@@ -13,11 +13,14 @@ use App\Services\Ventas\Gastronomia\GastronomiaChequeoVentasAnitaErpService;
 /**
  * Excluye del reporte de conciliación gastronomía facturas de estacionamiento
  * u otros circuitos que comparten PV CAEA pero no tienen emisión gastronomía.
+ *
+ * Las exclusiones son por puntoventa_id: una clave huérfana en PV CAEA 00020
+ * no debe ocultar la misma numeración en PV CAE 00070.
  */
 final class GastronomiaConciliacionExclusionEmisionSupport
 {
-    /** @var array<string, list<string>> */
-    private array $clavesExcluirCache = [];
+    /** @var array<string, array<int, list<string>>> */
+    private array $clavesPorPuntoventaCache = [];
 
     public function __construct(
         private readonly GastronomiaChequeoVentasAnitaErpService $chequeoVentasService,
@@ -25,29 +28,67 @@ final class GastronomiaConciliacionExclusionEmisionSupport
     }
 
     /**
-     * @return list<string> claves FAC|letra|sucursal|nro
+     * @return list<string> claves tipo|letra|sucursal|nro (legacy: unión global — evitar en conciliación por PC)
      */
     public function clavesExcluirConciliacion(
         int $empresaId,
         string $fechaJornada,
         ?array $indiceAnitaBulk = null,
     ): array {
-        $cacheKey = $empresaId.':'.$fechaJornada.':'.($indiceAnitaBulk !== null ? 'bulk' : 'live');
-        if (isset($this->clavesExcluirCache[$cacheKey])) {
-            return $this->clavesExcluirCache[$cacheKey];
-        }
-
+        $porPv = $this->clavesExcluirPorPuntoventa($empresaId, $fechaJornada, $indiceAnitaBulk);
         $claves = [];
-
-        foreach ($this->clavesVentasEstacionamientoSinGastronomia($empresaId, $fechaJornada) as $clave) {
-            $claves[$clave] = true;
+        foreach ($porPv as $lista) {
+            foreach ($lista as $clave) {
+                $claves[$clave] = true;
+            }
         }
 
-        foreach ($this->clavesAnitaSinParGastronomiaEnPvCaea($empresaId, $fechaJornada, $indiceAnitaBulk) as $clave) {
-            $claves[$clave] = true;
+        return array_keys($claves);
+    }
+
+    /**
+     * @return array<int, list<string>> claves a excluir indexadas por puntoventa_id ERP
+     */
+    public function clavesExcluirPorPuntoventa(
+        int $empresaId,
+        string $fechaJornada,
+        ?array $indiceAnitaBulk = null,
+    ): array {
+        $cacheKey = $empresaId.':'.$fechaJornada.':'.($indiceAnitaBulk !== null ? 'bulk' : 'live');
+        if (isset($this->clavesPorPuntoventaCache[$cacheKey])) {
+            return $this->clavesPorPuntoventaCache[$cacheKey];
         }
 
-        return $this->clavesExcluirCache[$cacheKey] = array_keys($claves);
+        $porPv = [];
+
+        foreach ($this->clavesVentasEstacionamientoSinGastronomia($empresaId, $fechaJornada) as $pvId => $claves) {
+            foreach ($claves as $clave) {
+                $porPv[$pvId][$clave] = true;
+            }
+        }
+
+        $resultado = [];
+        foreach ($porPv as $pvId => $set) {
+            $resultado[(int) $pvId] = array_keys($set);
+        }
+
+        return $this->clavesPorPuntoventaCache[$cacheKey] = $resultado;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function clavesExcluirListaParaPuntoventa(
+        int $empresaId,
+        string $fechaJornada,
+        int $puntoventaId,
+        ?array $indiceAnitaBulk = null,
+    ): array {
+        if ($puntoventaId <= 0) {
+            return [];
+        }
+
+        return $this->clavesExcluirPorPuntoventa($empresaId, $fechaJornada, $indiceAnitaBulk)[$puntoventaId] ?? [];
     }
 
     /**
@@ -70,7 +111,7 @@ final class GastronomiaConciliacionExclusionEmisionSupport
     }
 
     /**
-     * @return list<string>
+     * @return array<int, list<string>>
      */
     private function clavesVentasEstacionamientoSinGastronomia(int $empresaId, string $fechaJornada): array
     {
@@ -87,15 +128,16 @@ final class GastronomiaConciliacionExclusionEmisionSupport
             ->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId))
             ->get(['id', 'codigo', 'numerocomprobante', 'puntoventa_id']);
 
-        $claves = [];
+        $porPv = [];
         foreach ($ventas as $venta) {
             $clave = $this->chequeoVentasService->claveComprobanteDesdeVentaErp($venta);
-            if ($clave !== null) {
-                $claves[] = $clave;
+            $pvId = (int) ($venta->puntoventa_id ?? 0);
+            if ($clave !== null && $pvId > 0) {
+                $porPv[$pvId][] = $clave;
             }
         }
 
-        return $claves;
+        return $porPv;
     }
 
     /**

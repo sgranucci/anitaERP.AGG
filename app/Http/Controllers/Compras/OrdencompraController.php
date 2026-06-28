@@ -24,14 +24,17 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Services\Compras\OrdencompraAnitaSyncService;
+use App\Services\Compras\OrdencompraEnvioProveedorService;
 use App\Services\Compras\OrdencompraGestionService;
 use App\Services\Compras\OrdencompraListadoPdfService;
 use App\Services\Compras\OrdencompraOpcionesPrecioService;
+use App\Services\Compras\OrdencompraPdfService;
+use App\Services\Compras\OrdencompraArticuloPrecioHistoriaService;
 use App\Services\Compras\OrdencompraRecepcionesListadoService;
 use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
+use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
-use App\Support\Compras\NotaOcPdfRecorteMargenIzquierdo;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraPdfContextoRequisicion;
@@ -41,13 +44,13 @@ use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Models\Stock\Recepcion_Proveedor;
 use Auth;
 use Illuminate\Http\Request;
-use Jurosh\PDFMerge\PDFMerger;
-
 class OrdencompraController extends Controller
 {
     public function __construct(
         private OrdencompraRepositoryInterface $ordencompraRepository,
         private OrdencompraGestionService $ordencompraGestionService,
+        private OrdencompraPdfService $ordencompraPdfService,
+        private OrdencompraEnvioProveedorService $ordencompraEnvioProveedorService,
         private ArbolaprobacionService $arbolaprobacionService,
         private Arbolaprobacion_MovimientoRepositoryInterface $arbolaprobacion_movimientoRepository,
         private EmpresaRepositoryInterface $empresaRepository,
@@ -61,6 +64,7 @@ class OrdencompraController extends Controller
         private OrdencompraListadoPdfService $ordencompraListadoPdfService,
         private OrdencompraRecepcionesListadoService $ordencompraRecepcionesListadoService,
         private OrdencompraRecepcionPrecioSyncService $ordencompraRecepcionPrecioSyncService,
+        private OrdencompraArticuloPrecioHistoriaService $ordencompraArticuloPrecioHistoriaService,
     ) {}
 
     public function index(Request $request)
@@ -109,7 +113,13 @@ class OrdencompraController extends Controller
         $ret = $this->ordencompraGestionService->guardar($request, false);
 
         if (($ret['mensaje'] ?? '') === 'ok') {
-            return redirect()->route('editar_ordencompra', ['id' => $ret['id']])->with('mensaje', 'Orden de compra creada con éxito');
+            $redirect = redirect()->route('editar_ordencompra', ['id' => $ret['id']])
+                ->with('mensaje', 'Orden de compra creada con éxito');
+            if ($this->ordencompraEnvioProveedorService->datosEnvio((int) $ret['id'])['puede_enviar'] ?? false) {
+                $redirect->with('sugerir_envio_oc', (int) $ret['id']);
+            }
+
+            return $redirect;
         }
 
         return redirect()->route('crear_ordencompra')->withInput()->with('mensaje', $ret['errores'] ?? 'Error al guardar');
@@ -401,6 +411,15 @@ class OrdencompraController extends Controller
         );
     }
 
+    public function leerHistoriaPrecios($ordencompra_id)
+    {
+        can('editar-ordencompra');
+
+        return response()->json(
+            $this->ordencompraArticuloPrecioHistoriaService->listarPorOrdencompra((int) $ordencompra_id)
+        );
+    }
+
     public function aplicarPreciosRecepcion($ordencompra_id, $recepcion_id)
     {
         can('editar-ordencompra');
@@ -411,7 +430,11 @@ class OrdencompraController extends Controller
             ->firstOrFail();
 
         try {
-            $actualizadas = $this->ordencompraRecepcionPrecioSyncService->actualizarPreciosDesdeRecepcion($recepcion);
+            $actualizadas = $this->ordencompraRecepcionPrecioSyncService->actualizarPreciosDesdeRecepcion(
+                $recepcion,
+                soloPendientes: true,
+                origen: OrdencompraArticuloPrecioHistoriaOrigen::APLICACION_MANUAL,
+            );
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         }
@@ -435,10 +458,59 @@ class OrdencompraController extends Controller
         $ret = $this->ordencompraGestionService->cambiarEstado((int) $id, (string) $request->estado, (string) ($request->observacion ?? ''));
 
         if ($request->ajax() || $request->wantsJson()) {
+            if (($ret['mensaje'] ?? '') === 'ok'
+                && (string) $request->estado === OrdencompraEstados::APROBADA
+                && ($this->ordencompraEnvioProveedorService->datosEnvio((int) $id)['puede_enviar'] ?? false)
+            ) {
+                $ret['sugerir_envio_proveedor'] = true;
+            }
+
             return response()->json($ret);
         }
 
-        return redirect()->back()->with('mensaje', ($ret['mensaje'] ?? '') === 'ok' ? 'Estado actualizado' : ($ret['errores'] ?? 'Error'));
+        $redirect = redirect()->back()->with(
+            'mensaje',
+            ($ret['mensaje'] ?? '') === 'ok' ? 'Estado actualizado' : ($ret['errores'] ?? 'Error')
+        );
+        if (($ret['mensaje'] ?? '') === 'ok'
+            && (string) $request->estado === OrdencompraEstados::APROBADA
+            && ($this->ordencompraEnvioProveedorService->datosEnvio((int) $id)['puede_enviar'] ?? false)
+        ) {
+            $redirect->with('sugerir_envio_oc', (int) $id);
+        }
+
+        return $redirect;
+    }
+
+    public function datosEnvioProveedor($id)
+    {
+        if (! can('listar-ordencompra', false) && ! can('editar-ordencompra', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        return response()->json($this->ordencompraEnvioProveedorService->datosEnvio((int) $id));
+    }
+
+    public function enviarProveedor(Request $request, $id)
+    {
+        if (! can('editar-ordencompra', false)) {
+            return response()->json(['mensaje' => 'error', 'errores' => 'Sin permisos para enviar la orden al proveedor.'], 403);
+        }
+
+        $request->validate([
+            'email' => 'nullable|string|max:500',
+            'mensaje' => 'nullable|string|max:4000',
+        ]);
+
+        $ret = $this->ordencompraEnvioProveedorService->enviar(
+            (int) $id,
+            $request->input('email'),
+            $request->input('mensaje')
+        );
+
+        $status = ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422;
+
+        return response()->json($ret, $status);
     }
 
     public function reactivarSuspendida($id)
@@ -523,82 +595,10 @@ class OrdencompraController extends Controller
             return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para imprimir la orden de compra');
         }
 
-        $data = $this->ordencompraRepository->find((int) $id);
-        $data->loadMissing([
-            'requisiciones.usuarios',
-            'requisiciones.requisicion_estados.usuarios',
-            'ordencompra_estados.usuarios',
-        ]);
-        OrdencompraTotalesCabecera::aplicarAtributosVirtuales($data, $this->cotizacionQuery);
-
-        $totalesOc = OrdencompraTotalesResumen::desdeModelo($data, $this->cotizacionQuery, $this->impuestoService);
-        $monedaPdf = $totalesOc['moneda_abrev'] !== ''
-            ? $totalesOc['moneda_abrev']
-            : (string) ($data->monedacabecera_abreviatura ?? '');
-
-        $req = ($data->requisicion_id && $data->requisiciones) ? $data->requisiciones : null;
-        [$reqUsuarioEmitio, $reqUsuarioAprobador] = OrdencompraPdfContextoRequisicion::emitioYUltimoAprobador($req);
-
         $layoutApaisado = strtolower((string) $request->query('formato', '')) === 'apaisado';
-        $vistaPdf = $layoutApaisado
-            ? 'compras.ordencompra.pdf-legal-landscape'
-            : 'compras.ordencompra.pdf';
+        $pdf = $this->ordencompraPdfService->generarArchivo((int) $id, $layoutApaisado);
 
-        $html = view($vistaPdf, compact('data', 'reqUsuarioEmitio', 'reqUsuarioAprobador', 'totalesOc', 'monedaPdf'))->render();
-
-        $dir = storage_path('pdf/ordencompra');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
-        $nombreArchivo = 'Ordencompra_'.preg_replace('/[^\w\-]+/', '_', (string) $data->numeroordencompra).'.pdf';
-        $rutaPdfOc = $dir.'/'.$nombreArchivo;
-
-        $pdf = \App::make('dompdf.wrapper');
-        if ($layoutApaisado) {
-            $pdf->setPaper([0.0, 0.0, 1008.0, 612.0]);
-        } else {
-            $pdf->setPaper('legal', 'portrait');
-        }
-        $pdf->loadHTML($html, 'UTF-8');
-        $pdf->save($rutaPdfOc);
-
-        $rutaNota = storage_path('app/public/imagenes/nota_oc.pdf');
-        if (is_file($rutaNota)) {
-            $recorteIzqPt = env('NOTA_OC_RECORTE_IZQUIERDO_PT');
-            $recorteIzqPt = $recorteIzqPt !== null && $recorteIzqPt !== ''
-                ? (float) $recorteIzqPt
-                : NotaOcPdfRecorteMargenIzquierdo::RECORTE_POR_DEFECTO_PT;
-            $escalaNota = env('NOTA_OC_ESCALA');
-            $escalaNota = $escalaNota !== null && $escalaNota !== ''
-                ? (float) $escalaNota
-                : NotaOcPdfRecorteMargenIzquierdo::ESCALA_POR_DEFECTO;
-            $margenIzqNota = env('NOTA_OC_MARGEN_IZQUIERDO_PT');
-            if ($margenIzqNota !== null && $margenIzqNota !== '') {
-                $margenIzqNota = (float) $margenIzqNota;
-            } else {
-                $margenIzqNota = ($recorteIzqPt > 0.01 || $escalaNota < 0.999)
-                    ? NotaOcPdfRecorteMargenIzquierdo::MARGEN_IZQUIERDO_POR_DEFECTO_PT
-                    : 0.0;
-            }
-            $rutaNotaParaFusion = NotaOcPdfRecorteMargenIzquierdo::generarTemporal($rutaNota, $recorteIzqPt, $escalaNota, $margenIzqNota) ?? $rutaNota;
-            try {
-                // jurosh/pdf-merge: 'vertical' = retrato (P), 'horizontal' = apaisado (L).
-                $orientacionOc = $layoutApaisado ? 'horizontal' : 'vertical';
-                $merger = new PDFMerger;
-                $merger->addPDF($rutaPdfOc, 'all', $orientacionOc)
-                    ->addPDF($rutaNotaParaFusion, 'all', 'vertical');
-                $fusion = $merger->merge('string', $nombreArchivo);
-                file_put_contents($rutaPdfOc, $fusion);
-            } catch (\Throwable $e) {
-                report($e);
-            } finally {
-                if ($rutaNotaParaFusion !== $rutaNota && is_file($rutaNotaParaFusion)) {
-                    @unlink($rutaNotaParaFusion);
-                }
-            }
-        }
-
-        return response()->download($rutaPdfOc, $nombreArchivo)->deleteFileAfterSend(true);
+        return response()->download($pdf['ruta'], $pdf['nombre'])->deleteFileAfterSend(true);
     }
 
     public function wizardMultiplesDesdeRequisicion(int $requisicion_id)
@@ -716,15 +716,30 @@ class OrdencompraController extends Controller
         }
 
         $numeros = [];
+        $enviosPendientes = [];
         foreach ($ret['ids'] ?? [] as $ocId) {
             $oc = Ordencompra::query()->select('id', 'numeroordencompra')->find($ocId);
             if ($oc) {
-                $numeros[] = [
+                $datosEnvio = $this->ordencompraEnvioProveedorService->datosEnvio((int) $oc->id);
+                $fila = [
                     'id' => $oc->id,
                     'numeroordencompra' => $oc->numeroordencompra,
                     'url_imprimir' => route('imprimir_pdf_ordencompra', ['id' => $oc->id]),
                     'url_imprimir_apaisado' => route('imprimir_pdf_ordencompra', ['id' => $oc->id, 'formato' => 'apaisado']),
+                    'url_editar' => route('editar_ordencompra', ['id' => $oc->id]),
+                    'puede_enviar_proveedor' => (bool) ($datosEnvio['puede_enviar'] ?? false),
+                    'proveedor_nombre' => (string) ($datosEnvio['proveedor_nombre'] ?? ''),
+                    'email_proveedor' => (string) ($datosEnvio['email'] ?? ''),
                 ];
+                $numeros[] = $fila;
+                if ($fila['puede_enviar_proveedor']) {
+                    $enviosPendientes[] = [
+                        'id' => (int) $oc->id,
+                        'numeroordencompra' => $oc->numeroordencompra,
+                        'proveedor_nombre' => $fila['proveedor_nombre'],
+                        'email' => $fila['email_proveedor'],
+                    ];
+                }
             }
         }
 
@@ -732,6 +747,7 @@ class OrdencompraController extends Controller
             'mensaje' => 'ok',
             'ordencompra_ids' => $ret['ids'] ?? [],
             'ordenes' => $numeros,
+            'envios_pendientes' => $enviosPendientes,
             'advertencias' => $ret['advertencias'] ?? [],
         ]);
     }
@@ -771,13 +787,17 @@ class OrdencompraController extends Controller
             : null;
 
         $oc_totales_resumen = OrdencompraTotalesResumen::vacioParaVista();
+        $oc_datos_envio_proveedor = null;
         if ($id !== null && $data) {
             $oc_totales_resumen = OrdencompraTotalesResumen::desdeModelo($data, $this->cotizacionQuery, $this->impuestoService);
             $monRef = $moneda_query->firstWhere('id', $oc_totales_resumen['moneda_id']);
             if ($monRef) {
                 $oc_totales_resumen['moneda_abrev'] = (string) ($monRef->abreviatura ?? '');
             }
+            $oc_datos_envio_proveedor = $this->ordencompraEnvioProveedorService->datosEnvio($id);
         }
+
+        $sugerir_envio_oc = session('sugerir_envio_oc');
 
         return view('compras.ordencompra.editar', compact(
             'data',
@@ -802,6 +822,8 @@ class OrdencompraController extends Controller
             'soloConsulta',
             'ocultarVolver',
             'puedeActualizarOrdencompra',
+            'oc_datos_envio_proveedor',
+            'sugerir_envio_oc',
         ));
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Models\Compras;
 
+use App\Models\Caja\Caja_Movimiento;
+use App\Models\Configuracion\Condicioniva;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Asiento;
@@ -23,7 +25,10 @@ class Comprobante_Proveedor extends Model implements Auditable
         'ordencompra_comprobante_id', 'precarga_comprobante_proveedor_id', 'condicionpago_id',
         'letra', 'sucursal', 'numerocomprobante', 'fechacomprobante', 'fechaiva', 'fechavencimiento',
         'fecharecepcion', 'subtotal', 'total', 'moneda_id', 'cotizacion', 'numerocae',
-        'fechavencimientocae', 'es_fce', 'leyenda', 'modo_carga', 'origen_entrada', 'estado', 'asiento_id',
+        'fechavencimientocae', 'es_fce',         'leyenda', 'modo_carga', 'origen_entrada', 'tipo_tesoreria', 'estado', 'asiento_id',
+        'caja_movimiento_id', 'proveedor_nombre_eventual', 'proveedor_documento_eventual',
+        'identificacion_proveedor_cuit',
+        'proveedor_condicioniva_id_eventual',
         'pararevisar', 'anita_nro_interno', 'anita_sync_estado', 'anita_sync_error',
         'anita_sync_at', 'creousuario_id',
     ];
@@ -48,6 +53,16 @@ class Comprobante_Proveedor extends Model implements Auditable
     public function proveedores()
     {
         return $this->belongsTo(Proveedor::class, 'proveedor_id');
+    }
+
+    public function caja_movimientos()
+    {
+        return $this->belongsTo(Caja_Movimiento::class, 'caja_movimiento_id');
+    }
+
+    public function proveedor_condicioniva_eventual()
+    {
+        return $this->belongsTo(Condicioniva::class, 'proveedor_condicioniva_id_eventual');
     }
 
     public function tipotransaccion_compras()

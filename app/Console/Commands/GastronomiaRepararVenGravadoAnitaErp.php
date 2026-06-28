@@ -15,7 +15,7 @@ class GastronomiaRepararVenGravadoAnitaErp extends Command
                             {--fecha-hasta= : Y-m-d jornada final}
                             {--tolerancia=0.02 : Tolerancia en pesos}';
 
-    protected $description = 'Actualiza ven_gravado, ven_impuesto1 y ven_exento en Anita desde montos ERP de cabecera';
+    protected $description = 'Actualiza ven_monto, ven_gravado, ven_impuesto1 y ven_exento en Anita desde montos ERP de cabecera';
 
     public function handle(GastronomiaChequeoVentasAnitaErpService $chequeoService): int
     {
@@ -79,7 +79,7 @@ class GastronomiaRepararVenGravadoAnitaErp extends Command
         }
 
         $this->info($resultado['actualizadas'] > 0
-            ? 'Montos de cabecera (gravado / IVA / exento) actualizados en Anita.'
+            ? 'Montos de cabecera (monto / gravado / IVA / exento) actualizados en Anita.'
             : 'No había cabeceras con montos desfasados.');
 
         return self::SUCCESS;

@@ -4,7 +4,7 @@ namespace App\Services\Contable;
 
 use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\InterbankingMovimiento;
-use App\Models\Caja\InterbankingSaldoDiario;
+use App\Support\Caja\InterbankingSaldoResolverSupport;
 use App\Models\Contable\ConciliacionBancariaEjecucion;
 use App\Models\Contable\ConciliacionBancariaPar;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCodificacionSupport;
@@ -307,25 +307,7 @@ class ConciliacionBancariaService
 
     private function resolverSaldoBanco(int $empresaId, string $cuentaInterbanking, Carbon $fechaHasta): float
     {
-        $saldo = InterbankingSaldoDiario::query()
-            ->where('empresa_id', $empresaId)
-            ->where('account_number', $cuentaInterbanking)
-            ->whereDate('fecha', '<=', $fechaHasta->toDateString())
-            ->orderByDesc('fecha')
-            ->value('countable_balance');
-
-        if ($saldo !== null) {
-            return round((float) $saldo, 2);
-        }
-
-        $saldoAlt = InterbankingSaldoDiario::query()
-            ->where('empresa_id', $empresaId)
-            ->where('account_number', $cuentaInterbanking)
-            ->whereDate('fecha', '<=', $fechaHasta->toDateString())
-            ->orderByDesc('fecha')
-            ->value('current_operating_balance');
-
-        return round((float) ($saldoAlt ?? 0), 2);
+        return InterbankingSaldoResolverSupport::saldoEnFecha($empresaId, $cuentaInterbanking, $fechaHasta);
     }
 
     /**

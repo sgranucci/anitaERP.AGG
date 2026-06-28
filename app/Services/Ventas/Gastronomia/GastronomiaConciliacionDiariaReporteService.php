@@ -10,10 +10,12 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaMesCacheSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionEstacionamientoSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPostCierreCaeaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionGastroTotalDiaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionRendgAsientosDiaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionVendingRendgSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -32,6 +34,8 @@ final class GastronomiaConciliacionDiariaReporteService
         private readonly GastronomiaConciliacionRendgAsientosDiaSupport $rendgAsientosDiaSupport,
         private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroSupport,
         private readonly GastronomiaAnitaMesCacheSupport $anitaMesCacheSupport,
+        private readonly GastronomiaConciliacionEstacionamientoSupport $estacionamientoSupport,
+        private readonly GastronomiaConciliacionVendingRendgSupport $vendingRendgSupport,
     ) {
     }
 
@@ -189,7 +193,7 @@ final class GastronomiaConciliacionDiariaReporteService
         }
 
         fputcsv($handle, [
-            'empresa_id', 'empresa_nombre', 'fecha_jornada', 'tipo_fila', 'tipo_pv',
+            'empresa_id', 'empresa_nombre', 'fecha_jornada', 'circuito', 'tipo_fila', 'tipo_pv',
             'identificador_pc', 'pv_codigo', 'pv_cae', 'pv_caea',
             'ventas_erp_cae', 'ventas_erp_caea', 'ventas_erp_total',
             'ventas_anita_cae', 'ventas_anita_caea', 'ventas_anita_total',
@@ -225,13 +229,19 @@ final class GastronomiaConciliacionDiariaReporteService
         foreach ($informe['empresas'] ?? [] as $empresa) {
             foreach ($empresa['dias'] ?? [] as $dia) {
                 foreach ($dia['filas'] ?? [] as $fila) {
-                    if (in_array($fila['tipo_fila'] ?? '', ['pv_cae', 'pv_caea', 'vending_rendg', 'total_vending'], true)) {
+                    if (in_array($fila['tipo_fila'] ?? '', ['pv_cae', 'pv_caea'], true)) {
+                        continue;
+                    }
+                    if (in_array($fila['tipo_fila'] ?? '', ['vending_pv', 'vending_rendg', 'total_vending'], true)) {
+                        continue;
+                    }
+                    if (in_array($fila['tipo_fila'] ?? '', ['estacionamiento_pv', 'total_estacionamiento'], true)) {
                         continue;
                     }
                     if (($fila['estado'] ?? '') === 'RENDG') {
                         continue;
                     }
-                    if (in_array($fila['estado'] ?? '', ['DIF', 'SIN RENDG'], true)) {
+                    if (in_array($fila['estado'] ?? '', ['DIF', 'DIF venta', 'DIF rendg', 'DIF ambos', 'SIN RENDG'], true)) {
                         return true;
                     }
                 }
@@ -339,6 +349,7 @@ final class GastronomiaConciliacionDiariaReporteService
         );
         $filasPc = $conciliacion['filas_pc'];
         $filas = $this->conciliacionPorPcSupport->expandirFilasAuditoria($filasPc, $tolerancia);
+        $this->marcarCircuito($filas, 'GASTRO');
 
         $totales = $conciliacion['totales_salon'];
 
@@ -351,6 +362,7 @@ final class GastronomiaConciliacionDiariaReporteService
                 }
             }
             if ($totalSalon !== null) {
+                $totalSalon['circuito'] = 'GASTRO';
                 $filas[] = $totalSalon;
             }
         }
@@ -361,20 +373,53 @@ final class GastronomiaConciliacionDiariaReporteService
             || (float) ($postCierre['ventas_erp'] ?? 0) > $tolerancia;
         $tieneAgregados = (int) ($agregados['cantidad_facturas_erp'] ?? 0) > 0
             || (float) ($agregados['ventas_erp'] ?? 0) > $tolerancia;
-        $tieneVending = (float) (($conciliacion['vending']['totales']['rendgastro_z'] ?? 0)) > $tolerancia;
 
-        if ($tienePostCierre || $tieneAgregados || $tieneVending) {
-            foreach ($conciliacion['filas_totales'] as $filaTotal) {
-                if (in_array($filaTotal['tipo_fila'] ?? '', [
-                    'post_cierre_caea',
-                    'caea_agregados_migrados',
-                    'vending_rendg',
-                    'total_vending',
-                    'total_dia',
-                ], true)) {
-                    $filas[] = $filaTotal;
-                }
+        if ($tienePostCierre) {
+            $postCierre['circuito'] = 'GASTRO';
+            $filas[] = $postCierre;
+        }
+        if ($tieneAgregados) {
+            $agregados['circuito'] = 'GASTRO';
+            $filas[] = $agregados;
+        }
+
+        foreach ($conciliacion['filas_totales'] as $filaTotal) {
+            if (($filaTotal['tipo_fila'] ?? '') === 'total_gastro') {
+                $filaTotal['circuito'] = 'GASTRO';
+                $filas[] = $filaTotal;
+                break;
             }
+        }
+
+        $estacionamiento = $this->estacionamientoSupport->filasReporte(
+            $empresaId,
+            $fechaJornada,
+            $tolerancia,
+            $jornadaAbierta,
+        );
+        foreach ($estacionamiento['filas'] as $filaEst) {
+            $filas[] = $filaEst;
+        }
+        if ((float) ($estacionamiento['totales']['ventas_erp'] ?? 0) > $tolerancia
+            || (float) ($estacionamiento['totales']['rendgastro_z'] ?? 0) > $tolerancia) {
+            $filas[] = $this->estacionamientoSupport->filaTotalEstacionamiento(
+                $estacionamiento['totales'],
+                $jornadaAbierta,
+                $tolerancia,
+            );
+        }
+
+        $vending = $this->vendingRendgSupport->filasReporte($empresaId, $fechaJornada, $tolerancia, $jornadaAbierta);
+        foreach ($vending['filas'] as $filaVending) {
+            $filas[] = $filaVending;
+        }
+        if ((float) ($vending['totales']['ventas_erp'] ?? 0) > $tolerancia
+            || (float) ($vending['totales']['rendgastro_z'] ?? 0) > $tolerancia) {
+            $filas[] = $this->vendingRendgSupport->filaTotalVending(
+                $vending['totales'],
+                $jornadaAbierta,
+                $tolerancia,
+            );
         }
 
         $controlGastro = $this->armarControlGastroTotal(
@@ -405,6 +450,8 @@ final class GastronomiaConciliacionDiariaReporteService
             'totales' => $totales,
             'post_cierre_caea' => $postCierre,
             'agregados_caea' => $agregados,
+            'estacionamiento' => $estacionamiento,
+            'vending' => $vending,
             'control_gastro_total' => $controlGastro,
             'control_rendg_asientos' => $controlRendgAsientos,
         ];
@@ -481,6 +528,7 @@ final class GastronomiaConciliacionDiariaReporteService
 
         return [
             'tipo_fila' => 'control_gastro_total',
+            'circuito' => 'GASTRO',
             'identificador_pc' => 'TOTAL-GASTRONOMIA',
             'tipo_pv' => 'EMPRESA',
             'pv_codigo' => '—',
@@ -511,6 +559,17 @@ final class GastronomiaConciliacionDiariaReporteService
         ];
     }
 
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function marcarCircuito(array &$filas, string $circuito): void
+    {
+        foreach ($filas as &$fila) {
+            $fila['circuito'] = $circuito;
+        }
+        unset($fila);
+    }
+
     private function jornadaId(int $empresaId, string $fechaJornada): ?int
     {
         $id = JornadaGastronomia::query()
@@ -539,6 +598,8 @@ final class GastronomiaConciliacionDiariaReporteService
             $tipo = 'control_gastro_total';
         } elseif (! empty($fila['es_control_rendg_asientos'])) {
             $tipo = 'control_rendg_asientos';
+        } elseif ($tipo === 'vending_rendg') {
+            $tipo = 'vending_pv';
         }
 
         $asientoFacturaDia = '';
@@ -564,6 +625,7 @@ final class GastronomiaConciliacionDiariaReporteService
             $empresa['empresa_id'],
             $empresa['empresa_nombre'],
             $dia['fecha_jornada'],
+            $fila['circuito'] ?? 'GASTRO',
             $tipo,
             $fila['tipo_pv'] ?? '',
             $fila['identificador_pc'] ?? '',

@@ -11,8 +11,12 @@
 <script src="{{asset("assets/pages/scripts/contable/asiento/asiento_externo.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/conceptogasto/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/caja/banco/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/caja/ingresoegreso/cheques.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/caja/ingresoegreso/comprobantes_ivacompra.js")}}" type="text/javascript"></script>
 <script>
     var urlConsultaProveedor = "{{ route('editar_proveedor', ':id') }}";
+    var ingresoEgresoChequeDiferidosHabilitado = @json((bool) config('caja.cheque_propio_imputacion_diferidos_habilitado'));
 </script>
 @endsection
 
@@ -37,10 +41,10 @@
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
                     @endif
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
+                    <button type="button" id="boton-copia-ie" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> Copia movimiento de caja
                     </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
+                    <button type="button" id="boton-revierte-ie" class="btn btn-info btn-sm">
                         <span class="fa fa-history"></span> Revierte movimiento de caja
                     </button>
                 </div>
@@ -71,6 +75,8 @@
                 </div>
                 <div class="card-body">
                     @include('caja.ingresoegreso.form')
+                    @include('caja.ingresoegreso.form2')
+                    @include('caja.ingresoegreso.form3')
                     @include('includes.contable.formasientoexterno')
                     @include('caja.ingresoegreso.form6')
                 </div>

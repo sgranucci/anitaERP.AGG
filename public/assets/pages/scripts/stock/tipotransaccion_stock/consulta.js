@@ -41,6 +41,45 @@ $(document).on('keyup', '#consultatipotransaccionstock', function () {
     buscar_datos_tipotransaccion_stock($(this).val());
 });
 
+var capturaEnterAbreviaturaTipotransaccionStockActiva = false;
+
+function manejarEnterAbreviaturaTipotransaccionStock(e) {
+    if (e.which !== 13 && e.key !== 'Enter') {
+        return;
+    }
+
+    var target = e.target;
+    if (!target || !target.classList || !target.classList.contains('abreviaturatipotransaccionstock')) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    leerTipotransaccionStockPorAbreviatura(target.value, target, function (data) {
+        if (!data || !data.id) {
+            return;
+        }
+        if (!$(target).closest('#tm_tipotransaccion_movimientostock').length) {
+            return;
+        }
+        if (typeof window.enfocarSiguienteCampoTrasTipoTransaccionMov === 'function') {
+            window.enfocarSiguienteCampoTrasTipoTransaccionMov();
+        }
+    });
+}
+
+function activarCapturaEnterAbreviaturaTipotransaccionStock() {
+    if (capturaEnterAbreviaturaTipotransaccionStockActiva) {
+        return;
+    }
+    document.addEventListener('keydown', manejarEnterAbreviaturaTipotransaccionStock, true);
+    capturaEnterAbreviaturaTipotransaccionStockActiva = true;
+}
+
     function activa_eventos_consultatipotransaccionstock() {
     $('.consultatipotransaccionstock')
         .off('click.consultaTipotransaccionStock')
@@ -156,17 +195,6 @@ $(document).on('keyup', '#consultatipotransaccionstock', function () {
             e.preventDefault();
             leerTipotransaccionStockPorAbreviatura($(this).val(), this);
         });
-
-    $(document)
-        .off('keydown.leerTipotransaccionStockEnter', '.abreviaturatipotransaccionstock')
-        .on('keydown.leerTipotransaccionStockEnter', '.abreviaturatipotransaccionstock', function (e) {
-            if (e.which !== 13 && e.key !== 'Enter') {
-                return;
-            }
-            e.preventDefault();
-            e.stopPropagation();
-            leerTipotransaccionStockPorAbreviatura($(this).val(), this);
-        });
 }
 
 function leerTipotransaccionStockPorAbreviatura(abreviatura, ptrrenglon, onDone) {
@@ -236,6 +264,7 @@ function leerTipotransaccionStockPorAbreviatura(abreviatura, ptrrenglon, onDone)
 }
 
 $(function () {
+    activarCapturaEnterAbreviaturaTipotransaccionStock();
     if (typeof activa_eventos_consultatipotransaccionstock === 'function') {
         activa_eventos_consultatipotransaccionstock();
     }

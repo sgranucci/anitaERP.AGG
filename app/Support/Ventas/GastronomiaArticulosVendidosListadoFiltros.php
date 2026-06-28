@@ -66,6 +66,21 @@ class GastronomiaArticulosVendidosListadoFiltros
 
         $operador = self::normalizarOperador($operador);
 
+        $fechaJornada = trim((string) $request->input('fecha_jornada', ''));
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $jornadaId = (int) $request->input('jornada_id', 0);
+
+        if ($fechaJornada !== '') {
+            $fechaDesde = $fechaJornada;
+            $fechaHasta = $fechaJornada;
+            $jornadaId = 0;
+        } elseif ($fechaDesde !== '' && ($fechaHasta === '' || $fechaDesde === $fechaHasta)) {
+            $fechaJornada = $fechaDesde;
+            $fechaHasta = $fechaDesde;
+            $jornadaId = 0;
+        }
+
         return [
             'modo' => $modo,
             'campo' => $campo,
@@ -75,30 +90,18 @@ class GastronomiaArticulosVendidosListadoFiltros
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
             'empresa_id' => (int) $request->input('empresa_id', 0),
-            'puntoventa_id' => (int) $request->input('puntoventa_id', 0),
+            'puntoventa_id' => 0,
             'deposito_id' => (int) $request->input('deposito_id', 0),
-            'jornada_id' => (int) $request->input('jornada_id', 0),
-            'fecha_desde' => trim((string) $request->input('fecha_desde', '')),
-            'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
+            'jornada_id' => $jornadaId,
+            'fecha_jornada' => $fechaJornada,
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
         ];
     }
 
-    public static function tieneCriteriosAplicados(array $filtros): bool
+    public static function tieneFiltrosAvanzados(array $filtros): bool
     {
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            return true;
-        }
-        if ((int) ($filtros['puntoventa_id'] ?? 0) > 0) {
-            return true;
-        }
         if ((int) ($filtros['deposito_id'] ?? 0) > 0) {
-            return true;
-        }
-        if ((int) ($filtros['jornada_id'] ?? 0) > 0) {
-            return true;
-        }
-        if (trim((string) ($filtros['fecha_desde'] ?? '')) !== ''
-            || trim((string) ($filtros['fecha_hasta'] ?? '')) !== '') {
             return true;
         }
         if (($filtros['operador'] ?? '') === 'vacio') {
@@ -117,6 +120,40 @@ class GastronomiaArticulosVendidosListadoFiltros
         return false;
     }
 
+    public static function tieneCriteriosAplicados(array $filtros): bool
+    {
+        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
+            return true;
+        }
+        if (self::tieneFiltrosAvanzados($filtros)) {
+            return true;
+        }
+        if (trim((string) ($filtros['fecha_jornada'] ?? '')) !== ''
+            || trim((string) ($filtros['fecha_desde'] ?? '')) !== ''
+            || trim((string) ($filtros['fecha_hasta'] ?? '')) !== '') {
+            return true;
+        }
+
+        return false;
+    }
+
+    public static function fechaJornadaDesdeFiltros(array $filtros): string
+    {
+        $fecha = trim((string) ($filtros['fecha_jornada'] ?? ''));
+        if ($fecha !== '') {
+            return $fecha;
+        }
+
+        $desde = trim((string) ($filtros['fecha_desde'] ?? ''));
+        $hasta = trim((string) ($filtros['fecha_hasta'] ?? ''));
+
+        if ($desde !== '' && ($hasta === '' || $desde === $hasta)) {
+            return $desde;
+        }
+
+        return '';
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -133,9 +170,20 @@ class GastronomiaArticulosVendidosListadoFiltros
             'puntoventa_id' => 0,
             'deposito_id' => 0,
             'jornada_id' => 0,
+            'fecha_jornada' => '',
             'fecha_desde' => '',
             'fecha_hasta' => '',
         ];
+    }
+
+    public static function urlLimpiarFiltrosAvanzados(array $filtros): array
+    {
+        return array_filter([
+            'empresa_id' => (int) ($filtros['empresa_id'] ?? 0) > 0 ? (int) $filtros['empresa_id'] : null,
+            'fecha_jornada' => trim((string) ($filtros['fecha_jornada'] ?? '')) !== ''
+                ? trim((string) $filtros['fecha_jornada'])
+                : (trim((string) ($filtros['fecha_desde'] ?? '')) !== '' ? trim((string) $filtros['fecha_desde']) : null),
+        ]);
     }
 
     /**
@@ -159,20 +207,19 @@ class GastronomiaArticulosVendidosListadoFiltros
         if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
             $params['empresa_id'] = (int) $filtros['empresa_id'];
         }
-        if ((int) ($filtros['puntoventa_id'] ?? 0) > 0) {
-            $params['puntoventa_id'] = (int) $filtros['puntoventa_id'];
-        }
         if ((int) ($filtros['deposito_id'] ?? 0) > 0) {
             $params['deposito_id'] = (int) $filtros['deposito_id'];
         }
-        if ((int) ($filtros['jornada_id'] ?? 0) > 0) {
-            $params['jornada_id'] = (int) $filtros['jornada_id'];
-        }
-        if (! empty($filtros['fecha_desde'])) {
-            $params['fecha_desde'] = $filtros['fecha_desde'];
-        }
-        if (! empty($filtros['fecha_hasta'])) {
-            $params['fecha_hasta'] = $filtros['fecha_hasta'];
+        $fechaJornada = trim((string) ($filtros['fecha_jornada'] ?? ''));
+        if ($fechaJornada !== '') {
+            $params['fecha_jornada'] = $fechaJornada;
+        } else {
+            if (! empty($filtros['fecha_desde'])) {
+                $params['fecha_desde'] = $filtros['fecha_desde'];
+            }
+            if (! empty($filtros['fecha_hasta'])) {
+                $params['fecha_hasta'] = $filtros['fecha_hasta'];
+            }
         }
 
         return $params;

@@ -4,6 +4,7 @@ namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
 use App\ApiAnita;
 use Auth;
@@ -84,6 +85,40 @@ class EmpresaRepository implements EmpresaRepositoryInterface
         }
 
         return $empresa;
+    }
+
+    /**
+     * Empresas "activas" en AGG: aparecen en usuario_empresa, filtradas por sesión del operador.
+     */
+    public function empresasActivasOperativas()
+    {
+        $idsActivos = DB::table('usuario_empresa')
+            ->distinct()
+            ->pluck('empresa_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->values()
+            ->all();
+
+        if ($idsActivos === []) {
+            return collect();
+        }
+
+        $query = $this->model->whereIn('id', $idsActivos)->orderBy('id', 'ASC');
+        $this->aplicarFiltroEmpresasAsignadas($query, 'id');
+
+        return $query->get();
+    }
+
+    public function empresaTieneUsuariosAsignados(int $empresaId): bool
+    {
+        if ($empresaId <= 0) {
+            return false;
+        }
+
+        return DB::table('usuario_empresa')
+            ->where('empresa_id', $empresaId)
+            ->exists();
     }
 
     public function create(array $data)

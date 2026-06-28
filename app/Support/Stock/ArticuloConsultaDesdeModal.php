@@ -46,7 +46,10 @@ class ArticuloConsultaDesdeModal
             || can('crear-prestamo', false)
             || can('editar-prestamo', false)
             || can('actualizar-prestamo', false)
-            || can('listar-prestamo', false);
+            || can('listar-prestamo', false)
+            || can('crear-maquinavending-gastronomia', false)
+            || can('editar-maquinavending-gastronomia', false)
+            || can('actualizar-maquinavending-gastronomia', false);
     }
 
     public static function urlEditar(int $id): string

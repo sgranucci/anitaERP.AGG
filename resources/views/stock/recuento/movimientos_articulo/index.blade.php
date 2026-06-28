@@ -23,6 +23,7 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
     $claseBtnTodosDepositos = 'btn btn-outline-primary btn-sm'
         .($modoTodosDepositos ? ' active font-weight-bold' : '');
     $sufijoUm = \App\Support\Stock\MovimientosArticuloDepositoSupport::sufijoColumnaCantidad($art['unidad_medida'] ?? '');
+    $empresaIdFiltrada = (int) ($empresaIdFiltrada ?? ($contexto['empresa_id'] ?? 0));
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -68,6 +69,10 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                     </dd>
                 </dl>
                 <div id="filtro-deposito-movimientos-articulo" class="border-top pt-3">
+                    @if ($empresaIdFiltrada > 0)
+                        <input type="hidden" id="movimientos-articulo-empresa-id" value="{{ $empresaIdFiltrada }}">
+                        <input type="hidden" id="empresa_id" value="{{ $empresaIdFiltrada }}">
+                    @endif
                     <div class="row align-items-start">
                         <div class="col-lg-8">
                             @include('stock.partials.campo_consulta_deposito', [
@@ -85,14 +90,25 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                             ])
                         </div>
                         <div class="col-lg-4 pt-2">
+                            @php
+                                $tituloBtnTodosDepositos = $empresaIdFiltrada > 0
+                                    ? 'Ver saldo y movimientos de todos los depósitos de la empresa del reporte'
+                                    : 'Ver saldo y movimientos de todos los depósitos autorizados';
+                            @endphp
                             <button type="button"
                                 id="btn-movimientos-todos-depositos"
                                 class="{{ $claseBtnTodosDepositos }}"
-                                title="Ver saldo y movimientos de todos los depósitos autorizados">
-                                <i class="fa fa-warehouse"></i> Todos los depósitos
+                                title="{{ $tituloBtnTodosDepositos }}">
+                                <i class="fa fa-warehouse"></i> Todos los dep&oacute;sitos
                             </button>
                             @if ($modoTodosDepositos)
-                                <span class="d-block small text-muted mt-1">Mostrando movimientos de todos los depósitos autorizados.</span>
+                                <span class="d-block small text-muted mt-1">
+                                    @if ($empresaIdFiltrada > 0)
+                                        Mostrando movimientos de los dep&oacute;sitos de la empresa seleccionada en el reporte.
+                                    @else
+                                        Mostrando movimientos de todos los dep&oacute;sitos autorizados.
+                                    @endif
+                                </span>
                             @endif
                         </div>
                     </div>
@@ -136,7 +152,11 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                             <tr>
                                 <td colspan="{{ $modoTodosDepositos ? 8 : 7 }}" class="text-muted text-center">
                                     @if ($modoTodosDepositos)
-                                        Sin movimientos registrados en los depósitos autorizados.
+                                        @if ($empresaIdFiltrada > 0)
+                                            Sin movimientos en los dep&oacute;sitos de la empresa del reporte.
+                                        @else
+                                            Sin movimientos registrados en los dep&oacute;sitos autorizados.
+                                        @endif
                                     @else
                                         Sin movimientos registrados en este depósito.
                                     @endif

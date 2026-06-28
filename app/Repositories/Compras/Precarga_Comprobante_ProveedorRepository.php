@@ -3,6 +3,7 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -34,20 +35,19 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
     {
         $data['pararevisar'] = $this->normalizarParaRevisar($data);
 
-        $duplicado = $this->findDuplicadoPrecarga(
+        ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
             (int) $data['empresa_id'],
-            (int) $data['proveedor_id'],
             (int) $data['tipotransaccion_compra_id'],
             (string) ($data['letra'] ?? ''),
-            $data['sucursal'] ?? 0,
-            $data['numerocomprobante'] ?? 0,
+            (int) ($data['sucursal'] ?? 0),
+            (int) ($data['numerocomprobante'] ?? 0),
+            (int) $data['proveedor_id'],
         );
-        if ($duplicado !== null) {
-            throw new \RuntimeException($this->mensajeFacturaDuplicada(
-                $duplicado,
-                (string) ($data['tipo'] ?? '')
-            ));
-        }
+
+        $data['identificacion_proveedor_cuit'] = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
+            (int) $data['proveedor_id'],
+            null,
+        );
 
         $precarga_comprobante_proveedor = $this->model->create($data);
 
@@ -64,21 +64,20 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
     {
         $data['pararevisar'] = $this->normalizarParaRevisar($data);
 
-        $duplicado = $this->findDuplicadoPrecarga(
+        ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
             (int) $data['empresa_id'],
-            (int) $data['proveedor_id'],
             (int) $data['tipotransaccion_compra_id'],
             (string) ($data['letra'] ?? ''),
-            $data['sucursal'] ?? 0,
-            $data['numerocomprobante'] ?? 0,
+            (int) ($data['sucursal'] ?? 0),
+            (int) ($data['numerocomprobante'] ?? 0),
+            (int) $data['proveedor_id'],
             (int) $id,
         );
-        if ($duplicado !== null) {
-            throw new \RuntimeException($this->mensajeFacturaDuplicada(
-                $duplicado,
-                (string) ($data['tipo'] ?? '')
-            ));
-        }
+
+        $data['identificacion_proveedor_cuit'] = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
+            (int) $data['proveedor_id'],
+            null,
+        );
 
         $precarga_comprobante_proveedor = $this->model->findOrFail($id)
             ->update($data);
@@ -222,41 +221,27 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
         $numerocomprobante,
         ?int $excluirId = null
     ) {
-        $query = $this->model->newQuery()
-            ->where('empresa_id', $empresaId)
-            ->where('proveedor_id', $proveedorId)
-            ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
-            ->where('letra', strtoupper(trim($letra)))
-            ->where('sucursal', (int) $sucursal)
-            ->where('numerocomprobante', (int) $numerocomprobante);
-
-        if ($excluirId !== null) {
-            $query->where('id', '!=', $excluirId);
+        $cuit = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos($proveedorId, null);
+        if ($cuit === '') {
+            return null;
         }
 
-        return $query->first();
+        return ComprobanteProveedorUnicidadSupport::findDuplicadoPrecarga(
+            $empresaId,
+            $tipotransaccionCompraId,
+            $letra,
+            (int) $sucursal,
+            (int) $numerocomprobante,
+            $cuit,
+            $excluirId,
+        );
     }
 
     public function mensajeFacturaDuplicada(
         Precarga_Comprobante_Proveedor $existente,
         string $tipoAbreviatura
     ): string {
-        $comprobante = trim(sprintf(
-            '%s %s %s-%s',
-            $tipoAbreviatura,
-            strtoupper((string) $existente->letra),
-            $existente->sucursal,
-            $existente->numerocomprobante
-        ));
-        $oc = trim((string) ($existente->numeroordencompra ?? ''));
-        $detalleOc = $oc !== '' ? ', OC '.$oc : '';
-
-        return sprintf(
-            'Factura duplicada: ya existe una precarga %s (id %d%s).',
-            $comprobante,
-            $existente->id,
-            $detalleOc
-        );
+        return ComprobanteProveedorUnicidadSupport::mensajeDuplicadoPrecarga($existente, $tipoAbreviatura);
     }
 
     private function normalizarParaRevisar(array $data): int

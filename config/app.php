@@ -42,6 +42,12 @@ return [
     'anita_sync_descuento_gastronomia_index' => (bool) env('ANITA_SYNC_DESCUENTO_GASTRONOMIA_INDEX', true),
 
     /*
+     * Máquinas vending: import masivo desde Anita (maqvmae / ubimvending) al abrir index vacío.
+     * Solo import ERP ← Anita; create/update/delete en ERP no replican a Anita.
+     */
+    'anita_sync_maquinavending_gastronomia_index' => (bool) env('ANITA_SYNC_MAQUINAVENDING_GASTRONOMIA_INDEX', true),
+
+    /*
     | When true, the stock "mozos gastronomía" index shows the button to sync from Anita (ApiAnita).
     */
     'anita_sync_mozo_gastronomia_index' => (bool) env('ANITA_SYNC_MOZO_GASTRONOMIA_INDEX', true),

@@ -11,56 +11,19 @@
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-articulos-vendidos" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
-    <div class="card-body bg-light py-2 text-body">
+    <div class="card-body bg-white py-2 text-body">
+        <p class="small text-muted mb-2 mb-md-1">Refinar el listado (opcional). El reporte siempre incluye todas las terminales de la empresa.</p>
         <div class="form-row align-items-end">
-            @include('includes.listado.filtro_empresa_asignada', ['f' => $f])
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="puntoventa_id">Punto de venta</label>
-                <select name="puntoventa_id" id="puntoventa_id" class="form-control form-control-sm">
-                    <option value="">Todos</option>
-                    @foreach ($puntoventa_query ?? [] as $pv)
-                        <option value="{{ $pv->id }}" @selected((int) ($f['puntoventa_id'] ?? 0) === (int) $pv->id)>
-                            {{ trim($pv->codigo.' '.$pv->nombre) }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
             <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="deposito_id">Depósito</label>
                 <select name="deposito_id" id="deposito_id" class="form-control form-control-sm">
-                    <option value="">Todos</option>
+                    <option value="">Todos los depósitos</option>
                     @foreach ($deposito_query ?? [] as $dep)
                         <option value="{{ $dep->id }}" @selected((int) ($f['deposito_id'] ?? 0) === (int) $dep->id)>
                             {{ trim($dep->codigo.' '.$dep->nombre) }}
                         </option>
                     @endforeach
                 </select>
-            </div>
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="jornada_id">Jornada</label>
-                <select name="jornada_id" id="jornada_id" class="form-control form-control-sm"
-                        title="Si elige jornada, reemplaza el rango de fechas">
-                    <option value="">Por rango de fechas</option>
-                    @foreach ($jornadas ?? [] as $j)
-                        <option value="{{ $j->id }}" @selected((int) ($f['jornada_id'] ?? 0) === (int) $j->id)>
-                            #{{ $j->id }} — {{ $j->fecha_jornada?->format('d/m/Y') }}
-                            @if ($j->estado === 'abierta')
-                                (abierta)
-                            @endif
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="fecha_desde">Jornada desde</label>
-                <input type="date" name="fecha_desde" id="fecha_desde" class="form-control form-control-sm"
-                       value="{{ $f['fecha_desde'] ?? '' }}" @disabled((int) ($f['jornada_id'] ?? 0) > 0)/>
-            </div>
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="fecha_hasta">Jornada hasta</label>
-                <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control form-control-sm"
-                       value="{{ $f['fecha_hasta'] ?? '' }}" data-fecha-jornada-hasta
-                       @disabled((int) ($f['jornada_id'] ?? 0) > 0)/>
             </div>
             <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="filtro_modo">Buscar en</label>
@@ -92,12 +55,12 @@
                        id="filtro_valor_panel"
                        class="form-control form-control-sm"
                        value="{{ $f['valor'] ?? '' }}"
-                       placeholder="SKU, descripción, PV, depósito…"
+                       placeholder="SKU, descripción, depósito…"
                        autocomplete="off">
             </div>
             <div class="form-group col-md-auto mb-2">
-                <button type="submit" class="btn btn-primary btn-sm" data-aplicar-filtros-panel="1">
-                    <i class="fa fa-search"></i> Aplicar filtros
+                <button type="submit" class="btn btn-outline-primary btn-sm" data-aplicar-filtros-panel="1">
+                    <i class="fa fa-filter"></i> Aplicar
                 </button>
             </div>
         </div>

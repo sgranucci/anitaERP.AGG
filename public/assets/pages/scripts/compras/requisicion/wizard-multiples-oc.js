@@ -128,19 +128,33 @@
 	}
 
 	function mostrarModalResultado(res, volverUrl) {
-		var html = '<div class="table-responsive"><table class="table table-sm table-bordered"><thead><tr><th>Nº OC</th><th>PDF</th></tr></thead><tbody>';
+		var metaLocal = readMeta();
+		var puedeEnviar = !!(metaLocal && metaLocal.puede_enviar_proveedor);
+		var html = '<div class="table-responsive"><table class="table table-sm table-bordered"><thead><tr><th>Nº OC</th><th>Acciones</th></tr></thead><tbody>';
 		(res.ordenes || []).forEach(function (o) {
 			var num = $('<div/>').text(String(o.numeroordencompra != null ? o.numeroordencompra : o.id)).html();
 			var u1 = String(o.url_imprimir || '');
 			var u2 = String(o.url_imprimir_apaisado || '');
+			var verUrl = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/compras/ordencompra/' + parseInt(o.id, 10) + '/editar';
 			html +=
 				'<tr><td>' +
 				num +
-				'</td><td class="text-nowrap"><a class="btn btn-sm btn-primary" target="_blank" rel="noopener noreferrer" href="' +
+				'</td><td class="text-nowrap">' +
+				'<a class="btn btn-sm btn-outline-primary mr-1" target="_blank" rel="noopener noreferrer" href="' +
+				verUrl.replace(/"/g, '&quot;') +
+				'"><i class="fa fa-eye"></i></a> ' +
+				'<a class="btn btn-sm btn-primary mr-1" target="_blank" rel="noopener noreferrer" href="' +
 				u1.replace(/"/g, '&quot;') +
-				'">Vertical</a> <a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer" href="' +
+				'">PDF</a> <a class="btn btn-sm btn-outline-primary mr-1" target="_blank" rel="noopener noreferrer" href="' +
 				u2.replace(/"/g, '&quot;') +
-				'">Apaisado</a></td></tr>';
+				'">Apaisado</a>';
+			if (puedeEnviar && o.puede_enviar_proveedor) {
+				html +=
+					' <button type="button" class="btn btn-sm btn-success js-oc-enviar-proveedor" data-ordencompra-id="' +
+					parseInt(o.id, 10) +
+					'"><i class="fa fa-envelope"></i></button>';
+			}
+			html += '</td></tr>';
 		});
 		html += '</tbody></table></div>';
 		if (res.advertencias && res.advertencias.length) {
@@ -150,15 +164,27 @@
 			});
 			html += '</ul></div>';
 		}
+		var pendientes = res.envios_pendientes || [];
+		var idsEnvio = pendientes.map(function (p) { return parseInt(p.id, 10); });
+		var btnEnvio = '';
+		if (puedeEnviar && pendientes.length) {
+			html += '<div class="alert alert-info mt-2"><strong><i class="fa fa-envelope"></i> ' + pendientes.length +
+				' orden(es) con email de proveedor.</strong> Puede revisar el envío ahora o más tarde desde el listado.</div>';
+			btnEnvio =
+				'<button type="button" class="btn btn-success js-oc-wizard-iniciar-envios mr-2" data-resultados-modal="#modalWizardMultiplesOcResultado" data-envio-ids="' +
+				$('<div/>').text(JSON.stringify(idsEnvio)).html() +
+				'"><i class="fa fa-envelope"></i> Enviar al proveedor (' + pendientes.length + ')</button>';
+		}
 		var vu = String(volverUrl || '');
 		var $modal = $(
-			'<div class="modal fade" tabindex="-1" role="dialog">' +
+			'<div class="modal fade" id="modalWizardMultiplesOcResultado" tabindex="-1" role="dialog" data-backdrop="static">' +
 				'<div class="modal-dialog modal-lg" role="document"><div class="modal-content">' +
-				'<div class="modal-header"><h5 class="modal-title">Órdenes de compra generadas</h5>' +
-				'<button type="button" class="close" data-dismiss="modal"><span>&times;</span></button></div>' +
+				'<div class="modal-header bg-success text-white"><h5 class="modal-title">Órdenes de compra generadas</h5>' +
+				'<button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>' +
 				'<div class="modal-body">' +
 				html +
 				'</div><div class="modal-footer">' +
+				btnEnvio +
 				'<a class="btn btn-outline-secondary" href="' +
 				vu.replace(/"/g, '&quot;') +
 				'">Volver a la requisición</a>' +
@@ -167,6 +193,11 @@
 		);
 		$('body').append($modal);
 		$modal.modal('show');
+		$modal.one('shown.bs.modal', function () {
+			if (typeof window.ocWizardOfrecerEnvioProveedor === 'function') {
+				window.ocWizardOfrecerEnvioProveedor(res, { resultadosModal: '#modalWizardMultiplesOcResultado' });
+			}
+		});
 		$modal.on('hidden.bs.modal', function () {
 			$modal.remove();
 		});

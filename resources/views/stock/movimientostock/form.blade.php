@@ -6,8 +6,16 @@
     $lineasFormulario = MovimientoStockFormLineasSupport::lineasParaFormulario($movimientostock);
     $tipoTransaccionSeleccionada = (int) old(
         'tipotransaccion_stock_id',
-        $movimientostock->tipotransaccion_stock_id ?? ($tipotransacciondefault_id ?? 0)
+        $movimientostock->tipotransaccion_stock_id ?? 0
     );
+    if ($tipoTransaccionSeleccionada <= 0
+        && ($funcion ?? '') === 'crear'
+        && ! empty($tipotransacciondefault_id ?? null)) {
+        $tipoDefault = $tipotransaccion_query->firstWhere('id', (int) $tipotransacciondefault_id);
+        if ($tipoDefault) {
+            $tipoTransaccionSeleccionada = (int) $tipoDefault->id;
+        }
+    }
     $ccDefault = old(
         'centrocosto_destino_id',
         $movimientostock->centrocosto_destino_id ?? auth()->user()->centrocosto_id ?? ''

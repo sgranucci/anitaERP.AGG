@@ -9,8 +9,7 @@ use App\Services\Configuracion\ImpuestoService;
 
 /**
  * Totales de orden de compra: importe por línea en moneda del primer ítem =
- * cantidad × precio × cotización de línea (la cotización ya lleva el tipo de cambio pactado;
- * no se aplica además el coeficiente de tabla para no duplicar USD→ARS).
+ * cantidad × precio × coeficiente de conversión (cotización de línea solo si la moneda difiere de la referencia).
  * Impuestos: solo IVA nacional vía {@see ImpuestoService::calculaImpuestosNacionalesItems}.
  */
 final class OrdencompraTotalesResumen
@@ -62,11 +61,13 @@ final class OrdencompraTotalesResumen
             if ($cant <= 0) {
                 continue;
             }
-            $cot = (float) ($lin->cotizacion ?? 1);
-            if ($cot <= 0) {
-                $cot = 1.0;
-            }
-            $importeRef = $cant * (float) $lin->precio * $cot;
+            $importeRef = OrdencompraTotalesCabecera::importeLineaEnMonedaReferencia(
+                $monedaBaseId,
+                (int) ($lin->moneda_id ?: $monedaBaseId ?: 1),
+                $cant,
+                (float) $lin->precio,
+                (float) ($lin->cotizacion ?? 1),
+            );
             $impuestoId = (int) (optional($lin->articulos)->impuesto_id ?: self::impuestoIdPorDefecto());
             $lineas[] = [
                 'cantidad' => $cant,
@@ -165,11 +166,14 @@ final class OrdencompraTotalesResumen
             }
 
             $precio = (float) ($data['precios'][$i] ?? 0);
-            $cot = (float) ($data['cotizaciones_linea'][$i] ?? 1);
-            if ($cot <= 0) {
-                $cot = 1.0;
-            }
-            $importeRef = $cant * $precio * $cot;
+            $lineMoneda = (int) ($data['moneda_linea_ids'][$i] ?? $monedaBaseId);
+            $importeRef = OrdencompraTotalesCabecera::importeLineaEnMonedaReferencia(
+                $monedaBaseId,
+                $lineMoneda,
+                $cant,
+                $precio,
+                (float) ($data['cotizaciones_linea'][$i] ?? 1),
+            );
             $impId = (int) ($impPorArticulo[(int) $aid] ?? self::impuestoIdPorDefecto());
             if ($impId <= 0) {
                 $impId = self::impuestoIdPorDefecto();

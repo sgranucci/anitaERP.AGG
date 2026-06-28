@@ -11,6 +11,7 @@ use App\Queries\Stock\ArticuloQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Stock\ExistenciasDepositoReporteService;
 use App\Support\Stock\ExistenciasDepositoListadoFiltros;
+use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use Illuminate\Http\Request;
 
 class ExistenciasDepositoReporteController extends Controller
@@ -54,6 +55,7 @@ class ExistenciasDepositoReporteController extends Controller
       'usoarticulo_query' => $this->opcionesUsoarticulo(),
       'tipoarticulo_query' => $this->opcionesTipoarticulo(),
       'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
+      'puede_ver_kardex' => MovimientosArticuloDepositoSupport::puedeConsultar(),
     ]);
   }
 

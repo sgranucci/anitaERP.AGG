@@ -20,22 +20,26 @@ class GastronomiaAnitaAuditoriaDiaria extends Mailable
 
     public function build(): self
     {
-        $fecha = (string) ($this->informe['fecha_calendario'] ?? '');
-        $post = $this->informe['post']['resumen_global'] ?? [];
-        $faltantesFinal = (int) ($post['conteo']['solo_erp'] ?? 0);
-        $delta = (float) ($post['delta_totales']['total'] ?? 0);
-        $replicadas = (int) ($this->informe['replicacion']['replicadas'] ?? 0);
-        $errores = count($this->informe['replicacion']['errores'] ?? []);
-
+        $fecha = (string) ($this->informe['fecha_jornada'] ?? $this->informe['fecha_calendario'] ?? '');
         $estado = 'OK';
-        if ($faltantesFinal > 0 || $errores > 0 || abs($delta) > 0.02) {
-            $estado = 'ALERTA';
-        } elseif ($replicadas > 0) {
-            $estado = 'REPARADO';
+
+        foreach (['gastro', 'estacionamiento'] as $circuito) {
+            $post = $this->informe[$circuito]['post']['resumen_global'] ?? [];
+            $rep = $this->informe[$circuito]['replicacion'] ?? [];
+            $faltantesFinal = (int) ($post['conteo']['solo_erp'] ?? 0);
+            $delta = (float) ($post['delta_totales']['total'] ?? 0);
+            $replicadas = (int) ($rep['replicadas'] ?? 0);
+            $errores = count($rep['errores'] ?? []);
+
+            if ($faltantesFinal > 0 || $errores > 0 || abs($delta) > 0.02) {
+                $estado = 'ALERTA';
+            } elseif ($replicadas > 0 && $estado !== 'ALERTA') {
+                $estado = 'REPARADO';
+            }
         }
 
         $asunto = sprintf(
-            '[%s] Gastronomía Anita — %s — %s',
+            '[%s] Anita jornada — %s — %s',
             config('app.name', 'anitaERP'),
             $fecha,
             $estado,

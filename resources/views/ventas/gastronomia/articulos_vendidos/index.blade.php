@@ -22,6 +22,10 @@
         background: #f8f9fa;
         z-index: 2;
     }
+    #av-gastro-procesando-overlay {
+        align-items: center !important;
+        justify-content: center !important;
+    }
 </style>
 <script>
     window.ARTICULOS_VENDIDOS_GASTRONOMIA = {
@@ -48,15 +52,6 @@
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        @if (! empty($jornada['jornada_abierta']))
-            <div class="alert alert-info py-2 mb-2">
-                Jornada activa:
-                <strong>{{ $jornada['fecha_jornada_fmt'] ?? $jornada['fecha_jornada'] }}</strong>
-                @if (($filtros['fecha_desde'] ?? '') === ($jornada['fecha_jornada'] ?? '') && ($filtros['fecha_hasta'] ?? '') === ($jornada['fecha_jornada'] ?? ''))
-                    · filtro por defecto
-                @endif
-            </div>
-        @endif
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Artículos vendidos gastronomía</h3>
@@ -64,24 +59,30 @@
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-articulos-vendidos',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => GastronomiaArticulosVendidosListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('gastronomia_articulos_vendidos'),
-                        'placeholder' => 'Búsqueda rápida (SKU, descripción, PV…)',
+                        'tieneCriterios' => GastronomiaArticulosVendidosListadoFiltros::tieneFiltrosAvanzados($filtros ?? []),
+                        'limpiarUrl' => route('gastronomia_articulos_vendidos', GastronomiaArticulosVendidosListadoFiltros::urlLimpiarFiltrosAvanzados($filtros ?? [])),
+                        'placeholder' => 'Búsqueda rápida (SKU, descripción…)',
                         'toggleTarget' => '#panel-filtros-articulos-vendidos',
                         'toggleId' => 'btn-toggle-filtros-articulos-vendidos',
+                        'toggleLabel' => 'Filtros avanzados',
+                        'toggleLabelOculto' => 'Ocultar filtros avanzados',
                         'inputId' => 'filtro_valor',
                     ])
-                    <a href="{{ route('gastronomia_facturas_dia', array_filter([
-                        'fecha' => $filtros['fecha_desde'] ?? null,
-                        'todas_pc' => '1',
-                    ])) }}"
-                       class="btn btn-outline-secondary btn-sm ml-1"
-                       title="Ver facturas del día con los mismos filtros de jornada">
-                        <i class="fa fa-file-text-o"></i> Facturas del día
-                    </a>
+                    @if ($puede_consultar ?? false)
+                        <a href="{{ route('gastronomia_facturas_dia', array_filter([
+                            'fecha' => $fecha_jornada ?? null,
+                            'empresa_id' => ($empresa_id ?? 0) > 0 ? $empresa_id : null,
+                            'todas_pc' => '1',
+                        ])) }}"
+                           class="btn btn-outline-secondary btn-sm ml-1"
+                           title="Ver facturas del día de esta empresa y jornada">
+                            <i class="fa fa-file-text-o"></i> Facturas del día
+                        </a>
+                    @endif
                 </div>
             </div>
             <form method="get" action="{{ route('gastronomia_articulos_vendidos') }}" id="form-filtros-articulos-vendidos" class="mb-0">
+                @include('ventas.gastronomia.articulos_vendidos.partials.cabecera_consulta')
                 @include('ventas.gastronomia.articulos_vendidos.partials.filtros_listado')
             </form>
             <div class="card-body p-0">
@@ -179,7 +180,11 @@
                             @empty
                                 <tr>
                                     <td colspan="10" class="text-center text-muted py-4">
-                                        Sin ventas de gastronomía para los filtros indicados.
+                                        @if (! ($puede_consultar ?? true) && ($requiere_seleccion_empresa ?? false))
+                                            Seleccione empresa arriba para ver artículos vendidos de la jornada.
+                                        @else
+                                            Sin ventas de gastronomía para los filtros indicados.
+                                        @endif
                                     </td>
                                 </tr>
                             @endforelse
@@ -312,4 +317,12 @@
         </div>
     </div>
 </div>
+
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'av-gastro-procesando-overlay',
+    'tituloId' => 'av-gastro-procesando-titulo',
+    'subtituloId' => 'av-gastro-procesando-subtitulo',
+    'titulo' => 'Procesando reporte…',
+    'subtitulo' => 'Artículos vendidos gastronomía. Por favor espere.',
+])
 @endsection

@@ -4,7 +4,6 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Contable\Tipoasiento;
-use App\Models\Stock\Configuracion_RecepcionProveedor;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
@@ -15,6 +14,8 @@ use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Contable\CuentaAutomaticaClaves;
+use App\Support\Contable\CuentaAutomaticaResolver;
 use RuntimeException;
 use Illuminate\Http\Request;
 
@@ -440,14 +441,11 @@ class ComprobanteProveedorAsientoService
 
     private function resolverCuentaProvision(int $empresaId): int
     {
-        $cfg = Configuracion_RecepcionProveedor::query()->where('empresa_id', $empresaId)->first();
-        $cuentaId = (int) ($cfg?->cuentacontable_provision_facturas_id ?? 0);
-
-        if ($cuentaId <= 0) {
-            throw new RuntimeException('Falta configurar la cuenta de provisión de facturas a recibir para la empresa.');
-        }
-
-        return $cuentaId;
+        return CuentaAutomaticaResolver::resolverIdObligatorio(
+            $empresaId,
+            CuentaAutomaticaClaves::RECEPCION_PROVISION_FACTURAS,
+            'Falta configurar la cuenta de provisión de facturas a recibir para la empresa.',
+        );
     }
 
   /**

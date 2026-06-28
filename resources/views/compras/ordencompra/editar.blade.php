@@ -10,6 +10,12 @@
 <script src="{{ asset('assets/pages/scripts/presupuesto/capex/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/formulario.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
+@if (!empty($sugerir_envio_oc) && (int) $sugerir_envio_oc === (int) ($data->id ?? 0))
+<script>
+    window.ocSugerirEnvioProveedor = { ordencompra_id: {{ (int) $data->id }} };
+</script>
+@endif
 @endsection
 
 @section('contenido')
@@ -17,6 +23,8 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+
+        @include('compras.ordencompra.partials.modal_enviar_proveedor')
 
         @if (isset($data) && $data && empty($visualizar))
             <div class="modal fade" id="modalOcCambiarEstado" tabindex="-1" role="dialog" aria-hidden="true">
@@ -114,6 +122,11 @@
                             <i class="fas fa-file-pdf"></i> PDF apaisado
                         </a>
                     @endif
+                    @if (isset($data) && $data && can('editar-ordencompra', false) && !empty($oc_datos_envio_proveedor['puede_enviar']))
+                        <button type="button" class="btn btn-success btn-sm js-oc-enviar-proveedor" data-ordencompra-id="{{ $data->id }}" title="Enviar PDF de la OC al email del proveedor">
+                            <i class="fa fa-envelope"></i> Enviar al proveedor
+                        </button>
+                    @endif
                     @if (isset($data) && $data && can('crear-comprobante-proveedor', false))
                         <a href="{{ route('crear_comprobante_proveedor', ['ordencompra_id' => $data->id]) }}" class="btn btn-outline-success btn-sm" title="Alta de comprobante de proveedor vinculado a esta OC">
                             <i class="fa fa-file-text-o"></i> Facturar proveedor
@@ -167,6 +180,9 @@
                         <button type="button" id="oc-boton-recepciones" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
                             <span class="fa fa-truck"></span> Recepciones
                         </button>
+                        <button type="button" id="oc-boton-historia-precios" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
+                            <span class="fa fa-history"></span> Historia precios
+                        </button>
                         <button type="button" id="oc-boton-arbol" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Árbol aprobación</button>
                     @endif
                 </div>
@@ -204,6 +220,7 @@
                         'requisicion_id' => (int) $wizardRequisicionId,
                         'post_url' => route('requisicion_generar_multiples_oc', ['id' => (int) $wizardRequisicionId]),
                         'csrf' => csrf_token(),
+                        'puede_enviar_proveedor' => can('editar-ordencompra', false),
                         'volver_url' => route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]),
                     ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
                 @endphp

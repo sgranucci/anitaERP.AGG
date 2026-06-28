@@ -47,7 +47,7 @@ class KandikoAnitaVentaTipoSupportTest extends TestCase
     public function test_conciliacion_caea_kandiko_acepta_fak_y_fac_en_anita(): void
     {
         $this->assertTrue(KandikoAnitaVentaTipoSupport::esPvCaeaKandiko('00031', '2', 'A'));
-        $this->assertSame('FAC-14041', KandikoAnitaVentaTipoSupport::claveConciliacionDesdeNumero(14041));
+        $this->assertSame('FAC|B|31|14041', KandikoAnitaVentaTipoSupport::claveConciliacionDesdeNumero(14041));
         $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('FAK', '00031', '2', 'A'));
         $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('FAC', '00031', '2', 'A'));
         $this->assertTrue(KandikoAnitaVentaTipoSupport::cabeceraAnitaCorrespondeAlPv('NCD', '00031', '2', 'A'));

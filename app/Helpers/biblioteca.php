@@ -4,14 +4,117 @@ use App\Models\Admin\Permiso;
 use Illuminate\Support\Facades\Request;
 use Carbon\Carbon;
 
+if (!function_exists('aplanarUrlsMenu')) {
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     * @return list<string>
+     */
+    function aplanarUrlsMenu(array $items): array
+    {
+        $urls = [];
+
+        foreach ($items as $item) {
+            $url = trim((string) ($item['url'] ?? ''), '/');
+            if ($url !== '' && $url !== '#') {
+                $urls[] = $url;
+            }
+
+            if (! empty($item['submenu']) && is_array($item['submenu'])) {
+                $urls = array_merge($urls, aplanarUrlsMenu($item['submenu']));
+            }
+        }
+
+        return $urls;
+    }
+}
+
+if (!function_exists('urlsMenuFrontResueltas')) {
+    /**
+     * URLs de menú visibles para el rol actual (misma fuente que el aside).
+     *
+     * @return list<string>
+     */
+    function urlsMenuFrontResueltas(): array
+    {
+        static $cacheRolId = null;
+        static $cacheUrls = null;
+
+        $rolId = (int) session()->get('rol_id', 0);
+        if ($cacheRolId === $rolId && $cacheUrls !== null) {
+            return $cacheUrls;
+        }
+
+        $cacheRolId = $rolId;
+        if ($rolId <= 0) {
+            $cacheUrls = [];
+
+            return $cacheUrls;
+        }
+
+        $nivelActual = 0;
+        $menus = \App\Models\Admin\Menu::getMenu(true, $nivelActual);
+        $menus = \App\Support\Caja\Estacionamiento\EstacionamientoModuloSupport::filtrarMenuAside($menus);
+        $cacheUrls = array_values(array_unique(aplanarUrlsMenu($menus)));
+
+        return $cacheUrls;
+    }
+}
+
+if (!function_exists('menuUrlCoincideConRuta')) {
+    function menuUrlCoincideConRuta(string $menuUrl, string $path): bool
+    {
+        $menuUrl = trim($menuUrl, '/');
+        if ($menuUrl === '' || $menuUrl === '#') {
+            return false;
+        }
+
+        return $path === $menuUrl || str_starts_with($path, $menuUrl.'/');
+    }
+}
+
+if (!function_exists('menuUrlMasEspecificaParaRuta')) {
+    function menuUrlMasEspecificaParaRuta(string $path): ?string
+    {
+        $path = trim($path, '/');
+        $mejor = null;
+        $mejorLongitud = -1;
+
+        foreach (urlsMenuFrontResueltas() as $url) {
+            if (! menuUrlCoincideConRuta($url, $path)) {
+                continue;
+            }
+
+            $longitud = strlen($url);
+            if ($longitud > $mejorLongitud) {
+                $mejor = $url;
+                $mejorLongitud = $longitud;
+            }
+        }
+
+        return $mejor;
+    }
+}
+
 if (!function_exists('getMenuActivo')) {
     function getMenuActivo($ruta)
     {
-        if (request()->is($ruta) || request()->is($ruta . '/*')) {
-            return 'active';
-        } else {
+        $ruta = trim((string) $ruta, '/');
+        if ($ruta === '' || $ruta === '#') {
             return '';
         }
+
+        $urlsMenu = urlsMenuFrontResueltas();
+        if ($urlsMenu !== []) {
+            $activa = menuUrlMasEspecificaParaRuta(trim(request()->path(), '/'));
+
+            return $activa === $ruta ? 'active' : '';
+        }
+
+        if (request()->is($ruta) || request()->is($ruta.'/*')) {
+            return 'active';
+        }
+
+        return '';
     }
 }
 

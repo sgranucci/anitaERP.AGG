@@ -10,6 +10,7 @@ Generar órdenes de compra desde requisición
 <script src="{{ asset('assets/pages/scripts/presupuesto/capex/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/wizard-desde-requisicion.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -66,6 +67,7 @@ Generar órdenes de compra desde requisición
         'volver_url' => route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]),
         'index_oc_url' => route('consultar_ordencompra'),
         'csrf' => csrf_token(),
+        'puede_enviar_proveedor' => can('editar-ordencompra', false),
         'moneda_peso_id' => $monedaPesoId,
         'centrocosto_default_id' => $centrocostoDefaultDestino,
     ], $ocJsonFlags);
@@ -518,8 +520,13 @@ Generar órdenes de compra desde requisición
                             </table>
                         </div>
                         <div id="wz-resultados-advertencias" class="alert alert-warning mt-2 d-none"></div>
+                        <div id="wz-resultados-envio-proveedor" class="alert alert-info mt-2 d-none"></div>
                     </div>
                     <div class="modal-footer">
+                        <button type="button" class="btn btn-success d-none js-oc-wizard-iniciar-envios" id="wz-resultados-btn-envios"
+                            data-resultados-modal="#modalWizardResultados" data-envio-ids="[]">
+                            <i class="fa fa-envelope"></i> Enviar al proveedor
+                        </button>
                         <a href="{{ route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]) }}" class="btn btn-outline-secondary">Volver a la requisición</a>
                         <a href="{{ route('consultar_ordencompra') }}" class="btn btn-primary"><i class="fa fa-list"></i> Ir al listado de OC</a>
                     </div>
@@ -531,6 +538,7 @@ Generar órdenes de compra desde requisición
         @include('includes.presupuesto.modalconsultapartidagasto', ['centrocosto_query' => $centrocosto_query ?? null])
         @include('includes.presupuesto.modalconsultacapex', ['centrocosto_query' => $centrocosto_query ?? null])
         @include('includes.compras.modalconsultaproveedor')
+        @include('compras.ordencompra.partials.modal_enviar_proveedor')
     </div>
 </div>
 @endsection

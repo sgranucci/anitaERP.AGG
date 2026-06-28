@@ -856,6 +856,9 @@ Route::get('contable/listar-efe-mensual/{formato}', 'Contable\EfeMensualControll
 Route::get('contable/mayor-plano-cuenta', 'Contable\MayorPlanoCuentaController@index')->name('mayor_plano_cuenta');
 Route::get('contable/listar-mayor-plano-cuenta/{formato}', 'Contable\MayorPlanoCuentaController@exportar')->name('listar_mayor_plano_cuenta');
 
+Route::get('contable/cuentas-automaticas', 'Contable\ContabilidadCuentaAutomaticaController@index')->name('cuentas_automaticas_contables');
+Route::put('contable/cuentas-automaticas', 'Contable\ContabilidadCuentaAutomaticaController@actualizar')->name('actualizar_cuentas_automaticas_contables');
+
 Route::get('contable/conciliacion-bancaria', 'Contable\ConciliacionBancariaController@index')->name('conciliacion_bancaria');
 Route::get('contable/conciliacion-bancaria/api/enganche-cuentacaja', 'Contable\ConciliacionBancariaController@apiEngancheCuentacaja')->name('conciliacion_bancaria_api_enganche');
 Route::get('contable/conciliacion-bancaria/api/cuentacaja-por-codigo/{codigo}', 'Contable\ConciliacionBancariaController@apiCuentacajaPorCodigo')->name('conciliacion_bancaria_api_cuentacaja_por_codigo');
@@ -1374,6 +1377,27 @@ Route::get('ventas/totem-waitry-gastronomia/api/ubicaciones-por-empresa/{empresa
 Route::get('ventas/totem-waitry-gastronomia/{id}/editar', 'Ventas\TotemWaitryGastronomiaController@editar')->name('editar_totem_waitry_gastronomia');
 Route::put('ventas/totem-waitry-gastronomia/{id}', 'Ventas\TotemWaitryGastronomiaController@actualizar')->name('actualizar_totem_waitry_gastronomia');
 Route::delete('ventas/totem-waitry-gastronomia/{id}', 'Ventas\TotemWaitryGastronomiaController@eliminar')->name('eliminar_totem_waitry_gastronomia');
+
+Route::get('ventas/gastronomia/maquinas-vending', 'Ventas\MaquinavendingController@index')->name('consultar_maquinavending_gastronomia');
+Route::get('ventas/gastronomia/maquinas-vending/crear', 'Ventas\MaquinavendingController@crear')->name('crear_maquinavending_gastronomia');
+Route::post('ventas/gastronomia/maquinas-vending', 'Ventas\MaquinavendingController@guardar')->name('guardar_maquinavending_gastronomia');
+Route::post('ventas/gastronomia/maquinas-vending/sincronizar-anita', 'Ventas\MaquinavendingController@sincronizarDesdeAnita')->name('sincronizar_maquinavending_gastronomia_anita');
+Route::get('ventas/gastronomia/maquinas-vending/api/selects-por-empresa/{empresaId}', 'Ventas\MaquinavendingController@selectsPorEmpresa')->name('maquinavending_gastronomia_selects_por_empresa');
+Route::get('ventas/gastronomia/maquinas-vending/{id}/editar', 'Ventas\MaquinavendingController@editar')->name('editar_maquinavending_gastronomia');
+Route::put('ventas/gastronomia/maquinas-vending/{id}', 'Ventas\MaquinavendingController@actualizar')->name('actualizar_maquinavending_gastronomia');
+Route::delete('ventas/gastronomia/maquinas-vending/{id}', 'Ventas\MaquinavendingController@eliminar')->name('eliminar_maquinavending_gastronomia');
+
+Route::get('ventas/gastronomia/maquinas-vending/rendiciones', 'Ventas\MaquinavendingRendicionController@index')->name('consultar_maquinavending_rendicion_gastronomia');
+Route::get('ventas/listar-maquinavending-rendicion/{formato?}/{busqueda?}', 'Ventas\MaquinavendingRendicionController@listar')->name('lista_maquinavending_rendicion');
+Route::get('ventas/gastronomia/maquinas-vending/rendiciones/crear', 'Ventas\MaquinavendingRendicionController@crear')->name('crear_maquinavending_rendicion_gastronomia');
+Route::post('ventas/gastronomia/maquinas-vending/rendiciones', 'Ventas\MaquinavendingRendicionController@guardar')->name('guardar_maquinavending_rendicion_gastronomia');
+Route::get('ventas/gastronomia/maquinas-vending/rendiciones/{id}/editar', 'Ventas\MaquinavendingRendicionController@editar')->name('editar_maquinavending_rendicion_gastronomia');
+Route::put('ventas/gastronomia/maquinas-vending/rendiciones/{id}', 'Ventas\MaquinavendingRendicionController@actualizar')->name('actualizar_maquinavending_rendicion_gastronomia');
+Route::delete('ventas/gastronomia/maquinas-vending/rendiciones/{id}', 'Ventas\MaquinavendingRendicionController@eliminar')->name('eliminar_maquinavending_rendicion_gastronomia');
+Route::get('ventas/gastronomia/maquinas-vending/rendiciones/{id}/comprobante', 'Ventas\MaquinavendingRendicionController@comprobante')->name('maquinavending_rendicion_comprobante');
+Route::get('ventas/gastronomia/maquinas-vending/rendiciones/api/empresa/{empresaId}/maquinas', 'Ventas\MaquinavendingRendicionController@apiMaquinasPorEmpresa')->name('maquinavending_rendicion_api_maquinas');
+Route::get('ventas/gastronomia/maquinas-vending/rendiciones/api/maquina/{maquinavendingId}/articulos', 'Ventas\MaquinavendingRendicionController@apiArticulosMaquina')->name('maquinavending_rendicion_api_articulos');
+Route::get('ventas/gastronomia/maquinas-vending/rendiciones/api/cuentas-caja', 'Ventas\MaquinavendingRendicionController@apiCuentasCaja')->name('maquinavending_rendicion_api_cuentas_caja');
 
 Route::get('ventas/mozo-gastronomia', 'Ventas\MozoGastronomiaController@index')->name('consultar_mozo_gastronomia');
 Route::get('ventas/mozo-gastronomia/crear', 'Ventas\MozoGastronomiaController@crear')->name('crear_mozo_gastronomia');
@@ -2074,6 +2098,16 @@ Route::get('caja/rendiciongastronomia/api/jornada/{numero}', 'Caja\RendicionGast
 Route::get('caja/rendiciongastronomia/api/proponer-codigo', 'Caja\RendicionGastronomiaController@apiProponerCodigo')->name('api_rendicion_gastronomia_proponer_codigo');
 Route::post('caja/rendiciongastronomia/api/consulta-cierre', 'Caja\RendicionGastronomiaController@apiConsultaCierre')->name('api_rendicion_gastronomia_consulta_cierre');
 Route::get('caja/rendiciongastronomia/api/turno/{numero}', 'Caja\RendicionGastronomiaController@apiTurnoPorNumero')->name('api_rendicion_gastronomia_turno_numero');
+Route::get('caja/rendicionmaquinavending', 'Caja\RendicionMaquinavendingController@index')->name('rendicionmaquinavending');
+Route::get('caja/listarrendicionmaquinavending/{formato?}/{busqueda?}', 'Caja\RendicionMaquinavendingController@listar')->name('listar_rendicionmaquinavending');
+Route::get('caja/rendicionmaquinavending/crear/{caja?}', 'Caja\RendicionMaquinavendingController@crear')->name('crear_rendicionmaquinavending');
+Route::post('caja/rendicionmaquinavending', 'Caja\RendicionMaquinavendingController@guardar')->name('guardar_rendicionmaquinavending');
+Route::get('caja/rendicionmaquinavending/{id}/imprimir', 'Caja\RendicionMaquinavendingController@imprimir')->name('imprimir_rendicion_maquinavending');
+Route::get('caja/rendicionmaquinavending/{id}/editar', 'Caja\RendicionMaquinavendingController@editar')->name('editar_rendicionmaquinavending');
+Route::put('caja/rendicionmaquinavending/{id}', 'Caja\RendicionMaquinavendingController@actualizar')->name('actualizar_rendicionmaquinavending');
+Route::delete('caja/rendicionmaquinavending/{id}', 'Caja\RendicionMaquinavendingController@eliminar')->name('eliminar_rendicionmaquinavending');
+Route::post('caja/rendicionmaquinavending/api/consulta-rendicion', 'Caja\RendicionMaquinavendingController@apiConsultaRendicionVentas')->name('api_rendicion_maquinavending_consulta_rendicion');
+Route::post('caja/rendicionmaquinavending/api/datos-rendicion', 'Caja\RendicionMaquinavendingController@apiDatosRendicionVentas')->name('api_rendicion_maquinavending_datos_rendicion');
 Route::get('caja/rendicionestacionamiento', 'Caja\RendicionEstacionamientoController@index')->name('rendicionestacionamiento');
 Route::get('caja/listarendicionestacionamiento/{formato?}/{busqueda?}', 'Caja\RendicionEstacionamientoController@listar')->name('listar_rendicionestacionamiento');
 Route::get('caja/rendicionestacionamiento/crear/{caja?}', 'Caja\RendicionEstacionamientoController@crear')->name('crear_rendicionestacionamiento');
@@ -2095,6 +2129,7 @@ Route::post('caja/waitry-cierre-jornada/api/proceso/recalcular', 'Caja\WaitryCie
 Route::get('caja/waitry-cierre-jornada/api/proceso/preview-factura', 'Caja\WaitryCierreJornadaController@apiProcesoPreviewFactura')->name('waitry_cierre_jornada_api_proceso_preview_factura');
 Route::get('caja/waitry-cierre-jornada/api/proceso/preview-lotes-factura', 'Caja\WaitryCierreJornadaController@apiProcesoPreviewLotesFactura')->name('waitry_cierre_jornada_api_proceso_preview_lotes_factura');
 Route::post('caja/waitry-cierre-jornada/api/proceso/emitir-factura', 'Caja\WaitryCierreJornadaController@apiProcesoEmitirFactura')->name('waitry_cierre_jornada_api_proceso_emitir_factura');
+Route::post('caja/waitry-cierre-jornada/api/proceso/ejecutar-automatico', 'Caja\WaitryCierreJornadaController@apiProcesoEjecutarAutomatico')->name('waitry_cierre_jornada_api_proceso_ejecutar_automatico');
 Route::post('caja/waitry-cierre-jornada/api/proceso/grabar-asientos', 'Caja\WaitryCierreJornadaController@apiProcesoGrabarAsientos')->name('waitry_cierre_jornada_api_proceso_grabar_asientos');
 Route::post('caja/waitry-cierre-jornada/api/proceso/revertir', 'Caja\WaitryCierreJornadaController@apiProcesoRevertir')->name('waitry_cierre_jornada_api_proceso_revertir');
 Route::get('caja/waitry-cierre-jornada/api/proceso/opciones-emitir', 'Caja\WaitryCierreJornadaController@apiProcesoOpcionesEmitir')->name('waitry_cierre_jornada_api_proceso_opciones_emitir');
@@ -2156,6 +2191,11 @@ Route::get('caja/listaingresoegreso/{formato?}/{busqueda?}', 'Caja\IngresoEgreso
 Route::post('caja/copiar_ingresoegreso', 'Caja\IngresoEgresoController@copiarIngresoEgreso')->name('copiar_ingresoegreso');
 Route::post('caja/revertir_ingresoegreso', 'Caja\IngresoEgresoController@revertirIngresoEgreso')->name('revertir_ingresoegreso');
 Route::post('caja/generaasientocontable_ingresoegreso', 'Caja\IngresoEgresoController@generaAsientoContable')->name('generaasientocontable_ingresoegreso');
+Route::post('caja/ingresoegreso/comprobante-iva/preview-asiento', 'Caja\IngresoEgresoController@previewAsientoComprobanteIva')->name('ingresoegreso_comprobante_iva_preview_asiento');
+Route::post('caja/ingresoegreso/comprobante-iva/pdf-ia-preview', 'Caja\IngresoEgresoController@previewPdfComprobanteIva')->name('ingresoegreso_comprobante_iva_pdf_ia_preview');
+Route::post('caja/ingresoegreso/comprobante-iva/validar-totales', 'Caja\IngresoEgresoController@validarTotalesComprobantesIva')->name('ingresoegreso_comprobante_iva_validar_totales');
+Route::post('caja/ingresoegreso/comprobante-iva/validar-duplicado', 'Caja\IngresoEgresoController@validarDuplicadoComprobanteIva')->name('ingresoegreso_comprobante_iva_validar_duplicado');
+Route::post('caja/ingresoegreso/buscar-cheque', 'Caja\IngresoEgresoController@buscarCheque')->name('ingresoegreso_buscar_cheque');
 
 /*
  * Cobranzas
@@ -2493,9 +2533,12 @@ Route::get('compras/ordencompra/cotizacion-moneda-fecha', 'Compras\OrdencompraCo
 Route::post('compras/ordencompra/calcular-totales', 'Compras\OrdencompraController@calcularTotales')->name('ordencompra_calcular_totales');
 Route::post('compras/ordencompra/sugerir-cuotas-condicionpago', 'Compras\OrdencompraController@sugerirCuotasCondicionpago')->name('ordencompra_sugerir_cuotas');
 Route::get('compras/ordencompra/{id}/imprimir-pdf', 'Compras\OrdencompraController@imprimirPdf')->name('imprimir_pdf_ordencompra');
+Route::get('compras/ordencompra/{id}/datos-envio-proveedor', 'Compras\OrdencompraController@datosEnvioProveedor')->name('ordencompra_datos_envio_proveedor');
+Route::post('compras/ordencompra/{id}/enviar-proveedor', 'Compras\OrdencompraController@enviarProveedor')->name('ordencompra_enviar_proveedor');
 Route::get('compras/ordencompra/{id}/archivo/{archivo}', 'Compras\OrdencompraController@descargarArchivo')->name('ordencompra_archivo');
 Route::get('compras/ordencompra/{id}/historia-legajo', 'Compras\OrdencompraController@leerHistoriaLegajo')->name('ordencompra_historia_legajo');
 Route::get('compras/ordencompra/{id}/historia-estados', 'Compras\OrdencompraController@leerHistoriaEstados')->name('ordencompra_historia_estados');
+Route::get('compras/ordencompra/{id}/historia-precios', 'Compras\OrdencompraController@leerHistoriaPrecios')->name('ordencompra_historia_precios');
 Route::get('compras/ordencompra/{id}/recepciones', 'Compras\OrdencompraController@leerRecepciones')->name('ordencompra_recepciones');
 Route::post('compras/ordencompra/{id}/aplicar-precios-recepcion/{recepcion_id}', 'Compras\OrdencompraController@aplicarPreciosRecepcion')->name('ordencompra_aplicar_precios_recepcion');
 Route::get('compras/ordencompra/{id}/movimiento-aprobacion', 'Compras\OrdencompraController@leerMovimientoAprobacion')->name('ordencompra_movimiento_aprobacion');
@@ -2520,6 +2563,10 @@ Route::get('compras/manual/descargar-word', 'Compras\ManualComprasController@des
 Route::get('ventas/gastronomia/manual', 'Ventas\ManualGastronomiaController@index')->name('manual_gastronomia');
 Route::get('ventas/gastronomia/manual/descargar-pdf', 'Ventas\ManualGastronomiaController@descargarPdf')->name('manual_gastronomia_pdf');
 Route::get('ventas/gastronomia/manual/descargar-word', 'Ventas\ManualGastronomiaController@descargarWord')->name('manual_gastronomia_word');
+
+Route::get('ventas/gastronomia/maquinas-vending/manual', 'Ventas\ManualVendingController@index')->name('manual_vending');
+Route::get('ventas/gastronomia/maquinas-vending/manual/descargar-pdf', 'Ventas\ManualVendingController@descargarPdf')->name('manual_vending_pdf');
+Route::get('ventas/gastronomia/maquinas-vending/manual/descargar-word', 'Ventas\ManualVendingController@descargarWord')->name('manual_vending_word');
 
 Route::get('ventas/gastronomia/canjes/manual', 'Ventas\ManualCanjesMarketingController@index')->name('manual_canjes_marketing');
 Route::get('ventas/gastronomia/canjes/manual/descargar-pdf', 'Ventas\ManualCanjesMarketingController@descargarPdf')->name('manual_canjes_marketing_pdf');

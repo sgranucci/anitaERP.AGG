@@ -777,6 +777,16 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\MaquinavendingRepositoryInterface',
+            'App\Repositories\Ventas\MaquinavendingRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\MaquinavendingRendicionRepositoryInterface',
+            'App\Repositories\Ventas\MaquinavendingRendicionRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\TurnoGastronomiaRepositoryInterface',
             'App\Repositories\Ventas\TurnoGastronomiaRepository',
         );
@@ -934,6 +944,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Configuracion\Cotizacion_MonedaRepositoryInterface',
             'App\Repositories\Configuracion\Cotizacion_MonedaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Configuracion\Arbolaprobacion_OcTriggerRepositoryInterface',
+            'App\Repositories\Configuracion\Arbolaprobacion_OcTriggerRepository',
         );
 
         $this->app->bind(

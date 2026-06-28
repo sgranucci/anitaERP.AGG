@@ -7,6 +7,12 @@
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/filtro.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
+@if (session('sugerir_envio_oc'))
+<script>
+    window.ocSugerirEnvioProveedor = { ordencompra_id: {{ (int) session('sugerir_envio_oc') }} };
+</script>
+@endif
 <script>
 $(function () {
     $('.js-oc-index-abrir-estado').on('click', function () {
@@ -33,6 +39,8 @@ $(function () {
 <?php use App\Support\Compras\OrdencompraListadoFiltros; ?>
 
 @section('contenido')
+@include('compras.ordencompra.partials.modal_enviar_proveedor')
+
 <div class="modal fade" id="modalIndexOcCambiarEstado" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -184,6 +192,11 @@ $(function () {
                                         <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $row->id, 'formato' => 'apaisado']) }}" class="btn-accion-tabla tooltipsC" title="PDF Legal apaisado" target="_blank" rel="noopener noreferrer">
                                             <i class="fa fa-arrows-alt-h"></i>
                                         </a>
+                                    @endif
+                                    @if (can('editar-ordencompra', false) && !empty($row->proveedor_id))
+                                        <button type="button" class="btn-accion-tabla tooltipsC js-oc-enviar-proveedor text-success" title="Enviar OC al proveedor por email" data-ordencompra-id="{{ $row->id }}">
+                                            <i class="fa fa-envelope"></i>
+                                        </button>
                                     @endif
                                     @if (!empty($row->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
                                         <a href="{{ route('editar_requisicion', ['id' => $row->requisicion_id]) }}" class="btn-accion-tabla tooltipsC text-warning" title="Ver requisición" target="_blank" rel="noopener noreferrer">

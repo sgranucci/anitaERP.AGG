@@ -5,6 +5,7 @@ namespace App\Models\Stock;
 use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
 use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
+use App\Support\Stock\StockAnitaBridgeSupport;
 use App\Support\Stock\InterformingArticuloAnitaMapperSupport;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Contable\Centrocosto;
@@ -366,7 +367,7 @@ class Articulo extends Model implements Auditable
         ];
     }
 
-    public function traerRegistroDeAnita($key, $fl_crea_registro)
+    public function traerRegistroDeAnita($key, $fl_crea_registro, ?int $empresaIdBridge = null)
     {
         $this->articulo_estadoRepository = App::make(\App\Repositories\Stock\Articulo_EstadoRepositoryInterface::class);
 
@@ -534,6 +535,9 @@ class Articulo extends Model implements Auditable
 				'),
                 'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
             ];
+        }
+        if ($empresaIdBridge !== null && $empresaIdBridge > 0) {
+            $data = StockAnitaBridgeSupport::mergePayload($data, $empresaIdBridge);
         }
         $dataAnita = json_decode($apiAnita->apiCall($data));
 

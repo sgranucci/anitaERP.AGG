@@ -94,21 +94,127 @@
         });
     };
 
+    function enfocarCampoMovStock(selector) {
+        var el = document.querySelector(selector);
+        if (!el || el.readOnly || el.disabled) {
+            return false;
+        }
+        el.focus();
+        if (typeof el.select === 'function') {
+            el.select();
+        }
+        return true;
+    }
+
+    window.enfocarTipoTransaccionMovimientoStock = function () {
+        return enfocarCampoMovStock('#tipotransaccion_stock_id_abreviatura');
+    };
+
+    function selectorCodigoDepositoMovimientoStock() {
+        if (msOperacionTipoTransaccion() === 'T' && $('#ms_panel_transferencia').is(':visible')) {
+            return '#deposito_salida_id_codigo';
+        }
+
+        return '#deposito_id_codigo';
+    }
+
+    window.enfocarDepositoMovimientoStock = function () {
+        return enfocarCampoMovStock(selectorCodigoDepositoMovimientoStock());
+    };
+
+    window.enfocarSiguienteCampoTrasTipoTransaccionMov = function () {
+        if (!$('#formgeneral').length || !$('#tm_tipotransaccion_movimientostock').length) {
+            return false;
+        }
+
+        return enfocarDepositoMovimientoStock();
+    };
+
+    function enfocarPrimerArticuloMovimientoStock() {
+        return enfocarCampoMovStock('#tabla-items-movimientostock .codigoarticulo');
+    }
+
+    function tipoTransaccionCompletoEnFormulario() {
+        var meta = msTipoTransaccionMeta();
+
+        return meta.id > 0 && (meta.abreviatura !== '' || meta.nombre !== '');
+    }
+
+    function debeAplicarFocoInicialMovimientoStock() {
+        if (!$('#formgeneral').length) {
+            return false;
+        }
+
+        var params = new URLSearchParams(window.location.search);
+        return params.get('vista') !== 'consulta';
+    }
+
+    function aplicarFocoInicialMovimientoStock() {
+        if (!debeAplicarFocoInicialMovimientoStock()) {
+            return;
+        }
+
+        if ($('#movimientostockid').length) {
+            enfocarPrimerArticuloMovimientoStock();
+            return;
+        }
+
+        if (!tipoTransaccionCompletoEnFormulario()) {
+            enfocarTipoTransaccionMovimientoStock();
+            return;
+        }
+
+        enfocarDepositoMovimientoStock();
+    }
+
+    function programarFocoInicialMovimientoStock() {
+        if (!debeAplicarFocoInicialMovimientoStock()) {
+            return;
+        }
+
+        window.setTimeout(aplicarFocoInicialMovimientoStock, 150);
+    }
+
+    function cargarTipoTransaccionSiIncompleto(onListo) {
+        if (tipoTransaccionCompletoEnFormulario()) {
+            if (typeof onListo === 'function') {
+                onListo();
+            }
+            return;
+        }
+
+        var actualId = parseInt($hiddenTipo().val(), 10) || 0;
+        var defaultId = parseInt($('#tipotransacciondefault_id').val(), 10) || 0;
+        var loadId = actualId > 0 ? actualId : defaultId;
+
+        if (loadId <= 0) {
+            if (typeof onListo === 'function') {
+                onListo();
+            }
+            return;
+        }
+
+        $.get(carpetaBase + '/stock/leertipotransaccion_stock/' + loadId)
+            .done(function (data) {
+                if (data && data.id) {
+                    msAplicarTipotransaccionStockEnCampo(data);
+                }
+            })
+            .always(function () {
+                if (typeof onListo === 'function') {
+                    onListo();
+                }
+            });
+    }
+
     $(function () {
         if (!$hiddenTipo().length) {
             return;
         }
         actualizarLinkEditarTipotransaccionStock($ctxTipo(), parseInt($hiddenTipo().val(), 10) || 0);
 
-        var defaultId = parseInt($('#tipotransacciondefault_id').val(), 10) || 0;
-        var actualId = parseInt($hiddenTipo().val(), 10) || 0;
-        if (defaultId > 0 && actualId <= 0) {
-            $.get(carpetaBase + '/stock/leertipotransaccion_stock/' + defaultId)
-                .done(function (data) {
-                    if (data && data.id) {
-                        msAplicarTipotransaccionStockEnCampo(data);
-                    }
-                });
-        }
+        cargarTipoTransaccionSiIncompleto(function () {
+            programarFocoInicialMovimientoStock();
+        });
     });
 }(jQuery));

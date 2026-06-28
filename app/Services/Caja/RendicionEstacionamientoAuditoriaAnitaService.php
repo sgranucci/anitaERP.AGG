@@ -7,6 +7,7 @@ use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Ventas\Puntoventa;
 use App\Services\Caja\Estacionamiento\EstacionamientoChequeoVentasAnitaErpService;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaRendgastroSupport;
+use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -19,6 +20,7 @@ final class RendicionEstacionamientoAuditoriaAnitaService
     public function __construct(
         private readonly RendicionEstacionamientoAnitaSyncService $anitaSyncService,
         private readonly RendicionEstacionamientoAnitaRendgastroSupport $rendgastroSupport,
+        private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroGastroSupport,
         private readonly EstacionamientoChequeoVentasAnitaErpService $chequeoVentasService,
     ) {
     }
@@ -147,7 +149,14 @@ final class RendicionEstacionamientoAuditoriaAnitaService
             ];
         }
 
-        $cabeceras = $this->rendgastroSupport->listarCabecerasPorSucursal($empresaId, $fechaEntera, $sucursal);
+        $cabecerasTodas = $this->rendgastroSupport->listarCabecerasPorSucursal($empresaId, $fechaEntera, $sucursal);
+        $contextoRendiciones = $this->contextoRendicionesPuntoventa($empresaId, $fechaJornada, (int) $pv->id);
+        $cabeceras = $this->rendgastroSupport->filtrarCabecerasSoloEstacionamiento(
+            $cabecerasTodas,
+            $empresaId,
+            $contextoRendiciones['nro_oper'],
+            $contextoRendiciones['turno_oper_ids'],
+        );
 
         if ($cabeceras === []) {
             $estado = ($erpZ > $tolerancia || $erpNc > $tolerancia) ? 'sin_anita' : 'sin_ventas_erp';
@@ -174,7 +183,11 @@ final class RendicionEstacionamientoAuditoriaAnitaService
         $portadora = $this->rendgastroSupport->elegirPortadora($cabeceras);
         $portadoraNro = (int) ($portadora->rendg_nro_oper ?? 0);
         $anitaZ = round((float) ($portadora->rendg_total_z ?? 0), 2);
-        $anitaNc = round((float) ($portadora->rendg_tot_nc ?? 0), 2);
+        $anitaNc = 0.0;
+        foreach ($cabeceras as $cab) {
+            $anitaNc += round((float) ($cab->rendg_tot_nc ?? 0), 2);
+        }
+        $anitaNc = round($anitaNc, 2);
         $diffZ = round($erpZ - $anitaZ, 2);
         $diffNc = round($erpNc - $anitaNc, 2);
 
@@ -277,9 +290,15 @@ final class RendicionEstacionamientoAuditoriaAnitaService
         }
 
         $fechaEntera = (int) Carbon::parse($fechaJornada)->format('Ymd');
-        foreach ($this->rendgastroSupport->listarCabecerasEmpresaFecha($empresaId, $fechaEntera) as $fila) {
+        foreach ($this->rendgastroGastroSupport->listarCabecerasEmpresaFechaDetalle($empresaId, $fechaEntera) as $fila) {
+            if ($this->rendgastroGastroSupport->esCabeceraPostCierreWaitry($fila)) {
+                continue;
+            }
             $sucursal = (int) ($fila->rendg_sucursal ?? 0);
             if ($sucursal <= 0 || $this->rendgastroSupport->esSucursalMaquinaVending($sucursal)) {
+                continue;
+            }
+            if (! $this->rendgastroGastroSupport->esSucursalDeEstacionamiento($empresaId, $sucursal)) {
                 continue;
             }
             $pv = $this->puntoventaPorSucursal($empresaId, $sucursal, $codigoFiltro);
@@ -311,6 +330,43 @@ final class RendicionEstacionamientoAuditoriaAnitaService
         }
 
         return null;
+    }
+
+    /**
+     * @return array{nro_oper: list<int>, turno_oper_ids: list<int>}
+     */
+    private function contextoRendicionesPuntoventa(int $empresaId, string $fechaJornada, int $puntoventaId): array
+    {
+        $rendiciones = RendicionEstacionamientoCaja::query()
+            ->where('tipo', RendicionEstacionamientoCaja::TIPO_TURNO)
+            ->where('empresa_id', $empresaId)
+            ->where('puntoventa_cae_id', $puntoventaId)
+            ->whereHas('turnoOperativo', fn ($q) => $q->whereHas(
+                'jornada',
+                fn ($j) => $j->whereDate('fecha_jornada', $fechaJornada),
+            ))
+            ->get();
+
+        $nroOper = [];
+        foreach ($rendiciones as $rendicion) {
+            $nro = (int) ($rendicion->nro_oper_anita ?? 0);
+            if ($nro > 0) {
+                $nroOper[] = $nro;
+            }
+        }
+
+        $turnoOperIds = $rendiciones
+            ->pluck('turno_operativo_estacionamiento_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        return [
+            'nro_oper' => array_values(array_unique($nroOper)),
+            'turno_oper_ids' => $turnoOperIds,
+        ];
     }
 
     public function resolverJornada(int $empresaId, string $fechaJornada): ?JornadaEstacionamiento

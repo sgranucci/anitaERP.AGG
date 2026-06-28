@@ -241,7 +241,11 @@
     @endif
 
     <div class="pdf-oc-flujo-compacto">
-    @php $monOcItems = trim((string) ($monedaPdf ?? '')); @endphp
+    @php
+        use App\Support\Compras\OrdencompraTotalesCabecera;
+        $monOcItems = trim((string) ($monedaPdf ?? ''));
+        $monedaRefPdfId = (int) (optional(collect($data->ordencompra_articulos ?? [])->sortBy('id')->first())->moneda_id ?: 1);
+    @endphp
     <h2>Ítems</h2>
     <table class="items">
         <thead>
@@ -263,7 +267,13 @@
                 @php
                     $cot = (float) ($linea->cotizacion ?? 1);
                     if ($cot <= 0) { $cot = 1.0; }
-                    $sub = (float) $linea->cantidad * (float) $linea->precio * $cot;
+                    $sub = OrdencompraTotalesCabecera::importeLineaEnMonedaReferencia(
+                        $monedaRefPdfId,
+                        (int) ($linea->moneda_id ?: $monedaRefPdfId ?: 1),
+                        (float) $linea->cantidad,
+                        (float) $linea->precio,
+                        $cot,
+                    );
                     $ccDest = $linea->centrocostos_destino;
                     $part = $linea->partidagastos;
                     $cpx = $linea->capexs;

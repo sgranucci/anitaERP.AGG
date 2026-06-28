@@ -4,8 +4,10 @@ namespace App\Repositories\Caja;
 
 use App\Models\Caja\Cheque;
 use App\Models\Caja\Cuentacaja;
+use App\Models\Caja\Estadocheque_Banco;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
+use App\Support\Caja\ChequePropioImputacionSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
@@ -259,6 +261,289 @@ class ChequeRepository implements ChequeRepositoryInterface
 		return $cheque;
 	}
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public function guardarChequeIngresoEgreso(array $data, string $funcion, int $cajaMovimientoId)
+    {
+        $idsPersistidos = [];
+
+        $fechaOperacion = (string) ($data['fecha'] ?? date('Y-m-d'));
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+        $cajaId = isset($data['caja_id']) ? (int) $data['caja_id'] : null;
+
+        $idsPersistidos = array_merge(
+            $idsPersistidos,
+            $this->persistirFilasEmitidos($data, $funcion, $cajaMovimientoId, $fechaOperacion, $empresaId, $cajaId)
+        );
+        $idsPersistidos = array_merge(
+            $idsPersistidos,
+            $this->persistirFilasRecibidos($data, $funcion, $cajaMovimientoId, $fechaOperacion, $empresaId, $cajaId)
+        );
+        $idsPersistidos = array_merge(
+            $idsPersistidos,
+            $this->persistirFilasReemplazo($data, $funcion, $cajaMovimientoId, $fechaOperacion, $empresaId, $cajaId)
+        );
+
+        if ($funcion === 'update') {
+            $this->model->query()
+                ->where('caja_movimiento_id', $cajaMovimientoId)
+                ->whereNull('cobranza_id')
+                ->whereNotIn('id', $idsPersistidos)
+                ->delete();
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<int>
+     */
+    private function persistirFilasEmitidos(
+        array $data,
+        string $funcion,
+        int $cajaMovimientoId,
+        string $fechaOperacion,
+        int $empresaId,
+        ?int $cajaId
+    ): array {
+        $ids = [];
+        if (! isset($data['numerocheque_emitidos']) || ! is_array($data['numerocheque_emitidos'])) {
+            return $ids;
+        }
+
+        $chequeIds = $data['cheque_emitido_ids'] ?? [];
+        $chequeraIds = $data['chequera_emitido_ids'] ?? [];
+        $cuentacajaIds = $data['cuentacaja_emitido_ids'] ?? [];
+        $numeros = $data['numerocheque_emitidos'];
+        $fechasPago = $data['fechapago_emitidos'] ?? [];
+        $monedaIds = $data['moneda_emitido_ids'] ?? [];
+        $montos = $data['montocheque_emitidos'] ?? [];
+        $cotizaciones = $data['cotizacioncheque_emitidos'] ?? [];
+        $caracteres = $data['caracter_emitidos'] ?? [];
+        $anombrede = $data['anombrede_emitidos'] ?? [];
+        $proveedorIds = $data['proveedor_emitido_ids'] ?? [];
+
+        foreach ($numeros as $i => $numero) {
+            $numero = trim((string) $numero);
+            if ($numero === '' || (float) ($montos[$i] ?? 0) <= 0) {
+                continue;
+            }
+
+            $cuentacajaId = (int) ($cuentacajaIds[$i] ?? 0);
+            $cuentacaja = $this->cuentacajaRepository->find($cuentacajaId);
+            $bancoId = (int) ($cuentacaja->banco_id ?? 0);
+            if ($bancoId <= 0) {
+                throw new Exception('La cuenta de caja del cheque emitido no tiene banco asociado.');
+            }
+
+            $fechaPago = (string) ($fechasPago[$i] ?? $fechaOperacion);
+            $payload = [
+                'origen' => 'E',
+                'chequera_id' => ($chequeraIds[$i] ?? '') !== '' ? (int) $chequeraIds[$i] : null,
+                'caracter' => ($caracteres[$i] ?? '') !== '' ? (string) $caracteres[$i] : 'O',
+                'estado' => ChequePropioImputacionSupport::estadoInicialEmitido($fechaOperacion, $fechaPago),
+                'fechaemision' => $fechaOperacion,
+                'fechapago' => $fechaPago,
+                'cuentacaja_id' => $cuentacajaId,
+                'empresa_id' => $empresaId,
+                'caja_id' => $cajaId,
+                'caja_movimiento_id' => $cajaMovimientoId,
+                'numerocheque' => $numero,
+                'moneda_id' => (int) ($monedaIds[$i] ?? 1),
+                'monto' => (float) ($montos[$i] ?? 0),
+                'cotizacion' => (float) ($cotizaciones[$i] ?? 1),
+                'proveedor_id' => ($proveedorIds[$i] ?? '') !== '' ? (int) $proveedorIds[$i] : null,
+                'anombrede' => (string) ($anombrede[$i] ?? ''),
+                'banco_id' => $bancoId,
+            ];
+
+            $chequeId = (int) ($chequeIds[$i] ?? 0);
+            if ($funcion === 'update' && $chequeId > 0) {
+                $this->model->findOrFail($chequeId)->update($payload);
+                $ids[] = $chequeId;
+            } else {
+                $cheque = $this->model->create($payload);
+                $ids[] = (int) $cheque->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<int>
+     */
+    private function persistirFilasRecibidos(
+        array $data,
+        string $funcion,
+        int $cajaMovimientoId,
+        string $fechaOperacion,
+        int $empresaId,
+        ?int $cajaId
+    ): array {
+        $ids = [];
+        if (! isset($data['numerocheque_recibidos']) || ! is_array($data['numerocheque_recibidos'])) {
+            return $ids;
+        }
+
+        $chequeIds = $data['cheque_recibido_ids'] ?? [];
+        $fechasPago = $data['fechapago_recibidos'] ?? [];
+        $bancoIds = $data['banco_recibido_ids'] ?? [];
+        $numeros = $data['numerocheque_recibidos'];
+        $sucursales = $data['sucursalpago_recibidos'] ?? [];
+        $cuentasLib = $data['cuentalibradora_recibidos'] ?? [];
+        $monedaIds = $data['monedacheque_recibido_ids'] ?? [];
+        $montos = $data['montocheque_recibidos'] ?? [];
+        $cotizaciones = $data['cotizacioncheque_recibidos'] ?? [];
+
+        foreach ($numeros as $i => $numero) {
+            $numero = trim((string) $numero);
+            if ($numero === '' || (float) ($montos[$i] ?? 0) <= 0) {
+                continue;
+            }
+
+            $payload = [
+                'origen' => 'R',
+                'caracter' => 'R',
+                'estado' => ' ',
+                'fechaemision' => $fechaOperacion,
+                'fechapago' => (string) ($fechasPago[$i] ?? $fechaOperacion),
+                'empresa_id' => $empresaId,
+                'caja_id' => $cajaId,
+                'caja_movimiento_id' => $cajaMovimientoId,
+                'numerocheque' => $numero,
+                'moneda_id' => (int) ($monedaIds[$i] ?? 1),
+                'monto' => (float) ($montos[$i] ?? 0),
+                'cotizacion' => (float) ($cotizaciones[$i] ?? 1),
+                'sucursalpago' => (string) ($sucursales[$i] ?? ''),
+                'banco_id' => (int) ($bancoIds[$i] ?? 0),
+                'cuentalibradora' => (string) ($cuentasLib[$i] ?? ''),
+                'cliente_id' => isset($data['cliente_id']) ? (int) $data['cliente_id'] : null,
+                'proveedor_id' => isset($data['proveedor_id']) ? (int) $data['proveedor_id'] : null,
+            ];
+
+            if ($payload['banco_id'] <= 0) {
+                throw new Exception('Debe indicar banco en cheque recibido.');
+            }
+
+            $chequeId = (int) ($chequeIds[$i] ?? 0);
+            if ($funcion === 'update' && $chequeId > 0) {
+                $this->model->findOrFail($chequeId)->update($payload);
+                $ids[] = $chequeId;
+            } else {
+                $cheque = $this->model->create($payload);
+                $ids[] = (int) $cheque->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<int>
+     */
+    private function persistirFilasReemplazo(
+        array $data,
+        string $funcion,
+        int $cajaMovimientoId,
+        string $fechaOperacion,
+        int $empresaId,
+        ?int $cajaId
+    ): array {
+        $ids = [];
+        if (! isset($data['cheque_anulado_ids']) || ! is_array($data['cheque_anulado_ids'])) {
+            return $ids;
+        }
+
+        $anulados = $data['cheque_anulado_ids'];
+        $origenReemplazo = $data['origen_reemplazo'] ?? [];
+        $numerosReemplazo = $data['numerocheque_reemplazo'] ?? [];
+        $montosReemplazo = $data['montocheque_reemplazo'] ?? [];
+        $monedaReemplazo = $data['moneda_reemplazo_ids'] ?? [];
+        $cotizReemplazo = $data['cotizacioncheque_reemplazo'] ?? [];
+        $fechasReemplazo = $data['fechapago_reemplazo'] ?? [];
+        $cuentacajaReemplazo = $data['cuentacaja_reemplazo_ids'] ?? [];
+        $chequeraReemplazo = $data['chequera_reemplazo_ids'] ?? [];
+        $bancoReemplazo = $data['banco_reemplazo_ids'] ?? [];
+
+        foreach ($anulados as $i => $anuladoId) {
+            $anuladoId = (int) $anuladoId;
+            if ($anuladoId <= 0) {
+                continue;
+            }
+
+            $anulado = $this->model->find($anuladoId);
+            if ($anulado === null) {
+                throw new Exception('Cheque a anular no encontrado (id '.$anuladoId.').');
+            }
+
+            $anulado->estado = 'A';
+            $anulado->save();
+
+            $montoReemplazo = (float) ($montosReemplazo[$i] ?? $anulado->monto);
+            $numeroReemplazo = trim((string) ($numerosReemplazo[$i] ?? ''));
+            if ($numeroReemplazo === '' || $montoReemplazo <= 0) {
+                continue;
+            }
+
+            $tipoReemplazo = strtoupper((string) ($origenReemplazo[$i] ?? 'E'));
+            $fechaPago = (string) ($fechasReemplazo[$i] ?? $fechaOperacion);
+
+            if ($tipoReemplazo === 'E') {
+                $cuentacajaId = (int) ($cuentacajaReemplazo[$i] ?? $anulado->cuentacaja_id ?? 0);
+                $cuentacaja = $this->cuentacajaRepository->find($cuentacajaId);
+                $payload = [
+                    'origen' => 'E',
+                    'chequera_id' => ($chequeraReemplazo[$i] ?? '') !== '' ? (int) $chequeraReemplazo[$i] : $anulado->chequera_id,
+                    'caracter' => $anulado->caracter ?: 'O',
+                    'estado' => ChequePropioImputacionSupport::estadoInicialEmitido($fechaOperacion, $fechaPago),
+                    'fechaemision' => $fechaOperacion,
+                    'fechapago' => $fechaPago,
+                    'cuentacaja_id' => $cuentacajaId,
+                    'empresa_id' => $empresaId,
+                    'caja_id' => $cajaId,
+                    'caja_movimiento_id' => $cajaMovimientoId,
+                    'cheque_reemplaza_id' => $anuladoId,
+                    'numerocheque' => $numeroReemplazo,
+                    'moneda_id' => (int) ($monedaReemplazo[$i] ?? $anulado->moneda_id),
+                    'monto' => $montoReemplazo,
+                    'cotizacion' => (float) ($cotizReemplazo[$i] ?? $anulado->cotizacion),
+                    'proveedor_id' => $anulado->proveedor_id,
+                    'anombrede' => $anulado->anombrede,
+                    'banco_id' => (int) ($cuentacaja->banco_id ?? $anulado->banco_id),
+                ];
+            } else {
+                $payload = [
+                    'origen' => 'R',
+                    'caracter' => 'R',
+                    'estado' => ' ',
+                    'fechaemision' => $fechaOperacion,
+                    'fechapago' => $fechaPago,
+                    'empresa_id' => $empresaId,
+                    'caja_id' => $cajaId,
+                    'caja_movimiento_id' => $cajaMovimientoId,
+                    'cheque_reemplaza_id' => $anuladoId,
+                    'numerocheque' => $numeroReemplazo,
+                    'moneda_id' => (int) ($monedaReemplazo[$i] ?? $anulado->moneda_id),
+                    'monto' => $montoReemplazo,
+                    'cotizacion' => (float) ($cotizReemplazo[$i] ?? $anulado->cotizacion),
+                    'banco_id' => (int) ($bancoReemplazo[$i] ?? $anulado->banco_id),
+                    'sucursalpago' => $anulado->sucursalpago,
+                    'cuentalibradora' => $anulado->cuentalibradora,
+                ];
+            }
+
+            $cheque = $this->model->create($payload);
+            $ids[] = (int) $cheque->id;
+        }
+
+        return $ids;
+    }
+
     public function sincronizarConAnita(){
 		ini_set('max_execution_time', '300');
 
@@ -498,33 +783,37 @@ class ChequeRepository implements ChequeRepositoryInterface
         $fechaEmision = date('d-m-Y', strtotime($data->cpro_fecha_emision));
         $fechaCheque = date('d-m-Y', strtotime($data->cpro_fecha_cheque));
 
-        $chequera = $this->chequeraRepository->select('id', 'codigo')->where('codigo' , $data->cpro_modelo)->first();
-        if ($chequera)
+        $chequera = $this->chequeraRepository->findPorCodigo($data->cpro_modelo ?? '');
+        if ($chequera) {
             $chequera_id = $chequera->id;
-        else
+        } else {
             $chequera_id = null;
+        }
 
-        $cuentacaja = $this->cuentacajaRepository->select('id', 'codigo')->where('codigo' , ltrim($data->cpro_cuenta, '0'))->first();
-        if ($cuentacaja)
+        $cuentacaja = $this->cuentacajaRepository->findPorCodigo(ltrim((string) ($data->cpro_cuenta ?? ''), '0'));
+        if ($cuentacaja) {
             $cuentacaja_id = $cuentacaja->id;
-        else
-            $cuentacaja = null;
+        } else {
+            $cuentacaja_id = null;
+        }
 
-        $empresa = $this->empresaRepository->select('id', 'codigo')->where('codigo' , $data->cpro_empresa)->first();
-        if ($empresa)
+        $empresa = $this->empresaRepository->findPorCodigo($data->cpro_empresa ?? '');
+        if ($empresa) {
             $empresa_id = $empresa->id;
-        else
+        } else {
             $empresa_id = null;
+        }
 
-        $proveedor = $this->proveedorRepository->select('id', 'codigo')->where('codigo' , ltrim($data->cpro_proveedor, '0'))->first();
-        if ($proveedor)
+        $proveedor = $this->proveedorRepository->findPorCodigo(ltrim((string) ($data->cpro_proveedor ?? ''), '0'));
+        if ($proveedor) {
             $proveedor_id = $proveedor->id;
-        else
+        } else {
             $proveedor_id = null;
+        }
 
-        $estadocheque_banco = $this->estadocheque_bancoRepository->select('id', 'codigoexterno')
-                                                                ->where('codigoexterno' , $data->cpro_estado_banco)
-                                                                ->first();
+        $estadocheque_banco = Estadocheque_Banco::query()
+            ->where('codigoexterno', $data->cpro_estado_banco ?? '')
+            ->first();
         if ($estadocheque_banco)
             $estadoChequeBanco_id = $estadocheque_banco->id;
         else

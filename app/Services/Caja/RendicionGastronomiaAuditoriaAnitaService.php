@@ -3,6 +3,7 @@
 namespace App\Services\Caja;
 
 use App\Models\Ventas\JornadaGastronomia;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionEstadoSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
 use Carbon\Carbon;
 
@@ -59,15 +60,35 @@ final class RendicionGastronomiaAuditoriaAnitaService
             $filas[] = $this->mapearFila($filaTotal, (string) ($filaTotal['tipo_fila'] ?? 'total'));
         }
 
-        $conteo = ['ok' => 0, 'diferencia' => 0, 'sin_anita' => 0, 'sin_ventas_erp' => 0];
+        $conteo = [
+            'ok' => 0,
+            'dif_venta' => 0,
+            'dif_rendg' => 0,
+            'dif_ambos' => 0,
+            'sin_rendg' => 0,
+            'diferencia' => 0,
+        ];
         foreach ($filas as $fila) {
             $estado = (string) ($fila['estado'] ?? '');
+            $estadoAnita = (string) ($fila['estado_anita'] ?? '');
+            $estadoRendg = (string) ($fila['estado_rendg'] ?? '');
+
             if ($estado === 'OK') {
                 $conteo['ok']++;
-            } elseif ($estado === 'DIF') {
+            } elseif ($estado === 'DIF venta') {
+                $conteo['dif_venta']++;
+                $conteo['diferencia']++;
+            } elseif ($estado === 'DIF rendg') {
+                $conteo['dif_rendg']++;
+                $conteo['diferencia']++;
+            } elseif ($estado === 'DIF ambos') {
+                $conteo['dif_ambos']++;
                 $conteo['diferencia']++;
             } elseif ($estado === 'SIN RENDG') {
-                $conteo['sin_anita']++;
+                $conteo['sin_rendg']++;
+                $conteo['diferencia']++;
+            } elseif ($estadoAnita === 'DIF' || in_array($estadoRendg, ['DIF', 'SIN RENDG'], true)) {
+                $conteo['diferencia']++;
             }
         }
 
@@ -87,16 +108,22 @@ final class RendicionGastronomiaAuditoriaAnitaService
             }
         }
 
-        $estadoDecisivo = (string) ($totalDia['estado'] ?? '');
-        $requiereAlerta = in_array($estadoDecisivo, ['DIF', 'SIN RENDG'], true);
-        if (! $requiereAlerta) {
-            foreach ($filas as $fila) {
-                if (($fila['tipo_fila'] ?? '') === 'pc'
-                    && in_array((string) ($fila['estado'] ?? ''), ['DIF', 'SIN RENDG'], true)) {
-                    $requiereAlerta = true;
-                    break;
-                }
+        $requiereAlerta = false;
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? '') === 'pc'
+                && GastronomiaConciliacionEstadoSupport::requiereAlerta(
+                    (string) ($fila['estado_anita'] ?? ''),
+                    (string) ($fila['estado_rendg'] ?? ''),
+                )) {
+                $requiereAlerta = true;
+                break;
             }
+        }
+        if (! $requiereAlerta && $totalDia !== null) {
+            $requiereAlerta = GastronomiaConciliacionEstadoSupport::requiereAlerta(
+                (string) ($totalDia['estado_anita'] ?? ''),
+                (string) ($totalDia['estado_rendg'] ?? ''),
+            );
         }
 
         return [
@@ -110,7 +137,8 @@ final class RendicionGastronomiaAuditoriaAnitaService
                 'conteo' => $conteo,
                 'requiere_alerta' => $requiereAlerta,
                 'filtro_erp' => 'venta.fechajornada + venta_gastronomia_emision por PC (CAE+CAEA)',
-                'filtro_anita' => 'rendgastro rendg_host (Z portadora + neto CAEA por PC); total día salón + post-cierre',
+                'filtro_anita_venta' => 'cabecera venta Informix (ven_monto) emparejada por comprobante',
+                'filtro_anita_rendg' => 'rendgastro rendg_host (Z portadora + neto CAEA por PC); total día salón + post-cierre',
             ],
         ];
     }
@@ -140,13 +168,17 @@ final class RendicionGastronomiaAuditoriaAnitaService
             'pv_cae' => $pvCae,
             'pv_caea' => $pvCaea,
             'estado' => (string) ($fila['estado'] ?? '—'),
+            'estado_anita' => (string) ($fila['estado_anita'] ?? '—'),
+            'estado_rendg' => (string) ($fila['estado_rendg'] ?? '—'),
             'cantidad_facturas_erp' => (int) ($fila['cantidad_facturas_erp'] ?? 0),
             'cantidad_nc_erp' => 0,
             'erp_z' => (float) ($fila['ventas_erp'] ?? 0),
             'erp_cae' => (float) ($fila['ventas_erp_cae'] ?? 0),
             'erp_caea' => (float) ($fila['ventas_erp_caea'] ?? 0),
+            'ventas_anita' => (float) ($fila['ventas_anita'] ?? 0),
             'anita_z' => $fila['rendgastro_z'] ?? null,
             'anita_nc' => null,
+            'diff_anita' => $fila['diff_erp_anita'] ?? null,
             'diff_z' => $fila['diff_erp_rendg'] ?? null,
             'diff_nc' => null,
             'mensaje' => (string) ($fila['descripcion_pc'] ?? ''),

@@ -23,6 +23,13 @@ class Kernel extends ConsoleKernel
     {
         // $schedule->command('inspire')->hourly();
         $schedule->command('cotizacion:leeapi')->daily()->at('06:00');
+
+        $horaReclasificacionCheques = (string) config('caja.reclasificar_cheques_diferidos_hora', '06:30');
+        $schedule->command('caja:reclasificar-cheques-diferidos')
+            ->dailyAt($horaReclasificacionCheques)
+            ->runInBackground()
+            ->withoutOverlapping(30);
+
         $schedule->command('interbanking:persistir-saldos-diarios')->daily()->at('07:15');
 
         $diasMovimientos = max(1, min(60, (int) config('interbanking.movimientos_sync_dias_ventana', 14)));
@@ -62,8 +69,8 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('rendicion-gastronomia:auditoria-anita')
             ->dailyAt((string) config('rendicion_gastronomia_anita.auditoria_diaria.hora', '07:00'))
-            ->runInBackground()
-            ->withoutOverlapping(120)
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/rendicion-gastronomia-auditoria-schedule.log'))
             ->when(fn () => (bool) config('rendicion_gastronomia_anita.auditoria_diaria.habilitada', true));
 
         $ventanaAuditoriaCom = max(1, (int) config('recepcion_proveedor.auditoria_asientos_com_diaria.ventana_dias', 7));
@@ -89,9 +96,16 @@ class Kernel extends ConsoleKernel
             '--requiere-jornada-cerrada',
         ])
             ->dailyAt((string) config('gastronomia.conciliacion_diaria_reporte.hora', '08:00'))
-            ->runInBackground()
-            ->withoutOverlapping(120)
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/conciliacion-diaria-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.conciliacion_diaria_reporte.habilitada', true));
+
+        $schedule->command('gastronomia:cierre-jornada-waitry-automatico', ['--enviar-mail'])
+            ->dailyAt((string) config('gastronomia.cierre_jornada_automatico.hora', '09:00'))
+            ->runInBackground()
+            ->withoutOverlapping(240)
+            ->appendOutputTo(storage_path('logs/cierre-jornada-waitry-automatico-schedule.log'))
+            ->when(fn () => (bool) config('gastronomia.cierre_jornada_automatico.habilitado', false));
 
         $intervaloMin = max(5, (int) config('contable_cierre.job_intervalo_minutos', 15));
         $schedule->command('contable:procesar-aperturas-periodo')

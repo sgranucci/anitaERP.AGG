@@ -94,7 +94,20 @@ class RecuentoMovimientosArticuloSupportTest extends TestCase
 
         $concepto = RecuentoMovimientosArticuloSupport::resolverConceptoDisplay($row);
 
-        $this->assertSame('FAC B-00008-00807543 — Ing.', $concepto);
+        $this->assertSame('FAC B-00008-00807543 - Insumo', $concepto);
+    }
+
+    public function test_concepto_insumo_nuevo_sufijo_en_grabacion(): void
+    {
+        $row = (object) [
+            'concepto' => 'Factura - Insumo',
+            'venta_codigo' => 'FAC B-00008-00807543',
+            'venta_id' => 99,
+        ];
+
+        $concepto = RecuentoMovimientosArticuloSupport::resolverConceptoDisplay($row);
+
+        $this->assertSame('FAC B-00008-00807543 - Insumo', $concepto);
     }
 
     public function test_modo_todos_depositos_se_detecta_con_cero(): void

@@ -18,6 +18,8 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
+use App\Support\Contable\CuentaAutomaticaClaves;
+use App\Support\Contable\CuentaAutomaticaResolver;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
 use Illuminate\Support\Facades\Log;
 
@@ -439,8 +441,12 @@ class RecepcionProveedorAsientoService
      */
     private function armarPreviewAsiento(Recepcion_Proveedor $recepcion): array
     {
-        $cfg = Configuracion_RecepcionProveedor::query()->where('empresa_id', $recepcion->empresa_id)->first();
-        if (! $cfg || ! $cfg->cuentacontable_provision_facturas_id) {
+        $empresaId = (int) $recepcion->empresa_id;
+        $provisionId = CuentaAutomaticaResolver::resolverId(
+            $empresaId,
+            CuentaAutomaticaClaves::RECEPCION_PROVISION_FACTURAS
+        );
+        if (! $provisionId) {
             throw new \RuntimeException('Falta configurar cuenta de provisión de facturas a recibir para la empresa.');
         }
 
@@ -468,10 +474,10 @@ class RecepcionProveedorAsientoService
         $esAnticipada = $oc && strtoupper((string) $oc->tratamiento) === 'ANTICIPADA';
 
         if ($esAnticipada) {
-            $lineasHaber = $this->armarHaberAnticipada($oc, $cfg, $totalDebe, $cotizacionRecepcion);
+            $lineasHaber = $this->armarHaberAnticipada($oc, $empresaId, $totalDebe, $cotizacionRecepcion);
         } else {
             $lineasHaber[] = [
-                'cuentacontable_id' => (int) $cfg->cuentacontable_provision_facturas_id,
+                'cuentacontable_id' => $provisionId,
                 'importe' => $totalDebe,
             ];
         }
@@ -481,7 +487,7 @@ class RecepcionProveedorAsientoService
 
         if (abs($diferencia) >= 0.01 && $esAnticipada && $diferencia > 0) {
             $lineasHaber[] = [
-                'cuentacontable_id' => (int) $cfg->cuentacontable_provision_facturas_id,
+                'cuentacontable_id' => $provisionId,
                 'importe' => $diferencia,
             ];
             $totalHaber = round(array_sum(array_column($lineasHaber, 'importe')), 2);
@@ -691,14 +697,14 @@ class RecepcionProveedorAsientoService
      */
     private function armarHaberAnticipada(
         Ordencompra $oc,
-        Configuracion_RecepcionProveedor $cfg,
+        int $empresaId,
         float $totalDebe,
         float $cotizacionRecepcion
     ): array {
         $cuentasAnticipo = array_filter([
-            (int) ($cfg->cuentacontable_factura_anticipada_id ?? 0),
-            (int) ($cfg->cuentacontable_anticipo_bienes_uso_id ?? 0),
-            (int) ($cfg->cuentacontable_proveedores_intangible_id ?? 0),
+            CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::RECEPCION_FACTURA_ANTICIPADA) ?? 0,
+            CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::RECEPCION_ANTICIPO_BIENES_USO) ?? 0,
+            CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::RECEPCION_PROVEEDORES_INTANGIBLE) ?? 0,
         ]);
 
         if ($cuentasAnticipo === []) {

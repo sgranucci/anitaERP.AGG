@@ -11,12 +11,12 @@ use Illuminate\Console\Command;
 class GastronomiaAuditoriaAnitaDiaria extends Command
 {
     protected $signature = 'gastronomia:auditoria-anita-diaria
-                            {--fecha= : Fecha calendario Y-m-d (default: ayer)}
+                            {--fecha= : Fecha de jornada Y-m-d (default: ayer)}
                             {--empresa= : Override empresa_id}
                             {--dry-run : Audita y simula replicación, sin escribir ni enviar mail}
                             {--sin-mail : No envía correo aunque haya alertas}';
 
-    protected $description = 'Audita ventas gastronomía del día calendario anterior, replica faltantes en Anita y alerta por mail';
+    protected $description = 'Audita ventas gastronomía y estacionamiento de la jornada anterior, replica faltantes en Anita y alerta por mail';
 
     public function handle(GastronomiaAnitaAuditoriaDiariaService $service): int
     {
@@ -35,7 +35,7 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Fecha calendario %s | empresas: %s%s%s',
+            'Jornada %s | empresas: %s | gastro + estacionamiento%s%s',
             $fecha,
             implode(', ', $empresas),
             $dryRun ? ' | MODO SIMULACIÓN' : '',
@@ -57,20 +57,33 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
                 continue;
             }
 
-            $pre = $informe['pre']['resumen_global'] ?? [];
-            $post = $informe['post']['resumen_global'] ?? [];
-            $rep = $informe['replicacion'] ?? [];
+            foreach (['gastro' => 'Gastronomía', 'estacionamiento' => 'Estacionamiento'] as $clave => $etiqueta) {
+                $bloque = $informe[$clave] ?? [];
+                $pre = $bloque['pre']['resumen_global'] ?? [];
+                $post = $bloque['post']['resumen_global'] ?? [];
+                $rep = $bloque['replicacion'] ?? [];
 
-            $this->table(
-                ['Concepto', 'Antes', 'Después'],
-                [
-                    ['Sin cabecera Anita', (string) ($pre['conteo']['solo_erp'] ?? 0), (string) ($post['conteo']['solo_erp'] ?? 0)],
-                    ['Diferencia importes (total/gravado/IVA/exento)', (string) ($pre['conteo']['diferencia'] ?? 0), (string) ($post['conteo']['diferencia'] ?? 0)],
-                    ['Replicadas', '—', (string) ($rep['replicadas'] ?? 0)],
-                    ['Delta total ERP−Anita', (string) ($pre['delta_totales']['total'] ?? 0), (string) ($post['delta_totales']['total'] ?? 0)],
-                    ['Delta gravado ERP−Anita', (string) ($pre['delta_totales']['gravado'] ?? 0), (string) ($post['delta_totales']['gravado'] ?? 0)],
-                ],
-            );
+                if ((int) ($pre['ventas_erp'] ?? 0) === 0 && (int) ($post['ventas_erp'] ?? 0) === 0) {
+                    continue;
+                }
+
+                $this->comment($etiqueta);
+                $this->table(
+                    ['Concepto', 'Antes', 'Después'],
+                    [
+                        ['Sin cabecera Anita', (string) ($pre['conteo']['solo_erp'] ?? 0), (string) ($post['conteo']['solo_erp'] ?? 0)],
+                        ['Diferencia importes', (string) ($pre['conteo']['diferencia'] ?? 0), (string) ($post['conteo']['diferencia'] ?? 0)],
+                        ['Replicadas', '—', (string) ($rep['replicadas'] ?? 0)],
+                        ['Delta total ERP−Anita', (string) ($pre['delta_totales']['total'] ?? 0), (string) ($post['delta_totales']['total'] ?? 0)],
+                    ],
+                );
+
+                if ((int) ($post['conteo']['solo_erp'] ?? 0) > 0
+                    || (int) ($post['conteo']['diferencia'] ?? 0) > 0
+                    || ($rep['errores'] ?? []) !== []) {
+                    $hayProblemas = true;
+                }
+            }
 
             if (! empty($informe['mail_enviado'])) {
                 $this->info('Correo enviado a '.$informe['mail_destino']);
@@ -80,12 +93,6 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
                 $this->comment('Alerta detectada; revise mail o ejecute sin --sin-mail.');
             } else {
                 $this->info('Sin alertas para empresa '.$empresaId.'.');
-            }
-
-            if ((int) ($post['conteo']['solo_erp'] ?? 0) > 0
-                || (int) ($post['conteo']['diferencia'] ?? 0) > 0
-                || ($rep['errores'] ?? []) !== []) {
-                $hayProblemas = true;
             }
         }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Caja;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\WaitryCierreJornadaService;
+use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaProcesoAutomaticoService;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaProcesoService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Caja\RendicionGastronomiaPdfPermiso;
@@ -21,6 +22,7 @@ class WaitryCierreJornadaController extends Controller
     public function __construct(
         private readonly WaitryCierreJornadaService $cierreJornadaService,
         private readonly GastronomiaCierreJornadaProcesoService $procesoService,
+        private readonly GastronomiaCierreJornadaProcesoAutomaticoService $procesoAutomaticoService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly GastronomiaJornadaService $jornadaService,
     ) {
@@ -64,6 +66,9 @@ class WaitryCierreJornadaController extends Controller
             'config_contable' => $empresaId > 0
                 ? CierreJornadaProcesoConfigSupport::paraEmpresaConDetalle($empresaId)
                 : [],
+            'porcentaje_proceso_config' => $empresaId > 0
+                ? CierreJornadaProcesoConfigSupport::resolverPorcentajeParaEmpresa($empresaId)
+                : (float) config('gastronomia.cierre_jornada_porcentaje', 0),
             'url_movimientos_proceso_base' => str_replace(
                 '__GRUPO__',
                 '',
@@ -387,6 +392,60 @@ class WaitryCierreJornadaController extends Controller
             'config' => $cfg,
             'faltantes' => CierreJornadaProcesoConfigSupport::faltantes($cfg, $empresaId),
         ]);
+    }
+
+    public function apiProcesoEjecutarAutomatico(Request $request)
+    {
+        $this->canProcesoCierre();
+
+        $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'fecha_jornada' => 'nullable|date',
+            'enviar_mail' => 'nullable|boolean',
+        ]);
+
+        try {
+            $this->prepararEntornoProcesoApi(600);
+
+            $empresaId = (int) $request->input('empresa_id');
+            $fechaJornada = $request->filled('fecha_jornada')
+                ? (string) $request->input('fecha_jornada')
+                : null;
+            $enviarMail = $request->boolean('enviar_mail', true);
+
+            $resultado = $this->procesoAutomaticoService->ejecutarEmpresa($empresaId, $fechaJornada);
+
+            if ($enviarMail) {
+                $informe = [
+                    'ejecutado_en' => now()->toIso8601String(),
+                    'empresas' => [$resultado],
+                    'resumen' => [
+                        'procesadas' => in_array($resultado['estado'] ?? '', ['completado', 'reanudado'], true) ? 1 : 0,
+                        'omitidas' => in_array($resultado['estado'] ?? '', ['omitido', 'sin_pendiente'], true) ? 1 : 0,
+                        'errores' => ($resultado['ok'] ?? false) ? 0 : (
+                            in_array($resultado['estado'] ?? '', ['omitido', 'sin_pendiente'], true) ? 0 : 1
+                        ),
+                    ],
+                ];
+                $informe['ok'] = ($informe['resumen']['errores'] ?? 0) === 0;
+                $this->procesoAutomaticoService->enviarMailInforme($informe);
+            }
+
+            $status = ($resultado['ok'] ?? false) || in_array($resultado['estado'] ?? '', ['omitido', 'sin_pendiente'], true)
+                ? 200
+                : 422;
+
+            return response()->json($resultado, $status);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
+            ], 422);
+        }
     }
 
     public function apiProcesoGuardarConfig(Request $request, int $empresaId)

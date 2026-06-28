@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaProveedor\ComprobanteProveedorPdfIaConceptoMatcherSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosListaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
@@ -165,19 +166,14 @@ final class ComprobanteProveedorPdfIaService
         $sucursal = $this->normalizarEntero($resuelto['sucursal'] ?? null);
         $numeroFactura = $this->normalizarEntero($resuelto['numero_factura'] ?? null);
 
-        $duplicado = $this->precargaRepository->findDuplicadoPrecarga(
+        ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
             $empresaId,
-            $proveedorId,
             $tipotransaccionId,
             $letra,
             $sucursal,
             $numeroFactura,
+            $proveedorId,
         );
-        if ($duplicado !== null) {
-            throw new RuntimeException(
-                $this->precargaRepository->mensajeFacturaDuplicada($duplicado, $tipoAbreviatura)
-            );
-        }
 
         $rutaAlmacenamiento = $resuelto['ruta_almacenamiento'] ?? null;
         if ($pdf !== null) {

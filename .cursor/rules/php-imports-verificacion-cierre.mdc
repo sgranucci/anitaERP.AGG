@@ -1,0 +1,64 @@
+---
+description: Verificar imports PHP (use) antes de cerrar cambios — evita Class not found en runtime
+alwaysApply: true
+---
+
+# PHP: imports antes de cerrar un cambio
+
+PHP resuelve nombres de clase **sin barra inicial** relativos al `namespace` del archivo. Un `OrdencompraEstados::PENDIENTE` en `App\Support\Configuracion\OcArbolTriggerEvaluators` busca `App\Support\Configuracion\OcArbolTriggerEvaluators\OrdencompraEstados` y falla al **cargar la clase**, a veces en pantallas no relacionadas (autoload al resolver el contenedor).
+
+Ver también `modelo-usuario-seguridad-import.mdc` (caso `Usuario`).
+
+## Obligatorio al agregar o mover código PHP
+
+1. Cada clase/interface de **otro namespace** usada en type-hints, `instanceof`, `::class`, constantes (`Estados::X`), `new`, `extends`, `implements` → **`use` explícito** o FQCN con `\`.
+2. Mismo namespace (`App\Services\Configuracion\A` usando `B` del mismo paquete) → no hace falta `use`, pero conviene no mezclar con alias ambiguos.
+3. **`app(MiClase::class)`** solo es seguro sin `use` si `MiClase` está en el **mismo namespace** del archivo; si no, agregar `use`.
+4. Al inyectar en constructor (`private OcArbolTriggerDispatcherService $x`) Laravel resuelve por FQCN del type-hint: el `use` del type-hint es **obligatorio** si la clase está en otro namespace.
+
+## Checklist del agente (antes de dar por terminado)
+
+Tras tocar PHP (services, support, models, evaluators, repositories):
+
+```bash
+# 1) Sintaxis de archivos tocados
+php -l app/Ruta/Al/Archivo.php
+
+# 2) Autoload + contenedor de clases nuevas o con dependencias
+php -r "
+require 'vendor/autoload.php';
+\$app = require 'bootstrap/app.php';
+\$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+foreach ([
+  'App\\Services\\Configuracion\\OcArbolTriggerDispatcherService',
+  // … agregar FQCN de clases creadas/modificadas
+] as \$c) {
+  class_exists(\$c) || interface_exists(\$c) or throw new RuntimeException(\"No autoload: \$c\");
+  app(\$c);
+}
+echo \"OK\n\";
+"
+
+# 3) Heurística rápida: :: de PascalCase sin use en el archivo
+rg -n '\b[A-Z][A-Za-z0-9_]*::' app/Ruta --glob '*.php'  # cruzar manualmente con bloque ^use 
+```
+
+4. Si hay vistas Blade nuevas: `php artisan view:cache`.
+5. Si el cambio registra bindings IoC: confirmar par en `AppServiceProvider`.
+
+## Ejemplo del fallo real (triggers OC)
+
+```php
+// ❌ namespace App\Support\Configuracion\OcArbolTriggerEvaluators;
+private const X = [ OrdencompraEstados::SUSPENDIDA ]; // Class not found
+
+// ✅
+use App\Support\Compras\OrdencompraEstados;
+private const X = [ OrdencompraEstados::SUSPENDIDA ];
+```
+
+## Prohibido cerrar sin verificar cuando
+
+- Se creó namespace nuevo (`Support/.../Evaluators`, `Services/...`).
+- Se agregó `::class`, constantes de Support, modelos de otro módulo, o type-hint cross-módulo.
+- El usuario reportó `Class "App\\…\\Algo" not found` en la misma sesión → repetir autoload/contenedor sobre **todos** los archivos del diff, no solo el que falló.

@@ -22,6 +22,9 @@ var flModificaAsiento;
 
 		buscaTipoTransaccionCaja();
 		activa_eventos(true);
+		if (typeof activaEventosChequesIngresoEgreso === 'function') {
+			activaEventosChequesIngresoEgreso();
+		}
 
 		$("#botonform1").click(function(){
             $(".form1").show();
@@ -91,8 +94,7 @@ var flModificaAsiento;
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
         });
 
-		// copia ingresoegreso
-		$("#botonform3").click(function(){
+		$("#boton-copia-ie").click(function(){
 			$('#copiaringresoegresoModal').modal('show');
         });
 
@@ -115,7 +117,7 @@ var flModificaAsiento;
 		});
 
 		// revierte ingresoegreso
-		$("#botonform4").click(function(){
+		$("#boton-revierte-ie").click(function(){
 			$('#revertiringresoegresoModal').modal('show');
         });
 
@@ -184,22 +186,48 @@ var flModificaAsiento;
 	
 			if (!flError)
 			{
-				// Controla total de la operacion contra el total del asiento
-				if (totalDebe != 0 || totalHaber != 0)
+				if (typeof window.obtenerComprobantesIvaIngresoEgreso === 'function') {
+					$('#comprobantes_ivacompra_json').val(JSON.stringify(window.obtenerComprobantesIvaIngresoEgreso()));
+				}
+
+				var comprobantesIva = typeof window.obtenerComprobantesIvaIngresoEgreso === 'function'
+					? window.obtenerComprobantesIvaIngresoEgreso()
+					: [];
+				if (comprobantesIva.length > 0 && typeof window.validarComprobantesIvaContraCaja === 'function') {
+					window.validarComprobantesIvaContraCaja(function (valido) {
+						if (!valido) {
+							return;
+						}
+						continuarGrabacionIngresoEgreso(totalDebe, totalHaber, totalDebeAsiento);
+					});
+					return;
+				}
+			}
+
+			if (!flError) {
+				continuarGrabacionIngresoEgreso(totalDebe, totalHaber, totalDebeAsiento);
+			}
+		});
+
+		function continuarGrabacionIngresoEgreso(totalDebe, totalHaber, totalDebeAsiento)
+		{
+			var flError = false;
+
+			// Controla total de la operacion contra el total del asiento
+			if (totalDebe != 0 || totalHaber != 0)
+			{
+				let totalOperacion;
+
+				if (totalDebe > totalHaber)
+					totalOperacion = totalDebe;
+				else
+					totalOperacion = totalHaber;
+
+				if (totalOperacion != totalDebeAsiento)
 				{
-					let totalOperacion;
-
-					if (totalDebe > totalHaber)
-						totalOperacion = totalDebe;
-					else
-						totalOperacion = totalHaber;
-
-					if (totalOperacion != totalDebeAsiento)
-					{
-						alert('Problemas en el asiento, no coincide el monto total de la operación con el asiento contable');
-						flError = true;
-						muestraVentanaAsiento();						
-					}
+					alert('Problemas en el asiento, no coincide el monto total de la operación con el asiento contable');
+					flError = true;
+					muestraVentanaAsiento();						
 				}
 			}
 
@@ -222,7 +250,7 @@ var flModificaAsiento;
 	
 			if (!flError)
 				$( "#form-general" ).submit();
-		});
+		}
     });
 
 	function activa_eventos(flInicio)
@@ -307,7 +335,31 @@ var flModificaAsiento;
         	$('#consultacuentacajaModal').modal('hide');
     	});
 
-		$(document).on('click', '.eligeconsultacuentacaja', function () {
+    	$(document).on('click', '.eligeconsultacuentacaja', function () {
+			if (typeof cuentacajaxcodigoEmitido !== 'undefined' && cuentacajaxcodigoEmitido && cuentacajaxcodigoEmitido.length) {
+				var seleccionE = $(this).parents("tr").children().html();
+				var nombreE = $(this).parents("tr").find(".nombre").html();
+				var codigoE = $(this).parents("tr").find(".codigo").html();
+				var monedaE = $(this).parents("tr").find(".moneda_id").html();
+				cuentacajaxcodigoEmitido.find('.cuentacaja_emitido_id').val(seleccionE);
+				cuentacajaxcodigoEmitido.find('.codigo_emitido').val(codigoE);
+				cuentacajaxcodigoEmitido.find('.nombre_emitido').val(nombreE);
+				cuentacajaxcodigoEmitido.find('.moneda_emitido_id').val(monedaE);
+				cuentacajaxcodigoEmitido = null;
+				$('#consultacuentacajaModal').modal('hide');
+				flModificaAsiento = true;
+				return;
+			}
+			if (typeof cuentacajaxcodigoReemplazo !== 'undefined' && cuentacajaxcodigoReemplazo && cuentacajaxcodigoReemplazo.length) {
+				var seleccionR = $(this).parents("tr").children().html();
+				var codigoR = $(this).parents("tr").find(".codigo").html();
+				cuentacajaxcodigoReemplazo.find('.cuentacaja_reemplazo_id').val(seleccionR);
+				cuentacajaxcodigoReemplazo.find('.codigo_reemplazo').val(codigoR);
+				cuentacajaxcodigoReemplazo = null;
+				$('#consultacuentacajaModal').modal('hide');
+				flModificaAsiento = true;
+				return;
+			}
 			var seleccion = $(this).parents("tr").children().html();
 			var nombre = $(this).parents("tr").find(".nombre").html();
 			var codigo = $(this).parents("tr").find(".codigo").html();
@@ -475,6 +527,18 @@ var flModificaAsiento;
 		$("#totaldebe").val(totalDebe.toFixed(2));
 		$("#totalhaber").val(totalHaber.toFixed(2));
 
+		if (typeof sumaMontosChequesIngresoEgreso === 'function') {
+			var extraCheques = sumaMontosChequesIngresoEgreso();
+			if (extraCheques.extraDebe) {
+				totalDebe += extraCheques.extraDebe;
+				$("#totaldebe").val(totalDebe.toFixed(2));
+			}
+			if (extraCheques.extraHaber) {
+				totalHaber += extraCheques.extraHaber;
+				$("#totalhaber").val(totalHaber.toFixed(2));
+			}
+		}
+
 		if (monedaDefault > 0)
 		{
 			let label = "Total Debe en "+descripcionMoneda[monedaDefault];
@@ -576,6 +640,13 @@ var flModificaAsiento;
 			});
 		}
 		datosCuentasContables = JSON.stringify(datosCuentasContables);
+
+		var datosChequesEmitidos = typeof serializarChequesEmitidos === 'function' ? serializarChequesEmitidos() : '[]';
+		var datosChequesRecibidos = typeof serializarChequesRecibidos === 'function' ? serializarChequesRecibidos() : '[]';
+		var datosChequesReemplazo = typeof serializarChequesReemplazo === 'function' ? serializarChequesReemplazo() : '[]';
+		var comprobantesIvaJson = typeof window.obtenerComprobantesIvaIngresoEgreso === 'function'
+			? JSON.stringify(window.obtenerComprobantesIvaIngresoEgreso())
+			: ($('#comprobantes_ivacompra_json').val() || '[]');
 		
 		$.ajaxSetup({
 			headers: {
@@ -592,8 +663,13 @@ var flModificaAsiento;
 				tipotransaccion_caja_id: tipotransaccion_caja_id,
 				conceptogasto_id: conceptogasto_id,
 				empresa_id: empresa_id,
+				fecha: $('#fecha').val(),
 				datoscaja: datosCuentasCaja,
-				datoscontables: datosCuentasContables
+				datoscontables: datosCuentasContables,
+				datoscheques_emitidos: datosChequesEmitidos,
+				datoscheques_recibidos: datosChequesRecibidos,
+				datoscheques_reemplazo: datosChequesReemplazo,
+				comprobantes_ivacompra_json: comprobantesIvaJson
 			},
 			success: function (data) {
 				if (data.mensaje == 'ok')

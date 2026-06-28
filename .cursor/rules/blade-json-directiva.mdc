@@ -1,0 +1,86 @@
+---
+description: Blade — no usar PHP complejo dentro de @json()
+globs: resources/views/**/*.blade.php
+alwaysApply: false
+---
+
+# Directiva @json en Blade
+
+No pasar **expresiones PHP complejas** dentro de `@json(...)`. El compilador de Blade las interpreta mal y falla al compilar la vista.
+
+Error típico en runtime:
+
+```text
+syntax error, unexpected token ";", expecting "]"
+Illuminate\Filesystem\Filesystem :12
+```
+
+Incidente real: `@json(($depositos)->map(static function ($dep) { return [...]; })->values())`.
+
+## Prohibido
+
+```blade
+{{-- ❌ Closure multilínea con ; dentro de @json --}}
+<script>
+window.datos = @json(
+    collect($items)->map(function ($item) {
+        return ['id' => $item->id, 'nombre' => $item->nombre];
+    })->values()
+);
+</script>
+
+{{-- ❌ Lógica larga inline (map, filter, closures, múltiples ; ) --}}
+<script>
+window.opts = @json($query->get()->map(fn ($r) => ['a' => $r->a])->all());
+</script>
+```
+
+## Correcto
+
+**Preferido:** preparar en controller / View Composer y pasar variable lista.
+
+```php
+// Controller
+return view('modulo.index', [
+    'depositos_kardex_opciones' => $depositos->map(fn ($dep) => [
+        'id' => (int) $dep->id,
+        'label' => Depmae::etiquetaDesdePartes($dep->codigo, $dep->nombre, $dep->id),
+    ])->values()->all(),
+]);
+```
+
+```blade
+<script>
+window.__depositosKardexExistencias = @json($depositos_kardex_opciones ?? []);
+</script>
+```
+
+**Alternativa en la vista:** bloque `@php` previo + `@json` con variable simple.
+
+```blade
+@php
+    $depositosKardexOpciones = ($depositos ?? collect())->map(function ($dep) {
+        return ['id' => (int) $dep->id, 'label' => $dep->nombre];
+    })->values()->all();
+@endphp
+<script>
+window.datos = @json($depositosKardexOpciones);
+</script>
+```
+
+## Regla práctica
+
+| Dentro de `@json(...)` | Permitido |
+|---|---|
+| Variable (`$foo`, `$foo ?? []`) | Sí |
+| Propiedad / array ya armado | Sí |
+| `map()`, closures, `function () { ... }`, `->values()` inline | No — mover fuera |
+
+## Tras editar vistas con @json
+
+```bash
+php artisan view:clear
+php artisan view:cache
+```
+
+Si falla la compilación, mover la expresión al controller antes de intentar otro workaround en Blade.

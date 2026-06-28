@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\ApiAnita;
 use App\Models\Stock\Articulo;
 use App\Support\Stock\ArticuloSkuMatchSupport;
+use App\Support\Stock\StockAnitaBridgeSupport;
 
 /**
  * Altas y actualizaciones de artículos en el ERP desde Anita (stkmae) vía {@see ApiAnita}.
@@ -23,27 +24,29 @@ class ArticuloAnitaSyncService
     }
 
     /**
-     * Importa o actualiza un artículo por SKU ERP (ej. V0432) desde Anita.
+     * Importa o actualiza un artículo por SKU ERP (ej. V0421) desde Anita.
      *
+     * @param  int|null  $empresaId  Bridge por empresa (2=Kandiko, 3=Rebisco); null = bridge central Biyemas.
      * @return array{sku:string, codigo_anita:string, accion:'importado'|'actualizado', advertencias:list<string>}
      */
-    public function sincronizarSkuDesdeAnita(string $sku): array
+    public function sincronizarSkuDesdeAnita(string $sku, ?int $empresaId = null): array
     {
         $sku = trim($sku);
         if ($sku === '') {
             throw new \InvalidArgumentException('Debe indicar el SKU del artículo.');
         }
 
-        $codigoAnita = $this->resolverCodigoAnitaPorSku($sku);
+        $codigoAnita = $this->resolverCodigoAnitaPorSku($sku, $empresaId);
         if ($codigoAnita === null) {
-            throw new \RuntimeException("Artículo «{$sku}» no encontrado en Anita (stkmae).");
+            $ctx = ($empresaId !== null && $empresaId > 0) ? " (bridge empresa {$empresaId})" : '';
+            throw new \RuntimeException("Artículo «{$sku}» no encontrado en Anita (stkmae){$ctx}.");
         }
 
         $skuLocal = ltrim($codigoAnita, '0');
         $existe = ArticuloSkuMatchSupport::existe($skuLocal);
         $accion = $existe ? 'actualizado' : 'importado';
 
-        (new Articulo)->traerRegistroDeAnita($codigoAnita, ! $existe);
+        (new Articulo)->traerRegistroDeAnita($codigoAnita, ! $existe, $empresaId);
 
         $canonico = ArticuloSkuMatchSupport::resolverCanonico($skuLocal);
         if ($canonico === null) {
@@ -67,7 +70,7 @@ class ArticuloAnitaSyncService
     /**
      * Resuelve stkm_articulo en Anita (13 caracteres con ceros) a partir del SKU ERP.
      */
-    public function resolverCodigoAnitaPorSku(string $sku): ?string
+    public function resolverCodigoAnitaPorSku(string $sku, ?int $empresaId = null): ?string
     {
         $sku = trim($sku);
         if ($sku === '') {
@@ -82,7 +85,7 @@ class ArticuloAnitaSyncService
 
         $apiAnita = new ApiAnita;
         foreach ($candidatos as $codigo) {
-            if ($this->existeEnStkmae($apiAnita, $codigo)) {
+            if ($this->existeEnStkmae($apiAnita, $codigo, $empresaId)) {
                 return $codigo;
             }
         }
@@ -94,6 +97,9 @@ class ArticuloAnitaSyncService
             'campos' => 'stkm_articulo',
             'whereArmado' => " WHERE stkm_articulo LIKE '%{$skuEsc}' ",
         ];
+        if ($empresaId !== null && $empresaId > 0) {
+            $data = StockAnitaBridgeSupport::mergePayload($data, $empresaId);
+        }
         $res = json_decode($apiAnita->apiCall($data));
         if (! is_array($res) || $res === []) {
             return null;
@@ -110,7 +116,7 @@ class ArticuloAnitaSyncService
         return trim((string) ($res[0]->stkm_articulo ?? '')) ?: null;
     }
 
-    private function existeEnStkmae(ApiAnita $apiAnita, string $codigo): bool
+    private function existeEnStkmae(ApiAnita $apiAnita, string $codigo, ?int $empresaId = null): bool
     {
         $data = [
             'acc' => 'list',
@@ -118,6 +124,9 @@ class ArticuloAnitaSyncService
             'campos' => 'stkm_articulo',
             'whereArmado' => " WHERE stkm_articulo = '".addslashes($codigo)."' ",
         ];
+        if ($empresaId !== null && $empresaId > 0) {
+            $data = StockAnitaBridgeSupport::mergePayload($data, $empresaId);
+        }
         $res = json_decode($apiAnita->apiCall($data));
 
         return is_array($res) && count($res) > 0;

@@ -234,7 +234,9 @@ final class EstacionamientoFacturaEmisionService
 
                 $resultado = $this->facturacionService->completarAnitaPendienteTrasEmision($resultado);
 
-                $resultado = $this->aplicarImpresionTicketTrasEmision($resultado, $cfg, $cuenta);
+                $resultado = $this->aplicarImpresionTicketTrasEmision($resultado, $cfg, $cuenta->fresh([
+                    'turnoOperativo.usuarioHabilitado',
+                ]));
                 $resultado['mensaje'] = 'Factura '.trim((string) ($resultado['factura'] ?? '')).' emitida correctamente.';
 
                 return $resultado;
@@ -331,6 +333,7 @@ final class EstacionamientoFacturaEmisionService
 
             $pc = EstacionamientoIdentificadorPc::resolver();
             $turno = $this->turnoOperativoService->turnoHabilitadoEnPc($pc);
+            $turnoOperativoId = $turno?->id ?? $cuenta->turno_operativo_estacionamiento_id;
 
             VentaEstacionamientoEmision::updateOrCreate(
                 ['venta_id' => $venta->id],
@@ -339,7 +342,7 @@ final class EstacionamientoFacturaEmisionService
                     'identificador_pc' => $pc,
                     'configuracion_puntoventa_estacionamiento_id' => $cfg->id,
                     'jornada_estacionamiento_id' => $payload['jornada_estacionamiento_id'] ?? $cuenta->jornada_estacionamiento_id,
-                    'turno_operativo_estacionamiento_id' => $turno?->id ?? $cuenta->turno_operativo_estacionamiento_id,
+                    'turno_operativo_estacionamiento_id' => $turnoOperativoId,
                 ],
             );
 
@@ -354,7 +357,7 @@ final class EstacionamientoFacturaEmisionService
                     ]);
             }
 
-            $this->cuentaService->marcarFacturada($cuenta->fresh(), $venta->id);
+            $this->cuentaService->marcarFacturada($cuenta->fresh(), $venta->id, $turnoOperativoId);
 
             $ventaAnitaRevertir = null;
 

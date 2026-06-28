@@ -17,12 +17,12 @@
         data-toggle="collapse"
         data-target="{{ $toggleTarget }}"
         data-listado-filtros-toggle
-        data-listado-filtros-label-show="Filtros"
-        data-listado-filtros-label-hide="Ocultar filtros"
+        data-listado-filtros-label-show="{{ $toggleLabel ?? 'Filtros' }}"
+        data-listado-filtros-label-hide="{{ $toggleLabelOculto ?? 'Ocultar filtros' }}"
         aria-expanded="false"
         style="color: #fff;">
     <i class="fa fa-filter"></i>
-    <span class="js-listado-filtros-toggle-text">Filtros</span>
+        <span class="js-listado-filtros-toggle-text">{{ $toggleLabel ?? 'Filtros' }}</span>
 </button>
 <input type="text"
        name="{{ $inputName }}"

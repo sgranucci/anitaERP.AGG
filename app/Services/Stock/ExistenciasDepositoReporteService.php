@@ -230,6 +230,17 @@ class ExistenciasDepositoReporteService
   }
 
   /**
+   * Depósitos visibles según empresa, autorización de usuario y filtro de códigos del formulario.
+   *
+   * @param  array<string, mixed>  $filtros
+   * @return Collection<int, Depmae>
+   */
+  public function depositosAutorizadosParaFiltros(array $filtros): Collection
+  {
+    return $this->depositosAutorizados($filtros);
+  }
+
+  /**
    * @param  array<string, mixed>  $filtros
    * @return Collection<int, Depmae>
    */

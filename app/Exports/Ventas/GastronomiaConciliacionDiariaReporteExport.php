@@ -62,7 +62,7 @@ final class GastronomiaConciliacionDiariaReporteExport implements FromView, Shou
         $hasta = (string) ($informe['fecha_hasta'] ?? $desde);
         $this->titulo = 'Conciliación gastronomía ERP / Anita / rendgastro';
         $this->subtitulo = sprintf(
-            'Jornada %s → %s · Agrupado por PC (terminal) y PV (CAE / CAEA) · rendgastro por rendg_host · Excluye estacionamiento y facturas fuera de PCs gastronomía',
+            'Jornada %s → %s · Circuitos: GASTRO (salón) | ESTACIONAMIENTO | VENDING · Por PC/PV vs rendgastro',
             $desde,
             $hasta,
         );
@@ -266,7 +266,7 @@ final class GastronomiaConciliacionDiariaReporteExport implements FromView, Shou
     {
         $filasCsv = $service->construirFilasCsv($informe);
         $headers = [
-            'empresa_id', 'empresa_nombre', 'fecha_jornada', 'tipo_fila', 'tipo_pv',
+            'empresa_id', 'empresa_nombre', 'fecha_jornada', 'circuito', 'tipo_fila', 'tipo_pv',
             'identificador_pc', 'pv_codigo', 'pv_cae', 'pv_caea',
             'ventas_erp_cae', 'ventas_erp_caea', 'ventas_erp_total',
             'ventas_anita_cae', 'ventas_anita_caea', 'ventas_anita_total',

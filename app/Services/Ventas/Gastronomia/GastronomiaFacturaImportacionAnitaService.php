@@ -45,7 +45,7 @@ final class GastronomiaFacturaImportacionAnitaService
     }
 
     /**
-     * @return array{importados:int,omitidos:int,errores:list<string>,advertencias:list<string>}
+     * @return array{importados:int,omitidos:int,vinculados:int,errores:list<string>,advertencias:list<string>}
      */
     public function importarRango(
         int $sucursal,
@@ -61,7 +61,7 @@ final class GastronomiaFacturaImportacionAnitaService
         }
 
         $ctx = $this->resolverContexto($sucursal, $empresaId, $identificadorPc);
-        $ret = ['importados' => 0, 'omitidos' => 0, 'errores' => [], 'advertencias' => []];
+        $ret = ['importados' => 0, 'omitidos' => 0, 'vinculados' => 0, 'errores' => [], 'advertencias' => []];
 
         $numeros = $this->listarNumerosAnitaEnRango($sucursal, $desde, $hasta, $ctx);
 
@@ -76,6 +76,8 @@ final class GastronomiaFacturaImportacionAnitaService
                     $ret['importados']++;
                 } elseif ($r === 'omitido') {
                     $ret['omitidos']++;
+                } elseif ($r === 'vinculado') {
+                    $ret['vinculados']++;
                 }
             } catch (\Throwable $e) {
                 $ret['errores'][] = $this->etiqueta($sucursal, $nro).': '.$e->getMessage();
@@ -111,17 +113,56 @@ final class GastronomiaFacturaImportacionAnitaService
     }
 
     /**
-     * @return 'importado'|'omitido'
+     * @return 'importado'|'omitido'|'vinculado'
      */
-    private function importarUno(int $sucursal, int $nro, array $ctx, int $usuarioId, bool $dryRun): string
-    {
-        $codigo = $this->armarCodigo($sucursal, $nro);
-
-        if (Venta::query()->where('codigo', $codigo)->exists()) {
-            return 'omitido';
+    public function importarNumero(
+        int $sucursal,
+        int $nro,
+        int $empresaId,
+        int $usuarioId,
+        bool $dryRun = false,
+        ?string $identificadorPc = null,
+        ?string $tipoAnita = null,
+    ): string {
+        if ($sucursal <= 0 || $nro <= 0) {
+            throw new InvalidArgumentException('Comprobante inválido.');
         }
 
-        $cab = $this->leerCabeceraAnita($sucursal, $nro, $ctx);
+        $ctx = $this->resolverContexto($sucursal, $empresaId, $identificadorPc);
+
+        return $this->importarUno($sucursal, $nro, $ctx, $usuarioId, $dryRun, $tipoAnita);
+    }
+
+    /**
+     * @return 'importado'|'omitido'|'vinculado'
+     */
+    private function importarUno(
+        int $sucursal,
+        int $nro,
+        array $ctx,
+        int $usuarioId,
+        bool $dryRun,
+        ?string $tipoAnita = null,
+    ): string {
+        $tipo = strtoupper(trim($tipoAnita ?? (string) ($ctx['tipo_anita'] ?? self::TIPO)));
+        $codigo = $this->armarCodigo($sucursal, $nro, $tipo);
+
+        $ventaExistente = Venta::query()->where('codigo', $codigo)->first();
+        if ($ventaExistente !== null) {
+            if ($ventaExistente->gastronomiaEmision()->exists()) {
+                return 'omitido';
+            }
+
+            if ($dryRun) {
+                return 'vinculado';
+            }
+
+            $this->vincularEmisionGastronomia($ventaExistente, $sucursal, $nro, $ctx, $usuarioId, $tipo);
+
+            return 'vinculado';
+        }
+
+        $cab = $this->leerCabeceraAnita($sucursal, $nro, $ctx, $tipo);
         if ($cab === null) {
             throw new InvalidArgumentException('Sin cabecera venta en Anita.');
         }
@@ -196,7 +237,7 @@ final class GastronomiaFacturaImportacionAnitaService
                 'cotizacion' => (float) ($cab->ven_cotizacion ?? 1) ?: 1.,
                 'estado' => ' ',
                 'usuario_id' => $usuarioId,
-                'leyenda' => 'Importación Anita '.$codigo,
+                'leyenda' => 'Generada en Anita POS — importación '.$codigo,
                 'descuento' => (float) ($cab->ven_porc_desc ?? 0),
                 'descuentointegrado' => ' ',
                 'lugarentrega' => null,
@@ -228,6 +269,7 @@ final class GastronomiaFacturaImportacionAnitaService
 
             $cuenta = CuentaGastronomia::query()->create([
                 'tipo' => CuentaGastronomia::TIPO_CUENTA,
+                'origen_pos' => CuentaGastronomia::ORIGEN_IMPORT_ANITA,
                 'empresa_id' => (int) $ctx['empresa_id'],
                 'mesa_gastronomia_id' => null,
                 'mozo_gastronomia_id' => $mozo?->id,
@@ -245,11 +287,12 @@ final class GastronomiaFacturaImportacionAnitaService
             VentaGastronomiaEmision::query()->create([
                 'venta_id' => $venta->id,
                 'cuenta_gastronomia_id' => $cuenta->id,
+                'origen_pos' => CuentaGastronomia::ORIGEN_IMPORT_ANITA,
                 'identificador_pc' => (string) $ctx['identificador_pc'],
                 'configuracion_puntoventa_gastronomia_id' => (int) $ctx['configuracion_id'],
             ]);
 
-            if (! $sinCobranza && $medios !== []) {
+            if (! $sinCobranza && $medios !== [] && ! $this->existeCobranzaActivaParaNumerotransaccion((int) $ctx['empresa_id'], $codigo)) {
                 session(['empresa_id' => (int) $ctx['empresa_id']]);
                 $this->eliminarCobranzaHuerfanaAnulada((int) $ctx['empresa_id'], $codigo);
                 $this->cobranzaGastronomiaService->registrarCobranzaPos(
@@ -262,6 +305,88 @@ final class GastronomiaFacturaImportacionAnitaService
         });
 
         return 'importado';
+    }
+
+    private function vincularEmisionGastronomia(
+        Venta $venta,
+        int $sucursal,
+        int $nro,
+        array $ctx,
+        int $usuarioId,
+        ?string $tipoAnita = null,
+    ): void {
+        if ($venta->gastronomiaEmision()->exists()) {
+            return;
+        }
+
+        $tipo = strtoupper(trim($tipoAnita ?? (string) ($ctx['tipo_anita'] ?? self::TIPO)));
+        $cab = $this->leerCabeceraAnita($sucursal, $nro, $ctx, $tipo);
+        if ($cab === null) {
+            throw new InvalidArgumentException('Sin cabecera venta en Anita para vincular emisión.');
+        }
+
+        $tipoAnita = strtoupper(trim((string) ($cab->ven_tipo ?? $ctx['tipo_anita'] ?? self::TIPO)));
+        $empresaCodigo = (string) ($ctx['empresa_codigo'] ?? '');
+        $resvta = $this->leerResvta($sucursal, $nro, $tipoAnita, $empresaCodigo);
+
+        if (GastronomiaAnitaImportEstacionamientoSupport::esResvtaEstacionamiento($resvta)) {
+            throw new InvalidArgumentException('Comprobante de estacionamiento; no se vincula a gastronomía.');
+        }
+
+        $fecha = $this->parseFechaAnita((string) ($cab->ven_fecha ?? ''));
+        $fechaJornada = $this->parseFechaJornadaAnita($cab, $fecha);
+        $total = round(abs((float) ($venta->total ?? $cab->ven_monto ?? 0)), 2);
+        $mozo = $this->resolverMozo($cab, (int) $ctx['empresa_id']);
+        $timestamp = $this->resolverTimestampImport(
+            $nro,
+            $fechaJornada,
+            $resvta,
+            (string) $ctx['identificador_pc'],
+            (int) $ctx['empresa_id'],
+        );
+
+        DB::transaction(function () use ($venta, $ctx, $mozo, $timestamp, $total, $fechaJornada, $cab): void {
+            if ($venta->fechajornada === null || (string) $venta->fechajornada === '') {
+                $venta->fechajornada = $fechaJornada;
+                $venta->save();
+            }
+
+            if ($venta->venta_emisiones()->count() === 0) {
+                $this->crearEmisiones(
+                    (int) $venta->id,
+                    [],
+                    $cab,
+                    $total,
+                    (int) ($venta->moneda_id ?? $cab->ven_cod_mon ?? 1),
+                    $timestamp,
+                );
+            }
+
+            $cuenta = CuentaGastronomia::query()->create([
+                'tipo' => CuentaGastronomia::TIPO_CUENTA,
+                'origen_pos' => CuentaGastronomia::ORIGEN_SALON,
+                'empresa_id' => (int) $ctx['empresa_id'],
+                'mesa_gastronomia_id' => null,
+                'mozo_gastronomia_id' => $mozo?->id,
+                'cubiertos' => 1,
+                'estado' => CuentaGastronomia::ESTADO_FACTURADA,
+                'identificador_pc' => (string) $ctx['identificador_pc'],
+                'cliente_id' => (int) ($venta->cliente_id ?? config('gastronomia_anita_import.cliente_consumidor_final_id', 1)),
+                'configuracion_puntoventa_gastronomia_id' => (int) $ctx['configuracion_id'],
+                'venta_id' => $venta->id,
+            ]);
+            $cuenta->created_at = $timestamp;
+            $cuenta->updated_at = $timestamp;
+            $cuenta->save();
+
+            VentaGastronomiaEmision::query()->create([
+                'venta_id' => $venta->id,
+                'cuenta_gastronomia_id' => $cuenta->id,
+                'origen_pos' => CuentaGastronomia::ORIGEN_SALON,
+                'identificador_pc' => (string) $ctx['identificador_pc'],
+                'configuracion_puntoventa_gastronomia_id' => (int) $ctx['configuracion_id'],
+            ]);
+        });
     }
 
     /**
@@ -371,7 +496,7 @@ final class GastronomiaFacturaImportacionAnitaService
     /**
      * @param  array<string, mixed>  $ctx
      */
-    private function leerCabeceraAnita(int $sucursal, int $nro, array $ctx): ?stdClass
+    private function leerCabeceraAnita(int $sucursal, int $nro, array $ctx, ?string $tipoPreferido = null): ?stdClass
     {
         $api = new ApiAnita;
         $campos = implode(',', [
@@ -383,7 +508,13 @@ final class GastronomiaFacturaImportacionAnitaService
         /** @var Puntoventa $puntoventa */
         $puntoventa = $ctx['puntoventa'];
 
-        foreach ($ctx['tipos_anita_lectura'] as $tipo) {
+        $tipos = $ctx['tipos_anita_lectura'];
+        if ($tipoPreferido !== null && trim($tipoPreferido) !== '') {
+            $preferido = strtoupper(trim($tipoPreferido));
+            $tipos = array_values(array_unique([$preferido, ...$tipos]));
+        }
+
+        foreach ($tipos as $tipo) {
             $raw = $api->apiCall([
                 'acc' => 'list',
                 'tabla' => 'venta',
@@ -708,12 +839,13 @@ final class GastronomiaFacturaImportacionAnitaService
         return $this->mozoRepository->findPorCodigo($codigo, $empresaId);
     }
 
-    private function armarCodigo(int $sucursal, int $nro): string
+    private function armarCodigo(int $sucursal, int $nro, string $tipo = self::TIPO): string
     {
         $digSuc = (int) config('facturacion.DIGITOS_SUCURSAL', 5);
         $digNro = (int) config('facturacion.DIGITOS_COMPROBANTE', 8);
+        $tipo = strtoupper(trim($tipo));
 
-        return self::TIPO.' '.self::LETRA.'-'
+        return $tipo.' '.self::LETRA.'-'
             .str_pad((string) $sucursal, $digSuc, '0', STR_PAD_LEFT).'-'
             .str_pad((string) $nro, $digNro, '0', STR_PAD_LEFT);
     }
@@ -895,6 +1027,29 @@ final class GastronomiaFacturaImportacionAnitaService
     /**
      * Libera numerotransaccion si quedó una cobranza ANULADA/huérfana (post-restore) que bloquea el unique.
      */
+    private function existeCobranzaActivaParaNumerotransaccion(int $empresaId, string $codigoVenta): bool
+    {
+        $numeroTx = CobranzaNumeracionTransaccion::numerotransaccionDesdeCodigoVenta($codigoVenta);
+        if ($numeroTx === '') {
+            return false;
+        }
+
+        $cobranza = Cobranza::query()
+            ->where('empresa_id', $empresaId)
+            ->where('numerotransaccion', $numeroTx)
+            ->first();
+
+        if ($cobranza === null) {
+            return false;
+        }
+
+        $estado = strtoupper(trim((string) ($cobranza->estado ?? '')));
+
+        return $cobranza->venta_id !== null
+            && $cobranza->deleted_at === null
+            && $estado !== 'ANULADA';
+    }
+
     private function eliminarCobranzaHuerfanaAnulada(int $empresaId, string $codigoVenta): void
     {
         $numeroTx = CobranzaNumeracionTransaccion::numerotransaccionDesdeCodigoVenta($codigoVenta);

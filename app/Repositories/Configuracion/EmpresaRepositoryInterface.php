@@ -19,5 +19,11 @@ interface EmpresaRepositoryInterface extends RepositoryInterface
 
     public function empresaIdPermitida(int $empresaId): bool;
 
+    public function allFiltrado();
+
+    /**
+     * Empresas con al menos un usuario en usuario_empresa, restringidas a las asignadas al operador en sesión.
+     */
+    public function empresasActivasOperativas();
 }
 

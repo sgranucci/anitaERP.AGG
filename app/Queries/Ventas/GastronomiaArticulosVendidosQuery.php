@@ -3,6 +3,7 @@
 namespace App\Queries\Ventas;
 
 use App\Models\Ventas\JornadaGastronomia;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Stock\ArticuloUsoInsumoSupport;
 use App\Support\Stock\RecuentoMovimientosArticuloSupport;
@@ -22,6 +23,10 @@ use Illuminate\Support\Str;
  */
 class GastronomiaArticulosVendidosQuery
 {
+    public function __construct(
+        private readonly EmpresaRepositoryInterface $empresaRepository,
+    ) {}
+
     private static function cantidadExpr(): string
     {
         return GastronomiaVentaComprobanteSignoSupport::sqlCantidadLineaVenta();
@@ -158,24 +163,31 @@ class GastronomiaArticulosVendidosQuery
      */
     public function totales(array $filtros): array
     {
-        $sub = $this->queryBase($filtros);
+        return $this->listadoConTotales($filtros)['totales'];
+    }
 
-        $row = DB::query()
-            ->fromSub($sub, 't')
-            ->selectRaw('COUNT(*) as cantidad_articulos')
-            ->selectRaw('COALESCE(SUM(cantidad_total), 0) as cantidad_total')
-            ->selectRaw('COALESCE(SUM(importe_total), 0) as importe_total')
-            ->first();
-
-        $comprobantes = DB::query()
-            ->fromSub($this->queryComprobantesDistintos($filtros), 'c')
-            ->count();
+    /**
+     * Listado completo + totales en una sola pasada SQL (queryBase una vez).
+     *
+     * @return array{filas: Collection<int, object>, totales: array{cantidad_articulos:int,cantidad_total:float,importe_total:float,cantidad_comprobantes:int}}
+     */
+    public function listadoConTotales(array $filtros): array
+    {
+        $filas = $this->queryBase($filtros)
+            ->orderBy('a.sku')
+            ->orderBy('pv.codigo')
+            ->orderBy('d.codigo')
+            ->get()
+            ->map(fn ($row) => $this->enriquecerFila($row));
 
         return [
-            'cantidad_articulos' => (int) ($row->cantidad_articulos ?? 0),
-            'cantidad_total' => round((float) ($row->cantidad_total ?? 0), 4),
-            'importe_total' => round((float) ($row->importe_total ?? 0), 2),
-            'cantidad_comprobantes' => (int) $comprobantes,
+            'filas' => $filas,
+            'totales' => [
+                'cantidad_articulos' => $filas->count(),
+                'cantidad_total' => round($filas->sum(fn (object $fila): float => (float) ($fila->cantidad_total ?? 0)), 4),
+                'importe_total' => round($filas->sum(fn (object $fila): float => (float) ($fila->importe_total ?? 0)), 2),
+                'cantidad_comprobantes' => $this->contarComprobantesDistintos($filtros),
+            ],
         ];
     }
 
@@ -190,7 +202,9 @@ class GastronomiaArticulosVendidosQuery
             ->select('v.id')
             ->distinct();
 
-        $this->aplicarJoinsDeposito($query);
+        if ($this->filtroRequiereJoinsDeposito($filtros)) {
+            $this->aplicarJoinsDeposito($query, $filtros);
+        }
 
         $this->aplicarExclusionInsumos($query);
 
@@ -202,6 +216,97 @@ class GastronomiaArticulosVendidosQuery
         }
 
         return $query;
+    }
+
+    private function contarComprobantesDistintos(array $filtros): int
+    {
+        if ($this->filtroRequiereJoinsDeposito($filtros)) {
+            return (int) DB::query()
+                ->fromSub($this->queryComprobantesDistintos($filtros), 'c')
+                ->count();
+        }
+
+        $query = DB::table('venta_emision as ve')
+            ->join('venta as v', 'v.id', '=', 've.venta_id')
+            ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'v.id')
+            ->join('articulo as a', 'a.id', '=', 've.articulo_id')
+            ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
+            ->whereNull('v.deleted_at')
+            ->select('v.id')
+            ->distinct();
+
+        $this->aplicarExclusionInsumos($query);
+        $this->aplicarFiltrosEstructurales($query, $filtros);
+
+        $valor = trim((string) ($filtros['valor'] ?? ''));
+        if ($valor !== '' || ($filtros['operador'] ?? '') === 'vacio') {
+            $this->aplicarFiltrosTexto($query, $filtros);
+        }
+
+        return (int) DB::query()->fromSub($query, 'c')->count();
+    }
+
+    /**
+     * Joins de depósito solo cuando filtran o buscan por depósito (evita escanear articulo_movimiento completo).
+     */
+    private function filtroRequiereJoinsDeposito(array $filtros): bool
+    {
+        if ((int) ($filtros['deposito_id'] ?? 0) > 0) {
+            return true;
+        }
+
+        $valor = trim((string) ($filtros['valor'] ?? ''));
+        $operador = (string) ($filtros['operador'] ?? 'contiene');
+
+        if ($operador === 'vacio') {
+            $modo = (string) ($filtros['modo'] ?? GastronomiaArticulosVendidosListadoFiltros::MODO_TODOS);
+
+            return $modo === GastronomiaArticulosVendidosListadoFiltros::MODO_CAMPO
+                && (string) ($filtros['campo'] ?? '') === 'deposito';
+        }
+
+        if ($valor === '') {
+            return false;
+        }
+
+        $modo = (string) ($filtros['modo'] ?? GastronomiaArticulosVendidosListadoFiltros::MODO_TODOS);
+        if ($modo === GastronomiaArticulosVendidosListadoFiltros::MODO_CAMPO) {
+            return (string) ($filtros['campo'] ?? '') === 'deposito';
+        }
+
+        return ($filtros['busqueda_rapida'] ?? false) || $modo === GastronomiaArticulosVendidosListadoFiltros::MODO_TODOS;
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function rangoJornadaFiltros(array $filtros): array
+    {
+        $jornadaId = (int) ($filtros['jornada_id'] ?? 0);
+        if ($jornadaId > 0) {
+            $jornada = JornadaGastronomia::query()->find($jornadaId);
+            if ($jornada !== null) {
+                $fecha = $jornada->fecha_jornada->format('Y-m-d');
+
+                return [$fecha, $fecha];
+            }
+        }
+
+        return GastronomiaArticulosVendidosListadoFiltros::normalizarRangoFechas(
+            (string) ($filtros['fecha_desde'] ?? ''),
+            (string) ($filtros['fecha_hasta'] ?? ''),
+        );
+    }
+
+    private function aplicarFiltroJornadaSubqueryMovimiento(Builder $query, array $filtros, string $columna = 'fechajornada'): void
+    {
+        [$desde, $hasta] = $this->rangoJornadaFiltros($filtros);
+        if ($desde !== '') {
+            $query->whereDate($columna, '>=', $desde);
+        }
+        if ($hasta !== '') {
+            $query->whereDate($columna, '<=', $hasta);
+        }
     }
 
     /**
@@ -235,7 +340,7 @@ class GastronomiaArticulosVendidosQuery
             ->whereNull('v.deleted_at')
             ->where('ve.articulo_id', $articuloId);
 
-        $this->aplicarJoinsDeposito($query);
+        $this->aplicarJoinsDeposito($query, $filtros);
 
         $this->aplicarExclusionInsumos($query);
 
@@ -336,8 +441,6 @@ class GastronomiaArticulosVendidosQuery
             ];
         }
 
-        $sufijo = GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO;
-
         $query = DB::table('articulo_movimiento as am')
             ->join('venta as v', 'v.id', '=', 'am.venta_id')
             ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'v.id')
@@ -349,7 +452,7 @@ class GastronomiaArticulosVendidosQuery
             ->leftJoin('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->where('am.articulo_id', $articuloId)
-            ->where('am.concepto', 'not like', '%'.$sufijo)
+            ->tap(fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoNoEsInsumo($q, 'am.concepto'))
             ->whereNull('v.deleted_at')
             ->where(function ($w) use ($articuloId) {
                 $w->whereNotNull('ve.id')
@@ -450,7 +553,7 @@ class GastronomiaArticulosVendidosQuery
             ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->whereNull('v.deleted_at');
 
-        $this->aplicarJoinsDeposito($query);
+        $this->aplicarJoinsDeposito($query, $filtros);
 
         $this->aplicarExclusionInsumos($query);
 
@@ -519,21 +622,21 @@ class GastronomiaArticulosVendidosQuery
         });
     }
 
-    private function aplicarJoinsDeposito(Builder $query): void
+    private function aplicarJoinsDeposito(Builder $query, array $filtros): void
     {
         $query
-            ->leftJoinSub($this->subqueryDepositoMovimientoItem(), 'am_dep', function ($join) {
+            ->leftJoinSub($this->subqueryDepositoMovimientoItem($filtros), 'am_dep', function ($join) {
                 $join->on('am_dep.venta_emision_id', '=', 've.id')
                     ->on('am_dep.articulo_id', '=', 've.articulo_id');
             })
-            ->leftJoinSub($this->subqueryDepositoMovimientoPorVenta(), 'am_dep_v', function ($join) {
+            ->leftJoinSub($this->subqueryDepositoMovimientoPorVenta($filtros), 'am_dep_v', function ($join) {
                 $join->on('am_dep_v.venta_id', '=', 'v.id')
                     ->on('am_dep_v.articulo_id', '=', 've.articulo_id');
             })
-            ->leftJoinSub($this->subqueryDepositoInsumosLinea(), 'am_ing', function ($join) {
+            ->leftJoinSub($this->subqueryDepositoInsumosLinea($filtros), 'am_ing', function ($join) {
                 $join->on('am_ing.venta_emision_id', '=', 've.id');
             })
-            ->leftJoinSub($this->subqueryDepositoInsumoPorVentaArticulo(), 'am_ing_v', function ($join) {
+            ->leftJoinSub($this->subqueryDepositoInsumoPorVentaArticulo($filtros), 'am_ing_v', function ($join) {
                 $join->on('am_ing_v.venta_id', '=', 'v.id')
                     ->on('am_ing_v.articulo_id', '=', 've.articulo_id');
             })
@@ -543,64 +646,65 @@ class GastronomiaArticulosVendidosQuery
             });
     }
 
-    /**
-     * Depósito del ítem facturado en la misma línea de emisión.
-     */
-    private function subqueryDepositoMovimientoItem(): Builder
+    private function subqueryDepositoMovimientoItem(array $filtros): Builder
     {
-        $sufijo = GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO;
-
-        return DB::table('articulo_movimiento')
+        $query = DB::table('articulo_movimiento')
             ->select('venta_emision_id', 'articulo_id')
             ->selectRaw('MIN(deposito_id) as deposito_id')
             ->whereNotNull('venta_emision_id')
-            ->where('concepto', 'not like', '%'.$sufijo)
-            ->groupBy('venta_emision_id', 'articulo_id');
+            ->tap(fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoNoEsInsumo($q));
+
+        $this->aplicarFiltroJornadaSubqueryMovimiento($query, $filtros);
+
+        return $query->groupBy('venta_emision_id', 'articulo_id');
     }
 
     /**
      * Depósito del artículo vendido buscando en toda la venta (líneas sin movimiento propio).
      */
-    private function subqueryDepositoMovimientoPorVenta(): Builder
+    private function subqueryDepositoMovimientoPorVenta(array $filtros): Builder
     {
-        $sufijo = GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO;
-
-        return DB::table('articulo_movimiento')
+        $query = DB::table('articulo_movimiento')
             ->select('venta_id', 'articulo_id')
             ->selectRaw('MIN(deposito_id) as deposito_id')
             ->whereNotNull('venta_id')
-            ->where('concepto', 'not like', '%'.$sufijo)
-            ->groupBy('venta_id', 'articulo_id');
+            ->tap(fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoNoEsInsumo($q));
+
+        $this->aplicarFiltroJornadaSubqueryMovimiento($query, $filtros);
+
+        return $query->groupBy('venta_id', 'articulo_id');
     }
 
     /**
      * Depósito de insumos de fórmula descontados en la línea facturada.
      */
-    private function subqueryDepositoInsumosLinea(): Builder
+    private function subqueryDepositoInsumosLinea(array $filtros): Builder
     {
-        $sufijo = GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO;
-
-        return DB::table('articulo_movimiento')
+        $query = DB::table('articulo_movimiento')
             ->select('venta_emision_id')
             ->selectRaw('MIN(deposito_id) as deposito_id')
             ->whereNotNull('venta_emision_id')
-            ->where('concepto', 'like', '%'.$sufijo)
-            ->groupBy('venta_emision_id');
+            ->tap(fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoEsInsumo($q));
+
+        $this->aplicarFiltroJornadaSubqueryMovimiento($query, $filtros);
+
+        return $query->groupBy('venta_emision_id');
     }
 
     /**
-     * Depósito cuando el artículo vendido es el insumo (movimiento con sufijo Ing. en la venta).
+     * Depósito cuando el artículo vendido es el insumo (movimiento con sufijo Insumo en la venta).
      */
-    private function subqueryDepositoInsumoPorVentaArticulo(): Builder
+    private function subqueryDepositoInsumoPorVentaArticulo(array $filtros): Builder
     {
-        $sufijo = GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO;
-
-        return DB::table('articulo_movimiento')
+        $query = DB::table('articulo_movimiento')
             ->select('venta_id', 'articulo_id')
             ->selectRaw('MIN(deposito_id) as deposito_id')
             ->whereNotNull('venta_id')
-            ->where('concepto', 'like', '%'.$sufijo)
-            ->groupBy('venta_id', 'articulo_id');
+            ->tap(fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoEsInsumo($q));
+
+        $this->aplicarFiltroJornadaSubqueryMovimiento($query, $filtros);
+
+        return $query->groupBy('venta_id', 'articulo_id');
     }
 
     private function aplicarFiltroDeposito(Builder $query, int $depositoId): void
@@ -616,6 +720,8 @@ class GastronomiaArticulosVendidosQuery
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
         if ($empresaId > 0) {
             $query->where('pv.empresa_id', $empresaId);
+        } else {
+            $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pv.empresa_id');
         }
 
         $puntoventaId = (int) ($filtros['puntoventa_id'] ?? 0);

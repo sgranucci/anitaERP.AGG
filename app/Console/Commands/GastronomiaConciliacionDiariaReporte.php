@@ -6,6 +6,7 @@ use App\ApiAnita;
 use App\Services\Ventas\Gastronomia\GastronomiaConciliacionDiariaReporteService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class GastronomiaConciliacionDiariaReporte extends Command
 {
@@ -26,6 +27,9 @@ class GastronomiaConciliacionDiariaReporte extends Command
 
     public function handle(GastronomiaConciliacionDiariaReporteService $service): int
     {
+        @ini_set('memory_limit', '1024M');
+        @set_time_limit(0);
+
         $config = config('gastronomia.conciliacion_diaria_reporte', []);
 
         $fechaDesde = trim((string) ($this->option('fecha-desde') ?? ''));
@@ -84,6 +88,14 @@ class GastronomiaConciliacionDiariaReporte extends Command
             $fechaHasta,
             $tolerancia,
         ));
+
+        Log::info('gastronomia.conciliacion_diaria_reporte.inicio', [
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'empresas' => $empresas,
+            'enviar_mail' => $enviarMail,
+        ]);
+
         $this->comment('Detalle: PV CAE + PV CAEA (salón) → total PC vs rendg Z → post-cierre → control día empresa.');
 
         $usarCacheAnita = (bool) $this->option('sin-cache-anita') ? false : null;
@@ -176,11 +188,13 @@ class GastronomiaConciliacionDiariaReporte extends Command
                         continue;
                     }
 
-                    if ($tipo === 'total_salon' || $tipo === 'total_dia') {
+                    if ($tipo === 'total_salon' || $tipo === 'total_gastro' || $tipo === 'total_dia') {
                         $this->line('');
-                        $etiqueta = $tipo === 'total_dia'
-                            ? '<comment>TOTAL DÍA</comment> (salón + vending + post-cierre + agregados CAEA)'
-                            : '<comment>TOTAL SALÓN</comment> (todas las PCs, sin post-cierre)';
+                        $etiqueta = match ($tipo) {
+                            'total_gastro' => '<comment>TOTAL GASTRO</comment> (salón + post-cierre + agregados CAEA)',
+                            'total_dia' => '<comment>TOTAL DÍA</comment> (legacy)',
+                            default => '<comment>TOTAL SALÓN</comment> (PCs, sin post-cierre)',
+                        };
                         $this->line(sprintf(
                             '  %s: ERP $ %s | Anita $ %s | Rendg ΣZ $ %s | Δ $ %s | %s',
                             $etiqueta,
@@ -220,12 +234,36 @@ class GastronomiaConciliacionDiariaReporte extends Command
                         continue;
                     }
 
-                    if ($tipo === 'vending_rendg') {
+                    if ($tipo === 'vending_pv' || $tipo === 'vending_rendg') {
                         $this->line(sprintf(
-                            '  Vending (PV %s): Rendg Z $ %s | nro_oper %s | %s',
+                            '  Vending (PV %s): ERP $ %s | Rendg Z $ %s | Δ $ %s | %s',
                             $fila['pv_codigo'] ?? '—',
+                            $this->fmt($fila['ventas_erp'] ?? 0),
                             $this->fmt($fila['rendgastro_z'] ?? null),
-                            (string) ($fila['rendgastro_nro_oper'] ?? '—'),
+                            $this->fmtDiff($fila['diff_erp_rendg'] ?? null),
+                            $fila['estado'] ?? '—',
+                        ));
+                        continue;
+                    }
+
+                    if ($tipo === 'estacionamiento_pv') {
+                        $this->line(sprintf(
+                            '  Estacionamiento (PV %s): ERP neto $ %s | Rendg neto $ %s | Δ $ %s | %s',
+                            $fila['pv_codigo'] ?? '—',
+                            $this->fmt($fila['ventas_erp'] ?? 0),
+                            $this->fmt($fila['rendgastro_neto'] ?? $fila['rendgastro_z'] ?? null),
+                            $this->fmtDiff($fila['diff_erp_rendg'] ?? null),
+                            $fila['estado'] ?? '—',
+                        ));
+                        continue;
+                    }
+
+                    if ($tipo === 'total_estacionamiento') {
+                        $this->line(sprintf(
+                            '  <comment>TOTAL ESTACIONAMIENTO</comment>: ERP $ %s | Rendg $ %s | Δ $ %s | %s',
+                            $this->fmt($fila['ventas_erp'] ?? 0),
+                            $this->fmt($fila['rendgastro_z'] ?? null),
+                            $this->fmtDiff($fila['diff_erp_rendg'] ?? null),
                             $fila['estado'] ?? '—',
                         ));
                         continue;
@@ -233,8 +271,10 @@ class GastronomiaConciliacionDiariaReporte extends Command
 
                     if ($tipo === 'total_vending') {
                         $this->line(sprintf(
-                            '  <comment>TOTAL VENDING</comment> (rendgastro): Z $ %s | %s',
+                            '  <comment>TOTAL VENDING</comment>: ERP $ %s | Rendg Z $ %s | Δ $ %s | %s',
+                            $this->fmt($fila['ventas_erp'] ?? 0),
                             $this->fmt($fila['rendgastro_z'] ?? null),
+                            $this->fmtDiff($fila['diff_erp_rendg'] ?? null),
                             $fila['estado'] ?? '—',
                         ));
                     }
@@ -302,10 +342,22 @@ class GastronomiaConciliacionDiariaReporte extends Command
                 $this->info('Correo enviado a '.($mail['destino'] ?? ''));
             } else {
                 $this->error('No se pudo enviar correo: '.($mail['error'] ?? 'error desconocido'));
+                Log::error('gastronomia.conciliacion_diaria_reporte.fin_sin_mail', [
+                    'fecha_desde' => $fechaDesde,
+                    'fecha_hasta' => $fechaHasta,
+                    'error' => $mail['error'] ?? null,
+                ]);
 
                 return self::FAILURE;
             }
         }
+
+        Log::info('gastronomia.conciliacion_diaria_reporte.fin', [
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'hay_diferencias' => $hayDiferencias,
+            'filas_csv' => count($csvFilas),
+        ]);
 
         if ($csvFilas === []) {
             $this->comment('Sin actividad en el rango indicado.');

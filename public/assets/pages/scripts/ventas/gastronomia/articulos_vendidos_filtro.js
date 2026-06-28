@@ -4,10 +4,6 @@
     var MODO_CAMPO = 'campo';
     var operadoresPorCampo = {};
     var LF = window.ListadoFiltros;
-    var $desde;
-    var $hasta;
-    var $jornada;
-    var hastaTocado = false;
 
     function $valorPrincipal() {
         return $('#filtro_valor');
@@ -15,6 +11,14 @@
 
     function $valorPanel() {
         return $('#filtro_valor_panel');
+    }
+
+    function $empresa() {
+        return $('#empresa_id');
+    }
+
+    function $fechaJornada() {
+        return $('#fecha_jornada');
     }
 
     function parseOperadores() {
@@ -61,33 +65,6 @@
         actualizarVisibilidad();
     }
 
-    function sincronizarHastaDesdeDesde() {
-        if (!$desde || !$desde.length || !$hasta || !$hasta.length) {
-            return;
-        }
-        var desdeVal = ($desde.val() || '').trim();
-        if (desdeVal === '') {
-            return;
-        }
-        if (hastaTocado && ($hasta.val() || '').trim() !== '') {
-            return;
-        }
-        $hasta.val(desdeVal);
-    }
-
-    function toggleFechasPorJornada() {
-        if (!$jornada || !$jornada.length) {
-            return;
-        }
-        var usaJornada = ($jornada.val() || '').trim() !== '';
-        if ($desde && $desde.length) {
-            $desde.prop('disabled', usaJornada);
-        }
-        if ($hasta && $hasta.length) {
-            $hasta.prop('disabled', usaJornada);
-        }
-    }
-
     function sincronizarValorAntesDeEnviar() {
         var $panel = $('#panel-filtros-articulos-vendidos');
         var panelAbierto = $panel.hasClass('show') || $panel.hasClass('in');
@@ -98,39 +75,72 @@
         }
     }
 
+    function puedeEnviarConsulta() {
+        var empresaVal = ($empresa().val() || '').trim();
+        var fechaVal = ($fechaJornada().val() || '').trim();
+        return empresaVal !== '' && fechaVal !== '';
+    }
+
+    function enviarConsultaSiCompleto(origenAuto) {
+        if (!puedeEnviarConsulta()) {
+            return;
+        }
+        if (origenAuto && window.ArticulosVendidosProcesando && window.ArticulosVendidosProcesando.mostrar) {
+            window.ArticulosVendidosProcesando.mostrar();
+        }
+        $('#form-filtros-articulos-vendidos').trigger('submit');
+    }
+
     $(function () {
         if (!$('#form-filtros-articulos-vendidos').length) {
             return;
         }
 
         parseOperadores();
-        $desde = $('#fecha_desde');
-        $hasta = $('#fecha_hasta');
-        $jornada = $('#jornada_id');
-        hastaTocado = ($hasta.val() || '').trim() !== '';
-
-        toggleFechasPorJornada();
-        $jornada.on('change', toggleFechasPorJornada);
 
         if (LF && LF.sincronizarValorPrincipal) {
             LF.sincronizarValorPrincipal('#filtro_valor', '#filtro_valor_panel');
         }
 
-        if ($desde.length) {
-            $desde.on('change input', sincronizarHastaDesdeDesde);
-        }
-        if ($hasta.length) {
-            $hasta.on('change input', function () {
-                hastaTocado = ($hasta.val() || '').trim() !== '';
-            });
-        }
+        $('#jornada_historial').on('change', function () {
+            var v = ($(this).val() || '').trim();
+            if (v !== '') {
+                $fechaJornada().val(v);
+            }
+        });
+
+        $empresa().on('change', function () {
+            enviarConsultaSiCompleto(true);
+        });
+
+        $fechaJornada().on('change', function () {
+            enviarConsultaSiCompleto(true);
+        });
 
         $('#form-filtros-articulos-vendidos').on('click', '[data-aplicar-filtros-panel]', function () {
             $valorPrincipal().val($valorPanel().val());
         });
 
-        $('#form-filtros-articulos-vendidos').on('submit.listadoFiltrosSync', function () {
+        $('#form-filtros-articulos-vendidos').on('submit.listadoFiltrosSync', function (event) {
             sincronizarValorAntesDeEnviar();
+
+            if ($(this).find('input[name="consultar"]').length === 0) {
+                $(this).append('<input type="hidden" name="consultar" value="1">');
+            }
+
+            if (!puedeEnviarConsulta()) {
+                event.preventDefault();
+                if (window.toastr) {
+                    toastr.warning('Seleccione empresa y jornada para consultar.');
+                } else {
+                    window.alert('Seleccione empresa y jornada para consultar.');
+                }
+                if (($empresa().val() || '').trim() === '') {
+                    $empresa().focus();
+                } else {
+                    $fechaJornada().focus();
+                }
+            }
         });
 
         if (LF && LF.initSubmitBusquedaRapida) {

@@ -364,7 +364,7 @@ final class GastronomiaFormulaConsumoService
 
             $depositoId = (int) ($movOrigen->deposito_id ?? 0);
             if ($depositoId <= 0) {
-                $depositoId = str_contains((string) $movOrigen->concepto, GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO)
+                $depositoId = GastronomiaVentaDetalleSupport::conceptoEsMovimientoInsumo((string) $movOrigen->concepto)
                     ? GastronomiaDepositoConfigSupport::depositoInsumosId($cfg)
                     : GastronomiaDepositoConfigSupport::depositoVentaId($cfg);
             }
@@ -377,7 +377,7 @@ final class GastronomiaFormulaConsumoService
                 'venta_emision_id' => $ventaEmisionNcId,
                 'articulo_id' => (int) $movOrigen->articulo_id,
                 'concepto' => $conceptoTipoNombre.(
-                    str_contains((string) $movOrigen->concepto, GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO)
+                    GastronomiaVentaDetalleSupport::conceptoEsMovimientoInsumo((string) $movOrigen->concepto)
                         ? GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO
                         : ''
                 ),

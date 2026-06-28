@@ -13,5 +13,10 @@ interface ChequeRepositoryInterface extends RepositoryInterface
 	public function eliminarAnita($origen, $cuenta, $numeroCheque);
     public function findPorNumeroCheque($codigo);
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public function guardarChequeIngresoEgreso(array $data, string $funcion, int $cajaMovimientoId);
+
 }
 

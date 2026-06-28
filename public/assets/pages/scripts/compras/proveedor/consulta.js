@@ -185,6 +185,10 @@ function aplicarProveedorEnPantalla(data, ctx) {
     }
 
     $('#proveedor_id').trigger('change.cpProveedorCargado');
+
+    if (typeof window.ieComprobanteIvaAplicarProveedor === 'function' && $('#modal-ie-comprobante-iva').hasClass('show')) {
+        window.ieComprobanteIvaAplicarProveedor(data.id, data.nombre || '');
+    }
 }
 
 function leeUnProveedor(proveedorId, codigoproveedor) {

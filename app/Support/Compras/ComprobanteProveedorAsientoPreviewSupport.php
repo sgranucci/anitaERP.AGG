@@ -9,8 +9,9 @@ use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tipotransaccion_Compra;
-use App\Models\Stock\Configuracion_RecepcionProveedor;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Contable\CuentaAutomaticaClaves;
+use App\Support\Contable\CuentaAutomaticaResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -102,10 +103,11 @@ final class ComprobanteProveedorAsientoPreviewSupport
         }
 
         if ($modoAsignaRecepcion) {
-            $cfg = Configuracion_RecepcionProveedor::query()
-                ->where('empresa_id', (int) $comprobante->empresa_id)
-                ->first();
-            if (! $cfg || ! (int) ($cfg->cuentacontable_provision_facturas_id ?? 0)) {
+            $provisionId = CuentaAutomaticaResolver::resolverId(
+                (int) $comprobante->empresa_id,
+                CuentaAutomaticaClaves::RECEPCION_PROVISION_FACTURAS
+            );
+            if (! $provisionId) {
                 $avisos[] = [
                     'tipo' => 'provision_sin_config',
                     'mensaje' => 'Falta configurar la cuenta de provisión de facturas a recibir para la empresa.',

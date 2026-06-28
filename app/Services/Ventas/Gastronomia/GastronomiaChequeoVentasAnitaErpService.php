@@ -272,19 +272,23 @@ final class GastronomiaChequeoVentasAnitaErpService
             }
 
             if ($esKandikoCaea) {
-                $clave = KandikoAnitaVentaTipoSupport::claveConciliacionDesdeNumero($nro);
-                $existente = $map[$clave] ?? null;
-                $tipoExistente = $existente !== null
-                    ? strtoupper(trim((string) ($existente->ven_tipo ?? '')))
-                    : '';
-                if ($existente === null || ($tipo === KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE && $tipoExistente !== KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE)) {
-                    $map[$clave] = $fila;
+                foreach (GastronomiaAnitaComprobantePkSupport::clavesConciliacionDesdeCabeceraAnita($fila, true) as $clave) {
+                    $existente = $map[$clave] ?? null;
+                    $tipoExistente = $existente !== null
+                        ? strtoupper(trim((string) ($existente->ven_tipo ?? '')))
+                        : '';
+                    if ($existente === null || ($tipo === KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE && $tipoExistente !== KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE)) {
+                        $map[$clave] = $fila;
+                    }
                 }
 
                 continue;
             }
 
-            $map[$tipo.'-'.$nro] = $fila;
+            $clave = GastronomiaAnitaComprobantePkSupport::claveVentaDesdeCabeceraAnita($fila);
+            if ($clave !== null) {
+                $map[$clave] = $fila;
+            }
         }
 
         return $map;
@@ -337,9 +341,7 @@ final class GastronomiaChequeoVentasAnitaErpService
                 continue;
             }
 
-            [$tipo, $nroStr] = explode('-', $clave, 2);
-            $tipoAnita = $this->tipoAnitaConsultaDesdeErp($tipo, $puntoventa);
-            $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipoAnita, (int) $nroStr);
+            $consulta = $this->consultarCabeceraAnitaDesdeClaveErp($clave, $puntoventa);
             if ($consulta['error_lectura'] !== null) {
                 $conteo['error']++;
                 $fila = $this->filaBase($venta, $clave, null);
@@ -490,6 +492,96 @@ final class GastronomiaChequeoVentasAnitaErpService
     }
 
     /**
+     * Auditoría global por fecha de jornada (todos los PV gastronomía de la empresa).
+     *
+     * @return array{
+     *   fecha_jornada: string,
+     *   por_puntoventa: list<array<string, mixed>>,
+     *   resumen_global: array<string, mixed>
+     * }
+     */
+    public function auditoriaPorFechaJornada(
+        string $fechaJornada,
+        int $empresaId,
+        float $tolerancia = 0.02,
+        ?string $codigoPv = null,
+    ): array {
+        $combinaciones = $this->listarCombinacionesPvJornada(
+            $fechaJornada,
+            $fechaJornada,
+            $empresaId,
+            $codigoPv,
+        );
+        $porPv = [];
+        $conteoGlobal = [
+            'ok' => 0,
+            'diferencia' => 0,
+            'solo_erp' => 0,
+            'solo_anita' => 0,
+            'error' => 0,
+        ];
+        $totalesErp = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
+        $totalesAnita = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
+
+        foreach ($combinaciones as $combo) {
+            if ((string) ($combo['fecha_jornada'] ?? '') !== $fechaJornada) {
+                continue;
+            }
+
+            $resultado = $this->chequear(
+                (int) $combo['puntoventa_id'],
+                $fechaJornada,
+                $tolerancia,
+                true,
+            );
+            $porPv[] = $resultado;
+
+            $res = $resultado['resumen'];
+            foreach ($conteoGlobal as $k => $_) {
+                if (! array_key_exists($k, $res['conteo'] ?? [])) {
+                    continue;
+                }
+                $conteoGlobal[$k] += (int) ($res['conteo'][$k] ?? 0);
+            }
+            foreach (self::CAMPOS_MONETARIOS as $c) {
+                $totalesErp[$c] += (float) ($res['totales_erp'][$c] ?? 0);
+                $totalesAnita[$c] += (float) ($res['totales_anita_signo_erp'][$c] ?? 0);
+            }
+        }
+
+        foreach ($totalesErp as $k => $v) {
+            $totalesErp[$k] = round($v, 2);
+        }
+        foreach ($totalesAnita as $k => $v) {
+            $totalesAnita[$k] = round($v, 2);
+        }
+
+        $delta = [];
+        foreach (self::CAMPOS_MONETARIOS as $c) {
+            $delta[$c] = round($totalesErp[$c] - $totalesAnita[$c], 2);
+        }
+
+        return [
+            'fecha_jornada' => $fechaJornada,
+            'por_puntoventa' => $porPv,
+            'resumen_global' => [
+                'puntoventas' => count($porPv),
+                'ventas_erp' => array_sum(array_map(
+                    fn (array $r) => (int) ($r['resumen']['ventas_erp'] ?? 0),
+                    $porPv,
+                )),
+                'tolerancia' => $tolerancia,
+                'conteo' => $conteoGlobal,
+                'totales_erp' => $totalesErp,
+                'totales_anita_signo_erp' => $totalesAnita,
+                'delta_totales' => $delta,
+                'filtro_erp' => 'venta.fechajornada + gastronomia_emision',
+                'filtro_anita' => 'ven_sucursal + ven_fecha_vto (jornada) + ven_tipo + ven_nro + ven_letra=B',
+            ],
+        ];
+    }
+
+    /**
      * @return Collection<int, Venta>
      */
     public function listarVentasErpPorJornada(int $puntoventaId, string $fechaJornada): Collection
@@ -513,15 +605,13 @@ final class GastronomiaChequeoVentasAnitaErpService
         $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
         $ventasErp = $this->listarVentasErpPorJornada($puntoventaId, $fechaJornada);
 
-        return $ventasErp->filter(function (Venta $venta) use ($sucursal, $puntoventa): bool {
+        return $ventasErp->filter(function (Venta $venta) use ($puntoventa): bool {
             $clave = $this->claveComprobanteDesdeVenta($venta);
             if ($clave === null) {
                 return false;
             }
 
-            [$tipo, $nroStr] = explode('-', $clave, 2);
-            $tipoAnita = $this->tipoAnitaConsultaDesdeErp($tipo, $puntoventa);
-            $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipoAnita, (int) $nroStr);
+            $consulta = $this->consultarCabeceraAnitaDesdeClaveErp($clave, $puntoventa);
             if ($consulta['error_lectura'] !== null) {
                 Log::warning('gastronomia.chequeo_anita.omitir_faltante_lectura_fallida', [
                     'venta_id' => $venta->id,
@@ -727,14 +817,13 @@ final class GastronomiaChequeoVentasAnitaErpService
         $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
 
         return $this->listarVentasErpPorFechaCalendario($puntoventaId, $fechaCalendario)
-            ->filter(function (Venta $venta) use ($sucursal, $puntoventa): bool {
+            ->filter(function (Venta $venta) use ($puntoventa): bool {
                 $clave = $this->claveComprobanteDesdeVenta($venta);
                 if ($clave === null) {
                     return false;
                 }
-                [$tipo, $nroStr] = explode('-', $clave, 2);
-                $tipoAnita = $this->tipoAnitaConsultaDesdeErp($tipo, $puntoventa);
-                $consulta = $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipoAnita, (int) $nroStr);
+
+                $consulta = $this->consultarCabeceraAnitaDesdeClaveErp($clave, $puntoventa);
                 if ($consulta['error_lectura'] !== null) {
                     Log::warning('gastronomia.chequeo_anita.omitir_faltante_lectura_fallida', [
                         'venta_id' => $venta->id,
@@ -882,11 +971,7 @@ final class GastronomiaChequeoVentasAnitaErpService
             return ['cabecera' => null, 'error_lectura' => 'Código de comprobante ERP no reconocido'];
         }
 
-        [$tipo, $nroStr] = explode('-', $clave, 2);
-        $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
-        $tipoAnita = $this->tipoAnitaConsultaDesdeErp($tipo, $puntoventa);
-
-        return $this->consultarCabeceraAnitaPorComprobante($sucursal, $tipoAnita, (int) $nroStr, $letra);
+        return $this->consultarCabeceraAnitaDesdeClaveErp($clave, $puntoventa);
     }
 
     private function tipoAnitaConsultaDesdeErp(string $tipoErp, Puntoventa $puntoventa): string
@@ -968,12 +1053,16 @@ final class GastronomiaChequeoVentasAnitaErpService
     private function compararMontos(array $erp, array $anita, float $tolerancia): array
     {
         $diffs = [];
+        $esCortesia = GastronomiaAnitaVenGravadoSupport::esCortesiaMinima((float) ($erp['total'] ?? 0));
 
         foreach (self::CAMPOS_MONETARIOS as $campo) {
             $ev = (float) ($erp[$campo] ?? 0);
             $av = (float) ($anita[$campo] ?? 0);
+            $toleranciaCampo = $esCortesia && in_array($campo, ['total', 'exento'], true)
+                ? 0.001
+                : $tolerancia;
 
-            if ($this->coincideMonetario($ev, $av, $tolerancia)) {
+            if ($this->coincideMonetario($ev, $av, $toleranciaCampo)) {
                 continue;
             }
 
@@ -995,16 +1084,57 @@ final class GastronomiaChequeoVentasAnitaErpService
 
     private function claveComprobanteDesdeVenta(Venta $venta): ?string
     {
-        $codigo = trim((string) ($venta->codigo ?? ''));
-        if (preg_match('/^(\S+)\s+[A-Z]-\d+-(\d+)$/', $codigo, $m)) {
-            return $m[1].'-'.(int) $m[2];
+        $desdeCodigo = GastronomiaAnitaComprobantePkSupport::claveVentaDesdeCodigoErp((string) ($venta->codigo ?? ''));
+        if ($desdeCodigo !== null) {
+            return $desdeCodigo;
         }
 
-        if ((int) ($venta->numerocomprobante ?? 0) <= 0) {
+        $venta->loadMissing('puntoventas');
+        $puntoventa = $venta->puntoventas;
+        if ($puntoventa === null || (int) ($venta->numerocomprobante ?? 0) <= 0) {
             return null;
         }
 
-        return 'FAC-'.(int) $venta->numerocomprobante;
+        return GastronomiaAnitaComprobantePkSupport::claveVenta(
+            'FAC',
+            'B',
+            $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo),
+            (int) $venta->numerocomprobante,
+        );
+    }
+
+    /**
+     * @return array{cabecera: ?object, error_lectura: ?string}
+     */
+    private function consultarCabeceraAnitaDesdeClaveErp(string $clave, Puntoventa $puntoventa): array
+    {
+        $partes = GastronomiaAnitaComprobantePkSupport::parseClaveVenta($clave);
+        if ($partes === null) {
+            return ['cabecera' => null, 'error_lectura' => 'Clave de comprobante ERP no reconocida'];
+        }
+
+        $tipoAnita = $this->tipoAnitaConsultaDesdeErp($partes['tipo'], $puntoventa);
+        $ultimoError = null;
+
+        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
+            $consulta = $this->consultarCabeceraAnitaPorComprobante(
+                $partes['sucursal'],
+                $tipo,
+                $partes['numero'],
+                $partes['letra'],
+            );
+            if ($consulta['error_lectura'] !== null) {
+                $ultimoError = $consulta['error_lectura'];
+
+                continue;
+            }
+
+            if ($consulta['cabecera'] !== null) {
+                return $consulta;
+            }
+        }
+
+        return ['cabecera' => null, 'error_lectura' => $ultimoError];
     }
 
     /**
@@ -1012,15 +1142,15 @@ final class GastronomiaChequeoVentasAnitaErpService
      */
     private function filaBase(Venta $venta, string $clave, ?object $anita): array
     {
-        [$tipo, $nro] = explode('-', $clave, 2);
+        $partes = GastronomiaAnitaComprobantePkSupport::parseClaveVenta($clave);
 
         return [
             'estado' => 'ok',
             'clave' => $clave,
             'codigo_erp' => (string) $venta->codigo,
             'venta_id' => (int) $venta->id,
-            'tipo' => $tipo,
-            'numero' => (int) $nro,
+            'tipo' => $partes['tipo'] ?? '',
+            'numero' => (int) ($partes['numero'] ?? 0),
             'ven_fecha_anita' => $anita !== null ? (string) ($anita->ven_fecha ?? '') : null,
             'erp' => null,
             'anita' => null,
@@ -1062,8 +1192,9 @@ final class GastronomiaChequeoVentasAnitaErpService
         $totalesErp = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
         foreach ($ventasErp as $venta) {
             $m = $this->montosDesdeVentaErp($venta);
+            $esNc = $this->esNotaCreditoErp($venta);
             foreach (self::CAMPOS_MONETARIOS as $c) {
-                $totalesErp[$c] += $m[$c];
+                $totalesErp[$c] += $esNc ? -abs($m[$c]) : $m[$c];
             }
         }
         foreach ($totalesErp as $k => $v) {
@@ -1265,6 +1396,16 @@ final class GastronomiaChequeoVentasAnitaErpService
         return str_starts_with($tipo, 'NC') || (float) ($cab->ven_monto ?? 0) < 0;
     }
 
+    private function esNotaCreditoErp(Venta $venta): bool
+    {
+        $codigo = strtoupper(trim((string) ($venta->codigo ?? '')));
+        if (str_starts_with($codigo, 'NCD') || str_starts_with($codigo, 'NC ')) {
+            return true;
+        }
+
+        return round((float) $venta->total, 2) < 0;
+    }
+
     private function fmt(float $valor): string
     {
         return number_format($valor, 2, '.', '');
@@ -1318,7 +1459,7 @@ final class GastronomiaChequeoVentasAnitaErpService
     }
 
     /**
-     * Índice sucursal → jornada → clave ERP (FAC-n) desde filas venta Anita (cache bulk).
+     * Índice sucursal → jornada → clave tipo|letra|sucursal|nro desde filas venta Anita (cache bulk).
      *
      * @param  list<object>  $filasAnita
      * @param  iterable<int, Puntoventa>  $puntoventas
@@ -1371,19 +1512,23 @@ final class GastronomiaChequeoVentasAnitaErpService
             );
 
             if ($esKandikoCaea && in_array($tipo, KandikoAnitaVentaTipoSupport::tiposAnitaEquivalentesFacErp(), true)) {
-                $clave = KandikoAnitaVentaTipoSupport::claveConciliacionDesdeNumero($nro);
-                $existente = $map[$sucursal][$fechaJornada][$clave] ?? null;
-                $tipoExistente = $existente !== null
-                    ? strtoupper(trim((string) ($existente->ven_tipo ?? '')))
-                    : '';
-                if ($existente === null || ($tipo === KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE && $tipoExistente !== KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE)) {
-                    $map[$sucursal][$fechaJornada][$clave] = $fila;
+                foreach (GastronomiaAnitaComprobantePkSupport::clavesConciliacionDesdeCabeceraAnita($fila, true) as $clave) {
+                    $existente = $map[$sucursal][$fechaJornada][$clave] ?? null;
+                    $tipoExistente = $existente !== null
+                        ? strtoupper(trim((string) ($existente->ven_tipo ?? '')))
+                        : '';
+                    if ($existente === null || ($tipo === KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE && $tipoExistente !== KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE)) {
+                        $map[$sucursal][$fechaJornada][$clave] = $fila;
+                    }
                 }
 
                 continue;
             }
 
-            $map[$sucursal][$fechaJornada][$tipo.'-'.$nro] = $fila;
+            $clave = GastronomiaAnitaComprobantePkSupport::claveVentaDesdeCabeceraAnita($fila);
+            if ($clave !== null) {
+                $map[$sucursal][$fechaJornada][$clave] = $fila;
+            }
         }
 
         return $map;
@@ -1520,23 +1665,25 @@ final class GastronomiaChequeoVentasAnitaErpService
             return null;
         }
 
-        $clave = $this->claveComprobanteDesdeVenta($venta);
-        if ($clave === null) {
+        $partes = GastronomiaAnitaComprobantePkSupport::parseClaveVenta($this->claveComprobanteDesdeVenta($venta) ?? '');
+        if ($partes === null) {
             return null;
         }
 
-        [$tipoErp] = explode('-', $clave, 2);
         $empresaCodigo = $puntoventa->empresas?->codigo ?? $puntoventa->empresa_id;
         $tipoAnita = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge(
-            $tipoErp,
+            $partes['tipo'],
             (string) $puntoventa->codigo,
             $empresaCodigo,
             $puntoventa->modofacturacion ?? null,
         );
-        $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
-        $numero = (int) ($venta->numerocomprobante ?? 0);
 
-        return GastronomiaAnitaComprobantePkSupport::claveVenta($tipoAnita, $letra, $sucursal, $numero);
+        return GastronomiaAnitaComprobantePkSupport::claveVenta(
+            $tipoAnita,
+            $partes['letra'],
+            $partes['sucursal'],
+            $partes['numero'],
+        );
     }
 
     /**

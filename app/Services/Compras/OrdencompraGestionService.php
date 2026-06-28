@@ -18,6 +18,7 @@ use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
@@ -36,6 +37,7 @@ class OrdencompraGestionService
         private Ordencompra_ArticuloRepositoryInterface $ordencompraArticuloRepository,
         private Ordencompra_ArchivoRepositoryInterface $ordencompraArchivoRepository,
         private ArbolaprobacionService $arbolaprobacionService,
+        private OcArbolTriggerDispatcherService $ocArbolTriggerDispatcher,
         private RequisicionRepositoryInterface $requisicionRepository,
         private Requisicion_EstadoRepositoryInterface $requisicionEstadoRepository,
         private RequisicionPresupuestoService $requisicionPresupuestoService,
@@ -347,9 +349,7 @@ class OrdencompraGestionService
                 ]);
             }
 
-            if ($this->arbolaprobacionService->empresaTieneArbolOrdencompraActivoUnico((int) $oc->empresa_id)) {
-                $this->arbolaprobacionService->procesaArbolaprobacion('OC', $oc->id, 'insert');
-            }
+            $this->ocArbolTriggerDispatcher->dispararPorAlta((int) $oc->id);
 
             if (! $omitirMarcarRequisicionGeneroOc && ! empty($cab['requisicion_id'])) {
                 $this->marcarRequisicionGeneroOc((int) $cab['requisicion_id'], $uid, 'Alta de orden de compra');
@@ -427,9 +427,8 @@ class OrdencompraGestionService
             $this->regenerarCondicionesContratacion($id);
             $this->ordencompraArchivoRepository->update($request, $id);
 
-            if (($existente->estadoordencompra ?? '') === OrdencompraEstados::PENDIENTE
-                && $this->arbolaprobacionService->empresaTieneArbolOrdencompraActivoUnico((int) $cab['empresa_id'])) {
-                $this->arbolaprobacionService->procesaArbolaprobacion('OC', $id, 'insert');
+            if (($existente->estadoordencompra ?? '') === OrdencompraEstados::PENDIENTE) {
+                $this->ocArbolTriggerDispatcher->dispararPorActualizacion($id);
             }
 
             if ($oldReqId !== $newReqId) {
@@ -519,6 +518,9 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => 'Sector inválido.'];
         }
 
+        $ocPrev = $this->ordencompraRepository->find($id);
+        $sectorAnteriorId = $ocPrev ? (int) ($ocPrev->sector_legajocompra_id ?? 0) : null;
+
         DB::beginTransaction();
         try {
             $this->ordencompraRepository->update(['sector_legajocompra_id' => $sectorLegajocompraId], $id);
@@ -530,6 +532,13 @@ class OrdencompraGestionService
                 'leyenda' => $leyenda,
                 'creousuario_id' => Auth::user()->id,
             ]);
+
+            $this->ocArbolTriggerDispatcher->dispararPorCambioSector(
+                $id,
+                $sectorAnteriorId > 0 ? $sectorAnteriorId : null,
+                $sectorLegajocompraId
+            );
+
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();

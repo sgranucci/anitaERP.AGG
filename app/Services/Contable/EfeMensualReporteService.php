@@ -8,6 +8,8 @@ use App\Support\Contable\Efe\EfeDatosGamingSuppliesSupport;
 use App\Support\Contable\Efe\EfeDatosGastronomiaSupport;
 use App\Support\Contable\Efe\EfeDatosMantenimientoEdificioSupport;
 use App\Support\Contable\Efe\EfeDatosPagosCobrosSupport;
+use App\Support\Contable\Efe\EfeDatosExcluirIvaOppGastoSupport;
+use App\Support\Contable\Efe\EfeDatosOppGastoComSupport;
 use App\Support\Contable\Efe\EfeDatosReimputaAnticipoSupport;
 use App\Support\Contable\Efe\EfeDatosVariosSupport;
 use App\Support\Contable\Efe\EfePosicionFinancieraSupport;
@@ -34,6 +36,8 @@ class EfeMensualReporteService
         private readonly EfeDatosGastronomiaSupport $gastronomiaSupport,
         private readonly EfeDatosGamingSuppliesSupport $gamingSuppliesSupport,
         private readonly EfeDatosVariosSupport $variosSupport,
+        private readonly EfeDatosOppGastoComSupport $oppGastoComSupport,
+        private readonly EfeDatosExcluirIvaOppGastoSupport $excluirIvaOppGastoSupport,
     ) {
     }
 
@@ -153,6 +157,8 @@ class EfeMensualReporteService
 
         $filas = $this->variosSupport->aplicar($filas, $filtros, $nombresConcepto);
 
+        $filas = $this->oppGastoComSupport->aplicar($filas, $filtros, $nombresConcepto);
+
         $filas = $this->reimputaAnticipoSupport->aplicar($filas, $nombresConcepto);
 
         $filas = $this->gastronomiaSupport->aplicar($filas, $filtros, $nombresConcepto);
@@ -160,6 +166,8 @@ class EfeMensualReporteService
         if ($filtros !== []) {
             $filas = $this->bienesUsoSupport->aplicar($filas, $filtros);
         }
+
+        $filas = $this->excluirIvaOppGastoSupport->aplicar($filas);
 
         return array_values(array_filter(
             $filas,

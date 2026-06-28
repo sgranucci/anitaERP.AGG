@@ -60,7 +60,8 @@ final class ComprobanteProveedorArchivoPathSupport
     {
         $comprobante->loadMissing(['proveedores', 'tipotransaccion_compras']);
 
-        $cuit = self::cuitCarpeta($comprobante->proveedores?->nroinscripcion);
+        $cuitDoc = $comprobante->proveedores?->nroinscripcion ?? $comprobante->proveedor_documento_eventual;
+        $cuit = self::cuitCarpeta($cuitDoc);
         $fecha = $comprobante->fechacomprobante
             ? Carbon::parse($comprobante->fechacomprobante)
             : now();

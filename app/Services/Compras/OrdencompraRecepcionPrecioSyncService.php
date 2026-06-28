@@ -6,6 +6,7 @@ use App\ApiAnita;
 use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
+use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
@@ -18,11 +19,18 @@ use Illuminate\Support\Facades\Log;
  */
 class OrdencompraRecepcionPrecioSyncService
 {
+    public function __construct(
+        private readonly OrdencompraArticuloPrecioHistoriaService $precioHistoriaService,
+    ) {}
+
     /**
      * @return int Cantidad de líneas OC actualizadas
      */
-    public function actualizarPreciosDesdeRecepcion(Recepcion_Proveedor $recepcion, bool $soloPendientes = true): int
-    {
+    public function actualizarPreciosDesdeRecepcion(
+        Recepcion_Proveedor $recepcion,
+        bool $soloPendientes = true,
+        string $origen = OrdencompraArticuloPrecioHistoriaOrigen::RECEPCION_CONFIRMADA,
+    ): int {
         if (! config('recepcion_proveedor.actualizar_precio_oc_al_confirmar', true)) {
             return 0;
         }
@@ -46,6 +54,7 @@ class OrdencompraRecepcionPrecioSyncService
         }
 
         $actualizadas = 0;
+        $cambiosLegajo = [];
 
         foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
             if (! $this->lineaAplicaActualizacionPrecio($linea, $soloPendientes)) {
@@ -57,14 +66,44 @@ class OrdencompraRecepcionPrecioSyncService
                 continue;
             }
 
+            $precioAnterior = (float) $ocArt->precio;
             $precioRec = (float) $linea->precio;
-            if ($soloPendientes && abs((float) $ocArt->precio - $precioRec) < 0.0001) {
+
+            if ($soloPendientes && abs($precioAnterior - $precioRec) < 0.0001) {
+                continue;
+            }
+
+            if (abs($precioAnterior - $precioRec) < 0.0001) {
                 continue;
             }
 
             $ocArt->update(['precio' => $precioRec]);
             $this->actualizarPendmovpPrecio($recepcion, $linea, $precioRec);
+
+            $this->precioHistoriaService->registrar(
+                $ocArt,
+                $precioAnterior,
+                $precioRec,
+                $recepcion,
+                $linea,
+                $origen,
+            );
+
+            $sku = trim((string) ($linea->articulos?->sku ?? ''));
+            if ($sku === '') {
+                $sku = 'Art.'.(int) ($ocArt->articulo_id ?? 0);
+            }
+            $cambiosLegajo[] = [
+                'sku' => $sku,
+                'precio_anterior' => $precioAnterior,
+                'precio_nuevo' => $precioRec,
+            ];
+
             $actualizadas++;
+        }
+
+        if ($actualizadas > 0) {
+            $this->precioHistoriaService->registrarResumenLegajo($oc, $recepcion, $cambiosLegajo, $origen);
         }
 
         return $actualizadas;

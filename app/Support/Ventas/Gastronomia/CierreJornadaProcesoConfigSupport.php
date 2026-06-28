@@ -3,6 +3,8 @@
 namespace App\Support\Ventas\Gastronomia;
 
 use App\Models\Contable\Cuentacontable;
+use App\Support\Contable\CuentaAutomaticaClaves;
+use App\Support\Contable\CuentaAutomaticaResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -24,6 +26,8 @@ final class CierreJornadaProcesoConfigSupport
 
     private const CAMPO_PUNTOVENTA = 'puntoventa_id';
 
+    private const CAMPO_PORCENTAJE = 'porcentaje';
+
     /**
      * @return array{
      *   cuenta_ventas_id:?int,
@@ -41,30 +45,22 @@ final class CierreJornadaProcesoConfigSupport
             return self::vacios();
         }
 
-        $defaults = [
-            'cuenta_ventas_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_ventas_id')),
-            'cuenta_iva_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_iva_id')),
-            'cuenta_ventas_kiosco_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_ventas_kiosco_id')),
-            'cuenta_fondo_fijo_maquinas_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_fondo_fijo_maquinas_id')),
-            'cuenta_diferencia_caja_id' => self::intOrNull(config('gastronomia.cierre_jornada_cuenta_diferencia_caja_id')),
-        ];
-
-        if (! Schema::hasTable(self::TABLA)) {
-            return self::normalizar($defaults);
-        }
-
-        $row = DB::table(self::TABLA)->where('empresa_id', $empresaId)->first();
-        if ($row === null) {
-            return self::normalizar($defaults);
+        $puntoventaId = null;
+        $porcentaje = null;
+        if (Schema::hasTable(self::TABLA)) {
+            $row = DB::table(self::TABLA)->where('empresa_id', $empresaId)->first(['puntoventa_id', 'porcentaje']);
+            $puntoventaId = self::intOrNull($row?->puntoventa_id ?? null);
+            $porcentaje = self::floatOrNull($row?->porcentaje ?? null);
         }
 
         return self::normalizar([
-            'cuenta_ventas_id' => $row->cuenta_ventas_id ?? $defaults['cuenta_ventas_id'],
-            'cuenta_iva_id' => $row->cuenta_iva_id ?? $defaults['cuenta_iva_id'],
-            'cuenta_ventas_kiosco_id' => $row->cuenta_ventas_kiosco_id ?? $defaults['cuenta_ventas_kiosco_id'],
-            'cuenta_fondo_fijo_maquinas_id' => $row->cuenta_fondo_fijo_maquinas_id ?? $defaults['cuenta_fondo_fijo_maquinas_id'],
-            'cuenta_diferencia_caja_id' => $row->cuenta_diferencia_caja_id ?? $defaults['cuenta_diferencia_caja_id'],
-            'puntoventa_id' => $row->puntoventa_id ?? null,
+            'cuenta_ventas_id' => CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::CIERRE_WAITRY_VENTAS),
+            'cuenta_iva_id' => CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::CIERRE_WAITRY_IVA),
+            'cuenta_ventas_kiosco_id' => CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::CIERRE_WAITRY_VENTAS_KIOSCO),
+            'cuenta_fondo_fijo_maquinas_id' => CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::CIERRE_WAITRY_FONDO_FIJO_MAQUINAS),
+            'cuenta_diferencia_caja_id' => CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::CIERRE_WAITRY_DIFERENCIA_CAJA),
+            'puntoventa_id' => $puntoventaId,
+            'porcentaje' => $porcentaje,
         ]);
     }
 
@@ -95,6 +91,7 @@ final class CierreJornadaProcesoConfigSupport
         $payload = [
             'empresa_id' => $empresaId,
             'puntoventa_id' => self::intOrNull($data['puntoventa_id'] ?? null),
+            'porcentaje' => self::floatOrNull($data['porcentaje'] ?? null),
             'cuenta_ventas_id' => self::intOrNull($data['cuenta_ventas_id'] ?? null),
             'cuenta_iva_id' => self::intOrNull($data['cuenta_iva_id'] ?? null),
             'cuenta_ventas_kiosco_id' => self::intOrNull($data['cuenta_ventas_kiosco_id'] ?? null),
@@ -105,6 +102,7 @@ final class CierreJornadaProcesoConfigSupport
 
         self::validarCuentasEmpresa($empresaId, $payload);
         self::validarPuntoventaEmpresa($empresaId, $payload);
+        self::validarPorcentaje($payload);
 
         $existe = DB::table(self::TABLA)->where('empresa_id', $empresaId)->exists();
         if ($existe) {
@@ -137,6 +135,30 @@ final class CierreJornadaProcesoConfigSupport
     }
 
     /**
+     * Porcentaje de redistribución QR/efectivo para el proceso (manual y automático).
+     * Prioridad: BD por empresa → mapa env por empresa → default global env.
+     */
+    public static function resolverPorcentajeParaEmpresa(int $empresaId): float
+    {
+        if ($empresaId <= 0) {
+            return 0.;
+        }
+
+        $cfg = self::paraEmpresa($empresaId);
+        $pctBd = self::floatOrNull($cfg['porcentaje'] ?? null);
+        if ($pctBd !== null) {
+            return round(max(0., min(100., $pctBd)), 4);
+        }
+
+        $mapa = config('gastronomia.cierre_jornada_porcentaje_por_empresa', []);
+        if (is_array($mapa) && isset($mapa[$empresaId])) {
+            return round(max(0., min(100., (float) $mapa[$empresaId])), 4);
+        }
+
+        return round(max(0., min(100., (float) config('gastronomia.cierre_jornada_porcentaje', 0))), 4);
+    }
+
+    /**
      * @param  array<string, mixed>  $raw
      * @return array<string, mixed>
      */
@@ -149,6 +171,7 @@ final class CierreJornadaProcesoConfigSupport
             'cuenta_fondo_fijo_maquinas_id' => self::intOrNull($raw['cuenta_fondo_fijo_maquinas_id'] ?? null),
             'cuenta_diferencia_caja_id' => self::intOrNull($raw['cuenta_diferencia_caja_id'] ?? null),
             'puntoventa_id' => self::intOrNull($raw['puntoventa_id'] ?? null),
+            'porcentaje' => self::floatOrNull($raw['porcentaje'] ?? null),
         ];
         $cfg['completo'] = $cfg['cuenta_ventas_id'] > 0 && $cfg['cuenta_iva_id'] > 0;
 
@@ -171,6 +194,15 @@ final class CierreJornadaProcesoConfigSupport
         $id = (int) $v;
 
         return $id > 0 ? $id : null;
+    }
+
+    private static function floatOrNull(mixed $v): ?float
+    {
+        if ($v === null || $v === '') {
+            return null;
+        }
+
+        return is_numeric($v) ? (float) $v : null;
     }
 
     /**
@@ -205,6 +237,7 @@ final class CierreJornadaProcesoConfigSupport
         $cfg['puntoventa_proceso_codigo'] = $pv['codigo'] ?? '';
         $cfg['puntoventa_proceso_nombre'] = $pv['nombre'] ?? '';
         $cfg['puntoventa_proceso_origen'] = $pv['origen'] ?? '';
+        $cfg['porcentaje_resuelto'] = self::resolverPorcentajeParaEmpresa($empresaId);
 
         return $cfg;
     }
@@ -238,6 +271,21 @@ final class CierreJornadaProcesoConfigSupport
                     ($etiquetas[$campoId] ?? $campoId).' no existe o no pertenece a la empresa seleccionada.',
                 );
             }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private static function validarPorcentaje(array $payload): void
+    {
+        $pct = self::floatOrNull($payload[self::CAMPO_PORCENTAJE] ?? null);
+        if ($pct === null) {
+            return;
+        }
+
+        if ($pct < 0 || $pct > 100) {
+            throw new \InvalidArgumentException('El porcentaje del proceso debe estar entre 0 y 100.');
         }
     }
 

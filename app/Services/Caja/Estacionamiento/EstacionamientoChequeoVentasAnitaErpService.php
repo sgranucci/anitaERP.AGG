@@ -96,6 +96,214 @@ final class EstacionamientoChequeoVentasAnitaErpService
     }
 
     /**
+     * @return array{
+     *   puntoventa: string,
+     *   sucursal: int,
+     *   fecha_jornada: string,
+     *   resumen: array<string, mixed>,
+     *   filas: list<array<string, mixed>>
+     * }
+     */
+    public function chequear(
+        int $puntoventaId,
+        string $fechaJornada,
+        float $tolerancia = 0.02,
+        bool $soloDiferencias = true,
+    ): array {
+        $puntoventa = Puntoventa::query()->findOrFail($puntoventaId);
+        $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) $puntoventa->codigo);
+        if ($sucursal <= 0) {
+            throw new \InvalidArgumentException('Código de punto de venta inválido: '.$puntoventa->codigo);
+        }
+
+        $ventasErp = $this->listarVentasErpPorJornada($puntoventaId, $fechaJornada);
+        $filas = [];
+        $conteo = [
+            'ok' => 0,
+            'diferencia' => 0,
+            'solo_erp' => 0,
+            'solo_anita' => 0,
+            'error' => 0,
+        ];
+        $anitaPorClave = [];
+        $totalesErp = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
+        $totalesAnita = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
+
+        foreach ($ventasErp as $venta) {
+            $consulta = $this->gastronomiaChequeo->consultarCabeceraAnitaDesdeVenta($venta);
+            if ($consulta['error_lectura'] !== null) {
+                $conteo['error']++;
+                $filas[] = [
+                    'estado' => 'error',
+                    'codigo_erp' => (string) $venta->codigo,
+                    'venta_id' => (int) $venta->id,
+                    'numero' => (int) ($venta->numerocomprobante ?? 0),
+                    'diferencias' => [
+                        'anita' => 'Error de lectura Anita: '.$consulta['error_lectura'],
+                    ],
+                ];
+
+                continue;
+            }
+
+            $conc = $this->gastronomiaChequeo->conciliarVentaConCabeceraAnita(
+                $venta,
+                $consulta['cabecera'],
+                $tolerancia,
+            );
+            $estado = (string) ($conc['estado'] ?? 'error');
+            if (isset($conteo[$estado])) {
+                $conteo[$estado]++;
+            } else {
+                $conteo['error']++;
+                $estado = 'error';
+            }
+
+            $erpMontos = $conc['erp'] ?? [];
+            foreach (['total', 'gravado', 'iva', 'exento'] as $c) {
+                $totalesErp[$c] += (float) ($erpMontos[$c] ?? 0);
+            }
+
+            if ($consulta['cabecera'] !== null) {
+                $clave = $this->claveComprobanteDesdeVenta($venta);
+                if ($clave !== null) {
+                    $anitaPorClave[$clave] = $consulta['cabecera'];
+                }
+                $anitaMontos = $conc['anita'] ?? [];
+                foreach (['total', 'gravado', 'iva', 'exento'] as $c) {
+                    $totalesAnita[$c] += (float) ($anitaMontos[$c] ?? 0);
+                }
+            }
+
+            if (! $soloDiferencias || $estado !== 'ok') {
+                $filas[] = [
+                    'estado' => $estado,
+                    'codigo_erp' => (string) $venta->codigo,
+                    'venta_id' => (int) $venta->id,
+                    'numero' => (int) ($venta->numerocomprobante ?? 0),
+                    'erp' => $erpMontos,
+                    'anita' => $conc['anita'] ?? null,
+                    'diferencias' => $conc['diferencias'] ?? [],
+                ];
+            }
+        }
+
+        foreach ($totalesErp as $k => $v) {
+            $totalesErp[$k] = round($v, 2);
+        }
+        foreach ($totalesAnita as $k => $v) {
+            $totalesAnita[$k] = round($v, 2);
+        }
+
+        $delta = [];
+        foreach (['total', 'gravado', 'iva', 'exento'] as $c) {
+            $delta[$c] = round($totalesErp[$c] - $totalesAnita[$c], 2);
+        }
+
+        return [
+            'puntoventa' => (string) $puntoventa->codigo,
+            'sucursal' => $sucursal,
+            'fecha_jornada' => $fechaJornada,
+            'resumen' => [
+                'ventas_erp' => $ventasErp->count(),
+                'cabeceras_anita' => count($anitaPorClave),
+                'tolerancia' => $tolerancia,
+                'conteo' => $conteo,
+                'totales_erp' => $totalesErp,
+                'totales_anita_signo_erp' => $totalesAnita,
+                'delta_totales' => $delta,
+                'filtro_anita' => 'ven_sucursal + ven_fecha_vto (jornada) + ven_tipo + ven_nro + ven_letra=B',
+            ],
+            'filas' => $filas,
+        ];
+    }
+
+    /**
+     * @return array{
+     *   fecha_jornada: string,
+     *   por_puntoventa: list<array<string, mixed>>,
+     *   resumen_global: array<string, mixed>
+     * }
+     */
+    public function auditoriaPorFechaJornada(
+        string $fechaJornada,
+        int $empresaId,
+        float $tolerancia = 0.02,
+        ?string $codigoPv = null,
+    ): array {
+        $combinaciones = $this->listarCombinacionesPvJornada(
+            $fechaJornada,
+            $fechaJornada,
+            $empresaId,
+            $codigoPv,
+        );
+        $porPv = [];
+        $conteoGlobal = [
+            'ok' => 0,
+            'diferencia' => 0,
+            'solo_erp' => 0,
+            'solo_anita' => 0,
+            'error' => 0,
+        ];
+        $totalesErp = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
+        $totalesAnita = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
+
+        foreach ($combinaciones as $combo) {
+            if ((string) ($combo['fecha_jornada'] ?? '') !== $fechaJornada) {
+                continue;
+            }
+
+            $resultado = $this->chequear(
+                (int) $combo['puntoventa_id'],
+                $fechaJornada,
+                $tolerancia,
+                true,
+            );
+            $porPv[] = $resultado;
+
+            $res = $resultado['resumen'];
+            foreach ($conteoGlobal as $k => $_) {
+                $conteoGlobal[$k] += (int) ($res['conteo'][$k] ?? 0);
+            }
+            foreach (['total', 'gravado', 'iva', 'exento'] as $c) {
+                $totalesErp[$c] += (float) ($res['totales_erp'][$c] ?? 0);
+                $totalesAnita[$c] += (float) ($res['totales_anita_signo_erp'][$c] ?? 0);
+            }
+        }
+
+        foreach ($totalesErp as $k => $v) {
+            $totalesErp[$k] = round($v, 2);
+        }
+        foreach ($totalesAnita as $k => $v) {
+            $totalesAnita[$k] = round($v, 2);
+        }
+
+        $delta = [];
+        foreach (['total', 'gravado', 'iva', 'exento'] as $c) {
+            $delta[$c] = round($totalesErp[$c] - $totalesAnita[$c], 2);
+        }
+
+        return [
+            'fecha_jornada' => $fechaJornada,
+            'por_puntoventa' => $porPv,
+            'resumen_global' => [
+                'puntoventas' => count($porPv),
+                'ventas_erp' => array_sum(array_map(
+                    fn (array $r) => (int) ($r['resumen']['ventas_erp'] ?? 0),
+                    $porPv,
+                )),
+                'tolerancia' => $tolerancia,
+                'conteo' => $conteoGlobal,
+                'totales_erp' => $totalesErp,
+                'totales_anita_signo_erp' => $totalesAnita,
+                'delta_totales' => $delta,
+                'filtro_erp' => 'venta.fechajornada + estacionamiento_emision',
+                'filtro_anita' => 'ven_sucursal + ven_fecha_vto (jornada) + ven_tipo + ven_nro + ven_letra=B',
+            ],
+        ];
+    }
+
+    /**
      * @return array{cabecera: ?object, error_lectura: ?string}
      */
     public function consultarCabeceraAnitaDesdeVenta(Venta $venta, string $letra = 'B'): array

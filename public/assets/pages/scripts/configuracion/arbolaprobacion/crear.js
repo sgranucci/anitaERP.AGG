@@ -30,6 +30,23 @@
 			}
 		});
 
+		$('#tipoarbol').on('change', function () {
+			actualizarPanelOcArbol();
+		});
+		actualizarPanelOcArbol();
+
+		$('#agrega_oc_trigger').on('click', agregaFilaOcTrigger);
+		$(document).on('click', '.eliminar_oc_trigger', function (e) {
+			e.preventDefault();
+			$(this).closest('tr.fila-oc-trigger').remove();
+		});
+		$(document).on('change', '.oc-trigger-tipo', function () {
+			actualizarCamposOcTrigger($(this).closest('tr'));
+		});
+		$('#tbody-oc-triggers .fila-oc-trigger').each(function () {
+			actualizarCamposOcTrigger($(this));
+		});
+
 		$('#filtro_centrocosto_id').on('change', function (event) {
 			event.preventDefault();
 			let centrocosto_id = $(this).val();
@@ -89,4 +106,31 @@
     	});
     }
 
+	function actualizarPanelOcArbol() {
+		var tipo = $('#tipoarbol').val() || '';
+		if (tipo === 'Ordenes de compra') {
+			$('#oc-triggers-panel').show();
+		} else {
+			$('#oc-triggers-panel').hide();
+		}
+	}
+
+	function agregaFilaOcTrigger(e) {
+		e.preventDefault();
+		var idx = $('#tbody-oc-triggers tr.fila-oc-trigger').length;
+		var html = $('#template-oc-trigger-fila').html().replace(/__IDX__/g, String(idx));
+		$('#tbody-oc-triggers').append(html);
+		actualizarCamposOcTrigger($('#tbody-oc-triggers tr.fila-oc-trigger').last());
+	}
+
+	function actualizarCamposOcTrigger($row) {
+		var tipo = ($row.find('.oc-trigger-tipo').val() || '').toUpperCase();
+		if (tipo === 'EVENTO') {
+			$row.find('.oc-trigger-evento').prop('disabled', false).show();
+			$row.find('.oc-trigger-evaluador').prop('disabled', true).hide().val('');
+		} else if (tipo === 'CONDICION') {
+			$row.find('.oc-trigger-evento').prop('disabled', true).hide().val('');
+			$row.find('.oc-trigger-evaluador').prop('disabled', false).show();
+		}
+	}
 

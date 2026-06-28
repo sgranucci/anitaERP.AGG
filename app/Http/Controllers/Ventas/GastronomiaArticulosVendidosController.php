@@ -6,8 +6,6 @@ use App\Exports\Ventas\GastronomiaArticulosVendidosExport;
 use App\Http\Controllers\Controller;
 use App\Models\Stock\Depmae;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
-use App\Models\Ventas\JornadaGastronomia;
-use App\Models\Ventas\Puntoventa;
 use App\Queries\Ventas\GastronomiaArticulosVendidosQuery;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
@@ -15,9 +13,12 @@ use App\Services\Stock\FormulaArticuloService;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
+use App\Support\Ventas\GastronomiaArticulosVendidosCacheSupport;
 use App\Support\Ventas\GastronomiaArticulosVendidosListadoFiltros;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Excel;
 
 class GastronomiaArticulosVendidosController extends Controller
@@ -35,43 +36,55 @@ class GastronomiaArticulosVendidosController extends Controller
     {
         can('listar-articulos-vendidos-gastronomia');
 
-        $empresaQuery = $this->empresaRepository->allFiltrado();
-        $empresaId = (int) $request->input('empresa_id', 0);
-        if ($empresaId <= 0 && $empresaQuery->count() === 1) {
-            $empresaId = (int) $empresaQuery->first()->id;
-        }
-        $this->assertAccesoEmpresa($empresaId);
-
-        $filtros = GastronomiaArticulosVendidosListadoFiltros::resolverDesdeRequest($request);
-        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaId, $request);
-        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+        $contexto = $this->prepararContextoFiltros($request);
+        $filtros = $contexto['filtros'];
+        $empresaIdFiltro = (int) ($filtros['empresa_id'] ?? 0);
+        $puedeConsultar = $this->puedeConsultarReporte($empresaIdFiltro, $contexto['requiere_seleccion_empresa']);
 
         $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
-        $filas = $this->query->listado($filtros, true, $perPage);
+        $totales = $this->totalesVacios();
+
+        if ($puedeConsultar) {
+            $jornadaEstado = $empresaIdFiltro > 0
+                ? $this->jornadaService->estadoParaEmpresa($empresaIdFiltro)
+                : null;
+            $resultado = $this->resolverResultadoListado($request, $filtros, $jornadaEstado);
+            $totales = $resultado['totales'];
+            $filas = $this->paginarFilas($resultado['filas'], $perPage, $request);
+        } else {
+            $jornadaEstado = null;
+            $filas = new LengthAwarePaginator([], 0, $perPage, 1, [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]);
+        }
+
         $filas->appends(GastronomiaArticulosVendidosListadoFiltros::paraQueryString($filtros));
+        if ($request->has('per_page')) {
+            $filas->appends(['per_page' => $perPage]);
+        }
 
-        $totales = $this->query->totales($filtros);
+        $jornada = $jornadaEstado ?? ($empresaIdFiltro > 0
+            ? $this->jornadaService->estadoParaEmpresa($empresaIdFiltro)
+            : null);
 
-        $jornada = $empresaId > 0 ? $this->jornadaService->estadoParaEmpresa($empresaId) : null;
-        $jornadas = $empresaId > 0 ? $this->jornadaRepository->historialPorEmpresa($empresaId, 30) : collect();
-
-        $empresaIdSelectores = (int) ($filtros['empresa_id'] ?? 0) > 0
-            ? (int) $filtros['empresa_id']
-            : $empresaId;
+        $fechaJornada = GastronomiaArticulosVendidosListadoFiltros::fechaJornadaDesdeFiltros($filtros);
 
         return view('ventas.gastronomia.articulos_vendidos.index', [
             'filas' => $filas,
             'filtros' => $filtros,
             'filtrosQuery' => GastronomiaArticulosVendidosListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => GastronomiaArticulosVendidosListadoFiltros::CAMPOS,
-            'empresa_query' => $empresaQuery,
-            'puntoventa_query' => $this->puntoventasGastronomia($empresaIdSelectores, $empresaQuery),
-            'deposito_query' => $this->depositosGastronomia($empresaIdSelectores, $empresaQuery),
-            'jornadas' => $empresaIdSelectores > 0
-                ? $this->jornadaRepository->historialPorEmpresa($empresaIdSelectores, 30)
-                : $jornadas,
+            'empresa_query' => $contexto['empresa_query'],
+            'requiere_seleccion_empresa' => $contexto['requiere_seleccion_empresa'],
+            'puede_consultar' => $puedeConsultar,
+            'deposito_query' => $this->depositosGastronomia($empresaIdFiltro, $contexto['empresa_query']),
+            'jornadas' => $empresaIdFiltro > 0
+                ? $this->jornadaRepository->historialPorEmpresa($empresaIdFiltro, 30)
+                : collect(),
             'jornada' => $jornada,
-            'empresa_id' => $empresaId,
+            'empresa_id' => $empresaIdFiltro,
+            'fecha_jornada' => $fechaJornada,
             'totales' => $totales,
             'puede_ver_factura' => can('ver-factura-gastronomia', false),
             'puede_ver_articulo' => can('editar-articulos', false),
@@ -87,25 +100,29 @@ class GastronomiaArticulosVendidosController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $empresaQuery = $this->empresaRepository->allFiltrado();
-        $empresaId = (int) $request->input('empresa_id', 0);
-        if ($empresaId <= 0 && $empresaQuery->count() === 1) {
-            $empresaId = (int) $empresaQuery->first()->id;
+        $contexto = $this->prepararContextoFiltros($request);
+        $filtros = $contexto['filtros'];
+        $empresaIdFiltro = (int) ($filtros['empresa_id'] ?? 0);
+
+        if (! $this->puedeConsultarReporte($empresaIdFiltro, $contexto['requiere_seleccion_empresa'])) {
+            return redirect()
+                ->route('gastronomia_articulos_vendidos')
+                ->with('errores', ['Seleccione empresa para exportar el reporte.']);
         }
-        $this->assertAccesoEmpresa($empresaId);
 
-        $filtros = GastronomiaArticulosVendidosListadoFiltros::resolverDesdeRequest($request);
-        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaId, $request);
-        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
-
-        $filas = $this->query->listado($filtros, false);
+        $jornadaEstado = $empresaIdFiltro > 0
+            ? $this->jornadaService->estadoParaEmpresa($empresaIdFiltro)
+            : null;
+        $resultado = $this->resolverResultadoListado($request, $filtros, $jornadaEstado);
+        $filas = $resultado['filas'];
+        $totalesExport = $resultado['totales'];
 
         switch (strtoupper($formato)) {
             case 'PDF':
                 $view = \View::make('ventas.gastronomia.articulos_vendidos.listado', [
                     'filas' => $filas,
                     'filtros' => $filtros,
-                    'totales' => $this->query->totales($filtros),
+                    'totales' => $totalesExport,
                 ])->render();
 
                 return $this->descargarPdf($view, 'articulos_vendidos_gastronomia', 'legal', 'landscape');
@@ -130,24 +147,19 @@ class GastronomiaArticulosVendidosController extends Controller
             return response()->json(['ok' => false, 'error' => 'Artículo inválido.'], 422);
         }
 
-        $empresaId = (int) $request->input('empresa_id', 0);
-        $this->assertAccesoEmpresa($empresaId);
+        $contexto = $this->prepararContextoFiltros($request);
+        $filtros = $contexto['filtros'];
+        $empresaIdFiltro = (int) ($filtros['empresa_id'] ?? 0);
 
-        $filtros = GastronomiaArticulosVendidosListadoFiltros::resolverDesdeRequest($request);
-        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaId, $request);
-        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+        if (! $this->puedeConsultarReporte($empresaIdFiltro, $contexto['requiere_seleccion_empresa'])) {
+            return response()->json(['ok' => false, 'error' => 'Seleccione empresa para consultar comprobantes.'], 422);
+        }
 
         $facturas = $this->query->facturasPorArticulo($articuloId, $filtros);
 
-        $fechaFacturasDia = $filtros['fecha_desde'] !== ''
-            ? $filtros['fecha_desde']
-            : Carbon::today()->format('Y-m-d');
-
-        if ((int) ($filtros['jornada_id'] ?? 0) > 0) {
-            $jornada = JornadaGastronomia::query()->find((int) $filtros['jornada_id']);
-            if ($jornada !== null) {
-                $fechaFacturasDia = $jornada->fecha_jornada->format('Y-m-d');
-            }
+        $fechaFacturasDia = GastronomiaArticulosVendidosListadoFiltros::fechaJornadaDesdeFiltros($filtros);
+        if ($fechaFacturasDia === '') {
+            $fechaFacturasDia = Carbon::today()->format('Y-m-d');
         }
 
         $sku = trim((string) $request->input('sku', ''));
@@ -168,6 +180,7 @@ class GastronomiaArticulosVendidosController extends Controller
             'facturas' => $facturas,
             'url_facturas_dia' => route('gastronomia_facturas_dia', array_filter([
                 'fecha' => $fechaFacturasDia,
+                'empresa_id' => $empresaIdFiltro > 0 ? $empresaIdFiltro : null,
                 'articulo_id' => $articuloId,
                 'articulo_sku' => $sku !== '' ? $sku : null,
                 'todas_pc' => '1',
@@ -193,12 +206,13 @@ class GastronomiaArticulosVendidosController extends Controller
             return response()->json(['ok' => false, 'error' => 'Artículo inválido.'], 422);
         }
 
-        $empresaId = (int) $request->input('empresa_id', 0);
-        $this->assertAccesoEmpresa($empresaId);
+        $contexto = $this->prepararContextoFiltros($request);
+        $filtros = $contexto['filtros'];
+        $empresaIdFiltro = (int) ($filtros['empresa_id'] ?? 0);
 
-        $filtros = GastronomiaArticulosVendidosListadoFiltros::resolverDesdeRequest($request);
-        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaId, $request);
-        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+        if (! $this->puedeConsultarReporte($empresaIdFiltro, $contexto['requiere_seleccion_empresa'])) {
+            return response()->json(['ok' => false, 'error' => 'Seleccione empresa para consultar movimientos.'], 422);
+        }
 
         $resultado = $this->query->movimientosPorArticulo($articuloId, $filtros);
 
@@ -220,75 +234,97 @@ class GastronomiaArticulosVendidosController extends Controller
     }
 
     /**
+     * @return array{
+     *   empresa_query: Collection,
+     *   requiere_seleccion_empresa: bool,
+     *   filtros: array<string, mixed>
+     * }
+     */
+    private function prepararContextoFiltros(Request $request): array
+    {
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $requiereSeleccionEmpresa = $empresaQuery->count() > 1;
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0 && $empresaQuery->count() === 1) {
+            $empresaId = (int) $empresaQuery->first()->id;
+        }
+        $this->assertAccesoEmpresa($empresaId);
+
+        $filtros = GastronomiaArticulosVendidosListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaQuery);
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+
+        return [
+            'empresa_query' => $empresaQuery,
+            'requiere_seleccion_empresa' => $requiereSeleccionEmpresa,
+            'filtros' => $filtros,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
-    private function aplicarDefaultsFiltros(array $filtros, int $empresaId, Request $request): array
+    private function aplicarDefaultsFiltros(array $filtros, Collection $empresaQuery): array
     {
-        if ($empresaId > 0 && (int) ($filtros['empresa_id'] ?? 0) <= 0) {
-            $filtros['empresa_id'] = $empresaId;
+        if ((int) ($filtros['empresa_id'] ?? 0) <= 0 && $empresaQuery->count() === 1) {
+            $filtros['empresa_id'] = (int) $empresaQuery->first()->id;
         }
 
-        if ((int) ($filtros['jornada_id'] ?? 0) <= 0
-            && $filtros['fecha_desde'] === ''
-            && $filtros['fecha_hasta'] === '') {
-            $jornada = $empresaId > 0 ? $this->jornadaService->estadoParaEmpresa($empresaId) : null;
-            if (! empty($jornada['jornada_abierta']) && ! empty($jornada['fecha_jornada'])) {
-                $filtros['fecha_desde'] = (string) $jornada['fecha_jornada'];
-                $filtros['fecha_hasta'] = (string) $jornada['fecha_jornada'];
-            } else {
-                $filtros['fecha_desde'] = Carbon::today()->subDays(7)->format('Y-m-d');
-                $filtros['fecha_hasta'] = Carbon::today()->format('Y-m-d');
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $filtros['puntoventa_id'] = 0;
+
+        $fechaJornada = GastronomiaArticulosVendidosListadoFiltros::fechaJornadaDesdeFiltros($filtros);
+
+        if ($fechaJornada === '' && (int) ($filtros['jornada_id'] ?? 0) <= 0) {
+            if ($empresaId > 0) {
+                $jornada = $this->jornadaService->estadoParaEmpresa($empresaId);
+                if (! empty($jornada['jornada_abierta']) && ! empty($jornada['fecha_jornada'])) {
+                    $fechaJornada = (string) $jornada['fecha_jornada'];
+                }
+            }
+            if ($fechaJornada === '') {
+                $fechaJornada = Carbon::today()->format('Y-m-d');
             }
         }
 
-        if ($filtros['fecha_desde'] !== '' || $filtros['fecha_hasta'] !== '') {
-            [$desde, $hasta] = GastronomiaArticulosVendidosListadoFiltros::normalizarRangoFechas(
-                $filtros['fecha_desde'],
-                $filtros['fecha_hasta'],
-            );
-            $filtros['fecha_desde'] = $desde;
-            $filtros['fecha_hasta'] = $hasta;
+        if ($fechaJornada !== '') {
+            $filtros['fecha_jornada'] = Carbon::parse($fechaJornada)->format('Y-m-d');
+            $filtros['fecha_desde'] = $filtros['fecha_jornada'];
+            $filtros['fecha_hasta'] = $filtros['fecha_jornada'];
+            $filtros['jornada_id'] = 0;
         }
 
         return $filtros;
     }
 
-    /**
-     * PV configurados en gastronomía (CAE/CAEA) de la empresa o de todas las asignadas al usuario.
-     */
-    private function puntoventasGastronomia(int $empresaId, \Illuminate\Support\Collection $empresaQuery): \Illuminate\Support\Collection
+    private function puedeConsultarReporte(int $empresaIdFiltro, bool $requiereSeleccionEmpresa): bool
     {
-        $empresaIds = $empresaId > 0
-            ? collect([$empresaId])
-            : $empresaQuery->pluck('id');
-
-        if ($empresaIds->isEmpty()) {
-            return collect();
+        if ($requiereSeleccionEmpresa) {
+            return $empresaIdFiltro > 0;
         }
 
-        $pvIds = ConfiguracionPuntoventaGastronomia::query()
-            ->whereIn('empresa_id', $empresaIds)
-            ->get(['puntoventa_cae_id', 'puntoventa_caea_id'])
-            ->flatMap(fn ($cfg) => [(int) $cfg->puntoventa_cae_id, (int) $cfg->puntoventa_caea_id])
-            ->filter(fn (int $id) => $id > 0)
-            ->unique()
-            ->values();
+        return true;
+    }
 
-        if ($pvIds->isEmpty()) {
-            return collect();
-        }
-
-        return Puntoventa::query()
-            ->whereIn('id', $pvIds)
-            ->orderBy('codigo')
-            ->get(['id', 'codigo', 'nombre']);
+    /**
+     * @return array{cantidad_articulos:int,cantidad_total:float,importe_total:float,cantidad_comprobantes:int}
+     */
+    private function totalesVacios(): array
+    {
+        return [
+            'cantidad_articulos' => 0,
+            'cantidad_total' => 0.,
+            'importe_total' => 0.,
+            'cantidad_comprobantes' => 0,
+        ];
     }
 
     /**
      * Depósitos de venta e insumos definidos en la configuración gastronomía.
      */
-    private function depositosGastronomia(int $empresaId, \Illuminate\Support\Collection $empresaQuery): \Illuminate\Support\Collection
+    private function depositosGastronomia(int $empresaId, Collection $empresaQuery): Collection
     {
         $empresaIds = $empresaId > 0
             ? collect([$empresaId])
@@ -329,6 +365,53 @@ class GastronomiaArticulosVendidosController extends Controller
         $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombreBase.'.pdf');
 
         return response()->download($path.'/'.$nombreBase.'.pdf');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|null  $jornadaEstado
+     * @return array{filas: Collection<int, object>, totales: array{cantidad_articulos:int,cantidad_total:float,importe_total:float,cantidad_comprobantes:int}}
+     */
+    private function resolverResultadoListado(Request $request, array $filtros, ?array $jornadaEstado): array
+    {
+        $usaCache = GastronomiaArticulosVendidosCacheSupport::permiteUsarCache($filtros, $jornadaEstado);
+        $forzarConsulta = $request->boolean('consultar') || $request->boolean('refrescar_cache');
+
+        if ($forzarConsulta) {
+            GastronomiaArticulosVendidosCacheSupport::limpiar();
+        }
+
+        if ($usaCache && ! $forzarConsulta) {
+            $desdeCache = GastronomiaArticulosVendidosCacheSupport::recuperar($filtros);
+            if ($desdeCache !== null) {
+                return $desdeCache;
+            }
+        }
+
+        $resultado = $this->query->listadoConTotales($filtros);
+
+        if ($usaCache) {
+            GastronomiaArticulosVendidosCacheSupport::guardar($filtros, $resultado);
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * @param  Collection<int, object>  $filas
+     */
+    private function paginarFilas(Collection $filas, int $perPage, Request $request): LengthAwarePaginator
+    {
+        $currentPage = LengthAwarePaginator::resolveCurrentPage();
+        $items = $filas->slice(($currentPage - 1) * $perPage, $perPage)->values();
+
+        return new LengthAwarePaginator(
+            $items,
+            $filas->count(),
+            $perPage,
+            $currentPage,
+            ['path' => LengthAwarePaginator::resolveCurrentPath()],
+        );
     }
 
     private function assertAccesoEmpresa(int $empresaId): void

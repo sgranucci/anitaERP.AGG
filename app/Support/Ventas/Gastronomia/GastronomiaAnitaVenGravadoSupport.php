@@ -13,6 +13,49 @@ use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
  */
 final class GastronomiaAnitaVenGravadoSupport
 {
+    public const IMPORTE_CORTESIA_MINIMA = 0.01;
+
+    public static function esCortesiaMinima(float $totalAbs): bool
+    {
+        $totalAbs = round(abs($totalAbs), 2);
+
+        return abs($totalAbs - self::IMPORTE_CORTESIA_MINIMA) <= 0.005;
+    }
+
+    /**
+     * @return array{monto: float, exento: float, gravado: float, iva: float}
+     */
+    public static function montosCabeceraCortesiaMinima(): array
+    {
+        return [
+            'monto' => self::IMPORTE_CORTESIA_MINIMA,
+            'exento' => self::IMPORTE_CORTESIA_MINIMA,
+            'gravado' => 0.0,
+            'iva' => 0.0,
+        ];
+    }
+
+    /**
+     * Alinea venta + data_cae antes de grabar en Anita (factura cortesía $0,01).
+     *
+     * @param  array<string, mixed>  $venta
+     * @param  array<string, mixed>  $dataCAE
+     */
+    public static function aplicarCortesiaMinimaEnPayloadAnita(array &$venta, array &$dataCAE, bool $forzar = false): void
+    {
+        if (! $forzar && ! self::esCortesiaMinima((float) ($venta['total'] ?? 0))) {
+            return;
+        }
+
+        $montos = self::montosCabeceraCortesiaMinima();
+        $venta['total'] = $montos['monto'];
+        $dataCAE['total'] = $montos['monto'];
+        $dataCAE['exento'] = $montos['exento'];
+        $dataCAE['nogravado'] = (float) ($dataCAE['nogravado'] ?? 0);
+        $dataCAE['gravado'] = $montos['gravado'];
+        $dataCAE['iva'] = $montos['iva'];
+    }
+
     /**
      * @param  list<array{concepto?: string, importe?: float|int|string, baseimponible?: float|int|string}>  $conceptosTotales
      */
@@ -61,7 +104,7 @@ final class GastronomiaAnitaVenGravadoSupport
     }
 
     /**
-     * Actualiza ven_gravado, ven_impuesto1 y ven_exento en cabecera venta Anita (sin tocar vengrav).
+     * Actualiza ven_monto, ven_gravado, ven_impuesto1 y ven_exento en cabecera venta Anita (sin tocar vengrav).
      */
     public static function actualizarMontosCabeceraAnita(
         string $tipoAnita,
@@ -71,6 +114,7 @@ final class GastronomiaAnitaVenGravadoSupport
         float $gravado,
         float $iva,
         float $exento,
+        ?float $monto = null,
     ): void {
         if ($sucursal <= 0 || $numero <= 0 || trim($tipoAnita) === '') {
             throw new \InvalidArgumentException('Clave de comprobante Anita inválida.');
@@ -80,6 +124,11 @@ final class GastronomiaAnitaVenGravadoSupport
         $gravadoStr = number_format(round($gravado, 2), 2, '.', '');
         $ivaStr = number_format(round($iva, 2), 2, '.', '');
         $exentoStr = number_format(round($exento, 2), 2, '.', '');
+        $valores = " ven_gravado = '".$gravadoStr."', ven_impuesto1 = '".$ivaStr."', ven_exento = '".$exentoStr."' ";
+        if ($monto !== null) {
+            $montoStr = number_format(round($monto, 2), 2, '.', '');
+            $valores = " ven_monto = '".$montoStr."', ".$valores;
+        }
         $where = " WHERE ven_sucursal = '".$sucursal."'"
             ." AND ven_tipo = '".addslashes($tipoAnita)."'"
             ." AND ven_nro = '".$numero."'"
@@ -89,7 +138,7 @@ final class GastronomiaAnitaVenGravadoSupport
             'acc' => 'update',
             'tabla' => 'venta',
             'sistema' => 'ventas',
-            'valores' => " ven_gravado = '".$gravadoStr."', ven_impuesto1 = '".$ivaStr."', ven_exento = '".$exentoStr."' ",
+            'valores' => $valores,
             'whereArmado' => $where,
         ], 'venta montos cabecera update', 'gastronomia.anita_ven_gravado.update');
     }
@@ -136,18 +185,29 @@ final class GastronomiaAnitaVenGravadoSupport
         array $montosErp,
         float $tolerancia = 0.02,
     ): bool {
+        $totalErp = round(abs((float) ($montosErp['total'] ?? $venta->total ?? 0)), 2);
         $gravadoErp = round((float) ($montosErp['gravado'] ?? 0), 2);
         $ivaErp = round((float) ($montosErp['iva'] ?? 0), 2);
         $exentoErp = round((float) ($montosErp['exento'] ?? 0), 2);
 
+        if (self::esCortesiaMinima($totalErp)) {
+            $montosCortesia = self::montosCabeceraCortesiaMinima();
+            $totalErp = $montosCortesia['monto'];
+            $gravadoErp = $montosCortesia['gravado'];
+            $ivaErp = $montosCortesia['iva'];
+            $exentoErp = $montosCortesia['exento'];
+        }
+
+        $montoAnita = round((float) ($cabeceraAnita->ven_monto ?? 0), 2);
         $gravadoAnita = round((float) ($cabeceraAnita->ven_gravado ?? 0), 2);
         $ivaAnita = round((float) ($cabeceraAnita->ven_impuesto1 ?? 0), 2);
         $exentoAnita = round((float) ($cabeceraAnita->ven_exento ?? 0), 2);
 
         if (
-            self::coincideMonetario($gravadoErp, $gravadoAnita, $tolerancia)
+            self::coincideMonetario($totalErp, $montoAnita, self::esCortesiaMinima($totalErp) ? 0.001 : $tolerancia)
+            && self::coincideMonetario($gravadoErp, $gravadoAnita, $tolerancia)
             && self::coincideMonetario($ivaErp, $ivaAnita, $tolerancia)
-            && self::coincideMonetario($exentoErp, $exentoAnita, $tolerancia)
+            && self::coincideMonetario($exentoErp, $exentoAnita, self::esCortesiaMinima($totalErp) ? 0.001 : $tolerancia)
         ) {
             return false;
         }
@@ -160,7 +220,7 @@ final class GastronomiaAnitaVenGravadoSupport
 
         [$tipoAnita, $letra, $sucursal, $numero] = self::resolverClaveAnitaDesdeVenta($venta, $cabeceraAnita);
 
-        self::actualizarMontosCabeceraAnita($tipoAnita, $letra, $sucursal, $numero, $gravadoErp, $ivaErp, $exentoErp);
+        self::actualizarMontosCabeceraAnita($tipoAnita, $letra, $sucursal, $numero, $gravadoErp, $ivaErp, $exentoErp, $totalErp);
 
         return true;
     }

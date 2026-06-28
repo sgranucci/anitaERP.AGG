@@ -10,6 +10,7 @@ use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Services\Ventas\FacturacionService;
+use App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 use InvalidArgumentException;
@@ -119,55 +120,80 @@ final class GastronomiaFacturacionService
         }
 
         $totalActual = round((float) $venta->total, 2);
-        if (abs($totalActual - self::IMPORTE_MINIMO_FACTURA) <= 0.001) {
-            return;
-        }
+        $necesitaPatchErp = abs($totalActual - self::IMPORTE_MINIMO_FACTURA) > 0.001;
 
-        $delta = round(self::IMPORTE_MINIMO_FACTURA - $totalActual, 2);
-        $motivo = $delta > 0.
-            ? 'Netos exentos por renglón redondearon a $0 con descuento de pie ≈100 % '
-                .'(Total en ImpuestoService quedó en $0).'
-            : 'Redondeo por línea en ImpuestoService::calculaNetoItem '
-                .'(0,005 → 0,01 por ítem con descuento de pie 100%).';
+        if ($necesitaPatchErp) {
+            $delta = round(self::IMPORTE_MINIMO_FACTURA - $totalActual, 2);
+            $motivo = $delta > 0.
+                ? 'Netos exentos por renglón redondearon a $0 con descuento de pie ≈100 % '
+                    .'(Total en ImpuestoService quedó en $0).'
+                : 'Redondeo por línea en ImpuestoService::calculaNetoItem '
+                    .'(0,005 → 0,01 por ítem con descuento de pie 100%).';
 
-        Log::warning('gastronomia.factura.cortesia_total_normalizado', [
-            'venta_id' => $ventaId,
-            'total_calculado' => $totalActual,
-            'total_normalizado' => self::IMPORTE_MINIMO_FACTURA,
-            'delta_centavos' => $delta,
-            'motivo' => $motivo,
-        ]);
-
-        $venta->total = self::IMPORTE_MINIMO_FACTURA;
-        $venta->save();
-
-        $exento = Venta_Impuesto::query()
-            ->where('venta_id', $ventaId)
-            ->where('concepto', 'Exento')
-            ->first();
-        if ($exento instanceof Venta_Impuesto) {
-            $exento->importe = round(max(0., (float) $exento->importe + $delta), 2);
-            $exento->save();
-        } else {
-            Venta_Impuesto::query()->create([
+            Log::warning('gastronomia.factura.cortesia_total_normalizado', [
                 'venta_id' => $ventaId,
-                'concepto' => 'Exento',
-                'baseimponible' => 0.,
-                'tasa' => 0.,
-                'importe' => self::IMPORTE_MINIMO_FACTURA,
-                'provincia_id' => null,
-                'impuesto_id' => null,
+                'total_calculado' => $totalActual,
+                'total_normalizado' => self::IMPORTE_MINIMO_FACTURA,
+                'delta_centavos' => $delta,
+                'motivo' => $motivo,
             ]);
+
+            $venta->total = self::IMPORTE_MINIMO_FACTURA;
+            $venta->save();
+
+            $exento = Venta_Impuesto::query()
+                ->where('venta_id', $ventaId)
+                ->where('concepto', 'Exento')
+                ->first();
+            if ($exento instanceof Venta_Impuesto) {
+                $exento->importe = round(max(0., (float) $exento->importe + $delta), 2);
+                $exento->save();
+            } else {
+                Venta_Impuesto::query()->create([
+                    'venta_id' => $ventaId,
+                    'concepto' => 'Exento',
+                    'baseimponible' => 0.,
+                    'tasa' => 0.,
+                    'importe' => self::IMPORTE_MINIMO_FACTURA,
+                    'provincia_id' => null,
+                    'impuesto_id' => null,
+                ]);
+            }
         }
 
         if (isset($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
             $dataCae = $resultado['cae_pendiente']['data_cae'] ?? null;
             if (is_array($dataCae)) {
-                $dataCae['total'] = self::IMPORTE_MINIMO_FACTURA;
-                $dataCae['exento'] = round(max(0., (float) ($dataCae['exento'] ?? 0) + $delta), 2);
+                $ventaTmp = ['total' => self::IMPORTE_MINIMO_FACTURA];
+                GastronomiaAnitaVenGravadoSupport::aplicarCortesiaMinimaEnPayloadAnita($ventaTmp, $dataCae, true);
                 $resultado['cae_pendiente']['data_cae'] = $dataCae;
             }
         }
+
+        $this->actualizarPayloadCortesiaAnitaPendiente($resultado);
+    }
+
+    /**
+     * Anita se replica post-commit con el payload congelado en generaComprobanteGeneral;
+     * si el total quedó en $0 hay que alinear venta + data_cae antes de grabaAnita.
+     *
+     * @param  array<string, mixed>  $resultado
+     */
+    private function actualizarPayloadCortesiaAnitaPendiente(array &$resultado): void
+    {
+        if (! isset($resultado['anita_pendiente']) || ! is_array($resultado['anita_pendiente'])) {
+            return;
+        }
+
+        $ventaPayload = $resultado['anita_pendiente']['venta'] ?? null;
+        $dataCae = $resultado['anita_pendiente']['data_cae'] ?? null;
+        if (! is_array($ventaPayload) || ! is_array($dataCae)) {
+            return;
+        }
+
+        GastronomiaAnitaVenGravadoSupport::aplicarCortesiaMinimaEnPayloadAnita($ventaPayload, $dataCae, true);
+        $resultado['anita_pendiente']['venta'] = $ventaPayload;
+        $resultado['anita_pendiente']['data_cae'] = $dataCae;
     }
 
     /**

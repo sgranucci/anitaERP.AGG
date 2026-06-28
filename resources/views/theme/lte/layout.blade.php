@@ -171,6 +171,7 @@
     <script src="{{asset('assets/js/modo-consulta.js')}}"></script>
     @auth
         <script src="{{ asset('assets/js/barra-tareas.js') }}"></script>
+        <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js')) ?: time() }}" type="text/javascript"></script>
     @endauth
     @yield("scripts")
 </body>

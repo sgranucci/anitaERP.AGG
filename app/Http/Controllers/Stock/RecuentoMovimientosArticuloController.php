@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Stock;
 
 use App\Exports\Stock\RecuentoMovimientosArticuloExport;
 use App\Http\Controllers\Controller;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\RecuentoMovimientosArticuloSupport;
 use Illuminate\Http\Request;
@@ -18,17 +19,18 @@ class RecuentoMovimientosArticuloController extends Controller
         $depositoId = RecuentoMovimientosArticuloSupport::resolverDepositoIdDesdeRequest(
             $request->query('deposito_id')
         );
+        $empresaId = $this->resolverEmpresaIdFiltrada($request);
 
         try {
-            $contexto = RecuentoMovimientosArticuloSupport::validarContexto($articuloId, $depositoId);
+            $contexto = RecuentoMovimientosArticuloSupport::validarContexto($articuloId, $depositoId, $empresaId);
         } catch (\Throwable $e) {
             return redirect($this->resolverUrlVolver($request))->with('mensaje', $e->getMessage());
         }
 
-        $queryParams = $this->queryParamsDesdeRequest($request, $articuloId, $depositoId);
+        $queryParams = $this->queryParamsDesdeRequest($request, $articuloId, $depositoId, $empresaId);
         $modoTodosDepositos = (bool) ($contexto['modo_todos_depositos'] ?? false);
 
-        $movimientos = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId)
+        $movimientos = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId)
             ->paginate(50)
             ->appends($queryParams);
 
@@ -43,6 +45,7 @@ class RecuentoMovimientosArticuloController extends Controller
             'modoTodosDepositos' => $modoTodosDepositos,
             'mostrarEmpresa' => MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados(),
             'volverUrl' => $this->resolverUrlVolver($request),
+            'empresaIdFiltrada' => $empresaId,
         ]);
     }
 
@@ -57,16 +60,17 @@ class RecuentoMovimientosArticuloController extends Controller
         $depositoId = RecuentoMovimientosArticuloSupport::resolverDepositoIdDesdeRequest(
             $request->query('deposito_id')
         );
+        $empresaId = $this->resolverEmpresaIdFiltrada($request);
 
         try {
-            $contexto = RecuentoMovimientosArticuloSupport::validarContexto($articuloId, $depositoId);
+            $contexto = RecuentoMovimientosArticuloSupport::validarContexto($articuloId, $depositoId, $empresaId);
         } catch (\Throwable $e) {
             return redirect($this->resolverUrlVolver($request))->with('mensaje', $e->getMessage());
         }
 
         $modoTodosDepositos = (bool) ($contexto['modo_todos_depositos'] ?? false);
 
-        $rows = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId)
+        $rows = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId)
             ->get()
             ->map(fn ($row) => RecuentoMovimientosArticuloSupport::enriquecerFila($row, $modoTodosDepositos));
 
@@ -101,7 +105,21 @@ class RecuentoMovimientosArticuloController extends Controller
                     ->download($baseNombre.'.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        return redirect()->route('recuento_movimientos_articulo', $this->queryParamsDesdeRequest($request, $articuloId, $depositoId));
+        return redirect()->route('recuento_movimientos_articulo', $this->queryParamsDesdeRequest($request, $articuloId, $depositoId, $empresaId));
+    }
+
+    private function resolverEmpresaIdFiltrada(Request $request): ?int
+    {
+        $empresaId = (int) $request->query('empresa_id', 0);
+        if ($empresaId <= 0) {
+            return null;
+        }
+
+        if (! app(EmpresaRepositoryInterface::class)->empresaIdPermitida($empresaId)) {
+            abort(403, 'Empresa no autorizada.');
+        }
+
+        return $empresaId;
     }
 
     private function assertPermisoConsulta(): void
@@ -129,12 +147,16 @@ class RecuentoMovimientosArticuloController extends Controller
     /**
      * @return array<string, int|string>
      */
-    private function queryParamsDesdeRequest(Request $request, int $articuloId, int $depositoId): array
+    private function queryParamsDesdeRequest(Request $request, int $articuloId, int $depositoId, ?int $empresaId = null): array
     {
         $params = [
             'articulo_id' => $articuloId,
             'deposito_id' => $depositoId,
         ];
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $params['empresa_id'] = $empresaId;
+        }
 
         if ($request->filled('volver')) {
             $params['volver'] = (string) $request->query('volver');

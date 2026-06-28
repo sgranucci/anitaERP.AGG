@@ -3,16 +3,32 @@
     Existencias por dep&oacute;sito
 @endsection
 
+@if ($consultado && ($puede_ver_kardex ?? false))
+@section('scripts')
+@include('includes.stock.kardex_deposito_scripts')
+<script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/existencias_deposito_reporte/kardex.js') }}" type="text/javascript"></script>
+<script>
+window.obtenerEmpresaIdFiltroSaldosKardex = function () {
+    var el = document.querySelector('#form-existencias-deposito #empresa_id, #form-existencias-deposito [name="empresa_id"]');
+    return el ? (parseInt(el.value, 10) || 0) : 0;
+};
+</script>
+@endsection
+@endif
+
 @section('contenido')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-primary">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h3 class="card-title mb-0">Existencias por dep&oacute;sito y empresa</h3>
-                <a href="{{ route('reporte_existencias_deposito') }}" class="btn btn-outline-secondary btn-sm">
-                    <i class="fa fa-eraser"></i> Limpiar
-                </a>
+            <div class="card-header">
+                <h3 class="card-title">Existencias por dep&oacute;sito y empresa</h3>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    <a href="{{ route('reporte_existencias_deposito') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
+                        <i class="fa fa-eraser"></i> Limpiar
+                    </a>
+                </div>
             </div>
             <form method="get" action="{{ route('reporte_existencias_deposito') }}" class="mb-0" id="form-existencias-deposito">
                 <div class="card-body pb-2">
@@ -232,6 +248,7 @@
                             'filas' => $filas,
                             'totales' => $totales,
                             'puede_ver_articulo' => $puede_ver_articulo ?? false,
+                            'puede_ver_kardex' => $puede_ver_kardex ?? false,
                         ])
                     </div>
 
@@ -246,4 +263,10 @@
         </div>
     </div>
 </div>
+@if ($consultado && ($puede_ver_kardex ?? false))
+@include('includes.stock.modal_kardex_deposito')
+@include('includes.stock.modalconsultadeposito')
+<input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
+<input type="hidden" id="articulo-saldos-deposito-url" value="{{ route('articulo_saldos_deposito') }}">
+@endif
 @endsection

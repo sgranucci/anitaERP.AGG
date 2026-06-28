@@ -279,7 +279,7 @@ final class GastronomiaAuditoriaMesTotalesAnitaService
                 $ctamovPorFecha[$fecha] ?? [],
                 $cuentas['codigos_cuenta'],
             );
-            $totalRendgAnita = $this->totalRendgAnitaCompleto($rendgCache[$fecha] ?? []);
+            $totalRendgAnita = $this->totalRendgAnitaCompleto($empresaId, $rendgCache[$fecha] ?? []);
 
             $corr = $this->resumenCorrelatividadAnitaDia($cabecerasDia);
 
@@ -487,19 +487,24 @@ final class GastronomiaAuditoriaMesTotalesAnitaService
     }
 
     /**
-     * TOTAL-DIA rendgastro Anita (neto): Σ portadora (rendg_total_z − rendg_tot_nc) + post-cierre Waitry.
+     * TOTAL-DIA rendgastro Anita (neto): Σ netoGrupoHost por host + vending (host vacío por sucursal) + post-cierre Waitry.
      *
      * @param  list<object>  $cabecerasRendg
      */
-    private function totalRendgAnitaCompleto(array $cabecerasRendg): float
+    private function totalRendgAnitaCompleto(int $empresaId, array $cabecerasRendg): float
     {
         if ($cabecerasRendg === []) {
             return 0.0;
         }
 
+        $vendingSupport = app(GastronomiaConciliacionVendingRendgSupport::class);
+        $pvVending = $vendingSupport->puntoventasVendingPorSucursal($empresaId);
+
         $suma = 0.0;
         /** @var array<string, list<object>> $porHost */
         $porHost = [];
+        /** @var array<int, list<object>> $porSucursalHostVacio */
+        $porSucursalHostVacio = [];
 
         foreach ($cabecerasRendg as $fila) {
             if ($this->rendgastroSupport->esCabeceraPostCierreWaitry($fila)) {
@@ -508,6 +513,20 @@ final class GastronomiaAuditoriaMesTotalesAnitaService
 
             $host = trim((string) ($fila->rendg_host ?? ''));
             if ($host === '') {
+                $sucursal = (int) ($fila->rendg_sucursal ?? 0);
+                if ($sucursal > 0 && isset($pvVending[$sucursal])) {
+                    $porSucursalHostVacio[$sucursal][] = $fila;
+                }
+
+                continue;
+            }
+
+            if ($vendingSupport->esCabeceraVending($fila, $empresaId)) {
+                $sucursal = (int) ($fila->rendg_sucursal ?? 0);
+                if ($sucursal > 0) {
+                    $porHost['VENDING|'.$sucursal][] = $fila;
+                }
+
                 continue;
             }
 
@@ -515,10 +534,11 @@ final class GastronomiaAuditoriaMesTotalesAnitaService
         }
 
         foreach ($porHost as $grupo) {
-            $portadora = $this->rendgastroSupport->elegirPortadora($grupo);
-            $z = round((float) ($portadora->rendg_total_z ?? 0), 2);
-            $nc = round((float) ($portadora->rendg_tot_nc ?? 0), 2);
-            $suma += round($z - $nc, 2);
+            $suma += $this->rendgastroSupport->netoGrupoHost($grupo);
+        }
+
+        foreach ($porSucursalHostVacio as $grupo) {
+            $suma += $this->rendgastroSupport->netoGrupoHost($grupo);
         }
 
         $post = array_values(array_filter(

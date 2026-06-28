@@ -1323,6 +1323,7 @@
 	function mostrarResultadoGeneracion(res) {
 		var $b = $('#wz-resultados-body').empty();
 		var ordenes = res.ordenes || [];
+		var puedeEnviar = !!(META && META.puede_enviar_proveedor);
 		if (!ordenes.length) {
 			$b.append(
 				'<tr><td colspan="2" class="text-muted small">No se generaron órdenes de compra. Los ítems sin origen de precio quedaron cerrados en la requisición y el estado pasó a <strong>GENERO ORDEN COMPRA</strong> (si estaba aprobada).</td></tr>'
@@ -1336,7 +1337,10 @@
 			html += '<a class="btn btn-sm btn-outline-primary mr-1" href="' + verUrl + '" target="_blank" rel="noopener noreferrer" title="Visualizar OC"><i class="fa fa-eye"></i> Visualizar</a>';
 			html += '<a class="btn btn-sm btn-primary mr-1" href="' + (o.url_imprimir || '#') + '" target="_blank" rel="noopener noreferrer" title="PDF vertical"><i class="fa fa-file-pdf"></i> PDF</a>';
 			html += '<a class="btn btn-sm btn-outline-primary mr-1" href="' + (o.url_imprimir_apaisado || '#') + '" target="_blank" rel="noopener noreferrer" title="PDF apaisado"><i class="fa fa-file-pdf"></i> Apaisado</a>';
-			$tr.append('<td>' + html + '</td>');
+			if (puedeEnviar && o.puede_enviar_proveedor) {
+				html += '<button type="button" class="btn btn-sm btn-success mr-1 js-oc-enviar-proveedor" data-ordencompra-id="' + parseInt(o.id, 10) + '" title="Enviar al proveedor"><i class="fa fa-envelope"></i> Email</button>';
+			}
+			$tr.append('<td class="text-nowrap">' + html + '</td>');
 			$b.append($tr);
 		});
 		var $adv = $('#wz-resultados-advertencias').addClass('d-none').empty();
@@ -1346,7 +1350,38 @@
 			ul += '</ul>';
 			$adv.removeClass('d-none').html(ul);
 		}
+		var pendientes = res.envios_pendientes || [];
+		var $env = $('#wz-resultados-envio-proveedor').addClass('d-none').empty();
+		var $btnEnv = $('#wz-resultados-btn-envios').addClass('d-none');
+		if (puedeEnviar && pendientes.length) {
+			var ids = pendientes.map(function (p) { return parseInt(p.id, 10); });
+			var lista = '<ul class="mb-0 pl-3">';
+			pendientes.forEach(function (p) {
+				lista += '<li>OC ' + htmlEsc(String(p.numeroordencompra != null ? p.numeroordencompra : p.id));
+				if (p.proveedor_nombre) {
+					lista += ' — ' + htmlEsc(p.proveedor_nombre);
+				}
+				if (p.email) {
+					lista += ' <span class="text-muted">(' + htmlEsc(p.email) + ')</span>';
+				}
+				lista += '</li>';
+			});
+			lista += '</ul>';
+			$env.removeClass('d-none').html(
+				'<strong><i class="fa fa-envelope"></i> ' + pendientes.length + ' orden(es) con email de proveedor.</strong> ' +
+				'Puede revisar y confirmar el envío ahora o hacerlo más tarde desde el listado o la edición de cada OC.' +
+				lista
+			);
+			$btnEnv.removeClass('d-none')
+				.attr('data-envio-ids', JSON.stringify(ids))
+				.html('<i class="fa fa-envelope"></i> Enviar al proveedor (' + pendientes.length + ')');
+		}
 		$('#modalWizardResultados').modal('show');
+		$('#modalWizardResultados').one('shown.bs.modal', function () {
+			if (typeof window.ocWizardOfrecerEnvioProveedor === 'function') {
+				window.ocWizardOfrecerEnvioProveedor(res, { resultadosModal: '#modalWizardResultados' });
+			}
+		});
 	}
 
 	// ---------------------------------------------------------------------

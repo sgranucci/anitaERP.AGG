@@ -28,7 +28,9 @@
         urlMovimientoStockVerBase: @json(can('editar-movimientos-de-stock', false) ? url('stock/movimientostock') : null),
         urlConfigBase: @json(url('caja/waitry-cierre-jornada/api/proceso/config/__EMPRESA_ID__')),
         urlConfigGuardarBase: @json(url('caja/waitry-cierre-jornada/api/proceso/config/__EMPRESA_ID__')),
+        urlEjecutarAutomatico: @json(route('waitry_cierre_jornada_api_proceso_ejecutar_automatico')),
         configInicial: @json($config_contable ?? []),
+        porcentajeProcesoConfig: @json($porcentaje_proceso_config ?? 0),
         sincronizarAnitaAlFacturar: @json(config('gastronomia.sincronizar_anita_al_facturar', true)),
     };
 </script>

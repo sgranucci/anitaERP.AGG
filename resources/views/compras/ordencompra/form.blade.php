@@ -697,6 +697,31 @@
         <p id="oc-recepciones-vacio" class="text-muted small d-none mb-0">No hay recepciones ni devoluciones vinculadas a esta orden de compra.</p>
     </div>
 
+    <div id="oc-solapa-historia-precios" class="oc-solapa" style="display:none;">
+        <p class="small text-muted mb-2">
+            Cambios de precio en ítems de la OC aplicados al confirmar una recepción o manualmente desde la solapa Recepciones.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm" id="tabla-historia-precios-oc">
+                <thead style="background-color:#85C1E9;color:#17202A;">
+                    <tr>
+                        <th>Fecha</th>
+                        <th>SKU</th>
+                        <th>Descripci&oacute;n</th>
+                        <th class="text-right">Precio anterior</th>
+                        <th class="text-right">Precio nuevo</th>
+                        <th>Origen</th>
+                        <th>Recepci&oacute;n</th>
+                        <th>Usuario</th>
+                        <th>Comentario</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <p id="oc-historia-precios-vacio" class="text-muted small d-none mb-0">No hay cambios de precio registrados para esta orden de compra.</p>
+    </div>
+
     <div id="oc-solapa-arbol" class="oc-solapa" style="display:none;">
         <div id="oc-aviso-arbol" class="alert alert-warning d-none"></div>
         <h5>Movimientos árbol de aprobación</h5>

@@ -6,19 +6,24 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Mail\Ventas\GastronomiaAnitaAuditoriaDiaria;
 use App\Models\Seguridad\Usuario;
+use App\Services\Caja\Estacionamiento\EstacionamientoChequeoVentasAnitaErpService;
+use App\Services\Caja\Estacionamiento\EstacionamientoReplicarVentasAnitaErpService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Auditoría diaria ERP ↔ Anita por fecha calendario: detecta faltantes, replica vía bridge y alerta por mail.
+ * Auditoría diaria ERP ↔ Anita por fecha de jornada: gastronomía + estacionamiento.
+ * Detecta faltantes, replica vía bridge y alerta por mail.
  */
 final class GastronomiaAnitaAuditoriaDiariaService
 {
     public function __construct(
-        private readonly GastronomiaChequeoVentasAnitaErpService $chequeoService,
-        private readonly GastronomiaReplicarVentasAnitaErpService $replicarService,
+        private readonly GastronomiaChequeoVentasAnitaErpService $chequeoGastroService,
+        private readonly GastronomiaReplicarVentasAnitaErpService $replicarGastroService,
+        private readonly EstacionamientoChequeoVentasAnitaErpService $chequeoEstacionamientoService,
+        private readonly EstacionamientoReplicarVentasAnitaErpService $replicarEstacionamientoService,
     ) {
     }
 
@@ -26,34 +31,33 @@ final class GastronomiaAnitaAuditoriaDiariaService
      * @return array<string, mixed>
      */
     public function ejecutar(
-        ?string $fechaCalendario = null,
+        ?string $fechaJornada = null,
         bool $dryRun = false,
         bool $enviarMail = true,
         ?int $empresaId = null,
     ): array {
         $config = config('gastronomia.auditoria_anita_diaria', []);
-        $fecha = $fechaCalendario ?? Carbon::yesterday()->toDateString();
+        $fecha = $fechaJornada ?? Carbon::yesterday()->toDateString();
         $empresaId = $empresaId ?? (int) ($config['empresa_id'] ?? 1);
         $tolerancia = max(0.0, (float) ($config['tolerancia'] ?? 0.02));
         $replicarInsumos = filter_var($config['replicar_insumos'] ?? true, FILTER_VALIDATE_BOOLEAN);
 
         $this->autenticarUsuarioSistema($config);
 
-        $pre = $this->chequeoService->auditoriaPorFechaCalendario($fecha, $empresaId, $tolerancia);
-        $faltantesInicial = (int) ($pre['resumen_global']['conteo']['solo_erp'] ?? 0);
+        $preGastro = $this->chequeoGastroService->auditoriaPorFechaJornada($fecha, $empresaId, $tolerancia);
+        $preEstacionamiento = $this->chequeoEstacionamientoService->auditoriaPorFechaJornada(
+            $fecha,
+            $empresaId,
+            $tolerancia,
+        );
 
-        $replicacion = [
-            'combinaciones' => 0,
-            'faltantes' => 0,
-            'replicadas' => 0,
-            'errores' => [],
-            'detalle' => [],
-            'fecha_calendario' => $fecha,
-            'omitida' => true,
-        ];
+        $faltantesGastro = (int) ($preGastro['resumen_global']['conteo']['solo_erp'] ?? 0);
+        $faltantesEstacionamiento = (int) ($preEstacionamiento['resumen_global']['conteo']['solo_erp'] ?? 0);
 
-        if ($faltantesInicial > 0) {
-            $replicacion = $this->replicarService->replicarFaltantesPorFechaCalendario(
+        $replicacionGastro = $this->replicacionVacia($fecha, 'gastro');
+        if ($faltantesGastro > 0) {
+            $replicacionGastro = $this->replicarGastroService->replicarFaltantes(
+                $fecha,
                 $fecha,
                 $empresaId,
                 null,
@@ -61,19 +65,59 @@ final class GastronomiaAnitaAuditoriaDiariaService
                 0,
                 $replicarInsumos,
             );
-            $replicacion['omitida'] = false;
+            $replicacionGastro['circuito'] = 'gastro';
+            $replicacionGastro['fecha_jornada'] = $fecha;
+            $replicacionGastro['omitida'] = false;
         }
 
-        $post = $this->chequeoService->auditoriaPorFechaCalendario($fecha, $empresaId, $tolerancia);
+        $replicacionEstacionamiento = $this->replicacionVacia($fecha, 'estacionamiento');
+        if ($faltantesEstacionamiento > 0) {
+            $replicacionEstacionamiento = $this->replicarEstacionamientoService->replicarFaltantes(
+                $fecha,
+                $fecha,
+                $empresaId,
+                null,
+                $dryRun,
+                0,
+            );
+            $replicacionEstacionamiento['circuito'] = 'estacionamiento';
+            $replicacionEstacionamiento['fecha_jornada'] = $fecha;
+            $replicacionEstacionamiento['omitida'] = false;
+        }
+
+        $postGastro = $this->chequeoGastroService->auditoriaPorFechaJornada($fecha, $empresaId, $tolerancia);
+        $postEstacionamiento = $this->chequeoEstacionamientoService->auditoriaPorFechaJornada(
+            $fecha,
+            $empresaId,
+            $tolerancia,
+        );
 
         $informe = [
+            'fecha_jornada' => $fecha,
             'fecha_calendario' => $fecha,
             'empresa_id' => $empresaId,
             'dry_run' => $dryRun,
-            'pre' => $pre,
-            'replicacion' => $replicacion,
-            'post' => $post,
-            'requiere_alerta' => $this->requiereAlerta($pre, $post, $replicacion, $tolerancia, $config),
+            'gastro' => [
+                'pre' => $preGastro,
+                'post' => $postGastro,
+                'replicacion' => $replicacionGastro,
+            ],
+            'estacionamiento' => [
+                'pre' => $preEstacionamiento,
+                'post' => $postEstacionamiento,
+                'replicacion' => $replicacionEstacionamiento,
+            ],
+            'pre' => $preGastro,
+            'post' => $postGastro,
+            'replicacion' => $replicacionGastro,
+            'requiere_alerta' => $this->requiereAlertaInforme(
+                $postGastro,
+                $postEstacionamiento,
+                $replicacionGastro,
+                $replicacionEstacionamiento,
+                $tolerancia,
+                $config,
+            ),
         ];
 
         if ($enviarMail && ! $dryRun && $informe['requiere_alerta']) {
@@ -87,7 +131,7 @@ final class GastronomiaAnitaAuditoriaDiariaService
                     $informe['mail_enviado'] = false;
                     $informe['mail_error'] = $e->getMessage();
                     Log::error('gastronomia.auditoria_anita_diaria.mail_fallo', [
-                        'fecha' => $fecha,
+                        'fecha_jornada' => $fecha,
                         'destino' => $destino,
                         'msg' => $e->getMessage(),
                     ]);
@@ -96,11 +140,15 @@ final class GastronomiaAnitaAuditoriaDiariaService
         }
 
         Log::info('gastronomia.auditoria_anita_diaria.ok', [
-            'fecha_calendario' => $fecha,
-            'faltantes_inicial' => $faltantesInicial,
-            'faltantes_final' => (int) ($post['resumen_global']['conteo']['solo_erp'] ?? 0),
-            'replicadas' => (int) ($replicacion['replicadas'] ?? 0),
-            'delta_total' => (float) ($post['resumen_global']['delta_totales']['total'] ?? 0),
+            'fecha_jornada' => $fecha,
+            'faltantes_gastro_inicial' => $faltantesGastro,
+            'faltantes_estacionamiento_inicial' => $faltantesEstacionamiento,
+            'faltantes_gastro_final' => (int) ($postGastro['resumen_global']['conteo']['solo_erp'] ?? 0),
+            'faltantes_estacionamiento_final' => (int) ($postEstacionamiento['resumen_global']['conteo']['solo_erp'] ?? 0),
+            'replicadas_gastro' => (int) ($replicacionGastro['replicadas'] ?? 0),
+            'replicadas_estacionamiento' => (int) ($replicacionEstacionamiento['replicadas'] ?? 0),
+            'delta_total_gastro' => (float) ($postGastro['resumen_global']['delta_totales']['total'] ?? 0),
+            'delta_total_estacionamiento' => (float) ($postEstacionamiento['resumen_global']['delta_totales']['total'] ?? 0),
             'requiere_alerta' => $informe['requiere_alerta'],
         ]);
 
@@ -108,15 +156,34 @@ final class GastronomiaAnitaAuditoriaDiariaService
     }
 
     /**
-     * @param  array<string, mixed>  $pre
-     * @param  array<string, mixed>  $post
-     * @param  array<string, mixed>  $replicacion
+     * @return array<string, mixed>
+     */
+    private function replicacionVacia(string $fechaJornada, string $circuito): array
+    {
+        return [
+            'circuito' => $circuito,
+            'combinaciones' => 0,
+            'faltantes' => 0,
+            'replicadas' => 0,
+            'errores' => [],
+            'detalle' => [],
+            'fecha_jornada' => $fechaJornada,
+            'omitida' => true,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $postGastro
+     * @param  array<string, mixed>  $postEstacionamiento
+     * @param  array<string, mixed>  $replicacionGastro
+     * @param  array<string, mixed>  $replicacionEstacionamiento
      * @param  array<string, mixed>  $config
      */
-    private function requiereAlerta(
-        array $pre,
-        array $post,
-        array $replicacion,
+    private function requiereAlertaInforme(
+        array $postGastro,
+        array $postEstacionamiento,
+        array $replicacionGastro,
+        array $replicacionEstacionamiento,
         float $tolerancia,
         array $config,
     ): bool {
@@ -124,9 +191,27 @@ final class GastronomiaAnitaAuditoriaDiariaService
             return true;
         }
 
+        foreach ([$postGastro, $postEstacionamiento] as $post) {
+            if ($this->requiereAlertaResumen($post, $tolerancia)) {
+                return true;
+            }
+        }
+
+        if (($replicacionGastro['errores'] ?? []) !== []
+            || ($replicacionEstacionamiento['errores'] ?? []) !== []) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $post
+     */
+    private function requiereAlertaResumen(array $post, float $tolerancia): bool
+    {
         $conteoPost = $post['resumen_global']['conteo'] ?? [];
 
-        // Solo alertar por estado final (no por faltantes ya replicados con éxito).
         if ((int) ($conteoPost['solo_erp'] ?? 0) > 0) {
             return true;
         }
@@ -136,10 +221,6 @@ final class GastronomiaAnitaAuditoriaDiariaService
         }
 
         if ((int) ($conteoPost['error'] ?? 0) > 0) {
-            return true;
-        }
-
-        if (($replicacion['errores'] ?? []) !== []) {
             return true;
         }
 

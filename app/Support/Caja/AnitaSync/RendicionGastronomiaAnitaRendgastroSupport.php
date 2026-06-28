@@ -788,6 +788,29 @@ final class RendicionGastronomiaAnitaRendgastroSupport
     }
 
     /**
+     * Neto rendg por host/terminal: Z de la portadora (N→T→M) menos Σ rendg_tot_nc (+ CAEA) de todos los turnos del grupo.
+     * Las NC en turno M/T deben restarse aunque la portadora sea turno N.
+     *
+     * @param  list<object>  $cabeceras
+     */
+    public function netoGrupoHost(array $cabeceras): float
+    {
+        if ($cabeceras === []) {
+            return 0.0;
+        }
+
+        $portadora = $this->elegirPortadora($cabeceras);
+        $z = round((float) ($portadora->rendg_total_z ?? 0), 2);
+        $nc = 0.0;
+        foreach ($cabeceras as $fila) {
+            $nc += round((float) ($fila->rendg_tot_nc ?? 0), 2);
+            $nc += round((float) ($fila->rendg_tot_nc_caea ?? 0), 2);
+        }
+
+        return round($z - $nc, 2);
+    }
+
+    /**
      * Elige la cabecera que debe portar Z/NC del día: N → T → M.
      *
      * @param  list<object>  $cabeceras

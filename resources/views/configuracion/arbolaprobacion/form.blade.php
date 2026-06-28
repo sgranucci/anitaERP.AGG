@@ -84,11 +84,12 @@
         </div>
     </div>
 </div>
-<h4>Niveles</h4>
 @php
     $esRequisiciones = (old('tipoarbol', $data->tipoarbol ?? '') === 'Requisiciones');
     $esRequisicionesSala = (old('tipoarbol', $data->tipoarbol ?? '') === 'Requisiciones de sala');
 @endphp
+@include('configuracion.arbolaprobacion.partials.oc_triggers', ['data' => $data ?? null])
+<h4>Niveles</h4>
 <div class="alert alert-info" role="alert" style="margin-top: 10px;">
     <strong>Usuario opcional por nivel.</strong>
     Si en un nivel no se asigna usuario, el nivel se considera <strong>aprobado automáticamente</strong>.

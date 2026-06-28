@@ -92,7 +92,7 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
                                         $query->orderBy('centrocosto_id', 'asc');
                                         $query->orderBy('nivel', 'asc');  
                                     }
-                                    ])->findOrFail($id)) {
+                                    ], 'oc_triggers')->findOrFail($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 
@@ -107,7 +107,7 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
                                         $query->orderBy('centrocosto_id', 'asc');
                                         $query->orderBy('nivel', 'asc');  
                                     }
-                                    ])->findOrFail($id))
+                                    ], 'oc_triggers')->findOrFail($id))
 			{
             throw new ModelNotFoundException("Registro no encontrado");
         }

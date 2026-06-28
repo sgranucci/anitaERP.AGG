@@ -22,7 +22,7 @@ final class ArticuloSaldosDepositoSupport
      *     total_fmt: string
      * }
      */
-    public static function listadoPorArticulo(int $articuloId): array
+    public static function listadoPorArticulo(int $articuloId, ?int $empresaId = null): array
     {
         $articulo = Articulo::query()
             ->select('id', 'sku', 'descripcion', 'unidadmedida_id')
@@ -34,8 +34,16 @@ final class ArticuloSaldosDepositoSupport
         $depQuery = Depmae::query()
             ->select('id', 'codigo', 'nombre', 'empresa_id')
             ->with('empresas:id,nombre')
+            ->paraUsuarioAutorizado()
             ->orderBy('codigo');
-        MovimientosArticuloDepositoSupport::aplicarFiltroConsultaDeposito($depQuery);
+
+        $empresaId = (int) ($empresaId ?? 0);
+        if ($empresaId > 0) {
+            $depQuery->paraEmpresa($empresaId);
+        } else {
+            MovimientosArticuloDepositoSupport::aplicarFiltroConsultaDeposito($depQuery);
+        }
+
         $depositos = $depQuery->get();
 
         $depositoIds = $depositos->pluck('id')->map(fn ($id) => (int) $id)->all();

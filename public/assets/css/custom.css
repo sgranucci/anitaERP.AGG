@@ -62,12 +62,66 @@ label.requerido:after{
     padding-left:40px !important;
 }
 
+/* Menú-Rol: fondos opacos al scroll (cabecera sticky + columna menú fija) */
+.tabla-menu-rol {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+.tabla-menu-rol thead th {
+    background-color: #85c1e9 !important;
+    color: #17202a;
+    font-weight: 600;
+    border-color: #7fb3d5;
+    white-space: nowrap;
+}
+.tabla-menu-rol thead.tableFloatingHeaderOriginal {
+    background-color: #85c1e9;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+.tabla-menu-rol thead.tableFloatingHeaderOriginal th {
+    background-color: #85c1e9 !important;
+}
+.tabla-menu-rol tbody tr:nth-of-type(odd) > td {
+    background-color: #f5f5f5 !important;
+    background-clip: padding-box;
+}
+.tabla-menu-rol tbody tr:nth-of-type(even) > td {
+    background-color: #fff !important;
+    background-clip: padding-box;
+}
+.tabla-menu-rol.table-hover tbody tr:hover > td {
+    background-color: #ececec !important;
+}
+.tabla-menu-rol thead th:first-child,
+.tabla-menu-rol tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 16rem;
+    max-width: 22rem;
+    box-shadow: 2px 0 6px -2px rgba(0, 0, 0, 0.12);
+    background-clip: padding-box;
+}
+.tabla-menu-rol thead th:first-child {
+    z-index: 6;
+}
+.tabla-menu-rol thead.tableFloatingHeaderOriginal th:first-child {
+    z-index: 7;
+}
+.menu-rol-tabla-wrap {
+    overflow: auto;
+    max-height: calc(100vh - 14rem);
+}
+
 /* Menú-Rol: resaltar módulos de nivel 1 (raíz del árbol) */
 .tabla-menu-rol tr.menu-rol-fila-modulo > td {
     background-color: #d6eaf8 !important;
     border-top: 2px solid #85c1e9;
     color: #17202a;
     font-weight: 600;
+}
+.tabla-menu-rol.table-hover tbody tr.menu-rol-fila-modulo:hover > td {
+    background-color: #c5dff5 !important;
 }
 .tabla-menu-rol tbody > tr.menu-rol-fila-modulo:first-child > td {
     border-top: none;

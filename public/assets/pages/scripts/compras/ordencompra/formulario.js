@@ -40,6 +40,12 @@ $(function () {
 		} else if ($el.closest('#oc-solapa-historia-estados').length) {
 			mostrarSolapa('#oc-solapa-historia-estados');
 			ocMarcarTabActivo('oc-boton-historia-estados');
+		} else if ($el.closest('#oc-solapa-historia-precios').length) {
+			mostrarSolapa('#oc-solapa-historia-precios');
+			ocMarcarTabActivo('oc-boton-historia-precios');
+		} else if ($el.closest('#oc-solapa-recepciones').length) {
+			mostrarSolapa('#oc-solapa-recepciones');
+			ocMarcarTabActivo('oc-boton-recepciones');
 		} else if ($el.closest('#oc-solapa-arbol').length) {
 			mostrarSolapa('#oc-solapa-arbol');
 			ocMarcarTabActivo('oc-boton-arbol');
@@ -1585,6 +1591,51 @@ $(function () {
 		});
 	});
 
+	function ocCargarHistoriaPrecios() {
+		var id = $('#ordencompra_id_actual').val();
+		if (!id) return;
+		var $tb = $('#tabla-historia-precios-oc tbody').empty();
+		$('#oc-historia-precios-vacio').addClass('d-none');
+		$tb.append('<tr><td colspan="9" class="text-center text-muted">Cargando…</td></tr>');
+
+		$.get(carpetaBase + '/compras/ordencompra/' + id + '/historia-precios').done(function (rows) {
+			$tb.empty();
+			if (!rows || !rows.length) {
+				$('#oc-historia-precios-vacio').removeClass('d-none');
+				return;
+			}
+			rows.forEach(function (r) {
+				var f = r.fecha ? String(r.fecha).replace('T', ' ').substring(0, 19) : '';
+				var recCell = ocEsc(r.recepcion_documento || '');
+				if (r.recepcion_url) {
+					recCell = '<a href="' + ocEsc(r.recepcion_url) + '" class="text-primary" target="_blank" rel="noopener">'
+						+ ocEsc(r.recepcion_documento || ('#' + r.recepcion_id)) + '</a>';
+				}
+				$tb.append(
+					'<tr>'
+					+ '<td class="text-nowrap">' + ocEsc(f) + '</td>'
+					+ '<td>' + ocEsc(r.sku) + '</td>'
+					+ '<td>' + ocEsc(r.descripcion) + '</td>'
+					+ '<td class="text-right">' + ocFmtNumero(r.precio_anterior) + '</td>'
+					+ '<td class="text-right font-weight-bold">' + ocFmtNumero(r.precio_nuevo) + '</td>'
+					+ '<td class="small">' + ocEsc(r.origen_etiqueta || r.origen) + '</td>'
+					+ '<td class="small">' + recCell + '</td>'
+					+ '<td>' + ocEsc(r.usuario) + '</td>'
+					+ '<td class="small">' + ocEsc(r.comentario) + '</td>'
+					+ '</tr>'
+				);
+			});
+		}).fail(function () {
+			$tb.empty().append('<tr><td colspan="9" class="text-danger">No se pudo cargar el historial de precios.</td></tr>');
+		});
+	}
+
+	$('#oc-boton-historia-precios').on('click', function () {
+		mostrarSolapa('#oc-solapa-historia-precios');
+		ocMarcarTabActivo('oc-boton-historia-precios');
+		ocCargarHistoriaPrecios();
+	});
+
 	function ocEsc(texto) {
 		return $('<div>').text(texto == null ? '' : String(texto)).html();
 	}
@@ -1742,6 +1793,9 @@ $(function () {
 		}).done(function (resp) {
 			alert((resp && resp.mensaje) ? resp.mensaje : 'Precios actualizados.');
 			ocCargarRecepciones();
+			if ($('#oc-solapa-historia-precios').is(':visible')) {
+				ocCargarHistoriaPrecios();
+			}
 		}).fail(function (xhr) {
 			var msg = (xhr.responseJSON && xhr.responseJSON.mensaje) ? xhr.responseJSON.mensaje : 'Error al aplicar precios.';
 			alert(msg);

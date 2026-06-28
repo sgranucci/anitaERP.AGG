@@ -9,6 +9,24 @@ return [
 
     'dias_tolerancia_fecha' => (int) env('CONCILIACION_BANCARIA_DIAS_FECHA', 3),
 
+    /** OPP con Ch: vs CH DEP en extracto (cuenta 127: clearing ~5–15 días). */
+    'dias_tolerancia_fecha_cheque' => (int) env('CONCILIACION_BANCARIA_DIAS_FECHA_CHEQUE', 30),
+
+    /** OPP/OPA/TRF vs TRF.DATA y similares. */
+    'dias_tolerancia_fecha_pago' => (int) env('CONCILIACION_BANCARIA_DIAS_FECHA_PAGO', 7),
+
+    /**
+     * Compatibilidad tipo comprobante mayor → concepto Interbanking (code_description_ib / bank).
+     */
+    'tipo_comp_conceptos_banco' => [
+        'OPP' => ['TRF.DATA', 'CH DEP', 'CH/PAG', 'CHEQUE', 'CHP', 'CHD', 'SUELDO', 'PAGO.REMUN'],
+        'OPA' => ['TRF.DATA', 'TRF', 'TRANSF', 'PAGO'],
+        'TRF' => ['TRF.DATA', 'TRF', 'TRANSF', 'CRED', 'DEB'],
+        'ING' => ['DEP', 'CRED', 'TRANSF', 'TRF.DATA', 'IDEP'],
+        'EGR' => ['TRF.DATA', 'CH DEP', 'DEB', 'PAGO'],
+        'COB' => ['DEP', 'CRED', 'TRANSF'],
+    ],
+
     /**
      * P.C.C. (grouping_code_ib Interbanking) → código conciliación.
      * 'AC' = acumulado diario (sellos, IVA 10,5 %, intereses acuerdo).

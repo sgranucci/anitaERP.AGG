@@ -157,7 +157,8 @@ return [
     'anita_job_timeout' => max(60, (int) env('GASTRONOMIA_ANITA_JOB_TIMEOUT', 300)),
 
     /**
-     * Usa venta.fecha (calendario), no fechajornada. Replica faltantes vía bridge y alerta por mail.
+     * Auditoría ERP ↔ Anita diaria (06:30): venta.fechajornada, gastronomía + estacionamiento.
+     * Replica faltantes vía bridge y alerta por mail.
      */
     'auditoria_anita_diaria' => [
         'habilitada' => filter_var(env('GASTRONOMIA_AUDITORIA_ANITA_DIARIA', true), FILTER_VALIDATE_BOOLEAN),
@@ -203,6 +204,8 @@ return [
             2 => env('GASTRONOMIA_CONCILIACION_KANDIKO_JORNADA_DESDE', '2026-06-08'),
             3 => env('GASTRONOMIA_CONCILIACION_REBISCO_JORNADA_DESDE', '2026-06-10'),
         ],
+        /** Circuito vending ERP↔rendgastro: jornadas anteriores no se auditan (pre go-live rendiciones ERP). */
+        'vending_jornada_desde' => env('GASTRONOMIA_CONCILIACION_VENDING_JORNADA_DESDE', '2026-06-28'),
         /** Cache Anita bulk (storage/app/anita_audit_cache) en lugar de N consultas live por PV×día. */
         'usar_cache_anita' => filter_var(env('GASTRONOMIA_CONCILIACION_USAR_CACHE_ANITA', true), FILTER_VALIDATE_BOOLEAN),
         /** Re-descarga cache Anita al generar el reporte (1 bulk por empresa/rango; evita cache stale). */
@@ -439,6 +442,52 @@ return [
      * Default 20 = lotes ~20 % de ARCA_WSFE_RECEPTOR_CF_UMBRAL_MONTO.
      */
     'cierre_jornada_cf_lote_porcentaje_tope' => (float) env('GASTRONOMIA_CIERRE_JORNADA_CF_LOTE_PORCENTAJE_TOPE', 20),
+
+    /**
+     * Porcentaje de redistribución QR/efectivo del proceso Waitry (manual y automático).
+     * Prioridad por empresa: gastronomia_cierre_jornada_config.porcentaje → mapa env → este default.
+     */
+    'cierre_jornada_porcentaje' => (float) env('GASTRONOMIA_CIERRE_JORNADA_PORCENTAJE', 0),
+
+    /**
+     * @var array<int, float>
+     */
+    'cierre_jornada_porcentaje_por_empresa' => (static function (): array {
+        $raw = env('GASTRONOMIA_CIERRE_JORNADA_PORCENTAJE_POR_EMPRESA');
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        $decoded = is_array($raw) ? $raw : json_decode((string) $raw, true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+        $map = [];
+        foreach ($decoded as $empresaId => $pct) {
+            if (is_numeric($pct)) {
+                $map[(int) $empresaId] = (float) $pct;
+            }
+        }
+
+        return $map;
+    })(),
+
+    /**
+     * Proceso automático de cierre Waitry (gastronomia:cierre-jornada-waitry-automatico).
+     * Deshabilitado por defecto hasta validar en producción con el botón de prueba.
+     */
+    'cierre_jornada_automatico' => [
+        'habilitado' => filter_var(env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_HORA', '09:00'),
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_EMPRESAS_IDS', '1,2,3')),
+        ))),
+        'email' => env(
+            'GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_EMAIL',
+            'sergiogranucci@gmail.com,ofalqui@grupoagg.com',
+        ),
+        'usuario_id' => max(1, (int) env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_USUARIO_ID', 1)),
+    ],
 
     /**
      * Punto de venta fijo para facturación del proceso de cierre Waitry (una factura por permiso).

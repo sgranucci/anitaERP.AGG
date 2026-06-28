@@ -6,6 +6,7 @@ use App\Models\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamiento;
 use App\Models\Caja\Estacionamiento\CuentaEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Models\Configuracion\Salida;
+use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Venta;
 use App\Support\Caja\Estacionamiento\EstacionamientoFacturaPayloadSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoVentaDisplaySupport;
@@ -231,7 +232,7 @@ final class EstacionamientoFacturaTicketService
             $w->linea($lineaEstacionamiento);
         }
 
-        $lineaOperador = $this->lineaOperadorTurno($cuenta);
+        $lineaOperador = $this->lineaOperadorTurno($venta, $cuenta);
         if ($lineaOperador !== '') {
             $w->linea($lineaOperador);
         }
@@ -541,13 +542,9 @@ final class EstacionamientoFacturaTicketService
         return implode(' — ', $partes);
     }
 
-    private function lineaOperadorTurno(?CuentaEstacionamiento $cuenta): string
+    private function lineaOperadorTurno(Venta $venta, ?CuentaEstacionamiento $cuenta): string
     {
-        if (! $cuenta) {
-            return '';
-        }
-
-        $usuario = $cuenta->turnoOperativo?->usuarioHabilitado;
+        $usuario = $this->resolverUsuarioOperadorTurno($venta, $cuenta);
         if ($usuario === null) {
             return '';
         }
@@ -558,5 +555,25 @@ final class EstacionamientoFacturaTicketService
         }
 
         return 'Operador: '.$nombre;
+    }
+
+    private function resolverUsuarioOperadorTurno(Venta $venta, ?CuentaEstacionamiento $cuenta): ?Usuario
+    {
+        $emision = VentaEstacionamientoEmision::query()
+            ->where('venta_id', $venta->id)
+            ->with('turnoOperativo.usuarioHabilitado')
+            ->first();
+        $usuario = $emision?->turnoOperativo?->usuarioHabilitado;
+        if ($usuario !== null) {
+            return $usuario;
+        }
+
+        if ($cuenta === null) {
+            return null;
+        }
+
+        $cuenta->loadMissing('turnoOperativo.usuarioHabilitado');
+
+        return $cuenta->turnoOperativo?->usuarioHabilitado;
     }
 }

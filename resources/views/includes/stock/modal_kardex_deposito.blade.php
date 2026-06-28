@@ -16,10 +16,6 @@
                 <div id="modal-kardex-saldos-wrap" class="mb-3">
                     @include('stock.partials.saldos_articulo_deposito_panel', ['panelId' => 'kardex'])
                 </div>
-                <div id="modal-kardex-opciones-wrap" class="mb-3 d-none">
-                    <label class="d-block small font-weight-bold mb-1">Elija dep&oacute;sito</label>
-                    <div id="modal-kardex-opciones" class="list-group"></div>
-                </div>
                 <div id="modal-kardex-picker-wrap">
                     <label class="d-block small font-weight-bold mb-1" id="modal-kardex-picker-label">Dep&oacute;sito</label>
                     @include('stock.partials.campo_consulta_deposito', [
@@ -35,6 +31,10 @@
                         'solo_lectura' => false,
                         'mostrar_editar' => false,
                     ])
+                    <small class="form-text text-muted mb-0">
+                        Ingrese el c&oacute;digo y pulse <kbd>Enter</kbd> o <kbd>Tab</kbd> para validar.
+                        Use la lupa o <kbd>F1</kbd> si no lo recuerda.
+                    </small>
                 </div>
                 <button type="button" id="btn-kardex-todos-depositos" class="btn btn-link btn-sm px-0 mt-2">
                     Ver todos los dep&oacute;sitos autorizados

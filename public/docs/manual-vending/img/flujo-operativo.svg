@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 360" font-family="DejaVu Sans, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#2E75B6"/>
+    </marker>
+  </defs>
+  <rect width="980" height="360" fill="#f8fafc"/>
+  <text x="490" y="28" text-anchor="middle" font-size="16" font-weight="bold" fill="#1F4E79">Flujo operativo  Módulo Vending (Ventas + Caja + Anita)</text>
+
+  <text x="490" y="52" text-anchor="middle" font-size="11" fill="#555">Configuración previa (una vez) ’ Rendición diaria en Ventas ’ Presentación en Caja</text>
+
+  <g font-size="10" fill="#17202A">
+    <rect x="20" y="80" width="140" height="56" rx="6" fill="#e8f4fc" stroke="#2E75B6"/>
+    <text x="90" y="102" text-anchor="middle" font-weight="bold">1. Máquinas vending</text>
+    <text x="90" y="118" text-anchor="middle">Ventas ’ Gastronomía</text>
+    <text x="90" y="130" text-anchor="middle">Máquinas vending</text>
+
+    <line x1="160" y1="108" x2="185" y2="108" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="190" y="80" width="150" height="56" rx="6" fill="#d4edda" stroke="#28a745"/>
+    <text x="265" y="102" text-anchor="middle" font-weight="bold">2. Alta rendición</text>
+    <text x="265" y="118" text-anchor="middle">Ventas ’ Rendiciones</text>
+    <text x="265" y="130" text-anchor="middle">vending (cierre X)</text>
+
+    <line x1="340" y1="108" x2="365" y2="108" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="370" y="80" width="150" height="56" rx="6" fill="#fff3cd" stroke="#ffc107"/>
+    <text x="445" y="102" text-anchor="middle" font-weight="bold">3. Sync Anita</text>
+    <text x="445" y="118" text-anchor="middle">rendgastro / rendvalor</text>
+    <text x="445" y="130" text-anchor="middle">total_x = ventas, Z = 0</text>
+
+    <line x1="520" y1="108" x2="545" y2="108" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="550" y="80" width="160" height="56" rx="6" fill="#cce5ff" stroke="#007bff"/>
+    <text x="630" y="102" text-anchor="middle" font-weight="bold">4. Presentar en caja</text>
+    <text x="630" y="118" text-anchor="middle">Caja ’ Rendiciones</text>
+    <text x="630" y="130" text-anchor="middle">vending (total Z)</text>
+
+    <line x1="710" y1="108" x2="735" y2="108" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="740" y="80" width="130" height="56" rx="6" fill="#e2d5f1" stroke="#6f42c1"/>
+    <text x="805" y="102" text-anchor="middle" font-weight="bold">5. Contabilidad</text>
+    <text x="805" y="118" text-anchor="middle">Anita: estado pendiente</text>
+    <text x="805" y="130" text-anchor="middle">(rendg_estado = espacio)</text>
+  </g>
+
+  <rect x="20" y="170" width="940" height="165" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="40" y="195" font-size="12" font-weight="bold" fill="#1F4E79">Estados y bloqueos</text>
+  <text x="40" y="218" font-size="10" fill="#333">" En Ventas la rendición queda <tspan font-weight="bold">Pendiente</tspan> hasta que Caja registre la presentación. Mientras esté pendiente puede editar o eliminar desde Ventas.</text>
+  <text x="40" y="238" font-size="10" fill="#333">" Tras presentar en Caja, Ventas bloquea edición/eliminación (iconos grises). Para corregir: anule o elimine la presentación en Caja primero.</text>
+  <text x="40" y="258" font-size="10" fill="#333">" Alta Ventas ’ Anita: rendg_total_x = total ventas, rendg_total_z = 0, rendg_estado = espacio (como estacionamiento).</text>
+  <text x="40" y="278" font-size="10" fill="#333">" Presentación Caja ’ Anita: actualiza rendg_total_z con el cobrado; mantiene rendg_estado = espacio. Anular presentación ’ reset Z a 0.</text>
+  <text x="40" y="298" font-size="10" fill="#333">" Solo la rendición de gastronomía de salón usa rendg_estado = F. Vending no cierra contabilidad desde Ventas.</text>
+  <text x="40" y="318" font-size="10" fill="#666">Rutas: ventas/gastronomia/maquinas-vending · ventas/gastronomia/maquinas-vending/rendiciones · caja/rendicionmaquinavending</text>
+</svg>

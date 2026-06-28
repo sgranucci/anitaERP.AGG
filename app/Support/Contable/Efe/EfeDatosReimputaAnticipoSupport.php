@@ -62,6 +62,11 @@ class EfeDatosReimputaAnticipoSupport
                     continue;
                 }
 
+                $conceptoActual = (int) ($filas[$indice]['concepto_id'] ?? 0);
+                if ($this->anticipoYaClasificado($conceptoActual)) {
+                    continue;
+                }
+
                 if ((int) ($filas[$indice]['concepto_id'] ?? 0)
                     === EfeDatosMantenimientoEdificioSupport::CONCEPTO_MANTENIMIENTO_EDIFICIO) {
                     continue;
@@ -105,7 +110,9 @@ class EfeDatosReimputaAnticipoSupport
     {
         $indiceMantEdificio = null;
         $indiceConcepto24 = null;
+        $indiceReimputa = null;
         $indiceDestino = null;
+        $maxReimputa = 0.0;
         $maxMonto = 0.0;
 
         foreach ($indices as $indice) {
@@ -113,10 +120,16 @@ class EfeDatosReimputaAnticipoSupport
             $cuenta = (int) ($fila['cuenta'] ?? 0);
 
             if (isset($this->cuentasReimputa[$cuenta])) {
+                $montoReimputa = max((float) ($fila['pagos'] ?? 0), (float) ($fila['cobros'] ?? 0));
+                if ($montoReimputa > $maxReimputa) {
+                    $maxReimputa = $montoReimputa;
+                    $indiceReimputa = $indice;
+                }
+
                 continue;
             }
 
-            if ($this->esDisponibilidad($fila)) {
+            if ($this->esDisponibilidad($fila) || $this->esCuentaIvaCredito($cuenta)) {
                 continue;
             }
 
@@ -143,7 +156,59 @@ class EfeDatosReimputaAnticipoSupport
             return $indiceConcepto24;
         }
 
+        $indiceGasto = $this->resolverIndiceGastoMayor($filas, $indices);
+        if ($indiceGasto !== null) {
+            return $indiceGasto;
+        }
+
+        if ($indiceReimputa !== null) {
+            return $indiceReimputa;
+        }
+
         return $indiceDestino;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @param  list<int>  $indices
+     */
+    private function resolverIndiceGastoMayor(array $filas, array $indices): ?int
+    {
+        $indiceDestino = null;
+        $maxMonto = 0.0;
+
+        foreach ($indices as $indice) {
+            $fila = $filas[$indice];
+            $cuenta = (int) ($fila['cuenta'] ?? 0);
+
+            if (isset($this->cuentasReimputa[$cuenta])
+                || $this->esDisponibilidad($fila)
+                || $this->esCuentaIvaCredito($cuenta)) {
+                continue;
+            }
+
+            if ($cuenta < 521000000 || $cuenta >= 600000000) {
+                continue;
+            }
+
+            $monto = max((float) ($fila['pagos'] ?? 0), (float) ($fila['cobros'] ?? 0));
+            if ($monto > $maxMonto) {
+                $maxMonto = $monto;
+                $indiceDestino = $indice;
+            }
+        }
+
+        return $indiceDestino;
+    }
+
+    private function esCuentaIvaCredito(int $cuenta): bool
+    {
+        return $cuenta >= 214010000 && $cuenta < 215000000;
+    }
+
+    private function anticipoYaClasificado(int $conceptoId): bool
+    {
+        return $conceptoId > 0 && ! in_array($conceptoId, [53, 55], true);
     }
 
     private function esCuentaMantenimientoEdificio(int $cuenta): bool

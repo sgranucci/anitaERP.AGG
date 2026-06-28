@@ -579,19 +579,23 @@ final class GastronomiaAnitaMesCacheSupport
             );
 
             if ($esKandikoCaea && in_array($tipo, KandikoAnitaVentaTipoSupport::tiposAnitaEquivalentesFacErp(), true)) {
-                $clave = KandikoAnitaVentaTipoSupport::claveConciliacionDesdeNumero($nro);
-                $existente = $map[$sucursal][$fechaJornada][$clave] ?? null;
-                $tipoExistente = $existente !== null
-                    ? strtoupper(trim((string) ($existente->ven_tipo ?? '')))
-                    : '';
-                if ($existente === null || ($tipo === KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE && $tipoExistente !== KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE)) {
-                    $map[$sucursal][$fechaJornada][$clave] = $fila;
+                foreach (GastronomiaAnitaComprobantePkSupport::clavesConciliacionDesdeCabeceraAnita($fila, true) as $clave) {
+                    $existente = $map[$sucursal][$fechaJornada][$clave] ?? null;
+                    $tipoExistente = $existente !== null
+                        ? strtoupper(trim((string) ($existente->ven_tipo ?? '')))
+                        : '';
+                    if ($existente === null || ($tipo === KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE && $tipoExistente !== KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE)) {
+                        $map[$sucursal][$fechaJornada][$clave] = $fila;
+                    }
                 }
 
                 continue;
             }
 
-            $map[$sucursal][$fechaJornada][$tipo.'-'.$nro] = $fila;
+            $clave = GastronomiaAnitaComprobantePkSupport::claveVentaDesdeCabeceraAnita($fila);
+            if ($clave !== null) {
+                $map[$sucursal][$fechaJornada][$clave] = $fila;
+            }
         }
 
         return $map;

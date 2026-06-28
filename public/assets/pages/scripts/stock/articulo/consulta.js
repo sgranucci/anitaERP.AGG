@@ -241,6 +241,9 @@ function buscar_datos_articulo(consulta) {
     if ($('#consultaarticuloModal').data('articuloSoloFacturable')) {
         postData.solo_facturable = 1;
     }
+    if ($('#consultaarticuloModal').data('articuloSoloInsumoGastronomia')) {
+        postData.solo_insumo_gastronomia = 1;
+    }
     consultaArticuloAjax = $.ajax({
         url: carpetaBase+'/stock/articulo/consultaarticulo',
         type: 'POST',
@@ -322,6 +325,13 @@ function activa_eventos_consultaarticulo()
             $('#consultaarticuloModal').removeData('articuloSoloFacturable');
         }
 
+        var $ctxInsumo = $(this).closest('[data-articulo-solo-insumo-gastronomia="1"]');
+        if ($ctxInsumo.length) {
+            $('#consultaarticuloModal').data('articuloSoloInsumoGastronomia', 1);
+        } else {
+            $('#consultaarticuloModal').removeData('articuloSoloInsumoGastronomia');
+        }
+
         var $ctxConsulta = $(this).closest('tr');
         if (!$ctxConsulta.length) {
             $ctxConsulta = $(this).closest('.cm-campo-articulo-carga');
@@ -375,6 +385,7 @@ function activa_eventos_consultaarticulo()
         $('#consultaarticuloModal').removeData('articuloListaprecioId');
         $('#consultaarticuloModal').removeData('articuloListaprecioNombre');
         $('#consultaarticuloModal').removeData('articuloSoloFacturable');
+        $('#consultaarticuloModal').removeData('articuloSoloInsumoGastronomia');
     });
 
     $('#consultaarticuloModal').off('shown.bs.modal.consultaArt').on('shown.bs.modal.consultaArt', function () {

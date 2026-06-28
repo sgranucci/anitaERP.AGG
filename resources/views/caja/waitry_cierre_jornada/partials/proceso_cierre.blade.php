@@ -157,6 +157,10 @@
             <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-config-contable" title="Cuentas contables">
                 <i class="fa fa-cog"></i> Configuración contable
             </button>
+            <button type="button" class="btn btn-outline-danger btn-sm" id="btn-proceso-ejecutar-automatico"
+                    title="Ejecuta analizar + recalcular % + facturas + asientos para la última jornada cerrada pendiente (envía mail)">
+                <i class="fa fa-bolt"></i> Probar cierre automático
+            </button>
         </div>
 
         <div id="proceso-aviso-vivo-overlay"
@@ -347,8 +351,9 @@
             <div class="form-inline mb-2 flex-wrap">
                 <label for="input-porcentaje" class="mr-2 small">Porcentaje</label>
                 <input type="number" id="input-porcentaje" class="form-control form-control-sm mr-1" style="width:90px"
-                       min="0" max="100" step="0.0001" value="0"
-                       title="Porcentaje sobre facturado Anita; el máximo depende del Waitry sin facturar recodificable (ver debajo).">
+                       min="0" max="100" step="0.0001"
+                       value="{{ number_format((float) ($porcentaje_proceso_config ?? 0), 4, '.', '') }}"
+                       title="Porcentaje sobre facturado Anita; el máximo depende del Waitry sin facturar recodificable (ver debajo). También se usa en el proceso automático.">
                 <span class="mr-2 small">%</span>
                 <button type="button" class="btn btn-sm btn-primary mr-2 mb-1" id="btn-proceso-recalcular">
                     Recalcular medios
@@ -520,7 +525,18 @@
                     <div class="modal-body">
                         <p class="text-muted small mb-2">
                             Las cuentas se consultan filtradas por la empresa del formulario principal.
+                            El porcentaje se guarda por empresa y lo usa el proceso manual y el automático.
                         </p>
+                        <div class="form-group row mb-3">
+                            <label for="config-porcentaje" class="col-sm-5 col-form-label col-form-label-sm">
+                                Porcentaje proceso (%)
+                            </label>
+                            <div class="col-sm-4">
+                                <input type="number" class="form-control form-control-sm" id="config-porcentaje"
+                                       name="porcentaje" min="0" max="100" step="0.0001"
+                                       placeholder="0">
+                            </div>
+                        </div>
                         <table class="table table-sm table-bordered mb-0" id="tabla-config-cuentas">
                             <thead class="thead-light">
                                 <tr>

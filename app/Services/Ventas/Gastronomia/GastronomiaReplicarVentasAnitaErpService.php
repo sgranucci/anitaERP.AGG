@@ -517,7 +517,7 @@ final class GastronomiaReplicarVentasAnitaErpService
         $fechaAsignacion = Carbon::parse((string) $venta->fecha);
         $fechaAsignacion->modify('first day of this month');
 
-        return [
+        $dataCae = [
             'codigoempresa' => $empresa->codigo,
             'tipodoc' => $cliente?->tipodocumentos?->codigoexterno ?? 80,
             'numerodocumento' => (string) ($cliente->numerodocumento ?? $venta->numerodocumento ?? ''),
@@ -549,6 +549,22 @@ final class GastronomiaReplicarVentasAnitaErpService
             'incoterms' => '',
             'items' => $dataFactura,
         ];
+
+        $this->aplicarCortesiaMinimaEnDataCae($venta, $dataCae);
+
+        return $dataCae;
+    }
+
+    /**
+     * @param  array<string, mixed>  $dataCae
+     */
+    private function aplicarCortesiaMinimaEnDataCae(Venta $venta, array &$dataCae): void
+    {
+        $ventaPayload = ['total' => (float) $venta->total];
+        \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::aplicarCortesiaMinimaEnPayloadAnita(
+            $ventaPayload,
+            $dataCae,
+        );
     }
 
     private function resolverLetra(Venta $venta): string

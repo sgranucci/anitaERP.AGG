@@ -222,8 +222,15 @@ class ArticuloController extends Controller
             return response()->json(['error' => 'Artículo inválido.'], 422);
         }
 
+        $empresaId = (int) $request->query('empresa_id', 0);
+        $empresaId = $empresaId > 0 ? $empresaId : null;
+
+        if ($empresaId !== null && ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403, 'Empresa no autorizada.');
+        }
+
         try {
-            $datos = ArticuloSaldosDepositoSupport::listadoPorArticulo($articuloId);
+            $datos = ArticuloSaldosDepositoSupport::listadoPorArticulo($articuloId, $empresaId);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
@@ -1012,6 +1019,13 @@ class ArticuloController extends Controller
 
         if (filter_var($request->input('solo_facturable'), FILTER_VALIDATE_BOOLEAN)) {
             $query->where('articulo.nofactura', '0');
+        }
+
+        if (filter_var($request->input('solo_insumo_gastronomia'), FILTER_VALIDATE_BOOLEAN)) {
+            $insumoId = \App\Support\Stock\ArticuloUsoInsumoSupport::idUsoInsumo();
+            if ($insumoId !== null && $insumoId > 0) {
+                $query->where('articulo.usoarticulo_id', $insumoId);
+            }
         }
 
         \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivos($query);

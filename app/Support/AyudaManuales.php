@@ -41,6 +41,13 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'Vending (Gastronomía y Caja)',
+                'bajada' => 'Máquinas expendedoras, rendiciones en Ventas, presentación en tesorería e integración Anita.',
+                'url' => route('manual_vending'),
+                'icono' => 'fa-cube',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Gastronomía',
                 'bajada' => 'Jornada, turnos, facturación en salón, cierres, restricciones de emisión y consultas gerenciales.',
                 'url' => route('manual_gastronomia'),

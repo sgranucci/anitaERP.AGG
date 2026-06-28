@@ -10,6 +10,8 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Tipodocumento;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Banco;
+use App\Models\Compras\Proveedor;
+use App\Models\Ventas\Cliente;
 use App\Traits\Caja\ChequeTrait;
 
 class Cheque extends Model implements Auditable
@@ -20,7 +22,7 @@ class Cheque extends Model implements Auditable
     protected $fillable = [ 
             'origen', 'chequera_id', 'caracter', 'estado', 'fechaemision', 'fechapago', 'cuentacaja_id',
             'empresa_id', 'caja_id', 'caja_movimiento_id', 
-            'cobranza_id',
+            'cobranza_id', 'cheque_reemplaza_id',
             'numerocheque', 'moneda_id', 'monto', 'cotizacion', 'proveedor_id', 'cliente_id',
             'tipodocumento_id', 'numerodocumento', 'entregado', 'anombrede', 'estadocheque_banco_id', 
             'sucursalpago', 'tipodistribucion', 'banco_id', 'cuentalibradora'
@@ -39,8 +41,18 @@ class Cheque extends Model implements Auditable
 
     public function cobranzas()
 	{
-    	return $this->belongsTo(Cobranza::class, 'id', 'cobranza_id');
+    	return $this->belongsTo(Cobranza::class, 'cobranza_id');
 	}
+
+    public function chequeReemplazado()
+    {
+        return $this->belongsTo(self::class, 'cheque_reemplaza_id');
+    }
+
+    public function chequesReemplazo()
+    {
+        return $this->hasMany(self::class, 'cheque_reemplaza_id');
+    }
 
     public function bancos()
     {

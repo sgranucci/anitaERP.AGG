@@ -132,7 +132,36 @@ final class MovimientosArticuloDepositoSupport
             ->all();
     }
 
-    public static function depositoConsultable(int $depositoId): bool
+    /**
+     * Depósitos consultables acotados por empresa del reporte/formulario (opcional).
+     *
+     * @return array<int>|null null = sin restricción adicional (acceso total y sin empresa fija)
+     */
+    public static function idsDepositosConsultablesFiltrados(?int $empresaId = null): ?array
+    {
+        $empresaId = (int) ($empresaId ?? 0);
+
+        if ($empresaId <= 0) {
+            return self::idsDepositosConsultables();
+        }
+
+        $idsEmpresa = Depmae::query()
+            ->select('id')
+            ->paraUsuarioAutorizado()
+            ->paraEmpresa($empresaId)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $idsRestriccion = self::idsDepositosConsultables();
+        if ($idsRestriccion === null) {
+            return $idsEmpresa;
+        }
+
+        return array_values(array_intersect($idsEmpresa, $idsRestriccion));
+    }
+
+    public static function depositoConsultable(int $depositoId, ?int $empresaId = null): bool
     {
         if ($depositoId <= 0) {
             return false;
@@ -143,8 +172,13 @@ final class MovimientosArticuloDepositoSupport
             return false;
         }
 
-        $empresaId = (int) ($deposito->empresa_id ?? 0);
-        if (! app(EmpresaRepositoryInterface::class)->empresaIdPermitida($empresaId)) {
+        $depositoEmpresaId = (int) ($deposito->empresa_id ?? 0);
+        if (! app(EmpresaRepositoryInterface::class)->empresaIdPermitida($depositoEmpresaId)) {
+            return false;
+        }
+
+        $empresaId = (int) ($empresaId ?? 0);
+        if ($empresaId > 0 && $depositoEmpresaId !== $empresaId) {
             return false;
         }
 

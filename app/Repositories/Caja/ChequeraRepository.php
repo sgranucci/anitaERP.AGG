@@ -35,8 +35,13 @@ class ChequeraRepository implements ChequeraRepositoryInterface
     {
         $hay_chequera = Chequera::first();
 
-        if (!$hay_chequera)
-            self::sincronizarConAnita();
+        if (!$hay_chequera) {
+            try {
+                self::sincronizarConAnita();
+            } catch (\Throwable $e) {
+                // No bloquear pantalla si la sync inicial falla parcialmente.
+            }
+        }
 
         return $this->model->with('cuentacajas')->get();
     }
@@ -148,14 +153,46 @@ class ChequeraRepository implements ChequeraRepositoryInterface
         $datosLocal = Chequera::all();
         $datosLocalArray = [];
         foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
+            $datosLocalArray[] = ltrim((string) $value->{$this->keyField}, '0');
         }
 
         foreach ($dataAnita as $value) {
-            if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
+            $codigoAnita = ltrim((string) $value->{$this->keyField}, '0');
+            if ($codigoAnita === '' || in_array($codigoAnita, $datosLocalArray, true)) {
+                continue;
+            }
+
+            try {
                 $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+                $datosLocalArray[] = $codigoAnita;
+            } catch (\Throwable $e) {
+                // Continuar con la siguiente chequera.
             }
         }
+    }
+
+    private function resolverCuentacajaIdDesdeAnita($codigoAnita): ?int
+    {
+        $codigoNorm = ltrim(trim((string) $codigoAnita), '0');
+        if ($codigoNorm === '') {
+            return null;
+        }
+
+        $cuentacaja = $this->cuentacajaRepository->findPorCodigo($codigoNorm);
+        if ($cuentacaja) {
+            return (int) $cuentacaja->id;
+        }
+
+        $estado = $this->cuentacajaRepository->traerRegistroDeAnita(
+            str_pad($codigoNorm, 8, '0', STR_PAD_LEFT)
+        );
+        if ($estado !== 'importado') {
+            return null;
+        }
+
+        $cuentacaja = $this->cuentacajaRepository->findPorCodigo($codigoNorm);
+
+        return $cuentacaja ? (int) $cuentacaja->id : null;
     }
 
     public function traerRegistroDeAnita($key){
@@ -181,11 +218,10 @@ class ChequeraRepository implements ChequeraRepositoryInterface
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
-            $cuentacaja = $this->cuentacajaRepository->select('id', 'empresa_id', 'codigo')->where('codigo' , $data->cproc_cuenta)->first();
-
-            $cuentacaja_id = 0;
-            if ($cuentacaja)
-                $cuentacaja_id = $cuentacaja->id;
+            $cuentacaja_id = $this->resolverCuentacajaIdDesdeAnita($data->cproc_cuenta ?? '');
+            if ($cuentacaja_id === null) {
+                return;
+            }
             
             $fechaUso = date('d-m-Y', strtotime($data->cproc_fecha_uso));
 

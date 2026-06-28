@@ -2961,6 +2961,14 @@
         window.jQuery('.cfg-cuenta-campo').each(function () {
             cargarCampoCuenta(window.jQuery(this), cfg);
         });
+        var inpPct = el('config-porcentaje');
+        if (inpPct) {
+            var pctCfg = cfg.porcentaje;
+            if (pctCfg === null || pctCfg === undefined || pctCfg === '') {
+                pctCfg = CFG.porcentajeProcesoConfig != null ? CFG.porcentajeProcesoConfig : 0;
+            }
+            inpPct.value = pctCfg;
+        }
     }
 
     function initConsultaCuentasConfig() {
@@ -3024,6 +3032,10 @@
             var campoId = window.jQuery(this).data('campo-id');
             payload[campoId] = window.jQuery(this).find('.cuentacontable_id').val() || '';
         });
+        var inpPct = el('config-porcentaje');
+        if (inpPct) {
+            payload.porcentaje = inpPct.value;
+        }
         return payload;
     }
 
@@ -3060,6 +3072,13 @@
                     if (r && r.config) {
                         CFG.configInicial = r.config;
                         cargarConfigEnModal(r.config);
+                        if (r.config.porcentaje != null && !isNaN(parseFloat(r.config.porcentaje))) {
+                            CFG.porcentajeProcesoConfig = parseFloat(r.config.porcentaje);
+                            var inputPct = el('input-porcentaje');
+                            if (inputPct) {
+                                inputPct.value = r.config.porcentaje;
+                            }
+                        }
                     }
                     $('#modal-config-contable').modal('hide');
                 }).catch(function (e) {
@@ -3067,6 +3086,82 @@
                 });
             });
         }
+    }
+
+    function ejecutarProcesoAutomatico() {
+        var params = empresaYFechaDesdeFormulario();
+        if (params.empresa_id <= 0) {
+            alert('Seleccione una empresa.');
+            return;
+        }
+        if (!window.confirm(
+            '¿Ejecutar el cierre automático Waitry para la última jornada cerrada pendiente de esta empresa?\n\n'
+            + 'Incluye: analizar tramo, recalcular con el % configurado, emitir facturas del proceso '
+            + 'y grabar asientos contables (+ rendición Anita).\n\n'
+            + 'Se enviará un correo con el detalle.'
+        )) {
+            return;
+        }
+        var btn = el('btn-proceso-ejecutar-automatico');
+        if (btn) {
+            btn.disabled = true;
+        }
+        iniciarAvisoVivoRotacion({
+            titulo: 'Ejecutando cierre automático Waitry…',
+            iconClass: 'fa-bolt text-danger',
+            mensajes: [
+                'Analizando tramo Waitry vs Anita…',
+                'Recalculando medios con el porcentaje configurado…',
+                'Emitiendo facturas del proceso…',
+                'Grabando asientos contables y rendición Anita…',
+                'Enviando correo de resumen…',
+            ],
+        });
+        apiPost(CFG.urlEjecutarAutomatico || '', {
+            empresa_id: params.empresa_id,
+            enviar_mail: true,
+        }).then(function (data) {
+            detenerAvisoVivo();
+            if (!data) {
+                throw new Error('Sin respuesta del servidor.');
+            }
+            if (!data.ok && data.estado !== 'sin_pendiente' && data.estado !== 'omitido') {
+                throw new Error(data.error || data.mensaje || 'El proceso automático falló.');
+            }
+            var partes = [];
+            if (data.fecha_jornada) {
+                partes.push('Jornada: ' + data.fecha_jornada);
+            }
+            if (data.porcentaje != null) {
+                partes.push('% aplicado: ' + data.porcentaje);
+            }
+            if (data.mensaje) {
+                partes.push(data.mensaje);
+            }
+            if (data.error) {
+                partes.push('Error: ' + data.error);
+            }
+            alert('Cierre automático — ' + (data.estado || 'fin') + '\n\n' + partes.join('\n'));
+            if (data.fecha_jornada && params.fecha_jornada !== data.fecha_jornada) {
+                var fechaInput = el('fecha_jornada');
+                if (fechaInput) {
+                    fechaInput.value = data.fecha_jornada;
+                }
+            }
+            analizar({
+                titulo: 'Actualizando tras cierre automático…',
+                subtitulo: 'Refrescando el estado del proceso en pantalla.',
+                mensajes: mensajesProcesoRefrescoTrasOperacion('el cierre automático'),
+                iconClass: 'text-danger',
+            });
+        }).catch(function (e) {
+            detenerAvisoVivo();
+            alert(e.message || 'Error al ejecutar el cierre automático.');
+        }).finally(function () {
+            if (btn) {
+                btn.disabled = false;
+            }
+        });
     }
 
     function init() {
@@ -3117,6 +3212,10 @@
         var btnRevertir = el('btn-proceso-revertir');
         if (btnRevertir) {
             btnRevertir.addEventListener('click', abrirModalRevertirProceso);
+        }
+        var btnAuto = el('btn-proceso-ejecutar-automatico');
+        if (btnAuto) {
+            btnAuto.addEventListener('click', ejecutarProcesoAutomatico);
         }
         var btnConfirmarRevertir = el('btn-confirmar-revertir-proceso');
         if (btnConfirmarRevertir) {

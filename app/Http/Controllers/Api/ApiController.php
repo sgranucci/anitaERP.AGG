@@ -14,6 +14,7 @@ use App\Services\Compras\OrdencompraService;
 use App\Services\Compras\ComprobanteService;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Support\Compras\ApiPrecargaProveedorLogger;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use DB;
 use Illuminate\Validation\ValidationException;
 
@@ -509,29 +510,27 @@ class ApiController extends Controller
             'origen_entrada' => \App\Support\Compras\PrecargaComprobanteOrigenEntrada::API,
         ];
 
-        $duplicado = $this->precarga_comprobante_proveedorRepository->findDuplicadoPrecarga(
-            $empresa_id,
-            $proveedor_id,
-            $tipotransaccion_compra_id,
-            (string) $request->letra,
-            $request->sucursal,
-            $request->numero_factura,
-        );
-        if ($duplicado !== null) {
-            $mensajeDuplicado = $this->precarga_comprobante_proveedorRepository->mensajeFacturaDuplicada(
-                $duplicado,
-                $tipoAbreviatura
+        try {
+            ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
+                $empresa_id,
+                $tipotransaccion_compra_id,
+                (string) $request->letra,
+                (int) $request->sucursal,
+                (int) $request->numero_factura,
+                $proveedor_id,
             );
+        } catch (\RuntimeException $e) {
             $log->warning('recibe_comprobante.factura_duplicada', [
-                'message' => $mensajeDuplicado,
-                'precarga_existente_id' => $duplicado->id,
+                'message' => $e->getMessage(),
                 'status' => 422,
             ]);
 
             return response()->json([
-                'message' => $mensajeDuplicado,
+                'message' => $e->getMessage(),
             ], 422);
         }
+
+        $data['identificacion_proveedor_cuit'] = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos($proveedor_id, null);
 
         $log->info('recibe_comprobante.grabar_inicio', ['data' => $data]);
 

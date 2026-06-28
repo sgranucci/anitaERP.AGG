@@ -82,9 +82,10 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
         }
 
         $cacheCabeceras = [];
-        $clavesExcluir = $this->exclusionEmisionSupport->clavesExcluirConciliacion(
+        $clavesExcluir = $this->exclusionEmisionSupport->clavesExcluirListaParaPuntoventa(
             $empresaId,
             $fechaJornada,
+            $pvCaeaId,
             $indiceAnitaBulk,
         );
         $anitaTotal = $this->chequeoVentasService->totalFacturacionBrutaAnitaParaVentasIds(
@@ -141,18 +142,7 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
             ? round($totales['ventas_erp'] - $rendgZ, 2)
             : null;
 
-        $estado = '—';
-        if ($totales['cantidad_facturas'] > 0) {
-            $okAnita = abs($diffErpAnita) <= $tolerancia;
-            if ($rendgZ === null) {
-                $estado = 'SIN RENDG';
-            } else {
-                $okRendg = abs((float) $diffErpRendg) <= $tolerancia;
-                $estado = ($okAnita && $okRendg) ? 'OK' : 'DIF';
-            }
-        }
-
-        return [
+        return GastronomiaConciliacionEstadoSupport::aplicarEstadosEnFila([
             'identificador_pc' => CierreJornadaProcesoRendicionAnitaSupport::HOST,
             'tipo_fila' => 'post_cierre_caea',
             'tipo_pv' => 'CAEA_POST',
@@ -176,11 +166,11 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
             'rendgastro_fuente' => $totales['rendgastro_fuente'] ?? null,
             'diff_erp_anita' => $diffErpAnita,
             'diff_erp_rendg' => $diffErpRendg,
-            'estado' => $estado,
             'cantidad_facturas_erp' => $totales['cantidad_facturas'],
             'jornada_cierre_en' => $totales['jornada_cierre_en'],
             'es_post_cierre_caea' => true,
-        ];
+            'jornada_abierta' => false,
+        ], $tolerancia);
     }
 
     private function puntoventaCaeaEmpresa(int $empresaId): ?Puntoventa

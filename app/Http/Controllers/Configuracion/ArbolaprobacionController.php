@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Configuracion;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionArbolaprobacion;
 use App\Models\Compras\Requisicion_Estado;
+use App\Models\Compras\Sector_Legajocompra;
 use App\Models\Sala\RequisicionSalaEstado;
 use App\Support\Compras\OrdencompraEstados;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_NivelRepositoryInterface;
+use App\Repositories\Configuracion\Arbolaprobacion_OcTriggerRepositoryInterface;
 use App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
@@ -38,9 +40,12 @@ class ArbolaprobacionController extends Controller
 
     private $arbolaprobacionService;
 
+    private $arbolaprobacion_ocTriggerRepository;
+
     public function __construct(ArbolaprobacionRepositoryInterface $arbolaprobacionrepository,
         Arbolaprobacion_NivelRepositoryInterface $arbolaprobacion_nivelrepository,
         Arbolaprobacion_MovimientoRepositoryInterface $arbolaprobacion_movimientorepository,
+        Arbolaprobacion_OcTriggerRepositoryInterface $arbolaprobacion_ocTriggerrepository,
         CentrocostoRepositoryInterface $centrocostorepository,
         EmpresaRepositoryInterface $empresarepository,
         MonedaRepositoryInterface $monedarepository,
@@ -49,6 +54,7 @@ class ArbolaprobacionController extends Controller
         $this->arbolaprobacionRepository = $arbolaprobacionrepository;
         $this->arbolaprobacion_nivelRepository = $arbolaprobacion_nivelrepository;
         $this->arbolaprobacion_movimientoRepository = $arbolaprobacion_movimientorepository;
+        $this->arbolaprobacion_ocTriggerRepository = $arbolaprobacion_ocTriggerrepository;
         $this->centrocostoRepository = $centrocostorepository;
         $this->empresaRepository = $empresarepository;
         $this->monedaRepository = $monedarepository;
@@ -87,9 +93,10 @@ class ArbolaprobacionController extends Controller
         $requisicion_estados_arbol_enum = Requisicion_Estado::estadosArbolRequisicionConfigurables();
         $requisicion_sala_estados_arbol_enum = RequisicionSalaEstado::estadosArbolConfigurables();
         $ordencompra_estados_arbol_enum = OrdencompraEstados::estadosArbolConfigurables();
+        $sector_legajocompra_query = Sector_Legajocompra::query()->orderBy('nombre')->get();
 
         return view('configuracion.arbolaprobacion.crear', compact('empresa_query', 'centrocosto_query', 'moneda_query',
-            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'requisicion_sala_estados_arbol_enum', 'ordencompra_estados_arbol_enum'));
+            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'requisicion_sala_estados_arbol_enum', 'ordencompra_estados_arbol_enum', 'sector_legajocompra_query'));
     }
 
     /**
@@ -111,6 +118,9 @@ class ArbolaprobacionController extends Controller
             // Guarda tablas asociadas
             if ($arbolaprobacion) {
                 $arbolaprobacion_nivel = $this->arbolaprobacion_nivelRepository->create($request->all(), $arbolaprobacion->id);
+                if (($request->input('tipoarbol') ?? '') === $this->arbolaprobacionService->nombreTipoArbolOrdenesCompra()) {
+                    $this->arbolaprobacion_ocTriggerRepository->syncFromRequest($request->all(), $arbolaprobacion->id);
+                }
             }
 
             DB::commit();
@@ -146,9 +156,10 @@ class ArbolaprobacionController extends Controller
         $requisicion_estados_arbol_enum = Requisicion_Estado::estadosArbolRequisicionConfigurables();
         $requisicion_sala_estados_arbol_enum = RequisicionSalaEstado::estadosArbolConfigurables();
         $ordencompra_estados_arbol_enum = OrdencompraEstados::estadosArbolConfigurables();
+        $sector_legajocompra_query = Sector_Legajocompra::query()->orderBy('nombre')->get();
 
         return view('configuracion.arbolaprobacion.editar', compact('data', 'empresa_query', 'centrocosto_query', 'moneda_query',
-            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'requisicion_sala_estados_arbol_enum', 'ordencompra_estados_arbol_enum'));
+            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'requisicion_sala_estados_arbol_enum', 'ordencompra_estados_arbol_enum', 'sector_legajocompra_query'));
     }
 
     /**
@@ -173,6 +184,9 @@ class ArbolaprobacionController extends Controller
             // Guarda tablas asociadas
             if ($arbolaprobacion) {
                 $arbolaprobacion_nivel = $this->arbolaprobacion_nivelRepository->update($request->all(), $id);
+                if (($request->input('tipoarbol') ?? '') === $this->arbolaprobacionService->nombreTipoArbolOrdenesCompra()) {
+                    $this->arbolaprobacion_ocTriggerRepository->syncFromRequest($request->all(), $id);
+                }
             }
 
             DB::commit();

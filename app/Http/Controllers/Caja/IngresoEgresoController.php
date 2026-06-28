@@ -14,7 +14,18 @@ use App\Repositories\Caja\CajaRepositoryInterface;
 use App\Repositories\Caja\ConceptogastoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Caja\ChequeraRepositoryInterface;
+use App\Repositories\Caja\ChequeRepositoryInterface;
+use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
+use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
+use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
+use App\Models\Caja\Cheque;
+use App\Models\Compras\Concepto_Ivacompra;
+use App\Services\Caja\IngresoEgresoComprobanteIvaPdfIaService;
+use App\Services\Caja\IngresoEgresoComprobanteIvaService;
 use App\Services\Caja\IngresoEgresoService;
+use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
+use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Queries\Caja\Caja_MovimientoQueryInterface;
 use App\Exports\Caja\Caja_MovimientoExport;
 use Illuminate\Http\Request;
@@ -39,6 +50,13 @@ class IngresoEgresoController extends Controller
     private $caja_movimientoQuery;
     private $ingresoegresoService;
     private $cajaRepository;
+    private $chequeraRepository;
+    private $chequeRepository;
+    private $tipotransaccionCompraRepository;
+    private $conceptoIvacompraRepository;
+    private $condicionivaRepository;
+    private $comprobanteIvaService;
+    private $comprobanteIvaPdfIaService;
 
 	public function __construct(Caja_MovimientoRepositoryInterface $caja_movimientorepository,
                                 Tipotransaccion_CajaRepositoryInterface $tipotransaccion_cajarepository,
@@ -50,7 +68,14 @@ class IngresoEgresoController extends Controller
                                 CentroCostoRepositoryInterface $centrocostorepository,
                                 Caja_MovimientoQueryInterface $caja_movimientoquery,
                                 IngresoEgresoService $ingresoegresoservice,
-                                CajaRepositoryInterface $cajarepository
+                                CajaRepositoryInterface $cajarepository,
+                                ChequeraRepositoryInterface $chequerarepository,
+                                ChequeRepositoryInterface $chequeRepository,
+                                Tipotransaccion_CompraRepositoryInterface $tipotransaccionCompraRepository,
+                                Concepto_IvacompraRepositoryInterface $conceptoIvacompraRepository,
+                                CondicionivaRepositoryInterface $condicionivaRepository,
+                                IngresoEgresoComprobanteIvaService $comprobanteIvaService,
+                                IngresoEgresoComprobanteIvaPdfIaService $comprobanteIvaPdfIaService,
                                 )
     {
         $this->caja_movimientoRepository = $caja_movimientorepository;
@@ -64,6 +89,13 @@ class IngresoEgresoController extends Controller
         $this->caja_movimientoQuery = $caja_movimientoquery;
         $this->ingresoegresoService = $ingresoegresoservice;
         $this->cajaRepository = $cajarepository;
+        $this->chequeraRepository = $chequerarepository;
+        $this->chequeRepository = $chequeRepository;
+        $this->tipotransaccionCompraRepository = $tipotransaccionCompraRepository;
+        $this->conceptoIvacompraRepository = $conceptoIvacompraRepository;
+        $this->condicionivaRepository = $condicionivaRepository;
+        $this->comprobanteIvaService = $comprobanteIvaService;
+        $this->comprobanteIvaPdfIaService = $comprobanteIvaPdfIaService;
     }
 
     /**
@@ -147,6 +179,8 @@ class IngresoEgresoController extends Controller
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
+        $chequera_query = $this->chequeraRepository->all();
+        $caracter_enum = Cheque::$enumCaracter;
 
         $nombreCaja = '';
         $origen = 'ingresoegreso';
@@ -159,10 +193,14 @@ class IngresoEgresoController extends Controller
 
             $origen = 'movimientocaja';
         }
-        return view('caja.ingresoegreso.crear', compact('tipotransaccion_caja_query', 'moneda_query', 
-                                                'conceptogasto_query',
-                                                'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
-                                                'centrocosto_query', 'caja_id', 'nombreCaja', 'origen'));
+        return view('caja.ingresoegreso.crear', array_merge(
+            compact('tipotransaccion_caja_query', 'moneda_query',
+                'conceptogasto_query',
+                'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
+                'centrocosto_query', 'chequera_query', 'caracter_enum',
+                'caja_id', 'nombreCaja', 'origen'),
+            $this->datosComprobantesIva(null),
+        ));
     }
 
     /**
@@ -200,6 +238,8 @@ class IngresoEgresoController extends Controller
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
+        $chequera_query = $this->chequeraRepository->all();
+        $caracter_enum = Cheque::$enumCaracter;
         $caja_id = $data->caja_id;
 
         $nombreCaja = '';
@@ -211,11 +251,15 @@ class IngresoEgresoController extends Controller
                 $nombreCaja = $caja->nombre;
         }
 
-        return view('caja.ingresoegreso.editar', compact('data', 
-                                                    'tipotransaccion_caja_query', 'moneda_query',
-                                                    'conceptogasto_query',
-                                                    'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
-                                                    'centrocosto_query', 'caja_id', 'nombreCaja', 'origen'));
+        return view('caja.ingresoegreso.editar', array_merge(
+            compact('data',
+                'tipotransaccion_caja_query', 'moneda_query',
+                'conceptogasto_query',
+                'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
+                'centrocosto_query', 'chequera_query', 'caracter_enum',
+                'caja_id', 'nombreCaja', 'origen'),
+            $this->datosComprobantesIva((int) $id),
+        ));
     }
 
     /**
@@ -278,5 +322,194 @@ class IngresoEgresoController extends Controller
     public function generaAsientoContable(Request $request)
     {
         return $this->ingresoegresoService->generaAsientoContable($request->all());
+    }
+
+    public function buscarCheque(Request $request)
+    {
+        can('listar-ingresos-egresos-caja', false);
+
+        $empresaId = (int) $request->input('empresa_id');
+        $numero = trim((string) $request->input('numerocheque', ''));
+        $bancoId = (int) $request->input('banco_id', 0);
+
+        if ($empresaId <= 0 || $numero === '') {
+            return response()->json(['mensaje' => 'ng']);
+        }
+
+        $query = Cheque::query()
+            ->where('empresa_id', $empresaId)
+            ->where('numerocheque', $numero)
+            ->whereNotIn('estado', ['A']);
+
+        if ($bancoId > 0) {
+            $query->where('banco_id', $bancoId);
+        }
+
+        $cheque = $query->with('bancos')->with('monedas')->with('cuentacajas')->first();
+        if ($cheque === null) {
+            return response()->json(['mensaje' => 'ng']);
+        }
+
+        return response()->json([
+            'mensaje' => 'ok',
+            'cheque' => [
+                'id' => $cheque->id,
+                'origen' => $cheque->origen,
+                'numerocheque' => $cheque->numerocheque,
+                'monto' => $cheque->monto,
+                'moneda_id' => $cheque->moneda_id,
+                'cotizacion' => $cheque->cotizacion,
+                'fechapago' => $cheque->fechapago,
+                'banco_id' => $cheque->banco_id,
+                'banco' => $cheque->bancos->nombre ?? '',
+                'cuentacaja_id' => $cheque->cuentacaja_id,
+            ],
+        ]);
+    }
+
+    public function previewAsientoComprobanteIva(Request $request)
+    {
+        can('crear-ingresos-egresos-caja', false);
+        can('editar-ingresos-egresos-caja', false);
+
+        $payload = json_decode((string) $request->input('comprobante_json', '{}'), true);
+        if (! is_array($payload)) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'JSON inválido']);
+        }
+
+        $empresaId = (int) $request->input('empresa_id', $payload['empresa_id'] ?? 0);
+
+        return response()->json(array_merge(
+            ['mensaje' => 'ok'],
+            $this->comprobanteIvaService->previewAsientoComprobante($payload, $empresaId),
+        ));
+    }
+
+    public function previewPdfComprobanteIva(Request $request)
+    {
+        can('crear-ingresos-egresos-caja', false);
+        can('editar-ingresos-egresos-caja', false);
+
+        $request->validate([
+            'pdf' => 'required|file|mimes:pdf|max:20480',
+            'empresa_id' => 'required|integer|min:1',
+        ]);
+
+        try {
+            $resultado = $this->comprobanteIvaPdfIaService->preview(
+                $request->file('pdf'),
+                (int) $request->input('empresa_id'),
+            );
+
+            return response()->json(array_merge(['mensaje' => 'ok'], $resultado));
+        } catch (\Throwable $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()]);
+        }
+    }
+
+    public function validarTotalesComprobantesIva(Request $request)
+    {
+        can('crear-ingresos-egresos-caja', false);
+        can('editar-ingresos-egresos-caja', false);
+
+        $comprobantes = json_decode((string) $request->input('comprobantes_ivacompra_json', '[]'), true);
+        if (! is_array($comprobantes)) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'JSON de comprobantes inválido']);
+        }
+
+        if ($comprobantes === []) {
+            return response()->json(['mensaje' => 'ok', 'valido' => true]);
+        }
+
+        $lineasCaja = [];
+        $montos = $request->input('montos', []);
+        $monedaIds = $request->input('moneda_ids', []);
+        $cotizaciones = $request->input('cotizaciones', []);
+
+        if (is_array($montos)) {
+            for ($i = 0; $i < count($montos); $i++) {
+                $lineasCaja[] = [
+                    'montos' => $montos[$i] ?? 0,
+                    'moneda_ids' => $monedaIds[$i] ?? 1,
+                    'cotizaciones' => $cotizaciones[$i] ?? 1,
+                ];
+            }
+        }
+
+        $monedaRef = (int) ($monedaIds[0] ?? 1);
+
+        try {
+            $this->comprobanteIvaService->validarTotalesContraCaja($comprobantes, $lineasCaja, $monedaRef);
+
+            return response()->json([
+                'mensaje' => 'ok',
+                'valido' => true,
+                'total_comprobantes' => IngresoEgresoComprobanteIvaValidacionSupport::totalComprobantes($comprobantes, $monedaRef),
+                'total_pago' => IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaRef),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'mensaje' => 'ng',
+                'valido' => false,
+                'error' => $e->getMessage(),
+                'total_comprobantes' => IngresoEgresoComprobanteIvaValidacionSupport::totalComprobantes($comprobantes, $monedaRef),
+                'total_pago' => IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaRef),
+            ]);
+        }
+    }
+
+    public function validarDuplicadoComprobanteIva(Request $request)
+    {
+        can('crear-ingresos-egresos-caja', false);
+        can('editar-ingresos-egresos-caja', false);
+
+        $payload = json_decode((string) $request->input('comprobante_json', '{}'), true);
+        if (! is_array($payload)) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'JSON inválido']);
+        }
+
+        $empresaId = (int) $request->input('empresa_id', $payload['empresa_id'] ?? 0);
+        $excluirId = (int) ($payload['id'] ?? 0) ?: null;
+
+        $error = $this->comprobanteIvaService->verificarDuplicadoDesdePayload($payload, $empresaId, $excluirId);
+
+        if ($error !== null) {
+            return response()->json(['mensaje' => 'ng', 'valido' => false, 'error' => $error]);
+        }
+
+        return response()->json(['mensaje' => 'ok', 'valido' => true]);
+    }
+
+    /** @return array<string, mixed> */
+    private function datosComprobantesIva(?int $cajaMovimientoId): array
+    {
+        $tipotransaccion_compra_query = $this->tipotransaccionCompraRepository->all();
+        $concepto_ivacompra_query = $this->conceptoIvacompraRepository->all();
+        $condicioniva_query = $this->condicionivaRepository->all();
+        $tipos_tesoreria = ComprobanteProveedorTipoTesoreria::todos();
+
+        $conceptos_cuenta_meta = Concepto_Ivacompra::query()
+            ->get()
+            ->mapWithKeys(static fn (Concepto_Ivacompra $c) => [
+                (string) $c->id => [
+                    'nombre' => $c->nombre,
+                    'tipoconcepto' => $c->tipoconcepto,
+                    'cuenta_debe_id' => (int) ($c->cuentacontabledebe_id ?? 0),
+                ],
+            ])
+            ->all();
+
+        $comprobantes_ivacompra_inicial = $cajaMovimientoId
+            ? $this->comprobanteIvaService->listarPorCajaMovimiento($cajaMovimientoId)
+            : [];
+
+        return compact(
+            'tipotransaccion_compra_query',
+            'concepto_ivacompra_query',
+            'condicioniva_query',
+            'tipos_tesoreria',
+            'conceptos_cuenta_meta',
+            'comprobantes_ivacompra_inicial',
+        );
     }
 }

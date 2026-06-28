@@ -10,6 +10,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Venta;
 use App\Models\Compras\Proveedor;
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Contable\Asiento;
 use Auth;
 
@@ -43,6 +44,16 @@ class Caja_Movimiento extends Model implements Auditable
 	{
     	return $this->hasMany(Caja_Movimiento_Archivo::class, 'caja_movimiento_id');
 	}
+
+    public function cheques()
+    {
+        return $this->hasMany(Cheque::class, 'caja_movimiento_id')
+            ->with('bancos')
+            ->with('monedas')
+            ->with('chequeras')
+            ->with('cuentacajas')
+            ->with('chequeReemplazado');
+    }
 
     public function asientos()
 	{
@@ -82,6 +93,13 @@ class Caja_Movimiento extends Model implements Auditable
     public function conceptogastos()
     {
         return $this->belongsTo(Conceptogasto::class, 'conceptogasto_id');
+    }
+
+    public function comprobante_proveedores()
+    {
+        return $this->hasMany(Comprobante_Proveedor::class, 'caja_movimiento_id')
+            ->where('origen_entrada', \App\Support\Compras\ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO)
+            ->orderBy('id');
     }
 
     public function usuarios()

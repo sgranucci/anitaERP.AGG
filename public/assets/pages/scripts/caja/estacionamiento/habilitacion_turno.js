@@ -227,16 +227,15 @@
             html += '<span class="badge ' + (ok ? 'badge-success' : 'badge-warning') + '">';
             html += ok ? 'Conciliación OK' : 'Conciliación con diferencia';
             html += '</span>';
-            var nConItems = Number(estado.cuentas_abiertas_con_items || estado.tickets_pendientes_ingreso || 0);
+            var nConItems = Number(estado.cuentas_abiertas_con_items || 0);
             if (nConItems > 0) {
-                var badgeCuentas = estado.es_ultimo_turno_dia ? 'badge-danger' : 'badge-info';
-                html += ' <span class="badge ' + badgeCuentas + '" title="Abiertas con consumos: bloquean cierre del último turno del día">'
-                    + nConItems + ' abierta(s) con consumos</span>';
+                html += ' <span class="badge badge-warning" title="Abiertas con ítems: bloquean el cierre de jornada. Resolver en Saneamiento de turnos.">'
+                    + nConItems + ' abierta(s) con ítems</span>';
             }
             var nVacias = Number(estado.cuentas_abiertas_vacias || 0);
             if (nVacias > 0) {
-                html += ' <span class="badge badge-info" title="Sin ítems: se descartan automáticamente al cerrar turno/jornada">'
-                    + nVacias + ' abierta(s) sin ítems (auto-descartan)</span>';
+                html += ' <span class="badge badge-info" title="Sin ítems: se descartan automáticamente al cerrar el turno">'
+                    + nVacias + ' abierta(s) sin ítems (auto-descartan al cerrar turno)</span>';
             }
             if (Number(estado.cuentas_cerradas_sin_facturar || 0) > 0) {
                 html += ' <span class="badge badge-secondary" title="Estado terminal por saneamiento: no bloquean cierre">'

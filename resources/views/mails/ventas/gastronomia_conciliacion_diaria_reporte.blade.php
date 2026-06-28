@@ -3,15 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auditoría gastronomía {{ $informe['fecha_desde'] ?? '' }}</title>
+    <title>Auditoría conciliación {{ $informe['fecha_desde'] ?? '' }}</title>
 </head>
 <body style="font-family: Arial, sans-serif; color:#222; font-size:14px;">
 @php
     $fmt = static fn ($n) => number_format((float) $n, 2, ',', '.');
     $hayDif = (bool) ($informe['hay_diferencias'] ?? false);
+    $etiquetaTipo = static function (array $fila): string {
+        return match ($fila['tipo_fila'] ?? '') {
+            'pv_cae' => 'PV CAE',
+            'pv_caea' => 'PV CAEA',
+            'pc_total' => 'Total PC',
+            'total_salon' => 'TOTAL SALÓN',
+            'total_gastro' => 'TOTAL GASTRO',
+            'post_cierre_caea' => 'Post-cierre CAEA',
+            'caea_agregados_migrados' => 'Agregados CAEA',
+            'estacionamiento_pv' => 'PV estacionamiento',
+            'total_estacionamiento' => 'TOTAL ESTAC.',
+            'vending_pv' => 'PV vending',
+            'total_vending' => 'TOTAL VENDING',
+            'control_gastro_total' => 'Control día (neto)',
+            default => (string) ($fila['tipo_pv'] ?? $fila['tipo_fila'] ?? '—'),
+        };
+    };
 @endphp
 
-<h2 style="margin:0 0 8px 0;">Auditoría conciliación gastronomía (ERP / Anita / rendgastro)</h2>
+<h2 style="margin:0 0 8px 0;">Auditoría conciliación (ERP / Anita / rendgastro)</h2>
 <p style="margin:0 0 16px 0;">
     Jornada(s):
     <strong>{{ $informe['fecha_desde'] ?? '—' }}</strong>
@@ -22,14 +39,13 @@
 </p>
 
 @if ($hayDif)
-    <p style="color:#dc3545; font-weight:bold;">Hay diferencias fuera de tolerancia (estado DIF o SIN RENDG).</p>
+    <p style="color:#dc3545; font-weight:bold;">Hay diferencias fuera de tolerancia en algún circuito (GASTRO / ESTACIONAMIENTO / VENDING).</p>
 @else
     <p style="color:#28a745; font-weight:bold;">Sin diferencias fuera de tolerancia en el rango.</p>
 @endif
 
 <p style="margin:16px 0 8px 0;">
-    Adjunto Excel (y CSV) agrupado por <strong>PC</strong> (<code>identificador_pc</code> / <code>rendg_host</code>) y <strong>PV</strong> (CAE / CAEA):
-    pv_cae, pv_caea, pc_total vs rendgastro Z, total_salon, post_cierre_caea, total_dia, control_gastro_total.
+    Adjunto Excel (y CSV) por circuito: <strong>GASTRO</strong> (salón), <strong>ESTACIONAMIENTO</strong> (PV ERP vs rendgastro), <strong>VENDING</strong> (rendiciones ERP vs rendgastro).
 </p>
 
 @foreach ($informe['empresas'] ?? [] as $empresa)
@@ -51,70 +67,53 @@
         @endif
         <p style="margin:12px 0 4px 0;"><strong>{{ $dia['fecha_jornada'] ?? '' }}</strong></p>
 
-        <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:11px; margin-bottom:10px; width:100%;">
-            <tr style="background:#85C1E9; color:#17202A;">
-                <th>PC</th>
-                <th>Tipo</th>
-                <th>PV</th>
-                <th align="right">ERP</th>
-                <th align="right">Anita</th>
-                <th align="right">Rendg Z</th>
-                <th align="right">Δ ERP-Rendg</th>
-                <th>Estado</th>
-            </tr>
-            @php $pcGrupo = null; @endphp
-            @php
-                $etiquetaTipo = static function (array $fila): string {
-                    return match ($fila['tipo_fila'] ?? '') {
-                        'pv_cae' => 'PV CAE',
-                        'pv_caea' => 'PV CAEA',
-                        'pc_total' => 'Total PC',
-                        'total_salon' => 'TOTAL SALÓN',
-                        'post_cierre_caea' => 'Post-cierre CAEA',
-                        'vending_rendg' => 'Vending rendg',
-                        'total_vending' => 'TOTAL VENDING',
-                        'total_dia' => 'TOTAL DÍA',
-                        'control_gastro_total' => 'Control día (neto)',
-                        default => (string) ($fila['tipo_pv'] ?? $fila['tipo_fila'] ?? '—'),
-                    };
-                };
-                $filasTabla = $dia['filas'] ?? [];
-                if (! empty($dia['control_gastro_total']) && is_array($dia['control_gastro_total'])) {
-                    $filasTabla[] = $dia['control_gastro_total'];
-                }
-            @endphp
-            @foreach ($filasTabla as $fila)
-                @php
-                    $tipo = $fila['tipo_fila'] ?? '';
-                    $bg = match ($tipo) {
-                        'pc_total' => '#f9f9f9',
-                        'total_salon' => '#eef6fb',
-                        'post_cierre_caea' => '#fff8e6',
-                        'vending_rendg' => '#f3e5f5',
-                        'total_vending' => '#ede7f6',
-                        'total_dia' => '#e8f5e9',
-                        'control_gastro_total' => '#fdebd0',
-                        default => '#fff',
-                    };
-                    $erpCol = $tipo === 'control_gastro_total'
-                        ? ($fila['ventas_erp'] ?? 0)
-                        : ($fila['ventas_erp'] ?? 0);
-                    $rendgCol = $tipo === 'control_gastro_total'
-                        ? ($fila['rendgastro_neto'] ?? null)
-                        : ($fila['rendgastro_z'] ?? null);
-                @endphp
-                <tr style="background:{{ $bg }};">
-                    <td>{{ $fila['identificador_pc'] ?? '' }}</td>
-                    <td><strong>{{ $etiquetaTipo($fila) }}</strong></td>
-                    <td>{{ $fila['pv_codigo'] ?? '—' }}</td>
-                    <td align="right">{{ $fmt($erpCol) }}</td>
-                    <td align="right">{{ $fmt($fila['ventas_anita'] ?? 0) }}</td>
-                    <td align="right">{{ isset($rendgCol) ? $fmt($rendgCol) : '—' }}</td>
-                    <td align="right">{{ isset($fila['diff_erp_rendg']) ? $fmt($fila['diff_erp_rendg']) : '—' }}</td>
-                    <td>{{ $fila['estado'] ?? '—' }}</td>
+        @php
+            $filasTabla = $dia['filas'] ?? [];
+            if (! empty($dia['control_gastro_total']) && is_array($dia['control_gastro_total'])) {
+                $filasTabla[] = $dia['control_gastro_total'];
+            }
+            $porCircuito = [];
+            foreach ($filasTabla as $f) {
+                $c = (string) ($f['circuito'] ?? 'GASTRO');
+                $porCircuito[$c][] = $f;
+            }
+        @endphp
+
+        @foreach (['GASTRO', 'ESTACIONAMIENTO', 'VENDING'] as $circuito)
+            @if (empty($porCircuito[$circuito]))
+                @continue
+            @endif
+            <p style="margin:14px 0 6px 0; font-weight:bold; color:#1a5276;">Circuito {{ $circuito }}</p>
+            <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:11px; margin-bottom:10px; width:100%;">
+                <tr style="background:#85C1E9; color:#17202A;">
+                    <th>Clave</th>
+                    <th>Tipo</th>
+                    <th>PV</th>
+                    <th align="right">ERP</th>
+                    <th align="right">Anita</th>
+                    <th align="right">Rendg</th>
+                    <th align="right">Δ ERP-Rendg</th>
+                    <th>Estado</th>
                 </tr>
-            @endforeach
-        </table>
+                @foreach ($porCircuito[$circuito] as $fila)
+                    @php
+                        $tipo = $fila['tipo_fila'] ?? '';
+                        $erpCol = (float) ($fila['ventas_erp'] ?? 0);
+                        $rendgCol = $fila['rendgastro_neto'] ?? $fila['rendgastro_z'] ?? null;
+                    @endphp
+                    <tr>
+                        <td>{{ $fila['identificador_pc'] ?? '' }}</td>
+                        <td><strong>{{ $etiquetaTipo($fila) }}</strong></td>
+                        <td>{{ $fila['pv_codigo'] ?? '—' }}</td>
+                        <td align="right">{{ $fmt($erpCol) }}</td>
+                        <td align="right">{{ $fmt($fila['ventas_anita'] ?? 0) }}</td>
+                        <td align="right">{{ $rendgCol !== null ? $fmt($rendgCol) : '—' }}</td>
+                        <td align="right">{{ isset($fila['diff_erp_rendg']) ? $fmt($fila['diff_erp_rendg']) : '—' }}</td>
+                        <td>{{ $fila['estado'] ?? '—' }}</td>
+                    </tr>
+                @endforeach
+            </table>
+        @endforeach
 
         @php $ctrl = $dia['control_gastro_total'] ?? null; @endphp
         @if (is_array($ctrl) && (

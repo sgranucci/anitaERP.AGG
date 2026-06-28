@@ -82,6 +82,11 @@ class Ordencompra extends Model
         return $this->hasMany(Ordencompra_Historia::class, 'ordencompra_id');
     }
 
+    public function ordencompra_articulo_precio_historias()
+    {
+        return $this->hasMany(Ordencompra_Articulo_Precio_Historia::class, 'ordencompra_id');
+    }
+
     public function ordencompra_archivos()
     {
         return $this->hasMany(Ordencompra_Archivo::class, 'ordencompra_id');

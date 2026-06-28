@@ -3408,6 +3408,8 @@ class FacturacionService
 		?string $cae = null,
 		?string $fechavencimientocae = null,
 	): array {
+		\App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::aplicarCortesiaMinimaEnPayloadAnita($venta, $dataCAE);
+
 		$cliente = $this->clienteQuery->traeClienteporId($venta['cliente_id']);
 		$codigoCliente = '';
 		$zonavta_id = $provincia_id = $subzonavta_id = 0;
@@ -3659,6 +3661,10 @@ class FacturacionService
 								bool $sinCuentaCorrienteAnita = false, bool $omitirStkmovAnita = false,
 								bool $omitirNumeraAnitaFin = false, ?string $modoFacturacionPuntoventa = null)
 	{
+		if ($modoMinimoAnita) {
+			\App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::aplicarCortesiaMinimaEnPayloadAnita($venta, $dataCAE);
+		}
+
 		if ($numeroOrdenventa > 0)
 			$detalle = $dataCAE['items'][0]['detalle'];
 
@@ -5027,6 +5033,21 @@ class FacturacionService
 		$venta = $anitaPendiente['venta'] ?? null;
 		if (! is_array($venta)) {
 			throw new \InvalidArgumentException('anita_pendiente sin datos de venta.');
+		}
+
+		$dataCae = $anitaPendiente['data_cae'] ?? [];
+		if (! is_array($dataCae)) {
+			$dataCae = [];
+		}
+		if (! empty($anitaPendiente['modo_minimo_anita'])) {
+			\App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::aplicarCortesiaMinimaEnPayloadAnita(
+				$venta,
+				$dataCae,
+				\App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::esCortesiaMinima((float) ($venta['total'] ?? 0))
+					|| abs((float) ($venta['total'] ?? 0)) <= 0.001,
+			);
+			$anitaPendiente['venta'] = $venta;
+			$anitaPendiente['data_cae'] = $dataCae;
 		}
 
 		GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_inicio');

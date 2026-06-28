@@ -10,6 +10,7 @@ use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_ArchivoRepositoryInterface;
 use App\Repositories\Caja\Tipotransaccion_CajaRepositoryInterface;
 use App\Repositories\Caja\ConceptogastoRepositoryInterface;
+use App\Repositories\Caja\ChequeRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
@@ -24,6 +25,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
+use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App;
 use Auth;
 use DB;
@@ -43,6 +46,8 @@ class IngresoEgresoService
 	private $cuentacajaRepository;
 	private $tipotransaccion_cajaRepository;
 	private $conceptogastoRepository;
+	private $chequeRepository;
+	private $comprobanteIvaService;
 
     public function __construct(Caja_MovimientoRepositoryInterface $caja_movimientorepository,
                                 Caja_Movimiento_CuentacajaRepositoryInterface $caja_movimiento_cuentacajarepository,
@@ -56,7 +61,9 @@ class IngresoEgresoService
 								AsientoRepositoryInterface $asientorepository,
 								Asiento_MovimientoRepositoryInterface $asiento_movimientorepository,
 								SeteosalidaRepositoryInterface $seteosalidarepository,
-								TipoTransaccion_CajaRepositoryInterface $tipotransaccion_cajarepository
+								TipoTransaccion_CajaRepositoryInterface $tipotransaccion_cajarepository,
+								ChequeRepositoryInterface $chequeRepository,
+								IngresoEgresoComprobanteIvaService $comprobanteIvaService,
 								)
     {
 		$this->caja_movimientoRepository = $caja_movimientorepository;
@@ -72,6 +79,8 @@ class IngresoEgresoService
 		$this->cuentacontableRepository = $cuentacontablerepository;
         $this->centrocostoRepository = $centrocostorepository;
 		$this->tipotransaccion_cajaRepository = $tipotransaccion_cajarepository;
+		$this->chequeRepository = $chequeRepository;
+		$this->comprobanteIvaService = $comprobanteIvaService;
     }
 
 	public function guardaIngresoEgreso($request, $origen = null)
@@ -83,6 +92,8 @@ class IngresoEgresoService
 			(string) ($request->input('fecha') ?? date('Y-m-d')),
 			PeriodoContableCierreSupport::ALCANCE_CAJA
 		);
+
+		$this->validarComprobantesIvaContraCaja($request);
 
 		$data = $request->all();
 
@@ -114,6 +125,8 @@ class IngresoEgresoService
 				if ($caja_movimiento)
 					Self::agrega($data, $caja_movimiento, $request);
 
+				$this->sincronizarComprobantesIva($request, (int) $caja_movimiento->id, (int) $request->input('empresa_id'));
+
 				DB::commit();
 			} catch (\Exception $e) {
 				DB::rollback();
@@ -132,7 +145,7 @@ class IngresoEgresoService
 		$caja_movimiento_estado = $this->caja_movimiento_estadoRepository->create($data, $caja_movimiento->id);
 		$caja_movimiento_archivo = $this->caja_movimiento_archivoRepository->create($request, $caja_movimiento->id);
 
-		// Graba cheques
+		$this->chequeRepository->guardarChequeIngresoEgreso($data, 'create', (int) $caja_movimiento->id);
 
 		// Graba asiento contable
 		if (isset($data['cuentacontable_ids']))
@@ -176,6 +189,8 @@ class IngresoEgresoService
 			PeriodoContableCierreSupport::ALCANCE_CAJA
 		);
 
+		$this->validarComprobantesIvaContraCaja($request);
+
 		$data = $request->all();
 
 		// Crea estado
@@ -191,6 +206,8 @@ class IngresoEgresoService
 			try
 			{
 				Self::actualiza($data, $id, $request);
+
+				$this->sincronizarComprobantesIva($request, $id, (int) $request->input('empresa_id'));
 
 				DB::commit();
 			} catch (\Exception $e) {
@@ -219,7 +236,7 @@ class IngresoEgresoService
 		// Graba archivos del ingreso egreso
 		$this->caja_movimiento_archivoRepository->update($request, $id);
 
-		// Graba cheques 
+		$this->chequeRepository->guardarChequeIngresoEgreso($data, 'update', (int) $id);
 
 		// Graba asiento
 		if (isset($data['cuentacontable_ids']))
@@ -361,11 +378,15 @@ class IngresoEgresoService
 
 	public function generaAsientoContable(array $data)
 	{
-		$datosCaja = json_decode($data['datoscaja']);
-		$datosContables = json_decode($data['datoscontables']);
-		$tipotransaccion_caja_id = json_decode($data['tipotransaccion_caja_id']);
-		$conceptogasto_id = json_decode($data['conceptogasto_id']);
-		$empresa_id = json_decode($data['empresa_id']);
+		$datosCaja = json_decode($data['datoscaja'] ?? '[]') ?: [];
+		$datosContables = json_decode($data['datoscontables'] ?? '[]') ?: [];
+		$datosChequesEmitidos = json_decode($data['datoscheques_emitidos'] ?? '[]') ?: [];
+		$datosChequesRecibidos = json_decode($data['datoscheques_recibidos'] ?? '[]') ?: [];
+		$datosChequesReemplazo = json_decode($data['datoscheques_reemplazo'] ?? '[]') ?: [];
+		$tipotransaccion_caja_id = json_decode($data['tipotransaccion_caja_id'] ?? '0');
+		$conceptogasto_id = json_decode($data['conceptogasto_id'] ?? '0');
+		$empresa_id = (int) json_decode($data['empresa_id'] ?? '0');
+		$fechaOperacion = (string) ($data['fecha'] ?? date('Y-m-d'));
 
 		$tipotransaccion_caja = $this->tipotransaccion_cajaRepository->find($tipotransaccion_caja_id);
 		$signo = 1;
@@ -452,10 +473,26 @@ class IngresoEgresoService
 					}
 				}
 			}
+
+			IngresoEgresoChequeAsientoSupport::agregarLineasCheques(
+				$asiento,
+				$datosChequesEmitidos,
+				$datosChequesRecibidos,
+				$datosChequesReemplazo,
+				$signo,
+				$empresa_id,
+				$fechaOperacion,
+				$this->cuentacajaRepository,
+				$this->cuentacontableRepository
+			);
 		}
 
-		// Agrega la contrapartida
-		if ($conceptogasto_id > 0 && count($datosContables) == 0)
+		// Agrega contrapartida de gastos (concepto de caja) o comprobantes IVA compra
+		$comprobantesIva = $this->decodificarComprobantesIvaJson($data['comprobantes_ivacompra_json'] ?? null);
+
+		if ($comprobantesIva !== []) {
+			$this->agregarLineasDebeComprobantesIva($asiento, $comprobantesIva, $signo);
+		} elseif ($conceptogasto_id > 0 && count($datosContables) == 0)
 		{
 			$conceptogasto = $this->conceptogastoRepository->find($conceptogasto_id);
 
@@ -512,6 +549,97 @@ class IngresoEgresoService
 			}
 		}
 		return ['mensaje' => 'ok', 'asiento' => $asiento];
+	}
+
+	/** @param  list<array<string, mixed>>  $comprobantes */
+	private function agregarLineasDebeComprobantesIva(array &$asiento, array $comprobantes, int $signo): void
+	{
+		if ($asiento === []) {
+			return;
+		}
+
+		$monedaAsientoId = $asiento[0]['moneda_id'];
+		$cotizacion = $asiento[0]['cotizacion'];
+
+		try {
+			$lineasDebe = IngresoEgresoComprobanteIvaAsientoSupport::lineasDebeDesdeComprobantes($comprobantes);
+		} catch (\Throwable $e) {
+			throw new Exception($e->getMessage());
+		}
+
+		foreach ($lineasDebe as $linea) {
+			$cuentacontable = $this->cuentacontableRepository->find($linea['cuentacontable_id']);
+			if (! $cuentacontable) {
+				continue;
+			}
+
+			$importe = round((float) $linea['importe'], 2);
+			$asiento[] = [
+				'cuentacontable_id' => $linea['cuentacontable_id'],
+				'codigo' => $cuentacontable->codigo,
+				'nombre' => $cuentacontable->nombre,
+				'moneda_id' => $monedaAsientoId,
+				'cotizacion' => $cotizacion,
+				'centrocosto_id' => $linea['centrocosto_id'] ?? 0,
+				'debe' => $signo >= 0 ? $importe : '',
+				'haber' => $signo < 0 ? $importe : '',
+				'observacion' => $linea['observacion'] ?? '',
+				'carga_cuentacontable_manual' => 'N',
+			];
+		}
+	}
+
+	private function sincronizarComprobantesIva($request, int $cajaMovimientoId, int $empresaId): void
+	{
+		$json = $request->input('comprobantes_ivacompra_json');
+		if ($json === null || $json === '') {
+			return;
+		}
+
+		$comprobantes = $this->decodificarComprobantesIvaJson($json);
+		$this->comprobanteIvaService->sincronizarDesdeJson($cajaMovimientoId, $empresaId, $comprobantes);
+	}
+
+	/** @return list<array<string, mixed>> */
+	private function decodificarComprobantesIvaJson(mixed $json): array
+	{
+		if (is_array($json)) {
+			return $json;
+		}
+
+		if (! is_string($json) || trim($json) === '') {
+			return [];
+		}
+
+		$decoded = json_decode($json, true);
+
+		return is_array($decoded) ? $decoded : [];
+	}
+
+	private function validarComprobantesIvaContraCaja($request): void
+	{
+		$comprobantes = $this->decodificarComprobantesIvaJson($request->input('comprobantes_ivacompra_json'));
+		if ($comprobantes === []) {
+			return;
+		}
+
+		$lineasCaja = [];
+		$montos = $request->input('montos', []);
+		$monedaIds = $request->input('moneda_ids', []);
+		$cotizaciones = $request->input('cotizaciones', []);
+
+		if (is_array($montos)) {
+			for ($i = 0; $i < count($montos); $i++) {
+				$lineasCaja[] = [
+					'montos' => $montos[$i] ?? 0,
+					'moneda_ids' => $monedaIds[$i] ?? 1,
+					'cotizaciones' => $cotizaciones[$i] ?? 1,
+				];
+			}
+		}
+
+		$monedaRef = (int) ($monedaIds[0] ?? 1);
+		$this->comprobanteIvaService->validarTotalesContraCaja($comprobantes, $lineasCaja, $monedaRef);
 	}
 
 }

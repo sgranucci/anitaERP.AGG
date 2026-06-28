@@ -45,8 +45,10 @@ class EstacionamientoCuentaService
             ->first();
 
         if ($existente) {
+            $this->sincronizarContextoOperativoCuentaAbierta($existente, $empresaId, $pc);
+
             return $this->enriquecerCuentaParaApi(
-                $existente->load([
+                $existente->fresh()->load([
                     'lineas.itemEstacionamiento',
                     'lineas.itemEstacionamiento',
                     'cliente',
@@ -346,12 +348,50 @@ class EstacionamientoCuentaService
         $this->cerrarSinFacturar($cuenta);
     }
 
-    public function marcarFacturada(CuentaEstacionamiento $cuenta, int $ventaId): void
-    {
-        $cuenta->update([
+    public function marcarFacturada(
+        CuentaEstacionamiento $cuenta,
+        int $ventaId,
+        ?int $turnoOperativoEstacionamientoId = null,
+    ): void {
+        $patch = [
             'estado' => CuentaEstacionamiento::ESTADO_FACTURADA,
             'venta_id' => $ventaId,
-        ]);
+        ];
+        if ($turnoOperativoEstacionamientoId !== null && $turnoOperativoEstacionamientoId > 0) {
+            $patch['turno_operativo_estacionamiento_id'] = $turnoOperativoEstacionamientoId;
+        }
+
+        $cuenta->update($patch);
+    }
+
+    /**
+     * Si la cuenta quedó abierta de un turno anterior, al retomarla en el POS
+     * debe reflejar jornada y turno habilitado actuales (evita operador/turno stale).
+     */
+    private function sincronizarContextoOperativoCuentaAbierta(
+        CuentaEstacionamiento $cuenta,
+        int $empresaId,
+        string $pc,
+    ): void {
+        $patch = [];
+
+        if (config('estacionamiento.jornada_obligatoria', true)) {
+            $jornada = $this->jornadaService->jornadaAbierta($empresaId);
+            if ($jornada !== null && (int) ($cuenta->jornada_estacionamiento_id ?? 0) !== (int) $jornada->id) {
+                $patch['jornada_estacionamiento_id'] = (int) $jornada->id;
+            }
+        }
+
+        if (EstacionamientoTurnoOperativoService::requiereHabilitacionTurno()) {
+            $turno = $this->turnoOperativoService->turnoHabilitadoEnPc($pc);
+            if ($turno !== null && (int) ($cuenta->turno_operativo_estacionamiento_id ?? 0) !== (int) $turno->id) {
+                $patch['turno_operativo_estacionamiento_id'] = (int) $turno->id;
+            }
+        }
+
+        if ($patch !== []) {
+            $cuenta->update($patch);
+        }
     }
 
     private function resolverClienteInternoDescuentoPorDefecto(): ?int

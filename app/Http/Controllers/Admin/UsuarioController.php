@@ -15,6 +15,7 @@ use App\Repositories\Ventas\VendedorRepositoryInterface;
 use App\Support\Http\EliminacionRegistroSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
+use App\Services\Contable\ContabilidadCuentaAutomaticaSeedService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
@@ -30,17 +31,21 @@ class UsuarioController extends Controller
 
     private $oficinacompraRepository;
 
+    private ContabilidadCuentaAutomaticaSeedService $cuentaAutomaticaSeedService;
+
     public function __construct(EmpresaRepositoryInterface $empresarepository,
         CentrocostoRepositoryInterface $centrocostorepository,
         VendedorRepositoryInterface $vendedorrepository,
         UsuarioRepositoryInterface $usuariorepository,
-        OficinacompraRepositoryInterface $oficinacomprarepository)
+        OficinacompraRepositoryInterface $oficinacomprarepository,
+        ContabilidadCuentaAutomaticaSeedService $cuentaAutomaticaSeedService)
     {
         $this->empresaRepository = $empresarepository;
         $this->centrocostoRepository = $centrocostorepository;
         $this->vendedorRepository = $vendedorrepository;
         $this->usuarioRepository = $usuariorepository;
         $this->oficinacompraRepository = $oficinacomprarepository;
+        $this->cuentaAutomaticaSeedService = $cuentaAutomaticaSeedService;
     }
 
     public function index()
@@ -81,6 +86,7 @@ class UsuarioController extends Controller
 
         // Actualiza las empresas
         $usuario->auditSync('usuario_empresas', $request->empresa_ids);
+        $this->sincronizarCatalogoCuentasAutomaticas($request);
 
         $this->sincronizarDepositosAutorizados($usuario, $request);
         $this->sincronizarTipotransaccionesStockAutorizadas($usuario, $request);
@@ -147,6 +153,7 @@ class UsuarioController extends Controller
 
         // Actualiza las empresas
         $usuario->auditSync('usuario_empresas', $request->empresa_ids);
+        $this->sincronizarCatalogoCuentasAutomaticas($request);
 
         $this->sincronizarDepositosAutorizados($usuario, $request);
         $this->sincronizarTipotransaccionesStockAutorizadas($usuario, $request);
@@ -305,5 +312,19 @@ class UsuarioController extends Controller
         $validIds = UsuarioTipotransaccionStockAutorizado::idsValidos($tipoIds);
 
         $usuario->auditSync('tipotransaccionesStockAutorizadas', $validIds);
+    }
+
+    private function sincronizarCatalogoCuentasAutomaticas(Request $request): void
+    {
+        $empresaIds = array_values(array_unique(array_filter(array_map(
+            'intval',
+            (array) $request->input('empresa_ids', [])
+        ))));
+
+        if ($empresaIds === []) {
+            return;
+        }
+
+        $this->cuentaAutomaticaSeedService->asegurarCatalogoEmpresas($empresaIds);
     }
 }

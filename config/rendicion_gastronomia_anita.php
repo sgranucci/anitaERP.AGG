@@ -59,6 +59,8 @@ return [
             explode(',', (string) env('RENDICION_GASTRONOMIA_AUDITORIA_EMPRESAS_IDS', '1,2,3')),
         ))),
         'tolerancia' => (float) env('RENDICION_GASTRONOMIA_AUDITORIA_TOLERANCIA', 0.02),
+        'email' => env('RENDICION_GASTRONOMIA_AUDITORIA_EMAIL', env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL', '')),
+        'email_si_ok' => filter_var(env('RENDICION_GASTRONOMIA_AUDITORIA_EMAIL_SI_OK', true), FILTER_VALIDATE_BOOLEAN),
         /** PV que facturan solo en Anita (estacionamiento); no alertar si ERP=0 y Anita tiene Z. */
         'puntoventa_codigos_solo_anita' => array_values(array_filter(array_map(
             'trim',

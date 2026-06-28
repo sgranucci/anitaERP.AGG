@@ -27,7 +27,7 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Reporte descuentos gastronomía</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     <a href="{{ route('gastronomia_descuento_reporte') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>

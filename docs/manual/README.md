@@ -12,6 +12,7 @@ Cada manual del ERP sigue el mismo patrón para incluir **capturas reales** de l
 | Gastronomía | `config/manual_gastronomia.php` | `public/docs/manual-gastronomia/img/` | `php artisan manual:capturar-gastronomia-interno` |
 | Ventas (pedidos) | `config/manual_ventas.php` | `public/docs/manual-ventas/img/` | `php artisan manual:capturar-ventas-interno` |
 | Canjes marketing | `config/manual_canjes_marketing.php` | `public/docs/manual-canjes-marketing/img/` | `php artisan manual:capturar-canjes-marketing-interno` |
+| Vending | `config/manual_vending.php` | `public/docs/manual-vending/img/` | `php artisan manual:capturar-vending-interno` |
 
 ## Cómo vincular una captura a un capítulo
 
@@ -47,6 +48,7 @@ php artisan manual:capturar-canjes-marketing-interno --usuario=admin
 # Regenerar PDF/Word del manual
 php docs/manual-gastronomia/generar.php
 php docs/manual-canjes-marketing/generar.php
+php docs/manual-vending/generar.php
 php docs/manual-recepcion-movstock/generar.php
 ```
 

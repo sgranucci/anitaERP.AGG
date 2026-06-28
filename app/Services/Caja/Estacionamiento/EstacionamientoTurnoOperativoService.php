@@ -166,6 +166,18 @@ final class EstacionamientoTurnoOperativoService
             'errores_cierre' => $activo !== null
                 ? $this->erroresAntesDeCerrar($activo)
                 : [],
+            'cuentas_sin_facturar' => $activo !== null
+                ? $this->contarCuentasAbiertasConItemsEnTerminal($activo)
+                : 0,
+            'cuentas_abiertas_con_items' => $activo !== null
+                ? $this->contarCuentasAbiertasConItemsEnTerminal($activo)
+                : 0,
+            'cuentas_abiertas_vacias' => $activo !== null
+                ? $this->contarCuentasAbiertasVaciasEnTerminal($activo)
+                : 0,
+            'cuentas_cerradas_sin_facturar' => $activo !== null
+                ? $this->contarCuentasCerradasSinFacturarEnTerminal($activo)
+                : 0,
             'tickets_pendientes_ingreso' => $activo !== null
                 ? $this->contarTicketsPendientesIngresoEnTerminal($activo)
                 : 0,
@@ -250,6 +262,16 @@ final class EstacionamientoTurnoOperativoService
             (string) $turno->identificador_pc,
             [CuentaEstacionamiento::ESTADO_ABIERTA],
         )->whereHas('lineas')->count();
+    }
+
+    public function contarCuentasAbiertasVaciasEnTerminal(TurnoOperativoEstacionamiento $turno): int
+    {
+        return $this->queryCuentasNoFacturadasParaPuntoventa(
+            (int) $turno->empresa_id,
+            (int) $turno->configuracion_puntoventa_estacionamiento_id,
+            (string) $turno->identificador_pc,
+            [CuentaEstacionamiento::ESTADO_ABIERTA],
+        )->whereDoesntHave('lineas')->count();
     }
 
     public function autoDescartarCuentasAbiertasVaciasEnTerminal(TurnoOperativoEstacionamiento $turno): int
@@ -601,6 +623,8 @@ final class EstacionamientoTurnoOperativoService
             throw new InvalidArgumentException(implode(' ', $errores));
         }
 
+        $vaciasAutoDescartadas = $this->autoDescartarCuentasAbiertasVaciasEnTerminal($turno);
+
         $fechaJornada = $turno->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
 
@@ -681,6 +705,7 @@ final class EstacionamientoTurnoOperativoService
             $redondeoTurno,
             $sobranteFaltante,
             $datosCierre,
+            $vaciasAutoDescartadas,
             $pcOperadorRemoto,
             $sobranteFaltanteAutoRemoto,
             $mediosContadoCierre,
@@ -705,6 +730,7 @@ final class EstacionamientoTurnoOperativoService
                 'medios_contado_cierre_json' => $mediosContadoCierre,
                 'observacion_cierre' => $this->componerObservacionCierreTurno(
                     $datosCierre['observacion_cierre'] ?? null,
+                    $vaciasAutoDescartadas,
                     $pcOperadorRemoto,
                     $sobranteFaltanteAutoRemoto,
                     $sobranteFaltante,
@@ -1376,6 +1402,7 @@ final class EstacionamientoTurnoOperativoService
 
     private function componerObservacionCierreTurno(
         ?string $observacion,
+        int $vaciasAutoDescartadas,
         ?string $pcOperadorRemoto = null,
         bool $sobranteFaltanteAutoRemoto = false,
         float $sobranteFaltante = 0.0,
@@ -1397,6 +1424,11 @@ final class EstacionamientoTurnoOperativoService
             $partes[] = '[Auto cierre remoto '.now()->format('Y-m-d H:i').'] Diferencia de conciliación imputada a '
                 .$tipo.' ($ '.number_format(abs($sobranteFaltante), 2, ',', '.').'). '
                 .'Rectificar con anulación de cierre cuando la terminal vuelva a operar.';
+        }
+
+        if ($vaciasAutoDescartadas > 0) {
+            $partes[] = '[Auto '.now()->format('Y-m-d H:i').'] '.$vaciasAutoDescartadas
+                .' cuenta(s) abierta(s) sin ítems descartada(s) automáticamente al cerrar el turno.';
         }
 
         if ($partes === []) {

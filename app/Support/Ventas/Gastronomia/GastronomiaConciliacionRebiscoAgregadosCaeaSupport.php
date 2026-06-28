@@ -6,6 +6,7 @@ namespace App\Support\Ventas\Gastronomia;
 
 use App\ApiAnita;
 use App\Models\Ventas\JornadaGastronomia;
+use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\Gastronomia\GastronomiaChequeoVentasAnitaErpService;
 use App\Support\Caja\AnitaSync\RendicionAnitaFechaAlfaSupport;
@@ -72,11 +73,15 @@ final class GastronomiaConciliacionRebiscoAgregadosCaeaSupport
         $erpTotal = round((float) Venta::query()->whereIn('id', $ventaIds)->sum('total'), 2);
 
         $cacheCabeceras = [];
-        $clavesExcluir = $this->exclusionEmisionSupport->clavesExcluirConciliacion(
-            $empresaId,
-            $fechaJornada,
-            $indiceAnitaBulk,
-        );
+        $pvCaeaId = (int) (Puntoventa::query()->where('codigo', self::PV_CAEA)->value('id') ?? 0);
+        $clavesExcluir = $pvCaeaId > 0
+            ? $this->exclusionEmisionSupport->clavesExcluirListaParaPuntoventa(
+                $empresaId,
+                $fechaJornada,
+                $pvCaeaId,
+                $indiceAnitaBulk,
+            )
+            : [];
         $anitaTotal = $this->chequeoVentasService->totalFacturacionBrutaAnitaParaVentasIds(
             $ventaIds,
             $fechaJornada,
@@ -113,17 +118,7 @@ final class GastronomiaConciliacionRebiscoAgregadosCaeaSupport
             ? round($totales['ventas_erp'] - $rendgZ, 2)
             : null;
 
-        $estado = '—';
-        if ($totales['cantidad_facturas'] > 0) {
-            $okAnita = abs($diffErpAnita) <= $tolerancia;
-            if ($rendgZ === null) {
-                $estado = 'SIN RENDG';
-            } else {
-                $estado = ($okAnita && abs((float) $diffErpRendg) <= $tolerancia) ? 'OK' : 'DIF';
-            }
-        }
-
-        return [
+        return GastronomiaConciliacionEstadoSupport::aplicarEstadosEnFila([
             'identificador_pc' => self::HOST_RENDG,
             'tipo_fila' => 'caea_agregados_migrados',
             'tipo_pv' => 'CAEA_AGREG',
@@ -143,10 +138,10 @@ final class GastronomiaConciliacionRebiscoAgregadosCaeaSupport
             'rendgastro_nro_oper' => $totales['rendgastro_nro_oper'],
             'diff_erp_anita' => $diffErpAnita,
             'diff_erp_rendg' => $diffErpRendg,
-            'estado' => $estado,
             'cantidad_facturas_erp' => $totales['cantidad_facturas'],
             'es_caea_agregados_migrados' => true,
-        ];
+            'jornada_abierta' => false,
+        ], $tolerancia);
     }
 
     /**

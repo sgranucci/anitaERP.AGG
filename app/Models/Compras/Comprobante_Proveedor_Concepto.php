@@ -2,6 +2,8 @@
 
 namespace App\Models\Compras;
 
+use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Contable\Cuentacontable;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -12,7 +14,7 @@ class Comprobante_Proveedor_Concepto extends Model implements Auditable
     protected $table = 'comprobante_proveedor_concepto';
 
     protected $fillable = [
-        'comprobante_proveedor_id', 'concepto_ivacompra_id', 'orden', 'monto',
+        'comprobante_proveedor_id', 'concepto_ivacompra_id', 'orden', 'monto', 'cuentacontabledebe_id',
     ];
 
     public function comprobante_proveedores()
@@ -23,5 +25,10 @@ class Comprobante_Proveedor_Concepto extends Model implements Auditable
     public function concepto_ivacompras()
     {
         return $this->belongsTo(Concepto_Ivacompra::class, 'concepto_ivacompra_id');
+    }
+
+    public function cuentacontablesdebe()
+    {
+        return $this->belongsTo(Cuentacontable::class, 'cuentacontabledebe_id');
     }
 }

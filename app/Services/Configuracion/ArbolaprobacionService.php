@@ -4,11 +4,14 @@ namespace App\Services\Configuracion;
 
 use App\Mail\Configuracion\MailArbolAprobacion;
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Ordencompra_Historia;
 use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Estado;
+use App\Models\Compras\Sector_Legajocompra;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Configuracion\Arbolaprobacion_Nivel;
+use App\Models\Configuracion\Arbolaprobacion_OcTrigger;
 use App\Models\Ordenventa\Ordenventa_Estado;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
@@ -23,6 +26,7 @@ use App\Repositories\Ordenventa\OrdenventaRepositoryInterface;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\RequisicionTotalesCabecera;
+use App\Support\Configuracion\OcArbolTriggerCatalog;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -33,6 +37,8 @@ use Mail;
 
 class ArbolaprobacionService
 {
+    public const CIRCUITO_OC_CAMBIO_SECTOR = 'sector';
+
     private $arbolaprobacionRepository;
 
     private $arbolaprobacion_movimientoRepository;
@@ -126,7 +132,7 @@ class ArbolaprobacionService
                     fn (...$args) => $this->buscaProximoNivel(...$args),
                 );
             case 'OC':
-                return $this->procesaArbolOrdencompra($arbolaprobacion, $tipoarbol, $comprobante_id, $arrayReplace);
+                return $this->procesaArbolOrdencompra($arbolaprobacion, $tipoarbol, $comprobante_id, $arrayReplace, $opciones);
             default:
                 return 0;
         }
@@ -369,7 +375,7 @@ class ArbolaprobacionService
         }
     }
 
-    private function procesaArbolOrdencompra($arbolaprobacion, $tipoarbol, $comprobante_id, array $arrayReplace): int
+    private function procesaArbolOrdencompra($arbolaprobacion, $tipoarbol, $comprobante_id, array $arrayReplace, array $opciones = []): int
     {
         $ordencompra = $this->ordencompraRepository->find($comprobante_id);
         if (! $ordencompra) {
@@ -385,13 +391,44 @@ class ArbolaprobacionService
             return 0;
         }
 
-        $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeOrdencompra($ordencompra);
+        $trigger = $this->resolverOcTriggerDesdeOpciones($opciones, (int) $arbol->id);
+        $ocTriggerId = $trigger ? (int) $trigger->id : null;
+
+        $esCircuitoCambioSector = ! empty($opciones['circuito_sector']);
+        if ($trigger !== null && $trigger->evento === OcArbolTriggerCatalog::EVENTO_CAMBIO_SECTOR) {
+            $esCircuitoCambioSector = true;
+        }
+        $circuitoOc = $esCircuitoCambioSector ? self::CIRCUITO_OC_CAMBIO_SECTOR : null;
+
+        if ($trigger !== null) {
+            $centrocostoArbol = (int) ($trigger->centrocosto_circuito_id ?? 0);
+            if ($centrocostoArbol <= 0) {
+                $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeOrdencompra($ordencompra);
+            }
+            if ($trigger->tipo === OcArbolTriggerCatalog::TIPO_EVENTO
+                && $trigger->evento === OcArbolTriggerCatalog::EVENTO_CAMBIO_SECTOR
+                && $centrocostoArbol <= 0) {
+                return 0;
+            }
+        } elseif ($esCircuitoCambioSector) {
+            $centrocostoArbol = (int) ($arbol->oc_sector_cambio_centrocosto_id ?? 0);
+            if ($centrocostoArbol <= 0) {
+                return 0;
+            }
+        } else {
+            $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeOrdencompra($ordencompra);
+        }
+
+        $permiteEstadoNoPendiente = $trigger !== null && (
+            ($trigger->tipo === OcArbolTriggerCatalog::TIPO_EVENTO && $trigger->evento === OcArbolTriggerCatalog::EVENTO_CAMBIO_SECTOR)
+            || $trigger->tipo === OcArbolTriggerCatalog::TIPO_CONDICION
+        );
 
         while (true) {
             $ordencompra = $this->ordencompraRepository->find($comprobante_id);
             $totalesOc = OrdencompraTotalesCabecera::desdeModelo($ordencompra, $this->cotizacionQuery);
 
-            if ($ordencompra->estadoordencompra !== OrdencompraEstados::PENDIENTE) {
+            if (! $permiteEstadoNoPendiente && ! $esCircuitoCambioSector && $ordencompra->estadoordencompra !== OrdencompraEstados::PENDIENTE) {
                 $this->anulaMovimientosArbolPendientesAbiertosOrdencompra(
                     $comprobante_id,
                     'Sin efecto (orden de compra ya no en circuito activo del árbol de aprobación)'
@@ -400,14 +437,20 @@ class ArbolaprobacionService
                 return 0;
             }
 
-            $estadoAprobacionActual = $this->leeAprobacionComprobante($tipoarbol, $comprobante_id);
+            $estadoAprobacionActual = $this->leeAprobacionComprobante($tipoarbol, $comprobante_id, $circuitoOc, $ocTriggerId);
             $proximoNivel = $this->buscaProximoNivel($arbol, $centrocostoArbol,
                 $estadoAprobacionActual['nivelactual'],
                 $ordencompra->fecha, $totalesOc['monto'], $totalesOc['moneda_id']);
 
             if ($proximoNivel['proximonivel'] === -1) {
                 $uid = Auth::check() ? Auth::user()->id : $ordencompra->creousuario_id;
-                $this->finalizaOrdencompraTrasArbolCompleto($comprobante_id, $uid);
+                if ($trigger !== null) {
+                    $this->finalizaOrdencompraTrasArbolTriggerCompleto($comprobante_id, $uid, $trigger);
+                } elseif ($esCircuitoCambioSector) {
+                    $this->finalizaOrdencompraTrasArbolCambioSectorCompleto($comprobante_id, $uid, $arbol);
+                } else {
+                    $this->finalizaOrdencompraTrasArbolCompleto($comprobante_id, $uid);
+                }
 
                 return -1;
             }
@@ -417,12 +460,19 @@ class ArbolaprobacionService
             }
 
             if (empty($proximoNivel['proximousuario'])) {
-                $this->aplicaEstadoOrdencompraPorNombre($comprobante_id, $proximoNivel['documento_estado_al_aprobar'],
+                $estadoAuto = $proximoNivel['documento_estado_al_aprobar'];
+                if (($estadoAuto === null || $estadoAuto === '') && $trigger !== null) {
+                    $estadoAuto = trim((string) ($trigger->documento_estado_al_aprobar ?? ''));
+                }
+                if (($estadoAuto === null || $estadoAuto === '') && $esCircuitoCambioSector) {
+                    $estadoAuto = OrdencompraEstados::APROBADA;
+                }
+                $this->aplicaEstadoOrdencompraPorNombre($comprobante_id, $estadoAuto,
                     'Árbol de aprobación: nivel '.$proximoNivel['proximonivel'].' sin usuario (automático)',
                     $this->usuarioHistoriaOrdencompra($ordencompra));
 
                 $this->grabaMovimientoArbolAutomatico($arbol->id, 'OC', $comprobante_id,
-                    $proximoNivel['proximonivel'], $arrayReplace);
+                    $proximoNivel['proximonivel'], $arrayReplace, $circuitoOc, $ocTriggerId);
 
                 continue;
             }
@@ -442,10 +492,11 @@ class ArbolaprobacionService
             }
             $uids = array_values(array_unique(array_filter($uids)));
 
-            $ya = Arbolaprobacion_Movimiento::where('ordencompra_id', $comprobante_id)
+            $yaQuery = Arbolaprobacion_Movimiento::where('ordencompra_id', $comprobante_id)
                 ->where('nivel', $proximoNivel['proximonivel'])
-                ->where('estado', $nombrePendiente)
-                ->pluck('destinatariousuario_id')
+                ->where('estado', $nombrePendiente);
+            $this->aplicarFiltroCircuitoOcQuery($yaQuery, $circuitoOc, $ocTriggerId);
+            $ya = $yaQuery->pluck('destinatariousuario_id')
                 ->map(fn ($x) => (int) $x)
                 ->all();
 
@@ -482,6 +533,8 @@ class ArbolaprobacionService
                     'fechaproceso' => null,
                     'estado' => $nombrePendiente,
                     'observacion' => '',
+                    'circuito_oc' => $circuitoOc,
+                    'arbolaprobacion_oc_trigger_id' => $ocTriggerId,
                 ]);
             }
 
@@ -489,7 +542,7 @@ class ArbolaprobacionService
         }
     }
 
-    public function leeAprobacionComprobante($tipoarbol, $comprobante_id)
+    public function leeAprobacionComprobante($tipoarbol, $comprobante_id, ?string $circuitoOc = null, ?int $ocTriggerId = null)
     {
         $nivelActual = 0;
         $estadoActual = '';
@@ -509,6 +562,7 @@ class ArbolaprobacionService
                 break;
             case 'Ordenes de compra':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
+                $arbolaprobacion_movimiento = $this->filtrarMovimientosOrdencompraPorCircuito($arbolaprobacion_movimiento, $circuitoOc, $ocTriggerId);
                 break;
         }
         if ($arbolaprobacion_movimiento) {
@@ -718,7 +772,22 @@ class ArbolaprobacionService
             if ($tipocomprobante === 'OC') {
                 $arbol = $this->arbolaprobacionRepository->find($movimientoPre->arbolaprobacion_id);
                 $ordencompra = $this->ordencompraRepository->find($comprobante_id);
-                $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeOrdencompra($ordencompra);
+                $circuitoOcMov = $movimientoPre->circuito_oc ?? null;
+                $ocTriggerId = (int) ($movimientoPre->arbolaprobacion_oc_trigger_id ?? 0);
+                $trigger = $ocTriggerId > 0
+                    ? Arbolaprobacion_OcTrigger::query()->find($ocTriggerId)
+                    : null;
+
+                if ($trigger !== null) {
+                    $centrocostoArbol = (int) ($trigger->centrocosto_circuito_id ?? 0);
+                    if ($centrocostoArbol <= 0) {
+                        $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeOrdencompra($ordencompra);
+                    }
+                } elseif ($circuitoOcMov === self::CIRCUITO_OC_CAMBIO_SECTOR) {
+                    $centrocostoArbol = (int) ($arbol->oc_sector_cambio_centrocosto_id ?? 0);
+                } else {
+                    $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeOrdencompra($ordencompra);
+                }
                 $totalesOc = OrdencompraTotalesCabecera::desdeModelo($ordencompra, $this->cotizacionQuery);
                 $nivelCfg = $this->encuentraNivelCoincidente(
                     $arbol,
@@ -728,13 +797,22 @@ class ArbolaprobacionService
                     $totalesOc['monto'],
                     $totalesOc['moneda_id']
                 );
-                if ($nivelCfg !== null && filled($nivelCfg->documento_estado_al_aprobar)) {
-                    $this->aplicaEstadoOrdencompraPorNombre(
-                        $comprobante_id,
-                        trim((string) $nivelCfg->documento_estado_al_aprobar),
-                        'Árbol de aprobación: nivel '.$movimientoPre->nivel.' aprobado',
-                        $usuario_id
-                    );
+                if ($nivelCfg !== null) {
+                    $estadoOc = trim((string) ($nivelCfg->documento_estado_al_aprobar ?? ''));
+                    if ($estadoOc === '' && $trigger !== null) {
+                        $estadoOc = trim((string) ($trigger->documento_estado_al_aprobar ?? ''));
+                    }
+                    if ($estadoOc === '' && $circuitoOcMov === self::CIRCUITO_OC_CAMBIO_SECTOR) {
+                        $estadoOc = OrdencompraEstados::APROBADA;
+                    }
+                    if ($estadoOc !== '') {
+                        $this->aplicaEstadoOrdencompraPorNombre(
+                            $comprobante_id,
+                            $estadoOc,
+                            'Árbol de aprobación: nivel '.$movimientoPre->nivel.' aprobado',
+                            $usuario_id
+                        );
+                    }
                 }
             }
 
@@ -758,7 +836,14 @@ class ArbolaprobacionService
                 }
             }
 
-            $this->procesaArbolaprobacion($tipocomprobante, $comprobante_id, 'self');
+            $opcionesProceso = [];
+            $ocTriggerIdProceso = (int) ($movimientoPre->arbolaprobacion_oc_trigger_id ?? 0);
+            if ($tipocomprobante === 'OC' && $ocTriggerIdProceso > 0) {
+                $opcionesProceso['oc_trigger_id'] = $ocTriggerIdProceso;
+            } elseif ($tipocomprobante === 'OC' && ($movimientoPre->circuito_oc ?? '') === self::CIRCUITO_OC_CAMBIO_SECTOR) {
+                $opcionesProceso['circuito_sector'] = true;
+            }
+            $this->procesaArbolaprobacion($tipocomprobante, $comprobante_id, 'self', $opcionesProceso);
 
             DB::commit();
         } catch (\Exception $e) {
@@ -773,7 +858,9 @@ class ArbolaprobacionService
         string $tipoComprobante,
         int $comprobante_id,
         int $numeroNivel,
-        array $arrayReplace
+        array $arrayReplace,
+        ?string $circuitoOc = null,
+        ?int $ocTriggerId = null
     ): void {
         $token = $tipoComprobante.'AUTO'.$comprobante_id.'N'.$numeroNivel.str_replace([' ', ':'], '', microtime(false));
         $hashAprobacion = str_replace($arrayReplace, '+', Hash::make($token.'A'));
@@ -851,6 +938,8 @@ class ArbolaprobacionService
             'fechaproceso' => Carbon::now(),
             'estado' => $nombreAprobado,
             'observacion' => 'Nivel sin usuario (automático)',
+            'circuito_oc' => $circuitoOc,
+            'arbolaprobacion_oc_trigger_id' => $ocTriggerId,
         ]);
     }
 
@@ -945,6 +1034,74 @@ class ArbolaprobacionService
             'Orden de compra aprobada (árbol completo)'
         );
         $this->ordencompraRepository->update(['estadoordencompra' => $aprobada], $ordencompra_id);
+    }
+
+    private function finalizaOrdencompraTrasArbolCambioSectorCompleto(int $ordencompra_id, $usuarioHistoriaId, Arbolaprobacion $arbol): void
+    {
+        $this->finalizaOrdencompraTrasArbolCompleto($ordencompra_id, $usuarioHistoriaId);
+
+        $sectorDestinoId = (int) ($arbol->oc_sector_destino_aprobacion_id ?? 0);
+        if ($sectorDestinoId <= 0) {
+            $sectorDestinoId = (int) Sector_Legajocompra::query()
+                ->whereRaw('UPPER(TRIM(nombre)) = ?', ['CUENTAS A PAGAR'])
+                ->value('id');
+        }
+        if ($sectorDestinoId <= 0) {
+            return;
+        }
+
+        $oc = $this->ordencompraRepository->find($ordencompra_id);
+        if (! $oc || (int) ($oc->sector_legajocompra_id ?? 0) === $sectorDestinoId) {
+            return;
+        }
+
+        $this->ordencompraRepository->update(['sector_legajocompra_id' => $sectorDestinoId], $ordencompra_id);
+        Ordencompra_Historia::create([
+            'ordencompra_id' => $ordencompra_id,
+            'sector_legajocompra_id' => $sectorDestinoId,
+            'fecha' => Carbon::now(),
+            'observacion' => 'Traslado automático tras aprobación por cambio de sector',
+            'leyenda' => 'Árbol de aprobación OC — circuito cambio de sector',
+            'creousuario_id' => $usuarioHistoriaId,
+        ]);
+    }
+
+    private function finalizaOrdencompraTrasArbolTriggerCompleto(int $ordencompra_id, $usuarioHistoriaId, Arbolaprobacion_OcTrigger $trigger): void
+    {
+        if ($trigger->evento === OcArbolTriggerCatalog::EVENTO_CAMBIO_SECTOR
+            || $trigger->accion_final === OcArbolTriggerCatalog::ACCION_CAMBIAR_SECTOR) {
+            $this->finalizaOrdencompraTrasArbolCompleto($ordencompra_id, $usuarioHistoriaId);
+        }
+
+        app(OcArbolTriggerAccionFinalService::class)->ejecutar(
+            $trigger,
+            $ordencompra_id,
+            (int) $usuarioHistoriaId
+        );
+    }
+
+    public function aplicarEstadoOrdencompraPublico(int $ordencompraId, string $estadoNombre, string $observacion, int $usuarioHistoriaId): void
+    {
+        $this->aplicaEstadoOrdencompraPorNombre($ordencompraId, $estadoNombre, $observacion, $usuarioHistoriaId);
+    }
+
+    private function resolverOcTriggerDesdeOpciones(array $opciones, int $arbolId): ?Arbolaprobacion_OcTrigger
+    {
+        if (! empty($opciones['oc_trigger']) && $opciones['oc_trigger'] instanceof Arbolaprobacion_OcTrigger) {
+            return $opciones['oc_trigger'];
+        }
+
+        $triggerId = (int) ($opciones['oc_trigger_id'] ?? 0);
+        if ($triggerId <= 0) {
+            return null;
+        }
+
+        return Arbolaprobacion_OcTrigger::query()
+            ->where('id', $triggerId)
+            ->where('arbolaprobacion_id', $arbolId)
+            ->where('activo', 'S')
+            ->whereNull('deleted_at')
+            ->first();
     }
 
     private function aplicaEstadoOrdencompraPorNombre(int $ordencompra_id, ?string $estadoNombre, string $observacion, $usuarioHistoriaId): void
@@ -1629,6 +1786,167 @@ class ArbolaprobacionService
     }
 
     /**
+     * Al cambiar el legajo de una OC a un sector configurado, dispara el circuito opcional del árbol OC.
+     */
+    public function dispararArbolOrdencompraAlCambiarSector(int $ordencompraId, int $sectorLegajocompraId): void
+    {
+        if ($ordencompraId <= 0 || $sectorLegajocompraId <= 0) {
+            return;
+        }
+
+        $oc = $this->ordencompraRepository->find($ordencompraId);
+        if (! $oc) {
+            return;
+        }
+
+        $arbol = $this->arbolOrdencompraActivoParaEmpresa((int) $oc->empresa_id);
+        if (! $this->tieneCircuitoCambioSectorConfigurado($arbol)) {
+            return;
+        }
+        if (! $this->sectorDisparaCircuitoCambio($arbol, $sectorLegajocompraId)) {
+            return;
+        }
+
+        $this->anulaMovimientosArbolPendientesOrdencompraCircuito(
+            $ordencompraId,
+            self::CIRCUITO_OC_CAMBIO_SECTOR,
+            'Reinicio del circuito por cambio de sector'
+        );
+
+        $this->procesaArbolaprobacion('OC', $ordencompraId, 'insert', ['circuito_sector' => true]);
+    }
+
+    public function arbolOrdencompraActivoParaEmpresa(int $empresaId): ?Arbolaprobacion
+    {
+        if ($empresaId <= 0) {
+            return null;
+        }
+        $trees = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa(
+            $this->nombreTipoArbolOrdenesCompra(),
+            $empresaId
+        );
+
+        return $trees->count() === 1 ? $trees->first() : null;
+    }
+
+    public function ocDispararArbolAlAlta(?Arbolaprobacion $arbol): bool
+    {
+        if (! $arbol) {
+            return false;
+        }
+
+        return strtoupper((string) ($arbol->oc_disparar_arbol_al_alta ?? 'N')) === 'S';
+    }
+
+    public function debeProcesarArbolOrdencompraAlAlta(int $empresaId): bool
+    {
+        return $this->ocDispararArbolAlAlta($this->arbolOrdencompraActivoParaEmpresa($empresaId));
+    }
+
+    public function tieneCircuitoCambioSectorConfigurado(?Arbolaprobacion $arbol): bool
+    {
+        return $arbol !== null && (int) ($arbol->oc_sector_cambio_centrocosto_id ?? 0) > 0;
+    }
+
+    private function sectorDisparaCircuitoCambio(Arbolaprobacion $arbol, int $sectorLegajocompraId): bool
+    {
+        $disparoId = (int) ($arbol->oc_sector_disparo_aprobacion_id ?? 0);
+        if ($disparoId > 0) {
+            return $disparoId === $sectorLegajocompraId;
+        }
+
+        $sector = Sector_Legajocompra::query()->find($sectorLegajocompraId);
+
+        return $sector !== null && strtoupper(trim((string) $sector->nombre)) === 'GASTRONOMIA';
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Collection|null  $movimientos
+     * @return \Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Collection
+     */
+    private function filtrarMovimientosOrdencompraPorCircuito($movimientos, ?string $circuitoOc, ?int $ocTriggerId = null)
+    {
+        if ($movimientos === null) {
+            return collect();
+        }
+
+        if ($ocTriggerId !== null && $ocTriggerId > 0) {
+            return $movimientos->filter(function ($mov) use ($ocTriggerId) {
+                return (int) ($mov->arbolaprobacion_oc_trigger_id ?? 0) === $ocTriggerId;
+            })->values();
+        }
+
+        return $movimientos->filter(function ($mov) use ($circuitoOc) {
+            $circuitoMov = $mov->circuito_oc ?? null;
+            if ($circuitoOc === self::CIRCUITO_OC_CAMBIO_SECTOR) {
+                return $circuitoMov === self::CIRCUITO_OC_CAMBIO_SECTOR;
+            }
+
+            return ($circuitoMov === null || $circuitoMov === '')
+                && empty($mov->arbolaprobacion_oc_trigger_id);
+        })->values();
+    }
+
+    private function aplicarFiltroCircuitoOcQuery($query, ?string $circuitoOc, ?int $ocTriggerId = null): void
+    {
+        if ($ocTriggerId !== null && $ocTriggerId > 0) {
+            $query->where('arbolaprobacion_oc_trigger_id', $ocTriggerId);
+
+            return;
+        }
+
+        if ($circuitoOc === self::CIRCUITO_OC_CAMBIO_SECTOR) {
+            $query->where('circuito_oc', self::CIRCUITO_OC_CAMBIO_SECTOR);
+
+            return;
+        }
+
+        $query->where(function ($w) {
+            $w->whereNull('circuito_oc')->orWhere('circuito_oc', '');
+        })->whereNull('arbolaprobacion_oc_trigger_id');
+    }
+
+    public function anulaMovimientosArbolPendientesOrdencompraTrigger(int $ordencompraId, int $ocTriggerId, string $observacion): void
+    {
+        if ($ordencompraId <= 0 || $ocTriggerId <= 0) {
+            return;
+        }
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $obs = Str::limit(trim($observacion) !== '' ? trim($observacion) : 'Sin efecto', 255, '');
+        Arbolaprobacion_Movimiento::query()
+            ->where('ordencompra_id', $ordencompraId)
+            ->where('arbolaprobacion_oc_trigger_id', $ocTriggerId)
+            ->where('estado', $nombrePendiente)
+            ->whereNull('fechaproceso')
+            ->update([
+                'fechaproceso' => Carbon::now(),
+                'estado' => $nombreSinEfecto,
+                'observacion' => $obs,
+            ]);
+    }
+
+    public function anulaMovimientosArbolPendientesOrdencompraCircuito(int $ordencompraId, string $circuitoOc, string $observacion): void
+    {
+        if ($ordencompraId <= 0 || $circuitoOc === '') {
+            return;
+        }
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $obs = Str::limit(trim($observacion) !== '' ? trim($observacion) : 'Sin efecto', 255, '');
+        Arbolaprobacion_Movimiento::query()
+            ->where('ordencompra_id', $ordencompraId)
+            ->where('circuito_oc', $circuitoOc)
+            ->where('estado', $nombrePendiente)
+            ->whereNull('fechaproceso')
+            ->update([
+                'fechaproceso' => Carbon::now(),
+                'estado' => $nombreSinEfecto,
+                'observacion' => $obs,
+            ]);
+    }
+
+    /**
      * Si no hay árbol activo para la empresa, no valida. Si hay uno, aplica las mismas reglas que requisiciones.
      *
      * @param  array<string, mixed>  $data
@@ -1647,12 +1965,22 @@ class ArbolaprobacionService
         if ($trees->count() > 1) {
             throw new \RuntimeException('Hay más de un árbol de aprobación activo de órdenes de compra para esa empresa; debe quedar uno solo.');
         }
+        $arbol = $trees->first();
+        $tieneTriggerAlta = Arbolaprobacion_OcTrigger::query()
+            ->where('arbolaprobacion_id', $arbol->id)
+            ->where('activo', 'S')
+            ->where('tipo', OcArbolTriggerCatalog::TIPO_EVENTO)
+            ->where('evento', OcArbolTriggerCatalog::EVENTO_ALTA)
+            ->whereNull('deleted_at')
+            ->exists();
+        if (! $tieneTriggerAlta && ! $this->ocDispararArbolAlAlta($arbol)) {
+            return;
+        }
         $cc = $this->centroCostoParaArbolDesdeRequest($data);
         [$monto, $monedaId] = OrdencompraTotalesCabecera::montoYMonedaDesdeRequest($data, $this->cotizacionQuery);
         $fecha = $data['fecha'] ?? date('Y-m-d');
         $oid = (int) ($data['ordencompra_id'] ?? 0);
         $nivelActual = $oid > 0 ? $this->leeAprobacionComprobante($nombreTipo, $oid)['nivelactual'] : 0;
-        $arbol = $trees->first();
         $prox = $this->buscaProximoNivel($arbol, $cc, $nivelActual, $fecha, $monto, $monedaId);
         if ($prox['proximonivel'] === 0) {
             throw new \RuntimeException('El árbol de aprobación no tiene un nivel aplicable para el centro de costo de destino, el monto total y la moneda de la orden de compra.');
@@ -1707,7 +2035,10 @@ class ArbolaprobacionService
     public function estadoTrasAprobarSegunMovimientoOrdencompra(Ordencompra $ordencompra, Arbolaprobacion_Movimiento $mov): ?string
     {
         $arbol = $this->arbolaprobacionRepository->find($mov->arbolaprobacion_id);
-        $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeOrdencompra($ordencompra);
+        $circuitoOcMov = $mov->circuito_oc ?? null;
+        $centrocostoArbol = ($circuitoOcMov === self::CIRCUITO_OC_CAMBIO_SECTOR)
+            ? (int) ($arbol->oc_sector_cambio_centrocosto_id ?? 0)
+            : $this->centroCostoParaArbolAprobacionDesdeOrdencompra($ordencompra);
         $totales = OrdencompraTotalesCabecera::desdeModelo($ordencompra, $this->cotizacionQuery);
         $nivelCfg = $this->encuentraNivelCoincidente(
             $arbol,
@@ -1721,6 +2052,9 @@ class ArbolaprobacionService
             return null;
         }
         $s = trim((string) ($nivelCfg->documento_estado_al_aprobar ?? ''));
+        if ($s === '' && $circuitoOcMov === self::CIRCUITO_OC_CAMBIO_SECTOR) {
+            return OrdencompraEstados::APROBADA;
+        }
 
         return $s !== '' ? $s : null;
     }

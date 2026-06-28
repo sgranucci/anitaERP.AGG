@@ -8,7 +8,8 @@ use Illuminate\Support\Collection;
 
 /**
  * Costo total de fórmula: Σ (cantidad × factor costo × mult. padre × precio últ. compra).
- * Subfórmulas: recursivo. Opcionales (gastronomía): 1.º de cada orden 1..N si no hay selección explícita.
+ * Subfórmulas: costo del lote ÷ cantidadunidad (porciones) × cantidad de línea × mult. padre.
+ * Opcionales (gastronomía): 1.º de cada orden 1..N si no hay selección explícita.
  */
 final class FormulaArticuloCostoTotalCalculator
 {
@@ -145,14 +146,30 @@ final class FormulaArticuloCostoTotalCalculator
         $mult = $multiplicadorPadre * $factorLinea;
 
         if ($hijo->formula_hija_id) {
-            return $this->calcular(
-                (int) $hijo->formula_hija_id,
+            $subId = (int) $hijo->formula_hija_id;
+            $resultSub = $this->calcular(
+                $subId,
                 $formulasPorId,
                 $preciosPorSku,
                 [],
-                $mult,
+                1.0,
                 $depth + 1,
                 $pilafFormulas,
+            );
+
+            /** @var Formula_Articulo|null $subFormula */
+            $subFormula = $formulasPorId->get($subId);
+            $porciones = (float) ($subFormula->cantidadunidad ?? 1);
+            if ($porciones <= 0.0001) {
+                $porciones = 1.0;
+            }
+
+            $costoPorPorcion = $resultSub->total / $porciones;
+
+            return new FormulaArticuloCostoTotalResult(
+                $costoPorPorcion * $mult,
+                $resultSub->completo,
+                $resultSub->advertencias,
             );
         }
 

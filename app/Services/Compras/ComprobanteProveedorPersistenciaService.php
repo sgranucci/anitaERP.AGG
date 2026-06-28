@@ -16,6 +16,7 @@ use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -38,6 +39,18 @@ class ComprobanteProveedorPersistenciaService
         $payload = $this->armarPayloadCabecera($request);
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
+
+        ComprobanteProveedorUnicidadSupport::assertUnico(
+            (int) $payload['empresa_id'],
+            (int) $payload['tipotransaccion_compra_id'],
+            (string) $payload['letra'],
+            (int) $payload['sucursal'],
+            (int) $payload['numerocomprobante'],
+            (int) $payload['proveedor_id'],
+            null,
+            null,
+            (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: 0) ?: null,
+        );
 
         $comprobante = $this->comprobanteRepository->create($payload);
 
@@ -67,6 +80,18 @@ class ComprobanteProveedorPersistenciaService
         }
 
         $payload = $this->armarPayloadCabecera($request);
+        ComprobanteProveedorUnicidadSupport::assertUnico(
+            (int) $payload['empresa_id'],
+            (int) $payload['tipotransaccion_compra_id'],
+            (string) $payload['letra'],
+            (int) $payload['sucursal'],
+            (int) $payload['numerocomprobante'],
+            (int) $payload['proveedor_id'],
+            null,
+            $id,
+            (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: 0) ?: null,
+        );
+
         $this->comprobanteRepository->update($payload, $id);
 
         $comprobante = $this->comprobanteRepository->find($id);
@@ -102,8 +127,24 @@ class ComprobanteProveedorPersistenciaService
 
         $payload = $this->payloadCabeceraDesdeModelo($data);
         $payload['origen_entrada'] = $this->origenComprobanteDesdePrecarga($precargaId);
+        $payload['identificacion_proveedor_cuit'] = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
+            isset($payload['proveedor_id']) ? (int) $payload['proveedor_id'] : null,
+            $payload['proveedor_documento_eventual'] ?? null,
+        );
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
+
+        ComprobanteProveedorUnicidadSupport::assertUnico(
+            (int) $payload['empresa_id'],
+            (int) $payload['tipotransaccion_compra_id'],
+            (string) $payload['letra'],
+            (int) $payload['sucursal'],
+            (int) $payload['numerocomprobante'],
+            isset($payload['proveedor_id']) ? (int) $payload['proveedor_id'] : null,
+            $payload['proveedor_documento_eventual'] ?? null,
+            null,
+            $precargaId,
+        );
 
         $comprobante = $this->comprobanteRepository->create($payload);
 
@@ -199,6 +240,10 @@ class ComprobanteProveedorPersistenciaService
         return [
             'empresa_id' => (int) $request->input('empresa_id'),
             'proveedor_id' => (int) $request->input('proveedor_id'),
+            'identificacion_proveedor_cuit' => ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
+                (int) $request->input('proveedor_id'),
+                null,
+            ),
             'tipotransaccion_compra_id' => (int) $request->input('tipotransaccion_compra_id'),
             'ordencompra_id' => $ordencompraId > 0 ? $ordencompraId : null,
             'ordencompra_comprobante_id' => (int) $request->input('ordencompra_comprobante_id', 0) ?: null,

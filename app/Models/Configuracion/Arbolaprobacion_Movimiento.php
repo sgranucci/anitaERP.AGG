@@ -20,7 +20,8 @@ class Arbolaprobacion_Movimiento extends Model implements Auditable
     protected $fillable = [
                             'arbolaprobacion_id', 'fechaenvio', 'enviousuario_id', 'requisicion_id', 'requisicion_sala_id', 'ordencompra_id',
 							'solicitudpago_id', 'ordenventa_id', 'hashaprobacion', 'hashrechazo', 'hashvisualizar', 'nivel',
-							'destinatariousuario_id', 'fechaproceso', 'estado', 'observacion'
+							'destinatariousuario_id', 'fechaproceso', 'estado', 'observacion', 'circuito_oc',
+                            'arbolaprobacion_oc_trigger_id',
                         ];
     protected $table = 'arbolaprobacion_movimiento';
 

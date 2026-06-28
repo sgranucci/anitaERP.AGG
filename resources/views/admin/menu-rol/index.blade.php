@@ -7,7 +7,10 @@ Menú - Rol
 <script src="{{asset("assets/pages/scripts/admin/menu-rol/index.js")}}" type="text/javascript"></script>
 <script src="https://unpkg.com/sticky-table-headers"></script>
 <script>
-    $('#tabla-menu-rol-data').stickyTableHeaders();
+    $('#tabla-menu-rol-data').stickyTableHeaders({
+        scrollableArea: $('.menu-rol-tabla-wrap'),
+        cacheHeaderHeight: true
+    });
 </script>
 @endsection
 
@@ -44,7 +47,7 @@ Menú - Rol
                     Las filas resaltadas en azul marcan el inicio de cada módulo del sistema; el borde inferior indica dónde termina ese bloque.
                 </p>
             </div>
-            <div class="card-body table-responsive p-0">
+            <div class="card-body table-responsive p-0 menu-rol-tabla-wrap">
                 @csrf
                 <table class="table table-striped table-bordered table-hover tabla-menu-rol" id="tabla-menu-rol-data">
                     <thead>

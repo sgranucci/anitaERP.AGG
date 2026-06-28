@@ -19,6 +19,9 @@ final class ComprobanteProveedorOrigenEntrada
     /** Precarga generada por el modelo IA propio (PDF). */
     public const PDF_IA = 'PDF_IA';
 
+    /** Alta desde ingresos y egresos de caja (fondo fijo, gastos banco, etc.). */
+    public const INGRESO_EGRESO = 'INGRESO_EGRESO';
+
     /** @return list<string> */
     public static function todos(): array
     {
@@ -27,6 +30,7 @@ final class ComprobanteProveedorOrigenEntrada
             self::ORDENCOMPRA,
             self::MANUAL,
             self::PDF_IA,
+            self::INGRESO_EGRESO,
         ];
     }
 
@@ -37,8 +41,14 @@ final class ComprobanteProveedorOrigenEntrada
             self::ORDENCOMPRA => 'Desde orden de compra',
             self::MANUAL => 'Sin OC (manual)',
             self::PDF_IA => 'PDF — modelo IA Anita',
+            self::INGRESO_EGRESO => 'Ingresos y egresos (tesorería)',
             default => $origen,
         };
+    }
+
+    public static function esIngresoEgreso(?string $origen): bool
+    {
+        return $origen === self::INGRESO_EGRESO;
     }
 
     /**

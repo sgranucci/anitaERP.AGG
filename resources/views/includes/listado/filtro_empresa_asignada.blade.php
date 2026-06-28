@@ -8,12 +8,22 @@
     $empresaIdSeleccion = (int) ($empresa_id ?? ($f['empresa_id'] ?? 0));
     $colClass = $col_class ?? 'col-md-2 col-sm-6 mb-2';
     $opcionTodas = $opcion_todas ?? 'Todas (asignadas)';
+    $requiereSeleccion = (bool) ($requiere_seleccion ?? false);
 @endphp
 @if ($empresasDisponibles->count() > 1)
     <div class="form-group {{ $colClass }}">
-        <label class="small mb-1" for="empresa_id">Empresa</label>
-        <select name="empresa_id" id="empresa_id" class="form-control form-control-sm">
-            <option value="">{{ $opcionTodas }}</option>
+        <label class="small mb-1" for="empresa_id">
+            Empresa
+            @if ($requiereSeleccion)
+                <span class="text-danger">*</span>
+            @endif
+        </label>
+        <select name="empresa_id" id="empresa_id" class="form-control form-control-sm"@if ($requiereSeleccion) required @endif>
+            @if ($requiereSeleccion)
+                <option value="" disabled @selected($empresaIdSeleccion <= 0)>Seleccione empresa…</option>
+            @else
+                <option value="">{{ $opcionTodas }}</option>
+            @endif
             @foreach ($empresasDisponibles as $emp)
                 <option value="{{ $emp->id }}" @selected($empresaIdSeleccion === (int) $emp->id)>{{ $emp->nombre }}</option>
             @endforeach

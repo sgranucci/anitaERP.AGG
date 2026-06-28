@@ -1,0 +1,22 @@
+<?php
+
+namespace App\Repositories\Ventas;
+
+use App\Models\Ventas\Maquinavending;
+
+interface MaquinavendingRepositoryInterface
+{
+    public function all();
+
+    public function existeRegistro(): bool;
+
+    public function create(array $data);
+
+    public function update(array $data, $id);
+
+    public function delete($id);
+
+    public function find($id);
+
+    public function findOrFail($id);
+}

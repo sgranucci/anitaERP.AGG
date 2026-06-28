@@ -110,7 +110,7 @@ use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
                             </td>
                             <td>{{ $row->jornada?->fecha_jornada?->format('d/m/Y') ?? $row->turnoOperativo?->jornada?->fecha_jornada?->format('d/m/Y') }}</td>
                             <td class="text-right">${{ number_format((float) $row->totalcobrado, 2, ',', '.') }}</td>
-                            <td>
+                            <td class="text-nowrap">
                                 @if (
                                     can('editar-rendicion-gastronomia-caja', false)
                                     && \App\Support\Caja\RendicionGastronomiaCajaPermiso::puedeActualizarPorFecha($row)

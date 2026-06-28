@@ -178,7 +178,7 @@ class GastronomiaCostoMensualCatalogoService
             return 'costo_incompleto';
         }
 
-        $precioCosto = round($costo->total, 4);
+        $precioCosto = round($costo->totalPorUnidadFormula(), 4);
         if ($precioCosto <= 0) {
             return 'costo_cero';
         }

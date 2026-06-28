@@ -16,7 +16,36 @@ use Illuminate\Support\Collection;
  */
 final class GastronomiaVentaDetalleSupport
 {
-    public const SUFIJO_CONCEPTO_INSUMO = ' — Ing.';
+    public const SUFIJO_CONCEPTO_INSUMO = ' - Insumo';
+
+    /** @deprecated Solo lectura de movimientos grabados antes del cambio de etiqueta. */
+    public const SUFIJO_CONCEPTO_INSUMO_LEGACY = ' — Ing.';
+
+    public static function conceptoEsMovimientoInsumo(string $concepto): bool
+    {
+        return str_contains($concepto, self::SUFIJO_CONCEPTO_INSUMO)
+            || str_contains($concepto, self::SUFIJO_CONCEPTO_INSUMO_LEGACY);
+    }
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder  $query
+     */
+    public static function aplicarWhereConceptoEsInsumo($query, string $column = 'concepto'): void
+    {
+        $query->where(function ($q) use ($column) {
+            $q->where($column, 'like', '%'.self::SUFIJO_CONCEPTO_INSUMO)
+                ->orWhere($column, 'like', '%'.self::SUFIJO_CONCEPTO_INSUMO_LEGACY);
+        });
+    }
+
+    /**
+     * @param  \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder  $query
+     */
+    public static function aplicarWhereConceptoNoEsInsumo($query, string $column = 'concepto'): void
+    {
+        $query->where($column, 'not like', '%'.self::SUFIJO_CONCEPTO_INSUMO)
+            ->where($column, 'not like', '%'.self::SUFIJO_CONCEPTO_INSUMO_LEGACY);
+    }
 
     /**
      * Cobranzas vinculadas a la venta (venta_id directo o vía movimiento de caja).
@@ -216,7 +245,7 @@ final class GastronomiaVentaDetalleSupport
         return Articulo_Movimiento::query()
             ->with(['articulos', 'depositos', 'venta_emisiones.articulos'])
             ->where('venta_id', $ventaId)
-            ->where('concepto', 'like', '%'.self::SUFIJO_CONCEPTO_INSUMO)
+            ->tap(fn ($q) => self::aplicarWhereConceptoEsInsumo($q))
             ->orderBy('deposito_id')
             ->orderBy('id')
             ->get();
@@ -248,7 +277,7 @@ final class GastronomiaVentaDetalleSupport
         return Articulo_Movimiento::query()
             ->with(['articulos', 'depositos'])
             ->where('venta_emision_id', $ventaEmisionId)
-            ->where('concepto', 'like', '%'.self::SUFIJO_CONCEPTO_INSUMO)
+            ->tap(fn ($q) => self::aplicarWhereConceptoEsInsumo($q))
             ->orderBy('id')
             ->get();
     }
@@ -291,7 +320,7 @@ final class GastronomiaVentaDetalleSupport
 
     public static function esMovimientoInsumo(Articulo_Movimiento $movimiento): bool
     {
-        return str_contains((string) ($movimiento->concepto ?? ''), self::SUFIJO_CONCEPTO_INSUMO);
+        return self::conceptoEsMovimientoInsumo((string) ($movimiento->concepto ?? ''));
     }
 
     /**
@@ -378,7 +407,7 @@ final class GastronomiaVentaDetalleSupport
         $movimientos = Articulo_Movimiento::query()
             ->with(['articulos', 'depositos', 'venta_emisiones'])
             ->whereIn('venta_id', $ids)
-            ->where('concepto', 'like', '%'.self::SUFIJO_CONCEPTO_INSUMO)
+            ->tap(fn ($q) => self::aplicarWhereConceptoEsInsumo($q))
             ->where(function ($q) use ($articuloPadreId) {
                 $q->whereHas(
                     'venta_emisiones',

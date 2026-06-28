@@ -98,11 +98,19 @@ final class KandikoAnitaVentaTipoSupport
     }
 
     /**
-     * Clave ERP (FAC-n) para conciliar con cabecera Anita FAK-n o FAC-n en PV CAEA Kandiko.
+     * Clave ERP (FAC|letra|sucursal|nro) para conciliar con cabecera Anita FAK|… o FAC|… en PV CAEA Kandiko.
      */
-    public static function claveConciliacionDesdeNumero(int $numero): string
-    {
-        return self::TIPO_NUMERADOR.'-'.$numero;
+    public static function claveConciliacionDesdeNumero(
+        int $numero,
+        string $letra = 'B',
+        int $sucursal = 31,
+    ): string {
+        return \App\Support\Ventas\Gastronomia\GastronomiaAnitaComprobantePkSupport::claveVenta(
+            self::TIPO_NUMERADOR,
+            $letra,
+            $sucursal,
+            $numero,
+        ) ?? self::TIPO_NUMERADOR.'|'.$letra.'|'.$sucursal.'|'.$numero;
     }
 
     /**

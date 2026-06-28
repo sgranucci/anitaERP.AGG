@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\ApiAnita;
+use App\Models\Configuracion\Empresa;
+use App\Services\Caja\RendicionGastronomiaAuditoriaAnitaNotificacionService;
 use App\Services\Caja\RendicionGastronomiaAuditoriaAnitaService;
 use App\Support\Caja\RendicionGastronomiaAuditoriaEmpresasSupport;
 use Carbon\Carbon;
@@ -16,12 +18,15 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                             {--empresa= : empresa_id (default: config rendicion_gastronomia_anita.auditoria_diaria.empresa_id)}
                             {--puntoventa= : Código PV CAE opcional}
                             {--tolerancia= : Override tolerancia en pesos (default config)}
-                            {--detalle : Muestra cabeceras rendgastro por PV con diferencias}';
+                            {--detalle : Muestra cabeceras rendgastro por PV con diferencias}
+                            {--sin-mail : No envía correo}';
 
     protected $description = 'Audita rendg_total_z (rendgastro) vs facturación ERP por PC (CAE+CAEA) y total día';
 
-    public function handle(RendicionGastronomiaAuditoriaAnitaService $service): int
-    {
+    public function handle(
+        RendicionGastronomiaAuditoriaAnitaService $service,
+        RendicionGastronomiaAuditoriaAnitaNotificacionService $notificacionService,
+    ): int {
         if (! config('rendicion_gastronomia_anita.sincronizar', true)) {
             $this->warn('RENDICION_GASTRONOMIA_SINCRONIZAR_ANITA está deshabilitado; no hay bridge activo.');
 
@@ -45,6 +50,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
 
         $pvFiltro = $this->option('puntoventa');
         $pvFiltro = is_string($pvFiltro) && trim($pvFiltro) !== '' ? trim($pvFiltro) : null;
+        $enviarMail = ! (bool) $this->option('sin-mail');
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
@@ -56,8 +62,15 @@ class RendicionGastronomiaAuditoriaAnita extends Command
 
         $hayProblemas = false;
 
-        foreach ($empresas as $empresaId) {
-            foreach ($fechas as $fecha) {
+        foreach ($fechas as $fecha) {
+            $informeMail = [
+                'fecha_jornada' => $fecha,
+                'tolerancia' => $tolerancia,
+                'empresas' => [],
+                'requiere_alerta' => false,
+            ];
+
+            foreach ($empresas as $empresaId) {
                 try {
                     $informe = $service->auditarFechaJornada($empresaId, $fecha, $tolerancia, $pvFiltro);
                 } catch (\Throwable $e) {
@@ -72,6 +85,16 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                     continue;
                 }
 
+                $empresa = Empresa::query()->find($empresaId, ['id', 'nombre']);
+                $informeMail['empresas'][] = [
+                    'empresa_id' => $empresaId,
+                    'empresa_nombre' => (string) ($empresa->nombre ?? ('Empresa '.$empresaId)),
+                    'informe' => $informe,
+                ];
+                if (! empty($informe['resumen']['requiere_alerta'])) {
+                    $informeMail['requiere_alerta'] = true;
+                }
+
                 $this->newLine();
                 $this->info('Empresa '.$empresaId.' — fecha jornada '.$fecha);
                 $conteo = $informe['resumen']['conteo'] ?? [];
@@ -79,18 +102,24 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                     ['Estado', 'Cantidad'],
                     [
                         ['OK', (string) ($conteo['ok'] ?? 0)],
-                        ['Diferencia', (string) ($conteo['diferencia'] ?? 0)],
-                        ['Sin rendgastro', (string) ($conteo['sin_anita'] ?? 0)],
+                        ['DIF venta (cabecera Anita)', (string) ($conteo['dif_venta'] ?? 0)],
+                        ['DIF rendg (rendgastro Z)', (string) ($conteo['dif_rendg'] ?? 0)],
+                        ['DIF ambos', (string) ($conteo['dif_ambos'] ?? 0)],
+                        ['Sin rendgastro', (string) ($conteo['sin_rendg'] ?? 0)],
                     ],
                 );
 
                 $totalDia = $informe['total_dia'] ?? null;
                 if ($totalDia !== null) {
                     $this->line(sprintf(
-                        'Total día: ERP $ %s | rendg $ %s | Δ $ %s | %s',
+                        'Total día: ERP $ %s | venta Anita $ %s | Δ venta $ %s (%s) | rendg $ %s | Δ rendg $ %s (%s) | %s',
                         $this->fmt($totalDia['erp_z'] ?? null),
+                        $this->fmt($totalDia['ventas_anita'] ?? null),
+                        $this->fmtDiff($totalDia['diff_anita'] ?? null),
+                        $totalDia['estado_anita'] ?? '—',
                         $this->fmt($totalDia['anita_z'] ?? null),
                         $this->fmtDiff($totalDia['diff_z'] ?? null),
+                        $totalDia['estado_rendg'] ?? '—',
                         $totalDia['estado'] ?? '—',
                     ));
                 }
@@ -101,10 +130,12 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                         $fila['tipo_fila'] ?? '—',
                         $fila['puntoventa'],
                         $fila['estado'],
+                        $fila['estado_anita'] ?? '—',
+                        $fila['estado_rendg'] ?? '—',
                         $fila['cantidad_facturas_erp'] ?? 0,
-                        $this->fmt($fila['erp_cae'] ?? null),
-                        $this->fmt($fila['erp_caea'] ?? null),
                         $this->fmt($fila['erp_z'] ?? null),
+                        $this->fmt($fila['ventas_anita'] ?? null),
+                        $this->fmtDiff($fila['diff_anita'] ?? null),
                         $this->fmt($fila['anita_z'] ?? null),
                         $this->fmtDiff($fila['diff_z'] ?? null),
                     ];
@@ -112,7 +143,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
 
                 if ($filasTabla !== []) {
                     $this->table(
-                        ['Tipo', 'Clave', 'Estado', 'Fac', 'ERP CAE', 'ERP CAEA', 'ERP total', 'Rendg Z', 'Δ Z'],
+                        ['Tipo', 'Clave', 'Estado', 'Venta', 'Rendg', 'Fac', 'ERP total', 'Anita venta', 'Δ venta', 'Rendg Z', 'Δ rendg'],
                         $filasTabla,
                     );
                 } else {
@@ -136,6 +167,16 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                     'empresa_id' => $empresaId,
                     'resumen' => $informe['resumen'],
                 ]);
+            }
+
+            if ($enviarMail && $informeMail['empresas'] !== []) {
+                $mail = $notificacionService->enviarCorreo($informeMail);
+                if ($mail['enviado'] ?? false) {
+                    $this->info('Correo enviado a '.($mail['destino'] ?? ''));
+                } elseif (($mail['error'] ?? '') !== 'Sin alertas y email_si_ok deshabilitado') {
+                    $this->error('No se pudo enviar correo: '.($mail['error'] ?? 'error desconocido'));
+                    $hayProblemas = true;
+                }
             }
         }
 

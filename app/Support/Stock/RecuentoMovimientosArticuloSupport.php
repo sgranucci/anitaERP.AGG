@@ -35,11 +35,14 @@ final class RecuentoMovimientosArticuloSupport
      *     saldo_fmt: string
      * }
      */
-    public static function validarContexto(int $articuloId, int $depositoId): array
+    public static function validarContexto(int $articuloId, int $depositoId, ?int $empresaId = null): array
     {
         if ($articuloId <= 0) {
             throw new \InvalidArgumentException('Artículo requerido.');
         }
+
+        $empresaId = (int) ($empresaId ?? 0);
+        $empresaId = $empresaId > 0 ? $empresaId : null;
 
         $articulo = Articulo::query()
             ->select('id', 'sku', 'descripcion', 'unidadmedida_id')
@@ -54,15 +57,24 @@ final class RecuentoMovimientosArticuloSupport
         $modoTodos = self::esModoTodosDepositos($depositoId);
 
         if ($modoTodos) {
+            $nombreDeposito = 'Todos los depósitos';
+            if ($empresaId !== null) {
+                $empresaNombre = DB::table('empresa')->where('id', $empresaId)->value('nombre');
+                if ($empresaNombre) {
+                    $nombreDeposito .= ' — '.$empresaNombre;
+                }
+            }
+
             return [
                 'articulo' => $articuloResumen,
                 'deposito' => [
                     'id' => 0,
                     'codigo' => '',
-                    'nombre' => 'Todos los depósitos',
+                    'nombre' => $nombreDeposito,
                 ],
                 'modo_todos_depositos' => true,
-                'saldo' => ($saldoTodos = self::saldoTodosDepositos($articuloId)),
+                'empresa_id' => $empresaId,
+                'saldo' => ($saldoTodos = self::saldoTodosDepositos($articuloId, $empresaId)),
                 'saldo_fmt' => self::formatearNumero($saldoTodos),
             ];
         }
@@ -74,7 +86,7 @@ final class RecuentoMovimientosArticuloSupport
         if (! $deposito) {
             throw new \RuntimeException('Depósito no encontrado.');
         }
-        if (! MovimientosArticuloDepositoSupport::depositoConsultable((int) $deposito->id)) {
+        if (! MovimientosArticuloDepositoSupport::depositoConsultable((int) $deposito->id, $empresaId)) {
             throw new \RuntimeException('Depósito no autorizado para su usuario o empresa.');
         }
 
@@ -90,19 +102,23 @@ final class RecuentoMovimientosArticuloSupport
                 'empresa_nombre' => (string) (optional($deposito->empresas)->nombre ?? ''),
             ],
             'modo_todos_depositos' => false,
+            'empresa_id' => $empresaId,
             'saldo' => $saldo,
             'saldo_fmt' => self::formatearNumero($saldo),
         ];
     }
 
-    public static function query(int $articuloId, int $depositoId): Builder
+    public static function query(int $articuloId, int $depositoId, ?int $empresaId = null): Builder
     {
+        $empresaId = (int) ($empresaId ?? 0);
+        $empresaId = $empresaId > 0 ? $empresaId : null;
+
         $query = self::queryBase($articuloId)
             ->where('am.articulo_id', $articuloId)
             ->whereNull('am.deleted_at');
 
         if (self::esModoTodosDepositos($depositoId)) {
-            self::aplicarFiltroDepositosAutorizados($query);
+            self::aplicarFiltroDepositosAutorizados($query, $empresaId);
 
             return $query
                 ->orderByDesc('am.fecha')
@@ -155,11 +171,10 @@ final class RecuentoMovimientosArticuloSupport
     {
         $concepto = trim((string) ($row->concepto ?? ''));
         $ventaCodigo = trim((string) ($row->venta_codigo ?? ''));
-        $sufijoInsumo = GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO;
 
         if ($ventaCodigo !== '') {
-            if ($sufijoInsumo !== '' && str_contains($concepto, $sufijoInsumo)) {
-                return $ventaCodigo.$sufijoInsumo;
+            if (GastronomiaVentaDetalleSupport::conceptoEsMovimientoInsumo($concepto)) {
+                return $ventaCodigo.GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO;
             }
 
             return $ventaCodigo;
@@ -237,10 +252,14 @@ final class RecuentoMovimientosArticuloSupport
             ->where('am.articulo_id', $articuloId);
     }
 
-    private static function aplicarFiltroDepositosAutorizados(Builder $query): void
+    private static function aplicarFiltroDepositosAutorizados(Builder $query, ?int $empresaId = null): void
     {
-        $ids = MovimientosArticuloDepositoSupport::idsDepositosConsultables();
+        $ids = MovimientosArticuloDepositoSupport::idsDepositosConsultablesFiltrados($empresaId);
         if ($ids === null) {
+            if ($empresaId !== null && $empresaId > 0) {
+                $query->where('dep.empresa_id', $empresaId);
+            }
+
             return;
         }
 
@@ -253,10 +272,10 @@ final class RecuentoMovimientosArticuloSupport
         $query->whereIn('am.deposito_id', $ids);
     }
 
-    private static function saldoTodosDepositos(int $articuloId): float
+    private static function saldoTodosDepositos(int $articuloId, ?int $empresaId = null): float
     {
         $saldoRepo = app(\App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface::class);
-        $idsConsultables = MovimientosArticuloDepositoSupport::idsDepositosConsultables();
+        $idsConsultables = MovimientosArticuloDepositoSupport::idsDepositosConsultablesFiltrados($empresaId);
 
         if ($idsConsultables === null) {
             return (float) Articulo_Saldo_Deposito::query()

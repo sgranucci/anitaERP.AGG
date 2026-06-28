@@ -53,4 +53,9 @@ class Ordencompra_Articulo extends Model
     {
         return $this->belongsTo(Requisicion_Articulo::class, 'requisicion_articulo_id');
     }
+
+    public function ordencompra_articulo_precio_historias()
+    {
+        return $this->hasMany(Ordencompra_Articulo_Precio_Historia::class, 'ordencompra_articulo_id');
+    }
 }

@@ -224,6 +224,13 @@ function activa_eventos_consulta_cuentacontable()
             nombre: $.trim($tr.find('.nombrecuentacontable').first().text()),
         };
 
+        if (window.ptrIeCpFilaCuentaConcepto && window.ptrIeCpFilaCuentaConcepto.length
+            && typeof window.ieComprobanteIvaAplicarCuenta === 'function') {
+            window.ieComprobanteIvaAplicarCuenta(data.id, data.codigo, data.nombre);
+            $('#consultacuentaModal').modal('hide');
+            return;
+        }
+
         var $ctx = ptrCuentacontableContext;
         if (!$ctx || !$ctx.length) {
             $ctx = null;

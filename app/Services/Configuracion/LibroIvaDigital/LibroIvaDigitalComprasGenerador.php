@@ -95,7 +95,7 @@ class LibroIvaDigitalComprasGenerador
             $cp->comprobante_proveedor_conceptos,
             $letra,
         );
-        $cuit = preg_replace('/\D+/', '', (string) ($cp->proveedores->nroinscripcion ?? '')) ?? '';
+        $cuit = preg_replace('/\D+/', '', (string) ($cp->proveedores->nroinscripcion ?? $cp->proveedor_documento_eventual ?? '')) ?? '';
 
         $cabecera = [
             'fecha' => date('Ymd', strtotime((string) ($cp->fechaiva ?: $cp->fechacomprobante))),
@@ -105,7 +105,7 @@ class LibroIvaDigitalComprasGenerador
             'despacho_importacion' => '',
             'codigo_documento' => '80',
             'numero_identificacion' => $cuit !== '' ? $cuit : '0',
-            'nombre_vendedor' => (string) ($cp->proveedores->nombre ?? ''),
+            'nombre_vendedor' => (string) ($cp->proveedores->nombre ?? $cp->proveedor_nombre_eventual ?? ''),
             'importe_total' => abs((float) $cp->total),
             'no_integra_neto' => $totales['no_integra'],
             'operaciones_exentas' => $totales['exento'],

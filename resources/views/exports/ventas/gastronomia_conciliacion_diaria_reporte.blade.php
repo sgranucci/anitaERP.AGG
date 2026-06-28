@@ -1,5 +1,5 @@
 @php
-    $colspan = 31;
+    $colspan = 32;
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
@@ -33,6 +33,7 @@
             <th>Empresa id</th>
             <th>Empresa</th>
             <th>Jornada</th>
+            <th>Circuito</th>
             <th>Tipo fila</th>
             <th>Tipo PV</th>
             <th>PC (host)</th>
@@ -69,6 +70,7 @@
                 <td>{{ $fila['empresa_id'] ?? '' }}</td>
                 <td>{{ $fila['empresa_nombre'] ?? '' }}</td>
                 <td>{{ $fila['fecha_jornada'] ?? '' }}</td>
+                <td>{{ $fila['circuito'] ?? '' }}</td>
                 <td>{{ $fila['tipo_fila'] ?? '' }}</td>
                 <td>{{ $fila['tipo_pv'] ?? '' }}</td>
                 <td>{{ $fila['identificador_pc'] ?? '' }}</td>

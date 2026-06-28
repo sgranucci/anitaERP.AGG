@@ -83,7 +83,17 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
     {
         $q = $this->queryListadoIndex($filtros, $sectorUsuarioId);
 
-        return $paginar ? $q->paginate(10) : $q->get();
+        if ($paginar) {
+            $result = $q->paginate(10);
+            $this->aplicarMontoLineasListado($result->getCollection());
+
+            return $result;
+        }
+
+        $collection = $q->get();
+        $this->aplicarMontoLineasListado($collection);
+
+        return $collection;
     }
 
     public function listadoIndexCursor($filtros, ?int $sectorUsuarioId)
@@ -151,6 +161,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
                 'ordencompra.fecha',
                 'ordencompra.estadoordencompra',
                 'ordencompra.requisicion_id',
+                'ordencompra.proveedor_id',
                 'ordencompra.sector_legajocompra_id',
                 'ordencompra.creousuario_id',
                 'empresa.nombre as nombreempresa',
@@ -158,7 +169,6 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
                 'proveedor.nombre as nombreproveedor',
                 'usuario.nombre as nombreusuario',
                 'sector_legajocompra.nombre as nombresector',
-                DB::raw('(select coalesce(sum(oa.cantidad * oa.precio * ifnull(oa.cotizacion, 1)), 0) from ordencompra_articulo oa where oa.ordencompra_id = ordencompra.id) as monto_lineas'),
             ])
             ->leftJoin('empresa', 'empresa.id', '=', 'ordencompra.empresa_id')
             ->leftJoin('centrocosto', 'centrocosto.id', '=', 'ordencompra.centrocosto_id')
@@ -273,5 +283,35 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         $ultimo = DB::table('ordencompra')->max('numeroordencompra');
 
         return $ultimo ? ((int) $ultimo + 1) : 1;
+    }
+
+    private function aplicarMontoLineasListado(Collection $filas): void
+    {
+        if ($filas->isEmpty()) {
+            return;
+        }
+
+        $ids = $filas->pluck('id')->filter()->all();
+        if ($ids === []) {
+            return;
+        }
+
+        $lineasPorOc = $this->model->newQuery()
+            ->whereIn('id', $ids)
+            ->with(['ordencompra_articulos.monedas'])
+            ->get()
+            ->keyBy('id');
+
+        foreach ($filas as $row) {
+            $oc = $lineasPorOc->get((int) $row->id);
+            if (! $oc) {
+                $row->monto_lineas = 0.0;
+
+                continue;
+            }
+
+            $totales = OrdencompraTotalesCabecera::sumaLineasEnMonedaReferencia($oc->ordencompra_articulos ?? []);
+            $row->monto_lineas = $totales['monto'];
+        }
     }
 }

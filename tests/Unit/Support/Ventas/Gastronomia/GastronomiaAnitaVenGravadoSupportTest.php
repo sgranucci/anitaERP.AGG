@@ -30,6 +30,28 @@ final class GastronomiaAnitaVenGravadoSupportTest extends TestCase
         $this->assertSame(0.0, GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptos, 0.01));
     }
 
+    public function test_es_cortesia_minima(): void
+    {
+        $this->assertTrue(GastronomiaAnitaVenGravadoSupport::esCortesiaMinima(0.01));
+        $this->assertFalse(GastronomiaAnitaVenGravadoSupport::esCortesiaMinima(0.02));
+        $this->assertFalse(GastronomiaAnitaVenGravadoSupport::esCortesiaMinima(0.03));
+        $this->assertFalse(GastronomiaAnitaVenGravadoSupport::esCortesiaMinima(5400.));
+    }
+
+    public function test_aplicar_cortesia_minima_en_payload_anita(): void
+    {
+        $venta = ['total' => 0.];
+        $dataCae = ['total' => 0., 'exento' => 0., 'nogravado' => 0., 'gravado' => 100., 'iva' => 21.];
+
+        GastronomiaAnitaVenGravadoSupport::aplicarCortesiaMinimaEnPayloadAnita($venta, $dataCae, true);
+
+        $this->assertSame(0.01, $venta['total']);
+        $this->assertSame(0.01, $dataCae['total']);
+        $this->assertSame(0.01, $dataCae['exento']);
+        $this->assertSame(0.0, $dataCae['gravado']);
+        $this->assertSame(0.0, $dataCae['iva']);
+    }
+
     public function test_prefiere_gravado_al_si_existe(): void
     {
         $conceptos = [

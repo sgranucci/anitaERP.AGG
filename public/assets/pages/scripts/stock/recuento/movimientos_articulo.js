@@ -42,6 +42,23 @@
         return el ? el.value : (carpetaBase() + '/stock/articulo/api/saldos-deposito');
     }
 
+    function empresaIdParaSaldosKardex() {
+        if (typeof window.obtenerEmpresaIdFiltroSaldosKardex === 'function') {
+            return parseInt(window.obtenerEmpresaIdFiltroSaldosKardex(), 10) || 0;
+        }
+
+        var elPagina = document.getElementById('movimientos-articulo-empresa-id');
+        if (elPagina) {
+            return parseInt(elPagina.value, 10) || 0;
+        }
+
+        return 0;
+    }
+
+    function empresaIdParaUrlKardex() {
+        return empresaIdParaSaldosKardex();
+    }
+
     function textoInfoArticulo(sku, descripcion, articuloId, unidadMedida) {
         var info = (sku || '').trim();
         if ((descripcion || '').trim()) {
@@ -235,11 +252,17 @@
         $vacio.addClass('d-none');
         $panel.find('.saldos-articulo-tbody').empty();
 
+        var payloadSaldos = { articulo_id: articuloId };
+        var empresaIdSaldos = empresaIdParaSaldosKardex();
+        if (empresaIdSaldos > 0) {
+            payloadSaldos.empresa_id = empresaIdSaldos;
+        }
+
         $.ajax({
             url: urlApiSaldosArticulo(),
             type: 'GET',
             dataType: 'json',
-            data: { articulo_id: articuloId },
+            data: payloadSaldos,
             headers: {
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
             },
@@ -319,6 +342,11 @@
             volver: volverUrl || (window.location.pathname + window.location.search),
         });
 
+        var empresaIdKardex = empresaIdParaUrlKardex();
+        if (empresaIdKardex > 0) {
+            params.set('empresa_id', String(empresaIdKardex));
+        }
+
         window.open(urlIndexMovimientosArticulo() + '?' + params.toString(), '_blank', 'noopener');
     }
 
@@ -365,33 +393,10 @@
         var descripcion = (config.descripcion || '').trim();
         $('#modal-kardex-articulo-info').text(textoInfoArticulo(sku, descripcion, pendingKardexArticuloId));
 
-        var $wrapOpciones = $('#modal-kardex-opciones-wrap');
-        var $lista = $('#modal-kardex-opciones').empty();
-        var opciones = Array.isArray(config.opciones) ? config.opciones : [];
         var depositoDefaultId = parseInt(config.depositoDefaultId, 10) || 0;
 
         limpiarPickerKardexModal();
-
-        if (opciones.length > 0) {
-            $wrapOpciones.removeClass('d-none');
-            opciones.forEach(function (opt) {
-                var depId = parseInt(opt.id, 10) || 0;
-                if (depId <= 0) {
-                    return;
-                }
-                var $btn = $('<button type="button" class="list-group-item list-group-item-action"></button>');
-                $btn.text(opt.label || ('Depósito ' + depId));
-                $btn.on('click', function () {
-                    $('#modalKardexDeposito').modal('hide');
-                    abrirUrlKardex(pendingKardexArticuloId, depId, config.volverUrl);
-                });
-                $lista.append($btn);
-            });
-            $('#modal-kardex-picker-label').text('Otro depósito');
-        } else {
-            $wrapOpciones.addClass('d-none');
-            $('#modal-kardex-picker-label').text('Depósito');
-        }
+        $('#modal-kardex-picker-label').text('Depósito');
 
         if (depositoDefaultId > 0 && (config.depositoDefaultCodigo || config.depositoDefaultNombre)) {
             aplicarDepositoPickerKardexModal({
@@ -437,23 +442,8 @@
             return;
         }
 
-        if (opciones.length > 1) {
-            if (modalKardexDisponible()) {
-                mostrarModalKardexDeposito({
-                    articuloId: articuloId,
-                    sku: extra.sku || '',
-                    descripcion: extra.descripcion || '',
-                    opciones: opciones,
-                    volverUrl: extra.volverUrl,
-                });
-            } else {
-                abrirUrlKardex(articuloId, opciones[0].id, extra.volverUrl);
-            }
-            return;
-        }
-
         var depositoId = resolverDepositoDefaultArticulo(depositoIdAttr);
-        if (depositoId > 0) {
+        if (depositoId > 0 && opciones.length === 0) {
             abrirUrlKardex(articuloId, depositoId, extra.volverUrl);
             return;
         }
@@ -463,9 +453,14 @@
                 articuloId: articuloId,
                 sku: extra.sku || '',
                 descripcion: extra.descripcion || '',
-                depositoDefaultId: 0,
+                depositoDefaultId: depositoId > 0 ? depositoId : 0,
                 volverUrl: extra.volverUrl,
             });
+            return;
+        }
+
+        if (depositoId > 0) {
+            abrirUrlKardex(articuloId, depositoId, extra.volverUrl);
             return;
         }
 
@@ -561,6 +556,14 @@
 
         depositoId = parseInt(depositoId, 10) || 0;
         params.set('deposito_id', depositoId > 0 ? String(depositoId) : '0');
+
+        var empresaIdKardex = empresaIdParaUrlKardex();
+        if (empresaIdKardex > 0) {
+            params.set('empresa_id', String(empresaIdKardex));
+        } else {
+            params.delete('empresa_id');
+        }
+
         window.location.href = urlIndexMovimientosArticulo() + '?' + params.toString();
     }
 
@@ -683,6 +686,23 @@
             activa_eventos_consultadeposito();
         }
 
+        $(document).on('click.saldoFilaKardex', '.btn-saldo-fila-kardex', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var depId = parseInt($(this).attr('data-deposito-id'), 10) || 0;
+            var $modalSaldos = $(this).closest('#modalSaldosArticulo');
+            var $modalKardex = $(this).closest('#modalKardexDeposito');
+            var articuloId = pendingSaldosArticuloId;
+            var volverUrl = pendingSaldosVolverUrl;
+            if ($modalKardex.length) {
+                articuloId = pendingKardexArticuloId;
+                volverUrl = pendingKardexVolverUrl;
+            } else if (!$modalSaldos.length) {
+                articuloId = 0;
+            }
+            abrirKardexDesdePanelSaldos(articuloId, depId, volverUrl);
+        });
+
         if (modalKardexDisponible()) {
             $('#modal-kardex-picker-wrap .codigodeposito, #modal-kardex-picker-wrap .consultadeposito')
                 .prop('tabindex', -1);
@@ -740,6 +760,52 @@
                 e.preventDefault();
                 ejecutarAbrirKardexModal();
             });
+
+            $(document).on('keydown.kardexF1Deposito', function (e) {
+                if (e.key !== 'F1' && e.code !== 'F1' && e.keyCode !== 112) {
+                    return;
+                }
+                if (!$('#modalKardexDeposito').hasClass('show')) {
+                    return;
+                }
+                var target = e.target;
+                if (!target || !target.classList.contains('codigodeposito')) {
+                    return;
+                }
+                if (!$(target).closest('#modal-kardex-picker-wrap').length) {
+                    return;
+                }
+                if ($('#consultadepositoModal').hasClass('show')) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                $(target).closest('.tm-deposito-campo').find('.consultadeposito').first().trigger('click');
+            });
+
+            $(document).on('keydown.kardexTabValidarDep', '#modal-kardex-picker-wrap .codigodeposito', function (e) {
+                if (e.key !== 'Tab' || e.shiftKey) {
+                    return;
+                }
+                var cod = ($(this).val() || '').trim();
+                if (!cod || depositoDesdePickerKardexModal() > 0) {
+                    return;
+                }
+                if (typeof leerDepositoPorCodigo !== 'function') {
+                    return;
+                }
+                e.preventDefault();
+                var $cod = $(this);
+                leerDepositoPorCodigo(cod, this, function () {
+                    var $picker = $('#modal-kardex-picker-wrap');
+                    var $next = $picker.find('.consultadeposito, #btn-kardex-abrir, #btn-kardex-todos-depositos')
+                        .filter(':visible')
+                        .first();
+                    if ($next.length) {
+                        $next.trigger('focus');
+                    }
+                });
+            });
         }
 
         if (document.getElementById('modalSaldosArticulo')) {
@@ -753,22 +819,6 @@
 
             $('#btn-saldos-kardex-todos').on('click', function () {
                 abrirKardexDesdePanelSaldos(pendingSaldosArticuloId, 0, pendingSaldosVolverUrl);
-            });
-
-            $(document).on('click', '.btn-saldo-fila-kardex', function (e) {
-                e.preventDefault();
-                var depId = parseInt($(this).attr('data-deposito-id'), 10) || 0;
-                var $modalSaldos = $(this).closest('#modalSaldosArticulo');
-                var $modalKardex = $(this).closest('#modalKardexDeposito');
-                var articuloId = pendingSaldosArticuloId;
-                var volverUrl = pendingSaldosVolverUrl;
-                if ($modalKardex.length) {
-                    articuloId = pendingKardexArticuloId;
-                    volverUrl = pendingKardexVolverUrl;
-                } else if (!$modalSaldos.length) {
-                    articuloId = 0;
-                }
-                abrirKardexDesdePanelSaldos(articuloId, depId, volverUrl);
             });
         }
 

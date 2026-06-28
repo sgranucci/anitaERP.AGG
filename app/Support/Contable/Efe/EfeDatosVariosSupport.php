@@ -89,6 +89,11 @@ class EfeDatosVariosSupport
                 continue;
             }
 
+            if ($conceptoDestino === self::CONCEPTO_VARIOS
+                && in_array($conceptoActual, [13, 7, 44, 45], true)) {
+                continue;
+            }
+
             if ($conceptoDestino === $conceptoActual) {
                 continue;
             }

@@ -21,6 +21,9 @@ class CuentaGastronomia extends Model implements Auditable
 
     public const ORIGEN_CANJE_MARKETING = 'canje_marketing';
 
+    /** Factura importada desde cabecera Informix (POS Anita legacy, fuera del flujo ERP). */
+    public const ORIGEN_IMPORT_ANITA = 'import_anita';
+
     public const ESTADO_ABIERTA = 'abierta';
 
     public const ESTADO_CERRADA = 'cerrada';

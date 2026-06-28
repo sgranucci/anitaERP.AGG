@@ -1,6 +1,9 @@
 @php
+    use App\Support\Compras\OrdencompraTotalesCabecera;
     $lineasTexto = [];
-    foreach (($data->ordencompra_articulos ?? collect()) as $item) {
+    $lineasOc = collect($data->ordencompra_articulos ?? [])->sortBy('id');
+    $monedaRefId = (int) (optional($lineasOc->first())->moneda_id ?: 1);
+    foreach ($lineasOc as $item) {
         $sku = $item->articulos->sku ?? '';
         $descripcion = $item->articulos->descripcion ?? '';
         $mon = $item->monedas->abreviatura ?? '';
@@ -9,11 +12,13 @@
         $ccDest = trim(implode(' ', array_filter([$ccDestCod, $ccDestNombre])));
         $cantidad = $item->cantidad ?? '';
         $precio = $item->precio ?? '';
-        $cot = (float) ($item->cotizacion ?? 1);
-        if ($cot <= 0) {
-            $cot = 1.0;
-        }
-        $subtotal = (float) ($item->cantidad ?? 0) * (float) ($item->precio ?? 0) * $cot;
+        $subtotal = OrdencompraTotalesCabecera::importeLineaEnMonedaReferencia(
+            $monedaRefId,
+            (int) ($item->moneda_id ?: $monedaRefId ?: 1),
+            (float) ($item->cantidad ?? 0),
+            (float) ($item->precio ?? 0),
+            (float) ($item->cotizacion ?? 1),
+        );
         $partidaCod = optional($item->partidagastos)->codigo ?? '';
         $partidaDesc = optional(optional($item->partidagastos)->articulos)->detalle ?? '';
         $capexCod = optional($item->capexs)->codigo ?? '';

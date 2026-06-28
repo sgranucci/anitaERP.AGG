@@ -29,7 +29,6 @@ class EfeDatosMantenimientoEdificioSupport
         114010007,
         114010009,
         114010011,
-        114020009,
     ];
 
     /** @var array<string, true> */
