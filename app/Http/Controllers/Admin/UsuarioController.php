@@ -11,7 +11,6 @@ use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
-use App\Repositories\Ventas\VendedorRepositoryInterface;
 use App\Support\Http\EliminacionRegistroSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
@@ -25,8 +24,6 @@ class UsuarioController extends Controller
 
     private $centrocostoRepository;
 
-    private $vendedorRepository;
-
     private $usuarioRepository;
 
     private $oficinacompraRepository;
@@ -35,14 +32,12 @@ class UsuarioController extends Controller
 
     public function __construct(EmpresaRepositoryInterface $empresarepository,
         CentrocostoRepositoryInterface $centrocostorepository,
-        VendedorRepositoryInterface $vendedorrepository,
         UsuarioRepositoryInterface $usuariorepository,
         OficinacompraRepositoryInterface $oficinacomprarepository,
         ContabilidadCuentaAutomaticaSeedService $cuentaAutomaticaSeedService)
     {
         $this->empresaRepository = $empresarepository;
         $this->centrocostoRepository = $centrocostorepository;
-        $this->vendedorRepository = $vendedorrepository;
         $this->usuarioRepository = $usuariorepository;
         $this->oficinacompraRepository = $oficinacomprarepository;
         $this->cuentaAutomaticaSeedService = $cuentaAutomaticaSeedService;
@@ -62,11 +57,10 @@ class UsuarioController extends Controller
         $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
         $centrocosto_query = $this->centrocostoRepository->all()->toArray();
-        $vendedor_query = $this->vendedorRepository->all()->pluck('nombre', 'id')->toArray();
         $oficinacompra_query = $this->oficinacompraRepository->all()->pluck('nombre', 'id')->toArray();
         $sector_legajocompra_query = SectorLegajocompra::orderBy('nombre')->get();
 
-        return view('admin.usuario.crear', compact('rols', 'empresa_query', 'centrocosto_query', 'vendedor_query', 'oficinacompra_query', 'sector_legajocompra_query'));
+        return view('admin.usuario.crear', compact('rols', 'empresa_query', 'centrocosto_query', 'oficinacompra_query', 'sector_legajocompra_query'));
     }
 
     public function guardar(ValidacionUsuario $request)
@@ -81,7 +75,12 @@ class UsuarioController extends Controller
                 : null,
         ]);
 
-        $usuario = Usuario::create($request->all());
+        $payload = $request->all();
+        if (! isset($payload['vendedor_id']) || $payload['vendedor_id'] === '' || (int) $payload['vendedor_id'] === 0) {
+            $payload['vendedor_id'] = null;
+        }
+
+        $usuario = Usuario::create($payload);
         $usuario->auditSync('roles', $request->rol_id);
 
         // Actualiza las empresas
@@ -97,14 +96,13 @@ class UsuarioController extends Controller
     public function editar($id)
     {
         $rols = Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
-        $data = Usuario::with(['roles', 'usuario_empresas', 'depositosAutorizados.empresas', 'tipotransaccionesStockAutorizadas'])->findOrFail($id);
+        $data = Usuario::with(['roles', 'usuario_empresas', 'depositosAutorizados.empresas', 'tipotransaccionesStockAutorizadas', 'vendedores'])->findOrFail($id);
         $empresa_query = $this->empresaRepository->all()->pluck('nombre', 'id')->toArray();
         $centrocosto_query = $this->centrocostoRepository->all()->toArray();
-        $vendedor_query = $this->vendedorRepository->all()->pluck('nombre', 'id')->toArray();
         $oficinacompra_query = $this->oficinacompraRepository->all()->pluck('nombre', 'id')->toArray();
         $sector_legajocompra_query = SectorLegajocompra::orderBy('nombre')->get();
 
-        return view('admin.usuario.editar', compact('data', 'rols', 'empresa_query', 'centrocosto_query', 'vendedor_query', 'oficinacompra_query', 'sector_legajocompra_query'));
+        return view('admin.usuario.editar', compact('data', 'rols', 'empresa_query', 'centrocosto_query', 'oficinacompra_query', 'sector_legajocompra_query'));
     }
 
     public function actualizar(ValidacionUsuario $request, $id)

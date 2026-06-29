@@ -54,9 +54,11 @@
                 @endif
 
                 <div class="card-tools">
-        			<button type="button" id="botonemitenc" class="btn btn-info btn-sm border btn-danger">
-                        <i id="iconoemitenc" class="fa fa-times"></i> Emite NC
-                    </button>
+                    @if (can('modifica-emite-nota-de-credito', false))
+                        <button type="button" id="botonemitenc" class="btn btn-info btn-sm border btn-danger">
+                            <i id="iconoemitenc" class="fa fa-times"></i> Emite NC
+                        </button>
+                    @endif
                     @if ($tipoalta == config('cliente.tipoalta')['PROVISORIO'][0])
                         <button type="button" id="botontipoalta" class="btn btn-info btn-sm">
                             <i class="fa fa-bell"></i> Cambia a DEFINITIVO

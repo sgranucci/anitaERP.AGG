@@ -22,6 +22,11 @@ class ValidacionUsuario extends FormRequest
         if ($sector === '' || $sector === null) {
             $this->merge(['sector_legajocompra_id' => null]);
         }
+
+        $vendedor = $this->input('vendedor_id');
+        if ($vendedor === '' || $vendedor === null || (int) $vendedor === 0) {
+            $this->merge(['vendedor_id' => null]);
+        }
     }
 
     /**

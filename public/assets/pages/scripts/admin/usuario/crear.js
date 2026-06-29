@@ -1,4 +1,8 @@
 $(document).ready(function () {
+    if (typeof activa_eventos_consultavendedor === 'function') {
+        activa_eventos_consultavendedor();
+    }
+
     $.validator.addMethod('asignacionRequerida', function (value) {
         return String(value || '').trim() !== '';
     }, 'Debe asignar al menos un ítem.');

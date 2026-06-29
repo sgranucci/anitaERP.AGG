@@ -173,15 +173,46 @@
                         <small class="form-text text-muted">Solo aplica si el usuario interviene en el circuito de compras con legajo por sector.</small>
                     </div>
                 </div>
-                <div class="form-group row mb-lg-0">
+                <div class="form-group row mb-lg-0 tm-vendedor-campo">
                     <label for="vendedor_id" class="col-lg-4 col-form-label">Vendedor</label>
                     <div class="col-lg-8">
-                        <select class="form-control" id="vendedor_id" name="vendedor_id">
-                            <option value="">Sin vendedor asociado</option>
-                            @foreach ($vendedor_query as $id => $nombre)
-                                <option value="{{ $id }}" {{ (int) old('vendedor_id', isset($data) ? ($data->vendedor_id ?? 0) : 0) === (int) $id ? 'selected' : '' }}>{{ $nombre }} — {{ $id }}</option>
-                            @endforeach
-                        </select>
+                        @php
+                            $vendedorIdUsuario = old('vendedor_id', isset($data) ? ($data->vendedor_id ?? '') : '');
+                            $vendedorCodigoUsuario = old('codigovendedor');
+                            $vendedorNombreUsuario = old('nombrevendedor');
+                            if ($vendedorCodigoUsuario === null && $vendedorIdUsuario && isset($data) && $data->vendedores) {
+                                $vendedorCodigoUsuario = $data->vendedores->codigo ?? '';
+                                $vendedorNombreUsuario = $data->vendedores->nombre ?? '';
+                            } elseif ($vendedorCodigoUsuario === null && $vendedorIdUsuario) {
+                                $vendedorResuelto = \App\Models\Ventas\Vendedor::query()->find($vendedorIdUsuario);
+                                $vendedorCodigoUsuario = $vendedorResuelto->codigo ?? '';
+                                $vendedorNombreUsuario = $vendedorResuelto->nombre ?? '';
+                            }
+                            $vendedorCodigoUsuario = $vendedorCodigoUsuario ?? '';
+                            $vendedorNombreUsuario = $vendedorNombreUsuario ?? '';
+                        @endphp
+                        <div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+                            <input type="hidden" class="vendedor_id" name="vendedor_id" id="vendedor_id"
+                                value="{{ $vendedorIdUsuario }}">
+                            <button type="button" title="Consulta vendedores" class="btn-accion-tabla consultavendedor tooltipsC flex-shrink-0">
+                                <i class="fa fa-search text-primary"></i>
+                            </button>
+                            @if (can('editar-vendedores', false) || can('listar-vendedores', false))
+                                <a href="{{ ((int) $vendedorIdUsuario > 0) ? route('editar_vendedor', ['id' => (int) $vendedorIdUsuario, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+                                    target="_blank" rel="noopener"
+                                    class="btn-accion-tabla btn-link-editar-vendedor tooltipsC flex-shrink-0 {{ ((int) $vendedorIdUsuario > 0) ? '' : 'd-none' }}"
+                                    title="Consultar vendedor en ABM">
+                                    <i class="fa fa-edit"></i>
+                                </a>
+                            @endif
+                            <input type="text" class="form-control codigovendedor flex-shrink-0" id="codigovendedor"
+                                value="{{ $vendedorCodigoUsuario }}"
+                                placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
+                            <input type="text" class="form-control nombrevendedor" id="nombrevendedor"
+                                value="{{ $vendedorNombreUsuario }}"
+                                placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+                        </div>
+                        <small class="form-text text-muted">C&oacute;digo Anita y nombre del vendedor asociado al usuario.</small>
                     </div>
                 </div>
             </div>
