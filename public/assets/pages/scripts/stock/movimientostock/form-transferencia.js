@@ -23,6 +23,25 @@
         $('#deposito_id').prop('required', activo);
     }
 
+    function actualizarCamposTransferenciaEnSubmit(esT) {
+        var $salida = $('#deposito_salida_id');
+        var $entrada = $('#deposito_entrada_id');
+        var $bienOrigen = $('#bien_uso_origen_id');
+        var $bienDestino = $('#bien_uso_destino_id');
+
+        if (esT) {
+            $salida.attr('name', 'deposito_salida_id');
+            $entrada.attr('name', 'deposito_entrada_id');
+            $bienOrigen.attr('name', 'bien_uso_origen_id');
+            $bienDestino.attr('name', 'bien_uso_destino_id');
+        } else {
+            $salida.prop('required', false).removeAttr('name');
+            $entrada.prop('required', false).removeAttr('name');
+            $bienOrigen.prop('required', false).removeAttr('name');
+            $bienDestino.prop('required', false).removeAttr('name');
+        }
+    }
+
     function actualizarRequiredTransferencia() {
         var esT = esTransferencia();
         var origenBien = tipoOrigenBienUso();
@@ -32,6 +51,7 @@
         $('#deposito_entrada_id').prop('required', esT && !destinoBien);
         $('#bien_uso_origen_id').prop('required', esT && origenBien);
         $('#bien_uso_destino_id').prop('required', esT && destinoBien);
+        actualizarCamposTransferenciaEnSubmit(esT);
     }
 
     function actualizarPanelesTransferencia() {
@@ -50,9 +70,7 @@
             $('#deposito_id').prop('required', false).removeAttr('name');
             var depSimple = String($('#deposito_id').val() || '').trim();
             if (depSimple && !String($('#deposito_salida_id').val() || '').trim() && !origenBien) {
-                $('#deposito_salida_id').val(depSimple);
-                $('#deposito_salida_codigo').val($('#deposito_id_codigo').val() || '');
-                $('#deposito_salida_descripcion').val($('#deposito_id_descripcion').val() || '');
+                window.copiarDepositoCampo('deposito_id', 'deposito_salida_id');
                 var tipoSimple = $('#tm_deposito_movimientostock').attr('data-tipodeposito') || '';
                 if (tipoSimple) {
                     $('#tm_deposito_salida').attr('data-tipodeposito', tipoSimple);

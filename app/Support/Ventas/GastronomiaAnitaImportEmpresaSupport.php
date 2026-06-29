@@ -57,6 +57,38 @@ final class GastronomiaAnitaImportEmpresaSupport
     }
 
     /**
+     * Tipos a consultar al importar: Kandiko CAEA 00031 lee FAK y FAC legacy, pero el código ERP es FAK.
+     *
+     * @return list<string>
+     */
+    public static function tiposCabeceraLecturaImport(
+        Puntoventa $puntoventa,
+        string|int|null $empresaCodigo = null,
+    ): array {
+        $empresaCodigo ??= $puntoventa->empresas?->codigo ?? $puntoventa->empresa_id;
+
+        if (KandikoAnitaVentaTipoSupport::esPvCaeaKandiko(
+            (string) $puntoventa->codigo,
+            $empresaCodigo,
+            $puntoventa->modofacturacion ?? null,
+        )) {
+            return KandikoAnitaVentaTipoSupport::tiposAnitaEquivalentesFacErp();
+        }
+
+        return self::tiposCabeceraVentaAnita($puntoventa, $empresaCodigo);
+    }
+
+    /**
+     * Código ERP al importar (FAK en Kandiko CAEA 00031; FAC en el resto).
+     */
+    public static function tipoCodigoErpImport(
+        Puntoventa $puntoventa,
+        string|int|null $empresaCodigo = null,
+    ): string {
+        return self::tipoVentaAnita($puntoventa, $empresaCodigo);
+    }
+
+    /**
      * Tipos a consultar en tabla venta (solo cabecera; detalle stkmov/resvta puede seguir FAC).
      *
      * @return list<string>

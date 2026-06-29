@@ -3,25 +3,16 @@
 namespace App\Support\Stock;
 
 use App\Models\Stock\Articulo;
-use App\Services\Stock\StkmaeUltimaCompraAnitaService;
 
 /**
- * Costo unitario para líneas de transferencia: última compra (stkmae) con fallback ERP.
+ * Costo unitario para líneas de transferencia: última compra (Anita → ERP COM → artículo).
  */
 final class TransferenciaMercaderiaCostoSupport
 {
-    public static function resolverCostoUltimaCompra(
-        Articulo $articulo,
-        ?StkmaeUltimaCompraAnitaService $ultimaCompraService = null,
-    ): float {
-        $sku = trim((string) ($articulo->sku ?? ''));
-        if ($sku === '') {
-            return self::fallbackCostoArticulo($articulo);
-        }
-
-        $ultimaCompraService ??= app(StkmaeUltimaCompraAnitaService::class);
-        $precios = $ultimaCompraService->obtenerPreciosUltimaCompraPorSkus([$sku]);
-        $precio = $precios[$sku] ?? null;
+    public static function resolverCostoUltimaCompra(Articulo $articulo): float
+    {
+        $dato = ArticuloPrecioUltimaCompraSupport::resolverPorArticulo($articulo);
+        $precio = $dato['precio'] ?? null;
 
         if ($precio !== null && (float) $precio > 0) {
             return round((float) $precio, 6);
@@ -51,6 +42,6 @@ final class TransferenciaMercaderiaCostoSupport
 
     public static function fallbackCostoArticulo(Articulo $articulo): float
     {
-        return round((float) ($articulo->costo ?? $articulo->precio ?? 0), 6);
+        return round((float) (ArticuloPrecioUltimaCompraSupport::fallbackPrecioDesdeArticulo($articulo) ?? 0), 6);
     }
 }

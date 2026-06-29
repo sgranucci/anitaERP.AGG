@@ -1,5 +1,6 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Models\Stock\Depmae;
 
     $totalFilas = is_countable($datas) ? count($datas) : 0;
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
@@ -10,7 +11,8 @@
         $subtituloFiltros[] = 'Empresa ID '.$filtros['empresa_id'];
     }
     if (($filtros['deposito_id'] ?? 0) > 0) {
-        $subtituloFiltros[] = 'Depósito ID '.$filtros['deposito_id'];
+        $depFiltro = Depmae::query()->find((int) $filtros['deposito_id']);
+        $subtituloFiltros[] = 'Depósito: '.($depFiltro?->etiqueta() ?? 'ID '.$filtros['deposito_id']);
     }
     if (trim((string) ($filtros['valor'] ?? '')) !== '') {
         $subtituloFiltros[] = 'Búsqueda: '.$filtros['valor'];
@@ -93,9 +95,7 @@
         <tbody>
             @foreach ($datas as $fila)
                 @php
-                    $estadoLabel = $fila->esTransferencia()
-                        ? ($fila->etiquetaEstadoTransferencia() ?? '')
-                        : ($estado_enum[$fila->estadoMovimiento ?? ''] ?? ($fila->estadoMovimiento ?? ''));
+                    $estadoLabel = $fila->etiquetaEstadoListado();
                 @endphp
                 <tr>
                     <td>{{ $fila->pkId }}</td>
@@ -103,8 +103,8 @@
                     <td>{{ $fila->esTransferencia() ? 'TRF' : 'MOV' }}</td>
                     <td>{{ $fila->tipoNombre }}</td>
                     <td>{{ $fila->codigoListado }}</td>
-                    <td>{{ $fila->esTransferencia() ? $fila->etiquetaOrigen() : '—' }}</td>
-                    <td>{{ $fila->esTransferencia() ? $fila->etiquetaDestino() : ($fila->depositoNombre ?? '—') }}</td>
+                    <td>{{ $fila->etiquetaOrigen() }}</td>
+                    <td>{{ $fila->etiquetaDestino() }}</td>
                     <td>{{ $fila->loteListado }}</td>
                     <td>{{ $fila->nombreEmpresa }}</td>
                     <td class="num">{{ number_format($fila->totalCantidad, 2, ',', '.') }}</td>

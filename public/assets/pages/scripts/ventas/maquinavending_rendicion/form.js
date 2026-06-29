@@ -333,6 +333,45 @@
         }
     }
 
+    function htmlFilaArticulo(art, idx) {
+        const precio = art.precio_lista || 0;
+        return '<td class="text-center">' + art.numero_rulo + '</td>' +
+            '<td>' + (art.sku || '') + '</td>' +
+            '<td>' + (art.descripcion || '') + '</td>' +
+            '<td class="text-right precio-lista-txt">' + fmtMoney(precio) + '</td>' +
+            '<td><input type="number" min="0" step="0.001" class="form-control form-control-sm cantidad-vendida" ' +
+            'name="articulos[' + idx + '][cantidad]" value="0"></td>' +
+            '<td class="text-right">' +
+            '<span class="importe-linea-txt">$0,00</span>' +
+            '<input type="hidden" class="importe-linea" value="0">' +
+            '<input type="hidden" name="articulos[' + idx + '][numero_rulo]" value="' + art.numero_rulo + '">' +
+            '<input type="hidden" name="articulos[' + idx + '][articulo_id]" value="' + art.articulo_id + '">' +
+            '<input type="hidden" name="articulos[' + idx + '][precio_lista]" class="precio-lista-hidden" value="' + precio + '">' +
+            '</td>';
+    }
+
+    function crearFilaArticulo(art) {
+        const tr = document.createElement('tr');
+        tr.dataset.articuloId = String(art.articulo_id);
+        tr.dataset.numeroRulo = String(art.numero_rulo);
+        const idx = indiceArticulo++;
+        tr.innerHTML = htmlFilaArticulo(art, idx);
+        tr.querySelector('.cantidad-vendida')?.addEventListener('input', recalcularTotales);
+        return tr;
+    }
+
+    function actualizarPrecioListaFila(tr, precio) {
+        const val = Number(precio) || 0;
+        const precioTxt = tr.querySelector('.precio-lista-txt');
+        const precioHidden = tr.querySelector('.precio-lista-hidden');
+        if (precioTxt) {
+            precioTxt.textContent = fmtMoney(val);
+        }
+        if (precioHidden) {
+            precioHidden.value = String(val);
+        }
+    }
+
     function renderArticulos(articulos) {
         const tbody = document.getElementById('tbody-articulos-rendicion');
         tbody.innerHTML = '';
@@ -345,31 +384,44 @@
         }
 
         articulos.forEach((art) => {
-            const tr = document.createElement('tr');
-            tr.dataset.articuloId = String(art.articulo_id);
-            tr.dataset.numeroRulo = String(art.numero_rulo);
-            const idx = indiceArticulo++;
-            tr.innerHTML =
-                '<td class="text-center">' + art.numero_rulo + '</td>' +
-                '<td>' + (art.sku || '') + '</td>' +
-                '<td>' + (art.descripcion || '') + '</td>' +
-                '<td class="text-right">' + fmtMoney(art.precio_lista || 0) + '</td>' +
-                '<td><input type="number" min="0" step="0.001" class="form-control form-control-sm cantidad-vendida" ' +
-                'name="articulos[' + idx + '][cantidad]" value="0"></td>' +
-                '<td class="text-right">' +
-                '<span class="importe-linea-txt">$0,00</span>' +
-                '<input type="hidden" class="importe-linea" value="0">' +
-                '<input type="hidden" name="articulos[' + idx + '][numero_rulo]" value="' + art.numero_rulo + '">' +
-                '<input type="hidden" name="articulos[' + idx + '][articulo_id]" value="' + art.articulo_id + '">' +
-                '<input type="hidden" name="articulos[' + idx + '][precio_lista]" class="precio-lista-hidden" value="' + (art.precio_lista || 0) + '">' +
-                '</td>';
-            tbody.appendChild(tr);
-            tr.querySelector('.cantidad-vendida')?.addEventListener('input', recalcularTotales);
+            tbody.appendChild(crearFilaArticulo(art));
         });
         recalcularTotales();
         if (CFG.modo !== 'edit') {
             enfocarPrimerRulo();
         }
+    }
+
+    function agregarRulosGuardadosFaltantes(guardadas) {
+        if (!guardadas || !guardadas.length) {
+            return;
+        }
+        const tbody = document.getElementById('tbody-articulos-rendicion');
+        if (!tbody) {
+            return;
+        }
+        const presentes = new Set(
+            $$('#tbody-articulos-rendicion tr[data-numero-rulo]').map((tr) => tr.dataset.numeroRulo),
+        );
+        guardadas.forEach((saved) => {
+            const key = String(saved.numero_rulo);
+            if (presentes.has(key)) {
+                return;
+            }
+            const tr = crearFilaArticulo({
+                numero_rulo: saved.numero_rulo,
+                articulo_id: saved.articulo_id,
+                sku: saved.sku || '—',
+                descripcion: saved.descripcion || '—',
+                precio_lista: saved.precio_lista || 0,
+            });
+            tbody.appendChild(tr);
+            presentes.add(key);
+            const inp = tr.querySelector('.cantidad-vendida');
+            if (inp) {
+                inp.value = saved.cantidad;
+            }
+        });
     }
 
     function aplicarCantidadesGuardadas(guardadas) {
@@ -379,10 +431,9 @@
         const map = {};
         guardadas.forEach((a) => {
             map[String(a.numero_rulo)] = a;
-            map['id_' + a.articulo_id] = a;
         });
-        $$('#tbody-articulos-rendicion tr[data-articulo-id]').forEach((tr) => {
-            const saved = map[tr.dataset.numeroRulo] || map['id_' + tr.dataset.articuloId];
+        $$('#tbody-articulos-rendicion tr[data-numero-rulo]').forEach((tr) => {
+            const saved = map[tr.dataset.numeroRulo];
             if (!saved) {
                 return;
             }
@@ -390,11 +441,11 @@
             if (inp) {
                 inp.value = saved.cantidad;
             }
-            const precioHidden = tr.querySelector('.precio-lista-hidden');
-            if (precioHidden && saved.precio_lista !== undefined && saved.precio_lista !== null) {
-                precioHidden.value = saved.precio_lista;
+            if (saved.precio_lista !== undefined && saved.precio_lista !== null) {
+                actualizarPrecioListaFila(tr, saved.precio_lista);
             }
         });
+        agregarRulosGuardadosFaltantes(guardadas);
         recalcularTotales();
     }
 
@@ -436,8 +487,7 @@
         recalcularTotales();
     }
 
-    function enfocarPrimerRulo() {
-        const inp = document.querySelector('#tbody-articulos-rendicion tr[data-articulo-id] .cantidad-vendida');
+    function enfocarCantidadRulo(inp) {
         if (!inp) return;
         requestAnimationFrame(() => {
             inp.focus();
@@ -445,6 +495,39 @@
                 inp.select();
             }
         });
+    }
+
+    function enfocarPrimerRulo() {
+        const inp = document.querySelector('#tbody-articulos-rendicion tr[data-articulo-id] .cantidad-vendida');
+        enfocarCantidadRulo(inp);
+    }
+
+    function validarCantidadRulo(inp) {
+        if (!inp) return;
+        const val = Math.max(0, parseNum(inp.value));
+        inp.value = val === 0 ? '0' : String(val);
+        recalcularTotales();
+    }
+
+    function cantidadRuloSiguiente(tr) {
+        if (!tr) return null;
+        let next = tr.nextElementSibling;
+        while (next && !next.dataset.articuloId) {
+            next = next.nextElementSibling;
+        }
+        return next ? next.querySelector('.cantidad-vendida') : null;
+    }
+
+    function manejarEnterCantidadRulo(ev) {
+        if (ev.key !== 'Enter') return;
+        const inp = ev.target;
+        if (!inp.classList.contains('cantidad-vendida')) return;
+        ev.preventDefault();
+        validarCantidadRulo(inp);
+        const siguiente = cantidadRuloSiguiente(inp.closest('tr[data-articulo-id]'));
+        if (siguiente) {
+            enfocarCantidadRulo(siguiente);
+        }
     }
 
     async function cargarMaquinas(empresaId) {
@@ -562,6 +645,8 @@
         document.getElementById('mv-agrega-renglon-cuenta')?.addEventListener('click', () => {
             agregarRenglonCobranza(true);
         });
+
+        document.getElementById('tbody-articulos-rendicion')?.addEventListener('keydown', manejarEnterCantidadRulo);
 
         document.getElementById('form-rendicion-vending')?.addEventListener('submit', (ev) => {
             sincronizarNamesMedios();

@@ -26,7 +26,9 @@ use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Services\Compras\RequisicionService;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Services\Stock\StkmaeUltimaCompraAnitaService;
 use App\Support\Compras\RequisicionListadoFiltros;
+use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,6 +55,8 @@ class RequisicionController extends Controller
 
     private $partidagastoRepository;
 
+    private $stkmaeUltimaCompraAnitaService;
+
     public function __construct(
         RequisicionRepositoryInterface $requisicionrepository,
         EmpresaRepositoryInterface $empresarepository,
@@ -64,6 +68,7 @@ class RequisicionController extends Controller
         Arbolaprobacion_MovimientoRepositoryInterface $arbolaprobacion_movimientorepository,
         ArbolaprobacionService $arbolaprobacionservice,
         PartidagastoRepositoryInterface $partidagastorepository,
+        StkmaeUltimaCompraAnitaService $stkmaeUltimaCompraAnitaService,
     ) {
         $this->requisicionRepository = $requisicionrepository;
         $this->empresaRepository = $empresarepository;
@@ -75,6 +80,7 @@ class RequisicionController extends Controller
         $this->arbolaprobacion_movimientoRepository = $arbolaprobacion_movimientorepository;
         $this->arbolaprobacionService = $arbolaprobacionservice;
         $this->partidagastoRepository = $partidagastorepository;
+        $this->stkmaeUltimaCompraAnitaService = $stkmaeUltimaCompraAnitaService;
     }
 
     public function index(Request $request)
@@ -101,6 +107,7 @@ class RequisicionController extends Controller
             'estado_enum' => Requisicion_Estado::$enumEstado,
             'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
             'estado_aprobada_requisicion' => $estadoAprobada,
+            'estado_provisorio' => RequisicionProvisorioSupport::nombreEstadoProvisorio(),
             'tratamiento_enum' => Requisicion::$enumTratamiento,
             'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta,
         ];
@@ -160,6 +167,8 @@ class RequisicionController extends Controller
         $tratamiento_enum = Requisicion::$enumTratamiento;
         $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
         $data = null;
+        $modo_provisorio = RequisicionProvisorioSupport::usuarioUsaModoProvisorio();
+        $estado_provisorio = RequisicionProvisorioSupport::nombreEstadoProvisorio();
 
         return view('compras.requisicion.crear', compact(
             'data',
@@ -171,7 +180,9 @@ class RequisicionController extends Controller
             'proveedor_query',
             'estado_enum',
             'tratamiento_enum',
-            'contratacionDirecta_enum'
+            'contratacionDirecta_enum',
+            'modo_provisorio',
+            'estado_provisorio'
         ));
     }
 
@@ -180,12 +191,15 @@ class RequisicionController extends Controller
         $ret = $this->requisicionService->guardaRequisicion($request);
 
         if ($ret['mensaje'] == 'ok') {
-            $mensaje = 'Requisición creada con éxito';
-        } else {
-            $mensaje = $ret['errores'];
+            if (! empty($ret['modo_provisorio']) && ! empty($ret['requisicion_id'])) {
+                return redirect('compras/requisicion/'.$ret['requisicion_id'].'/editar')
+                    ->with('mensaje', 'Requisición guardada en PROVISORIO. Revise los datos y confirme.');
+            }
+
+            return redirect('compras/requisicion')->with('mensaje', 'Requisición creada con éxito');
         }
 
-        return redirect('compras/requisicion')->with('mensaje', $mensaje);
+        return redirect()->back()->withInput()->with('mensaje', $ret['errores']);
     }
 
     /**
@@ -252,6 +266,10 @@ class RequisicionController extends Controller
             return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para imprimir la requisición');
         }
 
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
+            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+        }
+
         $data = $this->requisicionRepository->find($id);
         $data->loadMissing([
             'requisicion_estados.usuarios',
@@ -288,16 +306,25 @@ class RequisicionController extends Controller
     {
         can('editar-requisicion');
 
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
+            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+        }
+
         $data = $this->requisicionRepository->find($id);
         if (! $this->requisicionService->usuarioPuedeEditarRequisicionEnCompras($data)) {
             return redirect()->route('solo_consulta_requisicion', $id)
                 ->with('mensaje', 'No puede modificar esta requisición en compras: su oficina de compra no coincide con la de la requisición.');
         }
 
-        // Solo editable en PENDIENTE o EN COMPRAS (nombre exacto según enum, p. ej. "EN COMPRAS" con espacio)
+        // Solo editable en PROVISORIO, PENDIENTE o EN COMPRAS (nombre exacto según enum, p. ej. "EN COMPRAS" con espacio)
         $nombrePendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
         $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
-        $estadoPermitido = ($data->estado === $nombrePendiente || $data->estado === $nombreEnCompras);
+        $nombreProvisorio = RequisicionProvisorioSupport::nombreEstadoProvisorio();
+        $estadoPermitido = (
+            $data->estado === $nombrePendiente
+            || $data->estado === $nombreEnCompras
+            || $data->estado === $nombreProvisorio
+        );
         // Compatibilidad registros viejos (p. ej. import) con guión bajo
         if (! $estadoPermitido && $data->estado === 'EN_COMPRAS') {
             $estadoPermitido = true;
@@ -328,6 +355,9 @@ class RequisicionController extends Controller
         $requisicion_wizard_multiples_oc_url = $puede_wizard_generar_multiples_oc
             ? route('requisicion_wizard_multiples_oc', ['id' => $data->id])
             : null;
+        $es_provisorio = RequisicionProvisorioSupport::esEstadoProvisorio($data->estado ?? '');
+        $estado_provisorio = $nombreProvisorio;
+        $puede_confirmar_provisorio = $es_provisorio && can('confirmar-requisicion', false);
 
         return view('compras.requisicion.editar', compact(
             'data',
@@ -348,7 +378,10 @@ class RequisicionController extends Controller
             'visualizar',
             'tiene_ordencompra_asociada',
             'puede_wizard_generar_multiples_oc',
-            'requisicion_wizard_multiples_oc_url'
+            'requisicion_wizard_multiples_oc_url',
+            'es_provisorio',
+            'estado_provisorio',
+            'puede_confirmar_provisorio'
         ));
     }
 
@@ -356,15 +389,70 @@ class RequisicionController extends Controller
     {
         can('actualizar-requisicion');
 
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
+            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+        }
+
         $ret = $this->requisicionService->actualizaRequisicion($request, $id);
 
         if ($ret['mensaje'] == 'ok') {
             $mensaje = 'Requisición actualizada con éxito';
+            if (! empty($ret['modo_provisorio'])) {
+                return redirect('compras/requisicion/'.$id.'/editar')->with('mensaje', $mensaje);
+            }
+
+            return redirect('compras/requisicion')->with('mensaje', $mensaje);
         } else {
-            $mensaje = $ret['errores'];
+            return redirect()->back()->withInput()->with('mensaje', $ret['errores'] ?? 'No se pudo actualizar la requisición.');
+        }
+    }
+
+    public function confirmar(int $id)
+    {
+        can('confirmar-requisicion');
+
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
+            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
         }
 
-        return redirect('compras/requisicion')->with('mensaje', $mensaje);
+        $ret = $this->requisicionService->confirmarRequisicion((int) $id);
+
+        if ($ret['mensaje'] === 'ok') {
+            return redirect('compras/requisicion/'.$id.'/editar')
+                ->with('mensaje', 'Requisición confirmada. Árbol de aprobación y Anita actualizados.');
+        }
+
+        return redirect('compras/requisicion/'.$id.'/editar')
+            ->with('mensaje', $ret['errores'] ?? 'Error al confirmar la requisición.');
+    }
+
+    public function eliminarProvisorio(Request $request, int $id)
+    {
+        can('actualizar-requisicion');
+
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'ng', 'errores' => 'Requisición no encontrada o sin acceso.'], 403);
+            }
+
+            abort(403);
+        }
+
+        $ret = $this->requisicionService->eliminarProvisorio((int) $id);
+
+        if ($ret['mensaje'] === 'ok') {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'ok']);
+            }
+
+            return redirect()->route('consultar_requisicion')->with('mensaje', 'Provisorio eliminado.');
+        }
+
+        if ($request->ajax()) {
+            return response()->json(['mensaje' => 'ng', 'errores' => $ret['errores'] ?? 'No se pudo eliminar.'], 422);
+        }
+
+        return redirect()->back()->with('mensaje', $ret['errores'] ?? 'No se pudo eliminar el provisorio.');
     }
 
     public function firmantesRetomeArbol($id)
@@ -425,19 +513,40 @@ class RequisicionController extends Controller
     {
         can('borrar-requisicion');
 
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'ng', 'errores' => 'Requisición no encontrada o sin acceso.'], 403);
+            }
+
+            abort(403);
+        }
+
+        $ret = $this->requisicionService->eliminarRequisicion((int) $id);
+
         if ($request->ajax()) {
-            if ($this->requisicionRepository->delete($id)) {
+            if ($ret['mensaje'] === 'ok') {
                 return response()->json(['mensaje' => 'ok']);
             }
 
-            return response()->json(['mensaje' => 'ng']);
+            return response()->json([
+                'mensaje' => 'ng',
+                'errores' => $ret['errores'] ?? 'No se pudo eliminar la requisición.',
+            ], 422);
         }
 
-        abort(404);
+        if ($ret['mensaje'] === 'ok') {
+            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición eliminada.');
+        }
+
+        return redirect()->back()->with('mensaje', $ret['errores'] ?? 'No se pudo eliminar la requisición.');
     }
 
     public function leerHistoriaRequisicion($requisicion_id)
     {
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $requisicion_id)) {
+            return response()->json(['message' => 'Requisición no encontrada o sin acceso.'], 404);
+        }
+
         return $this->requisicionService->leeHistoriaRequisicion($requisicion_id);
     }
 
@@ -455,6 +564,27 @@ class RequisicionController extends Controller
     }
 
     /**
+     * Precio y moneda de última compra (Anita stkmae.stkm_pre_compra3 / stkm_cod_mon_co3) para líneas de requisición.
+     */
+    public function precioUltimaCompraArticulo(Request $request)
+    {
+        if (! can('crear-requisicion', false)
+            && ! can('editar-requisicion', false)
+            && ! can('actualizar-requisicion', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        $skus = $request->input('skus', []);
+        if (! is_array($skus)) {
+            $skus = [$skus];
+        }
+
+        $datos = $this->stkmaeUltimaCompraAnitaService->obtenerDatosUltimaCompraPorSkus($skus);
+
+        return response()->json(['datos' => $datos]);
+    }
+
+    /**
      * Comprueba árbol de aprobación para alta (empresa) o edición en pendiente (requisición completa).
      */
     public function avisoArbolGrabacion(Request $request)
@@ -466,6 +596,10 @@ class RequisicionController extends Controller
             can('editar-requisicion');
         } else {
             can('crear-requisicion');
+        }
+
+        if (RequisicionProvisorioSupport::usuarioUsaModoProvisorio() && $requisicionId <= 0) {
+            return response()->json(['aviso' => null]);
         }
 
         $aviso = $this->arbolaprobacionService->avisoGrabacionRequisicionAjax($empresaId, $requisicionId);
@@ -760,6 +894,10 @@ class RequisicionController extends Controller
         }
 
         if ($flEncontro) {
+            if (! $hash && ! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
+                return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+            }
+
             $data = $this->requisicionRepository->find($id);
             $empresa_query = $this->empresaRepository->allFiltrado();
             $centrocosto_query = $this->centrocostoRepository->all();
@@ -804,6 +942,6 @@ class RequisicionController extends Controller
 
     private function tieneOrdencompraAsociadaRequisicion(int $requisicionId): bool
     {
-        return Ordencompra::query()->where('requisicion_id', $requisicionId)->exists();
+        return $this->requisicionService->tieneOrdencompraAsociada($requisicionId);
     }
 }

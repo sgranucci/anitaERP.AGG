@@ -34,7 +34,9 @@ class ModuloAvisoMail extends Mailable
 
     public function build(): self
     {
-        $mail = $this->view('mails.configuracion.modulo_aviso');
+        $mail = $this
+            ->from(config('mail.from.address'), config('mail.from.name'))
+            ->view('mails.configuracion.modulo_aviso');
 
         if ($this->pdfAdjunto && ! empty($this->pdfAdjunto['contenido']) && ! empty($this->pdfAdjunto['nombre'])) {
             $mail->attachData(

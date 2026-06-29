@@ -108,15 +108,18 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="alert alert-info py-2 mb-2">
-            @if ($tiene_cfg_pv ?? false)
-                Terminal: <strong>{{ $identificador_pc }}</strong>
+            Terminal: <strong>{{ $identificador_pc }}</strong>
+            @if ($empresa_nombre ?? null)
                 · Empresa: <strong>{{ $empresa_nombre }}</strong>
-                ·
-            @else
-                Terminal: <strong>{{ $identificador_pc }}</strong>
-                · <span class="text-warning">Sin configuración PV estacionamiento para esta terminal</span>
-                ·
+            @elseif (($empresa_id ?? null))
+                · Empresa: <strong>#{{ $empresa_id }}</strong>
             @endif
+            @if (! ($tiene_cfg_pv ?? false))
+                · <span class="text-warning">Sin configuración PV estacionamiento para esta terminal</span>
+            @elseif ($empresa_sin_pv_en_terminal ?? false)
+                · <span class="text-warning">La empresa seleccionada no tiene PV configurado en esta terminal</span>
+            @endif
+            ·
             Fecha jornada <strong>{{ $fecha }}</strong>
             · Fecha calendario <strong>{{ $fecha_calendario ?? \Illuminate\Support\Carbon::today()->format('Y-m-d') }}</strong>
             @if (! empty($jornada['jornada_abierta']))
@@ -158,91 +161,122 @@
             </div>
         @endif
         <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Facturas estacionamiento del día</h3>
-                <div class="card-tools">
-                    @if ($tiene_cfg_pv ?? false)
-                        <small class="text-muted">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
+                <h3 class="card-title mb-0">Facturas estacionamiento del día</h3>
+                <div class="card-tools text-right mb-0">
+                    <small class="text-muted">
+                        @if ($empresa_nombre ?? null)
                             Empresa: <strong>{{ $empresa_nombre }}</strong>
-                            · Terminal: <strong>{{ $identificador_pc }}</strong>
-                        </small>
-                    @else
-                        <small class="text-muted">Terminal: <strong>{{ $identificador_pc }}</strong></small>
-                    @endif
+                            ·
+                        @endif
+                        Terminal: <strong>{{ $identificador_pc }}</strong>
+                    </small>
                 </div>
-                <div class="d-md-flex justify-content-md-end align-items-md-end flex-wrap">
-                    <form action="{{ route('estacionamiento_facturas_dia') }}" method="GET" class="d-flex flex-wrap align-items-end mb-2 mb-md-0">
-                        <div class="form-group mb-0 mr-2">
-                            <label for="fecha_fd" class="small text-muted mb-0 d-block">Fecha jornada</label>
-                            <input type="date" id="fecha_fd" name="fecha" value="{{ $fecha }}" class="form-control form-control-sm">
+            </div>
+            <div class="card-body py-2 border-bottom bg-light">
+                <form action="{{ route('estacionamiento_facturas_dia') }}" method="GET" class="d-flex flex-wrap align-items-end est-fd-filtros-form">
+                    @if (($empresa_query ?? collect())->count() > 1)
+                        <div class="form-group mb-2 mb-md-0 mr-2">
+                            @include('includes.listado.filtro_empresa_asignada_inline', [
+                                'empresa_query' => $empresa_query,
+                                'empresa_id' => $empresa_id ?? 0,
+                                'id' => 'empresa_id_fd',
+                                'required' => true,
+                                'permite_todas' => false,
+                                'mostrar_opcion_vacia' => false,
+                                'select_class' => 'form-control form-control-sm',
+                                'label_class' => 'small text-muted mb-0 d-block',
+                                'label' => 'Empresa',
+                            ])
                         </div>
-                        <div class="form-group mb-0 mr-2">
+                    @elseif (($empresa_query ?? collect())->count() === 1)
+                        <input type="hidden" name="empresa_id" value="{{ $empresa_query->first()->id }}">
+                    @elseif (($empresa_id ?? null))
+                        <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                    @endif
+                    <div class="form-group mb-2 mb-md-0 mr-2">
+                        <label for="fecha_fd" class="small text-muted mb-0 d-block">Fecha jornada</label>
+                        <input type="date" id="fecha_fd" name="fecha" value="{{ $fecha }}" class="form-control form-control-sm">
+                    </div>
+                    @if (count($items_selector ?? []) > 0)
+                        <div class="form-group mb-2 mb-md-0 mr-2">
+                            <label for="item_estacionamiento_id" class="small text-muted mb-0 d-block">Ítem estacionamiento</label>
+                            <select name="item_estacionamiento_id" id="item_estacionamiento_id" class="form-control form-control-sm est-fd-campo-item">
+                                <option value="">Todos</option>
+                                @foreach ($items_selector as $itemOp)
+                                    <option value="{{ $itemOp['id'] }}" @selected((int) ($item_estacionamiento_id ?? 0) === (int) $itemOp['id'])>
+                                        {{ $itemOp['nombre'] }}@if (! empty($itemOp['codigo'])) ({{ $itemOp['codigo'] }})@endif
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @else
+                        <div class="form-group mb-2 mb-md-0 mr-2">
                             <label for="item_nombre_fd" class="small text-muted mb-0 d-block">Ítem estacionamiento</label>
-                            <input type="text" id="item_nombre_fd" name="item_nombre" class="form-control form-control-sm" style="min-width:140px;"
-                                   placeholder="Nombre o ID de ítem" value="{{ $item_nombre ?? '' }}"
+                            <input type="text" id="item_nombre_fd" name="item_nombre" class="form-control form-control-sm est-fd-campo-item"
+                                   placeholder="Nombre o ID" value="{{ $item_nombre ?? '' }}"
                                    title="Filtra facturas que incluyan este ítem de estacionamiento">
                             @if ($item_filtro ?? null)
                                 <input type="hidden" name="item_id" value="{{ $item_filtro->id }}">
                             @endif
                         </div>
-                        <div class="form-group mb-0 mr-2">
-                            <label class="small text-muted mb-0 d-block">&nbsp;</label>
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="todas_pc" name="todas_pc" value="1" @checked($todas_pc ?? false)>
-                                <label class="custom-control-label small" for="todas_pc" title="Incluye facturas emitidas desde otras PCs de la misma empresa en el día">Todas las terminales</label>
-                            </div>
+                    @endif
+                    <div class="form-group mb-2 mb-md-0 mr-2">
+                        <label class="small text-muted mb-0 d-block">&nbsp;</label>
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="todas_pc" name="todas_pc" value="1" @checked($todas_pc ?? false)>
+                            <label class="custom-control-label small" for="todas_pc" title="Incluye facturas emitidas desde otras PCs de la misma empresa en el día">Todas las terminales</label>
                         </div>
-                        @if (count($items_selector ?? []) > 0)
-                            <div class="form-group mb-0 mr-2">
-                                <label for="item_estacionamiento_id" class="small text-muted mb-0 d-block">Ítem</label>
-                                <select name="item_estacionamiento_id" id="item_estacionamiento_id" class="form-control form-control-sm" style="min-width:160px;">
-                                    <option value="">Todos</option>
-                                    @foreach ($items_selector as $itemOp)
-                                        <option value="{{ $itemOp['id'] }}" @selected((int) ($item_estacionamiento_id ?? 0) === (int) $itemOp['id'])>
-                                            {{ $itemOp['nombre'] }}@if (! empty($itemOp['codigo'])) ({{ $itemOp['codigo'] }})@endif
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        @endif
-                        @if ($requiere_habilitacion_turno ?? false)
-                            <div class="form-group mb-0 mr-2">
-                                <label for="turno_filtro" class="small text-muted mb-0 d-block">Turno</label>
-                                <select name="turno_filtro" id="turno_filtro" class="form-control form-control-sm" style="min-width:220px;"
-                                        title="Todo el día, turno activo o un turno cerrado de esta terminal">
-                                    <option value="0" @selected(($turno_filtro_val ?? '0') === '0')>Todo el día</option>
-                                    @if ($turno_activo ?? null)
-                                        <option value="activo" @selected(($turno_filtro_val ?? '') === 'activo')>
-                                            Turno activo — {{ $turno_activo->turno?->nombre ?? 'Turno' }}
-                                            ({{ $turno_activo->habilitacion_en?->format('Y-m-d H:i') ?? '—' }})
+                    </div>
+                    @if ($requiere_habilitacion_turno ?? false)
+                        <div class="form-group mb-2 mb-md-0 mr-2">
+                            <label for="turno_filtro" class="small text-muted mb-0 d-block">
+                                Turno
+                                <i class="fa fa-info-circle text-muted ml-1" title="Acota por ventana horaria del turno habilitado en esta terminal. «Todo el día» muestra todas las facturas de la fecha jornada."></i>
+                            </label>
+                            <select name="turno_filtro" id="turno_filtro" class="form-control form-control-sm est-fd-campo-turno"
+                                    title="Todo el día = jornada completa; Turno activo = desde la habilitación actual; otros = turnos cerrados de esta PC">
+                                <option value="0" @selected(($turno_filtro_val ?? '0') === '0')>Todo el día (jornada)</option>
+                                @if ($turno_activo ?? null)
+                                    <option value="activo" @selected(($turno_filtro_val ?? '') === 'activo')>
+                                        Turno activo — {{ $turno_activo->turno?->nombre ?? 'Turno' }}
+                                        ({{ $turno_activo->habilitacion_en?->format('Y-m-d H:i') ?? '—' }})
+                                    </option>
+                                @endif
+                                @foreach ($turnos_selector ?? [] as $op)
+                                    @if (! ($op['es_activo'] ?? false))
+                                        <option value="{{ $op['id'] }}" @selected((string) ($turno_filtro_val ?? '') === (string) $op['id'])>
+                                            {{ $op['label'] }}
                                         </option>
                                     @endif
-                                    @foreach ($turnos_selector ?? [] as $op)
-                                        @if (! ($op['es_activo'] ?? false))
-                                            <option value="{{ $op['id'] }}" @selected((string) ($turno_filtro_val ?? '') === (string) $op['id'])>
-                                                {{ $op['label'] }}
-                                            </option>
-                                        @endif
-                                    @endforeach
-                                </select>
-                            </div>
-                        @endif
-                        <div class="btn-group mr-2">
-                            <input type="text" name="busqueda" class="form-control form-control-sm" placeholder="Nº venta, cliente…" value="{{ $busqueda ?? '' }}">
-                            <button type="submit" class="btn btn-default btn-sm" title="Buscar">
-                                <span class="fa fa-search"></span>
-                            </button>
+                                @endforeach
+                            </select>
                         </div>
-                        @if (($item_filtro ?? null) || ($busqueda ?? '') !== '' || ($item_estacionamiento_id ?? null))
+                    @endif
+                    <div class="form-group mb-2 mb-md-0 mr-2">
+                        <label for="busqueda_fd" class="small text-muted mb-0 d-block">Buscar</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="busqueda_fd" name="busqueda" class="form-control form-control-sm" placeholder="Nº venta, cliente…" value="{{ $busqueda ?? '' }}">
+                            <div class="input-group-append">
+                                <button type="submit" class="btn btn-default btn-sm" title="Consultar">
+                                    <span class="fa fa-search"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    @if (($item_filtro ?? null) || ($busqueda ?? '') !== '' || ($item_estacionamiento_id ?? null) || ($item_nombre ?? '') !== '')
+                        <div class="form-group mb-2 mb-md-0">
+                            <label class="small text-muted mb-0 d-block">&nbsp;</label>
                             <a href="{{ route('estacionamiento_facturas_dia', array_filter([
                                 'fecha' => $fecha,
+                                'empresa_id' => ($empresa_id ?? null) ?: null,
                                 'todas_pc' => ($todas_pc ?? false) ? '1' : null,
                                 'turno_filtro' => ($turno_filtro_val ?? '0') !== '0' ? ($turno_filtro_val ?? '0') : null,
                             ])) }}"
-                               class="btn btn-outline-secondary btn-sm ml-1 mb-0" title="Quitar filtros de texto">Limpiar</a>
-                        @endif
-                    </form>
-                </div>
+                               class="btn btn-outline-secondary btn-sm" title="Quitar filtros de texto e ítem">Limpiar</a>
+                        </div>
+                    @endif
+                </form>
             </div>
             @if ($item_filtro ?? null)
                 <div class="card-body py-2 border-bottom bg-light">
@@ -270,6 +304,7 @@
                             'ruta' => 'listar_estacionamiento_facturas_dia',
                             'queryparams' => array_filter([
                                 'fecha' => $fecha,
+                                'empresa_id' => ($empresa_id ?? null) ?: null,
                                 'busqueda' => $busqueda ?? '',
                                 'todas_pc' => ($todas_pc ?? false) ? '1' : null,
                                 'turno_filtro' => ($requiere_habilitacion_turno ?? false) && ($turno_filtro_val ?? '0') !== '0'

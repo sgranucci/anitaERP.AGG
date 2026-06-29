@@ -107,18 +107,31 @@ $(function () {
 		var $table = $('#tabla-articulos-requisicion');
 		var $first = $tbody.find('tr.item-requisicion-articulo').first();
 		var $clone = $first.clone();
+		$clone.removeClass('req-requisicion-linea-cerrada').removeAttr('title');
 		$clone.find('input,select').val('');
+		$clone.removeAttr('data-req-cc-manual data-req-moneda-manual');
 		$clone.find('select').each(function () {
 			$(this).prop('selectedIndex', 0);
 		});
-		var defCc = $table.attr('data-requisicion-cc-destino-default');
-		if (defCc !== undefined && defCc !== null && defCc !== '') {
-			var $ccDest = $clone.find('select[name="centrocostodestino_ids[]"]');
-			if ($ccDest.find('option[value="' + defCc + '"]').length) {
-				$ccDest.val(defCc);
+		$tbody.append($clone);
+		if (typeof window.reqLineasAplicarPatronFila === 'function') {
+			window.reqLineasAplicarPatronFila($clone);
+		} else {
+			var defCc = $table.attr('data-requisicion-cc-destino-default');
+			if (defCc !== undefined && defCc !== null && defCc !== '') {
+				var $ccDest = $clone.find('select[name="centrocostodestino_ids[]"]');
+				if ($ccDest.find('option[value="' + defCc + '"]').length) {
+					$ccDest.val(defCc);
+				}
+			}
+			var defMon = $table.attr('data-requisicion-moneda-default');
+			if (defMon !== undefined && defMon !== null && defMon !== '') {
+				var $mon = $clone.find('select[name="moneda_linea_ids[]"]');
+				if ($mon.find('option[value="' + defMon + '"]').length) {
+					$mon.val(defMon);
+				}
 			}
 		}
-		$tbody.append($clone);
 		setTimeout(function () {
 			$tbody.find('tr.item-requisicion-articulo').last().find('.codigoarticulo').trigger('focus');
 		}, 0);
@@ -350,9 +363,70 @@ $(function () {
 	$(".form1").show();
 	requisicionToggleFooterPresupuesto(false);
 
+	function claveUltimaEmpresaRequisicion() {
+		var usuarioId = parseInt((window.requisicionEmpresaRecordar || {}).usuarioId, 10) || 0;
+		if (usuarioId <= 0) {
+			return '';
+		}
+		return 'anitaERP_requisicion_ultima_empresa_u' + usuarioId;
+	}
+
+	function leerUltimaEmpresaRequisicion() {
+		var key = claveUltimaEmpresaRequisicion();
+		if (!key) {
+			return '';
+		}
+		try {
+			return String(localStorage.getItem(key) || '').trim();
+		} catch (eIgn) {
+			return '';
+		}
+	}
+
+	function guardarUltimaEmpresaRequisicion(empresaId) {
+		var key = claveUltimaEmpresaRequisicion();
+		var id = String(empresaId || '').trim();
+		if (!key || !id) {
+			return;
+		}
+		try {
+			localStorage.setItem(key, id);
+		} catch (eIgn) {}
+	}
+
+	function aplicarUltimaEmpresaRequisicionSiCorresponde() {
+		if (($('#requisicion_id').val() || '').trim() !== '') {
+			return false;
+		}
+		var $emp = $('#empresa_id');
+		if (!$emp.length || ($emp.is(':hidden') && $emp.attr('type') === 'hidden')) {
+			return false;
+		}
+		if ($emp.is('select') === false) {
+			return false;
+		}
+		if (($emp.val() || '').trim() !== '') {
+			return false;
+		}
+		var guardada = leerUltimaEmpresaRequisicion();
+		if (!guardada || !$emp.find('option[value="' + guardada + '"]').length) {
+			return false;
+		}
+		$emp.val(guardada).trigger('change');
+		return true;
+	}
+
 	$('#empresa_id').on('change', function () {
+		var empresaId = ($(this).val() || '').trim();
+		if (empresaId) {
+			guardarUltimaEmpresaRequisicion(empresaId);
+		}
 		actualizaAvisoArbolGrabacion();
 	});
 
-	actualizaAvisoArbolGrabacion();
+	if (window.requisicionModoProvisorio) {
+		setAvisoArbolEstado('ok');
+	} else if (!aplicarUltimaEmpresaRequisicionSiCorresponde()) {
+		actualizaAvisoArbolGrabacion();
+	}
 });

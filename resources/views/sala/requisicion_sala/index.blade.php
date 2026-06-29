@@ -67,7 +67,18 @@ Requisiciones de sala
                             <td><small>{{ $data->nombredeposito }}</small></td>
                             <td><small>{{ $data->nombrezona }}</small></td>
                             <td><small>{{ $data->nombreprioridad }}</small></td>
-                            <td><small>{{ $data->estado }}</small></td>
+                            <td>
+                                @include('sala.requisicion_sala.partials.estado_badge', ['estado' => $data->estado ?? ''])
+                                @if(($data->estado ?? '') === ($estado_rechazada ?? 'RECHAZADA'))
+                                    @php $motivoRechazo = \App\Support\Sala\RequisicionSalaMotivoRechazoSupport::textoVisible($data->motivo_rechazo ?? null); @endphp
+                                    @if($motivoRechazo !== '')
+                                    <div class="small text-danger mt-1" title="{{ $motivoRechazo }}">
+                                        <i class="fa fa-comment-o" aria-hidden="true"></i>
+                                        {{ \Illuminate\Support\Str::limit($motivoRechazo, 100) }}
+                                    </div>
+                                    @endif
+                                @endif
+                            </td>
                             <td>
                                 @foreach ($data->requisicion_sala_articulos as $item)
                                     <small>{{ $item->articulos->sku ?? '' }}-{{ $item->articulos->descripcion ?? '' }}-Cant.:{{ $item->cantidad }}</small><br>

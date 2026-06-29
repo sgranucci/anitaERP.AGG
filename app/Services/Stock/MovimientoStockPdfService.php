@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\Models\Stock\MovimientoStock;
 use App\Repositories\Stock\MovimientoStockRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Stock\TransferenciaBienUsoSupport;
 
 class MovimientoStockPdfService
 {
@@ -21,6 +22,7 @@ class MovimientoStockPdfService
             'tipotransaccion_stock',
             'centrocostoDestino',
             'articulos_movimiento.articulos.unidadesdemedidas',
+            'articulos_movimiento.depositos:'.implode(',', TransferenciaBienUsoSupport::DEPOSITO_RELATION_COLUMNS).',empresa_id',
             'articulos_movimiento.depositos.empresas',
         ]);
 

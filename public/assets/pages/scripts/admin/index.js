@@ -238,10 +238,16 @@ $(document).ready(function () {
     });
 
     function mensajeErrorEliminacion(respuesta, xhr) {
+        if (respuesta && respuesta.errores) {
+            return respuesta.errores;
+        }
         if (respuesta && respuesta.error) {
             return respuesta.error;
         }
         if (xhr && xhr.responseJSON) {
+            if (xhr.responseJSON.errores) {
+                return xhr.responseJSON.errores;
+            }
             if (xhr.responseJSON.error) {
                 return xhr.responseJSON.error;
             }

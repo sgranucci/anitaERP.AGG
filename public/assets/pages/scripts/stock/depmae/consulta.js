@@ -15,6 +15,37 @@ function descripcionDepositoConEmpresa(descripcion, empresaNombre) {
     return desc;
 }
 
+/** Resuelve hidden/código/descripción según convención del partial campo_consulta_deposito ({inputId}_codigo). */
+window.depositoCampoInputs = function (hiddenInputId) {
+    hiddenInputId = (hiddenInputId || '').replace(/_codigo$|_descripcion$/, '');
+    return {
+        $id: $('#' + hiddenInputId),
+        $codigo: $('#' + hiddenInputId + '_codigo'),
+        $descripcion: $('#' + hiddenInputId + '_descripcion'),
+    };
+};
+
+function copiarDepositoCampo(origenHiddenId, destinoHiddenId) {
+    var origen = window.depositoCampoInputs(origenHiddenId);
+    var destino = window.depositoCampoInputs(destinoHiddenId);
+    destino.$id.val(origen.$id.val() || '');
+    destino.$codigo.val(origen.$codigo.val() || '');
+    destino.$descripcion.val(origen.$descripcion.val() || '');
+    return destino;
+}
+
+window.copiarDepositoCampo = copiarDepositoCampo;
+
+function limpiarDepositoCampo(hiddenInputId) {
+    var campos = window.depositoCampoInputs(hiddenInputId);
+    campos.$id.val('').trigger('change');
+    campos.$codigo.val('');
+    campos.$descripcion.val('');
+    return campos;
+}
+
+window.limpiarDepositoCampo = limpiarDepositoCampo;
+
 function empresaSelectParaConsultaDeposito() {
     if (esFormularioDepmaeAbm()) {
         return $();

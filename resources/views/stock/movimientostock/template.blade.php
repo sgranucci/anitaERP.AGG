@@ -22,8 +22,8 @@
 				<button type="button" title="Consulta artículos (F1)" class="btn-accion-tabla consultaarticulo flex-shrink-0" style="padding:1px 4px;">
 					<i class="fa fa-search text-primary"></i>
 				</button>
-				<button type="button" title="Kardex de stock" class="btn-accion-tabla btn-kardex-articulo-linea d-none flex-shrink-0" style="padding:1px 4px;" disabled>
-					<i class="fa fa-list-alt text-info"></i>
+				<button type="button" title="Saldos por dep&oacute;sito" class="btn-accion-tabla btn-saldos-articulo-linea d-none flex-shrink-0" style="padding:1px 4px;" disabled>
+					<i class="fa fa-warehouse text-secondary"></i>
 				</button>
 					<a href="#" class="btn btn-xs btn-link-articulo d-none flex-shrink-0" target="_blank" rel="noopener" title="Consultar artículo">
 						<i class="fa fa-external-link text-primary"></i>
@@ -69,8 +69,8 @@
 				<button type="button" title="Consulta artículos (F1)" class="btn-accion-tabla consultaarticulo flex-shrink-0" style="padding:1px 4px;">
 					<i class="fa fa-search text-primary"></i>
 				</button>
-				<button type="button" title="Kardex de stock" class="btn-accion-tabla btn-kardex-articulo-linea d-none flex-shrink-0" style="padding:1px 4px;" disabled>
-					<i class="fa fa-list-alt text-info"></i>
+				<button type="button" title="Saldos por dep&oacute;sito" class="btn-accion-tabla btn-saldos-articulo-linea d-none flex-shrink-0" style="padding:1px 4px;" disabled>
+					<i class="fa fa-warehouse text-secondary"></i>
 				</button>
 					<a href="#" class="btn btn-xs btn-link-articulo d-none flex-shrink-0" target="_blank" rel="noopener" title="Consultar artículo">
 						<i class="fa fa-external-link text-primary"></i>

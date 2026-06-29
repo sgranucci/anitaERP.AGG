@@ -11,6 +11,7 @@ use App\Models\Stock\Transferencia_Mercaderia_Token;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Stock\DepmaeControlStockSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
@@ -44,6 +45,7 @@ class TransferenciaMercaderiaService
         private Tipotransaccion_StockRepositoryInterface $tipotransaccionStockRepository,
         private StkdepSaldoAnitaService $stkdepSaldoAnitaService,
         private ModuloAvisoService $moduloAvisoService,
+        private TransferenciaMercaderiaAsientoService $transferenciaAsientoService,
     ) {}
 
     public function defaultsUsuario(): array
@@ -302,6 +304,28 @@ class TransferenciaMercaderiaService
             ? TransferenciaBienUsoSupport::etiquetaBien($bienOrigen)
             : (string) $depositoSalida->nombre;
 
+        $ccDestinoId = (int) ($cabecera['centrocosto_destino_id'] ?? 0);
+        $manejaContabilidad = TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipoTransferencia);
+        if ($manejaContabilidad && $ccDestinoId <= 0) {
+            return ['ok' => false, 'mensaje' => 'Debe indicar centro de costo destino para transferencias con contabilidad.'];
+        }
+
+        if ($manejaContabilidad && ! $requiereAprobacion) {
+            try {
+                $this->transferenciaAsientoService->assertCuadreAntesDeConfirmar(
+                    $this->construirTransferenciaPreviewParaCuadre(
+                        $lineasResueltas,
+                        $tipoTransferencia,
+                        $empresaId > 0 ? $empresaId : (int) ($depositoSalida?->empresa_id ?? $depositoEntrada?->empresa_id ?? 0),
+                        $fecha,
+                        $ccDestinoId
+                    )
+                );
+            } catch (\Throwable $e) {
+                return ['ok' => false, 'mensaje' => $e->getMessage()];
+            }
+        }
+
         try {
             return DB::transaction(function () use (
                 $cabecera,
@@ -322,7 +346,9 @@ class TransferenciaMercaderiaService
                 $requiereAprobacion,
                 $usuarioDestino,
                 $etiquetaDestino,
-                $etiquetaOrigen
+                $etiquetaOrigen,
+                $ccDestinoId,
+                $manejaContabilidad
             ) {
                 $transferencia = Transferencia_Mercaderia::create([
                     'codigo' => $codigoBase,
@@ -333,6 +359,7 @@ class TransferenciaMercaderiaService
                     'deposito_destino_id' => $destinoBienUso ? null : $depositoEntradaId,
                     'bien_uso_destino_id' => $destinoBienUso ? $bienUsoDestinoId : null,
                     'tipotransaccion_stock_id' => $tipoTransferencia->id,
+                    'centrocosto_destino_id' => $manejaContabilidad ? $ccDestinoId : null,
                     'estado' => $requiereAprobacion
                         ? TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION
                         : TransferenciaMercaderiaEstados::CONFIRMADA,
@@ -381,6 +408,11 @@ class TransferenciaMercaderiaService
                     $transferencia->save();
 
                     $this->actualizarStkmaePrecioDestino($transferencia);
+
+                    $this->confirmarAsientoContable($transferencia->fresh([
+                        'articulos.articuloOrigen.articulo_cuentacontables',
+                        'tipotransaccion_stock',
+                    ]));
 
                     $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
                 } else {
@@ -440,6 +472,8 @@ class TransferenciaMercaderiaService
         );
 
         return DB::transaction(function () use ($transferencia, $usuarioAprobadorId, $observaciones, $esDestinoBien, $esOrigenBien) {
+            $this->transferenciaAsientoService->assertCuadreAntesDeConfirmar($transferencia);
+
             $lineas = $transferencia->articulos->all();
             $payloadEntrada = $this->armarPayloadMovimientoDesdePersistidas($lineas, 'entrada');
             $tipo = $transferencia->tipotransaccion_stock;
@@ -472,6 +506,11 @@ class TransferenciaMercaderiaService
             $this->invalidarTokens($transferencia);
 
             $this->actualizarStkmaePrecioDestino($transferencia);
+
+            $this->confirmarAsientoContable($transferencia->fresh([
+                'articulos.articuloOrigen.articulo_cuentacontables',
+                'tipotransaccion_stock',
+            ]));
 
             $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
 
@@ -609,6 +648,175 @@ class TransferenciaMercaderiaService
     }
 
     /**
+     * Evalúa saldo en depósito de salida sin grabar (preflight requisición sala, avisos portal/mail).
+     *
+     * @param  list<array{articulo_id: int, cantidad: float}>  $lineas
+     * @return array{
+     *     viable: bool,
+     *     controla_stock: bool,
+     *     mensaje_resumen: string,
+     *     lineas_detalle: list<array{
+     *         articulo_id: int,
+     *         sku: string,
+     *         descripcion: string,
+     *         cantidad_requerida: float,
+     *         saldo_disponible: float|null,
+     *         ok: bool,
+     *         motivo: string
+     *     }>
+     * }
+     */
+    public function evaluarSaldosTransferenciaDesdePayload(
+        int $depositoSalidaId,
+        int $depositoEntradaId,
+        int $empresaId,
+        array $lineas
+    ): array {
+        if ($lineas === []) {
+            return [
+                'viable' => false,
+                'controla_stock' => true,
+                'mensaje_resumen' => 'No hay ítems para transferir.',
+                'lineas_detalle' => [],
+            ];
+        }
+
+        $depositoSalida = Depmae::query()->find($depositoSalidaId);
+        $depositoEntrada = Depmae::query()->find($depositoEntradaId);
+        if ($depositoSalida === null || $depositoEntrada === null) {
+            return [
+                'viable' => false,
+                'controla_stock' => true,
+                'mensaje_resumen' => 'Depósito de origen o destino inexistente.',
+                'lineas_detalle' => [],
+            ];
+        }
+
+        $controlaStock = DepmaeControlStockSupport::manejaControlStock($depositoSalida);
+
+        try {
+            $lineasResueltas = $this->resolverLineas($lineas, $depositoEntrada, $empresaId, false);
+        } catch (\Throwable $e) {
+            return [
+                'viable' => false,
+                'controla_stock' => $controlaStock,
+                'mensaje_resumen' => $e->getMessage(),
+                'lineas_detalle' => [],
+            ];
+        }
+
+        if (! $controlaStock) {
+            return [
+                'viable' => true,
+                'controla_stock' => false,
+                'mensaje_resumen' => '',
+                'lineas_detalle' => $this->armarDetalleEvaluacionSaldos($lineasResueltas, [], true),
+            ];
+        }
+
+        $inventario = $this->stkdepSaldoAnitaService->inventarioPorDepositoId($depositoSalidaId);
+        $saldoPorArticulo = [];
+        foreach ($inventario as $fila) {
+            if (! empty($fila['articulo_id'])) {
+                $saldoPorArticulo[(int) $fila['articulo_id']] = (float) $fila['saldo'];
+            }
+        }
+
+        $detalle = $this->armarDetalleEvaluacionSaldos($lineasResueltas, $saldoPorArticulo, false);
+        $viable = collect($detalle)->every(static fn (array $fila): bool => (bool) ($fila['ok'] ?? false));
+
+        return [
+            'viable' => $viable,
+            'controla_stock' => true,
+            'mensaje_resumen' => $viable
+                ? ''
+                : 'No hay saldo suficiente en el depósito de origen para uno o más ítems de reparación/devolución. '
+                    .'La aprobación puede registrarse, pero la transferencia automática al laboratorio no se realizará.',
+            'lineas_detalle' => $detalle,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineasResueltas
+     * @param  array<int, float>  $saldoPorArticulo
+     * @return list<array{
+     *     articulo_id: int,
+     *     sku: string,
+     *     descripcion: string,
+     *     cantidad_requerida: float,
+     *     saldo_disponible: float|null,
+     *     ok: bool,
+     *     motivo: string
+     * }>
+     */
+    private function armarDetalleEvaluacionSaldos(array $lineasResueltas, array $saldoPorArticulo, bool $omitirValidacion): array
+    {
+        $detalle = [];
+        foreach ($lineasResueltas as $linea) {
+            $articuloId = (int) $linea['articulo_origen_id'];
+            $cantidad = (float) $linea['cantidad_origen'];
+            $art = Articulo::query()->find($articuloId);
+            $sku = (string) ($art?->sku ?? $articuloId);
+            $desc = (string) ($art?->descripcion ?? '');
+
+            if ($omitirValidacion) {
+                $detalle[] = [
+                    'articulo_id' => $articuloId,
+                    'sku' => $sku,
+                    'descripcion' => $desc,
+                    'cantidad_requerida' => $cantidad,
+                    'saldo_disponible' => null,
+                    'ok' => true,
+                    'motivo' => '',
+                ];
+
+                continue;
+            }
+
+            if (! isset($saldoPorArticulo[$articuloId])) {
+                $detalle[] = [
+                    'articulo_id' => $articuloId,
+                    'sku' => $sku,
+                    'descripcion' => $desc,
+                    'cantidad_requerida' => $cantidad,
+                    'saldo_disponible' => null,
+                    'ok' => false,
+                    'motivo' => 'Sin saldo en el depósito de origen.',
+                ];
+
+                continue;
+            }
+
+            $saldo = $saldoPorArticulo[$articuloId];
+            if ($cantidad > $saldo + 0.000001) {
+                $detalle[] = [
+                    'articulo_id' => $articuloId,
+                    'sku' => $sku,
+                    'descripcion' => $desc,
+                    'cantidad_requerida' => $cantidad,
+                    'saldo_disponible' => $saldo,
+                    'ok' => false,
+                    'motivo' => 'La cantidad supera el saldo disponible.',
+                ];
+
+                continue;
+            }
+
+            $detalle[] = [
+                'articulo_id' => $articuloId,
+                'sku' => $sku,
+                'descripcion' => $desc,
+                'cantidad_requerida' => $cantidad,
+                'saldo_disponible' => $saldo,
+                'ok' => true,
+                'motivo' => '',
+            ];
+        }
+
+        return $detalle;
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $lineas
      */
     private function validarCantidadesContraSaldoBien(int $bienUsoOrigenId, array $lineas): void
@@ -636,6 +844,11 @@ class TransferenciaMercaderiaService
      */
     private function validarCantidadesContraSaldo(int $depositoSalidaId, array $lineas): void
     {
+        $deposito = Depmae::query()->find($depositoSalidaId);
+        if (! DepmaeControlStockSupport::manejaControlStock($deposito)) {
+            return;
+        }
+
         $inventario = $this->stkdepSaldoAnitaService->inventarioPorDepositoId($depositoSalidaId);
         $saldoPorArticulo = [];
         foreach ($inventario as $fila) {
@@ -779,6 +992,7 @@ class TransferenciaMercaderiaService
             'codigoprovincia' => '',
             'pedido' => '',
             'empresa' => config('app.empresa'),
+            'omitir_asiento_contable' => true,
         ]);
 
         $resultado = $this->movimientoStockService->guardaMovimientoStock($data, 'create');
@@ -883,5 +1097,50 @@ class TransferenciaMercaderiaService
             ->value('id');
 
         return $id ? (int) $id : null;
+    }
+
+    private function confirmarAsientoContable(Transferencia_Mercaderia $transferencia): void
+    {
+        $asientoId = $this->transferenciaAsientoService->generarSiCorresponde($transferencia);
+        if ($asientoId !== null && $asientoId > 0) {
+            $transferencia->asiento_id = $asientoId;
+            $transferencia->save();
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineasResueltas
+     */
+    private function construirTransferenciaPreviewParaCuadre(
+        array $lineasResueltas,
+        Tipotransaccion_Stock $tipo,
+        int $empresaId,
+        string $fecha,
+        int $ccDestinoId,
+    ): Transferencia_Mercaderia {
+        $transferencia = new Transferencia_Mercaderia([
+            'empresa_id' => $empresaId,
+            'centrocosto_destino_id' => $ccDestinoId,
+            'codigo' => 'PREVIEW',
+            'fecha' => $fecha,
+        ]);
+        $transferencia->setRelation('tipotransaccion_stock', $tipo);
+
+        $articulos = collect();
+        foreach ($lineasResueltas as $linea) {
+            $row = new Transferencia_Mercaderia_Articulo([
+                'item' => (int) $linea['item'],
+                'articulo_origen_id' => (int) $linea['articulo_origen_id'],
+                'cantidad_origen' => (float) $linea['cantidad_origen'],
+            ]);
+            $origen = Articulo::query()
+                ->with('articulo_cuentacontables')
+                ->find((int) $linea['articulo_origen_id']);
+            $row->setRelation('articuloOrigen', $origen);
+            $articulos->push($row);
+        }
+        $transferencia->setRelation('articulos', $articulos);
+
+        return $transferencia;
     }
 }

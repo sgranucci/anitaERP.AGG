@@ -16,6 +16,7 @@ use App\Repositories\Stock\Recuento_ArchivoRepositoryInterface;
 use App\Repositories\Stock\Recuento_ItemRepositoryInterface;
 use App\Repositories\Stock\RecuentoRepositoryInterface;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
+use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\RecuentoModoCierreSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Auth;
@@ -566,6 +567,12 @@ class RecuentoService
 
         $tipoCabecera = $tipoPositivo;
 
+        $articuloIdsAjuste = array_values(array_unique(array_map(
+            static fn (array $a) => (int) $a['articulo_id'],
+            $ajustes
+        )));
+        $preciosUltimaCompra = ArticuloPrecioUltimaCompraSupport::resolverPorArticulos($articuloIdsAjuste);
+
         $movimiento = MovimientoStock::create([
             'fecha' => $fecha,
             'fechajornada' => $fecha,
@@ -591,6 +598,7 @@ class RecuentoService
             }
 
             $articuloId = (int) $ajuste['articulo_id'];
+            $precioUnitario = (float) ($preciosUltimaCompra[$articuloId]['precio'] ?? 0);
 
             Articulo_Movimiento::create([
                 'fecha' => $fecha,
@@ -601,8 +609,8 @@ class RecuentoService
                 'articulo_id' => $articuloId,
                 'concepto' => $ajuste['concepto'] ?? $tipo->nombre,
                 'cantidad' => $cantidad,
-                'precio' => 0,
-                'costo' => 0,
+                'precio' => $precioUnitario,
+                'costo' => $precioUnitario,
                 'deposito_id' => (int) $recuento->deposito_id,
             ]);
 

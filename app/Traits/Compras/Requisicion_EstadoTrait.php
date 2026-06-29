@@ -5,6 +5,7 @@ namespace App\Traits\Compras;
 trait Requisicion_EstadoTrait
 {
 	public static $enumEstado = [
+		['id' => '0', 'valor' => 'V', 'nombre' => 'PROVISORIO'],
 		['id' => '1', 'valor' => 'P', 'nombre' => 'PENDIENTE'],
 		['id' => '2', 'valor' => 'C', 'nombre' => 'CUMPLIDA'],
 		['id' => '3', 'valor' => 'S', 'nombre' => 'SUSPENDIDA'],

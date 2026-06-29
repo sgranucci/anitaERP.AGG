@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Services\Compras\OrdencompraAnitaSyncService;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
+use App\Support\Stock\RecepcionProveedorAccionLineaOc;
 use App\Support\Stock\RecepcionProveedorCentrocostoLineaSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
@@ -51,6 +52,7 @@ class RecepcionProveedorOrdencompraResolverService
 
         $this->ensurePenvpOrdenEnLineasOc($oc);
         RecepcionProveedorCentrocostoLineaSupport::assertOcRecepcionable($oc);
+        RecepcionProveedorOcPendienteSupport::assertPermiteNuevaRecepcion($oc);
 
         return [
             'cabecera' => $oc,
@@ -58,7 +60,7 @@ class RecepcionProveedorOrdencompraResolverService
         ];
     }
 
-    public function resolverPorId(int $ordencompraId): array
+    public function resolverPorId(int $ordencompraId, bool $validarNuevaRecepcion = false): array
     {
         if (! RecepcionProveedorVisibilidadSupport::ordencompraAccesible($ordencompraId)) {
             throw new \RuntimeException('Orden de compra no encontrada o sin acceso.');
@@ -67,6 +69,9 @@ class RecepcionProveedorOrdencompraResolverService
         $oc = $this->ordencompraRepository->find($ordencompraId);
         $this->ensurePenvpOrdenEnLineasOc($oc);
         RecepcionProveedorCentrocostoLineaSupport::assertOcRecepcionable($oc);
+        if ($validarNuevaRecepcion) {
+            RecepcionProveedorOcPendienteSupport::assertPermiteNuevaRecepcion($oc);
+        }
 
         return [
             'cabecera' => $oc,
@@ -81,6 +86,7 @@ class RecepcionProveedorOrdencompraResolverService
         $orden = 1;
         $proveedorId = (int) $oc->proveedor_id;
         $empresaId = (int) $oc->empresa_id;
+        $ccOc = (int) ($oc->centrocosto_id ?? 0);
         $recibidosPorLinea = RecepcionProveedorOcPendienteSupport::cantidadesRecibidasPorLineaOc((int) $oc->id);
 
         RecepcionProveedorDepositoSupport::reiniciarCache();
@@ -164,7 +170,19 @@ class RecepcionProveedorOrdencompraResolverService
 
             $cantidadOc = (float) $ocArt->cantidad;
             $recibido = (float) ($recibidosPorLinea[$ocArt->id] ?? 0);
-            $cantidadPendiente = max(0, $cantidadOc - $recibido);
+            $ccLinea = (int) ($ocArt->centrocostodestino_id ?? 0);
+            $cc = $ccLinea > 0 ? $ccLinea : $ccOc;
+            $cantidadPendiente = RecepcionProveedorOcPendienteSupport::saldoPendienteLinea(
+                $cantidadOc,
+                $recibido,
+                $empresaId,
+                $cc
+            );
+
+            if ($cantidadPendiente <= 0.000001) {
+                continue;
+            }
+
             $penvpOrden = (int) ($ocArt->penvp_orden ?? 0);
             $penvpNroInterno = (int) ($ocArt->penvp_nro_interno ?? 0);
 
@@ -182,9 +200,7 @@ class RecepcionProveedorOrdencompraResolverService
                 'cantidad_recibida' => $recibido,
                 'cantidad' => $cantidadPendiente,
                 'cantidad_rechazada' => 0,
-                'accion_linea_oc' => $cantidadPendiente > 0.000001
-                    ? \App\Support\Stock\RecepcionProveedorAccionLineaOc::RECIBIR
-                    : '',
+                'accion_linea_oc' => RecepcionProveedorAccionLineaOc::RECIBIR,
                 'fl_cerrar_linea_oc' => false,
                 'comentario_diferencia' => '',
                 'motivorechazo' => '',

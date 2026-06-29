@@ -35,10 +35,59 @@ Recuento de inventario
                 </div>
             </div>
             <form method="get" action="{{ route('recuento') }}" id="form-filtros-recuento" class="mb-0">
+                @if (! empty($ver_todos_recuentos))
+                    <input type="hidden" name="ver_todos_recuentos" value="1">
+                @endif
                 @include('stock.recuento.partials.filtros_listado', [
                     'limpiarUrl' => route('recuento'),
                 ])
             </form>
+            @if ($ver_todos_recuentos ?? false)
+                <div class="px-3 py-2 border-bottom bg-light small d-flex flex-wrap align-items-center justify-content-between">
+                    <div>
+                        <i class="fa fa-users"></i>
+                        Mostrando <strong>todos los recuentos</strong> de los dep&oacute;sitos autorizados.
+                    </div>
+                    <div class="mt-1 mt-sm-0">
+                        @if ($puede_ver_todos_recuentos ?? false)
+                            <a href="{{ route('recuento', RecuentoListadoFiltros::paraQueryStringAlternarAlcance($filtros ?? [], false)) }}"
+                               class="btn btn-secondary btn-sm text-nowrap"
+                               title="Volver a ver solo los recuentos que usted carg&oacute;">
+                                <i class="fa fa-user"></i> Solo mis recuentos
+                            </a>
+                        @else
+                            <span class="btn btn-secondary btn-sm disabled text-nowrap"
+                                  title="Sin permiso para ver todos los recuentos">
+                                <i class="fa fa-user"></i> Solo mis recuentos
+                            </span>
+                        @endif
+                    </div>
+                </div>
+            @else
+                <div class="px-3 py-2 border-bottom bg-light small d-flex flex-wrap align-items-center justify-content-between">
+                    <div class="text-muted">
+                        <i class="fa fa-user"></i>
+                        Mostrando <strong>sus recuentos</strong> en dep&oacute;sitos autorizados.
+                        @if (! ($puede_ver_todos_recuentos ?? false))
+                            (Para ver los de otros usuarios necesita el permiso «Listar todos los recuentos de inventario».)
+                        @endif
+                    </div>
+                    <div class="mt-1 mt-sm-0">
+                        @if ($puede_ver_todos_recuentos ?? false)
+                            <a href="{{ route('recuento', RecuentoListadoFiltros::paraQueryStringAlternarAlcance($filtros ?? [], true)) }}"
+                               class="btn btn-primary btn-sm text-nowrap"
+                               title="Ver recuentos de todos los usuarios (dep&oacute;sitos autorizados)">
+                                <i class="fa fa-users"></i> Ver todos los recuentos
+                            </a>
+                        @else
+                            <span class="btn btn-primary btn-sm disabled text-nowrap"
+                                  title="Requiere el permiso «Listar todos los recuentos de inventario»">
+                                <i class="fa fa-users"></i> Ver todos los recuentos
+                            </span>
+                        @endif
+                    </div>
+                </div>
+            @endif
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_recuento',
@@ -71,10 +120,11 @@ Recuento de inventario
                                 <td>{{ $r->tipo }}</td>
                                 <td>@include('stock.recuento.partials.estado_badge', ['estado' => $r->estado])</td>
                                 <td class="text-right">{{ $r->items_count ?? $r->items->count() }}</td>
-                                <td>
+                                <td class="text-nowrap">
                                     <a href="{{ route('ver_recuento', ['id' => $r->id]) }}" class="btn-accion-tabla tooltipsC" title="Ver detalle">
                                         <i class="fa fa-eye"></i>
                                     </a>
+                                    @include('stock.recuento.partials.botones_exportar', ['recuento' => $r, 'modo' => 'fila'])
                                     @if ($r->esEditable() && can('editar-recuento', false))
                                         <a href="{{ route('editar_recuento', ['id' => $r->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>

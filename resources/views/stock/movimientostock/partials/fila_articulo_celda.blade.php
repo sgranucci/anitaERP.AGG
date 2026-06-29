@@ -13,8 +13,8 @@
         </button>
         @endif
         @if($puedeVerKardex)
-        <button type="button" title="Kardex de stock" class="btn-accion-tabla btn-kardex-articulo-linea flex-shrink-0 {{ ($articuloId ?? 0) > 0 ? '' : 'd-none' }}" style="padding:1px 4px;" @if(($articuloId ?? 0) <= 0) disabled @endif>
-            <i class="fa fa-list-alt text-info"></i>
+        <button type="button" title="Saldos por dep&oacute;sito" class="btn-accion-tabla btn-saldos-articulo-linea flex-shrink-0 {{ ($articuloId ?? 0) > 0 ? '' : 'd-none' }}" style="padding:1px 4px;" @if(($articuloId ?? 0) <= 0) disabled @endif>
+            <i class="fa fa-warehouse text-secondary"></i>
         </button>
         @endif
         <a href="{{ $articuloId > 0 ? route('editar_articulo', ['id' => $articuloId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"

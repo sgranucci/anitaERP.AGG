@@ -24,7 +24,33 @@
             : '';
     }
 
+    function ctxDepositoOrigen() {
+        if (operacionTipo() === 'T' && $('#tm_deposito_salida').is(':visible')) {
+            return $('#tm_deposito_salida');
+        }
+
+        return $('#tm_deposito_movimientostock');
+    }
+
+    function depositoOrigenRequiereControlStock() {
+        var $ctx = ctxDepositoOrigen();
+        if (!$ctx.length) {
+            return true;
+        }
+
+        var tipo = String($ctx.attr('data-tipodeposito') || '').trim();
+        if (!tipo) {
+            return true;
+        }
+
+        return tipo.toLowerCase() !== 'centro de consumo' && tipo.toUpperCase() !== 'M';
+    }
+
     function depositoOrigenId() {
+        if (!depositoOrigenRequiereControlStock()) {
+            return 0;
+        }
+
         var op = operacionTipo();
         if (op === 'T') {
             var origenBien = typeof window.msTipoTransaccionMeta === 'function'
@@ -110,6 +136,7 @@
     }
 
     window.msRefrescarSaldosOrigen = refrescarSaldosOrigen;
+    window.msDepositoOrigenRequiereControlStock = depositoOrigenRequiereControlStock;
 
     $(document).on('change input', '#tabla-items-movimientostock .articulo_id, #tabla-items-movimientostock .codigoarticulo', function () {
         programarSaldoFila($(this).closest('tr'));

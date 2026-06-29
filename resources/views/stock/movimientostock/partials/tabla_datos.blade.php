@@ -10,15 +10,15 @@
 @foreach ($datas as $fila)
     @php
         /** @var \App\Support\Stock\MovimientoStockListadoFila $fila */
-        $estadoLabel = $fila->esTransferencia()
-            ? ($fila->etiquetaEstadoTransferencia() ?? '')
-            : ($estado_enum[$fila->estadoMovimiento ?? ''] ?? ($fila->estadoMovimiento ?? ''));
+        $estadoLabel = $fila->etiquetaEstadoListado();
     @endphp
     <tr data-entry-id="{{ $fila->pkId }}" data-fila-tipo="{{ $fila->filaTipo }}">
         <td>
             {{ $fila->pkId }}
             @if ($fila->esTransferencia())
                 <br><span class="badge badge-info">Transferencia</span>
+            @else
+                <br><span class="badge badge-light border">Movimiento</span>
             @endif
         </td>
         <td>{{ $fila->fecha ? date('d/m/Y', strtotime($fila->fecha)) : '' }}</td>
@@ -28,12 +28,18 @@
             <td><small>{{ $fila->marcaNombre ?? '' }}</small></td>
         @endif
         <td><small>{{ $fila->loteListado }}</small></td>
-        <td><small>{{ $fila->esTransferencia() ? $fila->etiquetaOrigen() : '—' }}</small></td>
-        <td><small>{{ $fila->esTransferencia() ? $fila->etiquetaDestino() : ($fila->depositoNombre ?? '—') }}</small></td>
+        <td><small>{{ $fila->etiquetaOrigen() }}</small></td>
+        <td><small>{{ $fila->etiquetaDestino() }}</small></td>
         <td><small>{{ $fila->nombreEmpresa }}</small></td>
         <td class="text-right">{{ number_format($fila->totalCantidad, 2, ',', '.') }}</td>
         <td class="text-center">{{ $fila->itemsCount > 0 ? $fila->itemsCount : '' }}</td>
-        <td><small>{{ $estadoLabel }}</small></td>
+        <td>
+            @if ($fila->esTransferencia())
+                <span class="badge badge-secondary">{{ $estadoLabel }}</span>
+            @else
+                <small>{{ $estadoLabel }}</small>
+            @endif
+        </td>
         @if ($mostrarAcciones)
             <td class="text-nowrap">
                 @if ($fila->esTransferencia())

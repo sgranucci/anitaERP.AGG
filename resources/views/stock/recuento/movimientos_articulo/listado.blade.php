@@ -85,9 +85,10 @@
                 <th style="width: 7%;">Tipo</th>
                 <th class="num" style="width: 8%;">Entrada{{ $sufijoUm }}</th>
                 <th class="num" style="width: 8%;">Salida{{ $sufijoUm }}</th>
-                <th style="width: 22%;">Concepto</th>
-                <th style="width: 9%;">Mov. stock</th>
-                <th style="width: {{ $modoTodos ? '25%' : '37%' }};">Leyenda mov.</th>
+                <th class="num" style="width: 9%;">Precio unit.</th>
+                <th style="width: 18%;">Concepto</th>
+                <th style="width: 8%;">Mov. stock</th>
+                <th style="width: {{ $modoTodos ? '17%' : '29%' }};">Leyenda mov.</th>
             </tr>
         </thead>
         <tbody>
@@ -100,6 +101,7 @@
                     <td>{{ $m->tipo ?? '' }}</td>
                     <td class="num">{{ $m->entrada_fmt ?? '' }}</td>
                     <td class="num">{{ $m->salida_fmt ?? '' }}</td>
+                    <td class="num">{{ $m->precio_unitario_fmt ?? '' }}</td>
                     <td>{{ $m->concepto_display ?? $m->concepto ?? '' }}</td>
                     <td>{{ $m->movimiento_codigo ?: ($m->movimientostock_id ?? '') }}</td>
                     <td>{{ $m->movimiento_leyenda ?? '' }}</td>

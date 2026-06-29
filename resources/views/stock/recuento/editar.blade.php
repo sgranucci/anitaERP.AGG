@@ -25,11 +25,7 @@ Recuento {{ $recuento->codigo }}
                     @include('stock.recuento.partials.estado_badge', ['estado' => $recuento->estado])
                 </h3>
                 <div class="card-tools">
-                    @if (can('imprimir-recuento', false))
-                    <a href="{{ route('imprimir_pdf_recuento', ['id' => $recuento->id]) }}" class="btn btn-primary btn-sm" target="_blank">
-                        <i class="fas fa-file-pdf"></i> PDF
-                    </a>
-                    @endif
+                    @include('stock.recuento.partials.botones_exportar', ['recuento' => $recuento])
                     <a href="{{ route('ver_recuento', ['id' => $recuento->id]) }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-eye"></i> Ver
                     </a>

@@ -92,4 +92,26 @@ return [
         ],
     ],
 
+    /*
+    | Precio unitario de última compra (costo) para recuentos, transferencias y mov. stock.
+    | Resolución en ArticuloPrecioUltimaCompraSupport:
+    |   1) Anita stkmae.stkm_pre_compra3
+    |   2) ERP: última recepción COM confirmada (historia OC o línea recepción)
+    |   3) articulo.costo / articulo.ppp
+    */
+    'precio_ultima_compra' => [
+        'fuente_primaria' => 'anita',
+        'fuente_secundaria' => 'erp_com',
+    ],
+
+    /*
+    | Precio sugerido en movimientos de stock manuales (ArticuloPrecioMovimientoStockSupport).
+    | Salidas con estas abreviaturas → lista de precios de venta vigente.
+    | Resto de tipos → última compra (misma cadena que precio_ultima_compra).
+    */
+    'precio_movimiento_salida_venta_abreviaturas' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('STOCK_PRECIO_MOV_SALIDA_VENTA_ABREVS', 'SAL,SAS'))
+    ), static fn (string $v) => $v !== '')),
+
 ];

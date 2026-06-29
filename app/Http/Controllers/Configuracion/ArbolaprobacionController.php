@@ -383,7 +383,7 @@ class ArbolaprobacionController extends Controller
             return $this->portalFinRequisicionSala(false, 'No se pudo confirmar la aprobación: enlace inválido o ya fue procesada por otro usuario.');
         }
 
-        $this->arbolaprobacionService->aprobar(
+        $resultado = $this->arbolaprobacionService->aprobar(
             'RS',
             (int) $request->comprobante_id,
             (int) $request->aprobacion_id,
@@ -391,11 +391,37 @@ class ArbolaprobacionController extends Controller
             $request->input('observacion')
         );
 
+        if (($resultado['mensaje'] ?? '') === 'error') {
+            return $this->portalFinRequisicionSala(false, (string) ($resultado['errores'] ?? 'No se pudo registrar la aprobación. Intente nuevamente.'));
+        }
+
         $movPost = Arbolaprobacion_Movimiento::find((int) $request->aprobacion_id);
         $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
         $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
         if ($movPost && $movPost->estado === $nombreAprobado) {
-            return $this->portalFinRequisicionSala(true, 'La requisición de sala fue aprobada en este nivel. Si el flujo continúa, recibirá nuevas notificaciones por correo.');
+            $req = \App\Models\Sala\RequisicionSala::query()
+                ->with('requisicion_sala_articulos.articulos')
+                ->find((int) $request->comprobante_id);
+            $estadoTras = $this->arbolaprobacionService->estadoTrasAprobarSegunMovimientoRequisicionSala(
+                $req,
+                $movPost
+            );
+            $generaTm = $req && \App\Support\Sala\RequisicionSalaLineasLaboratorioSupport::generaraTransferenciaLaboratorioAlAprobar($req, $estadoTras);
+            $mensaje = 'La requisición de sala fue aprobada en este nivel.';
+            $transferencias = $resultado['transferencias_sala'] ?? [];
+            $tmFallida = collect($transferencias)->first(fn ($t) => ($t['ok'] ?? false) === false);
+            if ($generaTm && $transferencias !== [] && ! $tmFallida) {
+                $mensaje .= ' Se registró la transferencia de mercadería hacia laboratorio.';
+            } elseif ($generaTm && $tmFallida) {
+                $mensaje .= ' La aprobación quedó registrada, pero la transferencia a laboratorio falló: '
+                    .($tmFallida['mensaje'] ?? 'consulte con stock/laboratorio.');
+            } elseif ($estadoTras) {
+                $mensaje .= ' Estado: '.$estadoTras.'.';
+            } else {
+                $mensaje .= ' Si el flujo continúa, recibirá nuevas notificaciones por correo.';
+            }
+
+            return $this->portalFinRequisicionSala(true, $mensaje);
         }
         if ($movPost && $movPost->estado === $nombrePendiente) {
             return $this->portalFinRequisicionSala(false, 'No se pudo registrar la aprobación. Intente nuevamente.');

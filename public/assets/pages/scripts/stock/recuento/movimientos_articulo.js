@@ -609,11 +609,11 @@
         btn.classList.toggle('d-none', articuloId <= 0);
     }
 
-    function actualizarBotonesKardexFilaMovStock(tr) {
+    function actualizarBotonesSaldosFilaMovStock(tr) {
         if (!tr || !document.getElementById('tabla-items-movimientostock')) {
             return;
         }
-        var btn = tr.querySelector('.btn-kardex-articulo-linea');
+        var btn = tr.querySelector('.btn-saldos-articulo-linea');
         if (!btn) {
             return;
         }
@@ -638,7 +638,8 @@
     window.abrirUrlKardex = abrirUrlKardex;
     window.abrirMovimientosArticuloDepositoRecuento = abrirConsultaMovimientosRecuento;
     window.actualizarBotonMovimientosRecuentoFila = actualizarBotonesMovimientosFila;
-    window.actualizarBotonKardexMovimientoStockFila = actualizarBotonesKardexFilaMovStock;
+    window.actualizarBotonKardexMovimientoStockFila = actualizarBotonesSaldosFilaMovStock;
+    window.actualizarBotonSaldosMovimientoStockFila = actualizarBotonesSaldosFilaMovStock;
 
     var onDepositoAplicadoAnterior = window.onDepositoAplicadoEnFormulario;
     window.onDepositoAplicadoEnFormulario = function (data, $ctx) {
@@ -835,22 +836,24 @@
         }
 
         document.addEventListener('click', function (e) {
-            var btnKardexLinea = e.target.closest('.btn-kardex-articulo-linea');
-            if (btnKardexLinea) {
+            var btnSaldosLinea = e.target.closest('.btn-saldos-articulo-linea');
+            if (btnSaldosLinea) {
                 e.preventDefault();
                 e.stopPropagation();
-                var tr = btnKardexLinea.closest('tr');
-                var datos = datosDesdeFilaMovimientoStock(tr);
-                if (!datos || datos.articuloId <= 0) {
-                    notificar('Kardex', 'Cargue un artículo en la línea.');
+                var trSaldos = btnSaldosLinea.closest('tr');
+                var datosLinea = datosDesdeFilaMovimientoStock(trSaldos);
+                if (!datosLinea || datosLinea.articuloId <= 0) {
+                    notificar('Saldos', 'Cargue un artículo en la línea.');
                     return;
                 }
-                var opciones = typeof window.depositosKardexMovimientoStock === 'function'
-                    ? window.depositosKardexMovimientoStock()
-                    : [];
-                abrirKardexArticulo(datos.articuloId, 0, opciones, {
-                    sku: datos.sku,
-                    descripcion: datos.descripcion,
+                if (!document.getElementById('modalSaldosArticulo')) {
+                    notificar('Saldos', 'No está disponible la consulta de saldos en esta pantalla.');
+                    return;
+                }
+                mostrarModalSaldosArticulo({
+                    articuloId: datosLinea.articuloId,
+                    sku: datosLinea.sku,
+                    descripcion: datosLinea.descripcion,
                     volverUrl: window.location.pathname + window.location.search,
                 });
                 return;
@@ -925,7 +928,7 @@
         }
 
         if (document.getElementById('tabla-items-movimientostock')) {
-            document.querySelectorAll('#tabla-items-movimientostock tbody tr.item-pedido').forEach(actualizarBotonesKardexFilaMovStock);
+            document.querySelectorAll('#tabla-items-movimientostock tbody tr.item-pedido').forEach(actualizarBotonesSaldosFilaMovStock);
         }
     });
 

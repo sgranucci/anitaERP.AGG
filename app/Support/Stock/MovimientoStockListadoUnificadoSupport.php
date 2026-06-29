@@ -30,6 +30,7 @@ final class MovimientoStockListadoUnificadoSupport
 
         $query = DB::query()
             ->fromSub($union, 'listado_ms')
+            ->orderByDesc('operacion_stock_id')
             ->orderByDesc('fecha')
             ->orderByDesc('pk_id');
 
@@ -96,6 +97,7 @@ final class MovimientoStockListadoUnificadoSupport
             ->select([
                 DB::raw("'movimiento' as fila_tipo"),
                 'ms.id as pk_id',
+                'ms.id as operacion_stock_id',
                 'ms.fecha',
                 'ms.id as movimientostock_id',
                 DB::raw('NULL as transferencia_id'),
@@ -109,9 +111,14 @@ final class MovimientoStockListadoUnificadoSupport
                 'am_agg.items_count',
                 'ms.estado as estado_movimiento',
                 DB::raw('NULL as estado_transferencia'),
+                'depmae.codigo as deposito_codigo',
                 'depmae.nombre as deposito_nombre',
+                DB::raw('NULL as deposito_origen_codigo'),
                 DB::raw('NULL as deposito_origen_nombre'),
+                DB::raw('NULL as deposito_destino_codigo'),
                 DB::raw('NULL as deposito_destino_nombre'),
+                DB::raw('NULL as deposito_origen_id'),
+                DB::raw('NULL as deposito_destino_id'),
                 DB::raw('NULL as bien_uso_origen_etiqueta'),
                 DB::raw('NULL as bien_uso_destino_etiqueta'),
                 'mventa.nombre as marca_nombre',
@@ -134,6 +141,7 @@ final class MovimientoStockListadoUnificadoSupport
             ->select([
                 DB::raw("'transferencia' as fila_tipo"),
                 'tm.id as pk_id',
+                DB::raw('GREATEST(COALESCE(tm.movimientostock_salida_id, 0), COALESCE(tm.movimientostock_entrada_id, 0)) as operacion_stock_id'),
                 'tm.fecha',
                 DB::raw('COALESCE(tm.movimientostock_salida_id, tm.movimientostock_entrada_id) as movimientostock_id'),
                 'tm.id as transferencia_id',
@@ -147,9 +155,14 @@ final class MovimientoStockListadoUnificadoSupport
                 DB::raw('COALESCE(tma_agg.items_count, 0) as items_count'),
                 DB::raw('NULL as estado_movimiento'),
                 'tm.estado as estado_transferencia',
+                DB::raw('NULL as deposito_codigo'),
                 DB::raw('NULL as deposito_nombre'),
+                'dep_o.codigo as deposito_origen_codigo',
                 'dep_o.nombre as deposito_origen_nombre',
+                'dep_d.codigo as deposito_destino_codigo',
                 'dep_d.nombre as deposito_destino_nombre',
+                'tm.deposito_origen_id as deposito_origen_id',
+                'tm.deposito_destino_id as deposito_destino_id',
                 DB::raw("TRIM(CONCAT(COALESCE(bu_o.codigo_inventario, ''), ' ', COALESCE(bu_o.hostname, ''))) as bien_uso_origen_etiqueta"),
                 DB::raw("TRIM(CONCAT(COALESCE(bu_d.codigo_inventario, ''), ' ', COALESCE(bu_d.hostname, ''))) as bien_uso_destino_etiqueta"),
                 DB::raw('NULL as marca_nombre'),
@@ -242,6 +255,7 @@ final class MovimientoStockListadoUnificadoSupport
                     ->orWhere('empresa.nombre', 'like', $like)
                     ->orWhere('usuario.nombre', 'like', $like)
                     ->orWhere('depmae.nombre', 'like', $like)
+                    ->orWhere('depmae.codigo', 'like', $like)
                     ->orWhere('mventa.nombre', 'like', $like)
                     ->orWhere('ms.estado', 'like', $like);
             } else {
@@ -252,7 +266,9 @@ final class MovimientoStockListadoUnificadoSupport
                     ->orWhere('empresa.nombre', 'like', $like)
                     ->orWhere('u_orig.nombre', 'like', $like)
                     ->orWhere('dep_o.nombre', 'like', $like)
+                    ->orWhere('dep_o.codigo', 'like', $like)
                     ->orWhere('dep_d.nombre', 'like', $like)
+                    ->orWhere('dep_d.codigo', 'like', $like)
                     ->orWhere('tm.estado', 'like', $like);
             }
         });
@@ -275,7 +291,7 @@ final class MovimientoStockListadoUnificadoSupport
             'tipo' => 'tts.nombre',
             'marca' => 'mventa.nombre',
             'lote' => 'am_agg.lote',
-            'deposito' => 'depmae.nombre',
+            'deposito' => 'depmae.codigo',
             'empresa' => 'empresa.nombre',
             'leyenda' => 'ms.leyenda',
             'estado' => 'ms.estado',
@@ -289,7 +305,7 @@ final class MovimientoStockListadoUnificadoSupport
             'tipo' => 'tts.nombre',
             'marca' => DB::raw('NULL'),
             'lote' => 'tm.lote',
-            'deposito' => 'dep_o.nombre',
+            'deposito' => 'dep_o.codigo',
             'empresa' => 'empresa.nombre',
             'leyenda' => 'tm.observacion',
             'estado' => 'tm.estado',
@@ -360,8 +376,8 @@ final class MovimientoStockListadoUnificadoSupport
             : Transferencia_Mercaderia::query()
                 ->with([
                     'tipotransaccion_stock:id,nombre,abreviatura',
-                    'depositoOrigen:id,nombre',
-                    'depositoDestino:id,nombre',
+                    'depositoOrigen:id,codigo,nombre',
+                    'depositoDestino:id,codigo,nombre',
                     'bienUsoOrigen:id,codigo_inventario,hostname,modelo',
                     'bienUsoDestino:id,codigo_inventario,hostname,modelo',
                     'usuarioOrigen:id,nombre',

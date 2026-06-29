@@ -17,6 +17,8 @@ class StkmaeUltimaCompraAnitaService
 
     private const CAMPO_PRECIO = 'stkm_pre_compra3';
 
+    private const CAMPO_MONEDA = 'stkm_cod_mon_co3';
+
     private const LONGITUD_CODIGO = 13;
 
     private const CHUNK_SIZE = 80;
@@ -53,14 +55,50 @@ class StkmaeUltimaCompraAnitaService
         $precioPorCodigo = [];
         $codigos = array_values(array_unique($codigoPorSku));
         foreach (array_chunk($codigos, self::CHUNK_SIZE) as $chunk) {
-            foreach ($this->consultarStkmaePorCodigos($chunk) as $codigo => $precio) {
-                $precioPorCodigo[$codigo] = $precio;
+            foreach ($this->consultarStkmaeDatosPorCodigos($chunk) as $codigo => $datos) {
+                $precioPorCodigo[$codigo] = $datos['precio'];
             }
         }
 
         $out = [];
         foreach ($codigoPorSku as $sku => $codigo) {
             $out[$sku] = $precioPorCodigo[$codigo] ?? null;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $skus
+     * @return array<string, array{precio: float|null, moneda_id: int|null}> clave = SKU del ERP
+     */
+    public function obtenerDatosUltimaCompraPorSkus(array $skus): array
+    {
+        $skus = array_values(array_unique(array_filter(array_map(
+            static fn ($s) => trim((string) $s),
+            $skus
+        ), static fn ($s) => $s !== '')));
+
+        if ($skus === []) {
+            return [];
+        }
+
+        $codigoPorSku = [];
+        foreach ($skus as $sku) {
+            $codigoPorSku[$sku] = $this->codigoAnitaDesdeSku($sku);
+        }
+
+        $datosPorCodigo = [];
+        $codigos = array_values(array_unique($codigoPorSku));
+        foreach (array_chunk($codigos, self::CHUNK_SIZE) as $chunk) {
+            foreach ($this->consultarStkmaeDatosPorCodigos($chunk) as $codigo => $datos) {
+                $datosPorCodigo[$codigo] = $datos;
+            }
+        }
+
+        $out = [];
+        foreach ($codigoPorSku as $sku => $codigo) {
+            $out[$sku] = $datosPorCodigo[$codigo] ?? ['precio' => null, 'moneda_id' => null];
         }
 
         return $out;
@@ -122,9 +160,9 @@ class StkmaeUltimaCompraAnitaService
 
     /**
      * @param  list<string>  $codigosAnita  códigos de 13 caracteres
-     * @return array<string, float|null> clave = código Anita exacto
+     * @return array<string, array{precio: float|null, moneda_id: int|null}> clave = código Anita exacto
      */
-    private function consultarStkmaePorCodigos(array $codigosAnita): array
+    private function consultarStkmaeDatosPorCodigos(array $codigosAnita): array
     {
         if ($codigosAnita === []) {
             return [];
@@ -138,7 +176,7 @@ class StkmaeUltimaCompraAnitaService
         $payload = [
             'acc' => 'list',
             'tabla' => self::TABLA,
-            'campos' => self::CAMPO_ARTICULO.','.self::CAMPO_PRECIO,
+            'campos' => self::CAMPO_ARTICULO.','.self::CAMPO_PRECIO.','.self::CAMPO_MONEDA,
             'whereArmado' => ' WHERE '.self::CAMPO_ARTICULO.' IN ('.$lista.') ',
         ];
 
@@ -171,8 +209,12 @@ class StkmaeUltimaCompraAnitaService
             if ($codigo === '') {
                 continue;
             }
-            $precio = $row[self::CAMPO_PRECIO] ?? null;
-            $out[$codigo] = $precio !== null && $precio !== '' ? (float) $precio : null;
+            $precioRaw = $row[self::CAMPO_PRECIO] ?? null;
+            $monedaRaw = $row[self::CAMPO_MONEDA] ?? null;
+            $out[$codigo] = [
+                'precio' => $precioRaw !== null && $precioRaw !== '' ? (float) $precioRaw : null,
+                'moneda_id' => $monedaRaw !== null && $monedaRaw !== '' ? (int) $monedaRaw : null,
+            ];
         }
 
         return $out;

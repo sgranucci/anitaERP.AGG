@@ -106,10 +106,8 @@
                     <div class="alert alert-info py-2" id="ms_transferencia_vinculada">
                         <strong>Transferencia {{ $transferenciaVinculada->codigo }}</strong>
                         @php
-                            $tvOrigen = $transferenciaVinculada->depositoOrigen?->nombre
-                                ?? TransferenciaBienUsoSupport::etiquetaBien($transferenciaVinculada->bienUsoOrigen);
-                            $tvDestino = $transferenciaVinculada->depositoDestino?->nombre
-                                ?? TransferenciaBienUsoSupport::etiquetaBien($transferenciaVinculada->bienUsoDestino);
+                            $tvOrigen = TransferenciaBienUsoSupport::etiquetaOrigenTransferencia($transferenciaVinculada);
+                            $tvDestino = TransferenciaBienUsoSupport::etiquetaDestinoTransferencia($transferenciaVinculada);
                         @endphp
                         <div class="small mt-1">
                             Origen: {{ $tvOrigen }} &rarr; Destino: {{ $tvDestino }}
@@ -259,7 +257,7 @@
     				<th class="col-comb">Combinaci&oacute;n</th>
     				<th class="col-mod">M&oacute;dulo</th>
     				<th class="col-qty text-right">Cantidad</th>
-    				<th class="col-precio text-right">Precio</th>
+    				<th class="col-precio text-right" title="Modo calzados: precio por talle/lista.">Precio</th>
 					<th class="col-flag" title="Todos los art&iacute;culos">A</th>
     				<th class="col-flag" title="Todas las combinaciones">C</th>
                     @else
@@ -270,7 +268,7 @@
                     <th class="col-insumo-dest ms-col-conversion-formula" title="Art&iacute;culo de stock destino (entrada en dep. F&oacute;rmulas) o art&iacute;culo de compra equivalente (salida)">SKU dest.</th>
                     <th class="col-qty-dest text-right ms-col-conversion-formula" title="Cantidad convertida a la unidad destino">Cant. dest.</th>
                     <th class="col-umd-dest text-center ms-col-conversion-formula" title="Unidad de medida del art&iacute;culo destino">UM dest.</th>
-                    <th class="col-precio text-right">Precio</th>
+                    <th class="col-precio text-right" title="Salidas de venta (SAL, SAS): precio de lista vigente. Resto: &uacute;ltima compra (Anita &rarr; ERP COM).">Precio</th>
                     @endif
     				<th class="col-acc"></th>
     			</tr>
@@ -378,7 +376,9 @@
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultatipotransaccionstock')
 @if(\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+@include('includes.stock.modal_saldos_articulo')
 @include('includes.stock.modal_kardex_deposito')
+<input type="hidden" id="articulo-saldos-deposito-url" value="{{ route('articulo_saldos_deposito') }}">
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
 @endif
 @include('stock.movimientostock.partials.modal_elegir_articulo_compra')

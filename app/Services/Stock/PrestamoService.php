@@ -12,6 +12,7 @@ use App\Models\Stock\Prestamo_Token;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Repositories\Stock\PrestamoRepositoryInterface;
+use App\Support\Stock\ArticuloMovimientoPrecioHistoricoSupport;
 use App\Services\Configuracion\ModuloAvisoService;
 use Auth;
 use Illuminate\Support\Facades\DB;
@@ -528,8 +529,13 @@ class PrestamoService
             'usuario_id' => Auth::id(),
         ]);
 
+        $articuloIds = $items->pluck('articulo_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $preciosUltimaCompra = ArticuloMovimientoPrecioHistoricoSupport::resolverUltimaCompraMovimientoPorArticuloIds($articuloIds);
+
         foreach ($items as $item) {
             $cantidad = (float) abs((float) $item->cantidad) * $signo;
+            $articuloId = (int) $item->articulo_id;
+            $datoPrecio = $preciosUltimaCompra[$articuloId] ?? ['precio' => 0.0, 'costo' => 0.0, 'moneda_id' => null];
             // create() dispara el observer Articulo_MovimientoObserver
             // que actualiza la tabla articulo_saldo_deposito.
             Articulo_Movimiento::create([
@@ -538,11 +544,12 @@ class PrestamoService
                 'tipotransaccion_stock_id' => $tipo->id,
                 'movimientostock_id' => $movimiento->id,
                 'lote' => 0,
-                'articulo_id' => (int) $item->articulo_id,
+                'articulo_id' => $articuloId,
                 'concepto' => $tipo->nombre,
                 'cantidad' => $cantidad,
-                'precio' => 0,
-                'costo' => 0,
+                'precio' => $datoPrecio['precio'],
+                'costo' => $datoPrecio['costo'],
+                'moneda_id' => $datoPrecio['moneda_id'],
                 'deposito_id' => $depositoId,
                 'descuentointegrado' => ' ',
             ]);

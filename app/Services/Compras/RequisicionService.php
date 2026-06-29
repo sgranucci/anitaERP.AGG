@@ -3,7 +3,9 @@
 namespace App\Services\Compras;
 
 use App\ApiAnita;
+use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Estado;
+use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Articulo;
 use App\Queries\Compras\ProveedorQueryInterface;
 use App\Queries\Stock\ArticuloQueryInterface;
@@ -18,6 +20,7 @@ use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\RequisicionAnitaColisionSupport;
 use App\Support\Compras\RequisicionAnitaSyncEstado;
+use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use Auth;
 use Carbon\Carbon;
@@ -81,33 +84,41 @@ class RequisicionService
     public function guardaRequisicion($request)
     {
         $data = $request->all();
+        $modoProvisorio = RequisicionProvisorioSupport::usuarioUsaModoProvisorio();
         $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $estadoAlta = $modoProvisorio
+            ? RequisicionProvisorioSupport::nombreEstadoProvisorio()
+            : $pendiente;
 
         $data['fechas'][] = Carbon::now()->toDateTimeString();
-        $data['estados'][] = $pendiente;
+        $data['estados'][] = $estadoAlta;
         $data['usuario_ids'][] = Auth::user()->id;
-        $data['observacionestados'][] = 'Alta de requisición';
+        $data['observacionestados'][] = $modoProvisorio ? 'Alta en provisorio' : 'Alta de requisición';
 
         $data['creousuario_id'] = Auth::user()->id;
-        $data['estado'] = $pendiente;
+        $data['estado'] = $estadoAlta;
 
         try {
             $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
-            $this->arbolaprobacionService->validaRequisicionRequestContraArbol($data);
+            if (! $modoProvisorio) {
+                $this->arbolaprobacionService->validaRequisicionRequestContraArbol($data);
+            }
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         } catch (\Exception $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
-        try {
-            ValidacionPresupuestoPartidaCapexLineas::validar($data);
-        } catch (\InvalidArgumentException $e) {
-            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        if (! $modoProvisorio) {
+            try {
+                ValidacionPresupuestoPartidaCapexLineas::validar($data);
+            } catch (\InvalidArgumentException $e) {
+                return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+            }
         }
 
         $cabecera = self::armaCabecera($data);
-        $syncAnitaActivo = config('requisicion.anita.sync_activo', true);
+        $syncAnitaActivo = config('requisicion.anita.sync_activo', true) && ! $modoProvisorio;
 
         DB::beginTransaction();
         $anitaIntentada = false;
@@ -124,7 +135,9 @@ class RequisicionService
 
             $this->requisicion_archivoRepository->create($request, $requisicion->id);
 
-            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $requisicion->id, 'insert');
+            if (! $modoProvisorio) {
+                $this->arbolaprobacionService->procesaArbolaprobacion('RE', $requisicion->id, 'insert');
+            }
 
             if ($syncAnitaActivo) {
                 $anitaIntentada = true;
@@ -147,7 +160,139 @@ class RequisicionService
             return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
         }
 
+        return [
+            'mensaje' => 'ok',
+            'requisicion_id' => $requisicion->id,
+            'modo_provisorio' => $modoProvisorio,
+        ];
+    }
+
+    /**
+     * Confirma una requisición en PROVISORIO: validaciones completas, árbol, Anita y estado PENDIENTE.
+     *
+     * @return array{mensaje: string, errores?: string}
+     */
+    public function confirmarRequisicion(int $id): array
+    {
+        $existente = $this->requisicionRepository->find($id);
+        if (! $existente) {
+            return ['mensaje' => 'error', 'errores' => 'Requisición no encontrada.'];
+        }
+        if (! RequisicionProvisorioSupport::esEstadoProvisorio($existente->estado)) {
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede confirmar una requisición en PROVISORIO.'];
+        }
+        if ($existente->requisicion_articulos->isEmpty()) {
+            return ['mensaje' => 'error', 'errores' => 'La requisición no tiene artículos.'];
+        }
+
+        $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+
+        try {
+            $this->arbolaprobacionService->validaRequisicionModeloContraArbol($existente);
+            $payloadValidacion = $this->payloadValidacionLineasDesdeModelo($existente);
+            ValidacionPresupuestoPartidaCapexLineas::validar($payloadValidacion);
+        } catch (\RuntimeException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        $syncAnitaActivo = config('requisicion.anita.sync_activo', true);
+        $numerorequisicion = (int) $existente->numerorequisicion;
+
+        DB::beginTransaction();
+        $anitaIntentada = false;
+
+        try {
+            $this->requisicionRepository->renumerarProvisorioSiColisionaGlobal($id);
+            $existente = $this->requisicionRepository->find($id);
+            $numerorequisicion = (int) $existente->numerorequisicion;
+
+            $this->requisicion_estadoRepository->creaEstado(
+                $id,
+                Carbon::now()->toDateTimeString(),
+                $pendiente,
+                Auth::user()->id,
+                'Confirmación desde provisorio'
+            );
+            $this->requisicionRepository->update(['estado' => $pendiente], $id);
+
+            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert');
+
+            if ($syncAnitaActivo) {
+                $anitaIntentada = true;
+                $requisicion = $this->requisicionRepository->find($id);
+                if (! $requisicion) {
+                    throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
+                }
+                $this->requisicionAnitaSyncService->escribirCreacion($requisicion);
+                $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            if ($anitaIntentada && $numerorequisicion > 0) {
+                $this->compensarRollbackAnitaCreacion($numerorequisicion);
+            }
+
+            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
+        }
+
         return ['mensaje' => 'ok'];
+    }
+
+    /**
+     * Elimina solo requisiciones en PROVISORIO (sin impacto en Anita).
+     *
+     * @return array{mensaje: string, errores?: string}
+     */
+    public function eliminarProvisorio(int $id): array
+    {
+        $existente = $this->requisicionRepository->find($id);
+        if (! RequisicionProvisorioSupport::esEstadoProvisorio($existente->estado)) {
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede eliminar una requisición en PROVISORIO desde esta acción.'];
+        }
+
+        if ($this->tieneOrdencompraAsociada($id)) {
+            return ['mensaje' => 'error', 'errores' => 'No se puede eliminar: la requisición tiene órdenes de compra asociadas.'];
+        }
+
+        if ($this->requisicionRepository->delete($id)) {
+            return ['mensaje' => 'ok'];
+        }
+
+        return ['mensaje' => 'error', 'errores' => 'No se pudo eliminar la requisición.'];
+    }
+
+    /**
+     * @return array{mensaje: string, errores?: string}
+     */
+    public function eliminarRequisicion(int $id): array
+    {
+        if ($this->tieneOrdencompraAsociada($id)) {
+            return ['mensaje' => 'error', 'errores' => 'No se puede eliminar: la requisición tiene órdenes de compra asociadas.'];
+        }
+
+        if (RequisicionProvisorioSupport::esEstadoProvisorio($this->requisicionRepository->find($id)->estado ?? '')) {
+            return ['mensaje' => 'error', 'errores' => 'Use eliminar provisorio para requisiciones en PROVISORIO.'];
+        }
+
+        if ($this->requisicionRepository->delete($id)) {
+            return ['mensaje' => 'ok'];
+        }
+
+        return ['mensaje' => 'error', 'errores' => 'No se pudo eliminar la requisición.'];
+    }
+
+    public function tieneOrdencompraAsociada(int $requisicionId): bool
+    {
+        if ($requisicionId <= 0) {
+            return false;
+        }
+
+        return Ordencompra::query()->where('requisicion_id', $requisicionId)->exists();
     }
 
     /**
@@ -279,7 +424,13 @@ class RequisicionService
         $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
 
         $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
-        if (($data['estado'] ?? '') == $pendiente) {
+        $esProvisorio = RequisicionProvisorioSupport::esEstadoProvisorio($existente->estado);
+
+        if ($esProvisorio) {
+            $data['estado'] = RequisicionProvisorioSupport::nombreEstadoProvisorio();
+        }
+
+        if (($data['estado'] ?? '') == $pendiente && ! $esProvisorio) {
             $data['requisicion_id'] = $id;
             try {
                 $this->arbolaprobacionService->validaRequisicionRequestContraArbol($data);
@@ -288,13 +439,15 @@ class RequisicionService
             }
         }
 
-        try {
-            ValidacionPresupuestoPartidaCapexLineas::validar($data);
-        } catch (\InvalidArgumentException $e) {
-            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        if (! $esProvisorio) {
+            try {
+                ValidacionPresupuestoPartidaCapexLineas::validar($data);
+            } catch (\InvalidArgumentException $e) {
+                return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+            }
         }
 
-        $syncAnitaActivo = config('requisicion.anita.sync_activo', true);
+        $syncAnitaActivo = config('requisicion.anita.sync_activo', true) && ! $esProvisorio;
         $habiaEnAnita = $syncAnitaActivo
             && RequisicionAnitaColisionSupport::existeNroEnReqmae((int) $existente->numerorequisicion);
         $numerorequisicion = (int) $existente->numerorequisicion;
@@ -314,7 +467,7 @@ class RequisicionService
 
             $this->requisicion_archivoRepository->update($request, $id);
 
-            if (($data['estado'] ?? '') == $pendiente) {
+            if (($data['estado'] ?? '') == $pendiente && ! $esProvisorio) {
                 $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert');
             }
 
@@ -339,7 +492,7 @@ class RequisicionService
             return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
         }
 
-        return ['mensaje' => 'ok'];
+        return ['mensaje' => 'ok', 'modo_provisorio' => $esProvisorio];
     }
 
     public function actualizaSoloRequisicion($estado, $id)
@@ -372,6 +525,32 @@ class RequisicionService
     public function leeHistoriaRequisicion($requisicion_id)
     {
         return $this->requisicion_estadoRepository->leeHistoriaRequisicion($requisicion_id);
+    }
+
+    /** @return array<string, mixed> */
+    private function payloadValidacionLineasDesdeModelo(Requisicion $requisicion): array
+    {
+        $payload = [
+            'empresa_id' => $requisicion->empresa_id,
+            'centrocosto_id' => $requisicion->centrocosto_id,
+            'fecha' => $requisicion->fecha,
+            'requisicion_id' => $requisicion->id,
+            'articulo_ids' => [],
+            'cantidades' => [],
+            'centrocostodestino_ids' => [],
+            'partidagasto_ids' => [],
+            'capex_ids' => [],
+        ];
+
+        foreach ($requisicion->requisicion_articulos as $linea) {
+            $payload['articulo_ids'][] = $linea->articulo_id;
+            $payload['cantidades'][] = $linea->cantidad;
+            $payload['centrocostodestino_ids'][] = $linea->centrocosto_destino_id;
+            $payload['partidagasto_ids'][] = $linea->partidagasto_id;
+            $payload['capex_ids'][] = $linea->capex_id;
+        }
+
+        return $payload;
     }
 
     private static function armaCabecera(array $data)

@@ -28,23 +28,44 @@
         }
     }
 
+    var FORM_IDS = ['formgeneral', 'form-recuento'];
+    var TABLA_ARTICULO_SELECTORS = ['#tabla-items-movimientostock', '#tabla-recuento-items'];
+
+    function formContenedor(target) {
+        if (!target) {
+            return null;
+        }
+        for (var i = 0; i < FORM_IDS.length; i++) {
+            var form = document.getElementById(FORM_IDS[i]);
+            if (form && form.contains(target)) {
+                return form;
+            }
+        }
+        return null;
+    }
+
+    function filaArticuloDesdeTarget(target) {
+        for (var i = 0; i < TABLA_ARTICULO_SELECTORS.length; i++) {
+            var tr = target.closest(TABLA_ARTICULO_SELECTORS[i] + ' tr');
+            if (tr) {
+                return tr;
+            }
+        }
+        return null;
+    }
+
     document.addEventListener('keydown', function (e) {
         if (!esTeclaF1(e) && !esTeclaF2(e)) {
             return;
         }
 
-        var form = document.getElementById('formgeneral');
-        if (!form) {
-            return;
-        }
-
         var target = e.target;
-        if (!target || !form.contains(target)) {
+        if (!formContenedor(target)) {
             return;
         }
 
         if (esTeclaF1(e) && target.classList.contains('codigoarticulo')) {
-            var trArt = target.closest('#tabla-items-movimientostock tr');
+            var trArt = filaArticuloDesdeTarget(target);
             if (!trArt) {
                 return;
             }

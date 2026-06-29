@@ -9,6 +9,8 @@ use App\Repositories\Sala\RequisicionSalaEstadoRepositoryInterface;
 use App\Repositories\Sala\RequisicionSalaRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ModuloAvisoService;
+use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioDeferred;
+use App\Support\Sala\RequisicionSalaTransferenciaAsociadaSupport;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -55,9 +57,12 @@ class RequisicionSalaService
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
+            RequisicionSalaTransferenciaLaboratorioDeferred::descartarPendientes();
 
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
+
+        RequisicionSalaTransferenciaLaboratorioDeferred::procesarPendientes();
 
         $this->moduloAvisoService->enviar('sala', 'requisicion_sala_creacion', (int) $requisicion->id);
 
@@ -71,10 +76,15 @@ class RequisicionSalaService
             return ['mensaje' => 'error', 'errores' => 'Requisición de sala no encontrada.'];
         }
         if (! $this->esEditable($existente->estado)) {
-            return ['mensaje' => 'error', 'errores' => 'Solo se puede editar en estado PENDIENTE, A COMPRAS o RECHAZADA.'];
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede editar en estado PENDIENTE, EN LABORATORIO o RECHAZADA.'];
         }
 
         $data = $request->all();
+        $errorTransferencia = RequisicionSalaTransferenciaAsociadaSupport::validarActualizacion($existente, $data);
+        if ($errorTransferencia !== null) {
+            return ['mensaje' => 'error', 'errores' => $errorTransferencia];
+        }
+
         $pendiente = RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
         $rechazada = RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
         $reenviarArbol = false;
@@ -114,19 +124,22 @@ class RequisicionSalaService
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
+            RequisicionSalaTransferenciaLaboratorioDeferred::descartarPendientes();
 
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
+        RequisicionSalaTransferenciaLaboratorioDeferred::procesarPendientes();
+
         return ['mensaje' => 'ok'];
     }
 
-    public function enviarArbolAprobacionDesdeEnCompras(int $id): array
+    public function enviarArbolAprobacionDesdeEnLaboratorio(int $id): array
     {
         $req = $this->requisicionSalaRepository->find($id);
-        $nombreEnCompras = RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
-        if ($req->estado !== $nombreEnCompras) {
-            return ['mensaje' => 'error', 'errores' => 'Solo se puede enviar al árbol cuando está en A COMPRAS.'];
+        $nombreEnLaboratorio = RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+        if ($req->estado !== $nombreEnLaboratorio) {
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede enviar al árbol cuando está en EN LABORATORIO.'];
         }
 
         try {
@@ -143,18 +156,27 @@ class RequisicionSalaService
                 Carbon::now()->toDateTimeString(),
                 $nombreEnArbol,
                 Auth::user()->id,
-                'Enviada al árbol de aprobación (desde A COMPRAS)'
+                'Enviada al árbol de aprobación (desde EN LABORATORIO)'
             );
             $this->requisicionSalaRepository->update(['estado' => $nombreEnArbol], $id);
             $this->arbolaprobacionService->procesaArbolaprobacion('RS', $id, 'resume');
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
+            RequisicionSalaTransferenciaLaboratorioDeferred::descartarPendientes();
 
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
+        RequisicionSalaTransferenciaLaboratorioDeferred::procesarPendientes();
+
         return ['mensaje' => 'ok'];
+    }
+
+    /** @deprecated Use enviarArbolAprobacionDesdeEnLaboratorio() */
+    public function enviarArbolAprobacionDesdeEnCompras(int $id): array
+    {
+        return $this->enviarArbolAprobacionDesdeEnLaboratorio($id);
     }
 
     public function leeHistoria(int $id)
@@ -165,10 +187,10 @@ class RequisicionSalaService
     public function esEditable(?string $estado): bool
     {
         $pendiente = RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
-        $enCompras = RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+        $enLaboratorio = RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
         $rechazada = RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
 
-        return in_array($estado, [$pendiente, $enCompras, $rechazada], true);
+        return in_array($estado, [$pendiente, $enLaboratorio, $rechazada], true);
     }
 
     private static function armaCabecera(array $data): array

@@ -18,12 +18,14 @@
     </td>
     <td class="align-middle"><input type="number" step="0.0001" name="cantidades[]" class="form-control form-control-sm cantidad-linea" value="1"></td>
     <td class="align-middle">
-        <select name="fueradeservicios[]" class="form-control form-control-sm">
+        <select name="fueradeservicios[]" class="form-control form-control-sm fueradeservicio-linea">
             <option value="N" selected>N</option>
             <option value="S">S</option>
         </select>
     </td>
-    <td class="align-middle"><input type="text" name="uids[]" class="form-control form-control-sm" value=""></td>
+    <td class="align-middle">
+        <input type="text" name="uids[]" class="form-control form-control-sm uid-linea" value="" maxlength="50" placeholder="Obligatorio si F/S = S">
+    </td>
     <td class="align-middle"><input type="text" name="numeropartes[]" class="form-control form-control-sm numeroparte-linea" value=""></td>
     <td class="align-middle">
         <select name="destinos[]" class="form-control form-control-sm">

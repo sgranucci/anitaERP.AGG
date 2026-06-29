@@ -8,10 +8,8 @@ Transferencia {{ $transferencia->codigo }}
     use App\Support\Stock\TransferenciaBienUsoSupport;
     use App\Support\Stock\TransferenciaMercaderiaEstados;
 
-    $origen = $transferencia->depositoOrigen?->nombre
-        ?? TransferenciaBienUsoSupport::etiquetaBien($transferencia->bienUsoOrigen);
-    $destino = $transferencia->depositoDestino?->nombre
-        ?? TransferenciaBienUsoSupport::etiquetaBien($transferencia->bienUsoDestino);
+    $origen = TransferenciaBienUsoSupport::etiquetaOrigenTransferencia($transferencia);
+    $destino = TransferenciaBienUsoSupport::etiquetaDestinoTransferencia($transferencia);
 @endphp
 <div class="row">
     <div class="col-lg-12">

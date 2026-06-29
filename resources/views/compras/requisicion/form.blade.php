@@ -171,13 +171,21 @@
             <div class="form-group row">
                 <label for="estado" class="col-lg-3 control-label">Estado</label>
                 <div class="col-lg-5">
+                    @if(!empty($es_provisorio))
+                        <input type="hidden" name="estado" value="{{ $estado_provisorio ?? 'PROVISORIO' }}">
+                        <input type="text" id="estado" class="form-control" value="{{ $estado_provisorio ?? 'PROVISORIO' }}" readonly>
+                    @else
                     <select name="estado" id="estado" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
                         @foreach ($estado_enum as $e)
+                            @if(($e['nombre'] ?? '') === 'PROVISORIO')
+                                @continue
+                            @endif
                             <option value="{{ $e['nombre'] }}" {{ old('estado', $data->estado ?? '') == $e['nombre'] ? 'selected' : '' }}>
                                 {{ $e['nombre'] }}
                             </option>
                         @endforeach
                     </select>
+                    @endif
                 </div>
             </div>
             @endif
@@ -199,6 +207,10 @@
                 ? $data->centrocosto_id
                 : (auth()->user()->centrocosto_id ?? 1)
         );
+        $monedaDefaultLinea = 1;
+        if (isset($data) && $data && $data->requisicion_articulos && $data->requisicion_articulos->count()) {
+            $monedaDefaultLinea = (int) ($data->requisicion_articulos->first()->moneda_id ?? 1);
+        }
     @endphp
     <style>
         #tabla-articulos-requisicion tbody tr.req-requisicion-linea-cerrada td {
@@ -208,7 +220,7 @@
             background-color: rgba(25, 135, 84, 0.16);
         }
     </style>
-    <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}">
+    <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-requisicion-moneda-default="{{ $monedaDefaultLinea }}">
         <thead>
             <tr>
                 <th style="width: 14%;">Artículo</th>
@@ -240,7 +252,7 @@
                     <input type="hidden" class="requisicion_articulo_id" name="requisicion_articulo_ids[]" value="{{ old('requisicion_articulo_ids.'.$idx, $linea->id ?? '') }}">
                     <div class="form-group row celda-articulo-requisicion mb-0 d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}" >
-                        <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
+                        <button type="button" title="Consulta art&iacute;culos (F1)" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
                         <button type="button" title="Consultar listas de precios de compra (si no hay artículo, muestra las últimas listas vigentes del proveedor)" style="padding:1;" class="btn-accion-tabla consultalistasprecio tooltipsC flex-shrink-0">
@@ -279,7 +291,7 @@
                 <td class="align-middle">
                     <div class="celda-partidagasto d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="partidagasto_id" name="partidagasto_ids[]" value="{{ old('partidagasto_ids.'.$idx, $linea->partidagasto_id ?? '') }}" >
-                        <button type="button" title="Consulta partidas (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC flex-shrink-0">
+                        <button type="button" title="Consulta partidas (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
                         <input type="text" class="codigopartidagasto form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigopartidagastos[]" value="{{ optional($linea->partidagastos)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
@@ -289,7 +301,7 @@
                 <td class="align-middle">
                     <div class="celda-capex d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="capex_id" name="capex_ids[]" value="{{ old('capex_ids.'.$idx, $linea->capex_id ?? '') }}">
-                        <button type="button" title="Consulta CAPEX (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC flex-shrink-0">
+                        <button type="button" title="Consulta CAPEX (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
                         <input type="text" class="codigocapex form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigocapexs[]" value="{{ optional($linea->capexs)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >

@@ -87,6 +87,17 @@ final class RequisicionAnitaSyncContext
         return $this->centrocostoCodigo($destino);
     }
 
+    /** reqm_ccosto_dest: centro de costo destino de la primera línea de artículos. */
+    public function centrocostoDestinoCodigo(): int
+    {
+        $primeraLinea = $this->requisicion->requisicion_articulos->sortBy('id')->first();
+        if ($primeraLinea instanceof Requisicion_Articulo) {
+            return $this->centrocostoCodigoLinea($primeraLinea);
+        }
+
+        return $this->centrocostoCodigo();
+    }
+
     public function proveedorCodigo(): string
     {
         $codigo = (string) ($this->requisicion->proveedores?->codigo ?? '0');
@@ -98,18 +109,19 @@ final class RequisicionAnitaSyncContext
     {
         $moneda = null;
         if ($monedaId !== null) {
-            $primera = $this->requisicion->requisicion_articulos->firstWhere('moneda_id', $monedaId);
-            $moneda = $primera?->monedas;
+            $linea = $this->requisicion->requisicion_articulos->firstWhere('moneda_id', $monedaId);
+            $moneda = $linea?->monedas;
         }
         if ($moneda === null) {
-            $primeraLinea = $this->requisicion->requisicion_articulos->first();
+            $primeraLinea = $this->requisicion->requisicion_articulos->sortBy('id')->first();
             $moneda = $primeraLinea?->monedas;
         }
 
-        $codigoErp = (int) ($moneda?->codigo ?? 0);
-        $anita = $codigoErp + 1;
+        if ($moneda && filled($moneda->codigo)) {
+            return (string) (int) $moneda->codigo;
+        }
 
-        return (string) $anita;
+        return '1';
     }
 
     public function condicionPagoCodigo(): int
@@ -175,10 +187,10 @@ final class RequisicionAnitaSyncContext
     public function articuloSkuPadded(?string $sku): string
     {
         $sku = trim((string) $sku);
-        if ($sku === '') {
-            return str_pad('texto', 13, ' ', STR_PAD_RIGHT);
+        if ($sku === '' || strcasecmp($sku, 'texto') === 0) {
+            return 'texto';
         }
 
-        return str_pad($sku, 13, ' ', STR_PAD_RIGHT);
+        return str_pad(substr($sku, 0, 13), 13, '0', STR_PAD_LEFT);
     }
 }

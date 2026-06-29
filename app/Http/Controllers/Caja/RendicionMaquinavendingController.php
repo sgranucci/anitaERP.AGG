@@ -229,7 +229,7 @@ class RendicionMaquinavendingController extends Controller
             $html .= '<td class="fecha">'.e((string) ($r->fecha_rendicion?->format('d/m/Y H:i') ?? '')).'</td>';
             $html .= '<td class="jornada">'.e((string) ($r->fecha_jornada?->format('d/m/Y') ?? '')).'</td>';
             $html .= '<td class="total">$'.e(number_format((float) $r->total_cobrado, 2, ',', '.')).'</td>';
-            $html .= '<td><a class="btn btn-warning btn-sm eligeconsultarendicion">Elegir</a></td>';
+            $html .= '<td><a href="#" class="btn btn-warning btn-sm elegir-rendicion-ventas" data-id="'.e((string) $r->id).'">Elegir</a></td>';
             $html .= '</tr>';
         }
 

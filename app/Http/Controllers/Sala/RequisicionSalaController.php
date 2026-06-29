@@ -20,6 +20,8 @@ use App\Services\Sala\RequisicionSalaPdfService;
 use App\Services\Sala\RequisicionSalaService;
 use App\Support\Sala\RecpunicaAnitaSupport;
 use App\Support\Sala\RequisicionSalaListadoFiltros;
+use App\Support\Navegacion\ModoConsultaUrlSupport;
+use App\Support\Sala\RequisicionSalaTransferenciaAsociadaSupport;
 use Illuminate\Http\Request;
 
 class RequisicionSalaController extends Controller
@@ -51,8 +53,9 @@ class RequisicionSalaController extends Controller
             'filtrosQuery' => RequisicionSalaListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => RequisicionSalaListadoFiltros::CAMPOS,
             'estado_enum' => RequisicionSalaEstado::$enumEstado,
-            'estado_a_compras' => RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
+            'estado_en_laboratorio' => RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
             'estado_pendiente' => RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
+            'estado_rechazada' => RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
         ]);
     }
 
@@ -111,10 +114,14 @@ class RequisicionSalaController extends Controller
     {
         can('editar-requisicion-sala');
         $data = $this->repository->find($id);
+        $modoConsulta = request()->input('vista') === 'consulta';
 
-        return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), [
+        return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), $this->datosVistaTransferencia($data), [
             'data' => $data,
             'movimientos_arbol' => $this->arbolIntegracion->findPorRequisicionSala((int) $id),
+            'soloConsulta' => $modoConsulta,
+            'ocultarVolver' => $modoConsulta,
+            'puedeActualizarRequisicionSala' => can('actualizar-requisicion-sala', false),
         ]));
     }
 
@@ -165,7 +172,7 @@ class RequisicionSalaController extends Controller
     public function enviarArbolAprobacion($id)
     {
         can('enviar-arbol-requisicion-sala');
-        $resultado = $this->service->enviarArbolAprobacionDesdeEnCompras((int) $id);
+        $resultado = $this->service->enviarArbolAprobacionDesdeEnLaboratorio((int) $id);
         if (($resultado['mensaje'] ?? '') === 'error') {
             return redirect()->back()->with('mensaje_error', $resultado['errores'] ?? 'Error.');
         }
@@ -193,7 +200,9 @@ class RequisicionSalaController extends Controller
 
     public function consultaNumeroParteUnica(Request $request)
     {
-        can('crear-requisicion-sala');
+        if (! can('crear-requisicion-sala', false) && ! can('actualizar-requisicion-sala', false)) {
+            can('crear-requisicion-sala');
+        }
         $sku = trim((string) $request->input('sku', ''));
         if ($sku === '') {
             return response()->json(['encontrado' => false]);
@@ -225,11 +234,39 @@ class RequisicionSalaController extends Controller
         }
 
         $data = $this->repository->find($id);
+        $puedeActualizar = ModoConsultaUrlSupport::usuarioPuedeActualizarRequisicionSala();
 
-        return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), [
+        return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), $this->datosVistaTransferencia($data), [
             'data' => $data,
-            'visualizar' => true,
+            'movimientos_arbol' => $movimientos,
+            'visualizar' => ! $puedeActualizar,
+            'acceso_visualizacion_por_hash' => filled($hash),
+            'soloConsulta' => true,
+            'ocultarVolver' => true,
+            'puedeActualizarRequisicionSala' => $puedeActualizar,
         ]));
+    }
+
+    /** @return array<string, mixed> */
+    private function datosVistaTransferencia(?\App\Models\Sala\RequisicionSala $data): array
+    {
+        if ($data === null) {
+            return [
+                'tiene_transferencia_laboratorio' => false,
+                'transferencia_laboratorio' => null,
+                'lineas_articulo_bloqueadas_por_tm' => [],
+            ];
+        }
+
+        $tieneTm = RequisicionSalaTransferenciaAsociadaSupport::tieneTransferenciaLaboratorio($data);
+
+        return [
+            'tiene_transferencia_laboratorio' => $tieneTm,
+            'transferencia_laboratorio' => $tieneTm
+                ? RequisicionSalaTransferenciaAsociadaSupport::transferenciaLaboratorio($data)
+                : null,
+            'lineas_articulo_bloqueadas_por_tm' => RequisicionSalaTransferenciaAsociadaSupport::idsLineasArticuloBloqueadas($data),
+        ];
     }
 
     private function datosFormulario($data): array
@@ -243,7 +280,7 @@ class RequisicionSalaController extends Controller
             'estado_enum' => RequisicionSalaEstado::$enumEstado,
             'destino_enum' => \App\Models\Sala\RequisicionSalaArticulo::$enumDestino,
             'estado_linea_enum' => \App\Models\Sala\RequisicionSalaArticulo::$enumEstado,
-            'estado_a_compras' => RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
+            'estado_en_laboratorio' => RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
             'estado_pendiente' => RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
         ];
     }

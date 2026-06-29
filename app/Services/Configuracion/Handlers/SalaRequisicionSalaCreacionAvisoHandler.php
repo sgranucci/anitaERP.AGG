@@ -4,7 +4,9 @@ namespace App\Services\Configuracion\Handlers;
 
 use App\Contracts\Configuracion\ModuloAvisoHandlerInterface;
 use App\Repositories\Sala\RequisicionSalaRepositoryInterface;
+use App\Services\Sala\RequisicionSalaArbolIntegracionService;
 use App\Services\Sala\RequisicionSalaPdfService;
+use App\Support\Navegacion\ModoConsultaUrlSupport;
 
 class SalaRequisicionSalaCreacionAvisoHandler implements ModuloAvisoHandlerInterface
 {
@@ -44,7 +46,17 @@ class SalaRequisicionSalaCreacionAvisoHandler implements ModuloAvisoHandlerInter
 
     public function linkConsulta(int $entityId): ?string
     {
-        return url('sala/requisicion-sala/'.$entityId.'/editar');
+        $movs = app(RequisicionSalaArbolIntegracionService::class)->findPorRequisicionSala($entityId);
+        foreach ($movs as $mov) {
+            if (filled($mov->hashvisualizar ?? null)) {
+                return ModoConsultaUrlSupport::urlVisualizarRequisicionSala(
+                    $entityId,
+                    (string) $mov->hashvisualizar
+                );
+            }
+        }
+
+        return ModoConsultaUrlSupport::urlAbsolutaConConsulta('sala/requisicion-sala/'.$entityId.'/editar');
     }
 
     public function generarPdf(int $entityId): ?array

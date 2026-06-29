@@ -3,6 +3,7 @@
 namespace App\Queries\Sala;
 
 use App\Models\Sala\RequisicionSala;
+use App\Models\Sala\RequisicionSalaEstado;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Sala\RequisicionSalaListadoFiltros;
 use Illuminate\Support\Facades\DB;
@@ -63,6 +64,17 @@ class RequisicionSalaQuery implements RequisicionSalaQueryInterface
             ->whereIn('requisicion_sala.empresa_id', $empresas)
             ->orderBy('requisicion_sala.id', 'desc');
 
+        $q->selectSub(
+            RequisicionSalaEstado::query()
+                ->select('observacion')
+                ->whereColumn('requisicion_sala_id', 'requisicion_sala.id')
+                ->where('estado', self::nombreEstadoRechazada())
+                ->orderByDesc('fecha')
+                ->orderByDesc('id')
+                ->limit(1),
+            'motivo_rechazo'
+        );
+
         if (RequisicionSalaListadoFiltros::tieneCriteriosAplicados($filtros)) {
             RequisicionSalaListadoFiltros::aplicar($q, $filtros);
         }
@@ -81,6 +93,11 @@ class RequisicionSalaQuery implements RequisicionSalaQueryInterface
         }
 
         return $flPaginando ? $q->paginate(10) : $q->get();
+    }
+
+    private static function nombreEstadoRechazada(): string
+    {
+        return RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
     }
 
     public function listadoExport($filtros)

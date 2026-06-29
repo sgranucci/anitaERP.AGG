@@ -54,6 +54,10 @@
     </table>
 
     <h2>Detalle de conteo</h2>
+    <p style="margin:0 0 6px 0; color:#555; font-size:8px;">
+        Costo unitario = precio de &uacute;ltima compra: primero Anita (stkmae.stkm_pre_compra3);
+        si no hay dato, &uacute;ltima COM confirmada en el ERP; si no, costo/PPP del art&iacute;culo.
+    </p>
     <table>
         <thead>
             <tr>
@@ -63,11 +67,21 @@
                 <th class="num">Saldo sistema</th>
                 <th class="num">Contado</th>
                 <th class="num">Diferencia a ajustar</th>
+                <th class="num">Costo u/c</th>
+                <th class="num">Valor dif.</th>
             </tr>
         </thead>
         <tbody>
+            @php $totalValorDif = 0.0; @endphp
             @foreach ($recuento->items as $item)
-                @php $dif = $item->diferencia(); @endphp
+                @php
+                    $dif = $item->diferencia();
+                    $costoUc = $item->precio_ultima_compra ?? null;
+                    $valorDif = ($costoUc !== null && abs($dif) > 1e-9) ? $dif * (float) $costoUc : null;
+                    if ($valorDif !== null) {
+                        $totalValorDif += $valorDif;
+                    }
+                @endphp
                 <tr>
                     <td>{{ optional($item->articulos)->sku }}</td>
                     <td>{{ $item->detalle ?: optional($item->articulos)->descripcion }}</td>
@@ -77,9 +91,29 @@
                     <td class="num @if (abs($dif) > 1e-9) dif-neg @else dif-cero @endif">
                         {{ rtrim(rtrim(number_format($dif, 6, '.', ''), '0'), '.') }}
                     </td>
+                    <td class="num">
+                        @if ($costoUc !== null)
+                            {{ number_format((float) $costoUc, 4, '.', '') }}
+                        @else
+                            —
+                        @endif
+                    </td>
+                    <td class="num">
+                        @if ($valorDif !== null)
+                            {{ number_format($valorDif, 2, '.', '') }}
+                        @else
+                            —
+                        @endif
+                    </td>
                 </tr>
             @endforeach
         </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="7" class="num">Total valor diferencias (costo u/c)</th>
+                <th class="num">{{ number_format($totalValorDif, 2, '.', '') }}</th>
+            </tr>
+        </tfoot>
     </table>
 </body>
 </html>

@@ -22,6 +22,13 @@
     <div class="wrapper">
         <nav class="main-header navbar navbar-expand navbar-light navbar-white border-bottom shadow-sm mb-0">
             <span class="navbar-brand mb-0 h6 font-weight-bold text-secondary">Anita ERP — Consulta de requisición</span>
+            <ul class="navbar-nav ml-auto">
+                <li class="nav-item">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.close();" title="Cerrar esta solapa">
+                        <i class="fa fa-times"></i> Cerrar solapa
+                    </button>
+                </li>
+            </ul>
         </nav>
         <div class="content-wrapper m-0" style="min-height: auto;">
             <section class="content pt-3 pb-4">

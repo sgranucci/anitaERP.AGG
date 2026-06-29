@@ -7,7 +7,7 @@
     $depEtiqueta = $modoTodos
         ? 'Todos los depósitos'
         : RecuentoMovimientosArticuloSupport::etiquetaDepositoConEmpresa($dep, $dep['empresa_nombre'] ?? '');
-    $colspan = $modoTodos ? 8 : 7;
+    $colspan = $modoTodos ? 9 : 8;
     $tituloArticulo = trim(($art['sku'] ?? '').' '.($art['descripcion'] ?? ''));
     $tituloColumnaDeposito = \App\Support\Stock\MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados()
         ? 'Depósito / Empresa'
@@ -48,6 +48,7 @@
             <th>Tipo</th>
             <th>Entrada{{ $sufijoUm }}</th>
             <th>Salida{{ $sufijoUm }}</th>
+            <th>Precio unit.</th>
             <th>Concepto</th>
             <th>Mov. stock</th>
             <th>Leyenda mov.</th>
@@ -63,6 +64,7 @@
                 <td>{{ $m->tipo ?? '' }}</td>
                 <td>@if ($m->entrada !== null){{ $m->entrada }}@endif</td>
                 <td>@if ($m->salida !== null){{ $m->salida }}@endif</td>
+                <td>{{ $m->precio_unitario_fmt ?? '' }}</td>
                 <td>{{ $m->concepto_display ?? $m->concepto ?? '' }}</td>
                 <td>{{ $m->movimiento_codigo ?: ($m->movimientostock_id ?? '') }}</td>
                 <td>{{ $m->movimiento_leyenda ?? '' }}</td>

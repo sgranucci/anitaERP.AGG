@@ -84,6 +84,30 @@
 			}
 		});
 
+		if (!flError
+			&& typeof window.msOperacionTipoTransaccion === 'function'
+			&& window.msOperacionTipoTransaccion() === 'S'
+			&& (typeof window.msDepositoOrigenRequiereControlStock !== 'function'
+				|| window.msDepositoOrigenRequiereControlStock())) {
+			$("#tbody-tabla tr.item-pedido").each(function () {
+				var $tr = $(this);
+				var cant = parseFloat($tr.find(".cantidad-stock").val() || $tr.find(".cantidad").val() || 0);
+				if (!cant || cant <= 0) {
+					return;
+				}
+				var saldoTexto = String($tr.find('.ms-saldo-origen').text() || '').trim().replace(/\./g, '').replace(',', '.');
+				if (saldoTexto === '' || saldoTexto === '—') {
+					return;
+				}
+				var saldo = parseFloat(saldoTexto);
+				if (!isNaN(saldo) && cant > saldo + 0.000001) {
+					alert('La cantidad supera el saldo disponible en al menos un artículo.');
+					flError = true;
+					return false;
+				}
+			});
+		}
+
 		if (!flError)
 			$('#formgeneral').submit();
 	}

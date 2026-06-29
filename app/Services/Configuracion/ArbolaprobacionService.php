@@ -27,6 +27,7 @@ use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Configuracion\OcArbolTriggerCatalog;
+use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioDeferred;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -678,7 +679,7 @@ class ArbolaprobacionService
         ];
     }
 
-    public function aprobar($tipocomprobante, $comprobante_id, $aprobacion_id, $usuario_id, ?string $observacion = null)
+    public function aprobar($tipocomprobante, $comprobante_id, $aprobacion_id, $usuario_id, ?string $observacion = null): array
     {
         DB::beginTransaction();
         try {
@@ -699,9 +700,7 @@ class ArbolaprobacionService
                     'observacion' => $obsAprobacion,
                 ]);
             if ($rows === 0) {
-                DB::commit();
-
-                return;
+                return $this->commitAprobacion($tipocomprobante);
             }
 
             // Invalida el resto de los usuarios del mismo nivel/comprobante.
@@ -820,19 +819,15 @@ class ArbolaprobacionService
                 $reqActual = $this->requisicionRepository->find($comprobante_id);
                 $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
                 if ($reqActual && $reqActual->estado === $nombreEnCompras) {
-                    DB::commit();
-
-                    return;
+                    return $this->commitAprobacion($tipocomprobante);
                 }
             }
 
             if ($tipocomprobante === 'RS') {
                 $reqSalaActual = app(\App\Repositories\Sala\RequisicionSalaRepositoryInterface::class)->find($comprobante_id);
-                $nombreEnComprasSala = \App\Models\Sala\RequisicionSalaEstado::$enumEstado[array_search('5', array_column(\App\Models\Sala\RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
-                if ($reqSalaActual && $reqSalaActual->estado === $nombreEnComprasSala) {
-                    DB::commit();
-
-                    return;
+                $nombreEnLaboratorioSala = \App\Models\Sala\RequisicionSalaEstado::$enumEstado[array_search('5', array_column(\App\Models\Sala\RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+                if ($reqSalaActual && $reqSalaActual->estado === $nombreEnLaboratorioSala) {
+                    return $this->commitAprobacion($tipocomprobante);
                 }
             }
 
@@ -845,12 +840,28 @@ class ArbolaprobacionService
             }
             $this->procesaArbolaprobacion($tipocomprobante, $comprobante_id, 'self', $opcionesProceso);
 
-            DB::commit();
+            return $this->commitAprobacion($tipocomprobante);
         } catch (\Exception $e) {
             DB::rollback();
+            if ($tipocomprobante === 'RS') {
+                RequisicionSalaTransferenciaLaboratorioDeferred::descartarPendientes();
+            }
 
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
+    }
+
+    private function commitAprobacion(string $tipocomprobante): array
+    {
+        DB::commit();
+        if ($tipocomprobante !== 'RS') {
+            return ['mensaje' => 'ok'];
+        }
+
+        return [
+            'mensaje' => 'ok',
+            'transferencias_sala' => RequisicionSalaTransferenciaLaboratorioDeferred::procesarPendientes(),
+        ];
     }
 
     private function grabaMovimientoArbolAutomatico(
@@ -2200,17 +2211,31 @@ class ArbolaprobacionService
             return null;
         }
         $requisicionSala = app(\App\Repositories\Sala\RequisicionSalaRepositoryInterface::class)->find($id);
+        $requisicionSala?->loadMissing(['requisicion_sala_articulos.articulos']);
         $totales = \App\Support\Sala\RequisicionSalaTotalesCabecera::desdeModelo($requisicionSala);
         $estadoTrasAprobar = null;
         if ($modo === 'aprobacion') {
             $estadoTrasAprobar = $this->estadoTrasAprobarSegunMovimientoRequisicionSala($requisicionSala, $mov);
         }
+        $generaTm = \App\Support\Sala\RequisicionSalaLineasLaboratorioSupport::generaraTransferenciaLaboratorioAlAprobar(
+            $requisicionSala,
+            $estadoTrasAprobar
+        );
+        $preflightTm = \App\Support\Sala\RequisicionSalaTransferenciaLaboratorioPreflightSupport::evaluar(
+            $requisicionSala,
+            $estadoTrasAprobar
+        );
 
         return [
             'requisicion_sala' => $requisicionSala,
             'movimiento' => $mov,
             'estado_tras_aprobar' => $estadoTrasAprobar,
             'monto_items' => (float) ($totales['monto'] ?? 0),
+            'genera_transferencia_laboratorio' => $generaTm,
+            'deposito_laboratorio' => $generaTm
+                ? \App\Support\Sala\RequisicionSalaLineasLaboratorioSupport::etiquetaDepositoLaboratorio()
+                : '',
+            'transferencia_laboratorio_preflight' => $preflightTm,
         ];
     }
 

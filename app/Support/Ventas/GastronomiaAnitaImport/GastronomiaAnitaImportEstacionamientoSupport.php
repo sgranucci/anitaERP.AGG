@@ -42,6 +42,7 @@ final class GastronomiaAnitaImportEstacionamientoSupport
         int $sucursal,
         string|int|null $empresaCodigo = null,
         array $numeros = [],
+        int $empresaId = 0,
     ): array {
         if ($sucursal <= 0 || $numeros === []) {
             return [];
@@ -61,13 +62,14 @@ final class GastronomiaAnitaImportEstacionamientoSupport
                 ." AND resv_letra = 'B' "
                 ." AND resv_nro IN (".$in.") ";
 
-            $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+            $parsed = ApiAnita::parsearRespuestaLista($api->apiCall(
+                GastronomiaAnitaImportBridgeSupport::mergePayload([
                 'acc' => 'list',
                 'tabla' => 'resvta',
                 'campos' => 'resv_tipo,resv_nro,resv_host',
                 'whereArmado' => $where,
                 'orderBy' => 'resv_nro',
-            ]));
+            ], $empresaId)));
 
             foreach ($parsed['filas'] ?? [] as $row) {
                 if (! self::esResvtaEstacionamiento($row)) {
@@ -87,8 +89,9 @@ final class GastronomiaAnitaImportEstacionamientoSupport
         int $sucursal,
         int $numero,
         string|int|null $empresaCodigo = null,
+        int $empresaId = 0,
     ): bool {
-        $map = self::numerosEstacionamientoEnSucursal($sucursal, $empresaCodigo, [$numero]);
+        $map = self::numerosEstacionamientoEnSucursal($sucursal, $empresaCodigo, [$numero], $empresaId);
 
         return isset($map[$numero]);
     }

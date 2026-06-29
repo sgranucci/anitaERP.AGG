@@ -16,11 +16,7 @@ Recuento {{ $recuento->codigo }}
                 </h3>
                 <div class="card-tools">
                     @include('includes.stock.boton-manual')
-                    @if (can('imprimir-recuento', false))
-                    <a href="{{ route('imprimir_pdf_recuento', ['id' => $recuento->id]) }}" class="btn btn-primary btn-sm" target="_blank">
-                        <i class="fas fa-file-pdf"></i> PDF
-                    </a>
-                    @endif
+                    @include('stock.recuento.partials.botones_exportar', ['recuento' => $recuento])
                     @if ($recuento->esEditable() && can('editar-recuento', false))
                     <a href="{{ route('editar_recuento', ['id' => $recuento->id]) }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-edit"></i> Editar

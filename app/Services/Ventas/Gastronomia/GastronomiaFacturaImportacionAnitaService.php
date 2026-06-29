@@ -20,6 +20,9 @@ use App\Models\Ventas\Venta_Emision;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Repositories\Ventas\MozoGastronomiaRepositoryInterface;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportBridgeSupport;
+use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportCacheReader;
+use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportDescuentoSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportEstacionamientoSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportMediosPagoSupport;
 use App\Support\Ventas\GastronomiaAnitaImportEmpresaSupport;
@@ -38,10 +41,22 @@ final class GastronomiaFacturaImportacionAnitaService
 
     private const LETRA = 'B';
 
+    private ?GastronomiaAnitaImportCacheReader $cacheReader = null;
+
     public function __construct(
         private readonly GastronomiaCobranzaService $cobranzaGastronomiaService,
         private readonly MozoGastronomiaRepositoryInterface $mozoRepository,
     ) {
+    }
+
+    public function setCacheReader(?GastronomiaAnitaImportCacheReader $reader): void
+    {
+        $this->cacheReader = $reader;
+    }
+
+    public function usaCacheLocal(): bool
+    {
+        return $this->cacheReader !== null;
     }
 
     /**
@@ -144,10 +159,10 @@ final class GastronomiaFacturaImportacionAnitaService
         bool $dryRun,
         ?string $tipoAnita = null,
     ): string {
-        $tipo = strtoupper(trim($tipoAnita ?? (string) ($ctx['tipo_anita'] ?? self::TIPO)));
-        $codigo = $this->armarCodigo($sucursal, $nro, $tipo);
+        $tipoCodigoErp = strtoupper(trim((string) ($ctx['tipo_codigo_erp'] ?? $ctx['tipo_anita'] ?? self::TIPO)));
+        $codigo = $this->armarCodigo($sucursal, $nro, $tipoCodigoErp);
 
-        $ventaExistente = Venta::query()->where('codigo', $codigo)->first();
+        $ventaExistente = $this->buscarVentaErpExistente($sucursal, $nro, $ctx, $tipoCodigoErp);
         if ($ventaExistente !== null) {
             if ($ventaExistente->gastronomiaEmision()->exists()) {
                 return 'omitido';
@@ -157,31 +172,37 @@ final class GastronomiaFacturaImportacionAnitaService
                 return 'vinculado';
             }
 
-            $this->vincularEmisionGastronomia($ventaExistente, $sucursal, $nro, $ctx, $usuarioId, $tipo);
+            $this->vincularEmisionGastronomia($ventaExistente, $sucursal, $nro, $ctx, $usuarioId, $tipoAnita);
 
             return 'vinculado';
         }
 
-        $cab = $this->leerCabeceraAnita($sucursal, $nro, $ctx, $tipo);
+        $cab = $this->leerCabeceraAnita($sucursal, $nro, $ctx, $tipoAnita ?? $tipoCodigoErp);
         if ($cab === null) {
             throw new InvalidArgumentException('Sin cabecera venta en Anita.');
         }
 
         $tipoAnita = strtoupper(trim((string) ($cab->ven_tipo ?? $ctx['tipo_anita'] ?? self::TIPO)));
         $empresaCodigo = (string) ($ctx['empresa_codigo'] ?? '');
-        $lineasStk = $this->leerStkmov($sucursal, $nro, $tipoAnita, $empresaCodigo);
+        $lineasStk = $this->leerStkmov($sucursal, $nro, $tipoAnita, $empresaCodigo, (int) $ctx['empresa_id']);
         $total = round(abs((float) ($cab->ven_monto ?? 0)), 2);
-        if ($lineasStk === [] && $total <= 0) {
+        $montoDesc = GastronomiaAnitaImportDescuentoSupport::montoDescDesdeCabecera($cab);
+        if ($lineasStk === [] && $total <= 0 && $montoDesc <= 0) {
             throw new InvalidArgumentException('Sin ítems stkmov ni monto en Anita.');
         }
 
-        $vengrav = $this->leerVengrav($sucursal, $nro, $tipoAnita, $empresaCodigo);
-        $vencae = $this->leerVencae($sucursal, $nro, $tipoAnita, $empresaCodigo);
-        $resvta = $this->leerResvta($sucursal, $nro, $tipoAnita, $empresaCodigo);
+        $vengrav = $this->leerVengrav($sucursal, $nro, $tipoAnita, $empresaCodigo, (int) $ctx['empresa_id']);
+        $vencae = $this->leerVencae($sucursal, $nro, $tipoAnita, $empresaCodigo, (int) $ctx['empresa_id']);
+        $resvta = $this->leerResvta($sucursal, $nro, $tipoAnita, $empresaCodigo, (int) $ctx['empresa_id']);
 
         if (GastronomiaAnitaImportEstacionamientoSupport::esResvtaEstacionamiento($resvta)) {
             return 'omitido';
         }
+
+        $descuentoImport = GastronomiaAnitaImportDescuentoSupport::resolverDesdeResvta($resvta);
+        $lineasEmision = GastronomiaAnitaImportDescuentoSupport::debeUsarLineaFicticiaVenMontoDesc($resvta, $cab)
+            ? []
+            : $lineasStk;
 
         $fecha = $this->parseFechaAnita((string) ($cab->ven_fecha ?? ''));
         $fechaJornada = $this->parseFechaJornadaAnita($cab, $fecha);
@@ -204,13 +225,14 @@ final class GastronomiaFacturaImportacionAnitaService
 
         DB::transaction(function () use (
             $cab,
-            $lineasStk,
+            $lineasEmision,
             $vengrav,
             $vencae,
             $resvta,
             $ctx,
             $usuarioId,
             $codigo,
+            $nro,
             $fecha,
             $fechaJornada,
             $total,
@@ -218,8 +240,7 @@ final class GastronomiaFacturaImportacionAnitaService
             $medios,
             $sinCobranza,
             $timestamp,
-            $sucursal,
-            $nro,
+            $descuentoImport,
         ) {
             $venta = Venta::query()->create([
                 'fecha' => $fecha,
@@ -264,7 +285,7 @@ final class GastronomiaFacturaImportacionAnitaService
             $venta->updated_at = $timestamp;
             $venta->save();
 
-            $this->crearEmisiones($venta->id, $lineasStk, $cab, $total, (int) ($cab->ven_cod_mon ?? 1), $timestamp);
+            $this->crearEmisiones($venta->id, $lineasEmision, $cab, $total, (int) ($cab->ven_cod_mon ?? 1), $timestamp, $resvta);
             $this->crearImpuestos($venta->id, $cab, $vengrav, $timestamp);
 
             $cuenta = CuentaGastronomia::query()->create([
@@ -277,6 +298,8 @@ final class GastronomiaFacturaImportacionAnitaService
                 'estado' => CuentaGastronomia::ESTADO_FACTURADA,
                 'identificador_pc' => (string) $ctx['identificador_pc'],
                 'cliente_id' => (int) config('gastronomia_anita_import.cliente_consumidor_final_id', 1),
+                'descuento_gastronomia_id' => $descuentoImport['descuento_gastronomia_id'],
+                'cliente_interno_descuento_id' => $descuentoImport['cliente_interno_descuento_id'],
                 'configuracion_puntoventa_gastronomia_id' => (int) $ctx['configuracion_id'],
                 'venta_id' => $venta->id,
             ]);
@@ -327,7 +350,7 @@ final class GastronomiaFacturaImportacionAnitaService
 
         $tipoAnita = strtoupper(trim((string) ($cab->ven_tipo ?? $ctx['tipo_anita'] ?? self::TIPO)));
         $empresaCodigo = (string) ($ctx['empresa_codigo'] ?? '');
-        $resvta = $this->leerResvta($sucursal, $nro, $tipoAnita, $empresaCodigo);
+        $resvta = $this->leerResvta($sucursal, $nro, $tipoAnita, $empresaCodigo, (int) $ctx['empresa_id']);
 
         if (GastronomiaAnitaImportEstacionamientoSupport::esResvtaEstacionamiento($resvta)) {
             throw new InvalidArgumentException('Comprobante de estacionamiento; no se vincula a gastronomía.');
@@ -337,6 +360,10 @@ final class GastronomiaFacturaImportacionAnitaService
         $fechaJornada = $this->parseFechaJornadaAnita($cab, $fecha);
         $total = round(abs((float) ($venta->total ?? $cab->ven_monto ?? 0)), 2);
         $mozo = $this->resolverMozo($cab, (int) $ctx['empresa_id']);
+        $descuentoImport = GastronomiaAnitaImportDescuentoSupport::resolverDesdeResvta($resvta);
+        $lineasEmision = GastronomiaAnitaImportDescuentoSupport::debeUsarLineaFicticiaVenMontoDesc($resvta, $cab)
+            ? []
+            : $this->leerStkmov($sucursal, $nro, $tipoAnita, $empresaCodigo, (int) $ctx['empresa_id']);
         $timestamp = $this->resolverTimestampImport(
             $nro,
             $fechaJornada,
@@ -345,7 +372,7 @@ final class GastronomiaFacturaImportacionAnitaService
             (int) $ctx['empresa_id'],
         );
 
-        DB::transaction(function () use ($venta, $ctx, $mozo, $timestamp, $total, $fechaJornada, $cab): void {
+        DB::transaction(function () use ($venta, $ctx, $mozo, $timestamp, $total, $fechaJornada, $cab, $resvta, $descuentoImport, $lineasEmision): void {
             if ($venta->fechajornada === null || (string) $venta->fechajornada === '') {
                 $venta->fechajornada = $fechaJornada;
                 $venta->save();
@@ -354,11 +381,12 @@ final class GastronomiaFacturaImportacionAnitaService
             if ($venta->venta_emisiones()->count() === 0) {
                 $this->crearEmisiones(
                     (int) $venta->id,
-                    [],
+                    $lineasEmision,
                     $cab,
                     $total,
                     (int) ($venta->moneda_id ?? $cab->ven_cod_mon ?? 1),
                     $timestamp,
+                    $resvta,
                 );
             }
 
@@ -372,6 +400,8 @@ final class GastronomiaFacturaImportacionAnitaService
                 'estado' => CuentaGastronomia::ESTADO_FACTURADA,
                 'identificador_pc' => (string) $ctx['identificador_pc'],
                 'cliente_id' => (int) ($venta->cliente_id ?? config('gastronomia_anita_import.cliente_consumidor_final_id', 1)),
+                'descuento_gastronomia_id' => $descuentoImport['descuento_gastronomia_id'],
+                'cliente_interno_descuento_id' => $descuentoImport['cliente_interno_descuento_id'],
                 'configuracion_puntoventa_gastronomia_id' => (int) $ctx['configuracion_id'],
                 'venta_id' => $venta->id,
             ]);
@@ -445,7 +475,8 @@ final class GastronomiaFacturaImportacionAnitaService
             'configuracion' => $cfg,
             'identificador_pc' => $pc,
             'tipo_anita' => $tipoAnita,
-            'tipos_anita_lectura' => GastronomiaAnitaImportEmpresaSupport::tiposCabeceraVentaAnita($puntoventa, $empresaCodigo),
+            'tipo_codigo_erp' => GastronomiaAnitaImportEmpresaSupport::tipoCodigoErpImport($puntoventa, $empresaCodigo),
+            'tipos_anita_lectura' => GastronomiaAnitaImportEmpresaSupport::tiposCabeceraLecturaImport($puntoventa, $empresaCodigo),
         ];
     }
 
@@ -455,11 +486,26 @@ final class GastronomiaFacturaImportacionAnitaService
      */
     private function listarNumerosAnitaEnRango(int $sucursal, int $desde, int $hasta, array $ctx): array
     {
-        $api = new ApiAnita;
+        if ($this->cacheReader !== null) {
+            $numeros = [];
+            foreach ($this->cacheReader->numerosEnRango($sucursal, $desde, $hasta, $ctx['tipos_anita_lectura']) as $nro) {
+                $cab = $this->leerCabeceraAnita($sucursal, $nro, $ctx);
+                if ($cab !== null) {
+                    $numeros[$nro] = $nro;
+                }
+            }
+            if ($numeros === []) {
+                throw new \RuntimeException('No se encontraron facturas en cache local para sucursal '.$sucursal.'.');
+            }
+            ksort($numeros);
+
+            return array_values($numeros);
+        }
+
         $numeros = [];
 
         foreach ($ctx['tipos_anita_lectura'] as $tipo) {
-            $raw = $api->apiCall([
+            $raw = $this->apiAnita([
                 'acc' => 'list',
                 'tabla' => 'venta',
                 'campos' => 'ven_nro',
@@ -471,7 +517,7 @@ final class GastronomiaFacturaImportacionAnitaService
                     (string) $tipo,
                     (string) ($ctx['empresa_codigo'] ?? ''),
                 ),
-            ]);
+            ], (int) $ctx['empresa_id']);
             $lista = json_decode($raw);
             if (! is_array($lista)) {
                 continue;
@@ -498,13 +544,6 @@ final class GastronomiaFacturaImportacionAnitaService
      */
     private function leerCabeceraAnita(int $sucursal, int $nro, array $ctx, ?string $tipoPreferido = null): ?stdClass
     {
-        $api = new ApiAnita;
-        $campos = implode(',', [
-            'ven_tipo', 'ven_empresa', 'ven_fecha', 'ven_fecha_vto', 'ven_monto', 'ven_gravado', 'ven_exento', 'ven_impuesto1',
-            'ven_porc_desc', 'ven_monto_desc', 'ven_cod_mon', 'ven_cotizacion',
-            'ven_nombre_cliente', 'ven_direccion_cli', 'ven_cod_postal_cli', 'ven_cuit_cli',
-            'ven_vendedor',
-        ]);
         /** @var Puntoventa $puntoventa */
         $puntoventa = $ctx['puntoventa'];
 
@@ -514,8 +553,29 @@ final class GastronomiaFacturaImportacionAnitaService
             $tipos = array_values(array_unique([$preferido, ...$tipos]));
         }
 
+        if ($this->cacheReader !== null) {
+            $cab = $this->cacheReader->cabecera($sucursal, $nro, $tipos);
+            if ($cab !== null && GastronomiaAnitaImportEmpresaSupport::cabeceraCorrespondeAlPv(
+                $cab,
+                $puntoventa,
+                $ctx['empresa_codigo'] ?? null,
+            )) {
+                return $cab;
+            }
+
+            return null;
+        }
+
+        $campos = implode(',', [
+            'ven_tipo', 'ven_empresa', 'ven_fecha', 'ven_fecha_vto', 'ven_monto', 'ven_gravado', 'ven_exento', 'ven_impuesto1',
+            'ven_porc_desc', 'ven_monto_desc', 'ven_cod_mon', 'ven_cotizacion',
+            'ven_nombre_cliente', 'ven_direccion_cli', 'ven_cod_postal_cli', 'ven_cuit_cli',
+            'ven_vendedor',
+        ]);
+        $empresaId = (int) $ctx['empresa_id'];
+
         foreach ($tipos as $tipo) {
-            $raw = $api->apiCall([
+            $raw = $this->apiAnita([
                 'acc' => 'list',
                 'tabla' => 'venta',
                 'campos' => $campos,
@@ -527,7 +587,7 @@ final class GastronomiaFacturaImportacionAnitaService
                     (string) $tipo,
                     (string) ($ctx['empresa_codigo'] ?? ''),
                 ),
-            ]);
+            ], $empresaId);
             $cab = ApiAnita::primeraFilaLista((string) $raw);
             if ($cab !== null && GastronomiaAnitaImportEmpresaSupport::cabeceraCorrespondeAlPv(
                 $cab,
@@ -544,9 +604,16 @@ final class GastronomiaFacturaImportacionAnitaService
     /**
      * @return list<stdClass>
      */
-    private function leerStkmov(int $sucursal, int $nro, string $tipoAnita, string $empresaCodigo): array
+    private function leerStkmov(int $sucursal, int $nro, string $tipoAnita, string $empresaCodigo, int $empresaId): array
     {
-        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
+        $tipos = GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita);
+        if ($this->cacheReader !== null) {
+            $lista = $this->cacheReader->stkmov($sucursal, $nro, $tipos);
+
+            return $lista !== [] ? $lista : [];
+        }
+
+        foreach ($tipos as $tipo) {
             $lista = $this->leerTablaDetalle(
                 'stkmov',
                 'stkv_articulo,stkv_cantidad,stkv_precio,stkv_cod_impuesto,stkv_descuento',
@@ -555,6 +622,7 @@ final class GastronomiaFacturaImportacionAnitaService
                 'stkv',
                 $tipo,
                 $empresaCodigo,
+                $empresaId,
             );
             if ($lista !== []) {
                 return $lista;
@@ -567,9 +635,16 @@ final class GastronomiaFacturaImportacionAnitaService
     /**
      * @return list<stdClass>
      */
-    private function leerVengrav(int $sucursal, int $nro, string $tipoAnita, string $empresaCodigo): array
+    private function leerVengrav(int $sucursal, int $nro, string $tipoAnita, string $empresaCodigo, int $empresaId): array
     {
-        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
+        $tipos = GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita);
+        if ($this->cacheReader !== null) {
+            $lista = $this->cacheReader->vengrav($sucursal, $nro, $tipos);
+
+            return $lista !== [] ? $lista : [];
+        }
+
+        foreach ($tipos as $tipo) {
             $lista = $this->leerTablaDetalle(
                 'vengrav',
                 'veng_codigo_tasa,veng_gravado,veng_impuesto,veng_tasa',
@@ -578,6 +653,7 @@ final class GastronomiaFacturaImportacionAnitaService
                 'veng',
                 $tipo,
                 $empresaCodigo,
+                $empresaId,
             );
             if ($lista !== []) {
                 return $lista;
@@ -587,16 +663,20 @@ final class GastronomiaFacturaImportacionAnitaService
         return [];
     }
 
-    private function leerVencae(int $sucursal, int $nro, string $tipoAnita, string $empresaCodigo): ?stdClass
+    private function leerVencae(int $sucursal, int $nro, string $tipoAnita, string $empresaCodigo, int $empresaId): ?stdClass
     {
-        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
-            $api = new ApiAnita;
-            $raw = $api->apiCall([
+        $tipos = GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita);
+        if ($this->cacheReader !== null) {
+            return $this->cacheReader->vencae($sucursal, $nro, $tipos);
+        }
+
+        foreach ($tipos as $tipo) {
+            $raw = $this->apiAnita([
                 'acc' => 'list',
                 'tabla' => 'vencae',
                 'campos' => 'venc_nro_cae,venc_fecha_vto',
                 'whereArmado' => $this->whereComprobante($sucursal, $nro, $nro, 'venc', $tipo, $empresaCodigo),
-            ]);
+            ], $empresaId);
             $cab = ApiAnita::primeraFilaLista((string) $raw);
             if ($cab !== null) {
                 return $cab;
@@ -606,19 +686,24 @@ final class GastronomiaFacturaImportacionAnitaService
         return null;
     }
 
-    private function leerResvta(int $sucursal, int $nro, string $tipoAnita, string $empresaCodigo): ?stdClass
+    private function leerResvta(int $sucursal, int $nro, string $tipoAnita, string $empresaCodigo, int $empresaId): ?stdClass
     {
-        foreach (GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita) as $tipo) {
-            $api = new ApiAnita;
-            $raw = $api->apiCall([
+        $tipos = GastronomiaAnitaImportEmpresaSupport::tiposDetalleAnita($tipoAnita);
+        if ($this->cacheReader !== null) {
+            return $this->cacheReader->resvta($sucursal, $nro, $tipos);
+        }
+
+        foreach ($tipos as $tipo) {
+            $raw = $this->apiAnita([
                 'acc' => 'list',
                 'tabla' => 'resvta',
                 'campos' => implode(',', [
                     'resv_fecha', 'resv_hora', 'resv_host', 'resv_cubierto', 'resv_mozo', 'resv_total',
                     'resv_tot_efectivo', 'resv_tot_fiserv', 'resv_tot_qr', 'resv_tot_ctacte', 'resv_tot_tarjeta',
+                    'resv_tipo_dto', 'resv_cliente',
                 ]),
                 'whereArmado' => $this->whereComprobante($sucursal, $nro, $nro, 'resv', $tipo, $empresaCodigo),
-            ]);
+            ], $empresaId);
             $cab = ApiAnita::primeraFilaLista((string) $raw);
             if ($cab !== null) {
                 return $cab;
@@ -639,14 +724,14 @@ final class GastronomiaFacturaImportacionAnitaService
         string $prefijo,
         string $tipo,
         string $empresaCodigo,
+        int $empresaId,
     ): array {
-        $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $this->apiAnita([
             'acc' => 'list',
             'tabla' => $tabla,
             'campos' => $campos,
             'whereArmado' => $this->whereComprobante($sucursal, $nro, $nro, $prefijo, $tipo, $empresaCodigo),
-        ]);
+        ], $empresaId);
         $lista = json_decode($raw);
 
         return is_array($lista) ? $lista : [];
@@ -662,18 +747,26 @@ final class GastronomiaFacturaImportacionAnitaService
         float $total,
         int $monedaId,
         Carbon $timestamp,
+        ?stdClass $resvta = null,
     ): void {
         if ($lineasStk === []) {
+            $montoDesc = GastronomiaAnitaImportDescuentoSupport::montoDescDesdeCabecera($cab);
+            $precio = $montoDesc > 0 ? $montoDesc : max($total, 0.01);
+            $esCortesia = $total <= 0.02;
             $impuestoId = (int) config('gastronomia.impuesto_exento_id', 1);
+            $detalle = GastronomiaAnitaImportDescuentoSupport::tieneCodigoDescuentoResvta($resvta)
+                ? 'Invitación / descuento import Anita'
+                : 'Cortesía import Anita';
+
             $em = Venta_Emision::query()->create([
                 'venta_id' => $ventaId,
                 'numeroitem' => 1,
                 'articulo_id' => $this->articuloCortesiaId(),
-                'detalle' => 'Cortesía import Anita',
+                'detalle' => $detalle,
                 'cantidad' => 1,
-                'precio' => $total,
+                'precio' => $precio,
                 'impuesto_id' => $impuestoId,
-                'incluyeimpuesto' => '1',
+                'incluyeimpuesto' => $esCortesia ? 'N' : '1',
                 'moneda_id' => $monedaId,
                 'lotestock' => 0,
                 'descuento' => 0,
@@ -848,6 +941,46 @@ final class GastronomiaFacturaImportacionAnitaService
         return $tipo.' '.self::LETRA.'-'
             .str_pad((string) $sucursal, $digSuc, '0', STR_PAD_LEFT).'-'
             .str_pad((string) $nro, $digNro, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Evita duplicar si ya existe FAK o alias FAC (Kandiko CAEA) o la misma numeración gastronomía.
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private function buscarVentaErpExistente(int $sucursal, int $nro, array $ctx, string $tipoCodigoErp): ?Venta
+    {
+        $codigo = $this->armarCodigo($sucursal, $nro, $tipoCodigoErp);
+        $venta = Venta::query()->where('codigo', $codigo)->first();
+        if ($venta !== null) {
+            return $venta;
+        }
+
+        /** @var Puntoventa $puntoventa */
+        $puntoventa = $ctx['puntoventa'];
+        $empresaCodigo = $ctx['empresa_codigo'] ?? null;
+
+        if (KandikoAnitaVentaTipoSupport::esPvCaeaKandiko(
+            (string) $puntoventa->codigo,
+            $empresaCodigo,
+            $puntoventa->modofacturacion ?? null,
+        )) {
+            foreach (KandikoAnitaVentaTipoSupport::tiposAnitaEquivalentesFacErp() as $tipoAlias) {
+                if ($tipoAlias === $tipoCodigoErp) {
+                    continue;
+                }
+                $alias = $this->armarCodigo($sucursal, $nro, $tipoAlias);
+                $venta = Venta::query()->where('codigo', $alias)->first();
+                if ($venta !== null) {
+                    return $venta;
+                }
+            }
+        }
+
+        return Venta::query()
+            ->where('puntoventa_id', (int) $ctx['puntoventa_id'])
+            ->where('numerocomprobante', $nro)
+            ->first();
     }
 
     private function whereComprobante(
@@ -1091,5 +1224,15 @@ final class GastronomiaFacturaImportacionAnitaService
         $id = (int) Articulo::query()->orderBy('id')->value('id');
 
         return $id > 0 ? $id : 1;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function apiAnita(array $payload, int $empresaId): string
+    {
+        return (new ApiAnita)->apiCall(
+            GastronomiaAnitaImportBridgeSupport::mergePayload($payload, $empresaId),
+        );
     }
 }

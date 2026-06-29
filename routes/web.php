@@ -1000,6 +1000,7 @@ Route::get('stock/movimientostock/{id}/editar', 'Stock\MovimientoStockController
 Route::match(['get', 'post'], 'stock/movimientostock/preview-asiento', 'Stock\MovimientoStockController@previewAsientoContable')->name('preview_asiento_movimientostock_nuevo');
 Route::match(['get', 'post'], 'stock/movimientostock/preview-conversion-formula', 'Stock\MovimientoStockController@previewConversionFormula')->name('preview_conversion_formula_movimientostock');
 Route::get('stock/movimientostock/api/saldo-articulo', 'Stock\MovimientoStockController@saldoArticuloDeposito')->name('movimientostock_saldo_articulo');
+Route::get('stock/movimientostock/api/precio-linea', 'Stock\MovimientoStockController@precioLineaArticulo')->name('movimientostock_precio_linea');
 Route::match(['get', 'post'], 'stock/movimientostock/{id}/preview-asiento', 'Stock\MovimientoStockController@previewAsientoContable')->name('preview_asiento_movimientostock');
 Route::put('stock/movimientostock/{id}', 'Stock\MovimientoStockController@actualizar')->name('actualizar_movimientostock');
 Route::delete('stock/movimientostock/{id}', 'Stock\MovimientoStockController@eliminar')->name('eliminar_movimientostock');
@@ -1101,6 +1102,7 @@ Route::post('stock/recuento/{id}/cerrar-parcial', 'Stock\RecuentoController@cerr
 Route::post('stock/recuento/{id}/cerrar-total', 'Stock\RecuentoController@cerrarTotal')->name('cerrar_recuento_total');
 Route::post('stock/recuento/{id}/anular-cierre', 'Stock\RecuentoController@anularCierre')->name('anular_cierre_recuento');
 Route::get('stock/recuento/{id}/pdf', 'Stock\RecuentoController@pdf')->name('imprimir_pdf_recuento');
+Route::get('stock/recuento/{id}/excel', 'Stock\RecuentoController@excel')->name('exportar_excel_recuento');
 Route::get('stock/recuento/api/saldo-articulo', 'Stock\RecuentoController@saldoArticulo')->name('recuento_saldo_articulo');
 Route::get('stock/recuento/movimientos-articulo', 'Stock\RecuentoMovimientosArticuloController@index')->name('recuento_movimientos_articulo')->middleware('modo.consulta');
 Route::get('stock/listarecuento-movimientos-articulo/{formato?}', 'Stock\RecuentoMovimientosArticuloController@listar')->name('lista_recuento_movimientos_articulo')->middleware('modo.consulta');
@@ -2471,6 +2473,8 @@ Route::delete('compras/encuesta/{id}', 'Compras\EncuestaController@eliminar')->n
  * Requisiciones
  */
 
+Route::post('compras/requisicion/{id}/confirmar', 'Compras\RequisicionController@confirmar')->name('confirmar_requisicion');
+Route::delete('compras/requisicion/{id}/provisorio', 'Compras\RequisicionController@eliminarProvisorio')->name('eliminar_requisicion_provisorio');
 Route::get('compras/requisicion', 'Compras\RequisicionController@index')->name('consultar_requisicion');
 Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->name('crear_requisicion');
 Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
@@ -2494,6 +2498,7 @@ Route::get('compras/listarequisicion/{formato?}/{busqueda?}', 'Compras\Requisici
 Route::get('compras/leer_historia_requisicion/{requisicion_id}', 'Compras\RequisicionController@leerHistoriaRequisicion')->name('lee_historia_requisicion');
 Route::get('compras/requisicion/aviso-arbol-grabacion', 'Compras\RequisicionController@avisoArbolGrabacion')->name('requisicion_aviso_arbol_grabacion');
 Route::get('compras/requisicion/consulta-listas-precio-articulo', 'Compras\RequisicionController@consultaListasPrecioArticulo')->name('requisicion_consulta_listas_precio_articulo');
+Route::get('compras/requisicion/precio-ultima-compra-articulo', 'Compras\RequisicionController@precioUltimaCompraArticulo')->name('requisicion_precio_ultima_compra_articulo');
 Route::post('compras/requisicion/consulta_partidagasto', 'Compras\RequisicionController@consultaPartidagastoRequisicion')->name('consulta_partidagasto_requisicion');
 Route::get('compras/requisicion/leer_partidagasto/{partidagasto_id}', 'Compras\RequisicionController@leerPartidagastoRequisicionPorId')->name('leer_partidagasto_requisicion');
 Route::get('compras/requisicion/visualizar/{id}/{hash}', 'Compras\RequisicionController@visualizar')->name('visualizar_requisicion');
@@ -2849,9 +2854,9 @@ Route::get('sala/requisicion-sala/crear', 'Sala\RequisicionSalaController@crear'
 Route::get('sala/requisicion-sala/consulta-npu', 'Sala\RequisicionSalaController@consultaNumeroParteUnica')->name('requisicion_sala_consulta_npu');
 Route::get('sala/requisicion-sala/{id}/imprimir-pdf', 'Sala\RequisicionSalaController@imprimirPdf')->name('imprimir_pdf_requisicion_sala');
 Route::post('sala/requisicion-sala', 'Sala\RequisicionSalaController@guardar')->name('guardar_requisicion_sala');
-Route::get('sala/requisicion-sala/visualizar/{id}/{hash}', 'Sala\RequisicionSalaController@visualizar')->name('visualizar_requisicion_sala');
-Route::get('sala/requisicion-sala/{id}/editar', 'Sala\RequisicionSalaController@editar')->name('editar_requisicion_sala');
-Route::put('sala/requisicion-sala/{id}', 'Sala\RequisicionSalaController@actualizar')->name('actualizar_requisicion_sala');
+Route::get('sala/requisicion-sala/visualizar/{id}/{hash}', 'Sala\RequisicionSalaController@visualizar')->name('visualizar_requisicion_sala')->middleware('modo.consulta');
+Route::get('sala/requisicion-sala/{id}/editar', 'Sala\RequisicionSalaController@editar')->name('editar_requisicion_sala')->middleware('modo.consulta');
+Route::put('sala/requisicion-sala/{id}', 'Sala\RequisicionSalaController@actualizar')->name('actualizar_requisicion_sala')->middleware('modo.consulta');
 Route::delete('sala/requisicion-sala/{id}', 'Sala\RequisicionSalaController@eliminar')->name('eliminar_requisicion_sala');
 Route::get('sala/requisicion-sala/{id}/archivo/{archivo}', 'Sala\RequisicionSalaController@descargarArchivo')->name('requisicion_sala_archivo');
 Route::post('sala/requisicion-sala/{id}/enviar-arbol-aprobacion', 'Sala\RequisicionSalaController@enviarArbolAprobacion')->name('enviar_arbol_requisicion_sala');

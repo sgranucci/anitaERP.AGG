@@ -2,6 +2,7 @@
 
 namespace App\Support\Stock;
 
+use App\Models\Stock\Depmae;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Transferencia_Mercaderia;
 use Illuminate\Support\Collection;
@@ -24,9 +25,15 @@ final class MovimientoStockListadoFila
         public readonly string $leyendaListado,
         public readonly string $loteListado,
         public readonly string $nombreEmpresa,
+        public readonly ?string $depositoCodigo,
         public readonly ?string $depositoNombre,
+        public readonly ?int $depositoId,
+        public readonly ?string $depositoOrigenCodigo,
         public readonly ?string $depositoOrigenNombre,
+        public readonly ?int $depositoOrigenId,
+        public readonly ?string $depositoDestinoCodigo,
         public readonly ?string $depositoDestinoNombre,
+        public readonly ?int $depositoDestinoId,
         public readonly ?string $bienUsoOrigenEtiqueta,
         public readonly ?string $bienUsoDestinoEtiqueta,
         public readonly ?string $marcaNombre,
@@ -51,11 +58,53 @@ final class MovimientoStockListadoFila
         return TransferenciaMercaderiaEstados::etiqueta($this->estadoTransferencia);
     }
 
+    public function etiquetaEstadoListado(): string
+    {
+        if ($this->esTransferencia()) {
+            return $this->etiquetaEstadoTransferencia() ?? ($this->estadoTransferencia ?? '—');
+        }
+
+        $enum = (new MovimientoStock)->estadoEnum();
+
+        return $enum[$this->estadoMovimiento ?? ''] ?? ($this->estadoMovimiento ?? '—');
+    }
+
+    public function etiquetaDeposito(): string
+    {
+        if ($this->esTransferencia()) {
+            return '—';
+        }
+
+        return Depmae::etiquetaDesdePartes(
+            (string) ($this->depositoCodigo ?? ''),
+            (string) ($this->depositoNombre ?? ''),
+            (int) ($this->depositoId ?? 0),
+        );
+    }
+
     public function etiquetaOrigen(): string
     {
-        if ($this->depositoOrigenNombre) {
-            return $this->depositoOrigenNombre;
+        if (! $this->esTransferencia()) {
+            return '—';
         }
+
+        if ($this->transferencia?->depositoOrigen) {
+            return $this->transferencia->depositoOrigen->etiqueta();
+        }
+
+        if ($this->transferencia?->bienUsoOrigen) {
+            return TransferenciaBienUsoSupport::etiquetaBien($this->transferencia->bienUsoOrigen);
+        }
+
+        $etqDeposito = Depmae::etiquetaDesdePartes(
+            (string) ($this->depositoOrigenCodigo ?? ''),
+            (string) ($this->depositoOrigenNombre ?? ''),
+            (int) ($this->depositoOrigenId ?? 0),
+        );
+        if ($etqDeposito !== '—') {
+            return $etqDeposito;
+        }
+
         $etq = trim((string) ($this->bienUsoOrigenEtiqueta ?? ''));
 
         return $etq !== '' ? $etq : '—';
@@ -63,9 +112,27 @@ final class MovimientoStockListadoFila
 
     public function etiquetaDestino(): string
     {
-        if ($this->depositoDestinoNombre) {
-            return $this->depositoDestinoNombre;
+        if (! $this->esTransferencia()) {
+            return $this->etiquetaDeposito();
         }
+
+        if ($this->transferencia?->depositoDestino) {
+            return $this->transferencia->depositoDestino->etiqueta();
+        }
+
+        if ($this->transferencia?->bienUsoDestino) {
+            return TransferenciaBienUsoSupport::etiquetaBien($this->transferencia->bienUsoDestino);
+        }
+
+        $etqDeposito = Depmae::etiquetaDesdePartes(
+            (string) ($this->depositoDestinoCodigo ?? ''),
+            (string) ($this->depositoDestinoNombre ?? ''),
+            (int) ($this->depositoDestinoId ?? 0),
+        );
+        if ($etqDeposito !== '—') {
+            return $etqDeposito;
+        }
+
         $etq = trim((string) ($this->bienUsoDestinoEtiqueta ?? ''));
 
         return $etq !== '' ? $etq : '—';
@@ -100,9 +167,15 @@ final class MovimientoStockListadoFila
             leyendaListado: (string) ($raw->leyenda_listado ?? ''),
             loteListado: (string) ($raw->lote_listado ?? ''),
             nombreEmpresa: (string) ($raw->nombreempresa ?? ''),
+            depositoCodigo: $raw->deposito_codigo ?? null,
             depositoNombre: $raw->deposito_nombre ?? null,
+            depositoId: isset($raw->deposito_id_listado) ? (int) $raw->deposito_id_listado : null,
+            depositoOrigenCodigo: $raw->deposito_origen_codigo ?? null,
             depositoOrigenNombre: $raw->deposito_origen_nombre ?? null,
+            depositoOrigenId: isset($raw->deposito_origen_id) ? (int) $raw->deposito_origen_id : null,
+            depositoDestinoCodigo: $raw->deposito_destino_codigo ?? null,
             depositoDestinoNombre: $raw->deposito_destino_nombre ?? null,
+            depositoDestinoId: isset($raw->deposito_destino_id) ? (int) $raw->deposito_destino_id : null,
             bienUsoOrigenEtiqueta: $raw->bien_uso_origen_etiqueta ?? null,
             bienUsoDestinoEtiqueta: $raw->bien_uso_destino_etiqueta ?? null,
             marcaNombre: $raw->marca_nombre ?? null,

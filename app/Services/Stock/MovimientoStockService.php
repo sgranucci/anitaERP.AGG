@@ -12,7 +12,10 @@ use App\Models\Stock\Talle;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
+use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
+use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use Auth;
 use DB;
 use Illuminate\Support\Facades\Log;
@@ -35,6 +38,7 @@ class MovimientoStockService
         Pedido_ArticuloRepositoryInterface $pedido_articuloRepository,
         private MovimientoStockAsientoService $asientoService,
         private MovimientoStockStkmovAnitaService $stkmovAnitaService,
+        private Articulo_Saldo_DepositoRepositoryInterface $saldoDepositoRepository,
     ) {
         $this->movimientostockRepository = $movimientostockrepository;
 		$this->articuloRepository = $articulorepository;
@@ -109,7 +113,9 @@ class MovimientoStockService
 				$existente = $this->leeMovimientoStock($id);
 			}
 
-			$this->asientoService->assertCuadreAntesDeGrabar($data, $tipotransaccion, $existente);
+			if (! $this->omitirAsientoContable($data)) {
+				$this->asientoService->assertCuadreAntesDeGrabar($data, $tipotransaccion, $existente);
+			}
 
 			$signoCantidadMovimiento = $data['signo_cantidad'] ?? $tipotransaccion->signo;
 
@@ -160,29 +166,45 @@ class MovimientoStockService
 				{
 					$this->articulo_movimientoService->deletePorMovimientoStockId($movimientostock_id);
 				}
-				$articulos = $data['articulos_id'];
+				$articulos = $this->normalizarArrayLineasFormulario($data['articulos_id'] ?? []);
 				$skus = [];
 				if (isset($data['skus']))
-					$skus = $data['skus'];
-				$combinaciones = $data['combinaciones_id'] ?? [];
-				$modulos = $data['modulos_id'] ?? [];
-				$numeroitems = $data['items'];
-				$cantidades = $data['cantidades'];
-				$cajas = $data['cajas'] ?? array_fill(0, count($articulos), 0);
-				$piezas = $data['piezas'] ?? array_fill(0, count($articulos), 0);
-				$precios = $data['precios'];
-				$listaprecios = $data['listasprecios_id'];
-				$incluyeimpuestos = $data['incluyeimpuestos'];
-				$monedas = $data['monedas_id'];
-				$descuentos = $data['descuentos'];
-				$loteids = $data['loteids'];
-				$medidas = $data['medidas'];
+					$skus = $this->normalizarArrayLineasFormulario($data['skus']);
+				$combinaciones = $this->normalizarArrayLineasFormulario($data['combinaciones_id'] ?? []);
+				$modulos = $this->normalizarArrayLineasFormulario($data['modulos_id'] ?? []);
+				$numeroitems = $data['items'] ?? count($articulos);
+				$cantidades = $this->normalizarArrayLineasFormulario($data['cantidades'] ?? []);
+				$cajas = $this->normalizarArrayLineasFormulario($data['cajas'] ?? array_fill(0, count($articulos), 0));
+				$piezas = $this->normalizarArrayLineasFormulario($data['piezas'] ?? array_fill(0, count($articulos), 0));
+				$precios = $this->normalizarArrayLineasFormulario($data['precios'] ?? []);
+				$listaprecios = $this->normalizarArrayLineasFormulario($data['listasprecios_id'] ?? []);
+				$incluyeimpuestos = $this->normalizarArrayLineasFormulario($data['incluyeimpuestos'] ?? []);
+				$monedas = $this->normalizarArrayLineasFormulario($data['monedas_id'] ?? []);
+				$descuentos = $this->normalizarArrayLineasFormulario($data['descuentos'] ?? []);
+				$loteids = $this->normalizarArrayLineasFormulario($data['loteids'] ?? []);
+				$medidas = $this->normalizarArrayLineasFormulario($data['medidas'] ?? []);
+				$fechaPrecio = ! empty($data['fecha']) ? \Carbon\Carbon::parse($data['fecha']) : \Carbon\Carbon::today();
+
+				if (($tipotransaccion->operacion ?? '') === 'S') {
+					MovimientoStockSalidaSaldoSupport::validarDesdeLineasFormulario(
+						(int) ($data['deposito_id'] ?? 0),
+						$articulos,
+						$cantidades,
+						$this->saldoDepositoRepository,
+					);
+				}
 
 				// Graba items
 				$dataArticuloMovimiento = [];
 				for ($i = 0; $i < count($articulos); $i++)
 				{
-					$articulo = $this->articuloRepository->find($articulos[$i]);
+					$articuloId = (int) ($articulos[$i] ?? 0);
+					$cantidadLinea = (float) ($cantidades[$i] ?? 0);
+					if ($articuloId <= 0 && abs($cantidadLinea) < 1e-9) {
+						continue;
+					}
+
+					$articulo = $articuloId > 0 ? $this->articuloRepository->find($articuloId) : null;
 
 					$codigoCategoria = ''; $sku = '';
 					if ($articulo)
@@ -196,6 +218,26 @@ class MovimientoStockService
 					$modulo = null;
 					if (isset($modulos[$i]))
 						$modulo = $modulos[$i];
+
+					$precioLinea = (float) str_replace(',', '', (string) ($precios[$i] ?? 0));
+					if ($precioLinea <= 0 && (int) $articulos[$i] > 0) {
+						$datoPrecio = ArticuloPrecioMovimientoStockSupport::resolverParaLinea(
+							(int) $articulos[$i],
+							$tipotransaccion,
+							$fechaPrecio
+						);
+						$precioLinea = (float) ($datoPrecio['precio'] ?? 0);
+						if (empty($listaprecios[$i]) && ! empty($datoPrecio['listaprecio_id'])) {
+							$listaprecios[$i] = $datoPrecio['listaprecio_id'];
+						}
+						if (empty($monedas[$i]) && ! empty($datoPrecio['moneda_id'])) {
+							$monedas[$i] = $datoPrecio['moneda_id'];
+						}
+						if (($incluyeimpuestos[$i] ?? '') === '' && $datoPrecio['incluyeimpuesto'] !== null) {
+							$incluyeimpuestos[$i] = $datoPrecio['incluyeimpuesto'];
+						}
+					}
+
 					$dataArticuloMovimiento = [
 						'fecha' => $data['fecha'],
 						'fechajornada' => $data['fecha'],
@@ -216,8 +258,10 @@ class MovimientoStockService
 						'cantidad' => $cantidades[$i],
 						'caja' => $cajas[$i],
 						'pieza' => $piezas[$i],
-						'precio' => $precios[$i],
-						'costo' => 0,
+						'precio' => $precioLinea,
+						'costo' => ArticuloPrecioMovimientoStockSupport::usaPrecioVenta($tipotransaccion)
+							? 0
+							: $precioLinea,
 						'descuento' => $descuentos[$i],
 						'descuentopie' => 0,
 						'descuentointegrado' => null,
@@ -244,18 +288,16 @@ class MovimientoStockService
 					];
 
 					$dataTalle = [];
-					if (isset($medidas))
-					{
-						if (count($medidas) > 0)
-						{
-							$jtalles = json_decode($medidas[$i]);
-							foreach($jtalles as $medida)
-							{
+					$medidasJson = trim((string) ($medidas[$i] ?? ''));
+					if ($medidasJson !== '') {
+						$jtalles = json_decode($medidasJson);
+						if (is_array($jtalles)) {
+							foreach ($jtalles as $medida) {
 								$dataTalle[] = [
 									'id' => null,
 									'talle_id' => $medida->talle_id,
 									'cantidad' => $medida->cantidad * ($signoCantidadMovimiento == 'S' ? 1 : -1),
-									'precio' => $precios[$i],
+									'precio' => $precioLinea,
 								];
 							}
 						}
@@ -283,7 +325,13 @@ class MovimientoStockService
 				//	}									
 				}
 
-				$resultadoAsiento = $this->sincronizarAsientoContable($movimientostock_id, $tipotransaccion, $data);
+				$resultadoAsiento = $this->omitirAsientoContable($data)
+					? [
+						'asiento_id_nuevo' => null,
+						'ctamov_nuevo' => null,
+						'ctamov_sincronizado_edicion' => false,
+					]
+					: $this->sincronizarAsientoContable($movimientostock_id, $tipotransaccion, $data);
 				$asientoIdNuevo = $resultadoAsiento['asiento_id_nuevo'] ?? null;
 				$ctamovNuevo = $resultadoAsiento['ctamov_nuevo'] ?? null;
 				$ctamovSincronizadoEnEdicion = (bool) ($resultadoAsiento['ctamov_sincronizado_edicion'] ?? false);
@@ -453,6 +501,11 @@ class MovimientoStockService
 		return $resultado;
 	}
 
+	private function omitirAsientoContable(array $data): bool
+	{
+		return ! empty($data['omitir_asiento_contable']);
+	}
+
 	private function assertPeriodoContableStock(array $data): void
 	{
 		$empresaId = (int) ($data['empresa_id'] ?? 0);
@@ -469,6 +522,22 @@ class MovimientoStockService
 			(string) $data['fecha'],
 			PeriodoContableCierreSupport::ALCANCE_STOCK
 		);
+	}
+
+	/**
+	 * @return list<mixed>
+	 */
+	private function normalizarArrayLineasFormulario(mixed $valor): array
+	{
+		if (is_array($valor)) {
+			return $valor;
+		}
+
+		if ($valor === null || $valor === '') {
+			return [];
+		}
+
+		return [$valor];
 	}
 
 

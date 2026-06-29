@@ -17,6 +17,8 @@
         'articulos' => $rendicion->articulos->map(static fn ($a) => [
             'numero_rulo' => (int) $a->numero_rulo,
             'articulo_id' => (int) $a->articulo_id,
+            'sku' => (string) ($a->articulo->sku ?? ''),
+            'descripcion' => (string) ($a->articulo->descripcion ?? ''),
             'cantidad' => (float) $a->cantidad,
             'precio_lista' => round((float) $a->precio_lista, 2),
         ])->values()->all(),

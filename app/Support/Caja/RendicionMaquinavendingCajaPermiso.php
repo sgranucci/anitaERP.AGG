@@ -10,13 +10,19 @@ use InvalidArgumentException;
 
 class RendicionMaquinavendingCajaPermiso
 {
+    public const SLUG_CREAR = 'crear-rendicion-maquinavending-caja';
+
+    public const SLUG_ACTUALIZAR_DIA = 'actualizar-rendicion-maquinavending-caja-dia';
+
+    public const SLUG_ACTUALIZAR_ENCARGADO = 'actualizar-rendicion-maquinavending-caja-encargado';
+
     public static function puedeActualizarPorFecha(RendicionMaquinavendingCaja $rendicion): bool
     {
-        if (can('actualizar-rendicion-maquinavending-caja-encargado', false)) {
+        if (can(self::SLUG_ACTUALIZAR_ENCARGADO, false)) {
             return true;
         }
 
-        if (can('actualizar-rendicion-maquinavending-caja-dia', false)) {
+        if (can(self::SLUG_ACTUALIZAR_DIA, false)) {
             $fechaRendicion = $rendicion->fecharendicion;
 
             return $fechaRendicion !== null
@@ -49,14 +55,19 @@ class RendicionMaquinavendingCajaPermiso
         );
     }
 
-    public static function assertAltaPermitida(int $empresaId, Carbon $fechaCaja): void
+    public static function assertAltaPermitida(int $empresaId, Carbon $fechaCaja, ?Carbon $fechaJornadaContable = null): void
     {
-        if (! can('actualizar-rendicion-maquinavending-caja-encargado', false)
-            && ! (can('actualizar-rendicion-maquinavending-caja-dia', false) && Carbon::today()->isSameDay($fechaCaja))) {
+        if (can(self::SLUG_ACTUALIZAR_ENCARGADO, false)) {
+            // Encargado: puede registrar con fecha de presentación distinta a hoy.
+        } elseif (Carbon::today()->isSameDay($fechaCaja)
+            && (can(self::SLUG_ACTUALIZAR_DIA, false) || can(self::SLUG_CREAR, false))) {
+            // Cajero: presentación el día de hoy (aunque la jornada Ventas sea anterior).
+        } else {
             throw new InvalidArgumentException(self::mensajeRestriccionFecha());
         }
 
-        self::assertPeriodoContablePorFecha($empresaId, $fechaCaja->format('Y-m-d'));
+        $fechaPeriodo = $fechaJornadaContable ?? $fechaCaja;
+        self::assertPeriodoContablePorFecha($empresaId, $fechaPeriodo->format('Y-m-d'));
     }
 
     public static function assertPeriodoContablePorFecha(int $empresaId, string $fechaYmd): void

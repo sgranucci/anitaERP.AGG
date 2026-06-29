@@ -4,9 +4,12 @@ namespace App\Support\Stock;
 
 use App\Models\Contable\BienUso;
 use App\Models\Stock\Tipotransaccion_Stock;
+use App\Models\Stock\Transferencia_Mercaderia;
 
 final class TransferenciaBienUsoSupport
 {
+    /** @var list<string> */
+    public const DEPOSITO_RELATION_COLUMNS = ['id', 'codigo', 'nombre'];
     public static function tipoDestinoBienUso(?Tipotransaccion_Stock $tipo): bool
     {
         return (bool) ($tipo?->destino_bien_uso ?? false);
@@ -40,6 +43,26 @@ final class TransferenciaBienUsoSupport
         ]);
 
         return implode(' — ', $partes) ?: 'Bien #'.$bien->id;
+    }
+
+    public static function etiquetaOrigenTransferencia(?Transferencia_Mercaderia $transferencia): string
+    {
+        if ($transferencia === null) {
+            return '—';
+        }
+
+        return $transferencia->depositoOrigen?->etiqueta()
+            ?? self::etiquetaBien($transferencia->bienUsoOrigen);
+    }
+
+    public static function etiquetaDestinoTransferencia(?Transferencia_Mercaderia $transferencia): string
+    {
+        if ($transferencia === null) {
+            return '—';
+        }
+
+        return $transferencia->depositoDestino?->etiqueta()
+            ?? self::etiquetaBien($transferencia->bienUsoDestino);
     }
 
     public static function assertBienActivo(int $bienUsoId): BienUso

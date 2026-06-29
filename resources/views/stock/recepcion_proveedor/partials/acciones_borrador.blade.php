@@ -1,7 +1,7 @@
 @php
     $puedeGuardar = can('actualizar-recepcion-proveedor', false);
     $puedeConfirmar = can('confirmar-recepcion-proveedor', false);
-    $puedeEliminar = can('actualizar-recepcion-proveedor', false);
+    $puedeEliminar = can('borrar-recepcion-proveedor', false);
 @endphp
 @if($puedeGuardar || $puedeConfirmar || $puedeEliminar || can('listar-recepcion-proveedor', false))
 <div class="{{ $claseContenedor ?? 'd-flex flex-wrap align-items-center' }}">

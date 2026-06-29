@@ -35,4 +35,27 @@
         font-variant-numeric: tabular-nums;
         font-feature-settings: "tnum";
     }
+
+    .est-fd-filtros-form .form-group {
+        flex: 0 0 auto;
+    }
+
+    .est-fd-filtros-form #fecha_fd {
+        width: 10.5rem;
+    }
+
+    .est-fd-filtros-form .est-fd-campo-item {
+        min-width: 9rem;
+        max-width: 14rem;
+    }
+
+    .est-fd-filtros-form .est-fd-campo-turno {
+        min-width: 11rem;
+        max-width: 18rem;
+    }
+
+    .est-fd-filtros-form #busqueda_fd {
+        min-width: 9rem;
+        max-width: 12rem;
+    }
 </style>

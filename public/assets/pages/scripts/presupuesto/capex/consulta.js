@@ -151,6 +151,7 @@ function activa_eventos_consultacapex() {
 		if (!codigo) {
 			$row.find('.capex_id').val('');
 			$row.find('.descripcioncapex').val('');
+			$inp.trigger('req:codigo-validado', [true]);
 			return;
 		}
 		if (!empresaId) {
@@ -176,10 +177,12 @@ function activa_eventos_consultacapex() {
 					$row.find('.capex_id').val(res.id);
 					$inp.val(res.codigo);
 					$row.find('.descripcioncapex').val(res.descripcion || '');
+					$inp.trigger('req:codigo-validado', [true]);
 				} else {
 					$row.find('.capex_id').val('');
 					$row.find('.descripcioncapex').val('');
 					alert((res && res.mensaje) ? res.mensaje : 'CAPEX no encontrado.');
+					$inp.trigger('req:codigo-validado', [false]);
 				}
 			})
 			.fail(function (xhr) {
@@ -197,6 +200,7 @@ function activa_eventos_consultacapex() {
 					} catch (eIgn) {}
 				}
 				alert(msg);
+				$inp.trigger('req:codigo-validado', [false]);
 			});
 	});
 }

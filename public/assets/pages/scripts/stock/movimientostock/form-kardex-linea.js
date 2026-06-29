@@ -44,10 +44,11 @@
             var destinoBien = metaTipo().destinoBienUso;
 
             if (!origenBien && $('#tm_deposito_salida').is(':visible')) {
+                var salida = window.depositoCampoInputs('deposito_salida_id');
                 var o = opcionDeposito(
-                    $('#deposito_salida_id').val(),
-                    $('#deposito_salida_codigo').val(),
-                    $('#deposito_salida_descripcion').val(),
+                    salida.$id.val(),
+                    salida.$codigo.val(),
+                    salida.$descripcion.val(),
                     'Origen'
                 );
                 if (o) {
@@ -55,10 +56,11 @@
                 }
             }
             if (!destinoBien && $('#tm_deposito_entrada').is(':visible')) {
+                var entrada = window.depositoCampoInputs('deposito_entrada_id');
                 var d = opcionDeposito(
-                    $('#deposito_entrada_id').val(),
-                    $('#deposito_entrada_codigo').val(),
-                    $('#deposito_entrada_descripcion').val(),
+                    entrada.$id.val(),
+                    entrada.$codigo.val(),
+                    entrada.$descripcion.val(),
                     'Destino'
                 );
                 if (d) {
@@ -69,14 +71,15 @@
             return opciones;
         }
 
-        var simple = opcionDeposito(
-            $('#deposito_id').val(),
-            $('#deposito_id_codigo').val(),
-            $('#deposito_id_descripcion').val(),
+        var simple = window.depositoCampoInputs('deposito_id');
+        var simpleOpt = opcionDeposito(
+            simple.$id.val(),
+            simple.$codigo.val(),
+            simple.$descripcion.val(),
             ''
         );
-        if (simple) {
-            opciones.push(simple);
+        if (simpleOpt) {
+            opciones.push(simpleOpt);
         }
 
         return opciones;
@@ -97,6 +100,15 @@
             window.actualizarBotonKardexMovimientoStockFila(tr);
         }
     });
+
+    window.obtenerEmpresaIdFiltroSaldosKardex = function () {
+        var el = document.getElementById('empresa_id');
+        if (el && el.value) {
+            return parseInt(el.value, 10) || 0;
+        }
+
+        return 0;
+    };
 
     $(function () {
         var prevOnArticulo = window.onArticuloSeleccionado;

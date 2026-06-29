@@ -203,6 +203,7 @@ class TransferenciaMercaderiaController extends Controller
                 'tipotransaccion_id',
                 'tipotransaccion_stock_id',
                 'usuario_destino_id',
+                'centrocosto_destino_id',
                 'observacion',
             ]),
             $lineas

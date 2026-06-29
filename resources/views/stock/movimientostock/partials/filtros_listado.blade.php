@@ -88,7 +88,7 @@
                     <select name="deposito_id" id="deposito_id" class="form-control form-control-sm">
                         <option value="">Todos (autorizados)</option>
                         @foreach ($depositosDisponibles as $dep)
-                            <option value="{{ $dep->id }}" @selected($depositoIdSeleccion === (int) $dep->id)>{{ $dep->nombre }}</option>
+                            <option value="{{ $dep->id }}" @selected($depositoIdSeleccion === (int) $dep->id)>{{ $dep->etiqueta() }}</option>
                         @endforeach
                     </select>
                 </div>

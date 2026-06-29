@@ -14,8 +14,8 @@ class TransferenciaMercaderiaPdfService
         $transferencia = Transferencia_Mercaderia::query()
             ->with([
                 'tipotransaccion_stock',
-                'depositoOrigen',
-                'depositoDestino',
+                'depositoOrigen:'.implode(',', TransferenciaBienUsoSupport::DEPOSITO_RELATION_COLUMNS),
+                'depositoDestino:'.implode(',', TransferenciaBienUsoSupport::DEPOSITO_RELATION_COLUMNS),
                 'bienUsoOrigen',
                 'bienUsoDestino',
                 'usuarioOrigen',
@@ -34,10 +34,8 @@ class TransferenciaMercaderiaPdfService
             })
         );
 
-        $origen = $transferencia->depositoOrigen?->nombre
-            ?? TransferenciaBienUsoSupport::etiquetaBien($transferencia->bienUsoOrigen);
-        $destino = $transferencia->depositoDestino?->nombre
-            ?? TransferenciaBienUsoSupport::etiquetaBien($transferencia->bienUsoDestino);
+        $origen = TransferenciaBienUsoSupport::etiquetaOrigenTransferencia($transferencia);
+        $destino = TransferenciaBienUsoSupport::etiquetaDestinoTransferencia($transferencia);
 
         $totalOrigen = 0.0;
         $totalDestino = 0.0;

@@ -8,6 +8,7 @@
     window.movimientoStockModoFerli = @json($movimientoStockModoFerli ?? false);
     window.movimientoStockPreviewConversionFormulaUrl = @json(route('preview_conversion_formula_movimientostock'));
     window.movimientoStockSaldoOrigenUrl = @json(route('movimientostock_saldo_articulo'));
+    window.movimientoStockPrecioLineaUrl = @json(route('movimientostock_precio_linea'));
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>

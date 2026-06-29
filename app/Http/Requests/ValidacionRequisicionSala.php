@@ -43,6 +43,30 @@ class ValidacionRequisicionSala extends FormRequest
         return [
             'articulo_ids.required' => 'Debe cargar al menos un artículo.',
             'articulo_ids.min' => 'Debe cargar al menos un artículo.',
+            'uids.*.required' => 'Debe ingresar el UID cuando el ítem está fuera de servicio (F/S = S).',
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            $fueraDeServicio = $this->input('fueradeservicios', []);
+            $uids = $this->input('uids', []);
+            if (! is_array($fueraDeServicio)) {
+                return;
+            }
+            foreach ($fueraDeServicio as $i => $valor) {
+                if ($valor !== 'S') {
+                    continue;
+                }
+                $uid = trim((string) ($uids[$i] ?? ''));
+                if ($uid === '') {
+                    $validator->errors()->add(
+                        'uids.'.$i,
+                        'Debe ingresar el UID cuando el ítem está fuera de servicio (F/S = S).'
+                    );
+                }
+            }
+        });
     }
 }

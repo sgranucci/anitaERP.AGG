@@ -48,7 +48,7 @@
 <table style="width:100%; margin-bottom:10px; font-size:8px;">
     <tr>
         <td><strong>Tipo:</strong> {{ optional($tipo)->nombre ?? '—' }} ({{ optional($tipo)->abreviatura ?? '—' }})</td>
-        <td><strong>Dep&oacute;sito:</strong> {{ optional($deposito)->nombre ?? '—' }}</td>
+        <td><strong>Dep&oacute;sito:</strong> {{ optional($deposito)->etiqueta() ?? '—' }}</td>
         <td><strong>Lote:</strong> {{ optional($movimiento->articulos_movimiento->first())->lote ?? '—' }}</td>
     </tr>
     <tr>

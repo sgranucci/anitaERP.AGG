@@ -118,4 +118,22 @@ class RecuentoMovimientosArticuloSupportTest extends TestCase
         $this->assertSame(0, RecuentoMovimientosArticuloSupport::resolverDepositoIdDesdeRequest('0'));
         $this->assertSame(12, RecuentoMovimientosArticuloSupport::resolverDepositoIdDesdeRequest('12'));
     }
+
+    public function test_enriquecer_fila_agrega_precio_unitario(): void
+    {
+        $row = (object) [
+            'cantidad' => -1.0,
+            'venta_id' => 5,
+            'concepto' => 'Factura',
+            'precio' => 100,
+            'costo' => 0,
+            'tipo_abreviatura' => 'FAC',
+            'tipo_nombre' => 'Factura',
+        ];
+
+        $enriquecida = RecuentoMovimientosArticuloSupport::enriquecerFila($row);
+
+        $this->assertSame(100.0, $enriquecida->precio_unitario);
+        $this->assertSame('100', $enriquecida->precio_unitario_fmt);
+    }
 }

@@ -62,8 +62,8 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
                                 <th>Marca</th>
                             @endif
                             <th>Lote</th>
-                            <th>Origen</th>
-                            <th>Destino</th>
+                            <th title="Transferencia: dep&oacute;sito o bien de origen. Movimiento: no aplica.">Dep. origen</th>
+                            <th title="Transferencia: dep&oacute;sito o bien destino. Movimiento: dep&oacute;sito (c&oacute;digo &mdash; nombre).">Dep. destino</th>
                             <th>Empresa</th>
                             <th class="text-right">Cantidad</th>
                             <th class="text-center">&Iacute;tems</th>

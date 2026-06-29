@@ -13,7 +13,11 @@ use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface
 use App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface;
 use App\Repositories\Sala\RequisicionSalaEstadoRepositoryInterface;
 use App\Repositories\Sala\RequisicionSalaRepositoryInterface;
+use App\Support\Sala\RequisicionSalaLineasLaboratorioSupport;
+use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioDeferred;
+use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioPreflightSupport;
 use App\Support\Sala\RequisicionSalaTotalesCabecera;
+use App\Support\Navegacion\ModoConsultaUrlSupport;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -122,9 +126,9 @@ class RequisicionSalaArbolIntegracionService
                     $req->creousuario_id
                 );
                 $this->grabaMovimientoAutomatico($arbol->id, $comprobanteId, $proximoNivel['proximonivel'], $arrayReplace);
-                $nombreEnCompras = RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+                $nombreEnLaboratorio = RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
                 $reqTrasAuto = $this->requisicionSalaRepository->find($comprobanteId);
-                if ($reqTrasAuto && $reqTrasAuto->estado === $nombreEnCompras) {
+                if ($reqTrasAuto && $reqTrasAuto->estado === $nombreEnLaboratorio) {
                     return 0;
                 }
 
@@ -134,12 +138,17 @@ class RequisicionSalaArbolIntegracionService
             $ip = config('arbolaprobacion.ip_link');
             $hashVisualizar = Hash::make('VISRS'.$comprobanteId.$req->fecha.$req->numerorequisicion);
             $hashVisualizar = str_replace($arrayReplace, '+', $hashVisualizar);
-            $linkVisualizar = $ip.'/anitaERP/public/sala/requisicion-sala/visualizar/'.$comprobanteId.'/'.$hashVisualizar;
+            $linkVisualizar = ModoConsultaUrlSupport::urlVisualizarRequisicionSala(
+                $comprobanteId,
+                $hashVisualizar
+            );
 
             $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
             $envioUid = Auth::check() ? Auth::user()->id : $req->creousuario_id;
             $uids = $proximoNivel['proximousuarios'] ?? [$proximoNivel['proximousuario']];
             $uids = array_values(array_unique(array_filter($uids)));
+
+            $mailExtras = $this->armaExtrasMail($req, $proximoNivel['documento_estado_al_aprobar']);
 
             $ya = Arbolaprobacion_Movimiento::where('requisicion_sala_id', $comprobanteId)
                 ->where('nivel', $proximoNivel['proximonivel'])
@@ -161,7 +170,7 @@ class RequisicionSalaArbolIntegracionService
                 $linkAprobacion = $ip.'/anitaERP/public/arbolaprobacion/aprobar/RS/'.$comprobanteId.'/'.$hashAprobacion;
                 $linkRechazo = $ip.'/anitaERP/public/arbolaprobacion/buscarechazo/RS/'.$comprobanteId.'/'.$hashRechazo;
 
-                $this->enviaCorreo($uid, $req, $linkAprobacion, $linkRechazo, $linkVisualizar);
+                $this->enviaCorreo($uid, $req, $linkAprobacion, $linkRechazo, $linkVisualizar, $mailExtras);
 
                 $this->arbolaprobacionMovimientoRepository->create([
                     'arbolaprobacion_id' => $arbol->id,
@@ -217,7 +226,7 @@ class RequisicionSalaArbolIntegracionService
         if ($estadoNombre !== $nombreAprobada) {
             return;
         }
-        app(RequisicionSalaTransferenciaLaboratorioService::class)->ejecutarSiCorresponde($id, $usuarioId);
+        RequisicionSalaTransferenciaLaboratorioDeferred::encolar($id, $usuarioId);
     }
 
     public function rechazaPorRechazo(int $id, $usuarioId, string $observacion): void
@@ -296,7 +305,7 @@ class RequisicionSalaArbolIntegracionService
         ]);
     }
 
-    private function enviaCorreo(int $uid, RequisicionSala $req, string $linkAprobacion, string $linkRechazo, string $linkVisualizar): void
+    private function enviaCorreo(int $uid, RequisicionSala $req, string $linkAprobacion, string $linkRechazo, string $linkVisualizar, ?array $mailExtras = null): void
     {
         $usuario = $this->usuarioRepository->find($uid);
         if (! $usuario || ! filled($usuario->email)) {
@@ -304,14 +313,32 @@ class RequisicionSalaArbolIntegracionService
         }
         $tipoarbol = $this->nombreTipoArbol();
         Mail::to($usuario->email)->send(new MailArbolAprobacion(
-            $usuario,
-            $tipoarbol,
             $req,
+            $tipoarbol,
             $linkAprobacion,
             $linkRechazo,
             $linkVisualizar,
-            null
+            $mailExtras
         ));
+    }
+
+    /** @return array<string, mixed> */
+    private function armaExtrasMail(RequisicionSala $req, ?string $estadoAlAprobarEsteNivel): array
+    {
+        $totales = RequisicionSalaTotalesCabecera::desdeModelo($req);
+        $estadoTrasAprobar = filled($estadoAlAprobarEsteNivel) ? trim((string) $estadoAlAprobarEsteNivel) : null;
+        $generaTm = RequisicionSalaLineasLaboratorioSupport::generaraTransferenciaLaboratorioAlAprobar($req, $estadoTrasAprobar);
+        $preflightTm = RequisicionSalaTransferenciaLaboratorioPreflightSupport::evaluar($req, $estadoTrasAprobar);
+
+        return [
+            'estado_tras_aprobar' => $estadoTrasAprobar,
+            'monto_items' => (float) ($totales['monto'] ?? 0),
+            'genera_transferencia_laboratorio' => $generaTm,
+            'deposito_laboratorio' => $generaTm
+                ? RequisicionSalaLineasLaboratorioSupport::etiquetaDepositoLaboratorio()
+                : '',
+            'transferencia_laboratorio_preflight' => $preflightTm,
+        ];
     }
 
     private function enviaCorreoRechazoAlSolicitante(int $requisicionId, int $rechazadorId, string $observacion): void
@@ -332,7 +359,9 @@ class RequisicionSalaArbolIntegracionService
         }
 
         $rechazador = $this->usuarioRepository->find($rechazadorId);
-        $linkEditar = url('sala/requisicion-sala/'.$requisicionId.'/editar');
+        $linkEditar = ModoConsultaUrlSupport::urlAbsolutaConConsulta(
+            'sala/requisicion-sala/'.$requisicionId.'/editar'
+        );
 
         Mail::to($solicitante->email)->send(new MailRequisicionSalaRechazoArbol(
             $solicitante,

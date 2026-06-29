@@ -11,6 +11,7 @@ use App\Models\Stock\Formula_Articulo_Hijo;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Services\Stock\Articulo_MovimientoService;
+use App\Support\Stock\ArticuloMovimientoPrecioHistoricoSupport;
 use App\Support\Stock\FormulaArticuloFactorCosto;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
@@ -102,12 +103,16 @@ final class GastronomiaFormulaConsumoService
             $aggregados = [];
             $this->expandFormula($formulaId, (float) $linea->cantidad, $opcMap, $aggregados, 0);
 
+            $preciosInsumo = ArticuloMovimientoPrecioHistoricoSupport::resolverUltimaCompraInsumoPorArticuloIds(
+                array_map('intval', array_keys($aggregados))
+            );
+
             foreach ($aggregados as $ingArticuloId => $cantidad) {
                 if ($cantidad <= 0) {
                     continue;
                 }
 
-                $this->persistirMovimientoStock($tipo, GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+                $payloadInsumo = GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
                     'fecha' => $fechaFactura,
                     'fechajornada' => $fechaJornada,
                     'tipotransaccion_id' => $tipotransaccionId,
@@ -116,12 +121,20 @@ final class GastronomiaFormulaConsumoService
                     'articulo_id' => (int) $ingArticuloId,
                     'concepto' => $conceptoTipoNombre.GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO,
                     'cantidad' => $cantidad,
-                    'precio' => '0',
-                    'costo' => 0,
                     'moneda_id' => $monedaId,
                     'incluyeimpuesto' => 1,
                     'deposito_id' => $depositoInsumosId,
-                ]));
+                ]);
+                $datoPrecio = $preciosInsumo[(int) $ingArticuloId] ?? null;
+                if ($datoPrecio !== null) {
+                    $payloadInsumo['precio'] = $datoPrecio['precio'];
+                    $payloadInsumo['costo'] = $datoPrecio['costo'];
+                    if (! empty($datoPrecio['moneda_id'])) {
+                        $payloadInsumo['moneda_id'] = $datoPrecio['moneda_id'];
+                    }
+                }
+
+                $this->persistirMovimientoStock($tipo, $payloadInsumo);
             }
         }
     }
@@ -159,7 +172,7 @@ final class GastronomiaFormulaConsumoService
             $descuento = (float) ($emision->descuento ?? 0);
             $precioNet = (float) $emision->precio * (1 - $descuento / 100.);
 
-            $this->persistirMovimientoStock($tipo, GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+            $payloadItem = GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
                 'fecha' => $fechaFactura,
                 'fechajornada' => $fechaJornada,
                 'tipotransaccion_id' => $tipotransaccionId,
@@ -168,12 +181,13 @@ final class GastronomiaFormulaConsumoService
                 'articulo_id' => (int) $emision->articulo_id,
                 'concepto' => $conceptoTipoNombre,
                 'cantidad' => (float) $emision->cantidad,
-                'precio' => (string) $precioNet,
-                'costo' => 0,
                 'moneda_id' => $monedaId,
                 'incluyeimpuesto' => 1,
                 'deposito_id' => $depositoVentaId,
-            ]));
+            ]);
+            $payloadItem = ArticuloMovimientoPrecioHistoricoSupport::aplicarPrecioVenta($payloadItem, $precioNet);
+
+            $this->persistirMovimientoStock($tipo, $payloadItem);
 
             if (! $articulo->formula) {
                 continue;
@@ -182,12 +196,16 @@ final class GastronomiaFormulaConsumoService
             $aggregados = [];
             $this->expandFormula((int) $articulo->formula, (float) $emision->cantidad, [], $aggregados, 0);
 
+            $preciosInsumo = ArticuloMovimientoPrecioHistoricoSupport::resolverUltimaCompraInsumoPorArticuloIds(
+                array_map('intval', array_keys($aggregados))
+            );
+
             foreach ($aggregados as $ingArticuloId => $cantidad) {
                 if ($cantidad <= 0) {
                     continue;
                 }
 
-                $this->persistirMovimientoStock($tipo, GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+                $payloadInsumo = GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
                     'fecha' => $fechaFactura,
                     'fechajornada' => $fechaJornada,
                     'tipotransaccion_id' => $tipotransaccionId,
@@ -196,12 +214,20 @@ final class GastronomiaFormulaConsumoService
                     'articulo_id' => (int) $ingArticuloId,
                     'concepto' => $conceptoTipoNombre.GastronomiaVentaDetalleSupport::SUFIJO_CONCEPTO_INSUMO,
                     'cantidad' => $cantidad,
-                    'precio' => '0',
-                    'costo' => 0,
                     'moneda_id' => $monedaId,
                     'incluyeimpuesto' => 1,
                     'deposito_id' => $depositoInsumosId,
-                ]));
+                ]);
+                $datoPrecio = $preciosInsumo[(int) $ingArticuloId] ?? null;
+                if ($datoPrecio !== null) {
+                    $payloadInsumo['precio'] = $datoPrecio['precio'];
+                    $payloadInsumo['costo'] = $datoPrecio['costo'];
+                    if (! empty($datoPrecio['moneda_id'])) {
+                        $payloadInsumo['moneda_id'] = $datoPrecio['moneda_id'];
+                    }
+                }
+
+                $this->persistirMovimientoStock($tipo, $payloadInsumo);
             }
         }
     }
@@ -220,7 +246,7 @@ final class GastronomiaFormulaConsumoService
         $pct = (float) $linea->descuento_linea_pct;
         $precioNet = (float) $linea->precio_unitario * (1 - $pct / 100);
 
-        $this->persistirMovimientoStock($tipo, GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
+        $payload = GastronomiaMovimientoStockSupport::normalizarPayloadMovimiento([
             'fecha' => $fechaFactura,
             'fechajornada' => $fechaJornada,
             'tipotransaccion_id' => $tipo->id,
@@ -229,12 +255,13 @@ final class GastronomiaFormulaConsumoService
             'articulo_id' => (int) $linea->articulo_id,
             'concepto' => $conceptoTipoNombre,
             'cantidad' => (float) $linea->cantidad,
-            'precio' => (string) $precioNet,
-            'costo' => 0,
             'moneda_id' => $monedaId,
             'incluyeimpuesto' => 1,
             'deposito_id' => $depositoId,
-        ]));
+        ]);
+        $payload = ArticuloMovimientoPrecioHistoricoSupport::aplicarPrecioVenta($payload, $precioNet);
+
+        $this->persistirMovimientoStock($tipo, $payload);
     }
 
     /**

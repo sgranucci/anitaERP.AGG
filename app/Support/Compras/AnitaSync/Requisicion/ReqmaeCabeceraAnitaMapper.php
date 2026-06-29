@@ -38,7 +38,7 @@ final class ReqmaeCabeceraAnitaMapper
     public static function valoresInsert(RequisicionAnitaSyncContext $ctx): string
     {
         $ccosto = $ctx->centrocostoCodigo();
-        $ccostoDest = $ccosto;
+        $ccostoDest = $ctx->centrocostoDestinoCodigo();
 
         return '
             '.AnitaSqlLiteral::int($ctx->numeroRequisicion()).',
@@ -69,7 +69,7 @@ final class ReqmaeCabeceraAnitaMapper
     public static function valoresUpdate(RequisicionAnitaSyncContext $ctx): string
     {
         $ccosto = $ctx->centrocostoCodigo();
-        $ccostoDest = $ccosto;
+        $ccostoDest = $ctx->centrocostoDestinoCodigo();
 
         return '
             reqm_fecha = '.AnitaSqlLiteral::int((int) $ctx->fechaYmd()).',

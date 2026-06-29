@@ -4,7 +4,9 @@
     const CFG = window.RENDICION_MV_CAJA || {};
 
     function csrf() {
-        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+            || document.querySelector('#form-rendicion-mv-caja input[name="_token"]')?.value
+            || '';
     }
 
     function empresaId() {
@@ -109,15 +111,29 @@
         const elegir = ev.target.closest('.elegir-rendicion-ventas');
         if (elegir) {
             ev.preventDefault();
-            cargarDatos(parseInt(elegir.getAttribute('data-id'), 10));
+            let rendicionId = parseInt(elegir.getAttribute('data-id'), 10);
+            if (!rendicionId) {
+                const fila = elegir.closest('tr');
+                rendicionId = parseInt(fila?.querySelector('td.id')?.textContent?.trim() || '', 10);
+            }
+            if (rendicionId > 0) {
+                cargarDatos(rendicionId);
+            }
         }
     });
 
     document.getElementById('modal-consulta-rendicion-ventas')?.addEventListener('shown.bs.modal', function () {
-        document.getElementById('consulta_rendicion_ventas_filtro')?.focus();
+        document.getElementById('consulta_rendicion_ventas_texto')?.focus();
     });
 
     document.getElementById('btn-buscar-rendicion-ventas')?.addEventListener('click', function () {
-        cargarConsulta(document.getElementById('consulta_rendicion_ventas_filtro')?.value || '');
+        cargarConsulta(document.getElementById('consulta_rendicion_ventas_texto')?.value || '');
+    });
+
+    document.getElementById('consulta_rendicion_ventas_texto')?.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') {
+            ev.preventDefault();
+            cargarConsulta(ev.target.value || '');
+        }
     });
 })();

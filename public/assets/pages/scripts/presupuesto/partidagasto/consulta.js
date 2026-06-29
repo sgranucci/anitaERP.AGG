@@ -154,6 +154,7 @@ function activa_eventos_consultapartidagasto() {
 		if (!codigo) {
 			$row.find('.partidagasto_id').val('');
 			$row.find('.descripcionpartidagasto').val('');
+			$inp.trigger('req:codigo-validado', [true]);
 			return;
 		}
 		if (!empresaId) {
@@ -183,10 +184,12 @@ function activa_eventos_consultapartidagasto() {
 							? res.descripcion
 							: '(Sin descripción en artículo — partida asignada)'
 					);
+					$inp.trigger('req:codigo-validado', [true]);
 				} else {
 					$row.find('.partidagasto_id').val('');
 					$row.find('.descripcionpartidagasto').val('');
 					alert((res && res.mensaje) ? res.mensaje : 'Partida no encontrada.');
+					$inp.trigger('req:codigo-validado', [false]);
 				}
 			})
 			.fail(function (xhr) {
@@ -204,6 +207,7 @@ function activa_eventos_consultapartidagasto() {
 					} catch (eIgn) {}
 				}
 				alert(msg);
+				$inp.trigger('req:codigo-validado', [false]);
 			});
 	});
 }

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Models\Ventas\Venta;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\Estacionamiento\EstacionamientoFacturaMedioPagoService;
 use App\Services\Caja\Estacionamiento\EstacionamientoFacturaTicketService;
 use App\Services\Caja\Estacionamiento\EstacionamientoNotaCreditoService;
@@ -18,6 +19,7 @@ use App\Support\Caja\Estacionamiento\EstacionamientoVentaDetalleSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Maatwebsite\Excel\Excel;
 
 class EstacionamientoFacturasDiaController extends Controller
@@ -29,6 +31,7 @@ class EstacionamientoFacturasDiaController extends Controller
         private readonly EstacionamientoNotaCreditoService $notaCreditoService,
         private readonly EstacionamientoFacturaTicketService $facturaTicketService,
         private readonly EstacionamientoFacturaMedioPagoService $facturaMedioPagoService,
+        private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
     public function index(Request $request)
@@ -36,21 +39,25 @@ class EstacionamientoFacturasDiaController extends Controller
         can('listar-facturas-estacionamiento-dia');
 
         $pc = EstacionamientoIdentificadorPc::resolver($request);
-        $fecha = $this->resolverFechaFiltro($request);
-        $jornada = $this->estadoJornadaParaRequest($request);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresasOperablesEnTerminal = $this->pvService->empresasConPvEnTerminal($pc, $empresaQuery);
+        $empresaId = $this->resolverEmpresaIdFacturasDia($request);
+        $fecha = $this->resolverFechaFiltro($request, $empresaId);
+        $jornada = $this->estadoJornadaParaRequest($request, $empresaId);
         $fechaCalendario = $jornada['fecha_factura_hoy'] ?? Carbon::today()->format('Y-m-d');
         $busqueda = trim((string) $request->get('busqueda', ''));
 
         $requiereTurno = EstacionamientoTurnoOperativoService::requiereHabilitacionTurno();
-        $turnoActivo = $requiereTurno ? $this->turnoOperativoService->turnoHabilitadoEnPc($pc) : null;
-        $cfgPv = $this->pvService->resolverConfiguracionPv($request);
-        $empresaId = (int) ($cfgPv?->empresa_id ?? 0);
-        $filtroTurno = $this->resolverFiltroTurno($request, $turnoActivo, $pc, $empresaId, $fecha);
+        $cfgPv = $this->resolverConfiguracionPvParaRequest($request, $empresaId);
+        $empresaNombre = $this->resolverEmpresaNombre($empresaId, $empresaQuery, $cfgPv);
+        $turnoActivo = $requiereTurno
+            ? $this->turnoOperativoService->turnoHabilitadoEnPc($pc, $empresaId > 0 ? $empresaId : null)
+            : null;
+        $todasPc = $request->boolean('todas_pc');
+        $filtroTurno = $this->resolverFiltroTurno($request, $turnoActivo, $pc, $empresaId, $fecha, $todasPc);
         $turnosSelector = $requiereTurno && $empresaId > 0
             ? $this->listarTurnosParaSelector($pc, $empresaId, $fecha)
             : [];
-
-        $todasPc = $request->boolean('todas_pc');
         $itemNombre = trim((string) $request->get('item_nombre', ''));
         $itemEstacionamientoId = (int) $request->get('item_estacionamiento_id', 0);
         if ($itemEstacionamientoId <= 0) {
@@ -94,8 +101,10 @@ class EstacionamientoFacturasDiaController extends Controller
             'busqueda' => $busqueda,
             'identificador_pc' => $pc,
             'tiene_cfg_pv' => $cfgPv !== null,
+            'empresa_query' => $empresaQuery,
             'empresa_id' => $empresaId > 0 ? $empresaId : null,
-            'empresa_nombre' => $cfgPv?->empresa?->nombre,
+            'empresa_nombre' => $empresaNombre,
+            'empresa_sin_pv_en_terminal' => $empresaId > 0 && ! $empresasOperablesEnTerminal->contains('id', $empresaId),
             'todas_pc' => $todasPc,
             'item_nombre' => $itemNombre,
             'item_filtro' => $itemFiltro,
@@ -117,9 +126,14 @@ class EstacionamientoFacturasDiaController extends Controller
     {
         can('listar-facturas-estacionamiento-dia');
 
+        $pc = EstacionamientoIdentificadorPc::resolver($request);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaId = $this->resolverEmpresaIdFacturasDia($request);
+
         $itemFiltro = EstacionamientoVentaDetalleSupport::resolverItemFiltro(
             (int) $request->get('item_id', 0),
             trim((string) $request->get('item_nombre', '')),
+            $empresaId > 0 ? $empresaId : null,
         );
 
         $registros = $this->registrosFacturasDiaQuery($request, $itemFiltro)
@@ -133,8 +147,8 @@ class EstacionamientoFacturasDiaController extends Controller
 
         $fecha = $this->resolverFechaFiltro($request);
         $identificador_pc = EstacionamientoIdentificadorPc::resolver($request);
-        $cfgPv = $this->pvService->resolverConfiguracionPv($request);
-        $empresa_nombre = $cfgPv?->empresa?->nombre;
+        $cfgPv = $this->resolverConfiguracionPvParaRequest($request, $empresaId);
+        $empresa_nombre = $this->resolverEmpresaNombre($empresaId, $empresaQuery, $cfgPv);
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
@@ -360,14 +374,15 @@ class EstacionamientoFacturasDiaController extends Controller
     private function registrosFacturasDiaQuery(Request $request, ?object $itemFiltro = null): Builder
     {
         $pc = EstacionamientoIdentificadorPc::resolver($request);
-        $fecha = $this->resolverFechaFiltro($request);
+        $empresaId = $this->resolverEmpresaIdFacturasDia($request);
+        $fecha = $this->resolverFechaFiltro($request, $empresaId);
         $busqueda = trim((string) $request->get('busqueda', ''));
         $todasPc = $request->boolean('todas_pc');
         $requiereTurno = EstacionamientoTurnoOperativoService::requiereHabilitacionTurno();
-        $turnoActivo = $requiereTurno ? $this->turnoOperativoService->turnoHabilitadoEnPc($pc) : null;
-        $cfgPv = $this->pvService->resolverConfiguracionPv($request);
-        $empresaId = (int) ($cfgPv?->empresa_id ?? 0);
-        $filtroTurno = $this->resolverFiltroTurno($request, $turnoActivo, $pc, $empresaId, $fecha);
+        $turnoActivo = $requiereTurno
+            ? $this->turnoOperativoService->turnoHabilitadoEnPc($pc, $empresaId > 0 ? $empresaId : null)
+            : null;
+        $filtroTurno = $this->resolverFiltroTurno($request, $turnoActivo, $pc, $empresaId, $fecha, $todasPc);
         $desdeHabilitacion = $filtroTurno['desde'];
         $hastaTurno = $filtroTurno['hasta'];
 
@@ -406,10 +421,7 @@ class EstacionamientoFacturasDiaController extends Controller
         }
 
         if ($empresaId > 0) {
-            $q->where(function ($w) use ($empresaId) {
-                $w->whereHas('configuracionPuntoventa', fn ($c) => $c->where('empresa_id', $empresaId))
-                    ->orWhereHas('venta.puntoventas', fn ($p) => $p->where('empresa_id', $empresaId));
-            });
+            $this->aplicarFiltroEmpresaEnEmision($q, $empresaId);
         }
 
         $q->whereHas('venta', function ($vq) use ($fecha, $desdeHabilitacion, $hastaTurno) {
@@ -507,6 +519,7 @@ class EstacionamientoFacturasDiaController extends Controller
         string $pc,
         int $empresaId,
         string $fechaJornada,
+        bool $todasPc = false,
     ): array {
         $todoElDia = [
             'valor' => '0',
@@ -520,9 +533,14 @@ class EstacionamientoFacturasDiaController extends Controller
             return $todoElDia;
         }
 
-        $valor = $this->resolverValorTurnoFiltro($request, $turnoActivo);
+        $valor = $this->resolverValorTurnoFiltro($request, $turnoActivo, $todasPc);
 
         if ($valor === '0' || $valor === '') {
+            return $todoElDia;
+        }
+
+        // Con todas las terminales, «turno activo» solo aplica a esta PC: usar todo el día salvo turno cerrado explícito.
+        if ($todasPc && $valor === 'activo') {
             return $todoElDia;
         }
 
@@ -592,14 +610,21 @@ class EstacionamientoFacturasDiaController extends Controller
         ];
     }
 
-    private function resolverValorTurnoFiltro(Request $request, ?TurnoOperativoEstacionamiento $turnoActivo): string
-    {
+    private function resolverValorTurnoFiltro(
+        Request $request,
+        ?TurnoOperativoEstacionamiento $turnoActivo,
+        bool $todasPc = false,
+    ): string {
         if ($request->has('turno_filtro')) {
             return trim((string) $request->input('turno_filtro', '0'));
         }
 
         if ($request->has('solo_turno_activo')) {
             return $request->boolean('solo_turno_activo') ? 'activo' : '0';
+        }
+
+        if ($todasPc) {
+            return '0';
         }
 
         return $turnoActivo !== null ? 'activo' : '0';
@@ -656,15 +681,19 @@ class EstacionamientoFacturasDiaController extends Controller
     }
 
     /**
-     * Sin ?fecha= en la URL: fecha de jornada abierta (empresa del PV de esta terminal); si no hay, hoy.
+     * Sin ?fecha= en la URL: fecha de jornada abierta (empresa seleccionada); si no hay, hoy.
      */
-    private function resolverFechaFiltro(Request $request): string
+    private function resolverFechaFiltro(Request $request, ?int $empresaId = null): string
     {
         if ($request->filled('fecha')) {
             return (string) $request->input('fecha');
         }
 
-        $jornada = $this->estadoJornadaParaRequest($request);
+        if ($empresaId === null || $empresaId <= 0) {
+            $empresaId = $this->resolverEmpresaIdFacturasDia($request);
+        }
+
+        $jornada = $this->estadoJornadaParaRequest($request, $empresaId);
         if (! empty($jornada['jornada_abierta']) && ! empty($jornada['fecha_jornada'])) {
             return (string) $jornada['fecha_jornada'];
         }
@@ -675,14 +704,98 @@ class EstacionamientoFacturasDiaController extends Controller
     /**
      * @return array<string, mixed>|null
      */
-    private function estadoJornadaParaRequest(Request $request): ?array
+    private function estadoJornadaParaRequest(Request $request, ?int $empresaId = null): ?array
     {
-        $cfg = $this->pvService->resolverConfiguracionPv($request);
-        if ($cfg === null) {
-            return null;
+        if ($empresaId === null || $empresaId <= 0) {
+            $empresaId = $this->resolverEmpresaIdFacturasDia($request);
         }
 
-        return $this->jornadaService->estadoParaEmpresa((int) $cfg->empresa_id);
+        if ($empresaId > 0) {
+            return $this->jornadaService->estadoParaEmpresa($empresaId);
+        }
+
+        return null;
+    }
+
+    private function resolverEmpresaIdFacturasDia(Request $request): int
+    {
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaId = (int) $request->input('empresa_id', 0);
+
+        if ($empresaId > 0 && ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            $empresaId = 0;
+        }
+
+        if ($empresaId <= 0) {
+            $cfgPv = $this->resolverConfiguracionPvParaRequest($request, 0);
+            if ($cfgPv === null) {
+                try {
+                    $cfgPv = $this->pvService->resolverConfiguracionPv($request);
+                } catch (InvalidArgumentException) {
+                    $cfgPv = null;
+                }
+            }
+            $empresaDesdePv = (int) ($cfgPv?->empresa_id ?? 0);
+            if ($empresaDesdePv > 0 && $this->empresaRepository->empresaIdPermitida($empresaDesdePv)) {
+                $empresaId = $empresaDesdePv;
+            }
+        }
+
+        if ($empresaId <= 0 && $empresaQuery->count() === 1) {
+            $empresaId = (int) $empresaQuery->first()->id;
+        }
+
+        if ($empresaId <= 0 && $empresaQuery->isNotEmpty()) {
+            $empresaId = (int) $empresaQuery->first()->id;
+        }
+
+        return $empresaId;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Configuracion\Empresa>  $empresaQuery
+     */
+    private function resolverEmpresaNombre(int $empresaId, $empresaQuery, $cfgPv): ?string
+    {
+        if ($empresaId > 0) {
+            $nombre = $empresaQuery->firstWhere('id', $empresaId)?->nombre;
+            if (is_string($nombre) && $nombre !== '') {
+                return $nombre;
+            }
+
+            $nombreBd = $this->empresaRepository->find($empresaId)?->nombre ?? null;
+            if (is_string($nombreBd) && $nombreBd !== '') {
+                return $nombreBd;
+            }
+        }
+
+        $nombreCfg = $cfgPv?->empresa?->nombre;
+
+        return is_string($nombreCfg) && $nombreCfg !== '' ? $nombreCfg : null;
+    }
+
+    private function resolverConfiguracionPvParaRequest(Request $request, int $empresaId)
+    {
+        try {
+            return $this->pvService->resolverConfiguracionPv(
+                $request,
+                $empresaId > 0 ? $empresaId : null,
+            );
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+    }
+
+    private function aplicarFiltroEmpresaEnEmision(Builder $q, int $empresaId): void
+    {
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        $q->where(function ($w) use ($empresaId) {
+            $w->whereHas('configuracionPuntoventa', fn ($c) => $c->where('empresa_id', $empresaId))
+                ->orWhereHas('venta.puntoventas', fn ($p) => $p->where('empresa_id', $empresaId));
+        });
     }
 
 }

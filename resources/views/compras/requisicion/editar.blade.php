@@ -9,10 +9,19 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/presupuesto/partidagasto/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/presupuesto/capex/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/consulta.js")}}" type="text/javascript"></script>
+<script>
+window.requisicionLineasConfig = window.requisicionLineasConfig || {};
+window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_precio_ultima_compra_articulo'));
+</script>
+<script src="{{asset("assets/pages/scripts/compras/requisicion/lineas.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/consulta-listasprecio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/presupuestos.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/enviar-arbol.js")}}" type="text/javascript"></script>
+@if(!empty($es_provisorio))
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
+@include('compras.requisicion.partials.banner_confirmando_styles')
+@endif
 @include('compras.requisicion.partials.comprobantes_asociados_script')
 @endsection
 
@@ -25,7 +34,12 @@ Requisiciones
         @include('includes.mensaje')
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Requisición &nbsp;ID:&nbsp;{{ $data->id }}&nbsp;Número {{ $data->numerorequisicion }}</h3>
+                <h3 class="card-title">
+                    Requisición &nbsp;ID:&nbsp;{{ $data->id }}&nbsp;Número {{ $data->numerorequisicion }}
+                    @if(!empty($es_provisorio))
+                        <span class="badge badge-secondary ml-2">PROVISORIO</span>
+                    @endif
+                </h3>
                 <div class="card-tools">
                     @if(empty($acceso_visualizacion_por_hash))
                         @if (can('listar-requisicion', false) || can('editar-requisicion', false))
@@ -48,7 +62,7 @@ Requisiciones
                         </a>
                     @endif
                     @if(empty($visualizar))
-                        @if (can('editar-requisicion', false) && ($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS'))
+                        @if (can('editar-requisicion', false) && ($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS') && empty($es_provisorio))
                         <button type="button"
                                 class="btn btn-success btn-sm ml-1 js-enviar-arbol-requisicion"
                                 data-requisicion-id="{{ $data->id }}"
@@ -68,7 +82,7 @@ Requisiciones
                     <button type="button" id="botonform3" class="btn btn-info btn-sm">Historia</button>
                     <button type="button" id="botonform4" class="btn btn-info btn-sm">Archivos asociados</button>
                     <button type="button" id="botonform5" class="btn btn-info btn-sm">Árbol aprobación</button>
-                    <button type="button" id="boton-solapa-presupuesto-requisicion" class="btn btn-info btn-sm">Presupuestos</button>
+                    <button type="button" id="boton-solapa-presupuesto-requisicion" class="btn btn-info btn-sm" @if(!empty($es_provisorio)) style="display:none;" @endif>Presupuestos</button>
                 </div>
                 <div class="card-body">
                     @if(empty($visualizar))
@@ -112,9 +126,13 @@ Requisiciones
                 <div class="card-footer">
                     @if(empty($visualizar))
                     <div id="requisicion-footer-bar" class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        @if(!empty($es_provisorio))
+                            @include('compras.requisicion.partials.acciones_provisorio')
+                        @else
                         <div class="flex-shrink-0">
                             <button type="button" id="botonform0" class="btn btn-primary">Actualizar</button>
                         </div>
+                        @endif
                         <div id="requisicion-footer-presupuesto-actions" class="d-none">
                             <div class="d-flex flex-wrap align-items-center" style="gap: 0.5rem;">
                                 <button type="button" class="btn btn-primary btn-sm" id="btn-footer-nuevo-presupuesto-requisicion">
@@ -129,6 +147,17 @@ Requisiciones
                     @endif
                 </div>
             </form>
+            @if(!empty($es_provisorio) && empty($visualizar))
+            <form action="{{ route('confirmar_requisicion', $data->id) }}" id="form-requisicion-confirmar" method="POST" class="d-none" aria-hidden="true">
+                @csrf
+            </form>
+            @if(empty($tiene_ordencompra_asociada))
+            <form action="{{ route('eliminar_requisicion_provisorio', $data->id) }}" id="form-requisicion-eliminar-provisorio" method="POST" class="d-none" aria-hidden="true">
+                @csrf
+                @method('DELETE')
+            </form>
+            @endif
+            @endif
         </div>
     </div>
 </div>

@@ -31,7 +31,7 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
 
     private bool $modoTodosDepositos = false;
 
-    private string $colUltima = 'G';
+    private string $colUltima = 'H';
 
     private bool $hayFilaLogos = false;
 
@@ -57,7 +57,7 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
     {
         $this->contexto = $contexto;
         $this->modoTodosDepositos = (bool) ($contexto['modo_todos_depositos'] ?? false);
-        $this->colUltima = $this->modoTodosDepositos ? 'H' : 'G';
+        $this->colUltima = $this->modoTodosDepositos ? 'I' : 'H';
         $this->movimientos = collect($movimientos);
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($this->movimientos);
@@ -89,6 +89,9 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
         foreach ($this->columnasCantidad() as $c) {
             $formats[$c] = '#,##0.######';
         }
+        foreach ($this->columnasPrecio() as $c) {
+            $formats[$c] = '#,##0.######';
+        }
 
         return $formats;
     }
@@ -99,6 +102,14 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
     private function columnasCantidad(): array
     {
         return $this->modoTodosDepositos ? ['D', 'E'] : ['C', 'D'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function columnasPrecio(): array
+    {
+        return [$this->modoTodosDepositos ? 'F' : 'E'];
     }
 
     public function styles(Worksheet $sheet)
@@ -128,9 +139,10 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
                 'C' => 8,
                 'D' => 10,
                 'E' => 10,
-                'F' => 24,
-                'G' => 12,
-                'H' => 32,
+                'F' => 11,
+                'G' => 22,
+                'H' => 12,
+                'I' => 28,
             ];
         }
 
@@ -139,9 +151,10 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
             'B' => 8,
             'C' => 10,
             'D' => 10,
-            'E' => 28,
-            'F' => 12,
-            'G' => 36,
+            'E' => 11,
+            'F' => 26,
+            'G' => 12,
+            'H' => 32,
         ];
     }
 

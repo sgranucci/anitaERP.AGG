@@ -43,18 +43,22 @@ final class EstacionamientoTurnoOperativoService
         return (bool) config('estacionamiento.validar_tickets_ingreso_al_cerrar', false);
     }
 
-    public function turnoHabilitadoEnPc(string $identificadorPc): ?TurnoOperativoEstacionamiento
+    public function turnoHabilitadoEnPc(string $identificadorPc, ?int $empresaId = null): ?TurnoOperativoEstacionamiento
     {
         if ($identificadorPc === '') {
             return null;
         }
 
-        return TurnoOperativoEstacionamiento::query()
+        $query = TurnoOperativoEstacionamiento::query()
             ->with(['turno', 'jornada', 'usuarioHabilitado', 'usuarioHabilitacion'])
             ->where('identificador_pc', $identificadorPc)
-            ->where('estado', TurnoOperativoEstacionamiento::ESTADO_HABILITADO)
-            ->orderByDesc('id')
-            ->first();
+            ->where('estado', TurnoOperativoEstacionamiento::ESTADO_HABILITADO);
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        return $query->orderByDesc('id')->first();
     }
 
     /**

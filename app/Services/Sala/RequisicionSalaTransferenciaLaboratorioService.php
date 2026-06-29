@@ -4,13 +4,14 @@ namespace App\Services\Sala;
 
 use App\Models\Sala\RequisicionSala;
 use App\Models\Stock\Depmae;
-use App\Models\Stock\Transferencia_Mercaderia;
 use App\Services\Stock\TransferenciaMercaderiaService;
+use App\Support\Sala\RequisicionSalaLineasLaboratorioSupport;
+use App\Support\Sala\RequisicionSalaTransferenciaAsociadaSupport;
 use Auth;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Transferencia de stock automática al aprobar requisición sala con ítems reparación/devolución.
+ * Transferencia de stock al laboratorio tras aprobación del árbol (ítems reparación/devolución).
  */
 class RequisicionSalaTransferenciaLaboratorioService
 {
@@ -33,7 +34,7 @@ class RequisicionSalaTransferenciaLaboratorioService
             return;
         }
 
-        $lineas = $this->lineasTransferibles($req);
+        $lineas = RequisicionSalaLineasLaboratorioSupport::payloadLineasTransferencia($req);
         if ($lineas === []) {
             return;
         }
@@ -54,7 +55,7 @@ class RequisicionSalaTransferenciaLaboratorioService
         }
 
         $observacion = 'Transferencia automática requisición sala #'.($req->numerorequisicion ?? $requisicionSalaId)
-            .' (destino reparación/devolución)';
+            .' (destino reparación/devolución — aprobación árbol)';
 
         $authPrev = Auth::id();
         if ($usuarioId > 0) {
@@ -83,7 +84,7 @@ class RequisicionSalaTransferenciaLaboratorioService
                 'mensaje' => $result['mensaje'] ?? 'error desconocido',
             ]);
 
-            return;
+            throw new \RuntimeException($result['mensaje'] ?? 'No se pudo registrar la transferencia a laboratorio.');
         }
 
         Log::info('RequisicionSala: transferencia automática a laboratorio', [
@@ -91,31 +92,6 @@ class RequisicionSalaTransferenciaLaboratorioService
             'transferencia_id' => $result['transferencia_id'] ?? null,
             'codigo' => $result['codigo'] ?? null,
         ]);
-    }
-
-    /**
-     * @return list<array{articulo_id: int, cantidad: float}>
-     */
-    private function lineasTransferibles(RequisicionSala $req): array
-    {
-        $lineas = [];
-        foreach ($req->requisicion_sala_articulos as $articulo) {
-            $destino = strtoupper((string) ($articulo->destino ?? ''));
-            if (! in_array($destino, ['R', 'D'], true)) {
-                continue;
-            }
-            $cantidad = (float) ($articulo->cantidad ?? 0);
-            $articuloId = (int) ($articulo->articulo_id ?? 0);
-            if ($articuloId <= 0 || $cantidad <= 0) {
-                continue;
-            }
-            $lineas[] = [
-                'articulo_id' => $articuloId,
-                'cantidad' => $cantidad,
-            ];
-        }
-
-        return $lineas;
     }
 
     private function resolverDepositoLaboratorioId(): int
@@ -131,10 +107,6 @@ class RequisicionSalaTransferenciaLaboratorioService
 
     private function yaEjecutada(RequisicionSala $req): bool
     {
-        $needle = 'requisición sala #'.($req->numerorequisicion ?? $req->id);
-
-        return Transferencia_Mercaderia::query()
-            ->where('observacion', 'like', '%'.$needle.'%')
-            ->exists();
+        return RequisicionSalaTransferenciaAsociadaSupport::tieneTransferenciaLaboratorio($req);
     }
 }

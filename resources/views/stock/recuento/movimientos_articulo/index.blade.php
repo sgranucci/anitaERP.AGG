@@ -129,9 +129,10 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                             <th style="width:7%">Tipo</th>
                             <th class="text-right" style="width:8%">Entrada{!! $sufijoUm !!}</th>
                             <th class="text-right" style="width:8%">Salida{!! $sufijoUm !!}</th>
-                            <th style="width:22%">Concepto</th>
-                            <th style="width:9%">Mov. stock</th>
-                            <th style="width:26%">Leyenda mov.</th>
+                            <th class="text-right" style="width:9%" title="Precio de venta en facturas; costo unitario (última compra) en el resto">Precio unit.</th>
+                            <th style="width:18%">Concepto</th>
+                            <th style="width:8%">Mov. stock</th>
+                            <th style="width:20%">Leyenda mov.</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -144,13 +145,30 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                                 <td title="{{ $m->tipo_nombre ?? '' }}">{{ $m->tipo ?? '—' }}</td>
                                 <td class="text-right text-monospace text-success">{{ $m->entrada_fmt ?: '—' }}</td>
                                 <td class="text-right text-monospace text-danger">{{ $m->salida_fmt ?: '—' }}</td>
-                                <td>{{ $m->concepto_display ?? $m->concepto }}</td>
-                                <td class="text-monospace">{{ $m->movimiento_codigo ?: ($m->movimientostock_id ? '#'.$m->movimientostock_id : '—') }}</td>
+                                <td class="text-right text-monospace" title="{{ $m->precio_unitario_etiqueta ?? '' }}">
+                                    {{ $m->precio_unitario_fmt ?: '—' }}
+                                </td>
+                                <td>
+                                    @include('stock.recuento.movimientos_articulo.partials.celda_enlace_consulta', [
+                                        'texto' => $m->concepto_display ?? $m->concepto ?? '—',
+                                        'url' => $m->url_factura ?? null,
+                                    ])
+                                </td>
+                                <td class="text-monospace">
+                                    @php
+                                        $movTexto = $m->movimiento_codigo
+                                            ?: ($m->movimientostock_id ? '#'.$m->movimientostock_id : '—');
+                                    @endphp
+                                    @include('stock.recuento.movimientos_articulo.partials.celda_enlace_consulta', [
+                                        'texto' => $movTexto,
+                                        'url' => $m->url_movimientostock ?? null,
+                                    ])
+                                </td>
                                 <td class="small">{{ $m->movimiento_leyenda }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $modoTodosDepositos ? 8 : 7 }}" class="text-muted text-center">
+                                <td colspan="{{ $modoTodosDepositos ? 9 : 8 }}" class="text-muted text-center">
                                     @if ($modoTodosDepositos)
                                         @if ($empresaIdFiltrada > 0)
                                             Sin movimientos en los dep&oacute;sitos de la empresa del reporte.

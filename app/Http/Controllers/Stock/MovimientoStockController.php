@@ -22,11 +22,13 @@ use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\MovimientoStockRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Repositories\Stock\LoteRepositoryInterface;
+use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockFormLineasSupport;
 use App\Support\Stock\MovimientoStockFormulaConversionSupport;
 use App\Support\Stock\MovimientoStockListadoFiltros;
 use App\Support\Stock\MovimientoStockPreferenciasUsuario;
 use App\Support\Stock\MovimientoStockVisibilidadSupport;
+use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Articulo;
@@ -111,8 +113,8 @@ class MovimientoStockController extends Controller
         $transferencia = \App\Models\Stock\Transferencia_Mercaderia::query()
             ->with([
                 'tipotransaccion_stock:id,nombre,abreviatura',
-                'depositoOrigen:id,nombre',
-                'depositoDestino:id,nombre',
+                'depositoOrigen:'.implode(',', TransferenciaBienUsoSupport::DEPOSITO_RELATION_COLUMNS),
+                'depositoDestino:'.implode(',', TransferenciaBienUsoSupport::DEPOSITO_RELATION_COLUMNS),
                 'bienUsoOrigen:id,codigo_inventario,hostname,modelo',
                 'bienUsoDestino:id,codigo_inventario,hostname,modelo',
                 'usuarioOrigen:id,nombre',
@@ -218,9 +220,7 @@ class MovimientoStockController extends Controller
 				$mensaje = 'Movimiento de stock creado con éxito';
                 MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
 
-                return redirect()
-                    ->route('editar_movimientostock', ['id' => $data['id']])
-                    ->with('mensaje', $mensaje);
+                return redirect('stock/movimientostock')->with('mensaje', $mensaje);
 			}
 
             if ($data) {
@@ -265,7 +265,12 @@ class MovimientoStockController extends Controller
         $movimientoStockModoFerli = \App\Support\Stock\MovimientoStockFerliSupport::esCalzadosFerli();
         $bienesUsoActivos = $this->bienesUsoActivosParaTransferencia();
         $transferenciaVinculada = Transferencia_Mercaderia::query()
-            ->with(['depositoOrigen:id,nombre,codigo', 'depositoDestino:id,nombre,codigo', 'bienUsoOrigen', 'bienUsoDestino'])
+            ->with([
+                'depositoOrigen:'.implode(',', TransferenciaBienUsoSupport::DEPOSITO_RELATION_COLUMNS),
+                'depositoDestino:'.implode(',', TransferenciaBienUsoSupport::DEPOSITO_RELATION_COLUMNS),
+                'bienUsoOrigen',
+                'bienUsoDestino',
+            ])
             ->where(function ($q) use ($id) {
                 $q->where('movimientostock_salida_id', (int) $id)
                     ->orWhere('movimientostock_entrada_id', (int) $id);
@@ -384,6 +389,44 @@ class MovimientoStockController extends Controller
 
         return response()->json([
             'saldo' => $this->saldoDepositoRepository->saldo($articuloId, $depositoId),
+        ]);
+    }
+
+    public function precioLineaArticulo(Request $request): JsonResponse
+    {
+        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $articuloId = (int) $request->query('articulo_id', 0);
+        $tipoId = (int) $request->query('tipotransaccion_stock_id', 0);
+        if ($articuloId <= 0 || $tipoId <= 0) {
+            return response()->json(['precio' => null]);
+        }
+
+        $tipo = Tipotransaccion_Stock::query()->find($tipoId);
+        if ($tipo === null) {
+            return response()->json(['error' => 'Tipo de transacción no encontrado.'], 404);
+        }
+
+        $fechaRaw = trim((string) $request->query('fecha', ''));
+        $fecha = $fechaRaw !== '' ? \Carbon\Carbon::parse($fechaRaw) : \Carbon\Carbon::today();
+
+        $dato = ArticuloPrecioMovimientoStockSupport::resolverParaLinea($articuloId, $tipo, $fecha);
+
+        return response()->json([
+            'precio' => $dato['precio'],
+            'listaprecio_id' => $dato['listaprecio_id'],
+            'moneda_id' => $dato['moneda_id'],
+            'incluyeimpuesto' => $dato['incluyeimpuesto'],
+            'criterio' => $dato['criterio'],
+            'origen_ultima_compra' => $dato['origen_ultima_compra'],
+            'origen_ultima_compra_etiqueta' => ArticuloPrecioMovimientoStockSupport::etiquetaOrigenUltimaCompra(
+                $dato['origen_ultima_compra']
+            ),
+            'criterio_etiqueta' => $dato['criterio'] === ArticuloPrecioMovimientoStockSupport::CRITERIO_VENTA
+                ? 'Precio de venta (lista vigente)'
+                : 'Precio de última compra',
         ]);
     }
 
@@ -533,6 +576,7 @@ class MovimientoStockController extends Controller
                 'bien_uso_destino_id' => (int) $request->input('bien_uso_destino_id'),
                 'bien_uso_origen_id' => (int) $request->input('bien_uso_origen_id'),
                 'tipotransaccion_stock_id' => (int) $request->input('tipotransaccion_stock_id'),
+                'centrocosto_destino_id' => (int) $request->input('centrocosto_destino_id'),
                 'observacion' => trim((string) $request->input('leyenda', '')),
             ],
             $lineas

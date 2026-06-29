@@ -77,11 +77,13 @@ final class GastronomiaControlCorrelatividadAnitaErpService
                 $sucursal,
                 $empresaCodigo,
                 $numeros,
+                $empresaId,
             );
             $numerosResvtaLegacy = GastronomiaAnitaImportResvtaSupport::numerosConResvtaEnSucursal(
                 $sucursal,
                 $empresaCodigo,
                 $numeros,
+                $empresaId,
             );
 
             $ordenadas = $ventasErp->sortBy(fn (Venta $v) => (string) $v->codigo)->values();

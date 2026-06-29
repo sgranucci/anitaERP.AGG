@@ -8,6 +8,8 @@ Requisiciones
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/enviar-arbol.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
+@include('compras.requisicion.partials.banner_confirmando_styles')
 @include('compras.requisicion.partials.comprobantes_asociados_script')
 @endsection
 
@@ -66,14 +68,25 @@ Requisiciones
                     </thead>
                     <tbody>
                         @foreach ($requisicion as $data)
-                        <tr>
-                            <td>{{ $data->numerorequisicion }}</td>
+                        @php
+                            $esProvisorioFila = ($data->estado ?? '') === ($estado_provisorio ?? 'PROVISORIO');
+                        @endphp
+                        <tr @if($esProvisorioFila) class="table-secondary" @endif>
+                            <td>
+                                @if($esProvisorioFila)
+                                    <strong>{{ $data->numerorequisicion }}</strong>
+                                @else
+                                    {{ $data->numerorequisicion }}
+                                @endif
+                            </td>
                             <td><small>{{ $data->nombreusuario ?? '' }}</small></td>
                             <td>{{ date('d/m/Y', strtotime($data->fecha)) }}</td>
                             <td>{{ $data->nombreempresa }}</td>
                             <td><small>{{ $data->nombrecentrocosto }}</small></td>
                             <td><small>{{ $data->nombreproveedor }}</small></td>
-                            <td><small>{{ $data->estado }}</small></td>
+                            <td>
+                                @include('compras.requisicion.partials.estado_badge', ['estado' => $data->estado ?? ''])
+                            </td>
                             <td class="text-right text-nowrap">
                                 <small>{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }} {{ $data->monedacabecera_abreviatura ?? '' }}</small>
                             </td>
@@ -84,9 +97,18 @@ Requisiciones
                             </td>
                             <td>
                                 @if (can('editar-requisicion', false))
-                                <a href="{{ route('editar_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                <a href="{{ route('editar_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="{{ $esProvisorioFila ? 'Editar provisorio' : 'Editar' }}">
                                     <i class="fas fa-edit"></i>
                                 </a>
+                                @if ($esProvisorioFila && can('confirmar-requisicion', false))
+                                <form action="{{ route('confirmar_requisicion', $data->id) }}" class="d-inline form-confirmar-requisicion" method="POST"
+                                      data-confirm-msg="¿Confirmar requisición {{ $data->numerorequisicion }}? Enviará al árbol de aprobación y sincronizará con Anita.">
+                                    @csrf
+                                    <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Confirmar requisición">
+                                        <i class="fa fa-check"></i>
+                                    </button>
+                                </form>
+                                @endif
                                 @if (($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS'))
                                 <button type="button"
                                         class="btn-accion-tabla tooltipsC text-success js-enviar-arbol-requisicion"
@@ -114,10 +136,24 @@ Requisiciones
                                     <i class="fas fa-link"></i>
                                 </button>
                                 @endif
-                                @if (can('borrar-requisicion', false))
+                                @if (can('borrar-requisicion', false)
+                                    && ($data->estado ?? '') !== ($estado_provisorio ?? 'PROVISORIO')
+                                    && (int) ($data->ordencompra_vinculadas_count ?? 0) === 0)
                                 <form action="{{ route('eliminar_requisicion', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar">
+                                        <i class="fas fa-times-circle text-danger"></i>
+                                    </button>
+                                </form>
+                                @endif
+                                @if (can('actualizar-requisicion', false)
+                                    && ($data->estado ?? '') === ($estado_provisorio ?? 'PROVISORIO')
+                                    && (int) ($data->ordencompra_vinculadas_count ?? 0) === 0)
+                                <form action="{{ route('eliminar_requisicion_provisorio', $data->id) }}" class="d-inline form-eliminar-provisorio" method="POST"
+                                      onsubmit="return confirm('¿Eliminar este provisorio? Esta acción no se puede deshacer.');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar provisorio">
                                         <i class="fas fa-times-circle text-danger"></i>
                                     </button>
                                 </form>

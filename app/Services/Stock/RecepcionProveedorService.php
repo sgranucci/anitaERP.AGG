@@ -17,6 +17,7 @@ use App\Support\Compras\OrdencompraLineaEstados;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
@@ -29,6 +30,7 @@ use App\Support\Stock\RecepcionProveedorEstados;
 use App\Support\Stock\RecepcionProveedorLineaEstados;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use App\Services\Configuracion\ModuloAvisoService;
+use App\Services\Compras\OrdencompraRecepcionCumplimientoService;
 use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
 use Auth;
 use Illuminate\Http\Request;
@@ -46,6 +48,7 @@ class RecepcionProveedorService
         private readonly ModuloAvisoService $moduloAvisoService,
         private readonly MovimientoStockService $movimientoStockService,
         private readonly OrdencompraRecepcionPrecioSyncService $ordencompraRecepcionPrecioSyncService,
+        private readonly OrdencompraRecepcionCumplimientoService $ordencompraRecepcionCumplimientoService,
     ) {
     }
 
@@ -72,8 +75,13 @@ class RecepcionProveedorService
             $ocData = $this->ocResolver->resolverPorId((int) $data['ordencompra_id']);
             $this->assertPeriodoContableRecepcion((int) $ocData['cabecera']->empresa_id, (string) ($data['fecha'] ?? ''));
             $oc = $ocData['cabecera'];
-            $items = $data['items'] ?? [];
             $tipo = $data['tipo'] ?? Recepcion_Proveedor::TIPO_RECEPCION;
+
+            if ($tipo === Recepcion_Proveedor::TIPO_RECEPCION) {
+                RecepcionProveedorOcPendienteSupport::assertPermiteNuevaRecepcion($oc);
+            }
+
+            $items = $data['items'] ?? [];
 
             $analisis = $this->procesarItems(
                 $oc,
@@ -215,6 +223,17 @@ class RecepcionProveedorService
                 (string) ($recepcion->fecha?->format('Y-m-d') ?? '')
             );
 
+            if ($recepcion->tipo === Recepcion_Proveedor::TIPO_RECEPCION) {
+                $recepcion->loadMissing('ordencompras');
+                $oc = $recepcion->ordencompras;
+                if ($oc !== null) {
+                    RecepcionProveedorOcPendienteSupport::assertRemitoDentroSaldoOc(
+                        $oc,
+                        $recepcion->recepcion_proveedor_articulos
+                    );
+                }
+            }
+
             $movId = null;
             $asientoId = null;
             $anitaIntentada = false;
@@ -280,6 +299,12 @@ class RecepcionProveedorService
                 );
 
                 $this->aplicarCierreLineasOcEnErp($recepcionConfirmada);
+
+                $this->ordencompraRecepcionCumplimientoService->sincronizarEstadoCabecera(
+                    (int) $recepcionConfirmada->ordencompra_id,
+                    (int) (Auth::id() ?? 0),
+                    'Recepción COM '.(int) $recepcionConfirmada->numerorecepcion.' confirmada'
+                );
 
                 return $recepcion->fresh();
             } catch (\Throwable $e) {
@@ -455,6 +480,14 @@ class RecepcionProveedorService
                 RecepcionProveedorEstados::ANULADA,
                 $motivo ?: 'Anulación de recepción'
             );
+
+            if ((int) ($recepcion->ordencompra_id ?? 0) > 0) {
+                $this->ordencompraRecepcionCumplimientoService->sincronizarEstadoCabecera(
+                    (int) $recepcion->ordencompra_id,
+                    (int) (Auth::id() ?? 0),
+                    'Anulación recepción COM '.(int) $recepcion->numerorecepcion
+                );
+            }
 
             return $recepcion->fresh();
         });

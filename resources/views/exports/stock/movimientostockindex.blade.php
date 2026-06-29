@@ -32,9 +32,7 @@
     <tbody>
         @foreach ($datas as $fila)
             @php
-                $estadoLabel = $fila->esTransferencia()
-                    ? ($fila->etiquetaEstadoTransferencia() ?? '')
-                    : ($estado_enum[$fila->estadoMovimiento ?? ''] ?? ($fila->estadoMovimiento ?? ''));
+                $estadoLabel = $fila->etiquetaEstadoListado();
             @endphp
             <tr>
                 <td>{{ $fila->pkId }}</td>
@@ -42,8 +40,8 @@
                 <td>{{ $fila->esTransferencia() ? 'Transferencia' : 'Movimiento' }}</td>
                 <td>{{ $fila->tipoNombre }}</td>
                 <td>{{ $fila->codigoListado }}</td>
-                <td>{{ $fila->esTransferencia() ? $fila->etiquetaOrigen() : '—' }}</td>
-                <td>{{ $fila->esTransferencia() ? $fila->etiquetaDestino() : ($fila->depositoNombre ?? '—') }}</td>
+                <td>{{ $fila->etiquetaOrigen() }}</td>
+                <td>{{ $fila->etiquetaDestino() }}</td>
                 <td>{{ $fila->loteListado }}</td>
                 <td>{{ $fila->nombreEmpresa }}</td>
                 <td>{{ number_format($fila->totalCantidad, 2, ',', '.') }}</td>

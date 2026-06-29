@@ -161,7 +161,9 @@ final class RecuentoMovimientosArticuloSupport
             ], (string) ($row->empresa_nombre ?? ''));
         }
 
-        return $row;
+        $row = ArticuloMovimientoPrecioHistoricoSupport::enriquecerPrecioDisplay($row);
+
+        return KardexMovimientoComprobanteSupport::enriquecerFila($row);
     }
 
     /**
@@ -228,6 +230,8 @@ final class RecuentoMovimientosArticuloSupport
                 'am.id',
                 'am.fecha',
                 'am.cantidad',
+                'am.precio',
+                'am.costo',
                 'am.concepto',
                 'am.venta_id',
                 'am.deposito_id',

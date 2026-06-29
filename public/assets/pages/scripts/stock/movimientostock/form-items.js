@@ -34,10 +34,57 @@
         $tr.find('.unidadesxenvase').val(uxenv > 0 ? uxenv : '');
         $tr.find('.abrev-umd').text(umd);
         $tr.find('.abrev-umd-alter').text(umdAlt);
+    };
 
-        if (dataArticulo.ppp != null && dataArticulo.ppp !== '') {
-            $tr.find('.precio').val(parseFloat(dataArticulo.ppp).toFixed(2));
+    window.msResolverPrecioLinea = function ($tr, articuloId) {
+        if (msEsModoFerli() || !$tr || !$tr.length) {
+            return;
         }
+        var url = window.movimientoStockPrecioLineaUrl || '';
+        var tipoId = parseInt($('#tipotransaccion_stock_id').val(), 10) || 0;
+        articuloId = parseInt(articuloId, 10) || 0;
+        if (!url || articuloId <= 0 || tipoId <= 0) {
+            return;
+        }
+        $.get(url, {
+            articulo_id: articuloId,
+            tipotransaccion_stock_id: tipoId,
+            fecha: $('#fecha').val() || ''
+        }).done(function (data) {
+            if (!data || data.precio == null) {
+                return;
+            }
+            var precio = parseFloat(data.precio);
+            if (!isFinite(precio)) {
+                return;
+            }
+            $tr.find('.precio').val(precio.toFixed(2));
+            if (data.listaprecio_id) {
+                $tr.find('.listaprecio_id').val(data.listaprecio_id);
+            }
+            if (data.moneda_id) {
+                $tr.find('.moneda_id').val(data.moneda_id);
+            }
+            if (data.incluyeimpuesto != null && data.incluyeimpuesto !== '') {
+                $tr.find('.incluyeimpuesto').val(data.incluyeimpuesto);
+            }
+            if (typeof window.movStockProgramarPreviewAsiento === 'function') {
+                window.movStockProgramarPreviewAsiento();
+            }
+        });
+    };
+
+    window.msRefrescarPreciosTodasLasFilas = function () {
+        if (msEsModoFerli()) {
+            return;
+        }
+        $('#tbody-tabla tr.item-pedido').each(function () {
+            var $tr = $(this);
+            var articuloId = msFilaArticuloId($tr);
+            if (articuloId) {
+                msResolverPrecioLinea($tr, articuloId);
+            }
+        });
     };
 
     window.msRecalcularCantidadesStandard = function ($tr, origen) {
@@ -86,6 +133,7 @@
             }
         } else {
             msEnriquecerUmDesdeArticulo($tr, dataArticulo);
+            msResolverPrecioLinea($tr, articuloId);
             $tr.find('.cantidad-stock').val('').trigger('focus');
             $tr.find('.cant-unidad').val('');
         }
@@ -95,10 +143,55 @@
         }
     };
 
+    function msEnfocarCantidadFila($tr) {
+        if (!$tr || !$tr.length) {
+            return false;
+        }
+        var $target = $tr.find('.cantidad-stock, .cantidad')
+            .filter(':visible:not([readonly])')
+            .first();
+        if (!$target.length) {
+            $target = $tr.find('.cantidad-stock, .cantidad').first();
+        }
+        if (!$target.length) {
+            return false;
+        }
+        setTimeout(function () {
+            $target.trigger('focus');
+            if ($target[0] && typeof $target[0].select === 'function') {
+                $target[0].select();
+            }
+        }, 0);
+        return true;
+    }
+
     $(function () {
         if (!$('#tabla-items-movimientostock').length) {
             return;
         }
+
+        $(document).on('keydown.msArtEnter', '#tabla-items-movimientostock .codigoarticulo', function (e) {
+            if (e.key !== 'Enter' && e.keyCode !== 13) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+
+            var $input = $(this);
+            var $tr = $input.closest('tr');
+            var sku = ($input.val() || '').trim();
+
+            if (!sku) {
+                return;
+            }
+
+            if (msFilaArticuloId($tr)) {
+                msEnfocarCantidadFila($tr);
+                return;
+            }
+
+            $input.trigger('change');
+        });
 
         if (typeof activa_eventos_consultaarticulo === 'function') {
             activa_eventos_consultaarticulo();
@@ -149,6 +242,10 @@
                 if (typeof window.movStockProgramarPreviewAsiento === 'function') {
                     window.movStockProgramarPreviewAsiento();
                 }
+            });
+
+            $(document).on('change', '#tipotransaccion_stock_id, #fecha', function () {
+                msRefrescarPreciosTodasLasFilas();
             });
         }
     });

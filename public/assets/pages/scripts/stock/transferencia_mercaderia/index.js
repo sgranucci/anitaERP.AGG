@@ -47,14 +47,12 @@
         $('#tm_deposito_entrada').toggle(!destinoBien);
         $('#tm_panel_bien_destino').toggle(destinoBien);
         if (destinoBien) {
-            $('#deposito_entrada_id').val('');
-            $('#deposito_entrada_codigo, #deposito_entrada_descripcion').val('');
+            window.limpiarDepositoCampo('deposito_entrada_id');
         } else {
             $('#bien_uso_destino_id').val('');
         }
         if (origenBien) {
-            $('#deposito_salida_id').val('');
-            $('#deposito_salida_codigo, #deposito_salida_descripcion').val('');
+            window.limpiarDepositoCampo('deposito_salida_id');
         } else {
             $('#bien_uso_origen_id').val('');
         }
@@ -428,21 +426,27 @@
             return;
         }
 
-        var invalido = false;
-        $('#tm_lista .tm-item:visible').each(function () {
-            var $row = $(this);
-            var cant = parseFloat($row.find('.tm-cant').val());
-            if (!cant || cant <= 0) {
+        var tipoDepSalida = String($('#tm_deposito_salida').attr('data-tipodeposito') || '').trim();
+        var omitirControlSaldo = tipoDepSalida.toLowerCase() === 'centro de consumo'
+            || tipoDepSalida.toUpperCase() === 'M';
+
+        if (!omitirControlSaldo) {
+            var invalido = false;
+            $('#tm_lista .tm-item:visible').each(function () {
+                var $row = $(this);
+                var cant = parseFloat($row.find('.tm-cant').val());
+                if (!cant || cant <= 0) {
+                    return;
+                }
+                var saldo = parseFloat($row.data('saldo')) || 0;
+                if (cant > saldo + 0.000001) {
+                    invalido = true;
+                }
+            });
+            if (invalido) {
+                alert('Alguna cantidad supera el saldo disponible.');
                 return;
             }
-            var saldo = parseFloat($row.data('saldo')) || 0;
-            if (saldo > 0 && cant > saldo + 0.000001) {
-                invalido = true;
-            }
-        });
-        if (invalido) {
-            alert('Alguna cantidad supera el saldo disponible.');
-            return;
         }
 
         if (tipoManejaContabilidad() && !(parseInt($('#centrocosto_destino_id').val(), 10) > 0)) {

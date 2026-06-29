@@ -34,6 +34,27 @@
             @if(($modoPortal ?? '') !== 'rechazo')
             <dt class="col-sm-4">Tras aprobar este paso</dt>
             <dd class="col-sm-8">@if(!empty($estado_tras_aprobar))<strong>{{ $estado_tras_aprobar }}</strong>@else<span class="text-muted">Sin cambio de estado definido en el árbol (solo avanza el flujo).</span>@endif</dd>
+            @if(!empty($genera_transferencia_laboratorio))
+            <dt class="col-sm-4">Transferencia de stock</dt>
+            <dd class="col-sm-8">
+                @php
+                    $pf = $transferencia_laboratorio_preflight ?? [];
+                    $viableTm = !empty($pf['aplica']) ? (bool) ($pf['viable'] ?? true) : true;
+                    $esCentroConsumo = !empty($pf['deposito_origen_es_centro_consumo']);
+                @endphp
+                @if($viableTm)
+                    <span class="text-success font-weight-bold">Al confirmar se generará TM</span>
+                    @if($esCentroConsumo)
+                        <span class="d-block small text-muted mt-1">{{ $pf['mensaje_informativo'] ?? '' }}</span>
+                    @endif
+                @else
+                    <span class="text-danger font-weight-bold">No se podrá generar la TM automática</span>
+                    <span class="d-block small text-muted mt-1">{{ $pf['mensaje_resumen'] ?? '' }}</span>
+                @endif
+                hacia {{ $deposito_laboratorio ?? 'depósito de laboratorio' }}
+                (ítems reparación/devolución).
+            </dd>
+            @endif
             @endif
             <dt class="col-sm-4">Comentario</dt>
             <dd class="col-sm-8">{{ $req->comentario !== null && $req->comentario !== '' ? $req->comentario : '—' }}</dd>
@@ -41,8 +62,20 @@
             <dd class="col-sm-8 text-break">{{ $req->detalle !== null && $req->detalle !== '' ? $req->detalle : '—' }}</dd>
         </dl>
         <div class="px-3 pb-3">
-            <a href="{{ route('visualizar_requisicion_sala', ['id' => $req->id, 'hash' => $mov->hashvisualizar]) }}" class="btn btn-outline-secondary btn-sm btn-block mb-2" target="_blank" rel="noopener noreferrer">
-                <i class="fa fa-eye"></i> Ver requisición completa (solo lectura)
+            @php
+                $puedeEditarRequiPortal = \App\Support\Navegacion\ModoConsultaUrlSupport::usuarioPuedeActualizarRequisicionSala();
+                $urlConsultaRequi = \App\Support\Navegacion\ModoConsultaUrlSupport::urlConsultaRequisicionSalaPortal(
+                    (int) $req->id,
+                    (string) $mov->hashvisualizar
+                );
+            @endphp
+            <a href="{{ $urlConsultaRequi }}" class="btn btn-outline-secondary btn-sm btn-block mb-2" target="_blank" rel="noopener noreferrer">
+                <i class="fa fa-{{ $puedeEditarRequiPortal ? 'edit' : 'eye' }}"></i>
+                @if($puedeEditarRequiPortal)
+                    Ver y editar requisición completa
+                @else
+                    Ver requisición completa (solo lectura)
+                @endif
             </a>
         </div>
         <div class="table-responsive border-top">

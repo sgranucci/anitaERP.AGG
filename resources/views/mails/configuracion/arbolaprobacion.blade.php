@@ -75,6 +75,68 @@
         <br>
         <label for="Visualizar">Visualizar:</label>
         <div><p><a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a></p></div>
+    @elseif ($tipoArbol == 'Requisiciones de sala')
+        @php $mx = $mailExtras ?? []; @endphp
+        <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle en una pantalla adaptable a celular y podrá cargar observaciones antes de confirmar.</p>
+        @if (!empty($mx['estado_tras_aprobar']))
+            <p>Al <strong>aprobar este paso</strong>, la requisición quedará en estado <strong>{{ $mx['estado_tras_aprobar'] }}</strong>.</p>
+        @else
+            <p>En este nivel del árbol <strong>no está definido</strong> un estado destino al aprobar; solo avanzará la aprobación del flujo.</p>
+        @endif
+        @if (!empty($mx['genera_transferencia_laboratorio']))
+            <p><strong>Importante:</strong> esta aprobación generará una <strong>transferencia de mercadería</strong> desde el depósito de la requisición hacia <strong>{{ $mx['deposito_laboratorio'] ?? 'laboratorio' }}</strong> (ítems reparación/devolución).</p>
+            @php
+                $pf = $mx['transferencia_laboratorio_preflight'] ?? [];
+                $tmNoViable = !empty($pf['aplica']) && ($pf['viable'] ?? true) === false;
+                $esCentroConsumo = !empty($pf['deposito_origen_es_centro_consumo']);
+            @endphp
+            @if($esCentroConsumo)
+                <p style="font-size:13px;color:#555;">
+                    {{ $pf['mensaje_informativo'] ?? 'El depósito de origen es centro de consumo: no se valida saldo y la transferencia se registrará igual.' }}
+                </p>
+            @elseif($tmNoViable)
+                <p style="color:#c0392b;font-weight:bold;">
+                    Atención: con el saldo actual del depósito de origen <strong>no se podrá realizar</strong> la transferencia automática al laboratorio.
+                    {{ $pf['mensaje_resumen'] ?? '' }}
+                </p>
+                @php $lineasProblema = collect($pf['lineas_detalle'] ?? [])->filter(static fn ($f) => empty($f['ok']))->values(); @endphp
+                @if($lineasProblema->isNotEmpty())
+                    <p style="font-size:13px;margin-bottom:4px;">Ítems sin saldo suficiente:</p>
+                    <ul style="font-size:13px;">
+                        @foreach($lineasProblema as $fila)
+                            <li>
+                                {{ $fila['sku'] ?? '' }} {{ $fila['descripcion'] ?? '' }}
+                                (req. {{ number_format((float) ($fila['cantidad_requerida'] ?? 0), 4, ',', '.') }}
+                                @if(isset($fila['saldo_disponible']))
+                                    / saldo {{ number_format((float) $fila['saldo_disponible'], 4, ',', '.') }}
+                                @else
+                                    / sin saldo
+                                @endif
+                                )
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            @endif
+        @endif
+        <ul>
+            <li>Empresa: {{ $datosComprobante->empresas->nombre ?? '' }}</li>
+            <li>Número: {{ $datosComprobante->numerorequisicion }}</li>
+            <li>Fecha: {{ date('d/m/Y', strtotime($datosComprobante->fecha ?? '')) }}</li>
+            <li>Monto total ítems: {{ number_format($mx['monto_items'] ?? 0, 2, ',', '.') }}</li>
+            <li>Depósito origen: {{ optional($datosComprobante->depositos)->nombre ?? '—' }}</li>
+            <li>Comentarios: {{ $datosComprobante->comentario }}</li>
+            <li>Detalle: {{ $datosComprobante->detalle }}</li>
+        </ul>
+        <br>
+        <label for="Autorizar">Autorizar:</label>
+        <div><p><a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a></p></div>
+        <br>
+        <label for="Rechazar">Rechazar:</label>
+        <div><p><a href="{{ $linkRechazo }}">{{ $linkRechazo }}</a></p></div>
+        <br>
+        <label for="Visualizar">Visualizar:</label>
+        <div><p><a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a></p></div>
     @elseif ($tipoArbol == 'Requisiciones')
         @php $mx = $mailExtras ?? []; @endphp
         <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle en una pantalla adaptable a celular y podrá cargar observaciones antes de confirmar.</p>

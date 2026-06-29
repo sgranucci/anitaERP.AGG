@@ -160,7 +160,7 @@ class RecepcionProveedorController extends Controller
 
         try {
             if ($ordencompraId > 0) {
-                $data = $this->ocResolver->resolverPorId($ordencompraId);
+                $data = $this->ocResolver->resolverPorId($ordencompraId, true);
             } elseif ($numeroOc > 0) {
                 $data = $this->service->precargaDesdeOc($numeroOc);
             } else {
@@ -373,7 +373,7 @@ class RecepcionProveedorController extends Controller
 
     public function eliminar(Request $request, int $id)
     {
-        can('actualizar-recepcion-proveedor');
+        can('borrar-recepcion-proveedor');
 
         if ($request->ajax()) {
             try {

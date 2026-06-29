@@ -16,7 +16,9 @@ class GastronomiaSincronizarVentasAnitaErp extends Command
                             {--empresa=1 : empresa_id}
                             {--puntoventa= : Código PV opcional (ej. 00020)}
                             {--usuario= : usuario_id (default: primer usuario)}
-                            {--dry-run : Simula sin escribir}';
+                            {--dry-run : Simula sin escribir}
+                            {--forzar-cache : Re-descarga cache local Anita aunque exista}
+                            {--sin-cache : Importa leyendo bridge por comprobante (legacy)}';
 
     protected $description = 'Sincroniza venta Anita ↔ ERP gastronomía: replica faltantes ERP→Anita e importa/vincula solo Anita→ERP';
 
@@ -35,6 +37,8 @@ class GastronomiaSincronizarVentasAnitaErp extends Command
         $pv = $this->option('puntoventa');
         $pv = is_string($pv) && trim($pv) !== '' ? trim($pv) : null;
         $dryRun = (bool) $this->option('dry-run');
+        $forzarCache = (bool) $this->option('forzar-cache');
+        $sinCache = (bool) $this->option('sin-cache');
 
         $usuarioId = (int) ($this->option('usuario') ?: Usuario::query()->orderBy('id')->value('id') ?? 1);
         if ($usuarioId <= 0 || ! Auth::loginUsingId($usuarioId)) {
@@ -51,10 +55,20 @@ class GastronomiaSincronizarVentasAnitaErp extends Command
             $fechaHasta !== null ? ' → '.$fechaHasta : '',
             $pv ?? 'todos',
             $dryRun ? ' | MODO SIMULACIÓN' : '',
+            $sinCache ? ' | SIN CACHE' : ($forzarCache ? ' | FORZAR CACHE' : ' | cache local'),
         ));
 
         try {
-            $resultado = $service->sincronizar($fechaDesde, $fechaHasta, $empresaId, $usuarioId, $pv, $dryRun);
+            $resultado = $service->sincronizar(
+                $fechaDesde,
+                $fechaHasta,
+                $empresaId,
+                $usuarioId,
+                $pv,
+                $dryRun,
+                $forzarCache,
+                $sinCache,
+            );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 

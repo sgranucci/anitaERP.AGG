@@ -5,7 +5,7 @@ namespace App\Repositories\Stock;
 use App\Models\Stock\Recuento;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Stock\RecuentoListadoFiltros;
-use App\Support\Stock\UsuarioDepositoAutorizado;
+use App\Support\Stock\RecuentoVisibilidadSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class RecuentoRepository implements RecuentoRepositoryInterface
@@ -49,9 +49,11 @@ class RecuentoRepository implements RecuentoRepositoryInterface
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'recuento.empresa_id');
 
-        $depositoIds = UsuarioDepositoAutorizado::idsRestringidos();
-        if (is_array($depositoIds) && count($depositoIds) > 0) {
-            $query->whereIn('recuento.deposito_id', $depositoIds);
+        RecuentoVisibilidadSupport::aplicarFiltroDepositos($query);
+
+        $usuarioId = (int) ($filtros['usuario_id'] ?? 0);
+        if ($usuarioId > 0) {
+            RecuentoVisibilidadSupport::aplicarFiltroUsuario($query, $usuarioId);
         }
 
         if (RecuentoListadoFiltros::tieneCriteriosAplicados($filtros)) {

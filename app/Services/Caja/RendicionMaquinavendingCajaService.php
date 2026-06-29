@@ -174,6 +174,7 @@ class RendicionMaquinavendingCajaService
             RendicionMaquinavendingCajaPermiso::assertAltaPermitida(
                 (int) $rendicionVentas->empresa_id,
                 Carbon::parse($cabecera['fecharendicion'] ?? now()),
+                $rendicionVentas->fecha_jornada ? Carbon::parse($rendicionVentas->fecha_jornada) : null,
             );
 
             $this->validarCuadre($cabecera, $movimientos);

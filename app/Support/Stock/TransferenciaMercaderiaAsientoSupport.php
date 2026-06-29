@@ -15,6 +15,7 @@ final class TransferenciaMercaderiaAsientoSupport
 {
     /**
      * @return array{
+     *     total_movimiento: float,
      *     total_debe: float,
      *     total_haber: float,
      *     payload_asiento: array<string, mixed>,
@@ -73,6 +74,7 @@ final class TransferenciaMercaderiaAsientoSupport
         /** @var array<string, array{importe: float, cc_id: int, obs: string}> */
         $haberAgrupado = [];
         $advertencias = [];
+        $totalMovimiento = 0.0;
 
         foreach ($transferencia->articulos as $linea) {
             $articulo = $linea->articuloOrigen;
@@ -100,6 +102,7 @@ final class TransferenciaMercaderiaAsientoSupport
             if ($importe <= 0) {
                 continue;
             }
+            $totalMovimiento += $importe;
 
             $cuentaGastoId = self::resolverCuentaGastoId($articulo, $empresaId);
             $cuentaContrapartidaId = (int) ($articulo->cuentacontablecompra_id ?? 0);
@@ -178,6 +181,7 @@ final class TransferenciaMercaderiaAsientoSupport
         }
 
         return [
+            'total_movimiento' => round($totalMovimiento, 2),
             'total_debe' => $totalDebe,
             'total_haber' => $totalHaber,
             'payload_asiento' => $payloadAsiento,

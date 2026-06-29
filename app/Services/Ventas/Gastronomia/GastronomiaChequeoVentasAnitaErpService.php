@@ -9,6 +9,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
+use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportBridgeSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportEstacionamientoSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportResvtaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaComprobantePkSupport;
@@ -59,15 +60,18 @@ final class GastronomiaChequeoVentasAnitaErpService
             static fn (object $cab): int => (int) ($cab->ven_nro ?? 0),
             $anitaPorClave,
         ), static fn (int $n): bool => $n > 0)));
+        $empresaId = (int) $puntoventa->empresa_id;
         $numerosEstacionamiento = GastronomiaAnitaImportEstacionamientoSupport::numerosEstacionamientoEnSucursal(
             $sucursal,
             $empresaCodigo,
             $numerosAnitaJornada,
+            $empresaId,
         );
         $numerosResvtaLegacy = GastronomiaAnitaImportResvtaSupport::numerosConResvtaEnSucursal(
             $sucursal,
             $empresaCodigo,
             $numerosAnitaJornada,
+            $empresaId,
         );
         $ventasErp = $this->listarVentasErpPorJornada($puntoventaId, $fechaJornada);
 
@@ -187,7 +191,6 @@ final class GastronomiaChequeoVentasAnitaErpService
      */
     private function listarCabecerasAnitaPorJornada(int $sucursal, int $fechaEntera, ?Puntoventa $puntoventa = null): array
     {
-        $api = new ApiAnita;
         $where = " WHERE ven_sucursal = '".$sucursal."'"
             ." AND ven_fecha_vto = '".$fechaEntera."'"
             ." AND ven_letra = 'B' ";
@@ -199,10 +202,13 @@ final class GastronomiaChequeoVentasAnitaErpService
 
         $maxIntentos = max(1, (int) config('gastronomia.conciliacion_diaria_reporte.anita_reintentos_bridge', 3));
         $lista = [];
+        $api = new ApiAnita;
+        $empresaId = $puntoventa !== null ? (int) $puntoventa->empresa_id : 0;
         $ultimoError = null;
 
         for ($intento = 1; $intento <= $maxIntentos; $intento++) {
-            $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+            $parsed = ApiAnita::parsearRespuestaLista($api->apiCall(
+                GastronomiaAnitaImportBridgeSupport::mergePayload([
                 'acc' => 'list',
                 'tabla' => 'venta',
                 'campos' => implode(',', [
@@ -212,7 +218,7 @@ final class GastronomiaChequeoVentasAnitaErpService
                 ]),
                 'whereArmado' => $where,
                 'orderBy' => 'ven_tipo, ven_nro',
-            ]));
+            ], $empresaId)));
 
             if ($parsed['error_lectura'] !== null) {
                 $ultimoError = $parsed['error_lectura'];

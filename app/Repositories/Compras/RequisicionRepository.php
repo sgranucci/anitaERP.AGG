@@ -3,8 +3,11 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Requisicion;
+use App\Support\Compras\RequisicionAnitaColisionSupport;
 use App\Support\Compras\RequisicionAnitaNumeracionSupport;
+use App\Support\Compras\RequisicionProvisorioSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Log;
 
 class RequisicionRepository implements RequisicionRepositoryInterface
 {
@@ -89,6 +92,33 @@ class RequisicionRepository implements RequisicionRepositoryInterface
     public function findOrFail($id)
     {
         return $this->find($id);
+    }
+
+    /**
+     * Renumera un provisorio cuyo número ya existe en Anita u otra fila ERP.
+     */
+    public function renumerarProvisorioSiColisionaGlobal(int $id): int
+    {
+        $req = $this->model->findOrFail($id);
+        if (! RequisicionProvisorioSupport::esEstadoProvisorio($req->estado)) {
+            return (int) $req->numerorequisicion;
+        }
+
+        $actual = (int) $req->numerorequisicion;
+        if (! RequisicionAnitaColisionSupport::numeroOcupadoParaNuevaAsignacion($actual, $id)) {
+            return $actual;
+        }
+
+        $nuevo = RequisicionAnitaNumeracionSupport::asignarNumeroGlobalLibre($id, $actual);
+        $req->update(['numerorequisicion' => $nuevo]);
+
+        Log::info('Requisicion: provisorio renumerado (número único global)', [
+            'requisicion_id' => $id,
+            'anterior' => $actual,
+            'nuevo' => $nuevo,
+        ]);
+
+        return $nuevo;
     }
 
 }

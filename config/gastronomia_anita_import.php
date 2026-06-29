@@ -36,4 +36,10 @@ return [
         env('GASTRONOMIA_ANITA_IMPORT_CONTABILIDAD_COBRANZA', false),
         FILTER_VALIDATE_BOOLEAN,
     ),
+
+    /** Descarga venta/stkmov/resvta a storage antes de importar (menos lecturas al bridge). */
+    'usar_cache_local' => filter_var(env('GASTRONOMIA_ANITA_IMPORT_USAR_CACHE_LOCAL', true), FILTER_VALIDATE_BOOLEAN),
+
+    /** Subdirectorio bajo storage/app/ para JSON de import bulk. */
+    'cache_directorio' => env('GASTRONOMIA_ANITA_IMPORT_CACHE_DIRECTORIO', 'anita_import_cache'),
 ];

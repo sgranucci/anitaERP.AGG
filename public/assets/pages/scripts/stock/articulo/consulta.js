@@ -99,7 +99,7 @@ function resolverInputCantidadLineaArticulo($tr, unidadmedida) {
         $target = $tr.find('.pieza').filter(':visible:not([readonly])');
     }
     if (!$target.length) {
-        $target = $tr.find('.input-cantidad-contada, .cantidad-linea, input.cantidad')
+        $target = $tr.find('.cantidad-stock, .input-cantidad-contada, .cantidad-linea, input.cantidad')
             .filter(':visible:not([readonly])')
             .first();
     }
@@ -287,6 +287,9 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
     if ($(this).closest('#tabla-items-movimientostock').length && $(this).hasClass('codigoarticulo')) {
         return;
     }
+    if ($(this).closest('#tabla-articulos-requisicion').length) {
+        return;
+    }
 	if ($(this).closest('.tm-deposito-campo').length && $(this).hasClass('codigodeposito')) {
 		return;
 	}
@@ -458,7 +461,11 @@ function activa_eventos_consultaarticulo()
         if (window.onArticuloSeleccionado) {
             $.get(carpetaBase + '/stock/leerunarticulo/' + seleccion, function (dataArticulo) {
                 if (dataArticulo) {
-                    window.onArticuloSeleccionado(dataArticulo, { row: $(ptrarticulo_id).closest('tr') });
+                    var $trModal = $(ptrarticulo_id).closest('tr');
+                    window.onArticuloSeleccionado(dataArticulo, { row: $trModal });
+                    if ($trModal.closest('#tabla-articulos-requisicion').length) {
+                        $trModal.trigger('req:articulo-linea-cargado', [dataArticulo]);
+                    }
                 }
             });
         }
@@ -621,6 +628,10 @@ function activa_eventos_consultaarticulo()
 
             if (window.onArticuloSeleccionado) {
                 window.onArticuloSeleccionado(data, { row: $tr });
+            }
+
+            if ($tr.closest('#tabla-articulos-requisicion').length) {
+                $tr.trigger('req:articulo-linea-cargado', [data]);
             }
 
             enfocarCantidadLineaArticulo($tr, unidadmedida);

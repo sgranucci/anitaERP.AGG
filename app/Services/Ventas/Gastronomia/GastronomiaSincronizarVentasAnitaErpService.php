@@ -7,6 +7,7 @@ namespace App\Services\Ventas\Gastronomia;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaComprobantePkSupport;
+use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportCacheSupport;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Facades\Config;
@@ -22,6 +23,7 @@ final class GastronomiaSincronizarVentasAnitaErpService
         private readonly GastronomiaChequeoVentasAnitaErpService $chequeoService,
         private readonly GastronomiaReplicarVentasAnitaErpService $replicarService,
         private readonly GastronomiaFacturaImportacionAnitaService $importacionService,
+        private readonly GastronomiaAnitaImportCacheSupport $importCacheSupport,
     ) {
     }
 
@@ -40,6 +42,8 @@ final class GastronomiaSincronizarVentasAnitaErpService
         int $usuarioId,
         ?string $codigoPv = null,
         bool $dryRun = false,
+        bool $forzarCache = false,
+        bool $sinCache = false,
     ): array {
         Config::set(
             'gastronomia.genera_contabilidad_al_cobrar',
@@ -48,6 +52,62 @@ final class GastronomiaSincronizarVentasAnitaErpService
 
         $fechaHasta = $fechaHasta !== null && $fechaHasta !== '' ? $fechaHasta : $fechaDesde;
 
+        $usarCache = ! $sinCache && (bool) config('gastronomia_anita_import.usar_cache_local', true);
+        if ($usarCache) {
+            try {
+                $manifest = $this->importCacheSupport->descargar($empresaId, $fechaDesde, $fechaHasta, $forzarCache);
+                $this->importacionService->setCacheReader(
+                    $this->importCacheSupport->crearReader($empresaId, $fechaDesde, $fechaHasta),
+                );
+                Log::info('gastronomia.sincronizar.cache_import', [
+                    'empresa_id' => $empresaId,
+                    'fecha_desde' => $fechaDesde,
+                    'fecha_hasta' => $fechaHasta,
+                    'consultas_bridge' => $manifest['consultas_bridge'] ?? null,
+                    'counts' => $manifest['counts'] ?? null,
+                    'directorio' => $manifest['directorio'] ?? null,
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('gastronomia.sincronizar.cache_import.fallo', [
+                    'empresa_id' => $empresaId,
+                    'msg' => $e->getMessage(),
+                ]);
+                throw $e;
+            }
+        }
+
+        try {
+            return $this->ejecutarSincronizacion(
+                $fechaDesde,
+                $fechaHasta,
+                $empresaId,
+                $usuarioId,
+                $codigoPv,
+                $dryRun,
+            );
+        } finally {
+            if ($usarCache) {
+                $this->importacionService->setCacheReader(null);
+            }
+        }
+    }
+
+    /**
+     * @return array{
+     *   combinaciones:int,
+     *   erp_anita: array<string, mixed>,
+     *   anita_erp: array<string, mixed>,
+     *   errores: list<string>
+     * }
+     */
+    private function ejecutarSincronizacion(
+        string $fechaDesde,
+        string $fechaHasta,
+        int $empresaId,
+        int $usuarioId,
+        ?string $codigoPv,
+        bool $dryRun,
+    ): array {
         $erpAnita = $this->replicarService->replicarFaltantes(
             $fechaDesde,
             $fechaHasta,

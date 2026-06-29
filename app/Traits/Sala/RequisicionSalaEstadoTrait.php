@@ -10,7 +10,7 @@ trait RequisicionSalaEstadoTrait
         ['id' => '3', 'valor' => '2', 'nombre' => 'PARCIAL'],
         ['id' => '4', 'valor' => '3', 'nombre' => 'CUMPLIDO'],
         ['id' => '5', 'valor' => '4', 'nombre' => 'SUSPENDIDO'],
-        ['id' => '6', 'valor' => '5', 'nombre' => 'A COMPRAS'],
+        ['id' => '6', 'valor' => '5', 'nombre' => 'EN LABORATORIO'],
         ['id' => '7', 'valor' => '6', 'nombre' => 'A AUTORIZAR'],
         ['id' => '8', 'valor' => 'E', 'nombre' => 'AUTORIZACION ESPECIAL'],
         ['id' => '9', 'valor' => 'R', 'nombre' => 'EN ARBOL APROBACION'],

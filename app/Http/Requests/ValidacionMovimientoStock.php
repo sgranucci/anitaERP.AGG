@@ -30,13 +30,21 @@ class ValidacionMovimientoStock extends FormRequest
     protected function prepareForValidation(): void
     {
         if ($this->validarComoTransferenciaNueva()) {
+            $this->normalizarDepositoIdOpcional('deposito_salida_id');
+            $this->normalizarDepositoIdOpcional('deposito_entrada_id');
+
             return;
         }
 
-        $depositoId = $this->input('deposito_id');
-        if ($depositoId === '' || $depositoId === '0' || $depositoId === 0 || $depositoId === null) {
-            $this->merge(['deposito_id' => null]);
-        }
+        $this->normalizarDepositoIdOpcional('deposito_id');
+
+        // Campos del panel transferencia siguen en el DOM; evitar exists:depmae con id 0.
+        $this->merge([
+            'deposito_salida_id' => null,
+            'deposito_entrada_id' => null,
+            'bien_uso_destino_id' => null,
+            'bien_uso_origen_id' => null,
+        ]);
     }
 
     public function rules()
@@ -53,10 +61,30 @@ class ValidacionMovimientoStock extends FormRequest
                 'integer',
                 'exists:depmae,id',
             ],
-            'deposito_salida_id' => 'nullable|integer|exists:depmae,id',
-            'deposito_entrada_id' => 'nullable|integer|exists:depmae,id',
-            'bien_uso_destino_id' => 'nullable|integer|exists:bien_uso,id',
-            'bien_uso_origen_id' => 'nullable|integer|exists:bien_uso,id',
+            'deposito_salida_id' => [
+                Rule::excludeIf(fn () => ! $this->validarComoTransferenciaNueva()),
+                'nullable',
+                'integer',
+                'exists:depmae,id',
+            ],
+            'deposito_entrada_id' => [
+                Rule::excludeIf(fn () => ! $this->validarComoTransferenciaNueva()),
+                'nullable',
+                'integer',
+                'exists:depmae,id',
+            ],
+            'bien_uso_destino_id' => [
+                Rule::excludeIf(fn () => ! $this->validarComoTransferenciaNueva()),
+                'nullable',
+                'integer',
+                'exists:bien_uso,id',
+            ],
+            'bien_uso_origen_id' => [
+                Rule::excludeIf(fn () => ! $this->validarComoTransferenciaNueva()),
+                'nullable',
+                'integer',
+                'exists:bien_uso,id',
+            ],
             'centrocosto_destino_id' => 'nullable|integer|exists:centrocosto,id',
         ];
     }
@@ -87,6 +115,16 @@ class ValidacionMovimientoStock extends FormRequest
                     $validator->errors()->add(
                         'centrocosto_destino_id',
                         'Debe indicar centro de costo destino para movimientos con contabilidad.'
+                    );
+                }
+            }
+
+            if ($tipo && (bool) $tipo->maneja_contabilidad && $this->validarComoTransferenciaNueva()) {
+                $ccDestino = (int) $this->input('centrocosto_destino_id', 0);
+                if ($ccDestino <= 0) {
+                    $validator->errors()->add(
+                        'centrocosto_destino_id',
+                        'Debe indicar centro de costo destino para transferencias con contabilidad.'
                     );
                 }
             }
@@ -184,5 +222,13 @@ class ValidacionMovimientoStock extends FormRequest
         $tipo = Tipotransaccion_Stock::query()->find($tipoId);
 
         return $tipo !== null && $tipo->operacion === 'T';
+    }
+
+    private function normalizarDepositoIdOpcional(string $campo): void
+    {
+        $valor = $this->input($campo);
+        if ($valor === '' || $valor === '0' || $valor === 0 || $valor === null) {
+            $this->merge([$campo => null]);
+        }
     }
 }

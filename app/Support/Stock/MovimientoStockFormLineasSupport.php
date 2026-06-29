@@ -13,8 +13,8 @@ final class MovimientoStockFormLineasSupport
      */
     public static function lineasParaFormulario(MovimientoStock $movimientostock): Collection
     {
-        $articulosOld = old('articulos_id');
-        if (is_array($articulosOld) && count(array_filter($articulosOld, static fn ($id) => (int) $id > 0)) > 0) {
+        $articulosOld = self::normalizarArrayOld('articulos_id');
+        if (count(array_filter($articulosOld, static fn ($id) => (int) $id > 0)) > 0) {
             return self::desdeOldInput();
         }
 
@@ -81,7 +81,7 @@ final class MovimientoStockFormLineasSupport
      */
     private static function desdeOldInput(): Collection
     {
-        $articulosIds = old('articulos_id', []);
+        $articulosIds = self::normalizarArrayOld('articulos_id');
         $cantidades = old('cantidades', []);
         $piezas = old('piezas', []);
         $precios = old('precios', []);
@@ -127,5 +127,23 @@ final class MovimientoStockFormLineasSupport
         }
 
         return $lineas;
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private static function normalizarArrayOld(string $campo): array
+    {
+        $valor = old($campo, []);
+
+        if (is_array($valor)) {
+            return $valor;
+        }
+
+        if ($valor === null || $valor === '') {
+            return [];
+        }
+
+        return [$valor];
     }
 }

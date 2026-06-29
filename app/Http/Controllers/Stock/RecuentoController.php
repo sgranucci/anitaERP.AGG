@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Stock;
 
+use App\Exports\Stock\RecuentoDetalleExport;
 use App\Exports\Stock\RecuentoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRecuento;
@@ -12,8 +13,10 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\RecuentoRepositoryInterface;
 use App\Services\Stock\RecuentoService;
+use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\RecuentoListadoFiltros;
 use App\Support\Stock\RecuentoModoCierreSupport;
+use App\Support\Stock\RecuentoVisibilidadSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -32,7 +35,7 @@ class RecuentoController extends Controller
     {
         can('listar-recuento');
 
-        $filtros = RecuentoListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltrosListado($request);
         $recuentos = $this->recuentoRepository->leeRecuentos($filtros, true);
 
         return view('stock.recuento.index', [
@@ -41,6 +44,8 @@ class RecuentoController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => RecuentoListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => RecuentoListadoFiltros::CAMPOS,
+            'ver_todos_recuentos' => ! empty($filtros['ver_todos_recuentos']),
+            'puede_ver_todos_recuentos' => RecuentoVisibilidadSupport::puedeVerTodos(),
         ]);
     }
 
@@ -51,7 +56,7 @@ class RecuentoController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = RecuentoListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
 
         switch ($formato) {
             case 'PDF':
@@ -78,6 +83,16 @@ class RecuentoController extends Controller
         }
 
         return redirect()->route('recuento', RecuentoListadoFiltros::paraQueryString($filtros));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $filtros = RecuentoListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+
+        return RecuentoListadoFiltros::aplicarAlcanceUsuario($filtros, (int) auth()->id());
     }
 
     public function crear(Request $request)
@@ -244,6 +259,7 @@ class RecuentoController extends Controller
     {
         can('imprimir-recuento');
         $recuento = $this->service->buscar($id);
+        ArticuloPrecioUltimaCompraSupport::enriquecerLineas($recuento->items);
 
         $html = view('stock.recuento.pdf', compact('recuento'))->render();
         $pdf = \App::make('dompdf.wrapper');
@@ -253,6 +269,19 @@ class RecuentoController extends Controller
         $nombreArchivo = 'Recuento_'.preg_replace('/[^\w\-]+/', '_', (string) $recuento->codigo).'.pdf';
 
         return $pdf->download($nombreArchivo);
+    }
+
+    public function excel(int $id)
+    {
+        can('imprimir-recuento');
+        $recuento = $this->service->buscar($id);
+        ArticuloPrecioUltimaCompraSupport::enriquecerLineas($recuento->items);
+
+        $nombreArchivo = 'Recuento_'.preg_replace('/[^\w\-]+/', '_', (string) $recuento->codigo).'.xlsx';
+
+        return (new RecuentoDetalleExport)
+            ->parametros($recuento)
+            ->download($nombreArchivo);
     }
 
     public function saldoArticulo(Request $request): JsonResponse

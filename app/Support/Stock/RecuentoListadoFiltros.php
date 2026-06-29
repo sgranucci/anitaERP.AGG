@@ -91,7 +91,38 @@ class RecuentoListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
+            'ver_todos_recuentos' => $request->has('ver_todos_recuentos')
+                ? $request->boolean('ver_todos_recuentos')
+                : false,
+            'usuario_id' => 0,
         ];
+    }
+
+    /**
+     * Por defecto solo recuentos del usuario; con permiso y ver_todos_recuentos, todos (salvo depósitos autorizados).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function aplicarAlcanceUsuario(array $filtros, int $usuarioId): array
+    {
+        if (! RecuentoVisibilidadSupport::puedeVerTodos()) {
+            $filtros['ver_todos_recuentos'] = false;
+            $filtros['usuario_id'] = $usuarioId;
+
+            return $filtros;
+        }
+
+        if (! empty($filtros['ver_todos_recuentos'])) {
+            $filtros['usuario_id'] = 0;
+
+            return $filtros;
+        }
+
+        $filtros['ver_todos_recuentos'] = false;
+        $filtros['usuario_id'] = $usuarioId;
+
+        return $filtros;
     }
 
     public static function tieneCriteriosAplicados(array $filtros): bool
@@ -131,6 +162,8 @@ class RecuentoListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'busqueda' => '',
+            'ver_todos_recuentos' => false,
+            'usuario_id' => 0,
         ];
     }
 
@@ -154,6 +187,25 @@ class RecuentoListadoFiltros
         }
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
+        }
+        if (! empty($filtros['ver_todos_recuentos'])) {
+            $params['ver_todos_recuentos'] = '1';
+        }
+
+        return $params;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, string|int|bool>
+     */
+    public static function paraQueryStringAlternarAlcance(array $filtros, bool $verTodos): array
+    {
+        $params = self::paraQueryString($filtros);
+        if ($verTodos) {
+            $params['ver_todos_recuentos'] = '1';
+        } else {
+            unset($params['ver_todos_recuentos']);
         }
 
         return $params;

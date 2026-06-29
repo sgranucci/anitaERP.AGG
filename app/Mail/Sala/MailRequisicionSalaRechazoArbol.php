@@ -26,6 +26,7 @@ class MailRequisicionSalaRechazoArbol extends Mailable
         $numero = $this->requisicion->numerorequisicion ?? $this->requisicion->id;
 
         return $this
+            ->from(config('mail.from.address'), config('mail.from.name'))
             ->subject('Requisición de sala #'.$numero.' rechazada')
             ->view('mails.sala.requisicion_sala_rechazo_arbol');
     }

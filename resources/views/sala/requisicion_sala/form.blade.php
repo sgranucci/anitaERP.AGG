@@ -1,5 +1,6 @@
 @php
     $soloLectura = isset($visualizar) && $visualizar;
+    $lineasTmBloqueadas = array_flip($lineas_articulo_bloqueadas_por_tm ?? []);
     $lineas = (isset($data) && $data && $data->requisicion_sala_articulos && $data->requisicion_sala_articulos->count())
         ? $data->requisicion_sala_articulos
         : collect([new \App\Models\Sala\RequisicionSalaArticulo()]);
@@ -152,27 +153,36 @@
         </thead>
         <tbody>
             @foreach ($lineas as $idx => $linea)
-            <tr class="item-requisicion-sala-articulo">
+            @php
+                $lineaBloqueadaTm = ! $soloLectura && isset($lineasTmBloqueadas[(int) ($linea->id ?? 0)]);
+                $soloLecturaArticulo = $soloLectura || $lineaBloqueadaTm;
+            @endphp
+            <tr class="item-requisicion-sala-articulo @if($lineaBloqueadaTm) linea-articulo-bloqueada-tm @endif">
                 <td class="align-middle">
                     <input type="hidden" class="requisicion_sala_articulo_id" name="requisicion_sala_articulo_ids[]" value="{{ old('requisicion_sala_articulo_ids.'.$idx, $linea->id ?? '') }}">
                     <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}">
                     <input type="hidden" class="articulo_lleva_npu" value="{{ optional($linea->articulos)->numeroparte ?? '0' }}">
                     @include('sala.requisicion_sala.partials.celda_articulo_linea', [
                         'sku' => optional($linea->articulos)->sku ?? '',
-                        'soloLectura' => $soloLectura,
+                        'soloLectura' => $soloLecturaArticulo,
                     ])
+                    @if($lineaBloqueadaTm)
+                        <small class="text-muted d-block mt-1" title="Incluido en transferencia al laboratorio">Art. bloqueado (TM)</small>
+                    @endif
                 </td>
                 <td class="col-desc-celda align-middle">
                     <input type="text" class="descripcionarticulo form-control form-control-sm" readonly value="{{ optional($linea->articulos)->descripcion ?? '' }}" title="{{ optional($linea->articulos)->descripcion ?? '' }}">
                 </td>
                 <td class="align-middle"><input type="number" step="0.0001" name="cantidades[]" class="form-control form-control-sm cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
                 <td class="align-middle">
-                    <select name="fueradeservicios[]" class="form-control form-control-sm" {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="fueradeservicios[]" class="form-control form-control-sm fueradeservicio-linea" {{ $soloLectura ? 'disabled' : '' }}>
                         <option value="N" {{ old('fueradeservicios.'.$idx, $linea->fueradeservicio ?? 'N') === 'N' ? 'selected' : '' }}>N</option>
                         <option value="S" {{ old('fueradeservicios.'.$idx, $linea->fueradeservicio ?? 'N') === 'S' ? 'selected' : '' }}>S</option>
                     </select>
                 </td>
-                <td class="align-middle"><input type="text" name="uids[]" class="form-control form-control-sm" value="{{ old('uids.'.$idx, $linea->uid ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
+                <td class="align-middle">
+                    <input type="text" name="uids[]" class="form-control form-control-sm uid-linea" value="{{ old('uids.'.$idx, $linea->uid ?? '') }}" maxlength="50" placeholder="Obligatorio si F/S = S" {{ $soloLectura ? 'readonly' : '' }}>
+                </td>
                 <td class="align-middle"><input type="text" name="numeropartes[]" class="form-control form-control-sm numeroparte-linea" value="{{ old('numeropartes.'.$idx, $linea->numeroparte ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
                 <td class="align-middle">
                     <select name="destinos[]" class="form-control form-control-sm" {{ $soloLectura ? 'disabled' : '' }}>
@@ -182,14 +192,28 @@
                     </select>
                 </td>
                 @if(!$soloLectura)
-                <td class="align-middle text-center"><button type="button" class="btn-accion-tabla eliminar_linea_sala"><i class="fa fa-times-circle text-danger"></i></button></td>
+                <td class="align-middle text-center">
+                    @if($lineaBloqueadaTm)
+                        <span class="text-muted" title="No se puede eliminar: incluido en transferencia al laboratorio"><i class="fa fa-lock"></i></span>
+                    @else
+                        <button type="button" class="btn-accion-tabla eliminar_linea_sala"><i class="fa fa-times-circle text-danger"></i></button>
+                    @endif
+                </td>
                 @endif
             </tr>
             @endforeach
         </tbody>
     </table>
+    @if(!empty($tiene_transferencia_laboratorio) && !$soloLectura)
+    <div id="aviso-nuevos-articulos-sin-tm" class="alert alert-warning small d-none mt-2 mb-0" role="alert">
+        <strong>Artículos nuevos sin transferir:</strong>
+        hay renglones agregados que <strong>no están incluidos</strong> en la transferencia al laboratorio ya generada.
+        Debe registrar una <strong>transferencia de mercadería aparte</strong> (Stock → Transferencia de mercadería) para esos ítems.
+    </div>
+    @endif
     @if(!$soloLectura)
     <button type="button" class="btn btn-danger btn-sm" id="agrega_renglon_sala">+ Agrega renglón</button>
+    <small id="aviso-uid-fuera-servicio" class="text-danger d-none ml-2">Complete el UID de los ítems fuera de servicio antes de agregar otro renglón.</small>
     @endif
 </div>
 <style>

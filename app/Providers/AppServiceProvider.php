@@ -31,6 +31,7 @@ use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -77,6 +78,19 @@ class AppServiceProvider extends ServiceProvider
 
         App::setLocale('es');
         Carbon::setLocale('es');
+
+        $fromAddress = (string) config('mail.from.address');
+        $fromName = (string) config('mail.from.name');
+        if ($fromAddress !== '') {
+            Mail::alwaysFrom($fromAddress, $fromName !== '' ? $fromName : 'Anita ERP');
+        }
+        $replyAddress = (string) config('mail.reply_to.address');
+        if ($replyAddress !== '') {
+            Mail::alwaysReplyTo(
+                $replyAddress,
+                (string) (config('mail.reply_to.name') ?: 'Anita ERP')
+            );
+        }
 
         Pedido_Combinacion::observe(Pedido_CombinacionObserver::class);
         Ordentrabajo_Tarea::observe(Ordentrabajo_TareaObserver::class);

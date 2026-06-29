@@ -61,9 +61,16 @@ Recepciones de proveedores
                         @foreach ($coleccion as $row)
                         @php
                             $tieneDiff = $row->fl_precio_diferencia || $row->fl_diferencia_cantidad || $row->fl_articulo_extra || $row->fl_faltante_oc;
+                            $esBorrador = ($row->estado ?? '') === 'BORRADOR';
                         @endphp
-                        <tr class="@if($tieneDiff) table-warning @endif">
-                            <td>{{ $row->numerorecepcion }}</td>
+                        <tr class="@if($esBorrador) table-secondary @elseif($tieneDiff) table-warning @endif">
+                            <td>
+                                @if($esBorrador)
+                                    <strong>{{ $row->numerorecepcion }}</strong>
+                                @else
+                                    {{ $row->numerorecepcion }}
+                                @endif
+                            </td>
                             <td>{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '' }}</td>
                             <td>{{ $row->tipo }}</td>
                             <td>
@@ -78,7 +85,9 @@ Recepciones de proveedores
                             </td>
                             <td>{{ $row->nombreproveedor }}</td>
                             <td>{{ $row->nombreempresa }}</td>
-                            <td>{{ $row->estado }}</td>
+                            <td>
+                                @include('stock.recepcion_proveedor.partials.estado_badge', ['estado' => $row->estado ?? ''])
+                            </td>
                             <td class="text-nowrap">
                                 @if($row->fl_precio_diferencia)<span class="badge badge-warning" title="Precio">P</span>@endif
                                 @if($row->fl_diferencia_cantidad)<span class="badge badge-warning" title="Cantidad">C</span>@endif
@@ -112,7 +121,7 @@ Recepciones de proveedores
                                     </button>
                                 </form>
                                 @endif
-                                @if($row->estado === 'BORRADOR' && can('actualizar-recepcion-proveedor', false))
+                                @if($row->estado === 'BORRADOR' && can('borrar-recepcion-proveedor', false))
                                 <form action="{{ route('eliminar_recepcion_proveedor', ['id' => $row->id]) }}" class="d-inline form-eliminar" method="POST">
                                     @csrf
                                     @method('DELETE')
