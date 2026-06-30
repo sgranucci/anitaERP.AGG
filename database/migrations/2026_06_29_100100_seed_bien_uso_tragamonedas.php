@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         if (! Schema::hasColumn('bien_uso', 'uid')) {
             return;
         }
@@ -66,6 +70,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         if (! Schema::hasColumn('bien_uso', 'uid')) {
             return;
         }
