@@ -11,7 +11,41 @@
   		});
 	}
 
+    function restaurarSolapasTrasErrorServidor() {
+        if (!$('.alert-danger').length || typeof mostrarSolapaDelPrimerCampoInvalido !== 'function') {
+            return;
+        }
+
+        var invalido = document.querySelector('#form-general [required]:invalid')
+            || document.querySelector('#form-general .is-invalid');
+
+        if (!invalido && typeof camposObligatoriosEnFormulario === 'function' && typeof valorCampoObligatorio === 'function') {
+            var form = document.getElementById('form-general');
+            if (form) {
+                camposObligatoriosEnFormulario(form).some(function (campo) {
+                    if (typeof campoObligatorioDebeValidarse === 'function' && !campoObligatorioDebeValidarse(campo)) {
+                        return false;
+                    }
+                    if (!valorCampoObligatorio(campo)) {
+                        invalido = campo;
+                        return true;
+                    }
+                    return false;
+                });
+            }
+        }
+
+        if (invalido) {
+            mostrarSolapaDelPrimerCampoInvalido(invalido);
+            if (typeof enfocarCampoInvalido === 'function') {
+                enfocarCampoInvalido(invalido);
+            }
+        }
+    }
+
     $(function () {
+        restaurarSolapasTrasErrorServidor();
+
         $("#condicioniva_id").change(function(){
             var  condicioniva_id = $(this).val();
             completarLetra(condicioniva_id);
@@ -172,6 +206,13 @@
 
 		var condicioniva_id = $("#condicioniva_id").val();
         completarLetra(condicioniva_id);
+
+        if ($('#tipodocumento_id option:selected').text().trim() === 'CUIT') {
+            var $nroDoc = $('#numerodocumento');
+            if ($nroDoc.val() && typeof formatarCUIT === 'function') {
+                formatarCUIT($nroDoc[0]);
+            }
+        }
 
         // Muestra tipo de suspension
         muestraTipoSuspension();

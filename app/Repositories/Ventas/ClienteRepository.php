@@ -30,6 +30,7 @@ use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use App\Support\Ventas\ClienteListadoFiltros;
+use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Services\Ventas\ClienteAnitaSyncService;
 use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
@@ -68,8 +69,15 @@ class ClienteRepository implements ClienteRepositoryInterface
 		}
 		$data['estado'] = '0';
 
-		if (config('app.empresa') == 'EL BIERZO')
+		if (config('app.empresa') == 'EL BIERZO') {
 			$data['emitenotadecredito'] = 'NO EMITE';
+			if (empty($data['agregabonificacion'])) {
+				$data['agregabonificacion'] = Cliente::$enumAgregaBonificacion['N'];
+			}
+			$data['coeficiente_id'] = $data['coeficiente_id'] ?? null;
+			$data['coeficienteextra'] = $data['coeficienteextra'] ?? 0;
+			$data['porcentajelogistica'] = $data['porcentajelogistica'] ?? 0;
+		}
 
 		if ($data['retieneiva'] == null)
 			$data['retieneiva'] = 'N';
@@ -85,6 +93,17 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		return $cliente;
     }
+
+	public function registrarNumeradorAnitaTrasAlta(string $codigo): void
+	{
+		if (! ClienteAnitaNumeracionSupport::estaHabilitada()) {
+			return;
+		}
+
+		$numero = (int) ltrim(trim($codigo), '0');
+
+		ClienteAnitaNumeracionSupport::registrarCodigoAsignadoEnNumerador($numero);
+	}
 
     public function update(array $data, $id, ?bool $syncAnita = null)
     {
@@ -1398,13 +1417,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		if (config("app.empresa") == "EL BIERZO")
 		{
-			$desdefecha_exclusionpercepcioniva = $request['desdefecha_exclusionpercepcioniva'];
+			$desdefecha_exclusionpercepcioniva = $request['desdefecha_exclusionpercepcioniva'] ?? null;
 			if ($desdefecha_exclusionpercepcioniva)
 				$dfexcl_piva = $desdefecha_exclusionpercepcioniva->format('Ymd');
 			else
 				$dfexcl_piva = '00000000';
 
-			$hastafecha_exclusionpercepcioniva = $request['hastafecha_exclusionpercepcioniva'];
+			$hastafecha_exclusionpercepcioniva = $request['hastafecha_exclusionpercepcioniva'] ?? null;
 			if ($hastafecha_exclusionpercepcioniva)
 				$hfexcl_piva = $hastafecha_exclusionpercepcioniva->format('Ymd');
 			else
@@ -1636,6 +1655,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita
 
 	private function ultimoCodigo(&$codigo) {
+		if (config('app.empresa') == 'EL BIERZO' && ClienteAnitaNumeracionSupport::estaHabilitada()) {
+			$numero = ClienteAnitaNumeracionSupport::asignarCodigoClienteLibre();
+			$codigo = ClienteAnitaNumeracionSupport::formatearCodigoErp($numero);
+
+			return;
+		}
+
         $apiAnita = new ApiAnita();
 		if (config('app.empresa') == 'AGG')
         	$data = array( 'acc' => 'list', 
@@ -1710,22 +1736,22 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		if (config("app.empresa") == "EL BIERZO")
 		{
-			if ($request['emitecertificado'] == 'Emite Certificado')
+			if (($request['emitecertificado'] ?? 'No Emite Certificado') === 'Emite Certificado')
 				$emitecertificado = 'S';
 			else
 				$emitecertificado = 'N';
 
-			if ($request['emitenotadecredito'] == 'Emite Nota de Credito')
+			if (($request['emitenotadecredito'] ?? 'No Emite Nota de Credito') === 'Emite Nota de Credito')
 				$emitenotadecredito = 'S';
 			else
 				$emitenotadecredito = 'N';
 
-			if ($request['agregabonificacion'] == 'Agrega Bonificacion')		
+			if (($request['agregabonificacion'] ?? 'No Agrega Bonificacion') === 'Agrega Bonificacion')
 				$agregabonificacion = 'S';
 			else
 				$agregabonificacion = 'N';
 
-			if ($request['modofacturacion'] == 'N')
+			if (($request['modofacturacion'] ?? 'N') === 'N')
 				$regimen = '0';
 			else
 				$regimen = '1';
@@ -1769,13 +1795,19 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		if (config("app.empresa") == "EL BIERZO")
 		{
-			$abasto = Abasto::select('id', 'codigo')->where('id' , $request['abasto_id'])->first();
+			$abastoId = $request['abasto_id'] ?? null;
+			$abasto = $abastoId
+				? Abasto::select('id', 'codigo')->whereKey($abastoId)->first()
+				: null;
 			if ($abasto)
 				$codigoabasto = $abasto->codigo;
 			else
 				$codigoabasto = 0;
-				
-			$coeficiente = Coeficiente::select('id', 'codigo')->where('id' , $request['coeficiente_id'])->first();
+
+			$coeficienteId = $request['coeficiente_id'] ?? null;
+			$coeficiente = $coeficienteId
+				? Coeficiente::select('id', 'codigo')->whereKey($coeficienteId)->first()
+				: null;
 			if ($coeficiente)
 				$codigocoeficiente = $coeficiente->codigo;
 			else

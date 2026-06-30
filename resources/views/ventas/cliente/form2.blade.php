@@ -15,7 +15,7 @@
 				</select>
 				<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
 				<span class="input-group-text">#</span>
-				<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" value="{{$data->numerodocumento??''}}">
+				<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" value="{{ old('numerodocumento', $data->numerodocumento ?? '') }}">
 				<span class="d-inline-block position-relative pl-1 align-middle">
 					<button type="button" id="btn-consulta-arca-cliente" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1;" onclick="return window.consultaArcaCliente?.(event)">
 						<i class="fa fa-search text-primary"></i>
@@ -349,6 +349,9 @@
 				</div>
 			@else
 				<input type="hidden" name="descuento" id="descuento" class="form-control" value="{{old('descuento', $data->descuento ?? '0')}}">
+				@if (config('app.empresa') == 'EL BIERZO')
+					<input type="hidden" name="agregabonificacion" value="{{ old('agregabonificacion', $data->agregabonificacion ?? 'No Agrega Bonificacion') }}">
+				@endif
 			@endif
 			@if (config('app.empresa') == 'EL BIERZO')
 				<input type="hidden" name="descuentoventa_id" id="descuentoventa_id" class="form-control" value="{{old('descuentoventa_id', $data->descuentoventa_id ?? '')}}">
@@ -373,6 +376,9 @@
 							<input type="number" min="0" max="100" name="coeficienteextra" id="coeficienteextra" class="form-control" value="{{old('coeficienteextra', $data->coeficienteextra ?? '0')}}">
 						</div>
 					</div>
+				@else
+					<input type="hidden" name="coeficiente_id" value="{{ old('coeficiente_id', $data->coeficiente_id ?? '') }}">
+					<input type="hidden" name="coeficienteextra" value="{{ old('coeficienteextra', $data->coeficienteextra ?? '0') }}">
 				@endif
 				<div class="form-group row">
 					<label for="hastafecha_exclusionpercepcioniva" class="col-lg-4 col-form-label">Hasta Fecha Excl. Perc. Iva</label>

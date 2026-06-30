@@ -166,13 +166,47 @@ function tituloSolapaFormulario(numeroSolapa) {
     if ($btn.length) {
         return $btn.text().replace(/\s+/g, ' ').trim();
     }
+    var $pane = $('.form' + numeroSolapa).first();
+    if ($pane.length) {
+        var paneId = $pane.attr('id');
+        if (paneId) {
+            var $link = $('a[data-toggle="tab"][href="#' + paneId + '"], a[data-bs-toggle="tab"][href="#' + paneId + '"]');
+            if ($link.length) {
+                return $link.text().replace(/\s+/g, ' ').trim();
+            }
+        }
+    }
     return 'sección ' + numeroSolapa;
+}
+
+function activarSolapaBootstrapDesdePane($pane) {
+    if (!$pane || !$pane.length) {
+        return false;
+    }
+    var paneId = $pane.attr('id');
+    if (!paneId) {
+        return false;
+    }
+    var $link = $('a[data-toggle="tab"][href="#' + paneId + '"], a[data-bs-toggle="tab"][href="#' + paneId + '"]');
+    if (!$link.length) {
+        return false;
+    }
+    if (typeof $link.tab === 'function') {
+        $link.tab('show');
+        return true;
+    }
+    $link.trigger('click');
+    return true;
 }
 
 function activarSolapaFormulario(numeroSolapa) {
     var $btn = $('#botonform' + numeroSolapa);
     if ($btn.length) {
         $btn.trigger('click');
+        return;
+    }
+    var $pane = $('.form' + numeroSolapa).first();
+    if (activarSolapaBootstrapDesdePane($pane)) {
         return;
     }
     $(SECCIONES_SOLAPA_FORM).hide();
@@ -214,14 +248,13 @@ function mostrarSolapaDelPrimerCampoInvalido(campo) {
     if (!campo) {
         return;
     }
+    var $pane = $(campo).closest('.tab-pane');
+    if ($pane.length && activarSolapaBootstrapDesdePane($pane)) {
+        return;
+    }
     var numeroSolapa = numeroSolapaDesdeElemento(campo);
     if (numeroSolapa) {
         activarSolapaFormulario(numeroSolapa);
-        return;
-    }
-    var solapaContenedora = campo.closest('.tab-content');
-    if (solapaContenedora && solapaContenedora.id) {
-        activarSolapa(solapaContenedora.id);
     }
 }
 

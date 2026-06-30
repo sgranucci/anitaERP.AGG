@@ -314,6 +314,8 @@ class ClienteController extends Controller
 
                 $this->clienteRepository->sincronizarAnitaDespuesDeGrabado($cliente->id);
 
+                $this->clienteRepository->registrarNumeradorAnitaTrasAlta((string) $cliente->codigo);
+
                 if ($request->filled('urlOrigen'))
                 {       
                     if (str_contains($request->urlOrigen, 'ordenventa'))
@@ -366,6 +368,8 @@ class ClienteController extends Controller
                 $cliente_archivo = $this->cliente_archivoRepository->create($request, $cliente->id);
 
                 $this->clienteRepository->sincronizarAnitaDespuesDeGrabado($cliente->id);
+
+                $this->clienteRepository->registrarNumeradorAnitaTrasAlta((string) $cliente->codigo);
             }
             DB::commit();
         } catch (\Exception $e) {

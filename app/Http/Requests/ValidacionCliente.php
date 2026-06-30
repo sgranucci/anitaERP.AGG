@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use App\Rules\Ventas\RuleCliente;
+use App\Rules\Ventas\RuleClienteDocumentoUnico;
 use App\Models\Ventas\Cliente;
 
 class ValidacionCliente extends FormRequest
@@ -25,6 +26,9 @@ class ValidacionCliente extends FormRequest
      */
     public function rules()
     {
+        $excluirClienteId = $this->route('id') ? (int) $this->route('id') : null;
+        $reglaDocumentoUnico = new RuleClienteDocumentoUnico($excluirClienteId);
+
         if (config('app.empresa') == 'Calzados Ferli')
             return [
                 'nombre' => 'required|max:255|',
@@ -40,7 +44,7 @@ class ValidacionCliente extends FormRequest
                 'condicionventa_id' => ['integer', 'nullable'],
                 'listaprecio_id' => ['integer', 'nullable'],
                 'cuentacontable_id' => 'required',
-                'numerodocumento' => ['required', new RuleCliente('numerodocumento')],
+                'numerodocumento' => ['required', new RuleCliente('numerodocumento'), $reglaDocumentoUnico],
                 'retieneiva' => ['required', new RuleCliente('retieneiva')],
                 'condicioniibb_id' => 'required',
                 'vaweb' => ['required', new RuleCliente('vaweb')],
@@ -60,7 +64,7 @@ class ValidacionCliente extends FormRequest
                 'condicionventa_id' => ['integer', 'nullable'],
                 'listaprecio_id' => ['integer', 'nullable'],
                 'cuentacontable_id' => 'required',
-                'numerodocumento' => ['required', new RuleCliente('numerodocumento')],
+                'numerodocumento' => ['required', new RuleCliente('numerodocumento'), $reglaDocumentoUnico],
                 'retieneiva' => ['required', new RuleCliente('retieneiva')],
                 'condicioniibb_id' => 'required',
             ];
