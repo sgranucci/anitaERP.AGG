@@ -26,8 +26,9 @@ final class ArcaPadronImpuestosClienteValidacion
 
         $riId = (int) config('arca.padron_validacion_cliente.condicioniva_responsable_inscripto_id', 1);
         $monoId = (int) config('arca.padron_validacion_cliente.condicioniva_monotributo_id', 4);
+        $bajaId = (int) config('arca.padron_validacion_cliente.condicioniva_baja_impuestos_id', 7);
 
-        if ($condicionivaId === null || ! in_array($condicionivaId, [$riId, $monoId], true)) {
+        if ($condicionivaId === null || ! in_array($condicionivaId, [$riId, $monoId, $bajaId], true)) {
             return [
                 'aplica' => false,
                 'ok' => true,
@@ -56,7 +57,70 @@ final class ArcaPadronImpuestosClienteValidacion
             return self::validarResponsableInscripto($impuestos, $condicionivaId);
         }
 
+        if ($condicionivaId === $bajaId) {
+            return self::validarBajaImpuestos($impuestos, $datosMonotributo, $condicionivaId);
+        }
+
         return self::validarMonotributo($impuestos, $datosMonotributo, $condicionivaId);
+    }
+
+    /**
+     * Baja de impuestos: el padrón no debe tener IVA ni Monotributo activos.
+     *
+     * @param  list<array<string, mixed>>  $impuestos
+     * @param  array<string, mixed>|null  $datosMonotributo
+     * @return array{aplica: bool, ok: bool, mensaje: string|null, detalles: list<string>, debe_suspender: bool, condicioniva_id: int}
+     */
+    private static function validarBajaImpuestos(array $impuestos, ?array $datosMonotributo, int $condicionivaId): array
+    {
+        $ivaId = (int) config('arca.padron_validacion_cliente.impuesto_iva_id', 30);
+        $monoId = (int) config('arca.padron_validacion_cliente.impuesto_monotributo_id', 20);
+        $detalles = [];
+
+        $ivaActivo = self::tieneImpuestoActivo($impuestos, $ivaId);
+        $monoEnBloqueMono = self::tieneImpuestoActivo($impuestos, $monoId, 'monotributo');
+        $monoEnRegimen = self::tieneImpuestoActivo($impuestos, $monoId, 'regimen_general');
+        $tieneCategoria = is_array($datosMonotributo)
+            && ! empty($datosMonotributo['categoriaMonotributo']['idCategoria']);
+        $monoActivo = $monoEnBloqueMono || $monoEnRegimen || $tieneCategoria;
+
+        if ($ivaActivo) {
+            $detalles[] = self::mensajeImpuestoFaltante($impuestos, $ivaId, 'IVA');
+        }
+        if ($monoActivo) {
+            if ($monoEnBloqueMono) {
+                $detalles[] = self::mensajeImpuestoFaltante($impuestos, $monoId, 'Monotributo', 'monotributo');
+            }
+            if ($monoEnRegimen) {
+                $detalles[] = self::mensajeImpuestoFaltante($impuestos, $monoId, 'Monotributo', 'regimen_general');
+            }
+            if ($tieneCategoria) {
+                $detalles[] = 'Figura categoría monotributo activa en ARCA.';
+            }
+        }
+
+        if ($ivaActivo || $monoActivo) {
+            return [
+                'aplica' => true,
+                'ok' => false,
+                'mensaje' => 'Problemas en ARCA: el cliente figura con condición IVA Baja de Impuestos, pero el padrón muestra impuestos activos.',
+                'detalles' => $detalles,
+                'debe_suspender' => false,
+                'condicioniva_id' => $condicionivaId,
+            ];
+        }
+
+        return [
+            'aplica' => true,
+            'ok' => false,
+            'mensaje' => 'Padrón ARCA: el contribuyente no tiene impuestos activos (baja de impuestos en AFIP/ARCA).',
+            'detalles' => [
+                'No figura IVA (id '.$ivaId.') ni Monotributo (id '.$monoId.') activos (estado '
+                .self::ESTADO_IMPUESTO_ACTIVO.') en el padrón.',
+            ],
+            'debe_suspender' => true,
+            'condicioniva_id' => $condicionivaId,
+        ];
     }
 
     /**

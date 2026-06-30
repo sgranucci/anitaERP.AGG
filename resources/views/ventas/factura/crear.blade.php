@@ -4,6 +4,8 @@
 @endsection
 
 @section("scripts")
+<script>window.REQUIERE_VALIDACION_PADRON_OPERACION = true;</script>
+<script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 @php
     $layoutItemsPedido = $layoutItemsPedido ?? facturaUsaLayoutItemsPedido();
@@ -60,7 +62,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1">
+            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true;">
                 @csrf
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear", "layoutItemsPedido" => $layoutItemsPedido]; @endphp

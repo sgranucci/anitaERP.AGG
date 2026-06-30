@@ -85,33 +85,136 @@
         });
 
         $("#botonestado").click(function(){
+            var estado = String($("#estado").val() || '0');
 
-            var estado = $("#estado").val();
-			var descripcion = $("#botonestado").text();
-
-			if (estado == '0')
-			{
-				estado = '1';
-				descripcion = 'Suspendido';
-
-                // Muestra modal si tiene orden de trabajo generada
+            if (estado === '0') {
                 $("#suspensionModal").modal('show');
+                return;
             }
-            else
-			{
-				estado = '0';
-				descripcion = 'Activo';
-                
-                // Pasa tipo de suspension al form
-                $('#tiposuspension_id').val('');
 
-                // Muestra tipo de suspension
-                muestraTipoSuspension();
-			}
+            if (estado === 'R') {
+                if (confirm('¿Reactivar el cliente como Activo?')) {
+                    aplicarEstadoClienteEnFormulario('0');
+                }
+                return;
+            }
 
-            $("#estado").val(estado);
-            $("#botonestado").html("<i class='fa fa-bell'></i>&nbsp;Estado "+descripcion);
+            if (estado === '1') {
+                if (confirm('¿Reactivar el cliente como Activo?')) {
+                    aplicarEstadoClienteEnFormulario('0');
+                }
+                return;
+            }
+
+            aplicarEstadoClienteEnFormulario('0');
         });
+
+        function condicionivaBajaImpuestosId() {
+            var $cfg = $('#cliente-arca-config, #cliente-arca-validacion-config').first();
+            if (!$cfg.length) {
+                return 7;
+            }
+            return parseInt($cfg.data('condicioniva-baja-id') || $cfg.attr('data-condicioniva-baja-id') || '7', 10);
+        }
+
+        function clienteTieneCondicionivaBajaImpuestos() {
+            var bajaId = condicionivaBajaImpuestosId();
+            var condId = parseInt($('#condicioniva_id').val() || '0', 10);
+            return bajaId > 0 && condId === bajaId;
+        }
+
+        function puedeRegularizarClienteSegunReglas() {
+            if (clienteTieneCondicionivaBajaImpuestos()) {
+                return false;
+            }
+            var estado = String($('#estado').val() || '0');
+            var arcaAlertVisible = $('#arca-impuestos-alerta').is(':visible');
+            return estado !== 'R' && (estado === '1' || arcaAlertVisible);
+        }
+
+        function descripcionEstadoCliente(estado) {
+            if (estado === '1') {
+                return 'Suspendido';
+            }
+            if (estado === 'R') {
+                return 'Regularizado';
+            }
+            return 'Activo';
+        }
+
+        function aplicarEstadoClienteEnFormulario(estado) {
+            estado = String(estado || '0');
+            $("#estado").val(estado);
+
+            var $btn = $("#botonestado");
+            if ($btn.length) {
+                $btn.removeClass('btn-info btn-danger btn-warning btn-success');
+                if (estado === 'R') {
+                    $btn.addClass('btn-warning');
+                } else if (estado === '1') {
+                    $btn.addClass('btn-danger');
+                } else {
+                    $btn.addClass('btn-info');
+                }
+                $btn.html("<i class='fa fa-bell'></i>&nbsp;Estado " + descripcionEstadoCliente(estado));
+            }
+
+            if (estado === 'R' || estado === '0') {
+                $('#tiposuspension_id').val('');
+            }
+
+            if (typeof muestraTipoSuspension === 'function') {
+                muestraTipoSuspension();
+            }
+
+            actualizarUiRegularizarCliente();
+        }
+
+        function regularizarClienteEnFormulario() {
+            if (String($("#estado").val() || '') === 'R') {
+                return;
+            }
+            if (clienteTieneCondicionivaBajaImpuestos()) {
+                alert('No se puede regularizar un cliente con condición IVA Baja de impuestos.');
+                return;
+            }
+            if (!confirm('¿Regularizar el cliente (estado R)? Podrá facturarse pese a observaciones ARCA. Debe grabar para persistir.')) {
+                return;
+            }
+            aplicarEstadoClienteEnFormulario('R');
+        }
+
+        function actualizarUiRegularizarCliente() {
+            var puedeRegularizar = puedeRegularizarClienteSegunReglas();
+
+            $('#btn-regularizar-cliente, #btn-regularizar-arca, #btn-regularizar-suspension').toggle(puedeRegularizar);
+
+            var $btnModal = $('#btn-regularizar-arca-modal');
+            if ($btnModal.length) {
+                if ($('#cliente-arca-validacion-config').length && puedeRegularizar) {
+                    $btnModal.removeClass('d-none');
+                } else {
+                    $btnModal.addClass('d-none');
+                }
+            }
+        }
+
+        window.aplicarEstadoClienteEnFormulario = aplicarEstadoClienteEnFormulario;
+        window.regularizarClienteEnFormulario = regularizarClienteEnFormulario;
+        window.actualizarUiRegularizarCliente = actualizarUiRegularizarCliente;
+
+        $('#condicioniva_id').on('change.regularizarCliente', function () {
+            actualizarUiRegularizarCliente();
+        });
+
+        $('#btn-regularizar-cliente, #btn-regularizar-arca, #btn-regularizar-arca-modal, #btn-regularizar-suspension').on('click', function (e) {
+            e.preventDefault();
+            regularizarClienteEnFormulario();
+            $('#suspensionModal').modal('hide');
+            $('#arca-impuestos-validacion-modal').modal('hide');
+        });
+
+        aplicarEstadoClienteEnFormulario(String($("#estado").val() || '0'));
 
         $('#tabs-cliente a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
             var target = $(e.target).attr('href');
@@ -200,10 +303,10 @@
             // Pasa tipo de suspension al form
             $('#tiposuspension_id').val(tiposuspension_id);
 
-            $('#suspensionModal').modal('hide');
- 
-            // Muestra tipo de suspension
+            aplicarEstadoClienteEnFormulario('1');
             muestraTipoSuspension();
+
+            $('#suspensionModal').modal('hide');
         });
 
         $('#suspensionModal').on('hidden.bs.modal', function () {
@@ -255,6 +358,7 @@
         activa_eventos_consultadistribuidor();
         activa_eventos_consultalistaprecio();
         activa_eventos_consulta_cuentacontable();
+        activa_eventos_consultatransporte();
     }
 
     function muestraEmiteNotaDeCredito()
@@ -280,6 +384,13 @@
 
     function muestraTipoSuspension()
     {
+        var estadoCli = ($('#estado').val() || '').toString().toUpperCase();
+        if (estadoCli === 'R') {
+            $('#tiposuspension_id').val('');
+            $('#nombretiposuspension').text('');
+            return;
+        }
+
         var tiposuspensioncliente_query = $("#tiposuspensioncliente_query").val();
         var tiposuspension_id = $("#tiposuspension_id").val();
 

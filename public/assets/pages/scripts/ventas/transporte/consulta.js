@@ -1,3 +1,5 @@
+var ptrTransporteContext;
+
 function buscar_datos_transporte(consulta) {
     $.ajax({
         url: carpetaBase+'/ventas/transporte/consultatransporte',
@@ -18,6 +20,61 @@ function buscar_datos_transporte(consulta) {
     .fail (function() {
         console.log("error");
     });
+}
+
+function aplicarTransporteEnContexto($ctx, data) {
+    if ($ctx && $ctx.length) {
+        $ctx.find('.transporte_id').first().val(data.id);
+        $ctx.find('.codigotransporte').first().val(data.codigo);
+        $ctx.find('.nombretransporte').first().val(data.nombre);
+    }
+
+    $('#transporte_id').val(data.id);
+    $('#codigotransporte').val(data.codigo);
+    $('#nombretransporte').val(data.nombre);
+}
+
+function limpiarTransporteEnContexto($ctx) {
+    if ($ctx && $ctx.length) {
+        $ctx.find('.transporte_id').first().val('');
+        $ctx.find('.codigotransporte').first().val('');
+        $ctx.find('.nombretransporte').first().val('');
+    }
+
+    $('#transporte_id').val('');
+    $('#codigotransporte').val('');
+    $('#nombretransporte').val('');
+}
+
+function resolverPorCodigoTransporte(codigo, $ctx) {
+    var cod = $.trim(codigo);
+    if (cod === '') {
+        limpiarTransporteEnContexto($ctx);
+        return;
+    }
+
+    var urlRes = carpetaBase + '/ventas/leertransporte/' + encodeURIComponent(cod);
+    $.get(urlRes, function(data) {
+        if (data && data.id) {
+            aplicarTransporteEnContexto($ctx, data);
+            if ($('#fechaentrega').length) {
+                $('#fechaentrega').focus();
+            }
+        } else {
+            limpiarTransporteEnContexto($ctx);
+        }
+    }).fail(function() {
+        limpiarTransporteEnContexto($ctx);
+    });
+}
+
+function abrirModalConsultaTransporteDesdeInput($input) {
+    ptrTransporteContext = $input.closest('.tm-transporte-campo');
+    if (!ptrTransporteContext.length) {
+        ptrTransporteContext = null;
+    }
+    $('#consultatransporteModal').modal('show');
+    buscar_datos_transporte('');
 }
 
 // Si pulsamos tecla enter en un Input no envia formulario
@@ -45,63 +102,64 @@ $(document).on('keyup', '#consultatransporte', function () {
 function activa_eventos_consultatransporte()
 {
     // Consulta de transportes
-    $('.consultatransporte').on('click', function (event) {
-        // Abre modal de consulta
+    $('.consultatransporte').off('click.transporte').on('click.transporte', function (event) {
+        ptrTransporteContext = $(this).closest('.tm-transporte-campo');
+        if (!ptrTransporteContext.length) {
+            ptrTransporteContext = null;
+        }
         $("#consultatransporteModal").modal('show');
+        buscar_datos_transporte('');
     });
 
-    $('#consultatransporteModal').on('shown.bs.modal', function () {
+    $('#consultatransporteModal').off('shown.bs.modal.transporte').on('shown.bs.modal.transporte', function () {
         $(this).find('[autofocus]').focus();
-    })
+    });
 
-    $('#aceptaconsultatransporteModal').on('click', function () {
+    $('#aceptaconsultatransporteModal').off('click.transporte').on('click.transporte', function () {
         $('#consultatransporteModal').modal('hide');
     });
 
-    $(document).on('click', '.eligeconsultatransporte', function () {
+    $(document).off('click.eligeconsultatransporte').on('click.eligeconsultatransporte', '.eligeconsultatransporte', function () {
         let $tr = $(this).parents("tr");
-        let seleccion = $tr.find(".id").html();
-        let nombre = $tr.find(".nombre").html();
-        let codigo = $tr.find(".codigo").html();
+        let data = {
+            id: $.trim($tr.find(".id").html()),
+            nombre: $.trim($tr.find(".nombre").html()),
+            codigo: $.trim($tr.find(".codigo").html()),
+        };
 
-        $("#transporte_id").val(seleccion);
-        $("#nombretransporte").val(nombre);
-        $("#codigotransporte").val(codigo);
+        if (ptrTransporteContext && ptrTransporteContext.length) {
+            aplicarTransporteEnContexto(ptrTransporteContext, data);
+        } else {
+            $("#transporte_id").val(data.id);
+            $("#nombretransporte").val(data.nombre);
+            $("#codigotransporte").val(data.codigo);
+        }
 
         $('#consultatransporteModal').modal('hide');
-        $("#fechaentrega").focus();
+        if ($('#fechaentrega').length) {
+            $("#fechaentrega").focus();
+        }
     });
 
-    $('#codigotransporte').on('change', function (event) {
+    $('.codigotransporte').off('change.transporte blur.transporte').on('change.transporte blur.transporte', function (event) {
+        if (event.type === 'blur' && !$(this).closest('.tm-transporte-campo').length && this.id !== 'codigotransporte') {
+            return;
+        }
+
         event.preventDefault();
-
-        // Lee servicio terrestre por codigo
-        let codigotransporte = $("#codigotransporte").val();
-        let url_res = carpetaBase+'/ventas/leertransporte/'+codigotransporte;
-
-        $.get(url_res, function(data){
-            if (data)
-            {
-                $("#transporte_id").val(data.id);
-                $("#nombretransporte").val(data.nombre);
-                $("#transporte").val(data.nombre);
-                $("#codigotransporte").val(data.codigo);
-
-                $("#fechaentrega").focus();
-            }
-        });
+        var $ctx = $(this).closest('.tm-transporte-campo');
+        resolverPorCodigoTransporte($(this).val(), $ctx.length ? $ctx : null);
     });
 
     // Consulta de transportes
-    $('.consultadesdetransporte').on('click', function (event) {
-        // Abre modal de consulta
+    $('.consultadesdetransporte').off('click.transporteDesde').on('click.transporteDesde', function (event) {
+        ptrTransporteContext = null;
         $("#consultatransporteModal").modal('show');
     });
 
-    $('#codigodesdetransporte').on('change', function (event) {
+    $('#codigodesdetransporte').off('change.transporteDesde').on('change.transporteDesde', function (event) {
         event.preventDefault();
 
-        // Lee servicio terrestre por codigo
         let codigotransporte = $("#codigodesdetransporte").val();
         let url_res = carpetaBase+'/ventas/leertransporte/'+codigotransporte;
 
@@ -116,15 +174,14 @@ function activa_eventos_consultatransporte()
     });    
 
     // Consulta de transportes
-    $('.consultahastatransporte').on('click', function (event) {
-        // Abre modal de consulta
+    $('.consultahastatransporte').off('click.transporteHasta').on('click.transporteHasta', function (event) {
+        ptrTransporteContext = null;
         $("#consultatransporteModal").modal('show');
     });
 
-    $('#codigohastatransporte').on('change', function (event) {
+    $('#codigohastatransporte').off('change.transporteHasta').on('change.transporteHasta', function (event) {
         event.preventDefault();
 
-        // Lee servicio terrestre por codigo
         let codigotransporte = $("#codigohastatransporte").val();
         let url_res = carpetaBase+'/ventas/leertransporte/'+codigotransporte;
 
@@ -138,7 +195,6 @@ function activa_eventos_consultatransporte()
         });
     });        
 }
-
 
 
 

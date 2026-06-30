@@ -24,8 +24,13 @@ input:invalid {
 <script src="{{asset("assets/pages/scripts/ventas/distribuidor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/listaprecio/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}" type="text/javascript"></script>
+@php($clienteModalesAbmJs = public_path('assets/pages/scripts/ventas/cliente/consultas-modales-abm.js'))
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/consultas-modales-abm.js') }}?v={{ file_exists($clienteModalesAbmJs) ? filemtime($clienteModalesAbmJs) : time() }}" type="text/javascript"></script>
 @php($arcaPadronJs = public_path('assets/pages/scripts/ventas/cliente/arca-padron.js'))
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-padron.js') }}?v={{ file_exists($arcaPadronJs) ? filemtime($arcaPadronJs) : time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-validacion-abm.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
 <script>
 $( "#botonform0" ).click(function() {
@@ -57,9 +62,9 @@ $( "#botonform0" ).click(function() {
                 </div>
             </div>
             @if ($tipoalta == 'P')
-                <form action="{{route('guardar_cliente_provisorio')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+                <form action="{{route('guardar_cliente_provisorio')}}" id="form-general" data-consultas-modales-abm="1" class="form-horizontal form--label-right" method="POST" autocomplete="off">
             @else
-                <form action="{{route('guardar_cliente')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+                <form action="{{route('guardar_cliente')}}" id="form-general" data-consultas-modales-abm="1" class="form-horizontal form--label-right" method="POST" autocomplete="off">
             @endif
                 @csrf
                 <input type="hidden" id="emitenotadecredito" name="emitenotadecredito" value="{{old('emitenotadecredito', $data->emitenotadecredito ?? '')}}" >

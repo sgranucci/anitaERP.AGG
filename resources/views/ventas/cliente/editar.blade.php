@@ -16,8 +16,13 @@
 <script src="{{asset("assets/pages/scripts/ventas/distribuidor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/listaprecio/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}" type="text/javascript"></script>
+@php($clienteModalesAbmJs = public_path('assets/pages/scripts/ventas/cliente/consultas-modales-abm.js'))
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/consultas-modales-abm.js') }}?v={{ file_exists($clienteModalesAbmJs) ? filemtime($clienteModalesAbmJs) : time() }}" type="text/javascript"></script>
 @php($arcaPadronJs = public_path('assets/pages/scripts/ventas/cliente/arca-padron.js'))
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-padron.js') }}?v={{ file_exists($arcaPadronJs) ? filemtime($arcaPadronJs) : time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-validacion-abm.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
 @if (config('suitecrm.habilitado'))
 @php($suitecrmNotasJs = public_path('assets/pages/scripts/ventas/cliente/suitecrm-notas.js'))
@@ -71,6 +76,9 @@
                         <button type="button" id="botonestado" class="btn btn-info btn-sm">
                             <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}
                         </button>
+                        <button type="button" id="btn-regularizar-cliente" class="btn btn-warning btn-sm" title="Regularizado: facturaci&oacute;n permitida pese a ARCA" style="display: {{ $data->estado === 'R' ? 'none' : 'inline-block' }};">
+                            <i class="fa fa-check-circle"></i> Regularizar
+                        </button>
                     @else
                         <button type="button" id="_" class="btn btn-info btn-sm">
                             <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}
@@ -92,7 +100,7 @@
                     @endif
                 </div>
             </div>
-            <form action="{{route('actualizar_cliente', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
+            <form action="{{route('actualizar_cliente', ['id' => $data->id])}}" id="form-general" data-consultas-modales-abm="1" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
                 data-cliente-id="{{ $data->id }}"
                 data-arca-validar-url="{{ route('validar_cliente_arca_padron', ['id' => $data->id]) }}"
             >
@@ -114,7 +122,7 @@
                         @endif
                         @include('ventas.cliente.suspensionmodal')
                     </div>
-                    @include('ventas.cliente.partials.arca_padron_support')
+                    @include('ventas.cliente.partials.arca_padron_support', ['clienteId' => $data->id])
                 </div>
                 <div class="card-footer" style="padding-top: 0">
                 	<div class="row">

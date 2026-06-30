@@ -120,7 +120,7 @@
 							<input type="hidden" class="col-form-label localidad_id" id="localidad_id" name="localidad_id" value="{{ old('localidad_id', $data->localidad_id ?? '') }}" >
 							<input type="text" class="form-control col-lg-3 codigolocalidad" id="codigolocalidad" name="codigolocalidad" value="{{ old('codigolocalidad', $data->localidades->codigo ?? '') }}" >
 							<input type="text" class="form-control col-lg-8 nombrelocalidad" id="nombrelocalidad" name="nombrelocalidad" value="{{ old('nombrelocalidad', $data->localidades->nombre ?? '') }}" readonly>
-							<button type="button" title="Consulta localidades" style="padding:1;" class="btn-accion-tabla consultalocalidad tooltipsC">
+							<button type="button" title="Consulta localidades (F1)" style="padding:1;" class="btn-accion-tabla consultalocalidad tooltipsC">
 								<i class="fa fa-search text-primary"></i>
 							</button>
 							<input type="hidden" name="nombrelocalidad" id="nombrelocalidad" class="form-control" value="{{old('nombrelocalidad', $data->localidades->nombre ?? '')}}">

@@ -425,7 +425,8 @@
 		if (!cfg || !condicionivaId) return false;
 		const ri = parseInt(cfg.getAttribute('data-condicioniva-ri-id') || '1', 10);
 		const mono = parseInt(cfg.getAttribute('data-condicioniva-monotributo-id') || '4', 10);
-		return condicionivaId === ri || condicionivaId === mono;
+		const baja = parseInt(cfg.getAttribute('data-condicioniva-baja-id') || '7', 10);
+		return condicionivaId === ri || condicionivaId === mono || condicionivaId === baja;
 	}
 
 	function mostrarAlertaArcaImpuestos(validacion) {
@@ -440,6 +441,9 @@
 			if (det) {
 				det.innerHTML = '';
 				det.style.display = 'none';
+			}
+			if (typeof window.actualizarUiRegularizarCliente === 'function') {
+				window.actualizarUiRegularizarCliente();
 			}
 			return;
 		}
@@ -460,13 +464,9 @@
 				det.style.display = 'none';
 			}
 		}
-	}
-
-	function aplicarSuspensionClienteArca() {
-		const estado = byId('estado');
-		if (estado) estado.value = '1';
-		const btn = byId('botonestado');
-		if (btn) btn.innerHTML = "<i class='fa fa-bell'></i>&nbsp;Estado Suspendido";
+		if (typeof window.actualizarUiRegularizarCliente === 'function') {
+			window.actualizarUiRegularizarCliente();
+		}
 	}
 
 	function procesarValidacionImpuestosArca(validacion, json) {
@@ -475,12 +475,6 @@
 			return;
 		}
 		mostrarAlertaArcaImpuestos(validacion);
-		if (validacion.debe_suspender) {
-			aplicarSuspensionClienteArca();
-			if (json && json.suspendido) {
-				console.info('Cliente suspendido en base de datos por validación ARCA.');
-			}
-		}
 	}
 
 	function getArcaValidarClienteUrl() {
@@ -673,9 +667,7 @@
 					ok: false,
 					mensaje: json.message,
 					detalles: [],
-					debe_suspender: true,
 				});
-				aplicarSuspensionClienteArca();
 			}
 
 			return json;
@@ -883,7 +875,7 @@
 			if (ev.target && ev.target.id === 'arca-full-overlay') closeArcaFullView();
 		});
 
-		if (arcaValidacionImpuestosHabilitada()) {
+		if (arcaValidacionImpuestosHabilitada() && !byId('cliente-arca-validacion-config')) {
 			consultarArcaConValidacionImpuestos({ silent: true });
 			const condIva = byId('condicioniva_id');
 			if (condIva) {

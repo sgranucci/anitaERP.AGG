@@ -107,12 +107,43 @@ final class ClienteAnitaNumeracionSupport
         }
     }
 
+    public static function actualizarNumeradorConReintento(int $numero): void
+    {
+        $maxIntentos = max(1, (int) config('cliente_anita.numeracion.reintentos_bloqueo', 6));
+        $esperaMs = max(100, (int) config('cliente_anita.numeracion.espera_reintento_ms', 400));
+        $ultimoError = null;
+
+        for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+            try {
+                self::actualizarNumerador($numero);
+
+                return;
+            } catch (\Throwable $e) {
+                $ultimoError = $e;
+                if (! self::esErrorBloqueoNumerador($e->getMessage()) || $intento >= $maxIntentos) {
+                    break;
+                }
+
+                usleep($esperaMs * 1000);
+            }
+        }
+
+        $detalle = $ultimoError?->getMessage() ?? 'error desconocido';
+        throw new \RuntimeException(
+            'Numerador CLI bloqueado en Anita. Cierre la ficha de numeradores o el módulo de clientes en Anita desktop y vuelva a intentar. Detalle: '.$detalle,
+            0,
+            $ultimoError
+        );
+    }
+
     public static function asignarCodigoClienteLibre(): int
     {
         $claveNumerador = self::resolverClaveNumeradorDesdeTComp();
         $ultimoNumerador = self::leerUltimoNumeroNumerador();
         $desde = $ultimoNumerador + 1;
         $numero = ClienteAnitaColisionSupport::primerCodigoDisponible($desde);
+
+        self::actualizarNumeradorConReintento($numero);
 
         Log::info('ClienteAnitaNumeracion: código cliente reservado desde numerador CLI', [
             't_comp_clave' => self::claveTComp(),
@@ -130,6 +161,37 @@ final class ClienteAnitaNumeracionSupport
         return str_pad((string) $numero, 6, '0', STR_PAD_LEFT);
     }
 
+    /**
+     * Informe del numerador CLI. No alinea contra max(climae): códigos legacy (ej. 014146)
+     * no deben mover el numerador de la serie CLI.
+     *
+     * @return array{antes: int, despues: int, num_clave: string, max_erp: int, max_climae: int}
+     */
+    public static function sincronizarNumeradorCliGlobal(bool $forzarAlinearMaxGlobal = false): array
+    {
+        $claveNumerador = self::resolverClaveNumeradorDesdeTComp();
+        $antes = self::leerUltimoNumeroNumerador();
+        $maxErp = ClienteAnitaColisionSupport::maxCodigoClienteErp();
+        $maxClimae = ClienteAnitaColisionSupport::maxCodigoClimae();
+        $despues = $antes;
+
+        if ($forzarAlinearMaxGlobal) {
+            $objetivo = max($antes, $maxErp, $maxClimae);
+            if ($objetivo > $antes) {
+                self::actualizarNumeradorConReintento($objetivo);
+                $despues = self::leerUltimoNumeroNumerador();
+            }
+        }
+
+        return [
+            'antes' => $antes,
+            'despues' => $despues,
+            'num_clave' => $claveNumerador,
+            'max_erp' => $maxErp,
+            'max_climae' => $maxClimae,
+        ];
+    }
+
     public static function registrarCodigoAsignadoEnNumerador(int $numero): void
     {
         if ($numero <= 0 || ! self::estaHabilitada()) {
@@ -139,19 +201,24 @@ final class ClienteAnitaNumeracionSupport
         try {
             $ultimoNumerador = self::leerUltimoNumeroNumerador();
             if ($numero > $ultimoNumerador) {
-                self::actualizarNumerador($numero);
+                self::actualizarNumeradorConReintento($numero);
             }
         } catch (\Throwable $e) {
-            Log::warning('ClienteAnitaNumeracion: no se pudo actualizar numerador tras alta', [
+            Log::warning('ClienteAnitaNumeracion: no se pudo reforzar numerador tras alta', [
                 'numero' => $numero,
                 'error' => $e->getMessage(),
             ]);
-            throw new \RuntimeException(
-                'Cliente grabado en ERP pero falló la actualización del numerador CLI Anita: '.$e->getMessage(),
-                0,
-                $e
-            );
         }
+    }
+
+    private static function esErrorBloqueoNumerador(string $mensaje): bool
+    {
+        $mensaje = strtolower($mensaje);
+
+        return str_contains($mensaje, 'could not lock')
+            || str_contains($mensaje, 'record is locked')
+            || str_contains($mensaje, '263:')
+            || str_contains($mensaje, 'bloqueado');
     }
 
     private static function escSqlLiteral(string $value): string

@@ -154,6 +154,9 @@ function registrarAtajosTecladoListaprecio() {
         if (!document.getElementById('form-general') || !document.getElementById('form-general').contains(target)) {
             return;
         }
+        if (document.getElementById('form-general').getAttribute('data-consultas-modales-abm') === '1') {
+            return;
+        }
 
         if (esTeclaF1Listaprecio(e)) {
             if (modalConsultaListaprecioAbierto()) {

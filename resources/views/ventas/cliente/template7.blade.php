@@ -5,7 +5,7 @@
                 <input type="hidden" name="articulo[]" class="form-control iiarticulo" readonly value="1" />
                 <input type="hidden" class="articulo_id" name="articulo_ids[]" value="" >
                 <input type="hidden" class="articulo_id_previa" name="articulo_id_previa[]" value="" >
-                <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC">
+                <button type="button" title="Consulta articulos (F1)" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
                 <input type="text" style="WIDTH: 150px;HEIGHT: 38px" class="codigoarticulo form-control" name="codigoarticulos[]" value="" >
