@@ -221,9 +221,15 @@ class Comprobante_ProveedorController extends Controller
         }
 
         $asientoPreview = $this->asientoService->previewDesdeFormulario($request, $existente);
-        $comprobanteVista = $existente
-            ? $this->asientoPreviewSupport->construirDesdeRequest($request, $existente)
-            : $this->asientoPreviewSupport->construirDesdeRequest($request);
+
+        try {
+            $comprobanteVista = $this->asientoPreviewSupport->construirDesdeRequest($request, $existente);
+        } catch (\RuntimeException $e) {
+            $comprobanteVista = $existente ?? new \App\Models\Compras\Comprobante_Proveedor;
+            if (empty($asientoPreview['error'])) {
+                $asientoPreview['error'] = $e->getMessage();
+            }
+        }
 
         $html = view('compras.comprobante_proveedor.partials.solapa_asiento_contable_body', [
             'asientoPreview' => $asientoPreview,

@@ -41,6 +41,7 @@ class OrdencompraGestionService
         private RequisicionRepositoryInterface $requisicionRepository,
         private Requisicion_EstadoRepositoryInterface $requisicionEstadoRepository,
         private RequisicionPresupuestoService $requisicionPresupuestoService,
+        private OrdencompraAnitaBridgeService $ordencompraAnitaBridge,
     ) {}
 
     public function idSectorCompras(): ?int
@@ -355,6 +356,8 @@ class OrdencompraGestionService
                 $this->marcarRequisicionGeneroOc((int) $cab['requisicion_id'], $uid, 'Alta de orden de compra');
             }
 
+            $this->ordencompraAnitaBridge->sincronizarAlta($this->ordencompraRepository->find($oc->id));
+
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
@@ -441,6 +444,8 @@ class OrdencompraGestionService
                 }
             }
 
+            $this->ordencompraAnitaBridge->sincronizarActualizacion($this->ordencompraRepository->find($id));
+
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
@@ -453,8 +458,10 @@ class OrdencompraGestionService
 
     public function eliminar(int $id): bool
     {
-        $oc = Ordencompra::query()->select('id', 'requisicion_id')->find($id);
-        if (! $oc) {
+        $oc = null;
+        try {
+            $oc = $this->ordencompraRepository->find($id);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return false;
         }
 
@@ -463,6 +470,7 @@ class OrdencompraGestionService
             if ($oc->requisicion_id) {
                 $this->marcarRequisicionAprobadaSiGeneroOc((int) $oc->requisicion_id, Auth::user()->id, 'Eliminación de orden de compra');
             }
+            $this->ordencompraAnitaBridge->sincronizarBaja($oc);
             $this->ordencompraRepository->delete($id);
             DB::commit();
         } catch (\Exception $e) {

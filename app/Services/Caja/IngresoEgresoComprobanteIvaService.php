@@ -12,6 +12,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -129,6 +130,7 @@ class IngresoEgresoComprobanteIvaService
         $totalComprobante = round(abs((float) ($payload['total'] ?? 0)), 2);
 
         try {
+            $conceptos = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($conceptos);
             $lineasDebe = IngresoEgresoComprobanteIvaAsientoSupport::lineasDebeDesdeConceptos($conceptos);
             $totalDebe = round(array_sum(array_column($lineasDebe, 'importe')), 2);
 
@@ -272,12 +274,15 @@ class IngresoEgresoComprobanteIvaService
             return;
         }
 
-        $orden = 1;
-        foreach ($conceptos as $concepto) {
-            if (! is_array($concepto)) {
-                continue;
-            }
+        $conceptos = array_values(array_filter($conceptos, 'is_array'));
+        if ($conceptos === []) {
+            return;
+        }
 
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($conceptos);
+
+        $orden = 1;
+        foreach ($lineas as $concepto) {
             $conceptoId = (int) ($concepto['concepto_ivacompra_id'] ?? 0);
             $monto = (float) ($concepto['monto'] ?? 0);
             if ($conceptoId <= 0 || abs($monto) < 0.0001) {

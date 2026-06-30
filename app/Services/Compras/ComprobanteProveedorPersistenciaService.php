@@ -13,6 +13,7 @@ use App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -272,24 +273,28 @@ class ComprobanteProveedorPersistenciaService
 
     private function sincronizarConceptos(Request $request, Comprobante_Proveedor $comprobante): void
     {
-        $conceptoIds = $request->input('concepto_ivacompra_ids', []);
-        $montos = $request->input('montos', []);
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
+            $request->input('concepto_ivacompra_ids', []),
+            $request->input('montos', []),
+        );
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas);
 
-        for ($i = 0; $i < count($conceptoIds); $i++) {
-            if ((int) $conceptoIds[$i] <= 0) {
+        foreach ($lineas as $i => $linea) {
+            $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            if ($conceptoId <= 0) {
                 continue;
             }
 
-            $concepto = $this->conceptoIvacompraRepository->find((int) $conceptoIds[$i]);
+            $concepto = $this->conceptoIvacompraRepository->find($conceptoId);
             if (! $concepto) {
-                throw new RuntimeException('Concepto IVA compra id «'.$conceptoIds[$i].'» inexistente.');
+                throw new RuntimeException('Concepto IVA compra id «'.$conceptoId.'» inexistente.');
             }
 
             $this->conceptoRepository->create([
                 'comprobante_proveedor_id' => $comprobante->id,
                 'concepto_ivacompra_id' => $concepto->id,
                 'orden' => $i + 1,
-                'monto' => $montos[$i] ?? 0,
+                'monto' => $linea['monto'] ?? 0,
             ]);
         }
     }

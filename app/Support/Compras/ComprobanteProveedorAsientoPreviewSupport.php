@@ -10,6 +10,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use Illuminate\Http\Request;
@@ -165,6 +166,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 'cuenta_debe_id' => (int) ($concepto->cuentacontabledebe_id ?? 0),
                 'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
                 'nombre' => (string) ($concepto->nombre ?? ''),
+                'impuesto_tasa' => round((float) ($concepto->impuestos->valor ?? 0), 3),
             ];
         }
 
@@ -174,32 +176,36 @@ final class ComprobanteProveedorAsientoPreviewSupport
     /** @return Collection<int, Comprobante_Proveedor_Concepto> */
     private function construirConceptosDesdeRequest(Request $request): Collection
     {
-        $ids = $request->input('concepto_ivacompra_ids', []);
-        $montos = $request->input('montos', []);
-        $conceptos = collect();
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
+            $request->input('concepto_ivacompra_ids', []),
+            $request->input('montos', []),
+        );
 
-        if (! is_array($ids)) {
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas);
+
+        $conceptos = collect();
+        if ($lineas === []) {
             return $conceptos;
         }
 
         $conceptosPorId = Concepto_Ivacompra::query()
-            ->whereIn('id', array_filter(array_map('intval', $ids)))
+            ->whereIn('id', array_column($lineas, 'concepto_ivacompra_id'))
             ->get()
             ->keyBy('id');
 
-        foreach ($ids as $i => $conceptoId) {
-            $conceptoId = (int) $conceptoId;
+        foreach ($lineas as $i => $linea) {
+            $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
             if ($conceptoId <= 0) {
                 continue;
             }
 
-            $linea = new Comprobante_Proveedor_Concepto([
+            $modelo = new Comprobante_Proveedor_Concepto([
                 'concepto_ivacompra_id' => $conceptoId,
-                'monto' => (float) ($montos[$i] ?? 0),
+                'monto' => (float) ($linea['monto'] ?? 0),
                 'orden' => $i + 1,
             ]);
-            $linea->setRelation('concepto_ivacompras', $conceptosPorId->get($conceptoId));
-            $conceptos->push($linea);
+            $modelo->setRelation('concepto_ivacompras', $conceptosPorId->get($conceptoId));
+            $conceptos->push($modelo);
         }
 
         return $conceptos;

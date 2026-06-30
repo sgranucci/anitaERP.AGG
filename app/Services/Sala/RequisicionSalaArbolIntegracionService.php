@@ -17,6 +17,7 @@ use App\Support\Sala\RequisicionSalaLineasLaboratorioSupport;
 use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioDeferred;
 use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioPreflightSupport;
 use App\Support\Sala\RequisicionSalaTotalesCabecera;
+use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Navegacion\ModoConsultaUrlSupport;
 use Auth;
 use Carbon\Carbon;
@@ -84,7 +85,7 @@ class RequisicionSalaArbolIntegracionService
         }
 
         $arbol = $arbolaprobacion->first();
-        $arrayReplace = ['/', '%'];
+        $arrayReplace = ArbolAprobacionEnlaceSupport::CARACTERES_REEMPLAZO;
         $centrocostoArbol = (int) $req->centrocosto_id;
         $tipoarbol = $this->nombreTipoArbol();
 
@@ -136,8 +137,7 @@ class RequisicionSalaArbolIntegracionService
             }
 
             $ip = config('arbolaprobacion.ip_link');
-            $hashVisualizar = Hash::make('VISRS'.$comprobanteId.$req->fecha.$req->numerorequisicion);
-            $hashVisualizar = str_replace($arrayReplace, '+', $hashVisualizar);
+            $hashVisualizar = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make('VISRS'.$comprobanteId.$req->fecha.$req->numerorequisicion));
             $linkVisualizar = ModoConsultaUrlSupport::urlVisualizarRequisicionSala(
                 $comprobanteId,
                 $hashVisualizar
@@ -161,14 +161,12 @@ class RequisicionSalaArbolIntegracionService
                     continue;
                 }
 
-                $hashAprobacion = Hash::make('RS'.'A'.$comprobanteId.$req->fecha.$req->numerorequisicion.'N'.
-                    $estadoAprobacionActual['nivelactual'].'U'.$uid);
-                $hashRechazo = Hash::make('RS'.'R'.$comprobanteId.$req->fecha.$req->numerorequisicion.'N'.
-                    $estadoAprobacionActual['nivelactual'].'U'.$uid);
-                $hashAprobacion = str_replace($arrayReplace, '+', $hashAprobacion);
-                $hashRechazo = str_replace($arrayReplace, '+', $hashRechazo);
-                $linkAprobacion = $ip.'/anitaERP/public/arbolaprobacion/aprobar/RS/'.$comprobanteId.'/'.$hashAprobacion;
-                $linkRechazo = $ip.'/anitaERP/public/arbolaprobacion/buscarechazo/RS/'.$comprobanteId.'/'.$hashRechazo;
+                $hashAprobacion = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make('RS'.'A'.$comprobanteId.$req->fecha.$req->numerorequisicion.'N'.
+                    $estadoAprobacionActual['nivelactual'].'U'.$uid));
+                $hashRechazo = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make('RS'.'R'.$comprobanteId.$req->fecha.$req->numerorequisicion.'N'.
+                    $estadoAprobacionActual['nivelactual'].'U'.$uid));
+                $linkAprobacion = ArbolAprobacionEnlaceSupport::enlaceAprobar($ip, 'RS', $comprobanteId, $hashAprobacion);
+                $linkRechazo = ArbolAprobacionEnlaceSupport::enlaceRechazo($ip, 'RS', $comprobanteId, $hashRechazo);
 
                 $this->enviaCorreo($uid, $req, $linkAprobacion, $linkRechazo, $linkVisualizar, $mailExtras);
 
@@ -256,10 +254,12 @@ class RequisicionSalaArbolIntegracionService
 
     public function movimientoPendientePorHash(int $id, string $hash, string $modo): ?Arbolaprobacion_Movimiento
     {
+        $hash = ArbolAprobacionEnlaceSupport::normalizarHashRecibido($hash);
         $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
         $campoHash = $modo === 'rechazo' ? 'hashrechazo' : 'hashaprobacion';
         foreach ($this->findPorRequisicionSala($id) as $mov) {
-            if ($mov->estado === $nombrePendiente && $mov->{$campoHash} === $hash) {
+            if ($mov->estado === $nombrePendiente
+                && ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, (string) $mov->{$campoHash})) {
                 return $mov;
             }
         }
@@ -294,9 +294,9 @@ class RequisicionSalaArbolIntegracionService
             'ordencompra_id' => null,
             'solicitudpago_id' => null,
             'ordenventa_id' => null,
-            'hashaprobacion' => str_replace($arrayReplace, '+', Hash::make($token.'A')),
-            'hashrechazo' => str_replace($arrayReplace, '+', Hash::make($token.'R')),
-            'hashvisualizar' => str_replace($arrayReplace, '+', Hash::make($token.'V')),
+            'hashaprobacion' => ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make($token.'A')),
+            'hashrechazo' => ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make($token.'R')),
+            'hashvisualizar' => ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make($token.'V')),
             'nivel' => $nivel,
             'destinatariousuario_id' => null,
             'fechaproceso' => Carbon::now(),

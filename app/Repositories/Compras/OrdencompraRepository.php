@@ -4,6 +4,7 @@ namespace App\Repositories\Compras;
 
 use App\Models\Compras\Ordencompra;
 use App\Queries\Configuracion\CotizacionQueryInterface;
+use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -22,7 +23,11 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
     public function create(array $data)
     {
         $data = self::limpiaPayloadCabecera($data);
-        $data['numeroordencompra'] = self::siguienteNumero();
+        if (empty($data['numeroordencompra'])) {
+            $data['numeroordencompra'] = OrdencompraAnitaNumeracionSupport::estaHabilitada()
+                ? OrdencompraAnitaNumeracionSupport::asignarNumeroOcLibre()
+                : self::siguienteNumero();
+        }
 
         return $this->model->create($data);
     }
@@ -249,6 +254,10 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
 
     public function proximoNumeroOrdencompra(): int
     {
+        if (OrdencompraAnitaNumeracionSupport::estaHabilitada()) {
+            return OrdencompraAnitaNumeracionSupport::ultimoNumeroOcGlobal() + 1;
+        }
+
         return self::siguienteNumero();
     }
 

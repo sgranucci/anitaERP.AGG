@@ -19,6 +19,8 @@
                 <div class="row">
                     <div class="col-lg-6 border-right">
                         <h6 class="font-weight-bold">Conceptos IVA</h6>
+                        <div id="ie-cp-conceptos-coherencia-error" class="alert alert-danger d-none small py-2"></div>
+                        <div id="ie-cp-conceptos-coherencia-aviso" class="alert alert-info d-none small py-2"></div>
                         <div id="ie-cp-asiento-avisos" class="alert alert-warning d-none small"></div>
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered" id="ie-cp-conceptos-table">

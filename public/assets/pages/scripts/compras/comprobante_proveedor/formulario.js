@@ -56,6 +56,66 @@ $(function () {
         }
     }
 
+    function actualizarBadgeConceptos(tieneProblema) {
+        var $tab = $('#cp-boton-conceptos');
+        if (!$tab.length) {
+            return;
+        }
+        $tab.find('.cp-badge-conceptos-error').remove();
+        if (tieneProblema) {
+            $tab.append('<span class="badge badge-warning ml-1 cp-badge-conceptos-error" title="Revise coherencia neto gravado / IVA">!</span>');
+        }
+    }
+
+    function lineasConceptosDesdeFormulario() {
+        var lineas = [];
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var $row = $(this);
+            var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
+            var monto = parseFloat($row.find('.monto').val() || '0');
+            if (conceptoId <= 0 || monto === 0) {
+                return;
+            }
+            lineas.push({ concepto_ivacompra_id: conceptoId, monto: monto });
+        });
+        return lineas;
+    }
+
+    function validarCoherenciaConceptosPantalla() {
+        if (typeof window.ConceptosIvacompraCoherencia === 'undefined') {
+            return { valido: true, errores: [], advertencias: [] };
+        }
+        return window.ConceptosIvacompraCoherencia.validar(lineasConceptosDesdeFormulario(), conceptosMeta);
+    }
+
+    function renderBannerCoherenciaConceptos(result) {
+        var $err = $('#cp-conceptos-iva-coherencia-banner');
+        var $aviso = $('#cp-conceptos-iva-coherencia-aviso');
+        if (!$err.length) {
+            return;
+        }
+
+        if (result.errores && result.errores.length) {
+            var htmlErr = '<strong><i class="fa fa-exclamation-triangle"></i> Coherencia IVA:</strong><ul class="mb-0 mt-1 pl-3">';
+            result.errores.forEach(function (msg) {
+                htmlErr += '<li>' + $('<div>').text(msg).html() + '</li>';
+            });
+            htmlErr += '</ul>';
+            $err.removeClass('d-none').html(htmlErr);
+        } else {
+            $err.addClass('d-none').empty();
+        }
+
+        if (result.advertencias && result.advertencias.length) {
+            var htmlAv = '<strong><i class="fa fa-info-circle"></i> </strong>' + $('<div>').text(result.advertencias[0]).html();
+            $aviso.removeClass('d-none').html(htmlAv);
+        } else {
+            $aviso.addClass('d-none').empty();
+        }
+
+        actualizarBadgeConceptos(!result.valido);
+    }
+
     function marcarAvisosConceptosLocales() {
         $('#tbody-concepto-table tr.item-concepto').each(function () {
             var $row = $(this);
@@ -173,7 +233,8 @@ $(function () {
                 }
                 renderBannerAvisos(res.avisos || [], res.error || null);
                 aplicarAvisosProveedor(res.avisos || []);
-                actualizarBadgeAsiento(!!(res.error || (res.avisos && res.avisos.length)));
+                var coherencia = validarCoherenciaConceptosPantalla();
+                actualizarBadgeAsiento(!!(res.error || (res.avisos && res.avisos.length) || !coherencia.valido));
             })
             .fail(function () {
                 if ($body.length) {
@@ -187,6 +248,7 @@ $(function () {
             return;
         }
         marcarAvisosConceptosLocales();
+        renderBannerCoherenciaConceptos(validarCoherenciaConceptosPantalla());
         clearTimeout(previewTimer);
         previewTimer = setTimeout(recargarPreviewAsiento, 350);
     }
@@ -252,6 +314,20 @@ $(function () {
 
     $(document).on('change', '#cp-bloque-recepciones-com input[type=checkbox]', function () {
         programarPreviewAsiento();
+    });
+
+    $form.on('submit', function (e) {
+        if (contabilizado) {
+            return;
+        }
+        var coherencia = validarCoherenciaConceptosPantalla();
+        renderBannerCoherenciaConceptos(coherencia);
+        if (!coherencia.valido) {
+            e.preventDefault();
+            mostrarSolapa('#cp-solapa-conceptos');
+            marcarTabActivo('cp-boton-conceptos');
+            alert(coherencia.errores.join('\n'));
+        }
     });
 
     // Archivos adjuntos

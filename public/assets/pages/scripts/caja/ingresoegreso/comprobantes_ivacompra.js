@@ -116,6 +116,7 @@
         $('#ie-cp-preview-asiento').empty();
         $('#ie-cp-preview-total-debe, #ie-cp-preview-total-haber').text('0.00');
         $('#ie-cp-preview-error, #ie-cp-asiento-avisos').addClass('d-none').empty();
+        $('#ie-cp-conceptos-coherencia-error, #ie-cp-conceptos-coherencia-aviso').addClass('d-none').empty();
         $('#ie-cp-pdf-temp-id').val('');
     }
 
@@ -153,6 +154,55 @@
         }
         $('#modal-ie-comprobante-iva').modal('show');
         programarPreview();
+    }
+
+    function lineasConceptosDesdeModal() {
+        var conceptos = [];
+        $('#ie-cp-tbody-conceptos .ie-cp-fila-concepto').each(function () {
+            var $row = $(this);
+            var conceptoId = parseInt($row.find('.ie-cp-concepto-id').val() || '0', 10);
+            var monto = parseFloat($row.find('.ie-cp-monto').val() || '0');
+            if (conceptoId <= 0 || monto === 0) {
+                return;
+            }
+            conceptos.push({
+                concepto_ivacompra_id: conceptoId,
+                monto: monto,
+            });
+        });
+        return conceptos;
+    }
+
+    function validarCoherenciaConceptosModal() {
+        if (typeof window.ConceptosIvacompraCoherencia === 'undefined') {
+            return { valido: true, errores: [], advertencias: [] };
+        }
+        return window.ConceptosIvacompraCoherencia.validar(lineasConceptosDesdeModal(), conceptosMeta);
+    }
+
+    function renderCoherenciaConceptosModal(result) {
+        var $err = $('#ie-cp-conceptos-coherencia-error');
+        var $aviso = $('#ie-cp-conceptos-coherencia-aviso');
+        if (!$err.length) {
+            return;
+        }
+
+        if (result.errores && result.errores.length) {
+            var htmlErr = '<strong>Coherencia IVA:</strong><ul class="mb-0 pl-3">';
+            result.errores.forEach(function (msg) {
+                htmlErr += '<li>' + $('<div>').text(msg).html() + '</li>';
+            });
+            htmlErr += '</ul>';
+            $err.removeClass('d-none').html(htmlErr);
+        } else {
+            $err.addClass('d-none').empty();
+        }
+
+        if (result.advertencias && result.advertencias.length) {
+            $aviso.removeClass('d-none').text(result.advertencias[0]);
+        } else {
+            $aviso.addClass('d-none').empty();
+        }
     }
 
     function serializarModal() {
@@ -199,6 +249,7 @@
     }
 
     function programarPreview() {
+        renderCoherenciaConceptosModal(validarCoherenciaConceptosModal());
         clearTimeout(previewTimer);
         previewTimer = setTimeout(recargarPreviewAsiento, 400);
     }
@@ -233,8 +284,11 @@
             $('#ie-cp-preview-total-haber').text(formatoNumero(data.total_haber));
 
             var $err = $('#ie-cp-preview-error');
+            var coherencia = validarCoherenciaConceptosModal();
             if (data.error) {
                 $err.removeClass('d-none').text(data.error);
+            } else if (!coherencia.valido) {
+                $err.removeClass('d-none').text(coherencia.errores.join(' '));
             } else {
                 $err.addClass('d-none').empty();
             }
@@ -262,6 +316,12 @@
         }
         if ((payload.conceptos || []).length === 0) {
             alert('Agregue al menos un concepto con importe.');
+            return;
+        }
+        var coherencia = validarCoherenciaConceptosModal();
+        renderCoherenciaConceptosModal(coherencia);
+        if (!coherencia.valido) {
+            alert(coherencia.errores.join('\n'));
             return;
         }
         if (payload.proveedor_id <= 0 && !payload.proveedor_nombre_eventual) {

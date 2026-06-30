@@ -293,7 +293,18 @@ class ComprobanteProveedorAsientoService
             );
         }
 
-        $comprobante = $this->previewSupport->construirDesdeRequest($request, $existente);
+        try {
+            $comprobante = $this->previewSupport->construirDesdeRequest($request, $existente);
+        } catch (\RuntimeException $e) {
+            return [
+                'activo' => true,
+                'error' => $e->getMessage(),
+                'es_preview' => true,
+                'avisos' => [],
+                'lineas' => [],
+            ];
+        }
+
         $preview = $this->previewBorrador($comprobante);
         $preview['avisos'] = $this->previewSupport->avisosFaltantes($comprobante);
 

@@ -16,6 +16,24 @@
 return [
     'fecha_desde' => (int) env('ORDENCOMPRA_SYNC_ANITA_FECHA_DESDE', 20250100),
 
+    /*
+    | Escritura ERP → Anita (pendmaep, pendmovp, movpresup) en alta/edición/baja de OC.
+    */
+    'escritura_habilitada' => filter_var(env('ORDENCOMPRA_ANITA_ESCRITURA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+
+    'escritura' => [
+        'sistema_compras' => env('ORDENCOMPRA_ANITA_SISTEMA_COMPRAS', 'compras'),
+        // numerador PEP (tcomp_refer=206) vive en Informix ventas, igual que COM.
+        'sistema_numerador' => env('ORDENCOMPRA_ANITA_SISTEMA_NUMERADOR', 'ventas'),
+        't_comp_clave' => env('ORDENCOMPRA_ANITA_T_COMP_CLAVE', 'PEP'),
+        'oc_tipo' => 'PEP',
+        'oc_letra' => 'X',
+        'oc_sucursal' => 0,
+        'deposito_default' => (int) env('ORDENCOMPRA_ANITA_DEPOSITO_DEFAULT', 1),
+        'piso_nro_interno' => (int) env('ORDENCOMPRA_ANITA_PISO_NRO_INTERNO', 500000),
+        'piso_nro_oc' => (int) env('ORDENCOMPRA_ANITA_PISO_NRO_OC', 200000),
+    ],
+
     'tablas' => [
         'cabecera' => 'pendmaep',
         'linea' => 'pendmovp',

@@ -1,6 +1,9 @@
 <h4 class="mb-3">Conceptos de IVA compra</h4>
 <p class="text-muted small">Agregue uno o más renglones. Los montos deben coincidir con el desglose de la factura.</p>
 
+<div id="cp-conceptos-iva-coherencia-banner" class="alert alert-danger py-2 mb-3 d-none" role="alert"></div>
+<div id="cp-conceptos-iva-coherencia-aviso" class="alert alert-info py-2 mb-3 d-none" role="alert"></div>
+
 <table class="table table-bordered" id="concepto-table">
     <thead style="background-color:#85C1E9;color:#17202A;">
         <tr>

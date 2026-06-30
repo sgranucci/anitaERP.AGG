@@ -54,6 +54,12 @@ final class RecepcionProveedorOcPendienteSupport
             return 0.0;
         }
 
+        // Sin recepción confirmada siempre hay saldo (aunque la tolerancia sea alta).
+        // Misma regla que RecepcionProveedorDiferenciaSupport al detectar faltantes OC.
+        if ($cantidadRecibida <= 0.000001) {
+            return $cantidadPedida;
+        }
+
         $tol = RecepcionProveedorToleranciaSupport::resolver(
             $empresaId,
             $centrocostoId > 0 ? $centrocostoId : null

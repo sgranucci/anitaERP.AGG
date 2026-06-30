@@ -7,6 +7,7 @@ use App\Http\Requests\ValidacionArbolaprobacion;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
 use App\Models\Sala\RequisicionSalaEstado;
+use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
@@ -229,6 +230,7 @@ class ArbolaprobacionController extends Controller
 
     public function aprobar($tipocomprobante, $comprobante_id, $hash)
     {
+        $hash = ArbolAprobacionEnlaceSupport::normalizarHashRecibido($hash);
         $flEncontro = false;
         $aprobacion_id = null;
         $usuario_id = null;
@@ -251,21 +253,21 @@ class ArbolaprobacionController extends Controller
                 break;
         }
 
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
         foreach ($arbolaprobacion_movimiento as $movimiento) {
-            if ($movimiento->estado == Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre']) {
-                if ($hash == $movimiento->hashaprobacion) {
-                    $flEncontro = true;
-                    $aprobacion_id = $movimiento->id;
-                    $usuario_id = $movimiento->destinatariousuario_id;
-                    break;
-                }
+            if ($movimiento->estado == $nombrePendiente
+                && ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, (string) $movimiento->hashaprobacion)) {
+                $flEncontro = true;
+                $aprobacion_id = $movimiento->id;
+                $usuario_id = $movimiento->destinatariousuario_id;
+                break;
             }
         }
 
         if ($flEncontro && $tipocomprobante === 'RE') {
             $datos = $this->arbolaprobacionService->portalDatosRequisicionPorHash((int) $comprobante_id, $hash, 'aprobacion');
             if ($datos === null) {
-                return $this->portalFinRequisicion(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+                return $this->portalFinRequisicion(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'aprobacion'));
             }
 
             return view('configuracion.arbolaprobacion.requisicion_portal_aprobar', array_merge($datos, [
@@ -276,7 +278,7 @@ class ArbolaprobacionController extends Controller
         if ($flEncontro && $tipocomprobante === 'RS') {
             $datos = $this->arbolaprobacionService->portalDatosRequisicionSalaPorHash((int) $comprobante_id, $hash, 'aprobacion');
             if ($datos === null) {
-                return $this->portalFinRequisicionSala(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+                return $this->portalFinRequisicionSala(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'aprobacion'));
             }
 
             return view('configuracion.arbolaprobacion.requisicion_sala_portal_aprobar', array_merge($datos, [
@@ -287,7 +289,7 @@ class ArbolaprobacionController extends Controller
         if ($flEncontro && $tipocomprobante === 'OC') {
             $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash((int) $comprobante_id, $hash, 'aprobacion');
             if ($datos === null) {
-                return $this->portalFinOrdencompra(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+                return $this->portalFinOrdencompra(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'aprobacion'));
             }
 
             return view('configuracion.arbolaprobacion.ordencompra_portal_aprobar', array_merge($datos, [
@@ -302,15 +304,15 @@ class ArbolaprobacionController extends Controller
         }
 
         if ($tipocomprobante === 'RE') {
-            return $this->portalFinRequisicion(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+            return $this->portalFinRequisicion(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'aprobacion'));
         }
 
         if ($tipocomprobante === 'RS') {
-            return $this->portalFinRequisicionSala(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+            return $this->portalFinRequisicionSala(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'aprobacion'));
         }
 
         if ($tipocomprobante === 'OC') {
-            return $this->portalFinOrdencompra(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+            return $this->portalFinOrdencompra(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'aprobacion'));
         }
 
         return redirect()->route('inicio')->with('mensaje', 'No tiene aprobación pendiente')->send();
@@ -326,9 +328,11 @@ class ArbolaprobacionController extends Controller
             'observacion' => 'nullable|string|max:4000',
         ]);
 
+        $hashAprobacion = ArbolAprobacionEnlaceSupport::normalizarHashRecibido((string) $request->hash_aprobacion);
+
         $datos = $this->arbolaprobacionService->portalDatosRequisicionPorHash(
             (int) $request->comprobante_id,
-            $request->hash_aprobacion,
+            $hashAprobacion,
             'aprobacion'
         );
 
@@ -502,6 +506,7 @@ class ArbolaprobacionController extends Controller
 
     public function buscaRechazo($tipocomprobante, $comprobante_id, $hash)
     {
+        $hash = ArbolAprobacionEnlaceSupport::normalizarHashRecibido($hash);
         $flEncontro = false;
         $aprobacion_id = null;
         $usuario_id = null;
@@ -523,21 +528,21 @@ class ArbolaprobacionController extends Controller
                 break;
         }
 
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
         foreach ($arbolaprobacion_movimiento as $movimiento) {
-            if ($movimiento->estado == Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre']) {
-                if ($hash == $movimiento->hashrechazo) {
-                    $flEncontro = true;
-                    $aprobacion_id = $movimiento->id;
-                    $usuario_id = $movimiento->destinatariousuario_id;
-                    break;
-                }
+            if ($movimiento->estado == $nombrePendiente
+                && ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, (string) $movimiento->hashrechazo)) {
+                $flEncontro = true;
+                $aprobacion_id = $movimiento->id;
+                $usuario_id = $movimiento->destinatariousuario_id;
+                break;
             }
         }
 
         if ($flEncontro && $tipocomprobante === 'RE') {
             $datos = $this->arbolaprobacionService->portalDatosRequisicionPorHash((int) $comprobante_id, $hash, 'rechazo');
             if ($datos === null) {
-                return $this->portalFinRequisicion(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+                return $this->portalFinRequisicion(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'rechazo'));
             }
 
             return view('configuracion.arbolaprobacion.requisicion_portal_rechazar', array_merge($datos, [
@@ -552,7 +557,7 @@ class ArbolaprobacionController extends Controller
         if ($flEncontro && $tipocomprobante === 'RS') {
             $datos = $this->arbolaprobacionService->portalDatosRequisicionSalaPorHash((int) $comprobante_id, $hash, 'rechazo');
             if ($datos === null) {
-                return $this->portalFinRequisicionSala(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+                return $this->portalFinRequisicionSala(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'rechazo'));
             }
 
             return view('configuracion.arbolaprobacion.requisicion_sala_portal_rechazar', array_merge($datos, [
@@ -567,7 +572,7 @@ class ArbolaprobacionController extends Controller
         if ($flEncontro && $tipocomprobante === 'OC') {
             $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash((int) $comprobante_id, $hash, 'rechazo');
             if ($datos === null) {
-                return $this->portalFinOrdencompra(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+                return $this->portalFinOrdencompra(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'rechazo'));
             }
 
             return view('configuracion.arbolaprobacion.ordencompra_portal_rechazar', array_merge($datos, [
@@ -584,15 +589,15 @@ class ArbolaprobacionController extends Controller
         }
 
         if ($tipocomprobante === 'RE') {
-            return $this->portalFinRequisicion(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+            return $this->portalFinRequisicion(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'rechazo'));
         }
 
         if ($tipocomprobante === 'RS') {
-            return $this->portalFinRequisicionSala(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+            return $this->portalFinRequisicionSala(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'rechazo'));
         }
 
         if ($tipocomprobante === 'OC') {
-            return $this->portalFinOrdencompra(false, 'No tiene aprobación pendiente o el enlace ya no es válido.');
+            return $this->portalFinOrdencompra(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'rechazo'));
         }
 
         return redirect()->route('inicio')->with('mensaje', 'No tiene aprobación pendiente')->send();

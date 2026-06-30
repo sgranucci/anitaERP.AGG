@@ -13,6 +13,7 @@
 <script src="{{asset("assets/pages/scripts/compras/proveedor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/banco/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/ingresoegreso/cheques.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/conceptos_ivacompra_coherencia.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/ingresoegreso/comprobantes_ivacompra.js")}}" type="text/javascript"></script>
 <script>
     var urlConsultaProveedor = "{{ route('editar_proveedor', ':id') }}";

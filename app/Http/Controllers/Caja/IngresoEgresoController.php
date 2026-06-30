@@ -489,12 +489,14 @@ class IngresoEgresoController extends Controller
         $tipos_tesoreria = ComprobanteProveedorTipoTesoreria::todos();
 
         $conceptos_cuenta_meta = Concepto_Ivacompra::query()
+            ->with('impuestos')
             ->get()
             ->mapWithKeys(static fn (Concepto_Ivacompra $c) => [
                 (string) $c->id => [
                     'nombre' => $c->nombre,
                     'tipoconcepto' => $c->tipoconcepto,
                     'cuenta_debe_id' => (int) ($c->cuentacontabledebe_id ?? 0),
+                    'impuesto_tasa' => round((float) ($c->impuestos->valor ?? 0), 3),
                 ],
             ])
             ->all();

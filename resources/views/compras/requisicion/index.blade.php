@@ -10,6 +10,7 @@ Requisiciones
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/enviar-arbol.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.banner_confirmando_styles')
+@include('compras.requisicion.partials.banner_enviando_arbol_styles')
 @include('compras.requisicion.partials.comprobantes_asociados_script')
 @endsection
 
