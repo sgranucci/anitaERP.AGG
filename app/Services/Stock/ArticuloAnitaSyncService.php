@@ -24,6 +24,14 @@ class ArticuloAnitaSyncService
     }
 
     /**
+     * @return array{en_anita:int, importados:int, actualizados:int, errores:int, advertencias:list<string>}
+     */
+    public function resincronizarDesdeAnita(): array
+    {
+        return (new Articulo)->resincronizarDesdeAnita();
+    }
+
+    /**
      * Importa o actualiza un artículo por SKU ERP (ej. V0421) desde Anita.
      *
      * @param  int|null  $empresaId  Bridge por empresa (2=Kandiko, 3=Rebisco); null = bridge central Biyemas.

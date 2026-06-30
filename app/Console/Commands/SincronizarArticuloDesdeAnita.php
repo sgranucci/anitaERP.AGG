@@ -11,9 +11,10 @@ class SincronizarArticuloDesdeAnita extends Command
 {
     protected $signature = 'articulo:sincronizar-anita
                             {--sku= : Importar/actualizar un solo artículo por SKU ERP (ej. V0432)}
+                            {--resync : Re-sincroniza todos los artículos (altas nuevas + actualización de existentes, conserva id ERP)}
                             {--usuario= : ID usuario para altas (cuentas/estado; default: primer usuario)}';
 
-    protected $description = 'Importa artículos desde Anita (stkmae) vía ApiAnita. Sin --sku: solo altas nuevas. Con --sku: importa o actualiza ese artículo.';
+    protected $description = 'Importa artículos desde Anita (stkmae) vía ApiAnita. Sin --sku: solo altas nuevas. Con --resync: altas + actualización de todos. Con --sku: importa o actualiza ese artículo.';
 
     public function handle(ArticuloAnitaSyncService $sync): int
     {
@@ -49,15 +50,24 @@ class SincronizarArticuloDesdeAnita extends Command
                 return self::SUCCESS;
             }
 
-            $this->info('Sincronizando artículos desde Anita (puede tardar varios minutos)…');
-            $ret = $sync->sincronizarDesdeAnita();
+            if ($this->option('resync')) {
+                $this->info('Re-sincronizando todos los artículos desde Anita (altas + actualizaciones; puede tardar varios minutos)…');
+                $ret = $sync->resincronizarDesdeAnita();
+            } else {
+                $this->info('Sincronizando artículos desde Anita (solo altas nuevas; puede tardar varios minutos)…');
+                $ret = $sync->sincronizarDesdeAnita();
+            }
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 
             return self::FAILURE;
         }
 
-        $this->info("Códigos listados en Anita: {$ret['en_anita']}; altas ejecutadas: {$ret['importados']}; ya existían en ERP: {$ret['omitidos_ya_en_erp']}.");
+        if ($this->option('resync')) {
+            $this->info("Códigos en Anita: {$ret['en_anita']}; altas: {$ret['importados']}; actualizados: {$ret['actualizados']}; errores: {$ret['errores']}.");
+        } else {
+            $this->info("Códigos listados en Anita: {$ret['en_anita']}; altas ejecutadas: {$ret['importados']}; ya existían en ERP: {$ret['omitidos_ya_en_erp']}.");
+        }
         foreach ($ret['advertencias'] as $w) {
             $this->warn($w);
         }

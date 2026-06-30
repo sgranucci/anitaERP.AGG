@@ -114,4 +114,10 @@ return [
         explode(',', (string) env('STOCK_PRECIO_MOV_SALIDA_VENTA_ABREVS', 'SAL,SAS'))
     ), static fn (string $v) => $v !== '')),
 
+    /*
+    | Sync precios venta Anita stkpre → precio (precio:sincronizar-anita).
+    | Filtro stkp_fe_ult_act mínimo Ymd; tras upsert deja solo la fila más vigente por artículo+lista.
+    */
+    'precio_anita_sync_desde' => env('STOCK_PRECIO_ANITA_SYNC_DESDE', '20250101'),
+
 ];
