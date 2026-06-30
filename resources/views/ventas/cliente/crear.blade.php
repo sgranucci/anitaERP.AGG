@@ -24,7 +24,8 @@ input:invalid {
 <script src="{{asset("assets/pages/scripts/ventas/distribuidor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/listaprecio/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ventas/cliente/arca-padron.js")}}" type="text/javascript"></script>
+@php($arcaPadronJs = public_path('assets/pages/scripts/ventas/cliente/arca-padron.js'))
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-padron.js') }}?v={{ file_exists($arcaPadronJs) ? filemtime($arcaPadronJs) : time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
 <script>
 $( "#botonform0" ).click(function() {
@@ -39,6 +40,7 @@ $( "#botonform0" ).click(function() {
         @include('includes.form-error')
         @include('includes.mensaje')
         @include('ventas.cliente.partials.arca_impuestos_alerta')
+        @include('ventas.cliente.partials.cuit_duplicado_alerta')
         <div class="card card-danger">
             <div class="card-header">
                 <h3 class="card-title">Crear Cliente @if ($tipoalta == 'P') Provisorio @endif</h3>

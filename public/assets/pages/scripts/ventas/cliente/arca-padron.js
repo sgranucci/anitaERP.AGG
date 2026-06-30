@@ -54,13 +54,17 @@
 		}
 	}
 
-	function aplicarCuitNumerodocumento(cuit) {
+	function aplicarCuitNumerodocumento(cuit, options) {
+		options = options || {};
 		if (cuit == null || cuit === '') return;
 		const nro = byId('numerodocumento');
 		if (!nro) return;
 		nro.value = String(cuit).replace(/\D+/g, '');
 		if (typeof window.formatarCUIT === 'function') window.formatarCUIT(nro);
 		triggerChange('numerodocumento');
+		if (options.verificarDuplicado !== false) {
+			verificarDocumentoDuplicado({ debounce: false });
+		}
 	}
 
 	function getCsrfToken() {
@@ -372,7 +376,7 @@
 
 	async function aplicarDatosArcaEnFormulario({ cuit, data }) {
 		selectTipoDocumentoCuit();
-		aplicarCuitNumerodocumento(cuit);
+		aplicarCuitNumerodocumento(cuit, { verificarDuplicado: true });
 
 		const df = data.domicilioFiscal || {};
 
@@ -419,8 +423,8 @@
 	function condicionivaRequiereValidacionArca(condicionivaId) {
 		const cfg = byId('cliente-arca-config');
 		if (!cfg || !condicionivaId) return false;
-		const ri = parseInt(tab.getAttribute('data-condicioniva-ri-id') || '1', 10);
-		const mono = parseInt(tab.getAttribute('data-condicioniva-monotributo-id') || '4', 10);
+		const ri = parseInt(cfg.getAttribute('data-condicioniva-ri-id') || '1', 10);
+		const mono = parseInt(cfg.getAttribute('data-condicioniva-monotributo-id') || '4', 10);
 		return condicionivaId === ri || condicionivaId === mono;
 	}
 
@@ -483,6 +487,141 @@
 		const form = byId('form-general');
 		const u = form && form.getAttribute('data-arca-validar-url');
 		return u ? String(u).trim() : '';
+	}
+
+	function getVerificarDocumentoUrl() {
+		const cfg = byId('cliente-arca-config');
+		const u = cfg && cfg.getAttribute('data-verificar-documento-url');
+		return u ? String(u).trim() : '';
+	}
+
+	function getExcluirClienteIdDocumento() {
+		const form = byId('form-general');
+		if (!form) return 0;
+		const id = parseInt(form.getAttribute('data-cliente-id') || '0', 10);
+		return Number.isFinite(id) && id > 0 ? id : 0;
+	}
+
+	let lastVerificacionDocumentoToken = 0;
+	let verificacionDocumentoTimer = null;
+	let clienteDocumentoDuplicadoActivo = false;
+
+	function ocultarAlertaDocumentoDuplicado() {
+		const box = byId('cliente-cuit-duplicado-alerta');
+		const msg = byId('cliente-cuit-duplicado-alerta-mensaje');
+		if (msg) msg.innerHTML = '';
+		if (box) box.style.display = 'none';
+		clienteDocumentoDuplicadoActivo = false;
+	}
+
+	function mostrarAlertaDocumentoDuplicado(cliente) {
+		const box = byId('cliente-cuit-duplicado-alerta');
+		const msg = byId('cliente-cuit-duplicado-alerta-mensaje');
+		if (!box || !msg || !cliente) return;
+
+		let html = escapeHtml(cliente.mensaje || 'El CUIT/documento ya está registrado en otro cliente.');
+		if (cliente.url_consulta) {
+			html += ' <a href="' + escapeHtml(cliente.url_consulta) + '" target="_blank" rel="noopener">Ver cliente existente</a>';
+		}
+		msg.innerHTML = html;
+		box.style.display = 'block';
+		clienteDocumentoDuplicadoActivo = true;
+		box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+		const tabLink = byId('tab-datos-facturacion-link');
+		if (tabLink && typeof window.jQuery === 'function') {
+			window.jQuery(tabLink).tab('show');
+		}
+	}
+
+	async function verificarDocumentoDuplicado(options) {
+		options = options || {};
+		const url = getVerificarDocumentoUrl();
+		if (!url) return;
+
+		const digitos = soloDigitos(getVal('numerodocumento'));
+		if (digitos.length !== 11) {
+			ocultarAlertaDocumentoDuplicado();
+			return;
+		}
+
+		const run = async function () {
+			const token = ++lastVerificacionDocumentoToken;
+			try {
+				const resp = await fetch(url, {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: {
+						'Content-Type': 'application/json',
+						Accept: 'application/json',
+						'X-Requested-With': 'XMLHttpRequest',
+						'X-CSRF-TOKEN': getCsrfToken(),
+					},
+					body: JSON.stringify({
+						numerodocumento: digitos,
+						excluir_cliente_id: getExcluirClienteIdDocumento(),
+					}),
+				});
+
+				if (token !== lastVerificacionDocumentoToken) return;
+
+				const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+				if (!contentType.includes('application/json')) {
+					console.error('Verificación CUIT cliente: respuesta no JSON', resp.status);
+					return;
+				}
+
+				const json = await resp.json();
+				if (token !== lastVerificacionDocumentoToken) return;
+
+				if (json.duplicado && json.cliente) {
+					mostrarAlertaDocumentoDuplicado(json.cliente);
+				} else {
+					ocultarAlertaDocumentoDuplicado();
+				}
+			} catch (err) {
+				console.error('Verificación CUIT cliente:', err);
+			}
+		};
+
+		if (options.debounce === false) {
+			if (verificacionDocumentoTimer) {
+				clearTimeout(verificacionDocumentoTimer);
+				verificacionDocumentoTimer = null;
+			}
+			await run();
+			return;
+		}
+
+		if (verificacionDocumentoTimer) clearTimeout(verificacionDocumentoTimer);
+		verificacionDocumentoTimer = setTimeout(run, 400);
+	}
+
+	window.verificarClienteDocumentoDuplicado = verificarDocumentoDuplicado;
+
+	function bindVerificacionDocumentoCliente() {
+		const nroDoc = byId('numerodocumento');
+		if (!nroDoc || nroDoc.getAttribute('data-verificar-documento-bound') === '1') {
+			return;
+		}
+		nroDoc.setAttribute('data-verificar-documento-bound', '1');
+
+		function onInputDocumento() {
+			const len = soloDigitos(nroDoc.value).length;
+			if (len !== 11) {
+				ocultarAlertaDocumentoDuplicado();
+				return;
+			}
+			verificarDocumentoDuplicado();
+		}
+
+		nroDoc.addEventListener('change', function () {
+			verificarDocumentoDuplicado({ debounce: false });
+		});
+		nroDoc.addEventListener('blur', function () {
+			verificarDocumentoDuplicado({ debounce: false });
+		});
+		nroDoc.addEventListener('input', onInputDocumento);
 	}
 
 	async function consultarArcaConValidacionImpuestos(options) {
@@ -560,9 +699,9 @@
 			return 'aborted';
 		}
 
-		const cuit = soloDigitos(getVal('numerodocumento'));
+		const cuit = soloDigitos(options.cuit != null ? options.cuit : getVal('numerodocumento'));
 		if (cuit.length !== 11) {
-			alert('Ingresá una CUIT válida (11 dígitos) en el número de documento.');
+			alert('Ingresá una CUIT válida (11 dígitos).');
 			return 'aborted';
 		}
 
@@ -672,13 +811,8 @@
 		const cuitGo = byId('arca-cuit-entry-consultar');
 		async function runConsultaDesdeModalCuit() {
 			const inp = byId('arca-cuit-entry-input');
-			const raw = inp ? inp.value : '';
-			const nro = byId('numerodocumento');
-			if (nro) {
-				nro.value = raw;
-				if (typeof window.formatarCUIT === 'function') window.formatarCUIT(nro);
-			}
-			const resultado = await ejecutarConsultaArcaCliente('modal');
+			const cuit = soloDigitos(inp ? inp.value : '');
+			const resultado = await ejecutarConsultaArcaCliente('modal', { cuit: cuit });
 			if (resultado !== 'aborted') {
 				closeArcaCuitEntryOverlay();
 			}
@@ -763,6 +897,28 @@
 					consultarArcaConValidacionImpuestos({ silent: true });
 				});
 			}
+		}
+
+		bindVerificacionDocumentoCliente();
+		const nroDocInicial = byId('numerodocumento');
+		if (nroDocInicial && soloDigitos(nroDocInicial.value).length === 11) {
+			verificarDocumentoDuplicado({ debounce: false });
+		}
+
+		const formGeneral = byId('form-general');
+		if (formGeneral) {
+			formGeneral.addEventListener('submit', function (ev) {
+				if (!clienteDocumentoDuplicadoActivo) {
+					return;
+				}
+				ev.preventDefault();
+				ev.stopPropagation();
+				const box = byId('cliente-cuit-duplicado-alerta');
+				if (box) {
+					box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+				}
+				alert('El CUIT/documento ya está registrado en otro cliente. Corrija el número antes de guardar.');
+			}, true);
 		}
 	});
 })();

@@ -30,4 +30,11 @@ return [
         'sistema_t_comp' => env('CLIENTE_ANITA_SISTEMA_T_COMP', 'ventas'),
         'sistema_numerador' => env('CLIENTE_ANITA_SISTEMA_NUMERADOR', 'ventas'),
     ],
+
+    /*
+     * EL BIERZO: clientes con clim_coef > 0 se replican también en Anita Villafranca (mismo patrón que venta).
+     */
+    'villafranca' => [
+        'path_sistema' => env('CLIENTE_ANITA_VILLAFRANCA_PATH', '/usr2/villafranca'),
+    ],
 ];

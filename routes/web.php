@@ -1617,6 +1617,7 @@ Route::get('ventas/cliente/crear/{tipoalta?}', 'Ventas\ClienteController@crear')
 Route::post('ventas/cliente', 'Ventas\ClienteController@guardar')->name('guardar_cliente');
 Route::post('ventas/clienteprovisorio', 'Ventas\ClienteController@guardarClienteProvisorio')->name('guardar_cliente_provisorio');
 Route::get('ventas/cliente/{id}/editar', 'Ventas\ClienteController@editar')->name('editar_cliente');
+Route::post('ventas/cliente/verificar-documento', 'Ventas\ClienteController@verificarDocumentoAlta')->name('verificar_cliente_documento_alta');
 Route::post('ventas/cliente/{id}/validar-arca-padron', 'Ventas\ClienteController@validarArcaPadron')->name('validar_cliente_arca_padron');
 Route::get('ventas/cliente/{cliente_id}/suitecrm-cuenta', 'Ventas\ClienteSuitecrmCuentaController@show')->name('cliente_suitecrm_cuenta');
 Route::post('ventas/cliente/{cliente_id}/suitecrm-cuenta/sincronizar', 'Ventas\ClienteSuitecrmCuentaController@sincronizar')->name('sincronizar_cliente_suitecrm_cuenta');

@@ -31,6 +31,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use App\Support\Ventas\ClienteListadoFiltros;
 use App\Support\Ventas\ClienteAnitaNumeracionSupport;
+use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
 use App\Services\Ventas\ClienteAnitaSyncService;
 use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
@@ -1055,9 +1056,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 	/**
 	 * Arma el payload HTTP (acc insert) para climae sin ejecutar el bridge.
 	 */
-	public function payloadInsertClimae(array $request): array
+	public function payloadInsertClimae(array $request, string $destinoAnita = 'bierzo'): array
 	{
 		$request = $this->prepararDatosAnitaCliente($request);
+		$esVillafranca = $destinoAnita === 'villafranca';
 
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,
 			$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
@@ -1111,8 +1113,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 					clim_perc_ing_br, '.$campo_ing_bruto.', clim_dir_postal, clim_loc_postal, clim_cp_postal, clim_fantasia, clim_fecha_alta,
 					clim_ley_liberado, clim_regimen, clim_leyenda_fact, clim_prov_postal, clim_lugar_de_pago, clim_excl_perc_iva, clim_fe_excl_piva,
 					clim_dto_integrado, clim_fecha_boletin, clim_e_mail, clim_fax'.(config('app.empresa') == 'EL BIERZO' ?
-					',clim_abasto, clim_distribuidor, clim_coef, clim_logistica, clim_emite_cert, clim_emite_nc, clim_coef_extra,clim_referencia,
-					clim_cod_localidad, clim_cod_provincia, clim_agrega_bonif, clim_e_mail2, clim_dfexcl_piva, clim_hfexcl_piva' : '').
+					($esVillafranca
+						? ',clim_abasto, clim_distribuidor, clim_coef, clim_logistica, clim_emite_cert, clim_emite_nc, clim_coef_extra'
+						: ',clim_abasto, clim_distribuidor, clim_coef, clim_logistica, clim_emite_cert, clim_emite_nc, clim_coef_extra,clim_referencia,
+					clim_cod_localidad, clim_cod_provincia, clim_agrega_bonif, clim_e_mail2, clim_dfexcl_piva, clim_hfexcl_piva') : '').
 					(config('app.empresa') == 'INTERFORMING' ? ', clim_url, clim_hs_atencion2' : ''),
 			'valores' => "
 				'".str_pad($request['codigo'], 6, '0', STR_PAD_LEFT)."',
@@ -1178,14 +1182,15 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'".($request['porcentajelogistica'] ?? 0)."',
 				'".$emitecertificado."',
 				'".$emitenotadecredito."',
-				'".($request['coeficienteextra'] ?? 0)."',
+				'".($request['coeficienteextra'] ?? 0)."'".
+				($esVillafranca ? ' ' : ",
 				'0',
 				'".$codigolocalidad."',
 				'".$codigoprovincia."',
 				'".$agregabonificacion."',
 				'".substr($this->sqlLit($request['email'] ?? ''), 40, 40)."',
 				'".$dfexcl_piva."',
-				'".$hfexcl_piva."' " : '').
+				'".$hfexcl_piva."' ") : '').
 				(config('app.empresa') == 'INTERFORMING' ? ",
 				'".$urlweb."',
 				'".$horarioAtencion."' " : ''),
@@ -1407,61 +1412,57 @@ class ClienteRepository implements ClienteRepositoryInterface
 		}
 
 		$this->sincronizarCm05Anita($apiAnita, $request, $request['codigo']);
+		$this->sincronizarClimaeVillafranca($request, (string) $request['codigo']);
 	}
 
-	private function actualizarAnita($request, $id) {
-        $apiAnita = new ApiAnita();
+	/**
+	 * UPDATE climae Anita (Bierzo o Villafranca según $destinoAnita).
+	 */
+	private function payloadUpdateClimae(array $request, string $id, string $destinoAnita = 'bierzo'): array
+	{
 		$request = $this->prepararDatosAnitaCliente($request);
-        $fecha = Carbon::now();
-		$fecha = $fecha->format('Ymd');
+		$esVillafranca = $destinoAnita === 'villafranca';
+		$fecha = Carbon::now()->format('Ymd');
 
-		if (config("app.empresa") == "EL BIERZO")
-		{
+		if (config('app.empresa') == 'EL BIERZO') {
 			$desdefecha_exclusionpercepcioniva = $request['desdefecha_exclusionpercepcioniva'] ?? null;
-			if ($desdefecha_exclusionpercepcioniva)
-				$dfexcl_piva = $desdefecha_exclusionpercepcioniva->format('Ymd');
-			else
-				$dfexcl_piva = '00000000';
-
+			$dfexcl_piva = $desdefecha_exclusionpercepcioniva
+				? $desdefecha_exclusionpercepcioniva->format('Ymd')
+				: '00000000';
 			$hastafecha_exclusionpercepcioniva = $request['hastafecha_exclusionpercepcioniva'] ?? null;
-			if ($hastafecha_exclusionpercepcioniva)
-				$hfexcl_piva = $hastafecha_exclusionpercepcioniva->format('Ymd');
-			else
-				$hfexcl_piva = '00000000';
+			$hfexcl_piva = $hastafecha_exclusionpercepcioniva
+				? $hastafecha_exclusionpercepcioniva->format('Ymd')
+				: '00000000';
 		}
 
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,
-								$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
-								$codigolistaprecio, $codigoabasto, $codigocoeficiente, $codigodistribuidor,
-								$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
-
-		if (array_key_exists('localidad_id', $request))
-			$localidad_id = $request['localidad_id'];
-		else
-			$localidad_id = 0;
+			$codigolocalidad, $codigoprovincia, $codigopais, $codigozonavta, $codigovendedor,
+			$codigolistaprecio, $codigoabasto, $codigocoeficiente, $codigodistribuidor,
+			$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
 
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre']);
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
 		$domicilio = $this->domicilioParaAnita($request['domicilio'] ?? '');
 
 		$tipodocumento = Tipodocumento::find($request['tipodocumento_id']);
-
 		$documento = $request['numerodocumento'];
-		if ($tipodocumento)
-		{
-			if ($tipodocumento->codigoexterno != "80")
-				$documento = $tipodocumento->abreviatura.' '.$request['numerodocumento'];
-		}		
-		if (config('app.empresa') == 'AGG' || config('app.empresa') == 'INTERFORMING')
-			$campo_ing_bruto = 'clim_nro_ing_br';
-		else
-			$campo_ing_bruto = 'clim_nro_ing_bruto';
-		$horarioAtencion = $request['horarioatencion'];
+		if ($tipodocumento && $tipodocumento->codigoexterno != '80') {
+			$documento = $tipodocumento->abreviatura.' '.$request['numerodocumento'];
+		}
 
-		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita[0], 
-				'sistema' => 'ventas',
-				'valores' => " 
-                clim_cliente 	                = '".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."',
+		if (config('app.empresa') == 'AGG' || config('app.empresa') == 'INTERFORMING') {
+			$campo_ing_bruto = 'clim_nro_ing_br';
+		} else {
+			$campo_ing_bruto = 'clim_nro_ing_bruto';
+		}
+		$horarioAtencion = $request['horarioatencion'] ?? '';
+
+		return [
+			'acc' => 'update',
+			'tabla' => $this->tableAnita[0],
+			'sistema' => 'ventas',
+			'valores' => "
+                clim_cliente 	                = '".str_pad($request['codigo'], 6, '0', STR_PAD_LEFT)."',
                 clim_nombre 	                = '".$nombre."',
                 clim_contacto 	                = '".$contacto."',
                 clim_direccion 	                = '".$this->sqlLit($domicilio)."',
@@ -1475,7 +1476,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_cond_venta 	            = '".$this->codigoCondicionVentaAnita($request['condicionventa_id'] ?? 0)."',
                 clim_cta_contable 	            = '".$cuentacontable."',
                 clim_zonavta 	                = '".$codigozonavta."',
-                clim_subzona 	                = '".($request['subzonavta_id']>0?$request['subzonavta_id']:0)."',
+                clim_subzona 	                = '".($request['subzonavta_id'] > 0 ? $request['subzonavta_id'] : 0)."',
                 clim_zonamult 	                = '".$codigoprovincia."',
                 clim_vendedor 	                = '".$codigovendedor."',
                 clim_expreso 	                = '".$codigotransporte."',
@@ -1490,27 +1491,79 @@ class ClienteRepository implements ClienteRepositoryInterface
                 ".$campo_ing_bruto."            = '".$request['nroiibb']."',
                 clim_fantasia 	                = '".$request['fantasia']."',
                 clim_fecha_alta 	            = '".$fecha."',
-                clim_e_mail 	                = '".substr($request['email'],0,40)."'".
-				(config("app.empresa") == "EL BIERZO" ? ",
+                clim_e_mail 	                = '".substr($request['email'], 0, 40)."'".
+				(config('app.empresa') == 'EL BIERZO' ? ",
 				clim_abasto                     = '".$codigoabasto."',
 				clim_distribuidor               = '".$codigodistribuidor."',
 				clim_coef                       = '".$codigocoeficiente."',
 				clim_logistica                  = '".$request['porcentajelogistica']."',
 				clim_emite_cert                 = '".$emitecertificado."',
 				clim_emite_nc                   = '".$emitenotadecredito."',
-				clim_coef_extra                 = '".$request['coeficienteextra']."',
-				clim_referencia                 = '".'0'."',
+				clim_coef_extra                 = '".$request['coeficienteextra']."'".
+				($esVillafranca ? ' ' : ",
+				clim_referencia                 = '0',
 				clim_cod_localidad              = '".$codigolocalidad."',
 				clim_cod_provincia              = '".$codigoprovincia."',
 				clim_agrega_bonif               = '".$agregabonificacion."',
-				clim_e_mail2                    = '".substr($request['email'],40,40)."',
+				clim_e_mail2                    = '".substr($request['email'], 40, 40)."',
 				clim_dfexcl_piva                = '".$dfexcl_piva."',
-				clim_hfexcl_piva                = '".$hfexcl_piva."' " : "").
-				(config('app.empresa') == "INTERFORMING" ? ",
+				clim_hfexcl_piva                = '".$hfexcl_piva."' ") : '').
+				(config('app.empresa') == 'INTERFORMING' ? ",
 				clim_url                        = '".$request['urlweb']."',
-				clim_hs_atencion2               = '".$horarioAtencion."' " : "")
-				,
-				'whereArmado' => " WHERE clim_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
+				clim_hs_atencion2               = '".$horarioAtencion."' " : ''),
+			'whereArmado' => " WHERE clim_cliente = '".str_pad($id, 6, '0', STR_PAD_LEFT)."' ",
+		];
+	}
+
+	private function existeClimaeAnitaPath(string $codigoCliente, string $pathSistema): bool
+	{
+		$apiAnita = new ApiAnita();
+		$raw = $apiAnita->apiCall([
+			'acc' => 'list',
+			'sistema' => 'ventas',
+			'tabla' => $this->tableAnita[0],
+			'campos' => $this->keyFieldAnita,
+			'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".str_pad($codigoCliente, 6, '0', STR_PAD_LEFT)."' ",
+			'limit' => 'FIRST 1',
+			'path_sistema' => $pathSistema,
+		]);
+
+		return ApiAnita::primeraFilaLista($raw) !== null;
+	}
+
+	/**
+	 * EL BIERZO: replica climae en Villafranca si clim_coef > 0 (insert o upsert).
+	 */
+	private function sincronizarClimaeVillafranca(array $request, string $codigoCliente): void
+	{
+		$codigoCoeficiente = ClienteAnitaVillafrancaSupport::codigoCoeficienteDesdeId(
+			isset($request['coeficiente_id']) ? (int) $request['coeficiente_id'] : null
+		);
+		if (! ClienteAnitaVillafrancaSupport::debeSincronizar($codigoCoeficiente)) {
+			return;
+		}
+
+		$path = ClienteAnitaVillafrancaSupport::pathSistema();
+		$apiAnita = new ApiAnita();
+		$codigoNorm = ltrim($codigoCliente, '0') ?: '0';
+
+		if ($this->existeClimaeAnitaPath($codigoNorm, $path)) {
+			$data = $this->payloadUpdateClimae($request, $codigoNorm, 'villafranca');
+			$contexto = 'climae update villafranca';
+		} else {
+			$data = $this->payloadInsertClimae($request, 'villafranca');
+			$contexto = 'climae insert villafranca';
+		}
+
+		$data['path_sistema'] = $path;
+		$this->apiCallAnitaEscritura($apiAnita, $data, $contexto);
+	}
+
+	private function actualizarAnita($request, $id) {
+        $apiAnita = new ApiAnita();
+		$request = $this->prepararDatosAnitaCliente($request);
+
+		$data = $this->payloadUpdateClimae($request, $id, 'bierzo');
         $this->apiCallAnitaEscritura($apiAnita, $data, 'climae update');
 
 		// Borra leyenda
@@ -1603,6 +1656,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		}
 
 		$this->sincronizarCm05Anita($apiAnita, $request, $id);
+		$this->sincronizarClimaeVillafranca($request, (string) $id);
 	}
 
 	private function eliminarAnita($id) {
@@ -1655,7 +1709,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita
 
 	private function ultimoCodigo(&$codigo) {
-		if (config('app.empresa') == 'EL BIERZO' && ClienteAnitaNumeracionSupport::estaHabilitada()) {
+		if (config('app.empresa') === 'EL BIERZO' && ClienteAnitaNumeracionSupport::estaHabilitada()) {
 			$numero = ClienteAnitaNumeracionSupport::asignarCodigoClienteLibre();
 			$codigo = ClienteAnitaNumeracionSupport::formatearCodigoErp($numero);
 
@@ -2161,8 +2215,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 	public function consultaCliente($consulta)
     {
-		$columns = ['cliente.id', 'cliente.nombre', 'cliente.codigo', 'cliente.domicilio', 'provincia.nombre', 'localidad.nombre'];
-        $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'provincia', 'localidad'];
+		$columns = ['cliente.id', 'cliente.nombre', 'cliente.codigo', 'cliente.domicilio', 'cliente.numerodocumento', 'provincia.nombre', 'localidad.nombre'];
+        $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'numerodocumento', 'provincia', 'localidad'];
 		$colspan = count($columnsOut) + 1;
 
 		$consulta = is_string($consulta) ? trim($consulta) : '';
@@ -2185,6 +2239,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 									'cliente.nombre as nombre',
                                     'cliente.codigo as codigo',
 									'cliente.domicilio as domicilio',
+									'cliente.numerodocumento as numerodocumento',
 									'provincia.nombre as provincia',
 									'localidad.nombre as localidad')
 							->leftjoin('provincia', 'provincia.id', '=', 'cliente.provincia_id')
@@ -2199,8 +2254,17 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$data = $data->where('vendedor_id', $vendedores);
 
 		$data = $data->where(function ($query) use ($count, $consulta, $columns) {
-                        			for ($i = 0; $i < $count; $i++)
+                        			for ($i = 0; $i < $count; $i++) {
                             			$query->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
+                            		}
+
+									$soloDigitos = preg_replace('/\D+/', '', $consulta);
+									if ($soloDigitos !== '') {
+										$query->orWhereRaw(
+											"REPLACE(REPLACE(REPLACE(cliente.numerodocumento, '-', ''), '.', ''), ' ', '') LIKE ?",
+											['%'.$soloDigitos.'%']
+										);
+									}
                             })
 							->orderBy('cliente.nombre', 'asc')
 							->limit(250)

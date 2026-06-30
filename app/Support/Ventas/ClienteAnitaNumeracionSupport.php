@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Numeración cliente EL BIERZO: t_comp (CLI) → numerador Anita (num_clave = tcomp_refer).
+ * El siguiente código sale de num_ult_numero + 1; si está ocupado en ERP/climae se incrementa.
  */
 final class ClienteAnitaNumeracionSupport
 {
@@ -45,7 +46,7 @@ final class ClienteAnitaNumeracionSupport
 
         $err = ApiAnita::extraerMensajeError($raw);
         if ($err !== null) {
-            throw new \RuntimeException('No se pudo leer t_comp (CLI) en Anita: '.$err);
+            throw new \RuntimeException('No se pudo leer t_comp ('.self::claveTComp().') en Anita: '.$err);
         }
 
         $fila = ApiAnita::primeraFilaLista((string) $raw);
@@ -106,31 +107,18 @@ final class ClienteAnitaNumeracionSupport
         }
     }
 
-    public static function ultimoNumeroClienteGlobal(): int
-    {
-        $maxNumerador = 0;
-        try {
-            $maxNumerador = self::leerUltimoNumeroNumerador();
-        } catch (\Throwable $e) {
-            Log::warning('ClienteAnitaNumeracion: no se pudo leer numerador CLI', [
-                'error' => $e->getMessage(),
-            ]);
-        }
-
-        return max(
-            $maxNumerador,
-            ClienteAnitaColisionSupport::maxCodigoClienteErp(),
-            ClienteAnitaColisionSupport::maxCodigoClimae()
-        );
-    }
-
     public static function asignarCodigoClienteLibre(): int
     {
-        $base = self::ultimoNumeroClienteGlobal();
-        $numero = ClienteAnitaColisionSupport::primerCodigoDisponible($base + 1);
+        $claveNumerador = self::resolverClaveNumeradorDesdeTComp();
+        $ultimoNumerador = self::leerUltimoNumeroNumerador();
+        $desde = $ultimoNumerador + 1;
+        $numero = ClienteAnitaColisionSupport::primerCodigoDisponible($desde);
 
-        Log::info('ClienteAnitaNumeracion: código cliente reservado', [
-            'base' => $base,
+        Log::info('ClienteAnitaNumeracion: código cliente reservado desde numerador CLI', [
+            't_comp_clave' => self::claveTComp(),
+            'num_clave' => $claveNumerador,
+            'numerador_ultimo' => $ultimoNumerador,
+            'desde' => $desde,
             'asignado' => $numero,
         ]);
 
@@ -149,12 +137,9 @@ final class ClienteAnitaNumeracionSupport
         }
 
         try {
-            $claveNumerador = self::resolverClaveNumeradorDesdeTComp();
             $ultimoNumerador = self::leerUltimoNumeroNumerador();
-            $maxErp = ClienteAnitaColisionSupport::maxCodigoClienteErp();
-            $objetivo = max($numero, $ultimoNumerador, $maxErp);
-            if ($objetivo > $ultimoNumerador) {
-                self::actualizarNumerador($objetivo);
+            if ($numero > $ultimoNumerador) {
+                self::actualizarNumerador($numero);
             }
         } catch (\Throwable $e) {
             Log::warning('ClienteAnitaNumeracion: no se pudo actualizar numerador tras alta', [

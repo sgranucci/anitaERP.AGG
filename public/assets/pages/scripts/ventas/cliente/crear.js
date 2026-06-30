@@ -66,6 +66,12 @@
 
                 $nro.off('input.cuitFormat').on('input.cuitFormat', function() {
                     formatarCUIT(this);
+                    if (typeof window.verificarClienteDocumentoDuplicado === 'function') {
+                        var digitos = (this.value || '').replace(/\D+/g, '');
+                        if (digitos.length === 11) {
+                            window.verificarClienteDocumentoDuplicado({ debounce: false });
+                        }
+                    }
                 });
             }
             else

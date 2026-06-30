@@ -55,6 +55,7 @@ use App\Exports\Ventas\ClienteCuentacorrienteListadoExport;
 use App\Support\Ventas\ClienteListadoFiltros;
 use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
+use App\Support\Ventas\ClienteDocumentoUnicoSupport;
 use App\Services\Arca\ConstanciaInscripcionService;
 use Carbon\Carbon;
 use Mail;
@@ -701,6 +702,33 @@ class ClienteController extends Controller
     {
         return ($this->clienteRepository->consultaCliente($request->consulta));
 	}
+
+    public function verificarDocumentoAlta(Request $request)
+    {
+        if (! can('crear-clientes', false) && ! can('editar-clientes', false) && ! can('actualizar-clientes', false)) {
+            abort(403);
+        }
+
+        $excluirId = (int) $request->input('excluir_cliente_id', 0);
+        $cliente = ClienteDocumentoUnicoSupport::findOtroCliente(
+            (string) $request->input('numerodocumento', ''),
+            $excluirId > 0 ? $excluirId : null
+        );
+
+        if ($cliente === null) {
+            return response()->json([
+                'ok' => true,
+                'duplicado' => false,
+            ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'duplicado' => true,
+            'cliente' => ClienteDocumentoUnicoSupport::payloadDuplicado($cliente),
+            'mensaje' => ClienteDocumentoUnicoSupport::mensajeDuplicado($cliente),
+        ]);
+    }
 
     public function leeUnCliente($cliente_id)
     {
