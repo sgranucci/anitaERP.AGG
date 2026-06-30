@@ -115,8 +115,8 @@ class MovimientoStockController extends Controller
                 'tipotransaccion_stock:id,nombre,abreviatura',
                 'depositoOrigen:'.implode(',', TransferenciaBienUsoSupport::DEPOSITO_RELATION_COLUMNS),
                 'depositoDestino:'.implode(',', TransferenciaBienUsoSupport::DEPOSITO_RELATION_COLUMNS),
-                'bienUsoOrigen:id,codigo_inventario,hostname,modelo',
-                'bienUsoDestino:id,codigo_inventario,hostname,modelo',
+                'bienUsoOrigen:'.implode(',', TransferenciaBienUsoSupport::BIEN_USO_RELATION_COLUMNS),
+                'bienUsoDestino:'.implode(',', TransferenciaBienUsoSupport::BIEN_USO_RELATION_COLUMNS),
                 'usuarioOrigen:id,nombre',
                 'usuarioDestino:id,nombre',
                 'usuarioAprobador:id,nombre',
@@ -536,8 +536,8 @@ class MovimientoStockController extends Controller
     {
         return BienUso::query()
             ->where('estado', 'A')
-            ->orderBy('hostname')
-            ->get(['id', 'codigo_inventario', 'hostname', 'modelo']);
+            ->orderByRaw('COALESCE(uid, hostname)')
+            ->get(TransferenciaBienUsoSupport::BIEN_USO_RELATION_COLUMNS);
     }
 
     private function requestEsTransferenciaStock(Request $request): bool

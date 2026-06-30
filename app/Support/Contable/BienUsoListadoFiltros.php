@@ -18,11 +18,15 @@ class BienUsoListadoFiltros
     public const CAMPOS = [
         'id' => ['column' => 'bien_uso.id', 'type' => 'entero', 'label' => 'ID'],
         'codigo_inventario' => ['column' => 'bien_uso.codigo_inventario', 'type' => 'entero', 'label' => 'Cód. inventario'],
+        'uid' => ['column' => 'bien_uso.uid', 'type' => 'texto', 'label' => 'UID'],
         'hostname' => ['column' => 'bien_uso.hostname', 'type' => 'texto', 'label' => 'Hostname'],
         'ip' => ['column' => 'bien_uso.ip', 'type' => 'texto', 'label' => 'IP'],
         'modelo' => ['column' => 'bien_uso.modelo', 'type' => 'texto', 'label' => 'Modelo'],
+        'vendor' => ['column' => 'bien_uso.vendor', 'type' => 'texto', 'label' => 'Vendor / fabricante'],
+        'tema' => ['column' => 'bien_uso.tema', 'type' => 'texto', 'label' => 'Tema / juego'],
         'numero_serie' => ['column' => 'bien_uso.numero_serie', 'type' => 'texto', 'label' => 'Número de serie'],
         'estado' => ['column' => 'bien_uso.estado', 'type' => 'estado', 'label' => 'Estado'],
+        'empresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
         'centrocosto' => ['column' => 'centrocosto.codigo', 'type' => 'texto', 'label' => 'Centro de costo'],
         'centrocosto_nombre' => ['column' => 'centrocosto.nombre', 'type' => 'texto', 'label' => 'Nombre CC'],
         'tipo_bien' => ['column' => 'bien_uso.tipo_bien', 'type' => 'tipo_bien', 'label' => 'Tipo de bien'],
@@ -31,8 +35,11 @@ class BienUsoListadoFiltros
 
     /** @var list<string> */
     private const COLUMNAS_COINCIDENCIA_FLEXIBLE = [
+        'bien_uso.uid',
         'bien_uso.hostname',
         'bien_uso.modelo',
+        'bien_uso.vendor',
+        'bien_uso.tema',
         'bien_uso.numero_serie',
         'bien_uso.observaciones',
     ];
@@ -68,9 +75,9 @@ class BienUsoListadoFiltros
             $modo = self::MODO_TODOS;
         }
 
-        $campo = (string) $request->input('filtro_campo', 'hostname');
+        $campo = (string) $request->input('filtro_campo', 'uid');
         if (! isset(self::CAMPOS[$campo])) {
-            $campo = 'hostname';
+            $campo = 'uid';
         }
 
         $operador = (string) $request->input('filtro_operador', 'contiene');
@@ -130,7 +137,7 @@ class BienUsoListadoFiltros
     {
         return [
             'modo' => self::MODO_TODOS,
-            'campo' => 'hostname',
+            'campo' => 'uid',
             'operador' => 'contiene',
             'valor' => '',
             'valor_hasta' => '',
@@ -218,11 +225,15 @@ class BienUsoListadoFiltros
             }
 
             $textCols = [
+                'bien_uso.uid',
                 'bien_uso.hostname',
                 'bien_uso.ip',
                 'bien_uso.modelo',
+                'bien_uso.vendor',
+                'bien_uso.tema',
                 'bien_uso.numero_serie',
                 'bien_uso.observaciones',
+                'empresa.nombre',
                 'centrocosto.codigo',
                 'centrocosto.nombre',
             ];

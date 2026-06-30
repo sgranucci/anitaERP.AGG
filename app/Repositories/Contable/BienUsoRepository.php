@@ -25,7 +25,7 @@ class BienUsoRepository implements BienUsoRepositoryInterface
             $texto = trim($filtros);
             $filtros = [
                 'modo' => BienUsoListadoFiltros::MODO_TODOS,
-                'campo' => 'hostname',
+                'campo' => 'uid',
                 'operador' => 'contiene',
                 'valor' => $texto,
                 'valor_hasta' => '',
@@ -38,7 +38,8 @@ class BienUsoRepository implements BienUsoRepositoryInterface
         $query = $this->model->newQuery()
             ->select('bien_uso.*')
             ->leftJoin('centrocosto', 'centrocosto.id', '=', 'bien_uso.centrocosto_id')
-            ->with('centrocostos');
+            ->leftJoin('empresa', 'empresa.id', '=', 'bien_uso.empresa_id')
+            ->with(['centrocostos', 'empresa']);
 
         $filtroCentro = (int) ($filtros['centrocosto_id'] ?? 0);
         BienUsoVisibilidadSupport::aplicarScope(
@@ -50,7 +51,7 @@ class BienUsoRepository implements BienUsoRepositoryInterface
             BienUsoListadoFiltros::aplicar($query, $filtros);
         }
 
-        $query->orderBy('bien_uso.hostname');
+        $query->orderByRaw('COALESCE(bien_uso.uid, bien_uso.hostname)');
 
         if ($flPaginando === true) {
             return $query->paginate(10);
@@ -112,6 +113,38 @@ class BienUsoRepository implements BienUsoRepositoryInterface
 
         if (array_key_exists('observaciones', $data) && $data['observaciones'] === '') {
             $data['observaciones'] = null;
+        }
+
+        if (array_key_exists('uid', $data) && $data['uid'] === '') {
+            $data['uid'] = null;
+        }
+
+        if (array_key_exists('vendor', $data) && $data['vendor'] === '') {
+            $data['vendor'] = null;
+        }
+
+        if (array_key_exists('tema', $data) && $data['tema'] === '') {
+            $data['tema'] = null;
+        }
+
+        if (array_key_exists('empresa_id', $data) && ($data['empresa_id'] === '' || $data['empresa_id'] === null)) {
+            $data['empresa_id'] = null;
+        }
+
+        if (array_key_exists('hostname', $data) && $data['hostname'] === '') {
+            $data['hostname'] = null;
+        }
+
+        if (($data['tipo_bien'] ?? '') === 'M') {
+            $data['hostname'] = null;
+        }
+
+        if (($data['tipo_bien'] ?? '') === 'M' && ! empty($data['uid']) && empty($data['codigo_inventario'])) {
+            $partes = explode('-', (string) $data['uid']);
+            $codigo = (int) end($partes);
+            if ($codigo > 0) {
+                $data['codigo_inventario'] = $codigo;
+            }
         }
 
         return $data;

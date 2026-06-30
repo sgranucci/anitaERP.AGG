@@ -25,7 +25,7 @@ use App\Models\Contable\BienUso; ?>
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => BienUsoListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('bien_uso'),
-                        'placeholder' => 'Búsqueda rápida (hostname, IP, modelo, serie…)…',
+                        'placeholder' => 'Búsqueda rápida (UID, hostname, IP, modelo, vendor, tema, serie…)…',
                         'toggleTarget' => '#panel-filtros-bien-uso',
                         'toggleId' => 'btn-toggle-filtros-bien-uso',
                         'inputId' => 'filtro_valor',
@@ -57,11 +57,15 @@ use App\Models\Contable\BienUso; ?>
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
-                            <th>Cód. inv.</th>
+                            <th>UID</th>
+                            <th>C&oacute;d. inv.</th>
+                            <th>Empresa</th>
                             <th>Hostname</th>
                             <th>IP</th>
                             <th>Modelo</th>
-                            <th>Nº serie</th>
+                            <th>Vendor</th>
+                            <th>Tema</th>
+                            <th>N&ordm; serie</th>
                             <th>Estado</th>
                             <th>C. costo</th>
                             <th>Tipo bien</th>
@@ -79,10 +83,14 @@ use App\Models\Contable\BienUso; ?>
                                     {{ $data->id }}
                                 @endif
                             </td>
+                            <td>{{ $data->uid }}</td>
                             <td>{{ $data->codigo_inventario }}</td>
+                            <td>{{ $data->empresa->nombre ?? '' }}</td>
                             <td>{{ $data->hostname }}</td>
                             <td>{{ $data->ip }}</td>
                             <td>{{ $data->modelo }}</td>
+                            <td>{{ $data->vendor }}</td>
+                            <td>{{ $data->tema }}</td>
                             <td>{{ $data->numero_serie }}</td>
                             <td>{{ BienUso::labelEstado($data->estado) }}</td>
                             <td>{{ $data->centrocostos->codigo ?? '' }} — {{ $data->centrocostos->nombre ?? '' }}</td>

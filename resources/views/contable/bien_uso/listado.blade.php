@@ -63,31 +63,37 @@
     <table class="data">
         <thead>
             <tr>
-                <th style="width: 5%;">ID</th>
-                <th style="width: 7%;">Cód. inv.</th>
-                <th style="width: 14%;">Hostname</th>
-                <th style="width: 10%;">IP</th>
-                <th style="width: 16%;">Modelo</th>
-                <th style="width: 12%;">Nº serie</th>
-                <th style="width: 8%;">Estado</th>
-                <th style="width: 9%;">C. costo</th>
-                <th style="width: 9%;">Tipo bien</th>
-                <th style="width: 10%;">Observaciones</th>
+                <th style="width: 4%;">ID</th>
+                <th style="width: 7%;">UID</th>
+                <th style="width: 5%;">C&oacute;d. inv.</th>
+                <th style="width: 10%;">Empresa</th>
+                <th style="width: 10%;">Hostname</th>
+                <th style="width: 7%;">IP</th>
+                <th style="width: 10%;">Modelo</th>
+                <th style="width: 9%;">Vendor</th>
+                <th style="width: 10%;">Tema</th>
+                <th style="width: 8%;">N&ordm; serie</th>
+                <th style="width: 6%;">Estado</th>
+                <th style="width: 8%;">C. costo</th>
+                <th style="width: 6%;">Tipo bien</th>
             </tr>
         </thead>
         <tbody>
             @foreach ($datas as $data)
             <tr>
                 <td>{{ $data->id }}</td>
+                <td>{{ $data->uid }}</td>
                 <td>{{ $data->codigo_inventario }}</td>
+                <td>{{ $data->empresa->nombre ?? '' }}</td>
                 <td>{{ $data->hostname }}</td>
                 <td>{{ $data->ip }}</td>
                 <td>{{ $data->modelo }}</td>
+                <td>{{ $data->vendor }}</td>
+                <td>{{ $data->tema }}</td>
                 <td>{{ $data->numero_serie }}</td>
                 <td>{{ BienUso::labelEstado($data->estado) }}</td>
                 <td>{{ $data->centrocostos->codigo ?? '' }} — {{ $data->centrocostos->nombre ?? '' }}</td>
                 <td>{{ BienUso::labelTipoBien($data->tipo_bien) }}</td>
-                <td>{{ $data->observaciones }}</td>
             </tr>
             @endforeach
         </tbody>

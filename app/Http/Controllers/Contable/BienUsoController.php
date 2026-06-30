@@ -6,6 +6,7 @@ use App\Exports\Contable\BienUsoListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionBienUso;
 use App\Models\Contable\BienUso;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\BienUsoRepositoryInterface;
 use App\Support\Contable\BienUsoListadoFiltros;
 use App\Support\Contable\BienUsoVisibilidadSupport;
@@ -16,9 +17,12 @@ class BienUsoController extends Controller
 {
     private BienUsoRepositoryInterface $repository;
 
-    public function __construct(BienUsoRepositoryInterface $repository)
+    private EmpresaRepositoryInterface $empresaRepository;
+
+    public function __construct(BienUsoRepositoryInterface $repository, EmpresaRepositoryInterface $empresaRepository)
     {
         $this->repository = $repository;
+        $this->empresaRepository = $empresaRepository;
     }
 
     public function index(Request $request)
@@ -95,6 +99,7 @@ class BienUsoController extends Controller
             'estado_enum' => BienUso::$enumEstado,
             'centrocosto_opciones' => BienUsoVisibilidadSupport::opcionesCentrocostoAbm(),
             'tipo_bien_enum' => BienUso::$enumTipoBien,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
         ]);
     }
 
@@ -131,6 +136,7 @@ class BienUsoController extends Controller
             'estado_enum' => BienUso::$enumEstado,
             'centrocosto_opciones' => BienUsoVisibilidadSupport::opcionesCentrocostoAbm(),
             'tipo_bien_enum' => BienUso::$enumTipoBien,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
             'soloConsulta' => $soloConsulta,
             'inventarioActual' => $inventarioActual,
             'historial' => $historial,

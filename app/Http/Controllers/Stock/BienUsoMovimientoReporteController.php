@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Contable\BienUso;
 use App\Services\Stock\BienUsoMovimientoReporteService;
 use App\Support\Stock\BienUsoMovimientoListadoFiltros;
+use App\Support\Stock\TransferenciaBienUsoSupport;
 use Illuminate\Http\Request;
 
 class BienUsoMovimientoReporteController extends Controller
@@ -34,8 +35,8 @@ class BienUsoMovimientoReporteController extends Controller
 
         $bienesUso = BienUso::query()
             ->where('estado', 'A')
-            ->orderBy('hostname')
-            ->get(['id', 'codigo_inventario', 'hostname', 'modelo']);
+            ->orderByRaw('COALESCE(uid, hostname)')
+            ->get(TransferenciaBienUsoSupport::BIEN_USO_RELATION_COLUMNS);
 
         return view('stock.bien_uso_movimiento_reporte.index', [
             'filtros' => $filtros,

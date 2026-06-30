@@ -10,6 +10,18 @@ final class TransferenciaBienUsoSupport
 {
     /** @var list<string> */
     public const DEPOSITO_RELATION_COLUMNS = ['id', 'codigo', 'nombre'];
+
+    /** @var list<string> */
+    public const BIEN_USO_RELATION_COLUMNS = [
+        'id',
+        'codigo_inventario',
+        'uid',
+        'hostname',
+        'modelo',
+        'vendor',
+        'tema',
+        'tipo_bien',
+    ];
     public static function tipoDestinoBienUso(?Tipotransaccion_Stock $tipo): bool
     {
         return (bool) ($tipo?->destino_bien_uso ?? false);
@@ -36,13 +48,7 @@ final class TransferenciaBienUsoSupport
             return '—';
         }
 
-        $partes = array_filter([
-            $bien->codigo_inventario ? '#'.$bien->codigo_inventario : null,
-            $bien->hostname,
-            $bien->modelo,
-        ]);
-
-        return implode(' — ', $partes) ?: 'Bien #'.$bien->id;
+        return $bien->etiqueta();
     }
 
     public static function etiquetaOrigenTransferencia(?Transferencia_Mercaderia $transferencia): string

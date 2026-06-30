@@ -123,8 +123,13 @@ final class BienUsoAsignacionSupport
                 'a.descripcion as articulo_descripcion',
                 'tts.nombre as tipo_transaccion',
                 'ms.codigo as movimiento_codigo',
+                'bu.uid as bien_uid',
+                'bu.tipo_bien as bien_tipo_bien',
                 'bu.hostname as bien_hostname',
                 'bu.codigo_inventario as bien_codigo_inventario',
+                'bu.vendor as bien_vendor',
+                'bu.modelo as bien_modelo',
+                'bu.tema as bien_tema',
                 DB::raw('COALESCE(tm_ent.codigo, tm_sal.codigo) as transferencia_codigo'),
                 DB::raw('COALESCE(tm_ent.id, tm_sal.id) as transferencia_id'),
             ]);
@@ -171,8 +176,21 @@ final class BienUsoAsignacionSupport
             return '—';
         }
 
-        return TransferenciaBienUsoSupport::etiquetaBien(
-            BienUso::query()->find((int) ($row->bien_uso_id ?? 0))
+        if (! empty($row->bien_uso_id)) {
+            return TransferenciaBienUsoSupport::etiquetaBien(
+                BienUso::query()->find((int) $row->bien_uso_id)
+            );
+        }
+
+        return BienUso::construirEtiqueta(
+            $row->bien_tipo_bien ?? null,
+            $row->bien_uid ?? null,
+            $row->bien_codigo_inventario ?? null,
+            $row->bien_hostname ?? null,
+            $row->bien_modelo ?? null,
+            $row->bien_vendor ?? null,
+            $row->bien_tema ?? null,
+            (int) ($row->bien_uso_id ?? 0)
         );
     }
 }

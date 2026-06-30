@@ -21,7 +21,7 @@
             @php $cantidad = (float) ($row->cantidad ?? 0); @endphp
             <tr>
                 <td>{{ $row->fecha }}</td>
-                <td>{{ $row->bien_hostname }}</td>
+                <td>{{ \App\Support\Stock\BienUsoAsignacionSupport::etiquetaBien($row) }}</td>
                 <td>{{ \App\Support\Stock\BienUsoAsignacionSupport::etiquetaEfecto($cantidad) }}</td>
                 <td>{{ $row->sku }}</td>
                 <td>{{ $row->articulo_descripcion }}</td>

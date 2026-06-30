@@ -156,7 +156,7 @@
                                 <option value="">— Seleccionar bien —</option>
                                 @foreach ($bienesUsoActivos as $bien)
                                     <option value="{{ $bien->id }}" @if($bienUsoOrigenId === (int) $bien->id) selected @endif>
-                                        @if ($bien->codigo_inventario)#{{ $bien->codigo_inventario }} — @endif{{ $bien->hostname }}@if($bien->modelo) ({{ $bien->modelo }})@endif
+                                        {{ $bien->etiqueta() }}
                                     </option>
                                 @endforeach
                             </select>
@@ -182,7 +182,7 @@
                                 <option value="">— Seleccionar bien —</option>
                                 @foreach ($bienesUsoActivos as $bien)
                                     <option value="{{ $bien->id }}" @if($bienUsoDestinoId === (int) $bien->id) selected @endif>
-                                        @if ($bien->codigo_inventario)#{{ $bien->codigo_inventario }} — @endif{{ $bien->hostname }}@if($bien->modelo) ({{ $bien->modelo }})@endif
+                                        {{ $bien->etiqueta() }}
                                     </option>
                                 @endforeach
                             </select>

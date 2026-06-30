@@ -25,7 +25,7 @@ class BienUsoListadoExport implements FromView, ShouldAutoSize, WithColumnFormat
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'J';
+    private const COL_ULTIMA = 'N';
 
     private BienUsoRepositoryInterface $repository;
 
@@ -125,14 +125,18 @@ class BienUsoListadoExport implements FromView, ShouldAutoSize, WithColumnFormat
         return [
             'A' => 8,
             'B' => 12,
-            'C' => 24,
-            'D' => 16,
-            'E' => 24,
-            'F' => 18,
-            'G' => 12,
-            'H' => 14,
-            'I' => 14,
-            'J' => 28,
+            'C' => 10,
+            'D' => 18,
+            'E' => 20,
+            'F' => 14,
+            'G' => 18,
+            'H' => 16,
+            'I' => 18,
+            'J' => 14,
+            'K' => 10,
+            'L' => 14,
+            'M' => 12,
+            'N' => 24,
         ];
     }
 
@@ -187,7 +191,7 @@ class BienUsoListadoExport implements FromView, ShouldAutoSize, WithColumnFormat
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
 
                 $primera = $this->filaPrimeraDatosExcel;
-                $sheet->getStyle('J'.$primera.':J'.$sheet->getHighestRow())
+                $sheet->getStyle('N'.$primera.':N'.$sheet->getHighestRow())
                     ->getAlignment()
                     ->setWrapText(true)
                     ->setVertical(Alignment::VERTICAL_TOP);

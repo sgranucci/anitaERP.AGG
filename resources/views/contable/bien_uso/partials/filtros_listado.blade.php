@@ -3,7 +3,7 @@
     use App\Models\Contable\BienUso;
     $f = $filtros ?? [];
     $modo = $f['modo'] ?? BienUsoListadoFiltros::MODO_TODOS;
-    $campoActivo = $f['campo'] ?? 'hostname';
+    $campoActivo = $f['campo'] ?? 'uid';
     $operadorActivo = $f['operador'] ?? 'contiene';
     $operadoresJson = [];
     foreach (BienUsoListadoFiltros::CAMPOS as $key => $meta) {

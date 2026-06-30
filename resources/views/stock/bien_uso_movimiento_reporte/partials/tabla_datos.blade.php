@@ -18,10 +18,7 @@
             @php
                 $cantidad = (float) ($row->cantidad ?? 0);
                 $efecto = \App\Support\Stock\BienUsoAsignacionSupport::etiquetaEfecto($cantidad);
-                $bienLabel = trim(
-                    ($row->bien_codigo_inventario ? '#'.$row->bien_codigo_inventario.' ' : '')
-                    .($row->bien_hostname ?? '')
-                );
+                $bienLabel = \App\Support\Stock\BienUsoAsignacionSupport::etiquetaBien($row);
             @endphp
             <tr>
                 <td>{{ $row->fecha ? \Carbon\Carbon::parse($row->fecha)->format('d/m/Y') : '' }}</td>

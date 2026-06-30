@@ -14,6 +14,7 @@ use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
+use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,8 +44,8 @@ class TransferenciaMercaderiaController extends Controller
         $bienesUsoActivos = BienUso::query()
             ->with('centrocostos:id,codigo,nombre')
             ->where('estado', 'A')
-            ->orderBy('hostname')
-            ->get(['id', 'codigo_inventario', 'hostname', 'modelo', 'tipo_bien', 'centrocosto_id']);
+            ->orderByRaw('COALESCE(uid, hostname)')
+            ->get(array_merge(TransferenciaBienUsoSupport::BIEN_USO_RELATION_COLUMNS, ['centrocosto_id']));
 
         $pendientesCount = count($this->transferenciaService->listarPendientes());
 

@@ -8,6 +8,7 @@ use App\Models\Contable\BienUso;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Stock\TransferenciaPendienteReporteService;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
+use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaPendienteListadoFiltros;
 use Illuminate\Http\Request;
 
@@ -42,7 +43,7 @@ class TransferenciaPendienteReporteController extends Controller
             'filas' => $filas,
             'totales' => $totales,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
-            'bienesUso' => BienUso::query()->where('estado', 'A')->orderBy('hostname')->get(['id', 'codigo_inventario', 'hostname']),
+            'bienesUso' => BienUso::query()->where('estado', 'A')->orderByRaw('COALESCE(uid, hostname)')->get(TransferenciaBienUsoSupport::BIEN_USO_RELATION_COLUMNS),
             'estados' => TransferenciaMercaderiaEstados::etiquetas(),
             'puede_aprobar' => can('aprobar-transferencia-mercaderia', false),
         ]);

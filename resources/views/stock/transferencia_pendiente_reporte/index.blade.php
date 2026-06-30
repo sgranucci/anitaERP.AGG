@@ -36,7 +36,7 @@
                                 <option value="">— Todos —</option>
                                 @foreach ($bienesUso as $bien)
                                     <option value="{{ $bien->id }}" @selected((int) ($filtros['bien_uso_destino_id'] ?? 0) === (int) $bien->id)>
-                                        @if ($bien->codigo_inventario)#{{ $bien->codigo_inventario }} — @endif{{ $bien->hostname }}
+                                        {{ $bien->etiqueta() }}
                                     </option>
                                 @endforeach
                             </select>
