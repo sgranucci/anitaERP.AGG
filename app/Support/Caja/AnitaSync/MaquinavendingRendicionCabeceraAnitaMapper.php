@@ -92,7 +92,7 @@ final class MaquinavendingRendicionCabeceraAnitaMapper
      */
     private static function columnasInsert(): array
     {
-        return [
+        $columnas = [
             ['columna' => 'rendg_nro_oper', 'clave' => true, 'tipo' => 'entero', 'ctx' => 'nro_oper'],
             ['columna' => 'rendg_tipo_oper', 'clave' => true, 'tipo' => 'texto', 'ctx' => 'tipo_oper', 'max_len' => 1],
             ['columna' => 'rendg_caja', 'tipo' => 'entero', 'ctx' => 'caja_id'],
@@ -104,6 +104,13 @@ final class MaquinavendingRendicionCabeceraAnitaMapper
             ['columna' => 'rendg_invitacion', 'tipo' => 'decimal', 'ctx' => 'invitacion'],
             ['columna' => 'rendg_total_z', 'tipo' => 'decimal', 'ctx' => 'total_z'],
             ['columna' => 'rendg_ult_ticket', 'tipo' => 'entero', 'ctx' => 'ultimo_ticket'],
+        ];
+
+        if (self::incluirNroTicket()) {
+            $columnas[] = ['columna' => 'rendg_nro_ticket', 'tipo' => 'entero', 'ctx' => 'nro_ticket'];
+        }
+
+        $columnas = array_merge($columnas, [
             ['columna' => 'rendg_nro_z', 'tipo' => 'entero', 'ctx' => 'nro_z'],
             ['columna' => 'rendg_tot_nc', 'tipo' => 'decimal', 'ctx' => 'tot_nc'],
             ['columna' => 'rendg_tot_redondeo', 'tipo' => 'decimal', 'ctx' => 'tot_redondeo'],
@@ -135,7 +142,17 @@ final class MaquinavendingRendicionCabeceraAnitaMapper
             ...RendicionGastronomiaRendgastroEsquema::definicionesDecimalCero(),
             ['columna' => 'rendg_host', 'tipo' => 'texto', 'ctx' => 'host', 'max_len' => 15],
             ['columna' => 'rendg_otros_cred', 'tipo' => 'decimal', 'fijo_decimal' => 0],
-        ];
+        ]);
+
+        return $columnas;
+    }
+
+    private static function incluirNroTicket(): bool
+    {
+        return filter_var(
+            config('rendicion_maquinavending_anita.incluir_rendg_nro_ticket', false),
+            FILTER_VALIDATE_BOOLEAN
+        );
     }
 
     /**
@@ -183,12 +200,23 @@ final class MaquinavendingRendicionCabeceraAnitaMapper
         return is_array($campos) ? array_values($campos) : [];
     }
 
-    public static function valoresUpdatePresentacionCaja(float $totalZ): string
+    public static function valoresUpdatePresentacionCaja(float $totalZ, int $nroTicket = 0): string
     {
-        return 'rendg_total_z = '.self::decimal($totalZ)
-            .', rendg_estado = \''
-            .self::texto(self::ESTADO_PENDIENTE_CONTABILIDAD, 1)
-            .'\'';
+        $partes = [
+            'rendg_total_z = '.self::decimal($totalZ),
+            'rendg_estado = \''
+                .self::texto(self::ESTADO_PENDIENTE_CONTABILIDAD, 1)
+                .'\'',
+        ];
+
+        if ($nroTicket > 0) {
+            $partes[] = 'rendg_ult_ticket = '.self::entero($nroTicket);
+            if (self::incluirNroTicket()) {
+                $partes[] = 'rendg_nro_ticket = '.self::entero($nroTicket);
+            }
+        }
+
+        return implode(', ', $partes);
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Support\Ventas;
 
 use App\Models\Ventas\MaquinavendingRendicion;
 use App\Support\Caja\AnitaSync\MaquinavendingRendicionCabeceraAnitaMapper;
+use App\Support\Caja\AnitaSync\MaquinavendingRendicionMvartAnitaMapper;
 use Carbon\Carbon;
 
 final class MaquinavendingRendicionAnitaContextBuilder
@@ -17,6 +18,8 @@ final class MaquinavendingRendicionAnitaContextBuilder
             'mediosPago.cuentacaja',
             'maquinavending.puntoventa',
             'usuario',
+            'articulos.articulo',
+            'rendicionCaja',
         ]);
 
         $maquina = $rendicion->maquinavending;
@@ -34,11 +37,31 @@ final class MaquinavendingRendicionAnitaContextBuilder
         $empresaId = (int) $rendicion->empresa_id;
         $cajaDefault = (int) (config('rendicion_maquinavending_anita.caja_id_default_por_empresa')[$empresaId] ?? 1);
 
+        $numeroCierre = (int) $rendicion->numero_cierre;
+        if ($numeroCierre <= 0) {
+            $numeroCierre = (int) $rendicion->id;
+        }
+
+        $presentacionCaja = $rendicion->rendicionCaja;
+        $totalZ = 0.0;
+        $cajaId = $cajaDefault > 0 ? $cajaDefault : 1;
+        if ($presentacionCaja !== null) {
+            $totalZ = round((float) ($presentacionCaja->totalfactura ?? 0), 2);
+            if ($totalZ <= 0) {
+                $totalZ = round((float) ($presentacionCaja->totalcobrado ?? 0), 2);
+            }
+            $cajaInformix = (int) ($presentacionCaja->caja_id ?? 0);
+            if ($cajaInformix > 0) {
+                $cajaId = $cajaInformix;
+            }
+        }
+
         return [
             'nro_oper' => $nroOper,
+            'nro_ticket' => $numeroCierre,
             'tipo_oper' => substr((string) config('rendicion_maquinavending_anita.tipo_oper', 'F'), 0, 1),
             'empresa_id' => $empresaId,
-            'caja_id' => $cajaDefault > 0 ? $cajaDefault : 1,
+            'caja_id' => $cajaId,
             'usuario_id' => (int) ($rendicion->usuario_id ?? 0),
             'fecha_rendicion' => $fechaRend,
             'fecha_jornada' => $fechaJornada->format('Y-m-d'),
@@ -48,13 +71,13 @@ final class MaquinavendingRendicionAnitaContextBuilder
             'hora_carga' => now()->format('H:i:s'),
             'fecha_carga' => (int) now()->format('Ymd'),
             'total_x' => $totalVentas,
-            'total_z' => 0.0,
+            'total_z' => $totalZ,
             'invitacion' => 0.0,
             'tot_nc' => 0.0,
             'tot_redondeo' => 0.0,
             'dif_caja' => round($totalCobrado - $totalVentas, 2),
-            'ultimo_ticket' => 0,
-            'nro_z' => (int) $rendicion->numero_cierre,
+            'ultimo_ticket' => $numeroCierre,
+            'nro_z' => $numeroCierre,
             'turno_letra' => ' ',
             'sucursal_cae' => self::codigoPuntoventaEntero($pv?->codigo),
             'suc_caea' => 0,
@@ -63,6 +86,7 @@ final class MaquinavendingRendicionAnitaContextBuilder
             'tot_fc_caea' => 0.0,
             'tot_nc_caea' => 0.0,
             'movimientos' => $rendicion->mediosPago,
+            'articulos_mvart' => MaquinavendingRendicionMvartAnitaMapper::lineasDesdeRendicion($rendicion),
         ];
     }
 

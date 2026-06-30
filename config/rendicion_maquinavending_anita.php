@@ -15,6 +15,18 @@ return [
 
     'tabla_valor' => 'rendvalor',
 
+    /** Detalle por rulo en Informix ventas (rendmva_nro_oper = Nº cierre Ventas). */
+    'tabla_articulo' => env('RENDICION_MAQUINAVENDING_ANITA_TABLA_ARTICULO', 'rendmvart'),
+
+    /**
+     * rendg_nro_ticket en rendgastro (Nº cierre Ventas) cuando exista la columna en Informix.
+     * Mientras tanto se replica en rendg_ult_ticket (Anita busca rendmvart por ese número).
+     */
+    'incluir_rendg_nro_ticket' => filter_var(
+        env('RENDICION_MAQUINAVENDING_ANITA_INCLUIR_RENDG_NRO_TICKET', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
     'tipo_oper' => env('RENDICION_MAQUINAVENDING_ANITA_TIPO_OPER', env('RENDICION_GASTRONOMIA_ANITA_TIPO_OPER', 'F')),
 
     /**

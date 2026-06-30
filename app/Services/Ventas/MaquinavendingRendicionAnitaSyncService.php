@@ -6,9 +6,11 @@ use App\ApiAnita;
 use App\Models\Ventas\MaquinavendingRendicion;
 use App\Support\Caja\AnitaSync\RendicionAnitaIdempotenciaWhereSupport;
 use App\Support\Caja\AnitaSync\MaquinavendingRendicionCabeceraAnitaMapper;
+use App\Support\Caja\AnitaSync\MaquinavendingRendicionMvartAnitaMapper;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaValorAnitaMapper;
 use App\Support\Caja\MaquinavendingRendicionNroOperPisoSupport;
 use App\Support\Caja\RendicionGastronomiaSecuenciaSupport;
+use App\Support\Stock\StockAnitaBridgeSupport;
 use App\Support\Ventas\MaquinavendingRendicionAnitaContextBuilder;
 use Illuminate\Support\Facades\Log;
 
@@ -27,7 +29,7 @@ class MaquinavendingRendicionAnitaSyncService
             return;
         }
 
-        $rendicion->load(['mediosPago.cuentacaja', 'maquinavending.puntoventa']);
+        $rendicion->load(['mediosPago.cuentacaja', 'maquinavending.puntoventa', 'articulos.articulo']);
 
         if ((int) ($rendicion->nro_oper_anita ?? 0) <= 0) {
             $propuesta = $this->proponerSiguienteNroOper((int) $rendicion->empresa_id);
@@ -229,6 +231,8 @@ class MaquinavendingRendicionAnitaSyncService
 
         $this->eliminarValores($api, $nroOper, $tipoOper);
         $this->insertarValores($api, $ctx);
+        $this->eliminarArticulos($ctx);
+        $this->insertarArticulos($ctx);
     }
 
     public function actualizarSoloTotalZ(MaquinavendingRendicion $rendicion, float $totalZ): void
@@ -253,11 +257,16 @@ class MaquinavendingRendicionAnitaSyncService
         }
 
         $api = new ApiAnita;
+        $nroTicket = (int) $rendicion->numero_cierre;
+        if ($nroTicket <= 0) {
+            $nroTicket = (int) $rendicion->id;
+        }
+
         $api->apiCallEscritura([
             'acc' => 'update',
             'tabla' => $this->tablaCabecera(),
             'sistema' => $this->sistema(),
-            'valores' => MaquinavendingRendicionCabeceraAnitaMapper::valoresUpdatePresentacionCaja($totalZ),
+            'valores' => MaquinavendingRendicionCabeceraAnitaMapper::valoresUpdatePresentacionCaja($totalZ, $nroTicket),
             'whereArmado' => MaquinavendingRendicionCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
         ], 'rendgastro update presentacion caja vending', self::LOG_EVENTO);
     }
@@ -282,6 +291,7 @@ class MaquinavendingRendicionAnitaSyncService
         $api = new ApiAnita;
         $tipoOper = $this->tipoOper();
         $this->eliminarValores($api, $nroOper, $tipoOper);
+        $this->eliminarArticulosDesdeRendicion($rendicion);
 
         $api->apiCallEscritura([
             'acc' => 'delete',
@@ -316,6 +326,7 @@ class MaquinavendingRendicionAnitaSyncService
             }
 
             $this->insertarValores($api, $ctx);
+            $this->insertarArticulos($ctx);
         } catch (\Throwable $e) {
             if ($this->esErrorDuplicadoInformix($e)) {
                 $this->actualizarEnAnitaDesdeContexto($ctx);
@@ -326,6 +337,7 @@ class MaquinavendingRendicionAnitaSyncService
             if ($cabeceraInsertada && $nroOper > 0 && $tipoOper !== '') {
                 try {
                     $this->eliminarEnAnitaPorNroOper($nroOper, $tipoOper);
+                    $this->eliminarArticulos($ctx);
                 } catch (\Throwable $rollbackErr) {
                     Log::warning(self::LOG_EVENTO.'.compensacion_fallo', [
                         'nro_oper' => $nroOper,
@@ -357,6 +369,8 @@ class MaquinavendingRendicionAnitaSyncService
 
         $this->eliminarValores($api, $nroOper, $tipoOper);
         $this->insertarValores($api, $ctx);
+        $this->eliminarArticulos($ctx);
+        $this->insertarArticulos($ctx);
     }
 
     /**
@@ -420,6 +434,107 @@ class MaquinavendingRendicionAnitaSyncService
         ], 'rendgastro delete vending', self::LOG_EVENTO);
     }
 
+    /**
+     * @param  array<string, mixed>  $ctx
+     */
+    private function insertarArticulos(array $ctx): void
+    {
+        $lineas = is_array($ctx['articulos_mvart'] ?? null) ? $ctx['articulos_mvart'] : [];
+        if ($lineas === []) {
+            return;
+        }
+
+        $empresaId = (int) ($ctx['empresa_id'] ?? 0);
+        $nroTicket = (int) ($ctx['nro_ticket'] ?? 0);
+        if ($empresaId <= 0 || $nroTicket <= 0) {
+            return;
+        }
+
+        $api = new ApiAnita;
+        foreach ($lineas as $linea) {
+            if (! is_array($linea)) {
+                continue;
+            }
+
+            try {
+                $api->apiCallEscritura(
+                    $this->payloadVentas([
+                        'tabla' => $this->tablaArticulo(),
+                        'acc' => 'insert',
+                        'campos' => MaquinavendingRendicionMvartAnitaMapper::camposInsert(),
+                        'valores' => MaquinavendingRendicionMvartAnitaMapper::valoresInsert($linea, $ctx),
+                    ], $empresaId),
+                    'rendmvart insert vending '.((int) ($linea['ubicacion'] ?? 0)),
+                    self::LOG_EVENTO,
+                );
+            } catch (\RuntimeException $e) {
+                if (! $this->esErrorDuplicadoInformix($e)) {
+                    throw $e;
+                }
+
+                $ubicacion = (int) ($linea['ubicacion'] ?? 0);
+                $api->apiCallEscritura(
+                    $this->payloadVentas([
+                        'acc' => 'update',
+                        'tabla' => $this->tablaArticulo(),
+                        'valores' => MaquinavendingRendicionMvartAnitaMapper::valoresUpdate($linea),
+                        'whereArmado' => MaquinavendingRendicionMvartAnitaMapper::wherePorOperacionYUbicacion(
+                            $nroTicket,
+                            $ubicacion,
+                        ),
+                    ], $empresaId),
+                    'rendmvart update vending '.$ubicacion,
+                    self::LOG_EVENTO,
+                );
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $ctx
+     */
+    private function eliminarArticulos(array $ctx): void
+    {
+        $nroTicket = (int) ($ctx['nro_ticket'] ?? 0);
+        $empresaId = (int) ($ctx['empresa_id'] ?? 0);
+        if ($nroTicket <= 0 || $empresaId <= 0) {
+            return;
+        }
+
+        $api = new ApiAnita;
+        $api->apiCallEscritura(
+            $this->payloadVentas([
+                'acc' => 'delete',
+                'tabla' => $this->tablaArticulo(),
+                'whereArmado' => MaquinavendingRendicionMvartAnitaMapper::wherePorOperacion($nroTicket),
+            ], $empresaId),
+            'rendmvart delete vending',
+            self::LOG_EVENTO,
+        );
+    }
+
+    private function eliminarArticulosDesdeRendicion(MaquinavendingRendicion $rendicion): void
+    {
+        $nroTicket = (int) $rendicion->numero_cierre;
+        if ($nroTicket <= 0) {
+            return;
+        }
+
+        $this->eliminarArticulos([
+            'nro_ticket' => $nroTicket,
+            'empresa_id' => (int) $rendicion->empresa_id,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function payloadVentas(array $payload, int $empresaId): array
+    {
+        return StockAnitaBridgeSupport::mergePayload($payload, $empresaId);
+    }
+
     private function esErrorDuplicadoInformix(\Throwable $e): bool
     {
         $msg = mb_strtolower($e->getMessage());
@@ -443,6 +558,11 @@ class MaquinavendingRendicionAnitaSyncService
     private function tablaValor(): string
     {
         return (string) config('rendicion_maquinavending_anita.tabla_valor', 'rendvalor');
+    }
+
+    private function tablaArticulo(): string
+    {
+        return (string) config('rendicion_maquinavending_anita.tabla_articulo', 'rendmvart');
     }
 
     private function tipoOper(): string
