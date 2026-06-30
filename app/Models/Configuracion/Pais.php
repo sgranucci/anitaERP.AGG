@@ -36,16 +36,19 @@ class Pais extends Model
 
     /**
      * Trae / actualiza países desde Informix (pais_pais, pais_desc, pais_cod_afip).
+     *
+     * @return array{insertados: int, actualizados: int, omitidos: int}
      */
-    public function sincronizarCodigosDesdeAnita(): void
+    public function sincronizarCodigosDesdeAnita(): array
     {
+        $stats = ['insertados' => 0, 'actualizados' => 0, 'omitidos' => 0];
         $filas = $this->listarFilasDesdeAnita();
         if ($filas === []) {
             Log::warning('pais.sincronizar_anita.sin_datos', [
                 'mensaje' => 'No se obtuvieron países desde Anita (revise bridge y columna pais_cod_afip en Informix).',
             ]);
 
-            return;
+            return $stats;
         }
 
         foreach ($filas as $row) {
@@ -54,6 +57,8 @@ class Pais extends Model
             $codigoAfip = trim((string) ($row->pais_cod_afip ?? ''));
 
             if ($codigoAnita === '' || $nombre === '') {
+                $stats['omitidos']++;
+
                 continue;
             }
 
@@ -62,20 +67,30 @@ class Pais extends Model
                 ->orWhereRaw('TRIM(nombre) = ?', [$nombre])
                 ->first();
 
+            $payload = [
+                'nombre' => $nombre,
+                'codigo' => $codigoAnita,
+                'codigo_afip' => $codigoAfip !== '' ? $codigoAfip : null,
+            ];
+
             if ($pais) {
-                $pais->update([
-                    'nombre' => $nombre,
-                    'codigo' => $codigoAnita,
-                    'codigo_afip' => $codigoAfip !== '' ? $codigoAfip : null,
-                ]);
+                $pais->update($payload);
+                $stats['actualizados']++;
             } else {
-                self::create([
-                    'nombre' => $nombre,
-                    'codigo' => $codigoAnita,
-                    'codigo_afip' => $codigoAfip !== '' ? $codigoAfip : null,
-                ]);
+                self::create($payload);
+                $stats['insertados']++;
             }
         }
+
+        return $stats;
+    }
+
+    /**
+     * @return array{insertados: int, actualizados: int, omitidos: int}
+     */
+    public function resincronizarConAnita(): array
+    {
+        return $this->sincronizarCodigosDesdeAnita();
     }
 
     public function traerRegistroDeAnita($key): void

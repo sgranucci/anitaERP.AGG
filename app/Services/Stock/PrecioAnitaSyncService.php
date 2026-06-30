@@ -39,6 +39,7 @@ class PrecioAnitaSyncService
         ?int $fechaDesdeAnita = null,
         bool $conservarSoloVigente = true,
         ?int $usuarioId = null,
+        ?string $codigoListaAnita = null,
     ): array {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
@@ -60,7 +61,7 @@ class PrecioAnitaSyncService
             'errores' => [],
         ];
 
-        $filasAnita = $this->listarStkpreDesdeAnita($fechaDesdeAnita);
+        $filasAnita = $this->listarStkpreDesdeAnita($fechaDesdeAnita, $codigoListaAnita);
         $ret['filas_anita'] = count($filasAnita);
 
         $filasUnicas = $this->agruparPorSkuListaMasReciente($filasAnita);
@@ -68,6 +69,7 @@ class PrecioAnitaSyncService
 
         $mapArticulos = $this->mapaArticulosPorSku();
         $mapListas = $this->mapaListasPorCodigo();
+        $paresTocados = [];
 
         foreach ($filasUnicas as $fila) {
             $sku = ltrim(trim((string) ($fila['stkp_articulo'] ?? '')), '0');
@@ -143,6 +145,11 @@ class PrecioAnitaSyncService
                     ]));
                     $ret['insertados']++;
                 }
+
+                $paresTocados[] = [
+                    'articulo_id' => $articuloId,
+                    'listaprecio_id' => $listaprecioId,
+                ];
             } catch (\Throwable $e) {
                 $msg = "SKU {$sku} lista {$codigoLista}: ".$e->getMessage();
                 if (count($ret['errores']) < 50) {
@@ -153,7 +160,10 @@ class PrecioAnitaSyncService
         }
 
         if ($conservarSoloVigente) {
-            $limp = $this->conservarVigente->conservarSoloVigente(null);
+            $scopePares = $codigoListaAnita !== null && $codigoListaAnita !== ''
+                ? $this->uniquePares($paresTocados)
+                : null;
+            $limp = $this->conservarVigente->conservarSoloVigente($scopePares);
             $ret['obsoletos_eliminados'] = $limp['eliminados'];
             $ret['pares_con_duplicado'] = $limp['pares_con_duplicado'];
         }
@@ -164,8 +174,14 @@ class PrecioAnitaSyncService
     /**
      * @return list<array<string, mixed>>
      */
-    private function listarStkpreDesdeAnita(int $fechaDesdeAnita): array
+    private function listarStkpreDesdeAnita(int $fechaDesdeAnita, ?string $codigoListaAnita = null): array
     {
+        $where = " WHERE stkp_fe_ult_act >= {$fechaDesdeAnita} ";
+        $codigoListaAnita = trim((string) ($codigoListaAnita ?? ''));
+        if ($codigoListaAnita !== '') {
+            $where .= " AND stkp_lista = '".addslashes($codigoListaAnita)."' ";
+        }
+
         $payload = [
             'acc' => 'list',
             'tabla' => self::TABLA,
@@ -177,7 +193,7 @@ class PrecioAnitaSyncService
                 'stkp_cod_mon',
                 'stkp_fe_ult_act',
             ]),
-            'whereArmado' => " WHERE stkp_fe_ult_act >= {$fechaDesdeAnita} ",
+            'whereArmado' => $where,
             'orderBy' => 'stkp_fe_ult_act desc',
         ];
 
@@ -259,5 +275,23 @@ class PrecioAnitaSyncService
         }
 
         return $map;
+    }
+
+    /**
+     * @param  list<array{articulo_id: int, listaprecio_id: int}>  $pares
+     * @return list<array{articulo_id: int, listaprecio_id: int}>
+     */
+    private function uniquePares(array $pares): array
+    {
+        $out = [];
+        foreach ($pares as $par) {
+            $key = (int) $par['articulo_id'].'|'.(int) $par['listaprecio_id'];
+            $out[$key] = [
+                'articulo_id' => (int) $par['articulo_id'],
+                'listaprecio_id' => (int) $par['listaprecio_id'],
+            ];
+        }
+
+        return array_values($out);
     }
 }

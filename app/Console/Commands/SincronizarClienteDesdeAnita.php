@@ -13,11 +13,13 @@ class SincronizarClienteDesdeAnita extends Command
 {
     protected $signature = 'cliente:sincronizar-anita
                             {--codigo= : Importar/actualizar un solo cliente por código Anita (clim_cliente)}
+                            {--resync : Resincroniza maestros (país/provincia/localidad/zonas) y luego todos los clientes (altas + actualizaciones)}
+                            {--sin-maestros : Con --resync, omitir la resincronización de tablas maestras}
                             {--usuario= : ID usuario para usuario_id en altas (default: primer usuario)}
                             {--sin-entregas : No sincronizar domicilios de entrega}
                             {--sin-archivos : No sincronizar archivos adjuntos}';
 
-    protected $description = 'Importa/actualiza clientes en anitaERP desde Anita (climae). Anita es la fuente de verdad; no modifica Informix.';
+    protected $description = 'Importa/actualiza clientes en anitaERP desde Anita (climae). Anita es la fuente de verdad; no modifica Informix. Con --resync actualiza también maestros geográficos/zona.';
 
     public function handle(
         ClienteAnitaSyncService $sync,
@@ -53,7 +55,16 @@ class SincronizarClienteDesdeAnita extends Command
                 return self::SUCCESS;
             }
 
-            $this->info('Sincronizando clientes desde Anita (climae). Puede tardar varios minutos…');
+            if ($this->option('resync') && ! $this->option('sin-maestros')) {
+                $this->info('Paso 1/2: resincronizando maestros (país, provincia, localidad, zonas)…');
+                $this->call('cliente:sincronizar-maestros-anita');
+                $this->newLine();
+            }
+
+            $this->info(
+                ($this->option('resync') ? 'Paso 2/2: ' : '')
+                .'Sincronizando clientes desde Anita (climae). Puede tardar varios minutos…'
+            );
 
             $ret = $sync->sincronizarConAnita();
 

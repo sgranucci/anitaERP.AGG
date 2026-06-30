@@ -121,90 +121,122 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 					'tabla' => $this->tableAnita );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        $datosLocal = Provincia::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
-        }
+        $codigosLocales = Provincia::query()->pluck('codigo')->map(fn ($c) => (string) $c)->all();
 
 		if ($dataAnita)
 		{
         	foreach ($dataAnita as $value) {
-            	if (!in_array($value->{$this->keyFieldAnita}, $datosLocalArray)) {
-                	$this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+                $codigo = (string) $value->{$this->keyFieldAnita};
+            	if (! in_array($codigo, $codigosLocales, true)) {
+                	$this->traerRegistroDeAnita($codigo);
             	}
         	}
 		}
     }
 
+    /**
+     * @return array{insertados: int, actualizados: int, omitidos: int}
+     */
+    public function resincronizarConAnita(): array
+    {
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'sistema' => 'shared',
+            'campos' => $this->camposListadoAnita(),
+            'orderBy' => $this->keyFieldAnita,
+            'tabla' => $this->tableAnita,
+        ];
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+        $stats = ['insertados' => 0, 'actualizados' => 0, 'omitidos' => 0];
+        if (! is_array($dataAnita)) {
+            return $stats;
+        }
+
+        foreach ($dataAnita as $value) {
+            $resultado = $this->upsertDesdeFilaAnita($value);
+            if ($resultado === 'insertado') {
+                $stats['insertados']++;
+            } elseif ($resultado === 'actualizado') {
+                $stats['actualizados']++;
+            } else {
+                $stats['omitidos']++;
+            }
+        }
+
+        return $stats;
+    }
+
+    private function camposListadoAnita(): string
+    {
+        return match (config('app.empresa')) {
+            'EL BIERZO' => 'provi_provincia, provi_desc, provi_abrev, provi_jurisdiccion, provi_cod_externo',
+            'AGG', 'FRASLE' => 'provi_provincia, provi_desc, provi_abrev, provi_jurisdiccion, provi_letra',
+            default => 'provi_provincia, provi_desc, provi_abrev, provi_jurisdiccion',
+        };
+    }
+
+    /**
+     * @return 'insertado'|'actualizado'|null
+     */
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
-        switch(config('app.empresa'))
-        {
-            case 'EL BIERZO':
-                $data = array( 
-                    'acc' => 'list', 'tabla' => $this->tableAnita, 
-                    'sistema' => 'shared',
-                    'campos' => '
-                        provi_provincia,
-                        provi_desc,
-                        provi_abrev,
-                        provi_jurisdiccion,
-                        provi_cod_externo
-                    ' , 
-                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-                );
-                break;
-
-            case 'AGG':
-            case 'FRASLE':
-                $data = array( 
-                    'acc' => 'list', 'tabla' => $this->tableAnita, 
-                    'sistema' => 'shared',
-                    'campos' => '
-                        provi_provincia,
-                        provi_desc,
-                        provi_abrev,
-                        provi_jurisdiccion,
-                        provi_letra
-                    ' , 
-                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-                );
-                break;
-
-            case 'INTERFORMING':
-                $data = array( 
-                    'acc' => 'list', 'tabla' => $this->tableAnita, 
-                    'sistema' => 'shared',
-                    'campos' => '
-                        provi_provincia,
-                        provi_desc,
-                        provi_abrev,
-                        provi_jurisdiccion
-                    ' , 
-                    'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-                );
-        }            
+        $data = [
+            'acc' => 'list',
+            'tabla' => $this->tableAnita,
+            'sistema' => 'shared',
+            'campos' => $this->camposListadoAnita(),
+            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' ",
+        ];
         $dataAnita = json_decode($apiAnita->apiCall($data));
         
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-            if (config('app.empresa') == 'EL BIERZO')
-                $codigoExterno = $data->provi_cod_externo;
-            else
-                $codigoExterno = $data->provi_provincia;
-
-            Provincia::create([
-                "id" => $data->provi_provincia,
-                "nombre" => $data->provi_desc,
-                "abreviatura" => $data->provi_abrev,
-                "jurisdiccion" => $data->provi_jurisdiccion,
-                "codigo" => $data->provi_provincia,
-                "pais_id" => 1,
-                "codigoexterno" => $codigoExterno
-            ]);
+        if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return null;
         }
+
+        return $this->upsertDesdeFilaAnita($dataAnita[0]);
+    }
+
+    /**
+     * @return 'insertado'|'actualizado'|null
+     */
+    private function upsertDesdeFilaAnita(object $data): ?string
+    {
+        $codigo = (string) ($data->provi_provincia ?? '');
+        if ($codigo === '') {
+            return null;
+        }
+
+        if (config('app.empresa') == 'EL BIERZO') {
+            $codigoExterno = $data->provi_cod_externo;
+        } else {
+            $codigoExterno = $data->provi_provincia;
+        }
+
+        $payload = [
+            'nombre' => $data->provi_desc,
+            'abreviatura' => $data->provi_abrev,
+            'jurisdiccion' => $data->provi_jurisdiccion,
+            'codigo' => $data->provi_provincia,
+            'pais_id' => 1,
+            'codigoexterno' => $codigoExterno,
+        ];
+
+        $existente = Provincia::query()
+            ->where('codigo', $codigo)
+            ->orWhere('id', $data->provi_provincia)
+            ->first();
+
+        if ($existente) {
+            $existente->update($payload);
+
+            return 'actualizado';
+        }
+
+        Provincia::create(array_merge(['id' => $data->provi_provincia], $payload));
+
+        return 'insertado';
     }
 
 	public function guardarAnita($request, $id) {

@@ -21,40 +21,101 @@ class Zonavta extends Model
 						'orderBy' => 'zonv_codigo' );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        $datosLocal = Zonavta::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
-        }
+        $codigosLocales = Zonavta::query()->pluck('codigo')->map(fn ($c) => (string) $c)->all();
         
-        foreach ($dataAnita as $value) {
-            if (!in_array($value->{$this->keyField}, $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyField});
+        if (is_array($dataAnita)) {
+            foreach ($dataAnita as $value) {
+                $codigo = (string) $value->{$this->keyField};
+                if (! in_array($codigo, $codigosLocales, true)) {
+                    $this->traerRegistroDeAnita($codigo);
+                }
             }
         }
     }
 
+    /**
+     * @return array{insertados: int, actualizados: int, omitidos: int}
+     */
+    public function resincronizarConAnita(): array
+    {
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'campos' => 'zonv_codigo, zonv_desc',
+            'sistema' => 'ventas',
+            'tabla' => $this->table,
+            'orderBy' => 'zonv_codigo',
+        ];
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+        $stats = ['insertados' => 0, 'actualizados' => 0, 'omitidos' => 0];
+        if (! is_array($dataAnita)) {
+            return $stats;
+        }
+
+        foreach ($dataAnita as $value) {
+            $resultado = $this->upsertDesdeFilaAnita($value);
+            if ($resultado === 'insertado') {
+                $stats['insertados']++;
+            } elseif ($resultado === 'actualizado') {
+                $stats['actualizados']++;
+            } else {
+                $stats['omitidos']++;
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @return 'insertado'|'actualizado'|null
+     */
     public function traerRegistroDeAnita($key){
         $apiAnita = new ApiAnita();
         $data = array( 
             'acc' => 'list', 'tabla' => $this->table, 
             'sistema' => 'ventas',
-            'campos' => '
-                zonv_codigo,
-				zonv_desc
-            ' , 
+            'campos' => 'zonv_codigo, zonv_desc',
             'whereArmado' => " WHERE ".$this->keyField." = '".$key."' " 
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-            Zonavta::create([
-                "id" => $key,
-                "nombre" => $data->zonv_desc,
-                "codigo" => $data->zonv_codigo
-            ]);
+        if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return null;
         }
+
+        return $this->upsertDesdeFilaAnita($dataAnita[0], $key);
+    }
+
+    /**
+     * @return 'insertado'|'actualizado'|null
+     */
+    private function upsertDesdeFilaAnita(object $data, ?string $key = null): ?string
+    {
+        $key = $key ?? (string) ($data->zonv_codigo ?? '');
+        if ($key === '') {
+            return null;
+        }
+
+        $payload = [
+            'nombre' => $data->zonv_desc,
+            'codigo' => $data->zonv_codigo,
+        ];
+
+        $existente = Zonavta::query()
+            ->where('codigo', (string) $data->zonv_codigo)
+            ->orWhere('id', $key)
+            ->first();
+
+        if ($existente) {
+            $existente->update($payload);
+
+            return 'actualizado';
+        }
+
+        Zonavta::create(array_merge(['id' => $key], $payload));
+
+        return 'insertado';
     }
 
 	public function guardarAnita($request, $id) {

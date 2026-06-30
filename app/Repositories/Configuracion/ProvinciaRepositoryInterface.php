@@ -7,6 +7,7 @@ interface ProvinciaRepositoryInterface extends RepositoryInterface
 
     public function all();
     public function sincronizarConAnita();
+    public function resincronizarConAnita(): array;
     public function traerRegistroDeAnita($key);
 	public function guardarAnita($request, $id);
 	public function actualizarAnita($request, $id);
