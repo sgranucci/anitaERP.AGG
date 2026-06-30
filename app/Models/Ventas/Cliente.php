@@ -193,8 +193,9 @@ class Cliente extends Model implements Auditable
 	public function getDescripcionEstadoAttribute()
 	{
         $desc = '';
-        if ($this->estado != ' ')
-		    $desc = self::$enumEstado[$this->estado];
+        if ($this->estado != ' ') {
+		    $desc = self::$enumEstado[$this->estado] ?? (string) $this->estado;
+        }
 
 		return ($desc);
 	}

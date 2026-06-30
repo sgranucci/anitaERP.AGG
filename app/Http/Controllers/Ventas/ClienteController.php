@@ -55,6 +55,7 @@ use App\Exports\Ventas\ClienteCuentacorrienteListadoExport;
 use App\Support\Ventas\ClienteListadoFiltros;
 use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
+use App\Support\Ventas\ArcaPadronClienteOperacionValidacionSupport;
 use App\Support\Ventas\ClienteDocumentoUnicoSupport;
 use App\Services\Arca\ConstanciaInscripcionService;
 use Carbon\Carbon;
@@ -341,11 +342,7 @@ class ClienteController extends Controller
             Mail::to($receivers)->send(new ClienteDefinitivo($request));
         }
 
-        if ($request->filled('urlOrigen')) {
-            return redirect($request->urlOrigen)->with($this->flashSuitecrm($suitecrmAviso, 'Cliente creado con éxito'));
-        }
-
-        return redirect('ventas/cliente')->with($this->flashSuitecrm($suitecrmAviso, 'Cliente creado con éxito'));
+        return $this->redirectTrasGrabadoCliente($request, 'Cliente creado con éxito', $suitecrmAviso);
     }
 
     public function guardarClienteProvisorio(ValidacionClienteProvisorio $request)
@@ -411,11 +408,8 @@ class ClienteController extends Controller
             $tipoempresa_cliente_query,
             'editar'); 
 
-        // Setea url de origen si no es llamada desde clientes
-        $urlOrigen = null;
-        $referer = request()->headers->get('referer');
-        if (str_contains($referer, 'edita') || str_contains($referer, "crear"))
-            $urlOrigen = $referer;
+        // Solo conserva urlOrigen para volver a pantallas externas (ej. orden de venta).
+        $urlOrigen = $this->urlOrigenEdicionClientePermitida();
         $tiposuspensioncliente_query = $this->tiposuspensionclienteRepository->all();
 
         $tipoalta = $data->tipoalta;
@@ -440,7 +434,39 @@ class ClienteController extends Controller
     }
 
     /**
-     * Consulta ARCA al ingresar al ABM y suspende el cliente si los impuestos no son válidos.
+     * Consulta padrón ARCA para pedidos/facturación (no suspende; respeta estado Regularizado).
+     */
+    public function validarPadronOperacion(Request $request, $id): \Illuminate\Http\JsonResponse
+    {
+        if (! can('crear-pedidos', false) && ! can('actualizar-pedidos', false)
+            && ! can('crear-factura', false) && ! can('editar-factura', false)) {
+            can('crear-pedidos');
+        }
+
+        if (! filter_var(config('arca.padron_validacion_cliente.habilitado', true), FILTER_VALIDATE_BOOLEAN)) {
+            return response()->json(['ok' => true, 'skipped' => true]);
+        }
+
+        $cliente = $this->clienteRepository->findOrFail($id);
+        $condicionivaId = $request->filled('condicioniva_id')
+            ? (int) $request->input('condicioniva_id')
+            : null;
+
+        $bloqueo = ArcaPadronClienteOperacionValidacionSupport::bloqueoOperacion($cliente, $condicionivaId);
+
+        if ($bloqueo !== null) {
+            return response()->json([
+                'ok' => false,
+                'message' => $bloqueo['error'],
+                'validacion' => $bloqueo['validacion'] ?? null,
+            ], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Consulta padrón ARCA al ingresar al ABM. Informa problemas; no suspende (decide el usuario).
      */
     public function validarArcaPadron(Request $request, $id): \Illuminate\Http\JsonResponse
     {
@@ -468,22 +494,18 @@ class ClienteController extends Controller
         try {
             $data = app(ConstanciaInscripcionService::class)->getPersonaV2($cuit);
             $validacion = ArcaPadronImpuestosClienteValidacion::validar($condicionivaId, $data);
-            $suspendido = false;
-
-            if (($validacion['debe_suspender'] ?? false) && ($validacion['aplica'] ?? false)) {
-                Cliente::query()->whereKey($id)->update(['estado' => '1']);
-                $suspendido = true;
-            }
 
             $httpOk = ! ($validacion['aplica'] ?? false) || ($validacion['ok'] ?? false);
+            $cliente->refresh();
 
             return response()->json([
                 'ok' => $httpOk,
                 'message' => $validacion['mensaje'] ?? null,
                 'data' => $data,
                 'validacion' => $validacion,
-                'suspendido' => $suspendido,
-                'estado' => $suspendido ? '1' : (string) $cliente->estado,
+                'suspendido' => false,
+                'estado' => (string) $cliente->estado,
+                'tiposuspension_id' => $cliente->tiposuspension_id,
                 'soap' => $data['soap'] ?? null,
             ], $httpOk ? 200 : 422);
         } catch (\Exception $e) {
@@ -533,11 +555,7 @@ class ClienteController extends Controller
 
         $suitecrmAviso = $this->sincronizarSuitecrmCuentaTrasGrabado(Cliente::find($id));
 
-        if ($request->filled('urlOrigen')) {
-            return redirect($request->urlOrigen)->with($this->flashSuitecrm($suitecrmAviso, 'Cliente actualizado con exito'));
-        }
-
-        return redirect('ventas/cliente')->with($this->flashSuitecrm($suitecrmAviso, 'Cliente actualizado con exito'));
+        return $this->redirectTrasGrabadoCliente($request, 'Cliente actualizado con exito', $suitecrmAviso);
     }
 
     /**
@@ -915,5 +933,35 @@ class ClienteController extends Controller
         }
 
         return ['mensaje' => $mensajeBase];
+    }
+
+    /**
+     * Referer válido para volver tras editar: solo flujos externos al ABM cliente.
+     */
+    private function urlOrigenEdicionClientePermitida(): ?string
+    {
+        $referer = (string) (request()->headers->get('referer') ?? '');
+        if ($referer === '') {
+            return null;
+        }
+
+        if (str_contains($referer, 'ordenventa')) {
+            return $referer;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    private function redirectTrasGrabadoCliente(Request $request, string $mensajeBase, ?string $suitecrmAviso = null)
+    {
+        $urlOrigen = (string) ($request->input('urlOrigen') ?? '');
+        if ($urlOrigen !== '' && str_contains($urlOrigen, 'ordenventa')) {
+            return redirect($urlOrigen)->with($this->flashSuitecrm($suitecrmAviso, $mensajeBase));
+        }
+
+        return redirect()->route('cliente')->with($this->flashSuitecrm($suitecrmAviso, $mensajeBase));
     }
 }

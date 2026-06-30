@@ -22,6 +22,9 @@
       </div>
       <div class="modal-footer">
         <button type="button" id="cierrasuspensionModal" class="btn btn-secondary" data-dismiss="modal">Cierra</button>
+        @if (can('suspender-clientes', false))
+        <button type="button" id="btn-regularizar-suspension" class="btn btn-warning">Regularizar (R)</button>
+        @endif
         <button type="button" id="aceptasuspensionModal" class="btn btn-primary">Suspende cliente</button>
       </div>
     </div>

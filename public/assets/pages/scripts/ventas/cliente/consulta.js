@@ -336,8 +336,11 @@ function leeUnCliente(cliente_id, codigocliente)
         $.get(url_res).done(function(data){
             if (data)
             {
-                if (String(data.estado) !== '0')
+                if (!window.clienteEstaHabilitadoParaFacturacion(data.estado))
                 {
+                    if (typeof window.invalidarEstadoPadronOperacion === 'function') {
+                        window.invalidarEstadoPadronOperacion();
+                    }
                     alert('Cliente '+data.nombre+' no activo');
                     $('#codigocliente').val('');
                     $('#nombrecliente').val('');
@@ -382,6 +385,12 @@ function leeUnCliente(cliente_id, codigocliente)
                     if (data.paises != null)
                         $("#desc_pais").val(data.paises['nombre']);
 
+                    if (typeof window.verificarPadronClienteOperacion === 'function') {
+                        window.verificarPadronClienteOperacion(data.id, {
+                            condicionivaId: data.condicioniva_id,
+                        });
+                    }
+
                     invocarDatosClienteTrasSeleccion(data.id, data);
                 }
             }
@@ -389,11 +398,17 @@ function leeUnCliente(cliente_id, codigocliente)
             {
                 $('#codigocliente').val('');
                 $('#nombrecliente').val('');
+                if (typeof window.invalidarEstadoPadronOperacion === 'function') {
+                    window.invalidarEstadoPadronOperacion();
+                }
                 $('#codigocliente').focus();
             }
         }).fail(function(jqXHR, textStatus, errorThrown) {
                 $('#codigocliente').val('');
                 $('#nombrecliente').val('');
+                if (typeof window.invalidarEstadoPadronOperacion === 'function') {
+                    window.invalidarEstadoPadronOperacion();
+                }
                 $('#codigocliente').focus();
         })
 

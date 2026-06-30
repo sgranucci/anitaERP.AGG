@@ -56,6 +56,7 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                             <th style="min-width: 85px;">Localidad</th>
                             <th style="min-width: 85px;">Provincia</th>
                             <th class="width10">C&oacute;d.</th>
+                            <th class="text-center" style="width: 2.25rem;" title="Estado">St.</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -63,6 +64,8 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                         @foreach ($clientes as $data)
 							@if ($data->estado == '1')
                         		<tr class="table-danger">
+							@elseif ($data->estado == 'R')
+                        		<tr class="table-warning">
 							@else
                         		<tr>
 							@endif
@@ -86,6 +89,13 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                             <td class="text-truncate" style="max-width: 110px;" title="{{ $data->nombrelocalidad ?? '' }}"><small>{{$data->nombrelocalidad ?? ''}}</small></td>
                             <td class="text-truncate" style="max-width: 110px;" title="{{ $data->nombreprovincia ?? '' }}"><small>{{$data->nombreprovincia ?? ''}}</small></td>
                             <td><small>{{$data->codigo}}</small></td>
+                            <td class="text-center p-1">
+                                @if ($data->estado === '1')
+                                    <span class="badge badge-danger" title="Suspendido">S</span>
+                                @elseif ($data->estado === 'R')
+                                    <span class="badge badge-warning text-dark" title="Regularizado: problemas ARCA, facturaci&oacute;n permitida">R</span>
+                                @endif
+                            </td>
                             <td>
                        			@if (can('editar-clientes', false))
                                 	<a href="{{route('editar_cliente', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

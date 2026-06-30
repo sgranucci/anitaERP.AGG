@@ -5,7 +5,7 @@
             <div class="form-group row" id="provincia">
                 <input type="hidden" class="provincia_id" name="provincia_ids[]" value="" >
                 <input type="hidden" class="provincia_id_previa" name="provincia_id_previa[]" value="" >
-                <button type="button" title="Consulta provincias" style="padding:1;" class="btn-accion-tabla consultaprovincia tooltipsC">
+                <button type="button" title="Consulta provincias (F1)" style="padding:1;" class="btn-accion-tabla consultaprovincia tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
                 <input type="text" style="WIDTH: 60px;HEIGHT: 38px" class="codigoprovincia form-control" name="codigoprovincias[]" value="" >

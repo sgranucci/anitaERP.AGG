@@ -18,8 +18,13 @@
             constanciaUrl: String($el.data('arca-constancia-url') || '').trim(),
             riId: parseInt($el.data('condicioniva-ri-id') || '1', 10),
             monoId: parseInt($el.data('condicioniva-monotributo-id') || '4', 10),
+            bajaId: parseInt($el.data('condicioniva-baja-id') || '7', 10),
             proveedorId: parseInt($el.data('proveedor-id') || '0', 10),
+            clienteId: parseInt($el.data('cliente-id') || '0', 10),
+            cuitField: String($el.data('cuit-field') || '').trim(),
+            tiposuspensionBajaId: parseInt($el.data('tiposuspension-baja-id') || '0', 10),
             suspenderEnAbm: String($el.data('suspender-en-abm') || '0') === '1',
+            esCliente: $el.attr('id') === 'cliente-arca-validacion-config',
         };
     }
 
@@ -29,7 +34,7 @@
 
     function condicionivaRequiereValidacion(condicionivaId, cfg) {
         var id = parseInt(condicionivaId || '0', 10);
-        return id === cfg.riId || id === cfg.monoId;
+        return id === cfg.riId || id === cfg.monoId || id === cfg.bajaId;
     }
 
     function claveResultado(validacion, mensaje) {
@@ -67,6 +72,13 @@
             $det.hide();
         }
         $('#arca-imp-validacion-nota').show();
+        var $btnReg = $('#btn-regularizar-arca-modal');
+        if ($btnReg.length && $('#cliente-arca-validacion-config').length
+            && typeof window.actualizarUiRegularizarCliente === 'function') {
+            window.actualizarUiRegularizarCliente();
+        } else if ($btnReg.length) {
+            $btnReg.addClass('d-none');
+        }
         $modal.modal('show');
     }
 
@@ -84,10 +96,50 @@
         }
     }
 
+    function aplicarSuspensionClienteAbm(json, cfg) {
+        if (!json || !json.suspendido) {
+            return;
+        }
+        var $estado = $('#estado');
+        if ($estado.length) {
+            $estado.val('1');
+        }
+        var $boton = $('#botonestado');
+        if ($boton.length) {
+            $boton.html("<i class='fa fa-bell'></i>&nbsp;Estado Suspendido");
+        }
+        var tipoId = parseInt(json.tiposuspension_id || (cfg && cfg.tiposuspensionBajaId) || '0', 10);
+        if (tipoId > 0) {
+            $('#tiposuspension_id').val(tipoId);
+            if (typeof window.muestraTipoSuspension === 'function') {
+                window.muestraTipoSuspension();
+            }
+        }
+    }
+
+    function leerCuitFormulario(cfg) {
+        var selector = (cfg && cfg.cuitField) ? ('#' + cfg.cuitField) : '#nroinscripcion';
+        var $cuit = $(selector);
+        if (!$cuit.length && cfg && cfg.esCliente) {
+            $cuit = $('#numerodocumento');
+        }
+        return $cuit.length ? $cuit.val() : '';
+    }
+
     function resolverEndpointYBody(opts, cfg) {
         var condicionivaId = parseInt(opts.condicionivaId || '0', 10);
         var cuit = soloDigitos(opts.cuit || '');
         var proveedorId = parseInt(opts.proveedorId || cfg.proveedorId || '0', 10);
+        var clienteId = parseInt(opts.clienteId || cfg.clienteId || '0', 10);
+
+        if (cfg.validarUrl && clienteId > 0) {
+            return {
+                url: cfg.validarUrl,
+                body: {
+                    condicioniva_id: condicionivaId > 0 ? condicionivaId : undefined,
+                },
+            };
+        }
 
         if (cfg.validarUrl && proveedorId > 0) {
             return {
@@ -125,7 +177,7 @@
     window.ArcaPadronValidacionAsync = {
         encolar: function (opts) {
             opts = opts || {};
-            var $cfgEl = opts.$config || $('#proveedor-arca-validacion-config, #cp-proveedor-arca-config').first();
+            var $cfgEl = opts.$config || $('#cliente-arca-validacion-config, #proveedor-arca-validacion-config, #cp-proveedor-arca-config').first();
             var cfg = cfgDesde($cfgEl);
             if (!cfg || !cfg.habilitado) {
                 return;
@@ -137,19 +189,19 @@
                 condicionivaId = $civa.length ? parseInt($civa.val() || '0', 10) : 0;
             }
 
+            var proveedorIdEncolado = parseInt(opts.proveedorId || cfg.proveedorId || '0', 10);
+            var clienteIdEncolado = parseInt(opts.clienteId || cfg.clienteId || '0', 10);
             if (!condicionivaRequiereValidacion(condicionivaId, cfg)) {
-                var proveedorIdEncolado = parseInt(opts.proveedorId || cfg.proveedorId || '0', 10);
-                if (!(cfg.validarUrl && proveedorIdEncolado > 0)) {
+                if (!(cfg.validarUrl && (proveedorIdEncolado > 0 || clienteIdEncolado > 0))) {
                     return;
                 }
             }
 
             var cuit = opts.cuit;
             if (cuit === undefined) {
-                var $cuit = $('#nroinscripcion');
-                cuit = $cuit.length ? $cuit.val() : '';
+                cuit = leerCuitFormulario(cfg);
             }
-            if (soloDigitos(cuit).length !== 11 && !(cfg.validarUrl && (opts.proveedorId || cfg.proveedorId))) {
+            if (soloDigitos(cuit).length !== 11 && !(cfg.validarUrl && (proveedorIdEncolado > 0 || clienteIdEncolado > 0))) {
                 return;
             }
 
@@ -207,7 +259,11 @@
 
                 var suspender = opts.suspenderUi !== false && cfg.suspenderEnAbm;
                 if (suspender && json && json.suspendido) {
-                    aplicarSuspensionProveedorAbm(json);
+                    if (cfg.esCliente) {
+                        aplicarSuspensionClienteAbm(json, cfg);
+                    } else {
+                        aplicarSuspensionProveedorAbm(json);
+                    }
                 }
 
                 if (typeof opts.onResult === 'function') {
@@ -226,6 +282,12 @@
                         mensaje: json.message,
                         detalles: [],
                     });
+                }
+                var suspender = opts.suspenderUi !== false && cfg.suspenderEnAbm;
+                if (suspender && json && json.suspendido && cfg.esCliente) {
+                    aplicarSuspensionClienteAbm(json, cfg);
+                } else if (suspender && json && json.suspendido) {
+                    aplicarSuspensionProveedorAbm(json);
                 }
                 if (typeof opts.onResult === 'function') {
                     opts.onResult(json);

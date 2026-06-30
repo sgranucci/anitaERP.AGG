@@ -88,10 +88,6 @@ class ClienteRepository implements ClienteRepositoryInterface
 
         $cliente = $this->model->create($data);
 
-		if ($syncAnita ?? config('app.anita_sync_cliente_write')) {
-			self::guardarAnita($data);
-		}
-
 		return $cliente;
     }
 
@@ -108,13 +104,15 @@ class ClienteRepository implements ClienteRepositoryInterface
 
     public function update(array $data, $id, ?bool $syncAnita = null)
     {
+        if (($data['estado'] ?? '') === Cliente::ESTADO_REGULARIZADO) {
+            $this->assertEstadoRegularizadoPermitido($data);
+            $data['tiposuspension_id'] = null;
+        }
+
         $cliente = $this->model->findOrFail($id)
             ->update($data);
 
-		$data['tiene_cm05'] = $this->model->find($id)?->cliente_cm05s()->exists() ?? false;
-		if ($syncAnita ?? config('app.anita_sync_cliente_write')) {
-			self::actualizarAnita($data, $data['codigo']);
-		}
+		// Anita: sincronizarAnitaDespuesDeGrabado() tras tablas asociadas (evita doble sync stksuspcli).
 
 		return $cliente;
 
@@ -795,6 +793,9 @@ class ClienteRepository implements ClienteRepositoryInterface
 			}
 
 			$arr_campos = $this->normalizarCamposClienteSync($arr_campos);
+			if (($arr_campos['estado'] ?? '') === Cliente::ESTADO_REGULARIZADO) {
+				$arr_campos['tiposuspension_id'] = null;
+			}
 			foreach (['desdefecha_exclusionpercepcioniva', 'hastafecha_exclusionpercepcioniva'] as $campoFecha) {
 				if (array_key_exists($campoFecha, $arr_campos) && $this->fechaSyncCliente($arr_campos[$campoFecha]) === '') {
 					$arr_campos[$campoFecha] = null;
@@ -951,11 +952,24 @@ class ClienteRepository implements ClienteRepositoryInterface
 	}
 
 	/**
-	 * Anita clim_estado_cli: 0 = Activo, 1 = Suspendido (mismo enum que cliente.estado en ERP).
+	 * Anita clim_estado_cli: 0 = Activo, 1 = Suspendido, R = Regularizado (ARCA con facturación permitida).
 	 */
 	private function mapEstadoClienteDesdeAnita(mixed $climEstado): string
 	{
-		return trim((string) ($climEstado ?? '')) === '1' ? '1' : '0';
+		$estado = strtoupper(trim((string) ($climEstado ?? '')));
+		if ($estado === '1') {
+			return '1';
+		}
+		if ($estado === 'R') {
+			return 'R';
+		}
+
+		return '0';
+	}
+
+	private function mapEstadoClienteHaciaAnita(mixed $estadoErp): string
+	{
+		return $this->mapEstadoClienteDesdeAnita($estadoErp);
 	}
 
 	/**
@@ -991,6 +1005,91 @@ class ClienteRepository implements ClienteRepositoryInterface
 		}
 
 		return $datos;
+	}
+
+	private function assertEstadoRegularizadoPermitido(array $data): void
+	{
+		$bajaId = (int) config('arca.padron_validacion_cliente.condicioniva_baja_impuestos_id', 7);
+		$condicionivaId = (int) ($data['condicioniva_id'] ?? 0);
+		if ($bajaId > 0 && $condicionivaId === $bajaId) {
+			throw new \InvalidArgumentException(
+				'No se puede regularizar un cliente con condición IVA Baja de impuestos.'
+			);
+		}
+	}
+
+	/**
+	 * @return list<int|string>
+	 */
+	private function resolverArticuloSuspendidoIdsDesdeRequest(array $request): array
+	{
+		if (! empty($request['articulo_suspendido_ids']) && is_array($request['articulo_suspendido_ids'])) {
+			return array_values(array_filter(
+				$request['articulo_suspendido_ids'],
+				static fn ($id) => $id !== '' && $id !== null
+			));
+		}
+
+		if (! empty($request['articulo_ids']) && is_array($request['articulo_ids'])) {
+			return array_values(array_filter(
+				$request['articulo_ids'],
+				static fn ($id) => $id !== '' && $id !== null
+			));
+		}
+
+		return [];
+	}
+
+	private function sincronizarStksuspcliAnita(ApiAnita $apiAnita, string $codigoCliente, array $articuloIds): void
+	{
+		if (config('app.empresa') !== 'EL BIERZO') {
+			return;
+		}
+
+		$codigoPadded = str_pad(ltrim($codigoCliente, '0') ?: '0', 6, '0', STR_PAD_LEFT);
+
+		$data = [
+			'acc' => 'delete',
+			'tabla' => $this->tableAnita[4],
+			'sistema' => 'ventas',
+			'whereArmado' => " WHERE stksc_cliente = '".$codigoPadded."' ",
+		];
+		$this->apiCallAnitaEscritura($apiAnita, $data, 'stksuspcli delete');
+
+		$articuloIds = array_values(array_unique(array_map('intval', $articuloIds)));
+		$articuloIds = array_values(array_filter($articuloIds, static fn (int $id) => $id > 0));
+		if ($articuloIds === []) {
+			return;
+		}
+
+		$skusInsertados = [];
+		foreach ($articuloIds as $articuloId) {
+			$articulo = Articulo::find($articuloId);
+			if (! $articulo) {
+				continue;
+			}
+
+			$skuPadded = str_pad((string) $articulo->sku, 13, '0', STR_PAD_LEFT);
+			if (isset($skusInsertados[$skuPadded])) {
+				continue;
+			}
+			$skusInsertados[$skuPadded] = true;
+
+			$data = [
+				'tabla' => $this->tableAnita[4],
+				'acc' => 'insert',
+				'sistema' => 'ventas',
+				'campos' => '
+							stksc_cliente,
+							stksc_articulo
+									',
+				'valores' => "
+							'".$codigoPadded."',
+							'".$skuPadded."' ",
+			];
+
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'stksuspcli insert');
+		}
 	}
 
 	/**
@@ -1334,7 +1433,29 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		$cliente = $this->model->findOrFail($clienteId);
 		$datos = $this->datosRequestDesdeCliente($cliente);
-		self::actualizarAnita($datos, $datos['codigo']);
+		$codigoNorm = ltrim((string) $datos['codigo'], '0') ?: '0';
+
+		if ($this->existeClimaeAnita($codigoNorm)) {
+			self::actualizarAnita($datos, $codigoNorm);
+		} else {
+			self::guardarAnita($datos);
+		}
+	}
+
+	private function existeClimaeAnita(string $codigoCliente): bool
+	{
+		$codigoNorm = ltrim($codigoCliente, '0') ?: '0';
+		$apiAnita = new ApiAnita();
+		$raw = $apiAnita->apiCall([
+			'acc' => 'list',
+			'tabla' => $this->tableAnita[0],
+			'sistema' => 'ventas',
+			'campos' => $this->keyFieldAnita,
+			'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".str_pad($codigoNorm, 6, '0', STR_PAD_LEFT)."' ",
+			'limit' => 'FIRST 1',
+		]);
+
+		return ApiAnita::primeraFilaLista((string) $raw) !== null;
 	}
 
 	private function guardarAnita($request) {
@@ -1363,30 +1484,7 @@ class ClienteRepository implements ClienteRepositoryInterface
         	$this->apiCallAnitaEscritura($apiAnita, $data, 'cliley insert');
 		}
 
-		// Graba articulos suspendidos
-		if (isset($request['articulo_suspendido_ids']))
-		{
-			foreach($request['articulo_suspendido_ids'] as $articulo)
-			{
-				$articulo = Articulo::find($articulo);
-
-				if ($articulo)
-				{
-					$data = array( 'tabla' => $this->tableAnita[4], 'acc' => 'insert',
-						'sistema' => 'ventas',
-						'campos' => '
-							stksc_cliente,
-							stksc_articulo
-									',
-						'valores' => " 
-							'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
-							'".str_pad($articulo->sku, 13, "0", STR_PAD_LEFT)."' "
-					);
-
-        			$this->apiCallAnitaEscritura($apiAnita, $data, 'stksuspcli insert');
-				}
-			}
-		}
+		// stksuspcli: sincronizarAnitaDespuesDeGrabado() tras cliente_articulo_suspendido
 
 		// Graba comisiones
 		if ($request['vendedor_id'] > 0 && config('app.empresa') == 'Calzados Ferli')
@@ -1485,7 +1583,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_retiene_iva 	            = '".$request['retieneiva']."',
                 clim_lista_precio 	            = '".$codigolistaprecio."',
                 clim_descuento 	                = '".($request['descuento'] > 0 ? $request['descuento'] : 0)."',
-                clim_estado_cli 	            = '".$request['estado']."',
+                clim_estado_cli 	            = '".$this->mapEstadoClienteHaciaAnita($request['estado'] ?? '0')."',
                 clim_pais 	                    = '".$codigopais."',
                 clim_perc_ing_br 	            = '".$condicioniibb."',
                 ".$campo_ing_bruto."            = '".$request['nroiibb']."',
@@ -1592,39 +1690,11 @@ class ClienteRepository implements ClienteRepositoryInterface
         	$this->apiCallAnitaEscritura($apiAnita, $data, 'cliley insert');
 		}
 
-		// Borra articulos suspendidos
-		if (config("app.empresa") == "EL BIERZO")
-		{
-			$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[4], 
-					'sistema' => 'ventas',
-					'whereArmado' => " WHERE stksc_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-			$this->apiCallAnitaEscritura($apiAnita, $data, 'stksuspcli delete');
-
-			// Graba articulos suspendidos
-			if (isset($request['articulo_suspendido_ids']))
-			{
-				foreach($request['articulo_suspendido_ids'] as $articulo)
-				{
-					$articulo = Articulo::find($articulo);
-
-					if ($articulo)
-					{
-						$data = array( 'tabla' => $this->tableAnita[4], 'acc' => 'insert',
-							'sistema' => 'ventas',
-							'campos' => '
-								stksc_cliente,
-								stksc_articulo
-										',
-							'valores' => " 
-								'".str_pad($id, 6, "0", STR_PAD_LEFT)."', 
-								'".str_pad($articulo->sku, 13, "0", STR_PAD_LEFT)."' "
-						);
-
-						$this->apiCallAnitaEscritura($apiAnita, $data, 'stksuspcli insert');
-					}
-				}		
-			}
-		}
+		$this->sincronizarStksuspcliAnita(
+			$apiAnita,
+			(string) $id,
+			$this->resolverArticuloSuspendidoIdsDesdeRequest($request)
+		);
 
 		// Borra comisiones
 		if ($request['vendedor_id'] > 0 && config('app.empresa') == 'Calzados Ferli')

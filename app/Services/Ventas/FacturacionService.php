@@ -316,6 +316,24 @@ class FacturacionService
 		return \App\Support\Ventas\ClienteEntregaPedidoSupport::validarPedido($cliente, $pedido);
 	}
 
+	/** @var array<int, array{error: string, validacion?: array}|null> */
+	private array $padronOperacionCache = [];
+
+	private function validarPadronClienteOperacion($cliente): ?array
+	{
+		$id = (int) ($cliente->id ?? 0);
+		if ($id > 0 && array_key_exists($id, $this->padronOperacionCache)) {
+			return $this->padronOperacionCache[$id];
+		}
+
+		$bloqueo = \App\Support\Ventas\ArcaPadronClienteOperacionValidacionSupport::bloqueoOperacion($cliente);
+		if ($id > 0) {
+			$this->padronOperacionCache[$id] = $bloqueo;
+		}
+
+		return $bloqueo;
+	}
+
 	// Calcula la factura por pedido
 
 	public function calculaFacturaPorPedido(array $data)
@@ -336,6 +354,11 @@ class FacturacionService
 
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
+
+		$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
+		if ($bloqueoPadron !== null) {
+			return $bloqueoPadron;
+		}
 		
 		if ($cliente->numerodocumento == null)
 			return ['error' => 'No tiene Documento'];
@@ -567,6 +590,11 @@ class FacturacionService
 		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
+
+		$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
+		if ($bloqueoPadron !== null) {
+			return $bloqueoPadron;
+		}
 
 		// Lee el tipo de transaccion
 		$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
@@ -1152,6 +1180,11 @@ class FacturacionService
 
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
+
+		$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
+		if ($bloqueoPadron !== null) {
+			return $bloqueoPadron;
+		}
 		
 		if ($cliente->numerodocumento == null)
 			return ['error' => 'No tiene Documento'];
@@ -1260,6 +1293,10 @@ class FacturacionService
 
 		// Recalcula factura
 		$calculoFactura = Self::calculaFacturaPorOrdenventa($data);
+
+		if (isset($calculoFactura['error'])) {
+			return ['error' => $calculoFactura['error']];
+		}
 
 		// Recibe datos para facturar
 		$numeroOrdenventa = $data['numeroordenventa'];
@@ -1692,6 +1729,11 @@ class FacturacionService
 
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
+
+		$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
+		if ($bloqueoPadron !== null) {
+			return $bloqueoPadron;
+		}
 		
 		if (! isset($data['arca_receptor']) && $cliente->numerodocumento == null)
 			return ['error' => 'No tiene Documento'];
@@ -2334,6 +2376,11 @@ class FacturacionService
 
 						if (!$cliente)
 							return ['error' => 'Cliente inexistente'];
+
+						$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
+						if ($bloqueoPadron !== null) {
+							return $bloqueoPadron;
+						}
 
 						if ($cliente->numerodocumento == null)
 							return ['error' => 'No tiene CUIT'];

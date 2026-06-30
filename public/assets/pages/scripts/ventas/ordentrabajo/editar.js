@@ -118,7 +118,7 @@ function facturarPedido(item)
         return;
     }
     // Debe chequear estado del cliente
-    if (estadocliente > '0' && 
+    if (!window.clienteEstaHabilitadoParaFacturacion(estadocliente) &&
         (tiposuspensioncliente_id == PROFORMA ||
         tiposuspensioncliente_id == MOROSO ||
         tiposuspensioncliente_id == NO_FACTURAR

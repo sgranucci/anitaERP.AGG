@@ -6,6 +6,11 @@ trait ClienteTrait {
 
 	public const ESTADO_ACTIVO = '0';
 
+	public const ESTADO_SUSPENDIDO = '1';
+
+	/** Cliente con problemas ARCA/AFIP pero habilitado para facturar (Anita: clim_estado_cli = R). */
+	public const ESTADO_REGULARIZADO = 'R';
+
 	public static $enumRetieneiva = [
 		'N' => 'Percibir Iva',
 		'S' => 'No Percibir Iva',
@@ -26,7 +31,19 @@ trait ClienteTrait {
 	public static $enumEstado = [
 		'0' => 'Activo',
 		'1' => 'Suspendido',
+		'R' => 'Regularizado',
 		];
+
+	/** @return list<string> */
+	public static function estadosHabilitadosFacturacion(): array
+	{
+		return [self::ESTADO_ACTIVO, self::ESTADO_REGULARIZADO];
+	}
+
+	public static function estaHabilitadoParaFacturacion(?string $estado): bool
+	{
+		return in_array((string) ($estado ?? ''), self::estadosHabilitadosFacturacion(), true);
+	}
 
 	public static $enumModoFacturacion = [
 		'N' => 'Normal',
@@ -60,7 +77,7 @@ trait ClienteTrait {
 	{
 		$table = $query->getModel()->getTable();
 
-		return $query->where($table.'.estado', self::ESTADO_ACTIVO)
+		return $query->whereIn($table.'.estado', self::estadosHabilitadosFacturacion())
 			->where($table.'.nombre', '!=', ' ');
 	}
 }

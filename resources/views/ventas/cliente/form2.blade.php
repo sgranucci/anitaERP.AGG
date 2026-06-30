@@ -80,7 +80,7 @@
 					<input type="hidden" id="desc_zonavta" name="desc_zonavta" value="{{old('desc_zonavta', $data->desc_zonavta ?? '')}}" >
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<input type="hidden" class="zonavta_id" id="zonavta_id" name="zonavta_id" value="{{ old('zonavta_id', $data->zonavta_id ?? '') }}">
-						<button type="button" title="Consulta zonas de venta" class="btn-accion-tabla consultazonavta tooltipsC flex-shrink-0">
+						<button type="button" title="Consulta zonas de venta (F1)" class="btn-accion-tabla consultazonavta tooltipsC flex-shrink-0">
 							<i class="fa fa-search text-primary"></i>
 						</button>
 						<input type="text" class="form-control codigozonavta flex-shrink-0" id="codigozonavta" name="codigozonavta"
@@ -168,7 +168,7 @@
 						<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 							<input type="hidden" class="distribuidor_id" name="distribuidor_id" id="distribuidor_id"
 								value="{{ old('distribuidor_id', $data->distribuidor_id ?? '') }}">
-							<button type="button" title="Consulta distribuidores" class="btn-accion-tabla consultadistribuidor tooltipsC flex-shrink-0">
+							<button type="button" title="Consulta distribuidores (F1)" class="btn-accion-tabla consultadistribuidor tooltipsC flex-shrink-0">
 								<i class="fa fa-search text-primary"></i>
 							</button>
 							@if (can('editar-distribuidor', false) || can('listar-distribuidor', false))
@@ -249,7 +249,7 @@
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<input type="hidden" class="vendedor_id" name="vendedor_id" id="vendedor_id"
 							value="{{ old('vendedor_id', $data->vendedor_id ?? '') }}">
-						<button type="button" title="Consulta vendedores" class="btn-accion-tabla consultavendedor tooltipsC flex-shrink-0">
+						<button type="button" title="Consulta vendedores (F1)" class="btn-accion-tabla consultavendedor tooltipsC flex-shrink-0">
 							<i class="fa fa-search text-primary"></i>
 						</button>
 						@if (can('editar-vendedores', false) || can('listar-vendedores', false))
@@ -269,18 +269,23 @@
 					</div>
 				</div>
 			</div>
-			<div class="form-group row">
+			<div class="form-group row tm-transporte-campo">
 				<label for="transporte" class="col-lg-4 col-form-label">Reparto</label>
-				<select name="transporte_id" id="transporte_id" data-placeholder="Reparto" class="col-lg-8 form-control" data-fouc>
-					<option value="">-- Seleccionar Reparto --</option>
-					@foreach($transporte_query as $key => $value)
-						@if( (int) $value->id == (int) old('transporte_id', $data->transporte_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{$value->codigo}}-{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{$value->codigo}}-{{ $value->nombre }}</option>    
-						@endif
-					@endforeach
-				</select>
+				<div class="col-lg-8">
+					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+						<input type="hidden" class="transporte_id" name="transporte_id" id="transporte_id"
+							value="{{ old('transporte_id', $data->transporte_id ?? '') }}">
+						<button type="button" title="Consulta repartos (F1)" class="btn-accion-tabla consultatransporte tooltipsC flex-shrink-0">
+							<i class="fa fa-search text-primary"></i>
+						</button>
+						<input type="text" class="form-control codigotransporte flex-shrink-0" id="codigotransporte"
+							value="{{ old('codigotransporte', optional($data->transportes ?? null)->codigo ?? '') }}"
+							placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
+						<input type="text" class="form-control nombretransporte" id="nombretransporte"
+							value="{{ old('nombretransporte', optional($data->transportes ?? null)->nombre ?? '') }}"
+							placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+					</div>
+				</div>
 			</div>
 			<div class="form-group row tm-cuentacontable-campo">
 				@if ($tipoalta != 'P')
@@ -308,7 +313,7 @@
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<input type="hidden" class="cuentacontable_id" name="cuentacontable_id" id="cuentacontable_id"
 							value="{{ $cuentaContableId }}" @if ($tipoalta != 'P') required @endif>
-						<button type="button" title="Consulta cuentas contables" class="btn-accion-tabla consultacuentacontable tooltipsC flex-shrink-0">
+						<button type="button" title="Consulta cuentas contables (F1)" class="btn-accion-tabla consultacuentacontable tooltipsC flex-shrink-0">
 							<i class="fa fa-search text-primary"></i>
 						</button>
 						@if (can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false))
@@ -413,6 +418,7 @@
 		</div>
 	</div>
 </div>
+@include('includes.ventas.modalconsultatransporte')
 @include('includes.ventas.modalconsultazonavta')
 @include('includes.ventas.modalconsultavendedor')
 @include('includes.ventas.modalconsultadistribuidor')

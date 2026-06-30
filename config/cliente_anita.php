@@ -29,6 +29,8 @@ return [
         't_comp_clave' => env('CLIENTE_ANITA_T_COMP_CLAVE', 'CLI'),
         'sistema_t_comp' => env('CLIENTE_ANITA_SISTEMA_T_COMP', 'ventas'),
         'sistema_numerador' => env('CLIENTE_ANITA_SISTEMA_NUMERADOR', 'ventas'),
+        'reintentos_bloqueo' => 6,
+        'espera_reintento_ms' => 400,
     ],
 
     /*

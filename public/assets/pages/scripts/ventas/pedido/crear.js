@@ -980,7 +980,7 @@
 				}
 
 				// Debe chequear estado del cliente
-				if (estadocliente > '0' && 
+				if (!window.clienteEstaHabilitadoParaFacturacion(estadocliente) &&
 					(tiposuspensioncliente_id == PROFORMA ||
 					tiposuspensioncliente_id == MOROSO ||
 					tiposuspensioncliente_id == NO_FACTURAR
@@ -1596,6 +1596,17 @@
 			return;
 		}
 
+		var clienteIdFactura = $("#cliente_id").val();
+		if (typeof window.ejecutarAccionTrasValidarPadron === 'function') {
+			window.ejecutarAccionTrasValidarPadron(clienteIdFactura, generaFacturaAbrirModal, { forzar: true });
+			return;
+		}
+
+		generaFacturaAbrirModal();
+	}
+
+	function generaFacturaAbrirModal()
+	{
 		let itemId, otId;
 		
 		preciosfactura_txt = [];
@@ -2059,6 +2070,34 @@
 			alert("No permite facturar sin cargar bultos");
 			return false;
 		}
+
+		if (typeof window.ejecutarAccionTrasValidarPadron === 'function') {
+			window.ejecutarAccionTrasValidarPadron(cliente_id, emitirFacturaPedidoDesdeModal, { forzar: true });
+			return;
+		}
+
+		emitirFacturaPedidoDesdeModal();
+	});
+
+	function emitirFacturaPedidoDesdeModal()
+	{
+		var token = $('#csrf_token').val();
+		var puntoventa_id = $('#puntoventa_id').val();
+		var tipotransaccion_id = $('#tipotransaccion_id').val();
+		var descuentopie = $('#descuentopie').val();
+		var descuentoimportepie = $('#descuentoimportepie').val();
+		var descuentolinea = $('#descuentolinea').val();
+		var fechafactura = $('#fechafactura').val();
+		var leyendafactura = $('#leyendafactura').val();
+		var cantidadbulto = $('#cantidadbulto').val();
+		var puntoventaremito_id = $('#puntoventaremito_id').val();
+		var formapago_id = $('#formapago_id').val();
+		var incoterm_id = $('#incoterm_id').val();
+		var mercaderia = $('#mercaderia').val();
+		var leyendaexportacion = $('#leyendaexportacion').val();
+		let cliente_id = $('#cliente_id').val();
+		let actividad_arca_id = $('#actividad_arca_id').val();
+		let pedido_id = $('#pedido_id').val();
 		
 		$('#facturarPedidoModal').modal('hide');
 

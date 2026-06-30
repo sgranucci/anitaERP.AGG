@@ -76,7 +76,10 @@ return [
         'impuesto_monotributo_id' => 20,
         'condicioniva_responsable_inscripto_id' => 1,
         'condicioniva_monotributo_id' => 4,
+        'condicioniva_baja_impuestos_id' => (int) env('ARCA_PADRON_CONDICIONIVA_BAJA_IMPUESTOS_ID', 7),
         'estado_impuesto_activo' => 'AC',
+        // Tipo suspensión al detectar baja de impuestos en padrón (nombre maestro: Baja de impuestos)
+        'tiposuspension_baja_impuestos_id' => (int) env('ARCA_PADRON_TIPOSUSPENSION_BAJA_IMPUESTOS_ID', 0),
     ],
 
     /*

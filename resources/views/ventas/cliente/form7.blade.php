@@ -11,15 +11,15 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla-articulo-suspendido">
-		 		@if ($data->cliente_articulo_suspendidos ?? '') 
-					@foreach (old('articulo_suspendidos', $data->cliente_articulo_suspendidos->count() ? $data->cliente_articulo_suspendidos : ['']) as $suspendido)
+		 		@if (($data->cliente_articulo_suspendidos ?? null) && $data->cliente_articulo_suspendidos->count())
+					@foreach (old('articulo_suspendidos', $data->cliente_articulo_suspendidos) as $suspendido)
             			<tr class="item-articulo-suspendido">
                 			<td>
                 				<input type="hidden" name="articulo_suspendidos[]" class="form-control iiarticulo-suspendido" readonly value="{{ $loop->index+1 }}" />
                                 <div class="form-group row" id="articulo">
                                     <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{$suspendido->articulo_id ?? ''}}" >
                                     <input type="hidden" class="articulo_id_previa" name="articulo_id_previa[]" value="{{$suspendido->articulo_id ?? ''}}" >
-                                    <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC">
+                                    <button type="button" title="Consulta articulos (F1)" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC">
                                             <i class="fa fa-search text-primary"></i>
                                     </button>
                                     <input type="text" style="WIDTH: 150px;HEIGHT: 38px" class="codigoarticulo form-control" name="codigoarticulos[]" value="{{$suspendido->articulos->sku ?? ''}}" >
