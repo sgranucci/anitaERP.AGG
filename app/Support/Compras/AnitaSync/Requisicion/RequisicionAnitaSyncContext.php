@@ -4,7 +4,7 @@ namespace App\Support\Compras\AnitaSync\Requisicion;
 
 use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Articulo;
-use App\Models\Seguridad\Usuario;
+use App\Support\Compras\AnitaSync\AnitaUsuarioBridgeSupport;
 use Carbon\Carbon;
 
 /**
@@ -147,16 +147,8 @@ final class RequisicionAnitaSyncContext
     public function usuarioAnitaCodigo(?int $usuarioId = null): int
     {
         $id = $usuarioId ?? (int) ($this->requisicion->creousuario_id ?? $this->usuarioSyncId);
-        if ($id <= 0) {
-            return 0;
-        }
 
-        $usuario = Usuario::query()->find($id);
-        if ($usuario === null) {
-            return $id;
-        }
-
-        return (int) $usuario->id;
+        return AnitaUsuarioBridgeSupport::usuUsuarioDesdeErpId($id);
     }
 
     public function leyendaCabecera(): string

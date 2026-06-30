@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\ApiAnita;
 use App\Models\Compras\Requisicion;
+use App\Support\Compras\AnitaSync\AnitaUsuarioBridgeSupport;
 use App\Support\Compras\AnitaSync\Requisicion\ReqmaeCabeceraAnitaMapper;
 use App\Support\Compras\AnitaSync\Requisicion\ReqmrefLineaAnitaMapper;
 use App\Support\Compras\AnitaSync\Requisicion\ReqmovLineaAnitaMapper;
@@ -12,6 +13,8 @@ use App\Support\Compras\AnitaSync\Requisicion\RequisicionAnitaSyncContext;
 use App\Support\Compras\RequisicionAnitaColisionSupport;
 use App\Support\Compras\RequisicionAnitaNumeracionSupport;
 use App\Support\Compras\RequisicionAnitaSyncEstado;
+use App\Support\Compras\RequisicionProvisorioSupport;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
@@ -193,6 +196,68 @@ class RequisicionAnitaSyncService
         }
 
         return $ok;
+    }
+
+    public function contarResincronizacionErp(?int $requisicionId = null): int
+    {
+        return $this->queryResincronizacionErp($requisicionId)->count();
+    }
+
+    /**
+     * Re-sincroniza requisiciones originadas en ERP ya grabadas en Anita (corrige reqm_usuario, etc.).
+     *
+     * @return array{procesadas: int, resincronizadas: int, omitidas: int, errores: int}
+     */
+    public function resincronizarErpEnAnita(?int $requisicionId = null, ?callable $onError = null): array
+    {
+        AnitaUsuarioBridgeSupport::limpiarCache();
+
+        $stats = [
+            'procesadas' => 0,
+            'resincronizadas' => 0,
+            'omitidas' => 0,
+            'errores' => 0,
+        ];
+
+        foreach ($this->queryResincronizacionErp($requisicionId)->cursor() as $requisicion) {
+            $stats['procesadas']++;
+            try {
+                if (! RequisicionAnitaColisionSupport::existeNroEnReqmae((int) $requisicion->numerorequisicion)) {
+                    $stats['omitidas']++;
+
+                    continue;
+                }
+
+                $this->syncUpdate($requisicion);
+                $stats['resincronizadas']++;
+            } catch (\Throwable $e) {
+                $stats['errores']++;
+                Log::warning('RequisicionAnitaSync: resincronización fallida', [
+                    'requisicion_id' => $requisicion->id,
+                    'numerorequisicion' => $requisicion->numerorequisicion,
+                    'error' => $e->getMessage(),
+                ]);
+                if ($onError !== null) {
+                    $onError($requisicion, $e);
+                }
+            }
+        }
+
+        return $stats;
+    }
+
+    private function queryResincronizacionErp(?int $requisicionId = null): Builder
+    {
+        $query = Requisicion::query()
+            ->where('anita_sync_estado', RequisicionAnitaSyncEstado::SYNC_OK)
+            ->where('estado', '!=', RequisicionProvisorioSupport::nombreEstadoProvisorio())
+            ->orderBy('id');
+
+        if ($requisicionId !== null && $requisicionId > 0) {
+            $query->whereKey($requisicionId);
+        }
+
+        return $query;
     }
 
     private function prepararYValidar(Requisicion $requisicion): void

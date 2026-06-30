@@ -75,6 +75,7 @@ final class ReqmaeCabeceraAnitaMapper
             reqm_fecha = '.AnitaSqlLiteral::int((int) $ctx->fechaYmd()).',
             reqm_fecha_ent = '.AnitaSqlLiteral::int((int) $ctx->fechaYmd($ctx->requisicion->fechaentrega)).',
             reqm_ccosto = '.AnitaSqlLiteral::int($ccosto).',
+            reqm_usuario = '.AnitaSqlLiteral::int($ctx->usuarioAnitaCodigo()).',
             reqm_estado = '.AnitaSqlLiteral::char($ctx->estadoAnitaChar()).',
             reqm_leyenda = '.AnitaSqlLiteral::string($ctx->leyendaCabecera(), 80).',
             reqm_empresa = '.AnitaSqlLiteral::int($ctx->empresaCodigo()).',
