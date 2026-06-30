@@ -88,7 +88,8 @@
 
 <p style="margin-top:24px; font-size:12px; color:#666;">
     Criterio: recepciones confirmadas con <code>fecha</code> = día auditado, generadas en ERP.<br>
-    Valida asiento en ERP, ctamov en Anita, importes, numeración COM, fechas, centros de costo y monedas.<br>
+    Clave Anita COM: tipo + letra + <code>empresa_id</code> (sucursal) + <code>numerorecepcion</code>.<br>
+    Valida recepmae, asiento ERP, ctamov, importes, fechas, centros de costo y monedas (sin <code>recm_documentoid</code>).<br>
     Comando manual:
     <code>php artisan recepcion-proveedor:auditoria-asientos-com --fecha={{ $informe['fecha_calendario'] ?? '' }}</code>
 </p>

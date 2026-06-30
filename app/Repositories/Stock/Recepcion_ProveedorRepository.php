@@ -10,7 +10,6 @@ use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInterface
@@ -26,14 +25,10 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
         }
 
         $cfg = config('recepcion_proveedor.anita');
-        $empresaCodigo = null;
-        if (! empty($data['empresa_id'])) {
-            $empresaCodigo = (int) (DB::table('empresa')->where('id', $data['empresa_id'])->value('codigo') ?: $data['empresa_id']);
-        }
 
         $data['anita_tipo'] = $data['anita_tipo'] ?? $cfg['recepcion_tipo'];
         $data['anita_letra'] = AnitaStkmovClaveErpSupport::letra();
-        $data['anita_sucursal'] = $data['anita_sucursal'] ?? RecepcionProveedorAnitaClaveSupport::sucursalDesdeEmpresaCodigo((int) $empresaCodigo);
+        $data['anita_sucursal'] = $data['anita_sucursal'] ?? RecepcionProveedorAnitaClaveSupport::sucursalDesdeEmpresaId((int) ($data['empresa_id'] ?? 0));
         $data['anita_nro'] = $data['anita_nro'] ?? (int) $data['numerorecepcion'];
 
         return $this->model->create($data);

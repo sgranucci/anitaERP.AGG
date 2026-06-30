@@ -6,7 +6,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 
 /**
  * Clave Anita COM para recepmae, recepmov y recpunica.
- * tipo=COM, letra=X, sucursal=código Anita de empresa, nro=numerorecepcion ERP (secuencia COM global).
+ * tipo=COM, letra=X, sucursal=empresa_id ERP, nro=numerorecepcion (secuencia COM global).
  */
 class RecepcionProveedorAnitaClaveSupport
 {
@@ -31,15 +31,18 @@ class RecepcionProveedorAnitaClaveSupport
 
     public static function sucursalEmpresa(Recepcion_Proveedor $recepcion): int
     {
-        $recepcion->loadMissing('empresas');
-        $codigo = (int) ($recepcion->empresas->codigo ?? 0);
-
-        return self::sucursalDesdeEmpresaCodigo($codigo > 0 ? $codigo : (int) $recepcion->empresa_id);
+        return self::sucursalDesdeEmpresaId((int) $recepcion->empresa_id);
     }
 
-    public static function sucursalDesdeEmpresaCodigo(int $empresaCodigo): int
+    public static function sucursalDesdeEmpresaId(int $empresaId): int
     {
-        return $empresaCodigo > 0 ? $empresaCodigo : 0;
+        return $empresaId > 0 ? $empresaId : 0;
+    }
+
+    /** @deprecated Usar sucursalDesdeEmpresaId (sucursal COM = empresa_id ERP). */
+    public static function sucursalDesdeEmpresaCodigo(int $empresaId): int
+    {
+        return self::sucursalDesdeEmpresaId($empresaId);
     }
 
     /**

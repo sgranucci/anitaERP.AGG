@@ -204,13 +204,30 @@ class RecepcionProveedorAnitaBridgeService
     }
 
     /**
-     * Auditoría COM: incluye recepmae ERP, REF o terminal vacío vinculado al documento.
+     * Auditoría COM: recepmae por clave Anita (tipo/letra/sucursal/nro), sin recm_documentoid.
      *
      * @return array<int, object>
      */
-    public function listarRecepmaePorDocumentoAuditoria(int $documentoId): array
+    public function listarRecepmaePorClaveAuditoria(Recepcion_Proveedor $recepcion): array
     {
-        return $this->listarRecepmaePorDocumento($documentoId, soloErp: false);
+        $recepcion->loadMissing(['proveedores', 'empresas']);
+
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        if ((int) ($clave['nro'] ?? 0) <= 0) {
+            return [];
+        }
+
+        $api = new ApiAnita;
+        $raw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
+            'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
+            'campos' => 'recm_proveedor, recm_tipo, recm_letra, recm_sucursal, recm_nro, recm_estado, recm_documentoid, recm_terminal',
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaePorClave($clave),
+            'limit' => 'FIRST 20',
+        ]);
+
+        return ApiAnita::decodificarListaFilas((string) $raw);
     }
 
     /**

@@ -7,6 +7,7 @@ namespace App\Services\Stock;
 use App\Mail\Stock\RecepcionProveedorAsientoAuditoriaDiaria;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorAsientoAuditoriaSupport;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
@@ -207,10 +208,22 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
         $base['numero_asiento'] = $numeroAsiento;
         $base['fecha_asiento'] = $fechaAsiento;
 
-        $cabecerasRecepmae = $this->anitaBridge->listarRecepmaePorDocumentoAuditoria((int) $recepcion->id);
+        $claveAnita = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        $base['clave_anita'] = sprintf(
+            '%s %s %d %d',
+            $claveAnita['tipo'],
+            $claveAnita['letra'],
+            $claveAnita['sucursal'],
+            $claveAnita['nro'],
+        );
+
+        $cabecerasRecepmae = $this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion);
         $base['recepmae_anita'] = count($cabecerasRecepmae);
         if ($cabecerasRecepmae === []) {
-            $base['problemas'][] = 'Falta cabecera recepmae en Anita (COM ERP no replicada en compras).';
+            $base['problemas'][] = sprintf(
+                'Falta cabecera recepmae en Anita (clave %s no encontrada en compras).',
+                $base['clave_anita'],
+            );
         }
 
         $movimientos = $asiento->asiento_movimientos ?? collect();
