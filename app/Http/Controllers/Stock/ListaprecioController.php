@@ -148,4 +148,93 @@ class ListaprecioController extends Controller
             abort(404);
         }
     }
+
+    public function consultaListaprecio(Request $request)
+    {
+        if (! can('listar-listaprecio', false)
+            && ! can('listar-clientes', false)
+            && ! can('editar-clientes', false)
+            && ! can('crear-clientes', false)) {
+            abort(403);
+        }
+
+        ini_set('max_execution_time', '300');
+        ini_set('memory_limit', '512M');
+
+        $consulta = strtoupper(trim((string) ($request->get('consulta') ?? '')));
+        $query = Listaprecio::query()->select('id', 'nombre', 'codigo');
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('id', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('codigo', 'LIKE', '%'.$consulta.'%');
+            });
+        }
+
+        $data = $query->orderBy('nombre')->orderBy('codigo')->limit(200)->get();
+        $puedeAbrirAbm = can('editar-listaprecio', false) || can('listar-listaprecio', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="4">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultalistaprecio">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_listaprecio', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td></tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
+
+    public function leeUnListaprecioPorCodigo(string $codigo)
+    {
+        if (! can('listar-listaprecio', false)
+            && ! can('listar-clientes', false)
+            && ! can('editar-clientes', false)
+            && ! can('crear-clientes', false)) {
+            abort(403);
+        }
+
+        return $this->findListaprecioPorCodigo($codigo);
+    }
+
+    private function findListaprecioPorCodigo(string $codigo): ?Listaprecio
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return null;
+        }
+
+        $listaprecio = Listaprecio::query()
+            ->select('id', 'nombre', 'codigo')
+            ->where('codigo', $codigo)
+            ->first();
+        if ($listaprecio) {
+            return $listaprecio;
+        }
+
+        $alt = ltrim($codigo, '0');
+        if ($alt !== '' && $alt !== $codigo) {
+            return Listaprecio::query()
+                ->select('id', 'nombre', 'codigo')
+                ->where('codigo', $alt)
+                ->first();
+        }
+
+        return null;
+    }
 }

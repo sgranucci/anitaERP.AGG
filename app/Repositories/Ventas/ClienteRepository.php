@@ -207,7 +207,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 											->with("provincias")->with("localidades")->with("paises")
 											->with("tipossuspensioncliente")->with('zonavtas')
 											->with("abastos")->with("coeficientes")
-										->with("vendedores")->with("distribuidores")->with("cuentascontables")
+										->with("vendedores")->with("distribuidores")->with("listaprecios")->with("cuentascontables")
 											->findOrFail($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }

@@ -574,6 +574,8 @@ Route::post('stock/listaprecio', 'Stock\ListaprecioController@guardar')->name('g
 Route::get('stock/listaprecio/{id}/editar', 'Stock\ListaprecioController@editar')->name('editar_listaprecio');
 Route::put('stock/listaprecio/{id}', 'Stock\ListaprecioController@actualizar')->name('actualizar_listaprecio');
 Route::delete('stock/listaprecio/{id}', 'Stock\ListaprecioController@eliminar')->name('eliminar_listaprecio');
+Route::post('stock/listaprecio/consultalistaprecio', 'Stock\ListaprecioController@consultaListaprecio')->name('consulta_listaprecio');
+Route::get('stock/leerlistaprecio/{codigo}', 'Stock\ListaprecioController@leeUnListaprecioPorCodigo')->name('leer_listaprecio');
 
 /*
  * Tipos de numeracion

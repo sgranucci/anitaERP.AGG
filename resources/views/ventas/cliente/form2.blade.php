@@ -122,18 +122,31 @@
 					@endforeach
 				</select>
 			</div>
-			<div class="form-group row">
-				<label for="listaprecio" class="col-lg-4 col-form-label">Lista de precio</label>
-				<select name="listaprecio_id" id="listaprecio_id" data-placeholder="Lista de precio" class="col-lg-5 form-control" data-fouc>
-					<option value="">-- Seleccionar lista de precio --</option>
-					@foreach($listaprecio_query as $key => $value)
-						@if( (int) $value->id == (int) old('listaprecio_id', $data->listaprecio_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+			<div class="form-group row tm-listaprecio-campo">
+				<label for="listaprecio_id" class="col-lg-4 col-form-label">Lista de precio</label>
+				<div class="col-lg-8">
+					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+						<input type="hidden" class="listaprecio_id" name="listaprecio_id" id="listaprecio_id"
+							value="{{ old('listaprecio_id', $data->listaprecio_id ?? '') }}">
+						<button type="button" title="Consulta listas de precios (F1)" class="btn-accion-tabla consultalistaprecio tooltipsC flex-shrink-0">
+							<i class="fa fa-search text-primary"></i>
+						</button>
+						@if (can('editar-listaprecio', false) || can('listar-listaprecio', false))
+							<a href="{{ ((int) ($data->listaprecio_id ?? 0) > 0) ? route('editar_listaprecio', ['id' => (int) $data->listaprecio_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+								target="_blank" rel="noopener"
+								class="btn-accion-tabla btn-link-editar-listaprecio tooltipsC flex-shrink-0 {{ ((int) ($data->listaprecio_id ?? 0) > 0) ? '' : 'd-none' }}"
+								title="Consultar lista de precios en ABM">
+								<i class="fa fa-edit"></i>
+							</a>
 						@endif
-					@endforeach
-				</select>
+						<input type="text" class="form-control codigolistaprecio flex-shrink-0" id="codigolistaprecio"
+							value="{{ old('codigolistaprecio', optional($data->listaprecios ?? null)->codigo ?? '') }}"
+							placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
+						<input type="text" class="form-control nombrelistaprecio" id="nombrelistaprecio"
+							value="{{ old('nombrelistaprecio', optional($data->listaprecios ?? null)->nombre ?? '') }}"
+							placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+					</div>
+				</div>
 			</div>
 			@if (config('app.empresa') == 'EL BIERZO')
 				<div class="form-group row">
@@ -397,4 +410,5 @@
 @include('includes.ventas.modalconsultazonavta')
 @include('includes.ventas.modalconsultavendedor')
 @include('includes.ventas.modalconsultadistribuidor')
+@include('includes.stock.modalconsultalistaprecio')
 @include('includes.contable.modalconsultacuentacontable')
