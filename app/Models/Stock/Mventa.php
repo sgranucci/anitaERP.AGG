@@ -19,16 +19,17 @@ class Mventa extends Model
         $data = array( 'acc' => 'list', 'campos' => $this->keyField, 'tabla' => $this->tablaAnita );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        $datosLocal = Mventa::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
-        }
-        
+        $datosLocalArray = Mventa::query()->pluck('codigo')->map(
+            fn ($codigo) => ltrim((string) $codigo, '0')
+        )->all();
+
         foreach ($dataAnita as $value) {
-            if (!in_array($value->{$this->keyField}, $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyField});
+            $codigoAnita = ltrim((string) ($value->{$this->keyField} ?? ''), '0');
+            if ($codigoAnita === '' || in_array($codigoAnita, $datosLocalArray, true)) {
+                continue;
             }
+            $this->traerRegistroDeAnita($value->{$this->keyField});
+            $datosLocalArray[] = $codigoAnita;
         }
     }
 

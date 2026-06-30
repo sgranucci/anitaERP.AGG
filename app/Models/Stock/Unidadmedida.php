@@ -9,7 +9,7 @@ use App\ApiAnita;
 
 class Unidadmedida extends Model
 {
-    protected $fillable = ['nombre', 'abreviatura', 'codigo'];
+    protected $fillable = ['id', 'nombre', 'abreviatura', 'codigo'];
     protected $table = 'unidadmedida';
     protected $tableAnita = 'stkumd';
     protected $keyField = 'stkum_umd';
@@ -24,16 +24,15 @@ class Unidadmedida extends Model
         $data = array( 'acc' => 'list', 'campos' => $this->keyField, 'tabla' => $this->tableAnita );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        $datosLocal = Unidadmedida::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
-        }
-        
+        $datosLocalArray = Unidadmedida::query()->pluck('id')->map(fn ($id) => (int) $id)->all();
+
         foreach ($dataAnita as $value) {
-            if (!in_array($value->{$this->keyField}, $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyField});
+            $idAnita = (int) ($value->{$this->keyField} ?? 0);
+            if ($idAnita <= 0 || in_array($idAnita, $datosLocalArray, true)) {
+                continue;
             }
+            $this->traerRegistroDeAnita($value->{$this->keyField});
+            $datosLocalArray[] = $idAnita;
         }
     }
 
@@ -52,6 +51,7 @@ class Unidadmedida extends Model
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
             Unidadmedida::create([
+                'id' => (int) $key,
 				"nombre" => $data->stkum_desc,
 				"abreviatura" => $data->stkum_abreviatura
             ]);

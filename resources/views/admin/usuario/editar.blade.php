@@ -14,8 +14,10 @@
 @endsection
 
 @section("scripts")
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/tipotransaccion_stock/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/vendedor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/empresas_roles.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/depositos.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/usuario/tipotransacciones_stock.js")}}" type="text/javascript"></script>
@@ -68,4 +70,5 @@
 </div>
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultatipotransaccionstock')
+@include('includes.ventas.modalconsultavendedor')
 @endsection

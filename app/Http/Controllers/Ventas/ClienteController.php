@@ -710,7 +710,9 @@ class ClienteController extends Controller
 
     public function emiteNc($cliente_id)
     {
-        $cliente = $this->clienteRepository->updateEmiteNc($cliente_id);
+        can('modifica-emite-nota-de-credito');
+
+        $this->clienteRepository->updateEmiteNc($cliente_id);
 
         return 'success';
     }

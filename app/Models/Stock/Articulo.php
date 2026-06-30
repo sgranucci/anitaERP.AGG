@@ -367,6 +367,72 @@ class Articulo extends Model implements Auditable
         ];
     }
 
+    /**
+     * Re-sincroniza todos los artículos de stkmae: altas nuevas y actualización de existentes (conserva id ERP).
+     *
+     * @return array{en_anita:int, importados:int, actualizados:int, errores:int, advertencias:list<string>}
+     */
+    public function resincronizarDesdeAnita(): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $advertencias = [];
+        $importados = 0;
+        $actualizados = 0;
+        $errores = 0;
+
+        $apiAnita = new ApiAnita;
+        $data = [
+            'acc' => 'list',
+            'campos' => "{$this->keyFieldAnita} as {$this->keyField}, {$this->keyFieldAnita}",
+            'tabla' => $this->tableAnita,
+        ];
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+        if (! is_array($dataAnita)) {
+            return [
+                'en_anita' => 0,
+                'importados' => 0,
+                'actualizados' => 0,
+                'errores' => 0,
+                'advertencias' => ['La respuesta del listado Anita (stkmae) no es un arreglo JSON válido.'],
+            ];
+        }
+
+        foreach ($dataAnita as $value) {
+            $codigoAnita = (string) ($value->{$this->keyFieldAnita} ?? '');
+            if ($codigoAnita === '') {
+                continue;
+            }
+
+            $skuLocal = ltrim((string) ($value->{$this->keyField} ?? $codigoAnita), '0');
+            $existe = \App\Support\Stock\ArticuloSkuMatchSupport::existe($skuLocal);
+
+            try {
+                $this->traerRegistroDeAnita($codigoAnita, ! $existe);
+                if ($existe) {
+                    $actualizados++;
+                } else {
+                    $importados++;
+                }
+            } catch (\Throwable $e) {
+                $errores++;
+                if (count($advertencias) < 50) {
+                    $advertencias[] = "SKU {$skuLocal} (Anita {$codigoAnita}): ".$e->getMessage();
+                }
+            }
+        }
+
+        return [
+            'en_anita' => count($dataAnita),
+            'importados' => $importados,
+            'actualizados' => $actualizados,
+            'errores' => $errores,
+            'advertencias' => $advertencias,
+        ];
+    }
+
     public function traerRegistroDeAnita($key, $fl_crea_registro, ?int $empresaIdBridge = null)
     {
         $this->articulo_estadoRepository = App::make(\App\Repositories\Stock\Articulo_EstadoRepositoryInterface::class);
@@ -1134,7 +1200,7 @@ class Articulo extends Model implements Auditable
             $this->articulo_cuentacontableRepository = App::make(\App\Repositories\Stock\Articulo_CuentacontableRepositoryInterface::class);
             $empresasSync = array_values(array_filter(
                 array_map('intval', (array) config('stock.depmae_anita_empresas_sync', [1])),
-                fn (int $id) => $id > 0
+                fn (int $id) => $id > 0 && Empresa::query()->whereKey($id)->exists()
             ));
             if ($empresasSync === []) {
                 $empresasSync = [1];
