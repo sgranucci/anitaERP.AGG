@@ -154,7 +154,10 @@ fi
 if [[ "$WORKER_COUNT" -eq 0 ]]; then
     ISSUES_CRITICAL+=("Sin proceso queue:work database")
 elif [[ "$WORKER_COUNT" -ne "$WORKERS_EXPECTED" ]]; then
-    ISSUES_WARN+=("Workers activos=$WORKER_COUNT (esperados=$WORKERS_EXPECTED)")
+    # Rotación --max-time / reinicio supervisor: mismatch de segundos con cola vacía no es incidente.
+    if [[ "$JOBS_PENDING" -ge "$PENDING_WARN" || "$JOBS_RESERVED" -gt 0 ]]; then
+        ISSUES_WARN+=("Workers activos=$WORKER_COUNT (esperados=$WORKERS_EXPECTED)")
+    fi
 fi
 
 if [[ "$SUPERVISOR_STATE" == "RUNNING" && "$WORKER_COUNT" -eq 0 ]]; then

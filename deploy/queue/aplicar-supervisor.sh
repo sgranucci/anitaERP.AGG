@@ -14,11 +14,11 @@ fi
 
 sudo cp "$CONF_SRC" "$CONF_DEST"
 sudo supervisorctl reread
-sudo supervisorctl update
-sudo supervisorctl start anitaERP-queue || sudo supervisorctl restart anitaERP-queue
+# Con numprocs>1 el grupo es anitaERP-queue:* (start/restart sin : suele fallar)
+sudo supervisorctl update anitaERP-queue
 
 echo ""
 echo "Colas activas. Estado:"
-sudo supervisorctl status anitaERP-queue
+sudo supervisorctl status 'anitaERP-queue:*'
 echo ""
 echo "Log: /var/www/html/anitaERP/storage/logs/queue-worker.log"

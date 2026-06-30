@@ -89,14 +89,24 @@ class VerificarColaPico extends Command
      */
     private function registrarLog(array $informe, int $exitCode): void
     {
+        $issuesWarn = $informe['issues_warn'] ?? [];
+        $issuesCrit = $informe['issues_critical'] ?? [];
+        $issuesExtra = '';
+        if ($issuesCrit !== []) {
+            $issuesExtra = ' critical='.implode(' | ', array_map('strval', $issuesCrit));
+        } elseif ($issuesWarn !== []) {
+            $issuesExtra = ' warn='.implode(' | ', array_map('strval', $issuesWarn));
+        }
+
         $linea = sprintf(
-            '[%s] status=%s exit=%d workers=%d pending=%d failed_24h=%d',
+            '[%s] status=%s exit=%d workers=%d pending=%d failed_24h=%d%s',
             $informe['timestamp'] ?? now()->toDateTimeString(),
             $informe['status'] ?? '?',
             $exitCode,
             (int) ($informe['worker_count'] ?? 0),
             (int) ($informe['jobs']['pending'] ?? 0),
             (int) ($informe['failed_jobs_24h'] ?? 0),
+            $issuesExtra,
         );
 
         $logPath = storage_path('logs/queue-verificar-pico.log');
