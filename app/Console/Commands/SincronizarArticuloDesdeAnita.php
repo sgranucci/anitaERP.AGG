@@ -51,10 +51,10 @@ class SincronizarArticuloDesdeAnita extends Command
             }
 
             if ($this->option('resync')) {
-                $this->info('Re-sincronizando todos los artículos desde Anita (altas + actualizaciones; puede tardar varios minutos)…');
+                $this->info('Re-sincronizando todos los artículos desde Anita por lotes (altas + actualizaciones; puede tardar varios minutos)…');
                 $ret = $sync->resincronizarDesdeAnita();
             } else {
-                $this->info('Sincronizando artículos desde Anita (solo altas nuevas; puede tardar varios minutos)…');
+                $this->info('Sincronizando artículos desde Anita por lotes (solo altas nuevas; puede tardar varios minutos)…');
                 $ret = $sync->sincronizarDesdeAnita();
             }
         } catch (\Throwable $e) {
@@ -67,6 +67,9 @@ class SincronizarArticuloDesdeAnita extends Command
             $this->info("Códigos en Anita: {$ret['en_anita']}; altas: {$ret['importados']}; actualizados: {$ret['actualizados']}; errores: {$ret['errores']}.");
         } else {
             $this->info("Códigos listados en Anita: {$ret['en_anita']}; altas ejecutadas: {$ret['importados']}; ya existían en ERP: {$ret['omitidos_ya_en_erp']}.");
+        }
+        if (isset($ret['lotes_bridge'], $ret['tamano_lote'])) {
+            $this->info("Llamadas detalle al bridge: {$ret['lotes_bridge']} lotes de {$ret['tamano_lote']} artículos.");
         }
         foreach ($ret['advertencias'] as $w) {
             $this->warn($w);

@@ -175,4 +175,71 @@ final class ArticuloStkmaeAnitaBridgeSupport
 				stkm_peso_caja,
 				stkm_alerta_stock';
     }
+
+    public static function tabla(): string
+    {
+        return 'stkmae';
+    }
+
+    public static function keyField(): string
+    {
+        return 'stkm_articulo';
+    }
+
+    public static function tamanoLote(): int
+    {
+        $tamano = (int) config('stock.articulo_anita_lote_tamano', 200);
+
+        return max(1, min(500, $tamano));
+    }
+
+    /**
+     * @param  list<string>  $codigosAnita  Códigos stkm_articulo (13 caracteres)
+     * @return list<object>
+     */
+    public static function listarDetallePorCodigos(array $codigosAnita, ?int $empresaIdBridge = null): array
+    {
+        $codigosAnita = array_values(array_unique(array_filter(array_map(
+            static fn ($c) => trim((string) $c),
+            $codigosAnita
+        ), static fn (string $c) => $c !== '')));
+
+        if ($codigosAnita === []) {
+            return [];
+        }
+
+        $apiAnita = new \App\ApiAnita;
+        $payload = [
+            'acc' => 'list',
+            'tabla' => self::tabla(),
+            'campos' => self::camposDetalle(),
+            'whereArmado' => ' WHERE 1=1 '.self::clausulaInArticulos($codigosAnita),
+            'orderBy' => self::keyField(),
+        ];
+        if ($empresaIdBridge !== null && $empresaIdBridge > 0) {
+            $payload = StockAnitaBridgeSupport::mergePayload($payload, $empresaIdBridge);
+        }
+
+        $respuesta = $apiAnita->apiCall($payload);
+        $filas = \App\ApiAnita::decodificarListaFilas(is_string($respuesta) ? $respuesta : null);
+
+        return $filas !== [] ? $filas : (is_array($decoded = json_decode((string) $respuesta)) ? $decoded : []);
+    }
+
+    /**
+     * @param  list<string>  $codigosAnita
+     */
+    public static function clausulaInArticulos(array $codigosAnita): string
+    {
+        if ($codigosAnita === []) {
+            return '';
+        }
+
+        $literales = [];
+        foreach ($codigosAnita as $codigo) {
+            $literales[] = "'".str_replace("'", "''", $codigo)."'";
+        }
+
+        return ' AND '.self::keyField().' IN ('.implode(',', $literales).') ';
+    }
 }

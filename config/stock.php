@@ -31,6 +31,9 @@ return [
     /** Campos stkmae detalle Anita (override). Vacío = según config app.empresa. */
     'articulo_anita_campos_detalle' => env('STOCK_ARTICULO_ANITA_CAMPOS_DETALLE', ''),
 
+    /** Artículos por llamada list stkmae en sync masivo (IN stkm_articulo). */
+    'articulo_anita_lote_tamano' => (int) env('STOCK_ARTICULO_ANITA_LOTE_TAMANO', 200),
+
     'depmae_anita_codigo_maximo' => (int) env('STOCK_DEPMAE_ANITA_CODIGO_MAXIMO', 100000),
 
     /** Campos depmae en Anita (override por instalación). Vacío = según config app.empresa. */
