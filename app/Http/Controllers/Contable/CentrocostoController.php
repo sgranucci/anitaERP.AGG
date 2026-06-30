@@ -109,4 +109,97 @@ class CentrocostoController extends Controller
             abort(404);
         }
     }
+
+    public function consultaCentrocosto(Request $request)
+    {
+        if (! $this->puedeConsultarCentrocosto()) {
+            abort(403);
+        }
+
+        $consulta = trim((string) ($request->input('consulta') ?? ''));
+        $query = Centrocosto::query()->select('id', 'codigo', 'nombre', 'abreviatura');
+
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('codigo', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('abreviatura', 'LIKE', '%'.$consulta.'%');
+            });
+        }
+
+        $data = $query->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->orderBy('nombre')->limit(200)->get();
+        $puedeAbrirAbm = can('editar-centro-costo', false) || can('listar-centro-costo', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="5">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="abreviatura">'.e($row->abreviatura ?? '').'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultacentrocosto">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_centrocosto', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td>';
+                $output['data'] .= '</tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
+
+    public function resolverCentrocosto(Request $request)
+    {
+        if (! $this->puedeConsultarCentrocosto()) {
+            abort(403);
+        }
+
+        $valor = trim((string) $request->query('valor', ''));
+        if ($valor === '') {
+            return response()->json(['ok' => false]);
+        }
+
+        $cc = Centrocosto::query()
+            ->where('codigo', $valor)
+            ->first(['id', 'codigo', 'nombre']);
+
+        if (! $cc) {
+            return response()->json(['ok' => false, 'mensaje' => 'Centro de costo no encontrado']);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'id' => (int) $cc->id,
+            'codigo' => (string) $cc->codigo,
+            'nombre' => (string) $cc->nombre,
+        ]);
+    }
+
+    private function puedeConsultarCentrocosto(): bool
+    {
+        foreach ([
+            'listar-centro-costo',
+            'editar-centro-costo',
+            'listar-requisicion',
+            'listar-reporte-requisicion-compras',
+            'crear-requisicion',
+            'editar-requisicion',
+        ] as $permiso) {
+            if (can($permiso, false)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

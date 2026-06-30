@@ -168,6 +168,10 @@ final class GastronomiaFacturaImportacionAnitaService
                 return 'omitido';
             }
 
+            if (GastronomiaAnitaImportEstacionamientoSupport::debeOmitirCircuitoGastronomia($ventaExistente)) {
+                return 'omitido_estacionamiento';
+            }
+
             if ($dryRun) {
                 return 'vinculado';
             }
@@ -352,7 +356,7 @@ final class GastronomiaFacturaImportacionAnitaService
         $empresaCodigo = (string) ($ctx['empresa_codigo'] ?? '');
         $resvta = $this->leerResvta($sucursal, $nro, $tipoAnita, $empresaCodigo, (int) $ctx['empresa_id']);
 
-        if (GastronomiaAnitaImportEstacionamientoSupport::esResvtaEstacionamiento($resvta)) {
+        if (GastronomiaAnitaImportEstacionamientoSupport::debeOmitirCircuitoGastronomia($venta, $resvta)) {
             throw new InvalidArgumentException('Comprobante de estacionamiento; no se vincula a gastronomía.');
         }
 

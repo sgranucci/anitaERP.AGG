@@ -11,8 +11,9 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\GastronomiaChequeoVentasAnitaErpService;
 
 /**
- * Excluye del reporte de conciliación gastronomía facturas de estacionamiento
- * u otros circuitos que comparten PV CAEA pero no tienen emisión gastronomía.
+ * Excluye del reporte de conciliación gastronomía facturas del circuito estacionamiento
+ * (comparten PV CAEA con gastronomía). Incluye ventas con emisión estacionamiento aunque
+ * tengan emisión gastronomía errónea por sync Anita→ERP.
  *
  * Las exclusiones son por puntoventa_id: una clave huérfana en PV CAEA 00020
  * no debe ocultar la misma numeración en PV CAE 00070.
@@ -117,7 +118,6 @@ final class GastronomiaConciliacionExclusionEmisionSupport
     {
         $ventas = Venta::query()
             ->whereHas('estacionamientoEmision')
-            ->whereDoesntHave('gastronomiaEmision')
             ->where(function ($fecha) use ($fechaJornada) {
                 $fecha->whereDate('fechajornada', $fechaJornada)
                     ->orWhere(function ($legacy) use ($fechaJornada) {

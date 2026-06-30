@@ -63,6 +63,7 @@ final class GastronomiaConciliacionGastroTotalDiaSupport
                 }
                 $excluir->whereRaw('LOWER(puntoventa.nombre) NOT LIKE ?', ['%estacionamiento%'])
                     ->whereRaw('LOWER(puntoventa.nombre) NOT LIKE ?', ['%estac.%']);
-            });
+            })
+            ->whereDoesntHave('venta.estacionamientoEmision');
     }
 }

@@ -21,7 +21,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                             {--detalle : Muestra cabeceras rendgastro por PV con diferencias}
                             {--sin-mail : No envía correo}';
 
-    protected $description = 'Audita rendg_total_z (rendgastro) vs facturación ERP por PC (CAE+CAEA) y total día';
+    protected $description = 'Audita rendgastro neto (Z−NC) vs facturación ERP neta por PC (CAE+CAEA) y total día';
 
     public function handle(
         RendicionGastronomiaAuditoriaAnitaService $service,
@@ -59,6 +59,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
             $tolerancia,
             implode(', ', $fechas),
         ));
+        $this->comment('Criterio: neto = facturas − NC (ERP, rendg Z−NC, asientos ya netos).');
 
         $hayProblemas = false;
 
@@ -103,7 +104,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                     [
                         ['OK', (string) ($conteo['ok'] ?? 0)],
                         ['DIF venta (cabecera Anita)', (string) ($conteo['dif_venta'] ?? 0)],
-                        ['DIF rendg (rendgastro Z)', (string) ($conteo['dif_rendg'] ?? 0)],
+                        ['DIF rendg (rendgastro neto)', (string) ($conteo['dif_rendg'] ?? 0)],
                         ['DIF ambos', (string) ($conteo['dif_ambos'] ?? 0)],
                         ['Sin rendgastro', (string) ($conteo['sin_rendg'] ?? 0)],
                     ],
@@ -112,7 +113,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                 $totalDia = $informe['total_dia'] ?? null;
                 if ($totalDia !== null) {
                     $this->line(sprintf(
-                        'Total día: ERP $ %s | venta Anita $ %s | Δ venta $ %s (%s) | rendg $ %s | Δ rendg $ %s (%s) | %s',
+                        'Total día: ERP neto $ %s | Anita $ %s | Δ venta $ %s (%s) | rendg neto $ %s | Δ rendg $ %s (%s) | %s',
                         $this->fmt($totalDia['erp_z'] ?? null),
                         $this->fmt($totalDia['ventas_anita'] ?? null),
                         $this->fmtDiff($totalDia['diff_anita'] ?? null),
@@ -143,7 +144,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
 
                 if ($filasTabla !== []) {
                     $this->table(
-                        ['Tipo', 'Clave', 'Estado', 'Venta', 'Rendg', 'Fac', 'ERP total', 'Anita venta', 'Δ venta', 'Rendg Z', 'Δ rendg'],
+                        ['Tipo', 'Clave', 'Estado', 'Venta', 'Rendg', 'Fac', 'ERP neto', 'Anita venta', 'Δ venta', 'Rendg neto', 'Δ rendg'],
                         $filasTabla,
                     );
                 } else {

@@ -207,7 +207,8 @@ final class CierreJornadaFacturadoAnitaSupport
             ])
             ->whereHas('venta', function ($q) use ($empresaId, $fechaJornada) {
                 $q->whereDate('fechajornada', $fechaJornada)
-                    ->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
+                    ->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId))
+                    ->whereDoesntHave('estacionamientoEmision');
             })
             ->get();
     }

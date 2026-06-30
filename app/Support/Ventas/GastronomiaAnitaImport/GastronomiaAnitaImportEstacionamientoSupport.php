@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Ventas\GastronomiaAnitaImport;
 
 use App\ApiAnita;
+use App\Models\Ventas\Venta;
 use stdClass;
 
 /**
@@ -32,6 +33,41 @@ final class GastronomiaAnitaImportEstacionamientoSupport
         }
 
         return self::esHostEstacionamiento((string) ($resvta->resv_host ?? ''));
+    }
+
+    /**
+     * Venta ya facturada en el circuito estacionamiento ERP (host en venta_estacionamiento_emision).
+     */
+    public static function esVentaEstacionamientoEnErp(Venta $venta): bool
+    {
+        if ($venta->relationLoaded('estacionamientoEmision')) {
+            return $venta->estacionamientoEmision !== null;
+        }
+
+        return $venta->estacionamientoEmision()->exists();
+    }
+
+    public static function esLeyendaEstacionamiento(?string $leyenda): bool
+    {
+        $texto = mb_strtolower(trim((string) $leyenda));
+
+        return $texto !== '' && str_starts_with($texto, 'estacionamiento');
+    }
+
+    /**
+     * No vincular / importar a gastronomía: Anita resvta, emisión estacionamiento ERP o leyenda estacionamiento.
+     */
+    public static function debeOmitirCircuitoGastronomia(Venta $venta, ?stdClass $resvta = null): bool
+    {
+        if (self::esVentaEstacionamientoEnErp($venta)) {
+            return true;
+        }
+
+        if (self::esLeyendaEstacionamiento($venta->leyenda ?? null)) {
+            return true;
+        }
+
+        return self::esResvtaEstacionamiento($resvta);
     }
 
     /**

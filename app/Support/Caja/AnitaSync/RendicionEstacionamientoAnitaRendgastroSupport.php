@@ -59,7 +59,7 @@ final class RendicionEstacionamientoAnitaRendgastroSupport
             'acc' => 'list',
             'sistema' => (string) config('rendicion_estacionamiento_anita.sistema', 'caja'),
             'tabla' => (string) config('rendicion_estacionamiento_anita.tabla_cabecera', 'rendgastro'),
-            'campos' => 'rendg_nro_oper, rendg_sucursal, rendg_nro_rend_vta, rendg_turno, rendg_total_x, rendg_total_z, rendg_tot_nc, rendg_hora, rendg_fecha_alfa, rendg_host, rendg_estado',
+            'campos' => 'rendg_nro_oper, rendg_sucursal, rendg_nro_rend_vta, rendg_turno, rendg_total_x, rendg_total_z, rendg_tot_nc, rendg_hora, rendg_fecha_alfa, rendg_host, rendg_suc_caea, rendg_tot_fc_caea, rendg_tot_nc_caea',
             'whereArmado' => $where,
         ]));
     }

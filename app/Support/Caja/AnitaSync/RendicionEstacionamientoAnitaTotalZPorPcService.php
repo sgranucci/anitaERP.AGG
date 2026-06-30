@@ -10,10 +10,10 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Asigna rendg_total_z en Anita al presentar la jornada (facturación bruta del día por PV CAE, sin NC).
+ * Asigna rendg_total_z en Anita al presentar la jornada (facturación bruta del día por PC, CAE+CAEA, sin NC).
  *
- * Agrupa por puntoventa_cae_id de la rendición (rendg_sucursal), no solo por PC: una misma terminal
- * puede facturar con varios PV ARCA y el Z del día debe coincidir con cada sucursal en rendgastro.
+ * Agrupa por identificador_pc de la terminal: el CAEA compartido (PV 00020) se consolida en el Z
+ * de la portadora de esa PC, igual que gastronomía. rendg_tot_fc_caea por turno queda como desglose.
  *
  * Mientras la jornada no fue presentada en caja, las rendiciones de turno van con Z=0 en Anita.
  * El recálculo se dispara al presentar o corregir la rendición tipo jornada en Caja.
@@ -98,33 +98,34 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
             return;
         }
 
-        /** @var Collection<int, Collection<int, RendicionEstacionamientoCaja>> $porPuntoventa */
-        $porPuntoventa = $rendiciones->groupBy(
-            fn (RendicionEstacionamientoCaja $r) => (int) ($r->puntoventa_cae_id ?? 0),
+        /** @var Collection<string, Collection<int, RendicionEstacionamientoCaja>> $porPc */
+        $porPc = $rendiciones->groupBy(
+            fn (RendicionEstacionamientoCaja $r) => trim((string) ($r->turnoOperativo?->identificador_pc ?? '')),
         );
 
-        foreach ($porPuntoventa as $puntoventaId => $grupoPv) {
-            if ((int) $puntoventaId <= 0) {
+        foreach ($porPc as $identificadorPc => $grupoPc) {
+            if ($identificadorPc === '') {
                 continue;
             }
 
-            $pvCodigo = $grupoPv->first()?->puntoventaCae?->codigo;
+            $pvCodigo = $grupoPc->first()?->puntoventaCae?->codigo;
             $sucursal = $this->rendgastroSupport->codigoPuntoventaEntero($pvCodigo);
             if ($this->rendgastroSupport->esSucursalMaquinaVending($sucursal)) {
                 continue;
             }
 
-            $totalDiaPv = EstacionamientoTurnoOperativoTotalesSupport::totalFacturasSinNotasCreditoPorPuntoventa(
-                (int) $puntoventaId,
+            // Bruto del día por PC (CAE + CAEA compartido en rendgastro de la terminal originadora).
+            $totalDiaPc = EstacionamientoTurnoOperativoTotalesSupport::totalFacturasSinNotasCredito(
+                $identificadorPc,
                 $empresaId,
                 $fechaJornada,
             );
 
-            $portadora = $this->resolverRendicionPortadoraZ($grupoPv);
+            $portadora = $this->resolverRendicionPortadoraZ($grupoPc);
 
-            foreach ($grupoPv as $rendicion) {
+            foreach ($grupoPc as $rendicion) {
                 $totalZ = ($portadora !== null && (int) $rendicion->id === (int) $portadora->id)
-                    ? $totalDiaPv
+                    ? $totalDiaPc
                     : 0.0;
 
                 try {
@@ -133,7 +134,7 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
                     Log::warning(self::LOG_EVENTO.'.fallo', [
                         'jornada_id' => $jornada->id,
                         'rendicion_id' => $rendicion->id,
-                        'puntoventa_cae_id' => (int) $puntoventaId,
+                        'identificador_pc' => $identificadorPc,
                         'total_z' => $totalZ,
                         'error' => $e->getMessage(),
                     ]);

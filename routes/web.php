@@ -795,6 +795,8 @@ Route::get('contable/centrocosto', 'Contable\CentrocostoController@index')->name
 Route::get('contable/centrocosto/crear', 'Contable\CentrocostoController@crear')->name('crear_centrocosto');
 Route::post('contable/centrocosto', 'Contable\CentrocostoController@guardar')->name('guardar_centrocosto');
 Route::get('contable/centrocosto/{id}/editar', 'Contable\CentrocostoController@editar')->name('editar_centrocosto');
+Route::post('contable/centrocosto/consultacentrocosto', 'Contable\CentrocostoController@consultaCentrocosto')->name('consulta_centrocosto');
+Route::get('contable/centrocosto/resolvercentrocosto', 'Contable\CentrocostoController@resolverCentrocosto')->name('resolver_centrocosto');
 Route::put('contable/centrocosto/{id}', 'Contable\CentrocostoController@actualizar')->name('actualizar_centrocosto');
 Route::delete('contable/centrocosto/{id}', 'Contable\CentrocostoController@eliminar')->name('eliminar_centrocosto');
 
@@ -2479,6 +2481,8 @@ Route::delete('compras/encuesta/{id}', 'Compras\EncuestaController@eliminar')->n
 Route::post('compras/requisicion/{id}/confirmar', 'Compras\RequisicionController@confirmar')->name('confirmar_requisicion');
 Route::delete('compras/requisicion/{id}/provisorio', 'Compras\RequisicionController@eliminarProvisorio')->name('eliminar_requisicion_provisorio');
 Route::get('compras/requisicion', 'Compras\RequisicionController@index')->name('consultar_requisicion');
+Route::get('compras/requisicion-reporte', 'Compras\RequisicionReporteController@index')->name('reporte_requisicion_compras');
+Route::get('compras/listar-requisicion-reporte/{formato?}', 'Compras\RequisicionReporteController@exportar')->name('listar_reporte_requisicion_compras');
 Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->name('crear_requisicion');
 Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
 Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion');

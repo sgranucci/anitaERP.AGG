@@ -17,7 +17,7 @@ class GastronomiaAuditoriaIntegralFacturacion extends Command
                             {--tolerancia= : Tolerancia en pesos (default: config)}
                             {--csv= : Ruta opcional para exportar CSV}';
 
-    protected $description = 'Auditoría integral por día: ERP vs Anita (total+gravado) vs rendgastro vs asientos vs ctamov';
+    protected $description = 'Auditoría integral por día: ERP neto vs Anita vs rendgastro neto vs asientos vs ctamov';
 
     public function handle(GastronomiaFacturacionAuditoriaIntegralService $service): int
     {
@@ -57,7 +57,8 @@ class GastronomiaAuditoriaIntegralFacturacion extends Command
             $fechaHasta,
             $tolerancia,
         ));
-        $this->comment('Rendgastro: total PC (CAE+CAEA por terminal) + TOTAL-DIA | Contabilidad: cierre Waitry ↔ ctamov');
+        $this->comment('Rendgastro: neto por PC (Z−NC) + post-cierre | Contabilidad: cierre Waitry ↔ ctamov (neto)');
+        $this->comment('Criterio único: neto = facturas − NC en ERP, rendg y asientos.');
 
         try {
             $informe = $service->generar($fechaDesde, $fechaHasta, $empresas, $tolerancia, $pvFiltro);
@@ -166,7 +167,7 @@ class GastronomiaAuditoriaIntegralFacturacion extends Command
         if ($filasTabla !== []) {
             $this->newLine();
             $this->table(
-                ['Emp', 'Jornada', 'Clave', 'Fac', 'ERP', 'Anita', 'Rendg Z', 'Asiento ERP', 'ctamov', 'Contable', 'Δ rendg', 'Estado'],
+                ['Emp', 'Jornada', 'Clave', 'Fac', 'ERP neto', 'Anita', 'Rendg neto', 'Asiento ERP', 'ctamov', 'Contable', 'Δ rendg', 'Estado'],
                 $filasTabla,
             );
         } else {

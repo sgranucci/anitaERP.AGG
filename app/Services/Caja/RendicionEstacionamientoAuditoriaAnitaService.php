@@ -3,12 +3,14 @@
 namespace App\Services\Caja;
 
 use App\Models\Caja\RendicionEstacionamientoCaja;
+use App\Models\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamiento;
 use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Ventas\Puntoventa;
 use App\Services\Caja\Estacionamiento\EstacionamientoChequeoVentasAnitaErpService;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaRendgastroSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionCaeaCompartidoRendgSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -21,6 +23,7 @@ final class RendicionEstacionamientoAuditoriaAnitaService
         private readonly RendicionEstacionamientoAnitaSyncService $anitaSyncService,
         private readonly RendicionEstacionamientoAnitaRendgastroSupport $rendgastroSupport,
         private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroGastroSupport,
+        private readonly GastronomiaConciliacionCaeaCompartidoRendgSupport $caeaCompartidoRendgSupport,
         private readonly EstacionamientoChequeoVentasAnitaErpService $chequeoVentasService,
     ) {
     }
@@ -159,6 +162,15 @@ final class RendicionEstacionamientoAuditoriaAnitaService
         );
 
         if ($cabeceras === []) {
+            $cabeceras = $this->resolverCabecerasPorHostPuntoventaCaea(
+                $empresaId,
+                $fechaEntera,
+                (int) $pv->id,
+                $contextoRendiciones,
+            );
+        }
+
+        if ($cabeceras === []) {
             $estado = ($erpZ > $tolerancia || $erpNc > $tolerancia) ? 'sin_anita' : 'sin_ventas_erp';
 
             return [
@@ -182,10 +194,26 @@ final class RendicionEstacionamientoAuditoriaAnitaService
 
         $portadora = $this->rendgastroSupport->elegirPortadora($cabeceras);
         $portadoraNro = (int) ($portadora->rendg_nro_oper ?? 0);
-        $anitaZ = round((float) ($portadora->rendg_total_z ?? 0), 2);
+        $zPortadora = round((float) ($portadora->rendg_total_z ?? 0), 2);
+        $caeaNeto = $this->rendgastroGastroSupport->totalCaeaNetoCabeceras($cabeceras);
+        $anitaZ = $this->resolverAnitaZPorPuntoventa(
+            (int) $pv->id,
+            $erpZ,
+            $zPortadora,
+            $caeaNeto,
+            $tolerancia,
+        );
         $anitaNc = 0.0;
+        $esPuntoventaCaea = ConfiguracionPuntoventaEstacionamiento::query()
+            ->where('puntoventa_caea_id', (int) $pv->id)
+            ->exists();
         foreach ($cabeceras as $cab) {
-            $anitaNc += round((float) ($cab->rendg_tot_nc ?? 0), 2);
+            if ($esPuntoventaCaea) {
+                $anitaNc += round((float) ($cab->rendg_tot_nc_caea ?? 0), 2);
+            } else {
+                $anitaNc += round((float) ($cab->rendg_tot_nc ?? 0), 2);
+                $anitaNc += round((float) ($cab->rendg_tot_nc_caea ?? 0), 2);
+            }
         }
         $anitaNc = round($anitaNc, 2);
         $diffZ = round($erpZ - $anitaZ, 2);
@@ -227,6 +255,69 @@ final class RendicionEstacionamientoAuditoriaAnitaService
             'cabeceras_huerfanas' => $cabecerasHuerfanas,
             'detalle' => $detalle,
         ];
+    }
+
+    /**
+     * PV CAEA compartido (00020): rendgastro usa rendg_sucursal del CAE; el CAEA va en rendg_tot_fc_caea por host.
+     *
+     * @param  array{nro_oper: list<int>, turno_oper_ids: list<int>}  $contextoRendiciones
+     * @return list<object>
+     */
+    private function resolverCabecerasPorHostPuntoventaCaea(
+        int $empresaId,
+        int $fechaEntera,
+        int $puntoventaId,
+        array $contextoRendiciones,
+    ): array {
+        $hosts = $this->caeaCompartidoRendgSupport->hostsEstacionamientoConPuntoventaCaea($empresaId, $puntoventaId);
+        if ($hosts === []) {
+            return [];
+        }
+
+        $cabecerasDia = $this->rendgastroGastroSupport->listarCabecerasEmpresaFechaDetalle($empresaId, $fechaEntera);
+        $cabeceras = [];
+
+        foreach ($hosts as $host) {
+            $porHost = $this->rendgastroGastroSupport->filtrarCabecerasPorHost($cabecerasDia, $host);
+            $cabeceras = array_merge(
+                $cabeceras,
+                $this->rendgastroSupport->filtrarCabecerasSoloEstacionamiento(
+                    $porHost,
+                    $empresaId,
+                    $contextoRendiciones['nro_oper'],
+                    $contextoRendiciones['turno_oper_ids'],
+                ),
+            );
+        }
+
+        return array_values($cabeceras);
+    }
+
+    /**
+     * CAE: Z portadora (sin CAEA embebido si Z ya incluye fc_caea del día).
+     * CAEA compartido: neto rendg_tot_fc_caea de la PC originadora.
+     */
+    private function resolverAnitaZPorPuntoventa(
+        int $puntoventaId,
+        float $erpZ,
+        float $zPortadora,
+        float $caeaNeto,
+        float $tolerancia,
+    ): float {
+        $esCaea = ConfiguracionPuntoventaEstacionamiento::query()
+            ->where('puntoventa_caea_id', $puntoventaId)
+            ->exists();
+
+        if ($esCaea) {
+            return round($caeaNeto, 2);
+        }
+
+        if ($caeaNeto > $tolerancia && $zPortadora > $caeaNeto + $tolerancia
+            && abs($zPortadora - $erpZ - $caeaNeto) <= $tolerancia) {
+            return round($zPortadora - $caeaNeto, 2);
+        }
+
+        return $zPortadora;
     }
 
     /**

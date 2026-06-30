@@ -7,6 +7,7 @@ use App\Models\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamiento;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRendicionAnitaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionCaeaCompartidoRendgSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionVendingRendgSupport;
 
 /**
@@ -618,6 +619,16 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         $zPortadora = round((float) ($portadora->rendg_total_z ?? 0), 2);
         $caeaNeto = $this->totalCaeaNetoCabeceras($cabeceras);
         $total = $this->resolverTotalBrutoHost($zPortadora, $caeaNeto, $erpCae, $erpCaea, $tolerancia);
+        $total = $this->ajustarTotalBrutoPorCaeaEstacionamientoAjena(
+            $empresaId,
+            $fechaEntera,
+            $host,
+            $total,
+            $zPortadora,
+            $erpCae,
+            $erpCaea,
+            $tolerancia,
+        );
 
         return [
             'total' => $total,
@@ -657,6 +668,37 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         }
 
         return round($neto, 2);
+    }
+
+    private function ajustarTotalBrutoPorCaeaEstacionamientoAjena(
+        int $empresaId,
+        int $fechaEntera,
+        string $identificadorPc,
+        float $totalRendg,
+        float $zPortadora,
+        float $erpCae,
+        float $erpCaea,
+        float $tolerancia,
+    ): float {
+        if ($fechaEntera <= 0) {
+            return $totalRendg;
+        }
+
+        $fechaJornada = substr((string) $fechaEntera, 0, 4).'-'
+            .substr((string) $fechaEntera, 4, 2).'-'
+            .substr((string) $fechaEntera, 6, 2);
+
+        return app(GastronomiaConciliacionCaeaCompartidoRendgSupport::class)
+            ->ajustarTotalBrutoGastroExcluyendoCaeaEstacionamientoAjena(
+                $empresaId,
+                $fechaJornada,
+                $identificadorPc,
+                $totalRendg,
+                $zPortadora,
+                $erpCae,
+                $erpCaea,
+                $tolerancia,
+            );
     }
 
     public function resolverTotalBrutoHost(
@@ -801,13 +843,42 @@ final class RendicionGastronomiaAnitaRendgastroSupport
 
         $portadora = $this->elegirPortadora($cabeceras);
         $z = round((float) ($portadora->rendg_total_z ?? 0), 2);
+
+        return round($z - $this->sumaNcCabeceras($cabeceras), 2);
+    }
+
+    /**
+     * Σ rendg_tot_nc (+ CAEA) de cabeceras del host (excl. estacionamiento).
+     *
+     * @param  list<object>  $cabeceras
+     */
+    public function sumaNcCabeceras(array $cabeceras): float
+    {
         $nc = 0.0;
         foreach ($cabeceras as $fila) {
+            if ($this->esCabeceraEstacionamiento($fila)) {
+                continue;
+            }
             $nc += round((float) ($fila->rendg_tot_nc ?? 0), 2);
             $nc += round((float) ($fila->rendg_tot_nc_caea ?? 0), 2);
         }
 
-        return round($z - $nc, 2);
+        return round($nc, 2);
+    }
+
+    public function ncPorHost(int $empresaId, int $fechaEntera, string $identificadorPc): float
+    {
+        $host = trim($identificadorPc);
+        if ($host === '') {
+            return 0.0;
+        }
+
+        $cabeceras = $this->filtrarCabecerasPorHost(
+            $this->listarCabecerasEmpresaFechaDetalle($empresaId, $fechaEntera),
+            $host,
+        );
+
+        return $this->sumaNcCabeceras($cabeceras);
     }
 
     /**

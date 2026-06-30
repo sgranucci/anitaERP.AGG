@@ -176,7 +176,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
 
                     if ($tipo === 'pc_total') {
                         $this->line(sprintf(
-                            '    → Total PC: ERP $ %s (CAE $ %s + CAEA $ %s) | Anita $ %s | Rendg Z $ %s | Δ rendg $ %s | %s',
+                            '    → Total PC: ERP neto $ %s (CAE $ %s + CAEA $ %s) | Anita $ %s | Rendg neto $ %s | Δ rendg $ %s | %s',
                             $this->fmt($fila['ventas_erp'] ?? 0),
                             $this->fmt($fila['ventas_erp_cae'] ?? 0),
                             $this->fmt($fila['ventas_erp_caea'] ?? 0),
@@ -196,7 +196,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             default => '<comment>TOTAL SALÓN</comment> (PCs, sin post-cierre)',
                         };
                         $this->line(sprintf(
-                            '  %s: ERP $ %s | Anita $ %s | Rendg ΣZ $ %s | Δ $ %s | %s',
+                            '  %s: ERP neto $ %s | Anita $ %s | Rendg neto $ %s | Δ $ %s | %s',
                             $etiqueta,
                             $this->fmt($fila['ventas_erp'] ?? 0),
                             $this->fmt($fila['ventas_anita'] ?? 0),

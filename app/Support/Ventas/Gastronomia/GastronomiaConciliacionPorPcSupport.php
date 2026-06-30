@@ -378,10 +378,21 @@ final class GastronomiaConciliacionPorPcSupport
 
             $rendgastroZ = $rendgastro !== null ? ($rendgastro['total'] ?? null) : null;
 
-            $diffErpAnita = round($erp['erp_total'] - $anitaTotal, 2);
-            $diffErpRendg = $rendgastroZ !== null ? round($erp['erp_total'] - $rendgastroZ, 2) : null;
+            $fechaEntera = (int) str_replace('-', '', $fechaJornada);
+            $ncErp = $this->notasCreditoErpPorPc(
+                $pc,
+                $empresaId,
+                $fechaJornada,
+                $caeId,
+                $caeaId,
+            );
+            $ncRendg = $jornadaAbierta
+                ? 0.0
+                : $this->rendgastroSupport->ncPorHost($empresaId, $fechaEntera, $pc);
 
-            $filas[] = GastronomiaConciliacionEstadoSupport::aplicarEstadosEnFila([
+            $diffErpAnita = round($erp['erp_total'] - $anitaTotal, 2);
+
+            $fila = [
                 'identificador_pc' => $pc,
                 'descripcion_pc' => trim((string) ($cfg->descripcion ?? '')),
                 'pv_cae' => (string) $cae->codigo,
@@ -397,12 +408,15 @@ final class GastronomiaConciliacionPorPcSupport
                 'rendgastro_caea' => ($rendgastro ?? [])['caea_neto'] ?? null,
                 'rendgastro_suc_caea' => ($rendgastro ?? [])['suc_caea'] ?? null,
                 'diff_erp_anita' => $diffErpAnita,
-                'diff_erp_rendg' => $diffErpRendg,
                 'cantidad_facturas_erp_cae' => $erp['cant_cae'],
                 'cantidad_facturas_erp_caea' => $erp['cant_caea'],
                 'cantidad_facturas_erp' => $erp['cant_facturas'],
                 'jornada_abierta' => $jornadaAbierta,
-            ], $tolerancia);
+            ];
+
+            $fila = GastronomiaConciliacionNetoSupport::enriquecerFila($fila, $ncErp, $ncRendg);
+
+            $filas[] = GastronomiaConciliacionEstadoSupport::aplicarEstadosEnFila($fila, $tolerancia);
         }
 
         usort($filas, fn (array $a, array $b): int => strcmp((string) $a['identificador_pc'], (string) $b['identificador_pc']));
@@ -576,6 +590,47 @@ final class GastronomiaConciliacionPorPcSupport
             'venta_ids_cae' => $idsCae,
             'venta_ids_caea' => $idsCaea,
         ];
+    }
+
+    /**
+     * NC gastronomía del día por PC (valor positivo).
+     */
+    public function notasCreditoErpPorPc(
+        string $identificadorPc,
+        int $empresaId,
+        string $fechaJornada,
+        int $puntoventaCaeId,
+        int $puntoventaCaeaId,
+    ): float {
+        $emisiones = VentaGastronomiaEmision::query()
+            ->where('identificador_pc', $identificadorPc)
+            ->whereNotNull('venta_factura_origen_id')
+            ->whereHas('venta', function ($v) use ($empresaId, $fechaJornada) {
+                $v->where(function ($fecha) use ($fechaJornada) {
+                    $fecha->whereDate('fechajornada', $fechaJornada)
+                        ->orWhere(function ($legacy) use ($fechaJornada) {
+                            $legacy->whereNull('fechajornada')
+                                ->whereDate('fecha', $fechaJornada);
+                        });
+                })->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
+            })
+            ->with('venta:id,puntoventa_id,total')
+            ->get();
+
+        $nc = 0.0;
+        foreach ($emisiones as $em) {
+            $venta = $em->venta;
+            if ($venta === null) {
+                continue;
+            }
+            $pvId = (int) ($venta->puntoventa_id ?? 0);
+            if ($pvId !== $puntoventaCaeId && ($puntoventaCaeaId <= 0 || $pvId !== $puntoventaCaeaId)) {
+                continue;
+            }
+            $nc += abs(round((float) ($venta->total ?? 0), 2));
+        }
+
+        return round($nc, 2);
     }
 
     /**

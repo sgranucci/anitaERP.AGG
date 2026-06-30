@@ -477,28 +477,25 @@ final class GastronomiaConciliacionDiariaReporteService
         $ncErp = $erpTotales['nc'];
         $ventasErpNeto = $erpTotales['neto'];
 
-        $rendgPc = ! $jornadaAbierta && ($totalesDia['diff_erp_rendg'] ?? null) !== null
+        $rendgSalonNeto = ! $jornadaAbierta && ($totalesDia['diff_erp_rendg'] ?? null) !== null
             ? (float) ($totalesDia['rendgastro_z'] ?? 0)
             : null;
-        $rendgPost = $postCierre['rendgastro_z'] ?? null;
-        $rendgAgregados = $agregados['rendgastro_z'] ?? null;
-        $rendgBruto = $jornadaAbierta || $rendgPc === null
-            ? null
-            : round(
-                $rendgPc + (float) ($rendgPost ?? 0) + (float) ($rendgAgregados ?? 0),
-                2,
-            );
+        $rendgPost = (float) ($postCierre['rendgastro_z'] ?? 0);
+        $rendgAgregados = (float) ($agregados['rendgastro_z'] ?? 0);
+        $rendgNeto = $rendgSalonNeto !== null
+            ? round($rendgSalonNeto + $rendgPost + $rendgAgregados, 2)
+            : null;
 
         $ncRendg = null;
-        $rendgNeto = null;
+        $rendgBruto = null;
         $rendgLegacy = null;
         $fcCaeaDuplicado = null;
         $pvCaeaZInflado = null;
-        if (! $jornadaAbierta && $rendgBruto !== null) {
+        if (! $jornadaAbierta && $rendgNeto !== null) {
             $fechaEntera = (int) str_replace('-', '', $fechaJornada);
             $jornadaId = $this->jornadaId($empresaId, $fechaJornada) ?? 0;
             $ncRendg = $this->rendgastroSupport->sumaNcPortadorasPcMasPostCierre($empresaId, $fechaEntera, $jornadaId);
-            $rendgNeto = round($rendgBruto - $ncRendg, 2);
+            $rendgBruto = round($rendgNeto + $ncRendg, 2);
 
             $hostsConfig = ConfiguracionPuntoventaGastronomia::query()
                 ->where('empresa_id', $empresaId)
