@@ -106,6 +106,7 @@ final class GastronomiaChequeoVentasAnitaErpService
                 $conteo['solo_erp']++;
                 $fila = $this->filaBase($venta, $clave, null);
                 $fila['estado'] = 'solo_erp';
+                $fila['erp'] = $this->montosDesdeVentaErp($venta);
                 $fila['diferencias'] = ['anita' => 'Sin cabecera en Informix'];
                 $filas[] = $fila;
 
@@ -208,7 +209,7 @@ final class GastronomiaChequeoVentasAnitaErpService
 
         for ($intento = 1; $intento <= $maxIntentos; $intento++) {
             $parsed = ApiAnita::parsearRespuestaLista($api->apiCall(
-                GastronomiaAnitaImportBridgeSupport::mergePayload([
+                GastronomiaAnitaImportBridgeSupport::mergePayloadVentaCabecera([
                 'acc' => 'list',
                 'tabla' => 'venta',
                 'campos' => implode(',', [
@@ -597,7 +598,7 @@ final class GastronomiaChequeoVentasAnitaErpService
             ->whereDate('fechajornada', $fechaJornada)
             ->whereHas('gastronomiaEmision')
             ->orderBy('numerocomprobante')
-            ->get(['id', 'codigo', 'numerocomprobante', 'total', 'fechajornada', 'fecha', 'tipotransaccion_id']);
+            ->get(['id', 'puntoventa_id', 'codigo', 'numerocomprobante', 'total', 'fechajornada', 'fecha', 'tipotransaccion_id']);
     }
 
     /**

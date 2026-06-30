@@ -31,7 +31,7 @@ final class EstacionamientoChequeoVentasAnitaErpService
             ->whereDate('fechajornada', $fechaJornada)
             ->whereHas('estacionamientoEmision')
             ->orderBy('numerocomprobante')
-            ->get(['id', 'codigo', 'numerocomprobante', 'total', 'fechajornada', 'fecha', 'tipotransaccion_id']);
+            ->get(['id', 'puntoventa_id', 'codigo', 'numerocomprobante', 'total', 'fechajornada', 'fecha', 'tipotransaccion_id']);
     }
 
     /**
@@ -133,11 +133,16 @@ final class EstacionamientoChequeoVentasAnitaErpService
             $consulta = $this->gastronomiaChequeo->consultarCabeceraAnitaDesdeVenta($venta);
             if ($consulta['error_lectura'] !== null) {
                 $conteo['error']++;
+                $erpMontos = $this->gastronomiaChequeo->montosDesdeVentaErp($venta);
+                foreach (['total', 'gravado', 'iva', 'exento'] as $c) {
+                    $totalesErp[$c] += (float) ($erpMontos[$c] ?? 0);
+                }
                 $filas[] = [
                     'estado' => 'error',
                     'codigo_erp' => (string) $venta->codigo,
                     'venta_id' => (int) $venta->id,
                     'numero' => (int) ($venta->numerocomprobante ?? 0),
+                    'erp' => $erpMontos,
                     'diferencias' => [
                         'anita' => 'Error de lectura Anita: '.$consulta['error_lectura'],
                     ],
