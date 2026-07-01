@@ -21,7 +21,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                             {--detalle : Muestra cabeceras rendgastro por PV con diferencias}
                             {--sin-mail : No envía correo}';
 
-    protected $description = 'Audita rendgastro neto (Z−NC) vs facturación ERP neta por PC (CAE+CAEA) y total día';
+    protected $description = 'Audita rendgastro neto (Z−NC) vs facturación ERP neta por PC (gastronomía) y por PV (estacionamiento)';
 
     public function handle(
         RendicionGastronomiaAuditoriaAnitaService $service,
@@ -59,7 +59,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
             $tolerancia,
             implode(', ', $fechas),
         ));
-        $this->comment('Criterio: neto = facturas − NC (ERP, rendg Z−NC, asientos ya netos).');
+        $this->comment('Criterio: neto = facturas − NC (ERP, rendg Z−NC, asientos ya netos). Incluye estacionamiento por PV.');
 
         $hayProblemas = false;
 

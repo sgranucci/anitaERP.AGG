@@ -19,7 +19,7 @@
     $requiereAlerta = (bool) ($informe['requiere_alerta'] ?? false);
 @endphp
 
-<h2 style="margin:0 0 8px 0;">Auditoría rendgastro vs ERP (gastronomía)</h2>
+<h2 style="margin:0 0 8px 0;">Auditoría rendgastro vs ERP (gastronomía + estacionamiento)</h2>
 <p style="margin:0 0 16px 0;">
     Fecha jornada: <strong>{{ $informe['fecha_jornada'] ?? '—' }}</strong>
     · Tolerancia $ {{ $fmt($informe['tolerancia'] ?? 0.02) }}
@@ -103,8 +103,8 @@
 
 <p style="margin-top:24px; font-size:12px; color:#666;">
     <strong>Δ venta</strong>: ERP vs cabecera <code>venta</code> Informix (ven_monto).<br>
-    <strong>Δ rendg</strong>: ERP vs <code>rendg_total_z</code> en rendgastro por PC.<br>
-    Estacionamiento (PV 00013, 00072–74) no entra en estas filas de salón.<br>
+    <strong>Δ rendg</strong>: ERP vs <code>rendg_total_z</code> en rendgastro por PC (salón) o por PV (estacionamiento).<br>
+    Filas <strong>ESTAC …</strong>: circuito estacionamiento (sin Δ venta cabecera Anita).<br>
     Comando manual:
     <code>php artisan rendicion-gastronomia:auditoria-anita --fecha={{ $informe['fecha_jornada'] ?? '' }}</code>
 </p>

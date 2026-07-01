@@ -4,6 +4,7 @@ namespace App\Services\Caja;
 
 use App\Models\Ventas\JornadaGastronomia;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionEstadoSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionEstacionamientoSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
 use Carbon\Carbon;
 
@@ -16,6 +17,7 @@ final class RendicionGastronomiaAuditoriaAnitaService
     public function __construct(
         private readonly RendicionGastronomiaAnitaSyncService $anitaSyncService,
         private readonly GastronomiaConciliacionPorPcSupport $conciliacionPorPcSupport,
+        private readonly GastronomiaConciliacionEstacionamientoSupport $estacionamientoSupport,
     ) {
     }
 
@@ -58,6 +60,23 @@ final class RendicionGastronomiaAuditoriaAnitaService
 
         foreach ($conciliacion['filas_totales'] as $filaTotal) {
             $filas[] = $this->mapearFila($filaTotal, (string) ($filaTotal['tipo_fila'] ?? 'total'));
+        }
+
+        $estacionamiento = $this->estacionamientoSupport->filasAuditoriaIntegrada(
+            $empresaId,
+            $fechaJornada,
+            $tolerancia,
+            $jornadaAbierta,
+        );
+        foreach ($estacionamiento['filas'] as $filaEst) {
+            if (! $this->pasaFiltroPvEstacionamiento($filaEst, $codigoPuntoventaFiltro)) {
+                continue;
+            }
+            $filas[] = $this->mapearFila($filaEst, 'estacionamiento_pv');
+        }
+        if ($estacionamiento['fila_total'] !== null
+            && ($codigoPuntoventaFiltro === null || trim($codigoPuntoventaFiltro) === '')) {
+            $filas[] = $this->mapearFila($estacionamiento['fila_total'], 'total_estacionamiento');
         }
 
         $conteo = [
@@ -110,11 +129,18 @@ final class RendicionGastronomiaAuditoriaAnitaService
 
         $requiereAlerta = false;
         foreach ($filas as $fila) {
-            if (($fila['tipo_fila'] ?? '') === 'pc'
-                && GastronomiaConciliacionEstadoSupport::requiereAlerta(
-                    (string) ($fila['estado_anita'] ?? ''),
-                    (string) ($fila['estado_rendg'] ?? ''),
-                )) {
+            $tipoFila = (string) ($fila['tipo_fila'] ?? '');
+            if (! in_array($tipoFila, ['pc', 'estacionamiento_pv'], true)) {
+                continue;
+            }
+            if (GastronomiaConciliacionEstadoSupport::requiereAlerta(
+                (string) ($fila['estado_anita'] ?? ''),
+                (string) ($fila['estado_rendg'] ?? ''),
+            )) {
+                $requiereAlerta = true;
+                break;
+            }
+            if (in_array((string) ($fila['estado'] ?? ''), ['DIF rendg', 'DIF ambos', 'SIN RENDG', 'DIF'], true)) {
                 $requiereAlerta = true;
                 break;
             }
@@ -138,7 +164,8 @@ final class RendicionGastronomiaAuditoriaAnitaService
                 'requiere_alerta' => $requiereAlerta,
                 'filtro_erp' => 'venta.fechajornada + venta_gastronomia_emision por PC (CAE+CAEA)',
                 'filtro_anita_venta' => 'cabecera venta Informix (ven_monto) emparejada por comprobante',
-                'filtro_anita_rendg' => 'rendgastro neto por rendg_host (Z portadora − NC por PC); total día salón + post-cierre',
+                'filtro_anita_rendg' => 'rendgastro neto por rendg_host (Z portadora − NC por PC); total día salón + post-cierre + estacionamiento',
+                'estacionamiento' => $estacionamiento['totales'],
             ],
         ];
     }
@@ -155,11 +182,17 @@ final class RendicionGastronomiaAuditoriaAnitaService
 
         $puntoventa = match ($tipoFila) {
             'pc' => $identificadorPc.' ('.$pvCae.($pvCaea !== '—' ? '+'.$pvCaea : '').')',
+            'estacionamiento_pv' => 'ESTAC '.trim((string) ($fila['pv_codigo'] ?? $pvCae)),
             'total_salon' => 'TOTAL-SALON',
+            'total_estacionamiento' => 'TOTAL-ESTACIONAMIENTO',
             'total_dia' => 'TOTAL-DIA',
             'post_cierre_caea' => 'POST-CIERRE '.((string) ($fila['pv_codigo'] ?? $pvCaea)),
             default => $identificadorPc,
         };
+
+        $ventasAnita = array_key_exists('ventas_anita', $fila) && $fila['ventas_anita'] === null
+            ? null
+            : (float) ($fila['ventas_anita'] ?? 0);
 
         return [
             'tipo_fila' => $tipoFila,
@@ -171,17 +204,17 @@ final class RendicionGastronomiaAuditoriaAnitaService
             'estado_anita' => (string) ($fila['estado_anita'] ?? '—'),
             'estado_rendg' => (string) ($fila['estado_rendg'] ?? '—'),
             'cantidad_facturas_erp' => (int) ($fila['cantidad_facturas_erp'] ?? 0),
-            'cantidad_nc_erp' => 0,
+            'cantidad_nc_erp' => (int) ($fila['cantidad_nc_erp'] ?? 0),
             'erp_z' => (float) ($fila['ventas_erp_neto'] ?? $fila['ventas_erp'] ?? 0),
             'erp_bruto' => (float) ($fila['ventas_erp_bruto'] ?? $fila['ventas_erp'] ?? 0),
             'erp_nc' => (float) ($fila['notas_credito_erp'] ?? 0),
             'erp_cae' => (float) ($fila['ventas_erp_cae'] ?? 0),
             'erp_caea' => (float) ($fila['ventas_erp_caea'] ?? 0),
-            'ventas_anita' => (float) ($fila['ventas_anita'] ?? 0),
+            'ventas_anita' => $ventasAnita,
             'anita_z' => $fila['rendgastro_neto'] ?? $fila['rendgastro_z'] ?? null,
             'anita_z_bruto' => $fila['rendgastro_z_bruto'] ?? null,
             'anita_nc' => (float) ($fila['notas_credito_rendg'] ?? 0),
-            'diff_anita' => $fila['diff_erp_anita'] ?? null,
+            'diff_anita' => $ventasAnita === null ? null : ($fila['diff_erp_anita'] ?? null),
             'diff_z' => $fila['diff_erp_rendg'] ?? null,
             'diff_nc' => null,
             'mensaje' => (string) ($fila['descripcion_pc'] ?? ''),
@@ -201,6 +234,20 @@ final class RendicionGastronomiaAuditoriaAnitaService
 
         return trim((string) ($filaPc['pv_cae'] ?? '')) === $filtro
             || trim((string) ($filaPc['pv_caea'] ?? '')) === $filtro;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filaEst
+     */
+    private function pasaFiltroPvEstacionamiento(array $filaEst, ?string $codigoPuntoventaFiltro): bool
+    {
+        if ($codigoPuntoventaFiltro === null || trim($codigoPuntoventaFiltro) === '') {
+            return true;
+        }
+
+        $filtro = trim($codigoPuntoventaFiltro);
+
+        return trim((string) ($filaEst['pv_cae'] ?? $filaEst['pv_codigo'] ?? '')) === $filtro;
     }
 
     private function jornadaEstaCerrada(int $empresaId, string $fechaJornada): bool

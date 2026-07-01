@@ -37,6 +37,16 @@ final class GastronomiaAnitaAuditoriaDiariaService
         ?int $empresaId = null,
     ): array {
         $config = config('gastronomia.auditoria_anita_diaria', []);
+        if (! config('gastronomia.sincronizar_anita_al_facturar', true)
+            && ! config('estacionamiento.sincronizar_anita_al_facturar', false)) {
+            return [
+                'fecha_jornada' => $fechaJornada ?? Carbon::yesterday()->toDateString(),
+                'omitida' => true,
+                'motivo' => 'Réplica venta Anita deshabilitada (ventas solo ERP).',
+                'requiere_alerta' => false,
+            ];
+        }
+
         $fecha = $fechaJornada ?? Carbon::yesterday()->toDateString();
         $empresaId = $empresaId ?? (int) ($config['empresa_id'] ?? 1);
         $tolerancia = max(0.0, (float) ($config['tolerancia'] ?? 0.02));

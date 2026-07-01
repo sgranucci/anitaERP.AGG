@@ -136,7 +136,10 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
         ?array $indiceAnitaBulk = null,
     ): array {
         $totales = $this->totalesDia($empresaId, $fechaJornada, $indiceAnitaBulk);
-        $diffErpAnita = round($totales['ventas_erp'] - $totales['ventas_anita'], 2);
+        $ventasSoloErp = GastronomiaVentasSoloErpSupport::esJornada($empresaId, $fechaJornada);
+        $diffErpAnita = $ventasSoloErp
+            ? 0.0
+            : round($totales['ventas_erp'] - $totales['ventas_anita'], 2);
         $rendgZ = $totales['rendgastro_z'];
         $diffErpRendg = $rendgZ !== null
             ? round($totales['ventas_erp'] - $rendgZ, 2)
@@ -155,7 +158,7 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
             'ventas_erp' => $totales['ventas_erp'],
             'ventas_anita_cae' => 0.0,
             'ventas_anita_caea' => $totales['ventas_anita'],
-            'ventas_anita' => $totales['ventas_anita'],
+            'ventas_anita' => $ventasSoloErp ? null : $totales['ventas_anita'],
             'rendgastro_z' => $rendgZ,
             'rendgastro_z_cae' => null,
             'rendgastro_caea' => $totales['rendgastro_x'],
@@ -170,6 +173,7 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
             'jornada_cierre_en' => $totales['jornada_cierre_en'],
             'es_post_cierre_caea' => true,
             'jornada_abierta' => false,
+            'ventas_solo_erp' => $ventasSoloErp,
         ], $tolerancia);
     }
 

@@ -115,6 +115,21 @@ return [
     'sincronizar_anita_al_facturar' => filter_var(env('GASTRONOMIA_SINCRONIZAR_ANITA', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
+     * Desde esta fecha (inclusive) las ventas POS no se replican en Informix; conciliación solo ERP ↔ rendg.
+     * Override por empresa en ventas_solo_erp_desde_por_empresa.
+     */
+    'ventas_solo_erp_desde' => env('GASTRONOMIA_VENTAS_SOLO_ERP_DESDE', '2026-07-01'),
+
+    /**
+     * @var array<int, string>
+     */
+    'ventas_solo_erp_desde_por_empresa' => [
+        1 => env('GASTRONOMIA_VENTAS_SOLO_ERP_DESDE', '2026-07-01'),
+        2 => env('GASTRONOMIA_VENTAS_SOLO_ERP_KANDIKO', env('GASTRONOMIA_VENTAS_SOLO_ERP_DESDE', '2026-07-01')),
+        3 => env('GASTRONOMIA_VENTAS_SOLO_ERP_REBISCO', env('GASTRONOMIA_VENTAS_SOLO_ERP_DESDE', '2026-07-01')),
+    ],
+
+    /**
      * Gastronomía: en Anita venta + vengrav + vencae; omite comprob, compaux, venibr, climov.
      * stkmov por plato: anita_omitir_stkmov (solo gastronomía; Ventas/administración no usa esta clave).
      * Insumos por fórmula: anita_replicar_insumos_al_facturar.

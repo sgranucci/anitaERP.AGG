@@ -8,6 +8,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaFacturacionAuditoriaCtamovSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaVentasSoloErpSupport;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 
@@ -104,8 +105,12 @@ final class GastronomiaFacturacionAuditoriaIntegralService
                     return true;
                 }
                 $montosCabecera = $dia['montos_cabecera'] ?? [];
-                if (($montosCabecera['conteo']['diferencia'] ?? 0) > 0
-                    || ($montosCabecera['conteo']['solo_erp'] ?? 0) > 0) {
+                if (($montosCabecera['estado'] ?? '') === 'DIF') {
+                    return true;
+                }
+                if (! ($montosCabecera['ventas_solo_erp'] ?? false)
+                    && (($montosCabecera['conteo']['diferencia'] ?? 0) > 0
+                        || ($montosCabecera['conteo']['solo_erp'] ?? 0) > 0)) {
                     return true;
                 }
                 $huecos = $dia['huecos_numeracion'] ?? null;
@@ -271,12 +276,14 @@ final class GastronomiaFacturacionAuditoriaIntegralService
             'filas' => $filas,
             'contable_empresa' => $contableEmpresa,
             'totales_salon' => $conciliacion['totales_salon'],
-            'montos_cabecera' => $this->auditarMontosCabeceraPorJornada(
-                $empresaId,
-                $fechaJornada,
-                $tolerancia,
-                $codigoPuntoventaFiltro,
-            ),
+            'montos_cabecera' => GastronomiaVentasSoloErpSupport::esJornada($empresaId, $fechaJornada)
+                ? ['conteo' => ['ok' => 0, 'diferencia' => 0, 'solo_erp' => 0, 'solo_anita' => 0], 'delta_totales' => ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0], 'estado' => 'N/A', 'ventas_solo_erp' => true]
+                : $this->auditarMontosCabeceraPorJornada(
+                    $empresaId,
+                    $fechaJornada,
+                    $tolerancia,
+                    $codigoPuntoventaFiltro,
+                ),
             'huecos_numeracion' => $this->huecosNumeracionService->resumenJornadaEmpresa($empresaId, $fechaJornada),
         ];
     }

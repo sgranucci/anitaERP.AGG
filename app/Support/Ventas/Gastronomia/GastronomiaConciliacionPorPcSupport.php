@@ -45,7 +45,15 @@ final class GastronomiaConciliacionPorPcSupport
         bool $jornadaAbierta,
         ?array $indiceAnitaBulk = null,
     ): array {
-        $filasPc = $this->filasDiaPorPc($empresaId, $fechaJornada, $tolerancia, $jornadaAbierta, $indiceAnitaBulk);
+        $ventasSoloErp = GastronomiaVentasSoloErpSupport::esJornada($empresaId, $fechaJornada);
+        $filasPc = $this->filasDiaPorPc(
+            $empresaId,
+            $fechaJornada,
+            $tolerancia,
+            $jornadaAbierta,
+            $indiceAnitaBulk,
+            $ventasSoloErp,
+        );
 
         $totalesSalon = [
             'ventas_erp_cae' => 0.0,
@@ -106,6 +114,7 @@ final class GastronomiaConciliacionPorPcSupport
                 'cantidad_facturas_erp' => (int) $totalesSalon['cantidad_facturas_erp'],
                 'jornada_abierta' => $jornadaAbierta,
                 'es_total' => true,
+                'ventas_solo_erp' => $ventasSoloErp,
             ], $tolerancia);
         }
 
@@ -139,6 +148,7 @@ final class GastronomiaConciliacionPorPcSupport
                 $algunaPcSinRendg,
                 $tienePostCierre,
                 $tieneAgregados,
+                $ventasSoloErp,
             );
         }
 
@@ -170,6 +180,7 @@ final class GastronomiaConciliacionPorPcSupport
         bool $algunaPcSinRendg,
         bool $incluyePostCierre,
         bool $incluyeAgregados,
+        bool $ventasSoloErp = false,
     ): array {
         $erpPost = $incluyePostCierre ? (float) ($postCierre['ventas_erp'] ?? 0) : 0.0;
         $erpAgreg = $incluyeAgregados ? (float) ($agregados['ventas_erp'] ?? 0) : 0.0;
@@ -218,6 +229,7 @@ final class GastronomiaConciliacionPorPcSupport
             'jornada_abierta' => $jornadaAbierta,
             'es_total' => true,
             'alguna_pc_sin_rendg' => $algunaPcSinRendg,
+            'ventas_solo_erp' => $ventasSoloErp,
         ], $tolerancia);
     }
 
@@ -305,6 +317,7 @@ final class GastronomiaConciliacionPorPcSupport
         float $tolerancia,
         bool $jornadaAbierta,
         ?array $indiceAnitaBulk = null,
+        bool $ventasSoloErp = false,
     ): array {
         $terminales = ConfiguracionPuntoventaGastronomia::query()
             ->with(['puntoventaCae', 'puntoventaCaea'])
@@ -347,23 +360,29 @@ final class GastronomiaConciliacionPorPcSupport
                 continue;
             }
 
-            $anitaCae = $this->chequeoVentasService->totalFacturacionBrutaAnitaParaVentasIds(
-                $erp['venta_ids_cae'],
-                $fechaJornada,
-                $cacheCabecerasAnita,
-                $clavesPorPv[$caeId] ?? [],
-                $indiceAnitaBulk,
-            );
-            $anitaCaea = $caeaId > 0
-                ? $this->chequeoVentasService->totalFacturacionBrutaAnitaParaVentasIds(
-                    $erp['venta_ids_caea'],
+            if ($ventasSoloErp) {
+                $anitaCae = 0.0;
+                $anitaCaea = 0.0;
+                $anitaTotal = 0.0;
+            } else {
+                $anitaCae = $this->chequeoVentasService->totalFacturacionBrutaAnitaParaVentasIds(
+                    $erp['venta_ids_cae'],
                     $fechaJornada,
                     $cacheCabecerasAnita,
-                    $clavesPorPv[$caeaId] ?? [],
+                    $clavesPorPv[$caeId] ?? [],
                     $indiceAnitaBulk,
-                )
-                : 0.0;
-            $anitaTotal = round($anitaCae + $anitaCaea, 2);
+                );
+                $anitaCaea = $caeaId > 0
+                    ? $this->chequeoVentasService->totalFacturacionBrutaAnitaParaVentasIds(
+                        $erp['venta_ids_caea'],
+                        $fechaJornada,
+                        $cacheCabecerasAnita,
+                        $clavesPorPv[$caeaId] ?? [],
+                        $indiceAnitaBulk,
+                    )
+                    : 0.0;
+                $anitaTotal = round($anitaCae + $anitaCaea, 2);
+            }
 
             $rendgastro = $jornadaAbierta
                 ? null
@@ -390,7 +409,7 @@ final class GastronomiaConciliacionPorPcSupport
                 ? 0.0
                 : $this->rendgastroSupport->ncPorHost($empresaId, $fechaEntera, $pc);
 
-            $diffErpAnita = round($erp['erp_total'] - $anitaTotal, 2);
+            $diffErpAnita = $ventasSoloErp ? 0.0 : round($erp['erp_total'] - $anitaTotal, 2);
 
             $fila = [
                 'identificador_pc' => $pc,
@@ -402,7 +421,7 @@ final class GastronomiaConciliacionPorPcSupport
                 'ventas_erp' => $erp['erp_total'],
                 'ventas_anita_cae' => $anitaCae,
                 'ventas_anita_caea' => $anitaCaea,
-                'ventas_anita' => $anitaTotal,
+                'ventas_anita' => $ventasSoloErp ? null : $anitaTotal,
                 'rendgastro_z' => $rendgastroZ,
                 'rendgastro_z_cae' => ($rendgastro ?? [])['z_portadora'] ?? null,
                 'rendgastro_caea' => ($rendgastro ?? [])['caea_neto'] ?? null,
@@ -412,6 +431,7 @@ final class GastronomiaConciliacionPorPcSupport
                 'cantidad_facturas_erp_caea' => $erp['cant_caea'],
                 'cantidad_facturas_erp' => $erp['cant_facturas'],
                 'jornada_abierta' => $jornadaAbierta,
+                'ventas_solo_erp' => $ventasSoloErp,
             ];
 
             $fila = GastronomiaConciliacionNetoSupport::enriquecerFila($fila, $ncErp, $ncRendg);

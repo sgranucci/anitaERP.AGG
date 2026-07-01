@@ -131,4 +131,38 @@ final class GastronomiaAnitaImportEstacionamientoSupport
 
         return isset($map[$numero]);
     }
+
+    /**
+     * Números de comprobante con emisión estacionamiento en ERP (misma jornada / PV).
+     *
+     * @return array<int, true>
+     */
+    public static function numerosConEmisionErpEnJornada(int $puntoventaId, string $fechaJornada): array
+    {
+        if ($puntoventaId <= 0 || trim($fechaJornada) === '') {
+            return [];
+        }
+
+        $numeros = Venta::query()
+            ->where('puntoventa_id', $puntoventaId)
+            ->whereHas('estacionamientoEmision')
+            ->where(function ($fecha) use ($fechaJornada) {
+                $fecha->whereDate('fechajornada', $fechaJornada)
+                    ->orWhere(function ($legacy) use ($fechaJornada) {
+                        $legacy->whereNull('fechajornada')
+                            ->whereDate('fecha', $fechaJornada);
+                    });
+            })
+            ->pluck('numerocomprobante');
+
+        $map = [];
+        foreach ($numeros as $numero) {
+            $n = (int) $numero;
+            if ($n > 0) {
+                $map[$n] = true;
+            }
+        }
+
+        return $map;
+    }
 }

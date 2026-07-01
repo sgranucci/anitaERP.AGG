@@ -106,6 +106,65 @@ final class GastronomiaAnitaComprobantePkSupport
         return $claves;
     }
 
+    /**
+     * Alias FAK↔FAC para marcar emparejadas todas las claves del mismo comprobante (PV CAEA Kandiko).
+     *
+     * @return list<string>
+     */
+    public static function clavesAliasConciliacionDesdeClave(string $clave): array
+    {
+        $partes = self::parseClaveVenta($clave);
+        if ($partes === null) {
+            return [];
+        }
+
+        $aliases = [];
+        foreach (KandikoAnitaVentaTipoSupport::tiposAnitaEquivalentesFacErp() as $tipo) {
+            $pk = self::claveVenta($tipo, $partes['letra'], $partes['sucursal'], $partes['numero']);
+            if ($pk !== null && $pk !== $clave && ! in_array($pk, $aliases, true)) {
+                $aliases[] = $pk;
+            }
+        }
+
+        return $aliases;
+    }
+
+    /**
+     * Una cabecera por (letra, sucursal, número) cuando el mapa indexa alias FAK/FAC del mismo comprobante.
+     *
+     * @param  array<string, object>  $anitaPorClave
+     * @return list<object>
+     */
+    public static function cabecerasUnicasDesdeMapa(array $anitaPorClave): array
+    {
+        $unicas = [];
+        foreach ($anitaPorClave as $cab) {
+            $letra = strtoupper(trim((string) ($cab->ven_letra ?? 'B')));
+            $sucursal = self::sucursalEntera((string) ($cab->ven_sucursal ?? ''));
+            $numero = (int) ($cab->ven_nro ?? 0);
+            if ($sucursal <= 0 || $numero <= 0) {
+                continue;
+            }
+
+            $canon = $letra.'|'.$sucursal.'|'.$numero;
+            $tipo = strtoupper(trim((string) ($cab->ven_tipo ?? '')));
+            $existente = $unicas[$canon] ?? null;
+            if ($existente === null) {
+                $unicas[$canon] = $cab;
+
+                continue;
+            }
+
+            $tipoExistente = strtoupper(trim((string) ($existente->ven_tipo ?? '')));
+            if ($tipo === KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE
+                && $tipoExistente !== KandikoAnitaVentaTipoSupport::TIPO_VENTA_BRIDGE) {
+                $unicas[$canon] = $cab;
+            }
+        }
+
+        return array_values($unicas);
+    }
+
     public static function claveVengrav(string $tipo, string $letra, int $sucursal, int $numero, string $codigoTasa): ?string
     {
         $codigoTasa = trim($codigoTasa);

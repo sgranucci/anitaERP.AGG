@@ -57,6 +57,12 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
                 continue;
             }
 
+            if (! empty($informe['omitida'])) {
+                $this->comment((string) ($informe['motivo'] ?? 'Auditoría omitida.'));
+
+                continue;
+            }
+
             foreach (['gastro' => 'Gastronomía', 'estacionamiento' => 'Estacionamiento'] as $clave => $etiqueta) {
                 $bloque = $informe[$clave] ?? [];
                 $pre = $bloque['pre']['resumen_global'] ?? [];

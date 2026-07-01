@@ -120,6 +120,133 @@ final class GastronomiaConciliacionEstacionamientoSupport
     }
 
     /**
+     * Filas estacionamiento para auditoría rendgastro integrada (incluye PV OK, no solo desvíos).
+     *
+     * @return array{
+     *   filas: list<array<string, mixed>>,
+     *   totales: array{ventas_erp: float, rendgastro_z: float, cantidad: int, cantidad_facturas_erp: int},
+     *   fila_total: ?array<string, mixed>
+     * }
+     */
+    public function filasAuditoriaIntegrada(
+        int $empresaId,
+        string $fechaJornada,
+        float $tolerancia,
+        bool $jornadaAbierta,
+    ): array {
+        $vacio = [
+            'filas' => [],
+            'totales' => [
+                'ventas_erp' => 0.0,
+                'rendgastro_z' => 0.0,
+                'cantidad' => 0,
+                'cantidad_facturas_erp' => 0,
+            ],
+            'fila_total' => null,
+        ];
+
+        if ($jornadaAbierta || ! filter_var(config('rendicion_estacionamiento_anita.sincronizar', true), FILTER_VALIDATE_BOOLEAN)) {
+            return $vacio;
+        }
+
+        try {
+            $informe = $this->auditoriaService->auditarFechaJornada($empresaId, $fechaJornada, $tolerancia);
+        } catch (\Throwable) {
+            return $vacio;
+        }
+
+        $ventasSoloErp = GastronomiaVentasSoloErpSupport::esJornada($empresaId, $fechaJornada);
+
+        $filas = [];
+        $sumErp = 0.0;
+        $sumRendg = 0.0;
+        $cantFacturas = 0;
+
+        foreach ($informe['filas'] ?? [] as $filaAudit) {
+            $estadoRaw = (string) ($filaAudit['estado'] ?? '');
+            if ($estadoRaw === 'vending_omitido' || $estadoRaw === 'sin_ventas_erp') {
+                continue;
+            }
+
+            $erpZ = round((float) ($filaAudit['erp_z'] ?? 0), 2);
+            $erpNc = round((float) ($filaAudit['erp_nc'] ?? 0), 2);
+            $erpNeto = round($erpZ - $erpNc, 2);
+            $anitaZ = $filaAudit['anita_z'] ?? null;
+            $anitaNc = round((float) ($filaAudit['anita_nc'] ?? 0), 2);
+            $rendgNeto = $anitaZ !== null ? round((float) $anitaZ - $anitaNc, 2) : null;
+            $diffRendg = $rendgNeto !== null ? round($erpNeto - $rendgNeto, 2) : null;
+            $cantFac = (int) ($filaAudit['cantidad_facturas_erp'] ?? 0);
+
+            if ($cantFac === 0 && $erpNeto <= $tolerancia && ($rendgNeto === null || $rendgNeto <= $tolerancia)) {
+                continue;
+            }
+
+            $codigoPv = (string) ($filaAudit['puntoventa'] ?? '—');
+            $fila = GastronomiaConciliacionEstadoSupport::aplicarEstadosEnFila([
+                'tipo_fila' => 'estacionamiento_pv',
+                'circuito' => 'ESTACIONAMIENTO',
+                'tipo_pv' => 'ESTACIONAMIENTO',
+                'identificador_pc' => 'ESTAC-'.$codigoPv,
+                'pv_codigo' => $codigoPv,
+                'descripcion_pc' => 'Estacionamiento PV '.$codigoPv.' (suc '.((int) ($filaAudit['sucursal'] ?? 0)).')',
+                'pv_cae' => $codigoPv,
+                'pv_caea' => '—',
+                'ventas_erp_cae' => $erpZ,
+                'ventas_erp_caea' => 0.0,
+                'ventas_erp_bruto' => $erpZ,
+                'notas_credito_erp' => $erpNc,
+                'ventas_erp' => $erpNeto,
+                'ventas_erp_neto' => $erpNeto,
+                'ventas_anita_cae' => null,
+                'ventas_anita_caea' => null,
+                'ventas_anita' => null,
+                'rendgastro_z' => $anitaZ,
+                'notas_credito_rendg' => $anitaNc,
+                'rendgastro_neto' => $rendgNeto,
+                'diff_erp_anita' => null,
+                'diff_erp_rendg' => $diffRendg,
+                'cantidad_facturas_erp' => $cantFac,
+                'cantidad_nc_erp' => (int) ($filaAudit['cantidad_nc_erp'] ?? 0),
+                'jornada_abierta' => false,
+                'es_estacionamiento_pv' => true,
+                'ventas_solo_erp' => $ventasSoloErp,
+            ], $tolerancia);
+
+            if ($estadoRaw === 'sin_anita' && $erpNeto > $tolerancia) {
+                $fila['estado'] = 'SIN RENDG';
+                $fila['estado_anita'] = '—';
+                $fila['estado_rendg'] = 'SIN RENDG';
+            } else {
+                $fila['estado_anita'] = '—';
+            }
+
+            $filas[] = $fila;
+            $sumErp += $erpNeto;
+            if ($rendgNeto !== null) {
+                $sumRendg += $rendgNeto;
+            }
+            $cantFacturas += $cantFac;
+        }
+
+        if ($filas === []) {
+            return $vacio;
+        }
+
+        $totales = [
+            'ventas_erp' => round($sumErp, 2),
+            'rendgastro_z' => round($sumRendg, 2),
+            'cantidad' => count($filas),
+            'cantidad_facturas_erp' => $cantFacturas,
+        ];
+
+        return [
+            'filas' => $filas,
+            'totales' => $totales,
+            'fila_total' => $this->filaTotalEstacionamiento($totales, false, $tolerancia),
+        ];
+    }
+
+    /**
      * @param  array{ventas_erp: float, rendgastro_z: float, cantidad: int}  $totales
      * @return array<string, mixed>
      */
@@ -129,7 +256,7 @@ final class GastronomiaConciliacionEstacionamientoSupport
         $rendg = $jornadaAbierta ? null : round((float) ($totales['rendgastro_z'] ?? 0), 2);
         $diff = $rendg !== null ? round($erp - $rendg, 2) : null;
 
-        return GastronomiaConciliacionEstadoSupport::aplicarEstadosEnFila([
+        $fila = GastronomiaConciliacionEstadoSupport::aplicarEstadosEnFila([
             'tipo_fila' => 'total_estacionamiento',
             'circuito' => 'ESTACIONAMIENTO',
             'identificador_pc' => 'TOTAL-ESTACIONAMIENTO',
@@ -141,17 +268,21 @@ final class GastronomiaConciliacionEstacionamientoSupport
             'ventas_erp_cae' => 0.0,
             'ventas_erp_caea' => 0.0,
             'ventas_erp' => $erp,
-            'ventas_anita_cae' => 0.0,
-            'ventas_anita_caea' => 0.0,
-            'ventas_anita' => $rendg ?? 0.0,
+            'ventas_anita_cae' => null,
+            'ventas_anita_caea' => null,
+            'ventas_anita' => null,
             'rendgastro_z' => $rendg,
             'rendgastro_neto' => $rendg,
-            'diff_erp_anita' => 0.0,
+            'diff_erp_anita' => null,
             'diff_erp_rendg' => $diff,
-            'cantidad_facturas_erp' => (int) ($totales['cantidad'] ?? 0),
+            'cantidad_facturas_erp' => (int) ($totales['cantidad_facturas_erp'] ?? $totales['cantidad'] ?? 0),
             'jornada_abierta' => $jornadaAbierta,
             'es_total' => true,
             'es_total_estacionamiento' => true,
         ], $tolerancia);
+
+        $fila['estado_anita'] = '—';
+
+        return $fila;
     }
 }

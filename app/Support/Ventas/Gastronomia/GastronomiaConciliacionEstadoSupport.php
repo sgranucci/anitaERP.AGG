@@ -110,19 +110,70 @@ final class GastronomiaConciliacionEstadoSupport
      */
     public static function aplicarEstadosEnFila(array $fila, float $tolerancia): array
     {
-        $estados = self::resolverDetallado(
-            (float) ($fila['diff_erp_anita'] ?? 0),
-            isset($fila['diff_erp_rendg']) ? (float) $fila['diff_erp_rendg'] : null,
-            $tolerancia,
-            (bool) ($fila['jornada_abierta'] ?? false),
-            (float) ($fila['ventas_erp'] ?? 0),
-        );
+        if (! empty($fila['ventas_solo_erp'])) {
+            $estados = self::resolverDetalladoSoloErp(
+                isset($fila['diff_erp_rendg']) ? (float) $fila['diff_erp_rendg'] : null,
+                $tolerancia,
+                (bool) ($fila['jornada_abierta'] ?? false),
+                (float) ($fila['ventas_erp'] ?? 0),
+            );
+        } else {
+            $estados = self::resolverDetallado(
+                (float) ($fila['diff_erp_anita'] ?? 0),
+                isset($fila['diff_erp_rendg']) ? (float) $fila['diff_erp_rendg'] : null,
+                $tolerancia,
+                (bool) ($fila['jornada_abierta'] ?? false),
+                (float) ($fila['ventas_erp'] ?? 0),
+            );
+        }
 
         $fila['estado'] = $estados['estado'];
         $fila['estado_anita'] = $estados['estado_anita'];
         $fila['estado_rendg'] = $estados['estado_rendg'];
 
         return $fila;
+    }
+
+    /**
+     * @return array{estado: string, estado_anita: string, estado_rendg: string}
+     */
+    private static function resolverDetalladoSoloErp(
+        ?float $diffErpRendg,
+        float $tolerancia,
+        bool $jornadaAbierta,
+        float $ventasErp,
+    ): array {
+        if ($ventasErp <= $tolerancia) {
+            return [
+                'estado' => '—',
+                'estado_anita' => '—',
+                'estado_rendg' => '—',
+            ];
+        }
+
+        if ($jornadaAbierta) {
+            return [
+                'estado' => 'OK',
+                'estado_anita' => '—',
+                'estado_rendg' => '—',
+            ];
+        }
+
+        if ($diffErpRendg === null) {
+            return [
+                'estado' => 'SIN RENDG',
+                'estado_anita' => '—',
+                'estado_rendg' => 'SIN RENDG',
+            ];
+        }
+
+        $okRendg = abs($diffErpRendg) <= $tolerancia;
+
+        return [
+            'estado' => $okRendg ? 'OK' : 'DIF rendg',
+            'estado_anita' => '—',
+            'estado_rendg' => $okRendg ? 'OK' : 'DIF',
+        ];
     }
 
     public static function requiereAlerta(string $estadoAnita, string $estadoRendg): bool

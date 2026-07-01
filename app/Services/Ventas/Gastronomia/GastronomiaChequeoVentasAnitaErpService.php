@@ -73,6 +73,11 @@ final class GastronomiaChequeoVentasAnitaErpService
             $numerosAnitaJornada,
             $empresaId,
         );
+        $numerosEstacionamientoErp = GastronomiaAnitaImportEstacionamientoSupport::numerosConEmisionErpEnJornada(
+            $puntoventaId,
+            $fechaJornada,
+        );
+        $numerosExcluidosConciliacion = $numerosResvtaLegacy + $numerosEstacionamientoErp;
         $ventasErp = $this->listarVentasErpPorJornada($puntoventaId, $fechaJornada);
 
         $filas = [];
@@ -100,6 +105,9 @@ final class GastronomiaChequeoVentasAnitaErpService
             }
 
             $clavesProcesadas[$clave] = true;
+            foreach (GastronomiaAnitaComprobantePkSupport::clavesAliasConciliacionDesdeClave($clave) as $claveAlias) {
+                $clavesProcesadas[$claveAlias] = true;
+            }
             $anita = $anitaPorClave[$clave] ?? null;
 
             if ($anita === null) {
@@ -140,9 +148,11 @@ final class GastronomiaChequeoVentasAnitaErpService
             }
 
             $numeroAnita = (int) ($anita->ven_nro ?? 0);
-            if ($numeroAnita > 0 && isset($numerosResvtaLegacy[$numeroAnita])) {
-                $conteo['excluido_resvta_legacy']++;
-                if (isset($numerosEstacionamiento[$numeroAnita])) {
+            if ($numeroAnita > 0 && isset($numerosExcluidosConciliacion[$numeroAnita])) {
+                if (isset($numerosResvtaLegacy[$numeroAnita])) {
+                    $conteo['excluido_resvta_legacy']++;
+                }
+                if (isset($numerosEstacionamiento[$numeroAnita]) || isset($numerosEstacionamientoErp[$numeroAnita])) {
                     $conteo['excluido_estacionamiento']++;
                 }
 
@@ -182,7 +192,7 @@ final class GastronomiaChequeoVentasAnitaErpService
             'puntoventa' => (string) $puntoventa->codigo,
             'sucursal' => $sucursal,
             'fecha_jornada' => $fechaJornada,
-            'resumen' => $this->armarResumen($ventasErp, $anitaPorClave, $conteo, $tolerancia, $numerosResvtaLegacy),
+            'resumen' => $this->armarResumen($ventasErp, $anitaPorClave, $conteo, $tolerancia, $numerosExcluidosConciliacion),
             'filas' => $filas,
         ];
     }
@@ -1210,7 +1220,8 @@ final class GastronomiaChequeoVentasAnitaErpService
 
         $totalesAnitaBruto = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
         $totalesAnitaSignoErp = ['total' => 0.0, 'gravado' => 0.0, 'iva' => 0.0, 'exento' => 0.0];
-        foreach ($anitaPorClave as $cab) {
+        $cabecerasAnitaUnicas = GastronomiaAnitaComprobantePkSupport::cabecerasUnicasDesdeMapa($anitaPorClave);
+        foreach ($cabecerasAnitaUnicas as $cab) {
             $numeroAnita = (int) ($cab->ven_nro ?? 0);
             if ($numeroAnita > 0 && isset($numerosExcluidosConciliacion[$numeroAnita])) {
                 continue;
@@ -1231,7 +1242,7 @@ final class GastronomiaChequeoVentasAnitaErpService
 
         return [
             'ventas_erp' => $ventasErp->count(),
-            'cabeceras_anita' => count($anitaPorClave),
+            'cabeceras_anita' => count($cabecerasAnitaUnicas),
             'tolerancia' => $tolerancia,
             'conteo' => $conteo,
             'totales_erp' => $totalesErp,
