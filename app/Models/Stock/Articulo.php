@@ -319,7 +319,7 @@ class Articulo extends Model implements Auditable
     /**
      * Lista códigos en stkmae (Anita) y da de alta en el ERP los que aún no existen (misma lógica histórica).
      *
-     * @return array{en_anita:int, importados:int, omitidos_ya_en_erp:int, advertencias:list<string>}
+     * @return array{en_anita:int, importados:int, omitidos_ya_en_erp:int, lotes_bridge:int, tamano_lote:int, advertencias:list<string>}
      */
     public function sincronizarConAnita(): array
     {
@@ -339,30 +339,53 @@ class Articulo extends Model implements Auditable
                 'en_anita' => 0,
                 'importados' => 0,
                 'omitidos_ya_en_erp' => 0,
+                'lotes_bridge' => 0,
+                'tamano_lote' => ArticuloStkmaeAnitaBridgeSupport::tamanoLote(),
                 'advertencias' => ['La respuesta del listado Anita (stkmae) no es un arreglo JSON válido.'],
             ];
         }
 
         $datosLocalArray = Articulo::query()->pluck($this->keyField)->all();
+        $datosLocalSet = array_fill_keys($datosLocalArray, true);
 
         $importados = 0;
         $omitidos = 0;
+        $pendientes = [];
 
         foreach ($dataAnita as $value) {
-            if (in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
+            $skuLocal = ltrim((string) ($value->{$this->keyField} ?? ''), '0');
+            if ($skuLocal === '' || isset($datosLocalSet[$skuLocal])) {
                 $omitidos++;
 
                 continue;
             }
-            $this->traerRegistroDeAnita($value->{$this->keyFieldAnita}, true);
-            $importados++;
-            $datosLocalArray[] = ltrim($value->{$this->keyField}, '0');
+            $codigoAnita = trim((string) ($value->{$this->keyFieldAnita} ?? ''));
+            if ($codigoAnita !== '') {
+                $pendientes[] = $codigoAnita;
+            }
+        }
+
+        $tamanoLote = ArticuloStkmaeAnitaBridgeSupport::tamanoLote();
+        $lotes = array_chunk($pendientes, $tamanoLote);
+        foreach ($lotes as $loteCodigos) {
+            $filas = ArticuloStkmaeAnitaBridgeSupport::listarDetallePorCodigos($loteCodigos);
+            foreach ($filas as $fila) {
+                $skuLocal = ltrim((string) ($fila->stkm_articulo ?? ''), '0');
+                if ($skuLocal === '' || isset($datosLocalSet[$skuLocal])) {
+                    continue;
+                }
+                $this->persistirRegistroStkmaeDesdeAnita($fila, true);
+                $importados++;
+                $datosLocalSet[$skuLocal] = true;
+            }
         }
 
         return [
             'en_anita' => count($dataAnita),
             'importados' => $importados,
             'omitidos_ya_en_erp' => $omitidos,
+            'lotes_bridge' => count($lotes),
+            'tamano_lote' => $tamanoLote,
             'advertencias' => $advertencias,
         ];
     }
@@ -370,7 +393,7 @@ class Articulo extends Model implements Auditable
     /**
      * Re-sincroniza todos los artículos de stkmae: altas nuevas y actualización de existentes (conserva id ERP).
      *
-     * @return array{en_anita:int, importados:int, actualizados:int, errores:int, advertencias:list<string>}
+     * @return array{en_anita:int, importados:int, actualizados:int, errores:int, lotes_bridge:int, tamano_lote:int, advertencias:list<string>}
      */
     public function resincronizarDesdeAnita(): array
     {
@@ -396,30 +419,45 @@ class Articulo extends Model implements Auditable
                 'importados' => 0,
                 'actualizados' => 0,
                 'errores' => 0,
+                'lotes_bridge' => 0,
+                'tamano_lote' => ArticuloStkmaeAnitaBridgeSupport::tamanoLote(),
                 'advertencias' => ['La respuesta del listado Anita (stkmae) no es un arreglo JSON válido.'],
             ];
         }
 
+        $pendientes = [];
         foreach ($dataAnita as $value) {
-            $codigoAnita = (string) ($value->{$this->keyFieldAnita} ?? '');
-            if ($codigoAnita === '') {
-                continue;
+            $codigoAnita = trim((string) ($value->{$this->keyFieldAnita} ?? ''));
+            if ($codigoAnita !== '') {
+                $pendientes[] = $codigoAnita;
             }
+        }
 
-            $skuLocal = ltrim((string) ($value->{$this->keyField} ?? $codigoAnita), '0');
-            $existe = \App\Support\Stock\ArticuloSkuMatchSupport::existe($skuLocal);
-
-            try {
-                $this->traerRegistroDeAnita($codigoAnita, ! $existe);
-                if ($existe) {
-                    $actualizados++;
-                } else {
-                    $importados++;
+        $tamanoLote = ArticuloStkmaeAnitaBridgeSupport::tamanoLote();
+        $lotes = array_chunk($pendientes, $tamanoLote);
+        foreach ($lotes as $loteCodigos) {
+            $filas = ArticuloStkmaeAnitaBridgeSupport::listarDetallePorCodigos($loteCodigos);
+            foreach ($filas as $fila) {
+                $codigoAnita = trim((string) ($fila->stkm_articulo ?? ''));
+                $skuLocal = ltrim($codigoAnita, '0');
+                if ($skuLocal === '') {
+                    continue;
                 }
-            } catch (\Throwable $e) {
-                $errores++;
-                if (count($advertencias) < 50) {
-                    $advertencias[] = "SKU {$skuLocal} (Anita {$codigoAnita}): ".$e->getMessage();
+
+                $existe = \App\Support\Stock\ArticuloSkuMatchSupport::existe($skuLocal);
+
+                try {
+                    $this->persistirRegistroStkmaeDesdeAnita($fila, ! $existe);
+                    if ($existe) {
+                        $actualizados++;
+                    } else {
+                        $importados++;
+                    }
+                } catch (\Throwable $e) {
+                    $errores++;
+                    if (count($advertencias) < 50) {
+                        $advertencias[] = "SKU {$skuLocal} (Anita {$codigoAnita}): ".$e->getMessage();
+                    }
                 }
             }
         }
@@ -429,200 +467,34 @@ class Articulo extends Model implements Auditable
             'importados' => $importados,
             'actualizados' => $actualizados,
             'errores' => $errores,
+            'lotes_bridge' => count($lotes),
+            'tamano_lote' => $tamanoLote,
             'advertencias' => $advertencias,
         ];
     }
 
     public function traerRegistroDeAnita($key, $fl_crea_registro, ?int $empresaIdBridge = null)
     {
-        $this->articulo_estadoRepository = App::make(\App\Repositories\Stock\Articulo_EstadoRepositoryInterface::class);
-
-        $apiAnita = new ApiAnita;
-        if (config('app.empresa') == 'FRASLE') {
-            $data = [
-                'acc' => 'list', 'tabla' => $this->tableAnita,
-                'campos' => '
-				stkm_articulo,
-				stkm_desc,
-				stkm_unidad_medida,
-				stkm_unidad_xenv,
-				stkm_proveedor,
-				stkm_agrupacion,
-				stkm_cta_contable,
-				stkm_cod_impuesto,
-				stkm_descuento,
-				stkm_p_rep,
-				stkm_cod_mon_p_rep,
-				stkm_imp_interno,
-				stkm_cta_cont_ii,
-				stkm_cant_compra1,
-				stkm_cant_compra2,
-				stkm_cant_compra3,
-				stkm_pre_compra1,
-				stkm_pre_compra2,
-				stkm_pre_compra3,
-				stkm_usuario,
-				stkm_terminal,
-				stkm_fe_ult_act,
-				stkm_articulo_prod,
-				stkm_peso_aprox,
-				stkm_marca,
-				stkm_linea,
-				stkm_cta_contablec,
-				stkm_fe_ult_compra,
-				stkm_o_compra,
-				stkm_fl_no_factura,
-				stkm_formula,
-				stkm_ppp,
-				stkm_codimpuesto  , 
-				stkm_nivel_stk    ,
-				stkm_fecha_alta   ,
-				stkm_art_princ    ,
-				stkm_art_barra    ,
-				stkm_cod_etiqueta ,
-				stkm_unidad_env   ,
-				stkm_ley_no_fact  ,
-				stkm_nombre_foto  ,
-				stkm_articulo_prov , 
-				stkm_detalle2 ,
-				stkm_pos_aranc ,
-				stkm_lista_vigente,
-				stkm_cod_nomenc   ,
-				stkm_cod_umd      ,
-				stkm_tipo_articulo,
-				stkm_precio_oc1   ,
-				stkm_precio_oc2   ,
-				stkm_precio_oc3   ,
-				stkm_cod_mon_oc1  ,
-				stkm_cod_mon_oc2  ,
-				stkm_cod_mon_oc3  ,
-				stkm_fecha_ult_oc ,
-				stkm_cta_var_pre  ,
-				stkm_cc_var_pre   ,
-				stkm_cc_compra    ,
-				stkm_abc          ,
-				stkm_punto        ,
-				stkm_lote         ,
-				stkm_detalle1     ,
-				stkm_estado       ,
-				stkm_coef_litro   ,
-				stkm_estado_bloq  ,
-				stkm_usuario_umod ,
-				stkm_fecha_umod   ,
-				stkm_hora_umod    ,
-				stkm_estuche      ,
-				stkm_art_etiqueta ,
-				stkm_art_l_precio ,
-				stkm_posarancel   ,
-				stkm_clase        ,
-				stkm_prom_venta   ,
-				stkm_fecha_pvta   ',
-                'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
-            ];
-        } elseif (config('app.empresa') === 'INTERFORMING') {
-            $data = [
-                'acc' => 'list', 'tabla' => $this->tableAnita,
-                'campos' => ArticuloStkmaeAnitaBridgeSupport::camposDetalle(),
-                'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
-            ];
-        } else {
-            $data = [
-                'acc' => 'list', 'tabla' => $this->tableAnita,
-                'campos' => '
-				stkm_articulo,
-				stkm_desc,
-				stkm_unidad_medida,
-				stkm_unidad_xenv,
-				stkm_proveedor,
-				stkm_agrupacion,
-				stkm_cta_contable,
-				stkm_cod_impuesto,
-				stkm_descuento,
-				stkm_p_rep,
-				stkm_cod_mon_p_rep,
-				stkm_imp_interno,
-				stkm_cta_cont_ii,
-				stkm_cant_compra1,
-				stkm_cant_compra2,
-				stkm_cant_compra3,
-				stkm_pre_compra1,
-				stkm_pre_compra2,
-				stkm_pre_compra3,
-				stkm_usuario,
-				stkm_terminal,
-				stkm_fe_ult_act,
-				stkm_articulo_prod,
-				stkm_peso_aprox,
-				stkm_marca,
-				stkm_linea,
-				stkm_cta_contablec,
-				stkm_fe_ult_compra,
-				stkm_o_compra,
-				stkm_fl_no_factura,
-				stkm_formula,
-				stkm_ppp,
-				stkm_nombre_foto,
-				stkm_cod_umd,
-				stkm_cod_umd_alter,'.
-                (config('app.empresa') == 'AGG' ?
-                '
-				stkm_tipo_articulo,
-				stkm_codigo_menu,
-				stkm_area,
-				stkm_fecha_alta,
-				stkm_tiempo_entr,
-				stkm_period_compra,
-				stkm_cond_entrega,
-				stkm_cod_mon_co1,
-				stkm_cod_mon_co2,
-				stkm_cod_mon_co3
-				'
-                :
-                '
-				stkm_fecha_alta,
-				stkm_cod_nomencl,
-				stkm_cta_var_pre,
-				stkm_cc_var_pre,
-				stkm_cc_compra,
-				stkm_tipo_articulo,
-				stkm_umd_nomenc,
-				stkm_iniciales,
-				stkm_tipo_producto,
-				stkm_dias_proceso,
-				stkm_vto_en_dias,
-				stkm_sector_sell,
-				stkm_sala,
-				stkm_dias_enfriado,
-				stkm_art_cbarra,
-				stkm_uref_cbarra,
-				stkm_envia_alarma,
-				stkm_peso_caja,
-				stkm_alerta_stock
-				'),
-                'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
-            ];
-        }
-        if ($empresaIdBridge !== null && $empresaIdBridge > 0) {
-            $data = StockAnitaBridgeSupport::mergePayload($data, $empresaIdBridge);
-        }
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        $usuario_id = Auth::user()->id;
-
-        if (! is_array($dataAnita) || count($dataAnita) < 1) {
+        $filas = ArticuloStkmaeAnitaBridgeSupport::listarDetallePorCodigos([(string) $key], $empresaIdBridge);
+        if ($filas === []) {
             return;
         }
 
-        // No exigir que el primer carácter sea distinto de "0": en stkmae el código suele ir ceros a la izquierda;
-        // la condición anterior impedía persistir casi todos los artículos.
-        $codigoMaeRaw = trim((string) ($dataAnita[0]->stkm_articulo ?? ''));
+        $this->persistirRegistroStkmaeDesdeAnita($filas[0], $fl_crea_registro);
+    }
+
+    private function persistirRegistroStkmaeDesdeAnita(object $data, bool $fl_crea_registro): void
+    {
+        $this->articulo_estadoRepository = App::make(\App\Repositories\Stock\Articulo_EstadoRepositoryInterface::class);
+
+        $codigoMaeRaw = trim((string) ($data->stkm_articulo ?? ''));
         if ($codigoMaeRaw === '' || ltrim($codigoMaeRaw, '0') === '') {
             return;
         }
 
-        {
-            $data = $dataAnita[0];
+        $usuario_id = Auth::user()->id;
 
+        {
             // Valores por defecto: los switch de AGG/FRASLE no cubren todos los códigos posibles de Anita.
             $estado = 'ACTIVO';
             $noFactura = '0';
