@@ -66,6 +66,9 @@ final class ArcaPadronImpuestosClienteValidacion
         $impuestos = is_array($padronData['impuestos'] ?? null) ? $padronData['impuestos'] : [];
         $datosMonotributo = is_array($padronData['datosMonotributo'] ?? null) ? $padronData['datosMonotributo'] : null;
 
+        $riId = (int) config('arca.padron_validacion_cliente.condicioniva_responsable_inscripto_id', 1);
+        $bajaId = (int) config('arca.padron_validacion_cliente.condicioniva_baja_impuestos_id', 7);
+
         if ($condicionivaId === $riId) {
             return self::validarResponsableInscripto($impuestos, $condicionivaId);
         }
