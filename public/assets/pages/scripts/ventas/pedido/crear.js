@@ -1597,8 +1597,8 @@
 		}
 
 		var clienteIdFactura = $("#cliente_id").val();
-		if (typeof window.ejecutarAccionTrasValidarPadron === 'function') {
-			window.ejecutarAccionTrasValidarPadron(clienteIdFactura, generaFacturaAbrirModal, { forzar: true });
+		if (typeof window.ejecutarSiPadronOperacionOk === 'function') {
+			window.ejecutarSiPadronOperacionOk(clienteIdFactura, generaFacturaAbrirModal);
 			return;
 		}
 
@@ -1869,7 +1869,7 @@
 				$('#actividad_arca_id').attr('readonly', false);
 		});
 
-		// Calcula factura
+		// Calcula factura (preview; padrón ya validado al elegir cliente)
 		$.post(carpetaBase+"/ventas/calculafacturaporpedido",
 		{
 			pedido_id: pedido_id,
@@ -2071,8 +2071,8 @@
 			return false;
 		}
 
-		if (typeof window.ejecutarAccionTrasValidarPadron === 'function') {
-			window.ejecutarAccionTrasValidarPadron(cliente_id, emitirFacturaPedidoDesdeModal, { forzar: true });
+		if (typeof window.ejecutarSiPadronOperacionOk === 'function') {
+			window.ejecutarSiPadronOperacionOk(cliente_id, emitirFacturaPedidoDesdeModal);
 			return;
 		}
 

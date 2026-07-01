@@ -4,6 +4,8 @@
 @endsection
 
 @section("scripts")
+<script>window.REQUIERE_VALIDACION_PADRON_OPERACION = true;</script>
+<script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ordenventa/ordenventa/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}" type="text/javascript"></script>
@@ -29,7 +31,7 @@
                     <h3 class="card-title">Editar Orden de Venta - Número {{$data->numeroordenventa ?? ''}} - Id {{$data->id}}</h3>
                     <div class="card-tools">
                         @if ($data->estado == 'PENDIENTE' || $data->estado == 'FACTPARCIAL')
-                            <button type="submit" id="generafactura" onclick="generaFactura()" class="btn btn-primary">
+                            <button type="button" id="generafactura" onclick="generaFactura()" class="btn btn-primary" data-padron-accion-factura="1">
                                 <i class="fa fa-fw fa-print"></i>
                                 Facturar
                             </button>

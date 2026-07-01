@@ -81,7 +81,7 @@
 						Pesada
 					</button>
                     @if ($pedido->estadopedido != "Facturado" && $pedido->estadopedido != "Suspendido")
-                        <button type="submit" onclick="generaFactura()" class="btn btn-primary">
+                        <button type="button" onclick="generaFactura()" class="btn btn-primary" data-padron-accion-factura="1">
                             <i class="fa fa-fw fa-print"></i>
                             Factura
                         </button>
@@ -111,7 +111,7 @@
                     @endif                                  
                 </div>
             </div>
-            <form action="{{route('actualizar_pedido', ['id' => $pedido->id])}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return (typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar()) && (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
+            <form action="{{route('actualizar_pedido', ['id' => $pedido->id])}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
                 @csrf @method("put")
                 @if (!empty($soloConsulta))
                     <input type="hidden" name="origen" value="modal_consulta">

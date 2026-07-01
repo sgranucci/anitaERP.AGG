@@ -327,6 +327,39 @@ class GastronomiaConciliacionDiariaReporte extends Command
                         $ctrlAsientos['estado'] ?? '—',
                     ));
                 }
+
+                $huecos = $dia['huecos_numeracion'] ?? null;
+                if (is_array($huecos) && (int) ($huecos['huecos_corr_erp'] ?? 0) > 0) {
+                    $this->warn(sprintf(
+                        '  <comment>HUECOS NUMERACIÓN (jornada)</comment>: %d tramo(s) ERP | solo ERP %d | solo Anita %d',
+                        (int) ($huecos['huecos_corr_erp'] ?? 0),
+                        (int) ($huecos['solo_erp'] ?? 0),
+                        (int) ($huecos['solo_anita'] ?? 0),
+                    ));
+                    foreach (array_slice($huecos['huecos'] ?? [], 0, 5) as $h) {
+                        $this->line(sprintf(
+                            '    PV %s: faltan %s (después de %s → %s)',
+                            $h['pv_codigo'] ?? '—',
+                            $h['faltantes'] ?? '',
+                            $h['desde'] ?? '',
+                            $h['hasta'] ?? '',
+                        ));
+                    }
+                }
+            }
+
+            $huecosRango = $empresa['huecos_rango'] ?? null;
+            if (is_array($huecosRango) && ($huecosRango['hay_huecos'] ?? false) === true) {
+                $resHuecos = $huecosRango['resumen'] ?? [];
+                $this->newLine();
+                $this->warn(sprintf(
+                    '  <comment>HUECOS RANGO %s → %s</comment>: ERP %d tramo(s) / %d faltantes en %d jornada(s)',
+                    $informe['fecha_desde'] ?? '',
+                    $informe['fecha_hasta'] ?? '',
+                    (int) ($resHuecos['huecos_erp'] ?? 0),
+                    (int) ($resHuecos['numeros_faltantes_erp'] ?? 0),
+                    (int) ($resHuecos['jornadas_con_huecos_erp'] ?? 0),
+                ));
             }
         }
 
@@ -356,6 +389,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
             'hay_diferencias' => $hayDiferencias,
+            'hay_huecos_numeracion' => (bool) ($informe['hay_huecos_numeracion'] ?? false),
             'filas_csv' => count($csvFilas),
         ]);
 
@@ -365,7 +399,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
             return self::SUCCESS;
         }
 
-        return $hayDiferencias ? self::FAILURE : self::SUCCESS;
+        return ($hayDiferencias || (bool) ($informe['hay_huecos_numeracion'] ?? false)) ? self::FAILURE : self::SUCCESS;
     }
 
     private function fmt(mixed $valor): string

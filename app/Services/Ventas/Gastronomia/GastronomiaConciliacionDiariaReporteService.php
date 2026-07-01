@@ -36,6 +36,7 @@ final class GastronomiaConciliacionDiariaReporteService
         private readonly GastronomiaAnitaMesCacheSupport $anitaMesCacheSupport,
         private readonly GastronomiaConciliacionEstacionamientoSupport $estacionamientoSupport,
         private readonly GastronomiaConciliacionVendingRendgSupport $vendingRendgSupport,
+        private readonly GastronomiaAuditoriaHuecosNumeracionService $huecosNumeracionService,
     ) {
     }
 
@@ -145,6 +146,14 @@ final class GastronomiaConciliacionDiariaReporteService
                 'empresa_nombre' => (string) ($empresa->nombre ?? 'Empresa '.$empresaId),
                 'dias' => $dias,
                 'anita_cache' => $cacheManifest,
+                'huecos_rango' => $this->huecosNumeracionService->auditarRango(
+                    $desde,
+                    $hasta,
+                    [$empresaId],
+                    null,
+                    $usarCache,
+                    false,
+                ),
             ];
         }
 
@@ -155,6 +164,7 @@ final class GastronomiaConciliacionDiariaReporteService
             'usar_cache_anita' => $usarCache,
             'empresas' => $empresas,
             'hay_diferencias' => $this->hayDiferencias(['empresas' => $empresas]),
+            'hay_huecos_numeracion' => $this->huecosNumeracionService->hayHuecos(['empresas' => $empresas]),
         ];
     }
 
@@ -253,6 +263,14 @@ final class GastronomiaConciliacionDiariaReporteService
                 if (is_array($ctrlAsientos) && ($ctrlAsientos['estado'] ?? '') === 'DIF') {
                     return true;
                 }
+                $huecos = $dia['huecos_numeracion'] ?? null;
+                if (is_array($huecos) && (int) ($huecos['huecos_corr_erp'] ?? 0) > 0) {
+                    return true;
+                }
+            }
+            $huecosRango = $empresa['huecos_rango'] ?? null;
+            if (is_array($huecosRango) && ($huecosRango['hay_huecos'] ?? false) === true) {
+                return true;
             }
         }
 
@@ -454,6 +472,7 @@ final class GastronomiaConciliacionDiariaReporteService
             'vending' => $vending,
             'control_gastro_total' => $controlGastro,
             'control_rendg_asientos' => $controlRendgAsientos,
+            'huecos_numeracion' => $this->huecosNumeracionService->resumenJornadaEmpresa($empresaId, $fechaJornada),
         ];
     }
 

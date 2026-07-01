@@ -71,7 +71,7 @@
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-6">
-							<button type="button" onclick="subm()" class="btn btn-success">Guardar</button>
+							<button type="button" onclick="subm()" class="btn btn-success" data-padron-accion-factura="1">Guardar</button>
                         </div>
                     </div>
                 </div>

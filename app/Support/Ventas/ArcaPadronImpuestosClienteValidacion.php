@@ -10,6 +10,23 @@ final class ArcaPadronImpuestosClienteValidacion
     public const ESTADO_IMPUESTO_ACTIVO = 'AC';
 
     /**
+     * Condiciones IVA que exigen consulta padrón (RI, Monotributo, Baja de impuestos).
+     */
+    public static function aplicaParaCondicionIva(?int $condicionivaId): bool
+    {
+        $condicionivaId = $condicionivaId > 0 ? $condicionivaId : null;
+        if ($condicionivaId === null) {
+            return false;
+        }
+
+        $riId = (int) config('arca.padron_validacion_cliente.condicioniva_responsable_inscripto_id', 1);
+        $monoId = (int) config('arca.padron_validacion_cliente.condicioniva_monotributo_id', 4);
+        $bajaId = (int) config('arca.padron_validacion_cliente.condicioniva_baja_impuestos_id', 7);
+
+        return in_array($condicionivaId, [$riId, $monoId, $bajaId], true);
+    }
+
+    /**
      * @param  array<string, mixed>  $padronData  Respuesta normalizada de ConstanciaInscripcionService
      * @return array{
      *     aplica: bool,
@@ -24,11 +41,7 @@ final class ArcaPadronImpuestosClienteValidacion
     {
         $condicionivaId = $condicionivaId > 0 ? $condicionivaId : null;
 
-        $riId = (int) config('arca.padron_validacion_cliente.condicioniva_responsable_inscripto_id', 1);
-        $monoId = (int) config('arca.padron_validacion_cliente.condicioniva_monotributo_id', 4);
-        $bajaId = (int) config('arca.padron_validacion_cliente.condicioniva_baja_impuestos_id', 7);
-
-        if ($condicionivaId === null || ! in_array($condicionivaId, [$riId, $monoId, $bajaId], true)) {
+        if (! self::aplicaParaCondicionIva($condicionivaId)) {
             return [
                 'aplica' => false,
                 'ok' => true,

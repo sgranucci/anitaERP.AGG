@@ -20,6 +20,7 @@ final class GastronomiaFacturacionAuditoriaIntegralService
     public function __construct(
         private readonly GastronomiaConciliacionPorPcSupport $conciliacionPorPcSupport,
         private readonly GastronomiaChequeoVentasAnitaErpService $chequeoService,
+        private readonly GastronomiaAuditoriaHuecosNumeracionService $huecosNumeracionService,
     ) {
     }
 
@@ -63,6 +64,14 @@ final class GastronomiaFacturacionAuditoriaIntegralService
                 'empresa_nombre' => (string) ($empresa->nombre ?? 'Empresa '.$empresaId),
                 'empresa_codigo' => (int) ($empresa->codigo ?? $empresaId),
                 'dias' => $dias,
+                'huecos_rango' => $this->huecosNumeracionService->auditarRango(
+                    $desde,
+                    $hasta,
+                    [$empresaId],
+                    $codigoPuntoventaFiltro,
+                    true,
+                    false,
+                ),
             ];
         }
 
@@ -72,6 +81,7 @@ final class GastronomiaFacturacionAuditoriaIntegralService
             'tolerancia' => $tolerancia,
             'empresas' => $empresas,
             'hay_diferencias' => $this->hayDiferencias(['empresas' => $empresas]),
+            'hay_huecos_numeracion' => $this->huecosNumeracionService->hayHuecos(['empresas' => $empresas]),
         ];
     }
 
@@ -98,6 +108,14 @@ final class GastronomiaFacturacionAuditoriaIntegralService
                     || ($montosCabecera['conteo']['solo_erp'] ?? 0) > 0) {
                     return true;
                 }
+                $huecos = $dia['huecos_numeracion'] ?? null;
+                if (is_array($huecos) && (int) ($huecos['huecos_corr_erp'] ?? 0) > 0) {
+                    return true;
+                }
+            }
+            $huecosRango = $empresa['huecos_rango'] ?? null;
+            if (is_array($huecosRango) && ($huecosRango['hay_huecos'] ?? false) === true) {
+                return true;
             }
         }
 
@@ -259,6 +277,7 @@ final class GastronomiaFacturacionAuditoriaIntegralService
                 $tolerancia,
                 $codigoPuntoventaFiltro,
             ),
+            'huecos_numeracion' => $this->huecosNumeracionService->resumenJornadaEmpresa($empresaId, $fechaJornada),
         ];
     }
 

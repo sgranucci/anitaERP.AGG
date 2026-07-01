@@ -434,7 +434,8 @@ class ClienteController extends Controller
     }
 
     /**
-     * Consulta padrón ARCA para pedidos/facturación (no suspende; respeta estado Regularizado).
+     * Consulta padrón ARCA para pedidos/facturación clásica (solo frontend).
+     * No suspende; respeta estado Regularizado y condición IVA aplicable.
      */
     public function validarPadronOperacion(Request $request, $id): \Illuminate\Http\JsonResponse
     {

@@ -147,7 +147,7 @@
         </div>
         <div class="modal-footer">
             <button type="button" id="cierraFacturarOrdenTrabajoModal" class="btn btn-secondary" data-dismiss="modal">Cierra</button>
-            <button type="button" id="aceptaFacturarOrdenTrabajoModal" class="btn btn-primary">Genera Factura</button>
+            <button type="button" id="aceptaFacturarOrdenTrabajoModal" class="btn btn-primary" data-padron-accion-factura="1">Genera Factura</button>
         </div>
     </div>
   </div>

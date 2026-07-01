@@ -1669,12 +1669,6 @@
 			sincronizarCantidadesItemsFactura();
 		}
 
-		var cliente_id = $('#cliente_id').val();
-		if (typeof window.ejecutarAccionTrasValidarPadron === 'function') {
-			window.ejecutarAccionTrasValidarPadron(cliente_id, calculaFacturaAjax, { forzar: false });
-			return;
-		}
-
 		calculaFacturaAjax();
 	}
 

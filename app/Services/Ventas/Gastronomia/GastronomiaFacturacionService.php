@@ -428,11 +428,15 @@ final class GastronomiaFacturacionService
      * @param  array<string, mixed>  $caePendiente  Contexto devuelto por generaComprobanteGeneral (cae_pendiente).
      * @return array<string, mixed>|null  vencae_pendiente si se difiere la grabación en Informix
      */
-    public function completarSolicitudCaePendiente(array $caePendiente): ?array
+    /**
+     * @param  array{cae:string,fechavencimientocae:string}|null  $caeRecuperadoArca
+     */
+    public function completarSolicitudCaePendiente(array $caePendiente, ?array $caeRecuperadoArca = null): ?array
     {
         return $this->facturacionService->completarSolicitudCaePendiente(
             $caePendiente,
             $this->debeDiferirVencaeAnita(),
+            $caeRecuperadoArca,
         );
     }
 

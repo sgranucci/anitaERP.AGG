@@ -653,20 +653,31 @@
 
 	function generaFactura()
 	{
-		flFactura = true;		
+		var clienteIdOv = $("#cliente_id").val();
 
-		preciosfactura_txt = [];
-		titulofactura_txt = [];
-		pedido_articulo_ids = [];
-		offFactura = 0;
+		function abrirModalFacturaOrdenventa() {
+			flFactura = true;
 
-		cliente_id = $("#cliente_id").val();
-		nombrecliente = $("#nombrecliente").val();
-		descuentoCliente = $('#descuento').val();
+			preciosfactura_txt = [];
+			titulofactura_txt = [];
+			pedido_articulo_ids = [];
+			offFactura = 0;
 
-		setTimeout(() => {
-			$("#facturarOrdenventaModal").modal('show');
-		}, 300);
+			cliente_id = $("#cliente_id").val();
+			nombrecliente = $("#nombrecliente").val();
+			descuentoCliente = $('#descuento').val();
+
+			setTimeout(() => {
+				$("#facturarOrdenventaModal").modal('show');
+			}, 300);
+		}
+
+		if (typeof window.ejecutarSiPadronOperacionOk === 'function') {
+			window.ejecutarSiPadronOperacionOk(clienteIdOv, abrirModalFacturaOrdenventa);
+			return;
+		}
+
+		abrirModalFacturaOrdenventa();
 	}
 
 	// Carga modal de facturacion

@@ -7,7 +7,8 @@ use App\Services\Arca\ConstanciaInscripcionService;
 use Throwable;
 
 /**
- * Valida padrón ARCA antes de cargar pedidos o facturar (Ventas clásica).
+ * Valida padrón ARCA en operaciones de venta (pedido / factura clásica).
+ * Solo se invoca desde el frontend vía ClienteController@validarPadronOperacion.
  * Clientes regularizados (estado R) pueden operar aunque el padrón muestre problemas.
  */
 final class ArcaPadronClienteOperacionValidacionSupport
@@ -25,14 +26,18 @@ final class ArcaPadronClienteOperacionValidacionSupport
             return null;
         }
 
+        $condicionivaId = $condicionivaIdOverride ?? (int) ($cliente->condicioniva_id ?? 0);
+
+        if (! ArcaPadronImpuestosClienteValidacion::aplicaParaCondicionIva($condicionivaId)) {
+            return null;
+        }
+
         $cuit = preg_replace('/\D+/', '', (string) ($cliente->numerodocumento ?? ''));
         if (strlen($cuit) !== 11) {
             return [
                 'error' => 'El cliente no tiene CUIT válida (11 dígitos) para consultar el padrón ARCA.',
             ];
         }
-
-        $condicionivaId = $condicionivaIdOverride ?? (int) ($cliente->condicioniva_id ?? 0);
 
         try {
             $padronData = app(ConstanciaInscripcionService::class)->getPersonaV2($cuit);

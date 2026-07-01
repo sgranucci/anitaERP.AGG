@@ -89,7 +89,7 @@
                     <div class="row">
                         <div class="col-lg-6">
                             @if (isset($flGeneraNotaDeCredito))
-							    <button type="submit" onclick="sub()" class="btn btn-success">Genera Nota de Crédito</button>
+							    <button type="submit" onclick="sub()" class="btn btn-success" data-padron-accion-factura="1">Genera Nota de Crédito</button>
                             @endif
                         </div>
                     </div>

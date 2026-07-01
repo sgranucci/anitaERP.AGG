@@ -74,6 +74,7 @@ class GastronomiaAuditoriaIntegralFacturacion extends Command
         $this->line('Modo contable gastronomía: '.$modoContable);
 
         $hayDiferencias = $service->hayDiferencias($informe);
+        $hayHuecos = (bool) ($informe['hay_huecos_numeracion'] ?? false);
         $filasTabla = [];
 
         foreach ($informe['empresas'] as $empresa) {
@@ -161,6 +162,25 @@ class GastronomiaAuditoriaIntegralFacturacion extends Command
                         ));
                     }
                 }
+
+                $huecos = $dia['huecos_numeracion'] ?? null;
+                if (is_array($huecos) && (int) ($huecos['huecos_corr_erp'] ?? 0) > 0) {
+                    $this->warn(sprintf(
+                        '  Huecos numeración jornada: %d tramo(s) ERP',
+                        (int) ($huecos['huecos_corr_erp'] ?? 0),
+                    ));
+                }
+            }
+
+            $huecosRango = $empresa['huecos_rango'] ?? null;
+            if (is_array($huecosRango) && ($huecosRango['hay_huecos'] ?? false) === true) {
+                $resHuecos = $huecosRango['resumen'] ?? [];
+                $this->warn(sprintf(
+                    '  Huecos rango: ERP %d tramo(s) / %d faltantes en %d jornada(s)',
+                    (int) ($resHuecos['huecos_erp'] ?? 0),
+                    (int) ($resHuecos['numeros_faltantes_erp'] ?? 0),
+                    (int) ($resHuecos['jornadas_con_huecos_erp'] ?? 0),
+                ));
             }
         }
 
@@ -180,7 +200,7 @@ class GastronomiaAuditoriaIntegralFacturacion extends Command
             $this->info('CSV: '.$csvPath);
         }
 
-        return $hayDiferencias ? self::FAILURE : self::SUCCESS;
+        return ($hayDiferencias || $hayHuecos) ? self::FAILURE : self::SUCCESS;
     }
 
     private function fmtDiff(mixed $valor): string

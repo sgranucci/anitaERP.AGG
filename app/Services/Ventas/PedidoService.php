@@ -521,11 +521,6 @@ class PedidoService
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
 
-		$bloqueoPadron = \App\Support\Ventas\ArcaPadronClienteOperacionValidacionSupport::bloqueoOperacion($cliente);
-		if ($bloqueoPadron !== null) {
-			return $bloqueoPadron;
-		}
-
 		$errorEntrega = \App\Support\Ventas\ClienteEntregaPedidoSupport::validarSeleccionParaCliente(
 			(int) $data['cliente_id'],
 			(int) ($data['cliente_entrega_id'] ?? 0) ?: null

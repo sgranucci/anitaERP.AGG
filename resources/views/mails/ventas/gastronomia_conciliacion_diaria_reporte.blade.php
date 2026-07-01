@@ -44,6 +44,13 @@
     <p style="color:#28a745; font-weight:bold;">Sin diferencias fuera de tolerancia en el rango.</p>
 @endif
 
+@php $hayHuecos = (bool) ($informe['hay_huecos_numeracion'] ?? false); @endphp
+@if ($hayHuecos)
+    <p style="color:#dc3545; font-weight:bold;">Hay huecos en numeración de comprobantes (ERP y/o Anita) en el rango.</p>
+@else
+    <p style="color:#28a745; font-weight:bold;">Sin huecos en numeración en el rango.</p>
+@endif
+
 <p style="margin:16px 0 8px 0;">
     Adjunto Excel (y CSV) por circuito: <strong>GASTRO</strong> (salón), <strong>ESTACIONAMIENTO</strong> (PV ERP vs rendgastro), <strong>VENDING</strong> (rendiciones ERP vs rendgastro).
 </p>

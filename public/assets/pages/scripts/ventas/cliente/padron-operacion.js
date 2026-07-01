@@ -7,6 +7,8 @@
         mensaje: null,
     };
 
+    var SELECTOR_BOTONES_FACTURA = '[data-padron-accion-factura]';
+
     function requiereValidacionPadron() {
         return window.REQUIERE_VALIDACION_PADRON_OPERACION === true;
     }
@@ -41,6 +43,31 @@
         return parseInt(val, 10);
     }
 
+    function actualizarBotonesFacturaSegunPadron() {
+        if (!requiereValidacionPadron()) {
+            $(SELECTOR_BOTONES_FACTURA).prop('disabled', false).removeClass('disabled').removeAttr('title');
+            return;
+        }
+
+        var id = clienteIdDesdeFormulario();
+        var bloqueado = id > 0 && estadoPadron.clienteId === id && estadoPadron.ok === false;
+        var pendiente = id > 0 && (estadoPadron.clienteId !== id || estadoPadron.ok === null);
+
+        $(SELECTOR_BOTONES_FACTURA).each(function () {
+            var $btn = $(this);
+            if (bloqueado) {
+                $btn.prop('disabled', true).addClass('disabled');
+                if (estadoPadron.mensaje) {
+                    $btn.attr('title', estadoPadron.mensaje);
+                }
+            } else if (pendiente) {
+                $btn.prop('disabled', true).addClass('disabled').removeAttr('title');
+            } else {
+                $btn.prop('disabled', false).removeClass('disabled').removeAttr('title');
+            }
+        });
+    }
+
     window.clienteEstaHabilitadoParaFacturacion = function (estado) {
         var e = String(estado || '').toUpperCase();
         return e === '0' || e === 'R';
@@ -50,6 +77,27 @@
         estadoPadron.clienteId = null;
         estadoPadron.ok = null;
         estadoPadron.mensaje = null;
+        actualizarBotonesFacturaSegunPadron();
+    };
+
+    window.limpiarSeleccionClienteOperacion = function () {
+        $('#cliente_id, .cliente_id').val('');
+        $('#codigocliente, .codigocliente').val('');
+        $('#nombrecliente, .nombrecliente').val('');
+        window.invalidarEstadoPadronOperacion();
+    };
+
+    window.padronOperacionClienteOk = function (clienteId) {
+        if (!requiereValidacionPadron()) {
+            return true;
+        }
+
+        var id = parseInt(clienteId, 10);
+        if (!id) {
+            return false;
+        }
+
+        return estadoPadron.clienteId === id && estadoPadron.ok === true;
     };
 
     window.validarPadronClienteOperacion = function (clienteId, opts) {
@@ -85,6 +133,7 @@
             estadoPadron.clienteId = id || null;
             estadoPadron.ok = true;
             estadoPadron.mensaje = null;
+            actualizarBotonesFacturaSegunPadron();
 
             return $.Deferred().resolve({ ok: true, skipped: true }).promise();
         }
@@ -92,30 +141,41 @@
         if (!opts.forzar
             && estadoPadron.clienteId === id
             && estadoPadron.ok === true) {
+            actualizarBotonesFacturaSegunPadron();
+
             return $.Deferred().resolve({ ok: true, cached: true }).promise();
         }
 
         if (!opts.forzar
             && estadoPadron.clienteId === id
             && estadoPadron.ok === false) {
+            actualizarBotonesFacturaSegunPadron();
+
             return $.Deferred().reject({ message: estadoPadron.mensaje }).promise();
         }
+
+        actualizarBotonesFacturaSegunPadron();
 
         return window.validarPadronClienteOperacion(id, opts)
             .done(function () {
                 estadoPadron.clienteId = id;
                 estadoPadron.ok = true;
                 estadoPadron.mensaje = null;
+                actualizarBotonesFacturaSegunPadron();
             })
             .fail(function (xhr) {
                 var msg = mensajeDesdeXhr(xhr);
                 estadoPadron.clienteId = id;
                 estadoPadron.ok = false;
                 estadoPadron.mensaje = msg;
+                actualizarBotonesFacturaSegunPadron();
             });
     };
 
-    window.ejecutarAccionTrasValidarPadron = function (clienteId, accion, opts) {
+    /**
+     * Ejecuta acción de facturación usando cache de padrón (sin reconsultar ARCA salvo cache miss).
+     */
+    window.ejecutarSiPadronOperacionOk = function (clienteId, accion, opts) {
         opts = opts || {};
 
         if (!requiereValidacionPadron()) {
@@ -146,6 +206,8 @@
                 }
             });
     };
+
+    window.ejecutarAccionTrasValidarPadron = window.ejecutarSiPadronOperacionOk;
 
     window.verificarPadronClienteOperacion = function (clienteId, opts) {
         opts = opts || {};
@@ -178,11 +240,43 @@
             event.preventDefault();
         }
 
-        window.ejecutarAccionTrasValidarPadron(clienteIdDesdeFormulario(), function () {
+        var id = clienteIdDesdeFormulario();
+
+        if (estadoPadron.clienteId === id && estadoPadron.ok === false) {
+            window.notificarBloqueoPadronCliente(estadoPadron.mensaje || 'Problemas en ARCA: no se puede operar con este cliente.');
+            return false;
+        }
+
+        if (estadoPadron.clienteId === id && estadoPadron.ok === true) {
             $(form).data('padron-omitir-validacion', true).trigger('submit');
-        }, { forzar: true });
+            return false;
+        }
+
+        window.ejecutarValidacionPadronOperacion(id, {
+            condicionivaId: $('#condicioniva_id').val() || '',
+        }).done(function () {
+            $(form).data('padron-omitir-validacion', true).trigger('submit');
+        }).fail(function (err) {
+            var msg = (err && err.message) ? err.message : (estadoPadron.mensaje || 'Problemas en ARCA: no se puede operar con este cliente.');
+            window.notificarBloqueoPadronCliente(msg);
+        });
 
         return false;
+    };
+
+    window.inicializarPadronOperacionDesdeFormulario = function () {
+        if (!requiereValidacionPadron()) {
+            return;
+        }
+
+        var id = clienteIdDesdeFormulario();
+        if (id > 0) {
+            window.ejecutarValidacionPadronOperacion(id, {
+                condicionivaId: $('#condicioniva_id').val() || '',
+            });
+        } else {
+            actualizarBotonesFacturaSegunPadron();
+        }
     };
 
     $(function () {
@@ -193,5 +287,7 @@
         $(document).on('change', '#cliente_id, #codigocliente', function () {
             window.invalidarEstadoPadronOperacion();
         });
+
+        window.inicializarPadronOperacionDesdeFormulario();
     });
 }(window, jQuery));

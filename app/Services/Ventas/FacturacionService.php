@@ -316,24 +316,6 @@ class FacturacionService
 		return \App\Support\Ventas\ClienteEntregaPedidoSupport::validarPedido($cliente, $pedido);
 	}
 
-	/** @var array<int, array{error: string, validacion?: array}|null> */
-	private array $padronOperacionCache = [];
-
-	private function validarPadronClienteOperacion($cliente): ?array
-	{
-		$id = (int) ($cliente->id ?? 0);
-		if ($id > 0 && array_key_exists($id, $this->padronOperacionCache)) {
-			return $this->padronOperacionCache[$id];
-		}
-
-		$bloqueo = \App\Support\Ventas\ArcaPadronClienteOperacionValidacionSupport::bloqueoOperacion($cliente);
-		if ($id > 0) {
-			$this->padronOperacionCache[$id] = $bloqueo;
-		}
-
-		return $bloqueo;
-	}
-
 	// Calcula la factura por pedido
 
 	public function calculaFacturaPorPedido(array $data)
@@ -354,11 +336,6 @@ class FacturacionService
 
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
-
-		$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
-		if ($bloqueoPadron !== null) {
-			return $bloqueoPadron;
-		}
 		
 		if ($cliente->numerodocumento == null)
 			return ['error' => 'No tiene Documento'];
@@ -590,11 +567,6 @@ class FacturacionService
 		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
-
-		$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
-		if ($bloqueoPadron !== null) {
-			return $bloqueoPadron;
-		}
 
 		// Lee el tipo de transaccion
 		$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
@@ -1180,11 +1152,6 @@ class FacturacionService
 
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
-
-		$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
-		if ($bloqueoPadron !== null) {
-			return $bloqueoPadron;
-		}
 		
 		if ($cliente->numerodocumento == null)
 			return ['error' => 'No tiene Documento'];
@@ -1729,11 +1696,6 @@ class FacturacionService
 
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
-
-		$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
-		if ($bloqueoPadron !== null) {
-			return $bloqueoPadron;
-		}
 		
 		if (! isset($data['arca_receptor']) && $cliente->numerodocumento == null)
 			return ['error' => 'No tiene Documento'];
@@ -2376,11 +2338,6 @@ class FacturacionService
 
 						if (!$cliente)
 							return ['error' => 'Cliente inexistente'];
-
-						$bloqueoPadron = $this->validarPadronClienteOperacion($cliente);
-						if ($bloqueoPadron !== null) {
-							return $bloqueoPadron;
-						}
 
 						if ($cliente->numerodocumento == null)
 							return ['error' => 'No tiene CUIT'];
@@ -5941,8 +5898,12 @@ class FacturacionService
 	 * @param  array<string, mixed>  $caePendiente
 	 * @return array<string, mixed>|null  Datos para grabar vencae en Anita post-respuesta (gastronomía).
 	 */
-	public function completarSolicitudCaePendiente(array $caePendiente, bool $deferVencaeAnita = false): ?array
+	public function completarSolicitudCaePendiente(array $caePendiente, bool $deferVencaeAnita = false, ?array $caeRecuperadoArca = null): ?array
 	{
+		if ($caeRecuperadoArca !== null) {
+			return $this->aplicarCaeRecuperadoArca($caePendiente, $caeRecuperadoArca, $deferVencaeAnita);
+		}
+
 		$opcionesArca = is_array($caePendiente['opciones_emision_arca'] ?? null)
 			? $caePendiente['opciones_emision_arca']
 			: [];
@@ -6132,6 +6093,80 @@ class FacturacionService
 		}
 
 		return 'Success';
+	}
+
+	/**
+	 * Aplica CAE ya autorizado en ARCA (recuperación tras rollback ERP) sin volver a solicitar FECAESolicitar.
+	 *
+	 * @param  array<string, mixed>  $caePendiente
+	 * @param  array{cae:string,fechavencimientocae:string}  $caeRecuperadoArca
+	 * @return array<string, mixed>|null
+	 */
+	private function aplicarCaeRecuperadoArca(array $caePendiente, array $caeRecuperadoArca, bool $deferVencaeAnita): ?array
+	{
+		$ventaId = (int) ($caePendiente['venta_id'] ?? 0);
+		if ($ventaId <= 0) {
+			throw new Exception('Recuperación CAE: venta_id inválido.');
+		}
+
+		$cae = trim((string) ($caeRecuperadoArca['cae'] ?? ''));
+		$fechaVto = $this->normalizarFechaVencimientoCae((string) ($caeRecuperadoArca['fechavencimientocae'] ?? ''));
+		if ($cae === '' || $fechaVto === '') {
+			throw new Exception('Recuperación CAE: faltan cae o fechavencimientocae.');
+		}
+
+		$puntoventa = $caePendiente['puntoventa'] ?? null;
+		$tipoAnita = (string) ($caePendiente['tipo_anita'] ?? '');
+		$letra = (string) ($caePendiente['letra'] ?? 'B');
+		$numeroComprobante = (int) ($caePendiente['numero_comprobante'] ?? 0);
+
+		$this->ventaRepository->update([
+			'cae' => $cae,
+			'fechavencimientocae' => $fechaVto,
+		], $ventaId);
+
+		if ($puntoventa !== null && ($puntoventa->modofacturacion ?? '') !== 'M' && ! $deferVencaeAnita) {
+			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_inicio');
+			$vencae = Self::grabaVenCae(
+				$tipoAnita,
+				$letra,
+				$puntoventa->codigo,
+				$numeroComprobante,
+				$cae,
+				date('Ymd', strtotime($fechaVto)),
+			);
+			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_fin');
+
+			if ($vencae === 'Error') {
+				throw new Exception('No pudo grabar CAE en Anita (vencae) en recuperación ARCA.');
+			}
+		}
+
+		if ($deferVencaeAnita) {
+			return $this->armarVencaePendienteDesdeCaePendiente($caePendiente);
+		}
+
+		return null;
+	}
+
+	private function normalizarFechaVencimientoCae(string $raw): string
+	{
+		$raw = trim($raw);
+		if ($raw === '') {
+			return '';
+		}
+
+		if (preg_match('/^\d{8}$/', $raw)) {
+			$dt = \DateTime::createFromFormat('Ymd', $raw);
+
+			return $dt ? $dt->format('Y-m-d') : '';
+		}
+
+		if (preg_match('/^\d{4}-\d{2}-\d{2}/', $raw)) {
+			return substr($raw, 0, 10);
+		}
+
+		return $raw;
 	}
 
 	/**

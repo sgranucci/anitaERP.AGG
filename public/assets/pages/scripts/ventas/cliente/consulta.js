@@ -97,7 +97,17 @@ function aplicarSeleccionClienteInternoDescuento(fila) {
 }
 
 function aplicarSeleccionClienteFactura(fila) {
-    if (ptrcliente_id && ptrcliente_id.length) {
+    if (typeof window.gastroOnClienteFacturaElegido === 'function') {
+        window.gastroOnClienteFacturaElegido(fila);
+        return;
+    }
+
+    if (window.REQUIERE_VALIDACION_PADRON_OPERACION === true && $.isNumeric(fila.id)) {
+        leeUnCliente(fila.id, 0);
+        return;
+    }
+
+   	if (ptrcliente_id && ptrcliente_id.length) {
         ptrcliente_id.val(fila.id);
     }
     if (ptrnombrecliente && ptrnombrecliente.length) {
@@ -118,9 +128,7 @@ function aplicarSeleccionClienteFactura(fila) {
     if ($('#codigocliente').length && fila.codigo) {
         $('#codigocliente').val(fila.codigo);
     }
-    if (typeof window.gastroOnClienteFacturaElegido === 'function') {
-        window.gastroOnClienteFacturaElegido(fila);
-    } else if ($.isNumeric(fila.id)) {
+    if ($.isNumeric(fila.id)) {
         leeUnCliente(fila.id, 0);
     }
 }
@@ -338,76 +346,102 @@ function leeUnCliente(cliente_id, codigocliente)
             {
                 if (!window.clienteEstaHabilitadoParaFacturacion(data.estado))
                 {
-                    if (typeof window.invalidarEstadoPadronOperacion === 'function') {
+                    if (typeof window.limpiarSeleccionClienteOperacion === 'function') {
+                        window.limpiarSeleccionClienteOperacion();
+                    } else if (typeof window.invalidarEstadoPadronOperacion === 'function') {
                         window.invalidarEstadoPadronOperacion();
                     }
                     alert('Cliente '+data.nombre+' no activo');
-                    $('#codigocliente').val('');
-                    $('#nombrecliente').val('');
                     $('#codigocliente').focus();
                 }
                 else
                 {
-                    $('#codigocliente').val(data.codigo);
-                    $("#cliente_id").val(data.id);
-                    $("#nombrecliente").val(nombreClienteDisplayConCodigo(data.codigo, data.nombre));
+                    function aplicarDatosClienteEnFormulario() {
+                        $('#codigocliente').val(data.codigo);
+                        $("#cliente_id").val(data.id);
+                        $("#nombrecliente").val(nombreClienteDisplayConCodigo(data.codigo, data.nombre));
 
-                    $("#domicilio").val(data.domicilio);
-                    $("#codigopostal").val(data.codigopostal);
-                    $("#nroinscripcion").val(data.numerodocumento);
-                    $("#telefono").val(data.telefono);
-                    $("#email").val(data.email);
-                    $("#localidad_id").val(data.localidad_id);
-                    $("#zonavta_id").val(data.zonavtas_id);
+                        $("#domicilio").val(data.domicilio);
+                        $("#codigopostal").val(data.codigopostal);
+                        $("#nroinscripcion").val(data.numerodocumento);
+                        $("#telefono").val(data.telefono);
+                        $("#email").val(data.email);
+                        $("#localidad_id").val(data.localidad_id);
+                        $("#zonavta_id").val(data.zonavtas_id);
 
-                    if (data.zonavtas != null)
-                    {
-                        $("#codigozonavta").val(data.zonavtas.codigo);
-                        $("#nombrezonavta").val(data.zonavtas.nombre);
+                        if (data.zonavtas != null)
+                        {
+                            $("#codigozonavta").val(data.zonavtas.codigo);
+                            $("#nombrezonavta").val(data.zonavtas.nombre);
+                        }
+
+                        if (data.localidades != null)
+                        {
+                            $("#desc_localidad").val(data.localidad_id);
+
+                            $("#localidad_id").empty();
+                            $("#localidad_id").append('<option value=""></option>');
+                            $("#localidad_id").append('<option value="'+data.localidad_id+'"selected>'+data.localidades['nombre']+'</option>');
+                        }
+
+                        $("#provincia_id").val(data.provincia_id);
+
+                        if (data.provincias != null)
+                            $("#desc_provincia").val(data.provincias['nombre']);
+
+                        $("#pais_id").val(data.pais_id);
+
+                        if (data.paises != null)
+                            $("#desc_pais").val(data.paises['nombre']);
+
+                        invocarDatosClienteTrasSeleccion(data.id, data);
                     }
 
-                    if (data.localidades != null)
-                    {
-                        $("#desc_localidad").val(data.localidad_id);
-
-                        $("#localidad_id").empty();
-                        $("#localidad_id").append('<option value=""></option>');
-                        $("#localidad_id").append('<option value="'+data.localidad_id+'"selected>'+data.localidades['nombre']+'</option>');
-                    }
-
-                    $("#provincia_id").val(data.provincia_id);
-
-                    if (data.provincias != null)
-                        $("#desc_provincia").val(data.provincias['nombre']);
-
-                    $("#pais_id").val(data.pais_id);
-
-                    if (data.paises != null)
-                        $("#desc_pais").val(data.paises['nombre']);
-
-                    if (typeof window.verificarPadronClienteOperacion === 'function') {
-                        window.verificarPadronClienteOperacion(data.id, {
+                    if (typeof window.ejecutarValidacionPadronOperacion === 'function'
+                        && window.REQUIERE_VALIDACION_PADRON_OPERACION === true) {
+                        window.ejecutarValidacionPadronOperacion(data.id, {
                             condicionivaId: data.condicioniva_id,
+                        }).done(function () {
+                            aplicarDatosClienteEnFormulario();
+                        }).fail(function (err) {
+                            if (typeof window.limpiarSeleccionClienteOperacion === 'function') {
+                                window.limpiarSeleccionClienteOperacion();
+                            }
+                            var msg = (err && err.message) ? err.message : 'Problemas en ARCA: no se puede operar con este cliente.';
+                            if (typeof window.notificarBloqueoPadronCliente === 'function') {
+                                window.notificarBloqueoPadronCliente(msg);
+                            } else {
+                                alert(msg);
+                            }
+                            $('#codigocliente').focus();
                         });
+                    } else {
+                        aplicarDatosClienteEnFormulario();
                     }
-
-                    invocarDatosClienteTrasSeleccion(data.id, data);
                 }
             }
             else
             {
-                $('#codigocliente').val('');
-                $('#nombrecliente').val('');
-                if (typeof window.invalidarEstadoPadronOperacion === 'function') {
-                    window.invalidarEstadoPadronOperacion();
+                if (typeof window.limpiarSeleccionClienteOperacion === 'function') {
+                    window.limpiarSeleccionClienteOperacion();
+                } else {
+                    $('#codigocliente').val('');
+                    $('#nombrecliente').val('');
+                    if (typeof window.invalidarEstadoPadronOperacion === 'function') {
+                        window.invalidarEstadoPadronOperacion();
+                    }
                 }
                 $('#codigocliente').focus();
             }
         }).fail(function(jqXHR, textStatus, errorThrown) {
-                $('#codigocliente').val('');
-                $('#nombrecliente').val('');
-                if (typeof window.invalidarEstadoPadronOperacion === 'function') {
-                    window.invalidarEstadoPadronOperacion();
+                if (typeof window.limpiarSeleccionClienteOperacion === 'function') {
+                    window.limpiarSeleccionClienteOperacion();
+                } else {
+                    $('#codigocliente').val('');
+                    $('#nombrecliente').val('');
+                    if (typeof window.invalidarEstadoPadronOperacion === 'function') {
+                        window.invalidarEstadoPadronOperacion();
+                    }
                 }
                 $('#codigocliente').focus();
         })

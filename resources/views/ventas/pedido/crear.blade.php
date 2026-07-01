@@ -77,7 +77,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_pedido')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return (typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar()) && (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
+            <form action="{{route('guardar_pedido')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
                 @csrf
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear"]; @endphp

@@ -6,6 +6,7 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
+use App\Support\Ventas\Gastronomia\GastronomiaNumeracionHuecosSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportEstacionamientoSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportResvtaSupport;
 use Illuminate\Support\Collection;
@@ -395,27 +396,15 @@ final class GastronomiaControlCorrelatividadAnitaErpService
      */
     private function detectarHuecosCorrelativos(Collection $ordenadas): array
     {
-        $huecos = [];
-        $prev = null;
-
+        $numeros = [];
         foreach ($ordenadas as $venta) {
             $n = (int) ($venta->numerocomprobante ?? 0);
-            if ($n <= 0) {
-                continue;
+            if ($n > 0) {
+                $numeros[] = $n;
             }
-            if ($prev !== null && $n > $prev + 1) {
-                $faltantes = range($prev + 1, $n - 1);
-                $huecos[] = [
-                    'desde' => $prev,
-                    'hasta' => $n,
-                    'faltantes' => implode(',', array_map('strval', $faltantes)),
-                    'cantidad' => count($faltantes),
-                ];
-            }
-            $prev = $n;
         }
 
-        return $huecos;
+        return GastronomiaNumeracionHuecosSupport::detectarHuecosSecuencia($numeros);
     }
 
     /**
