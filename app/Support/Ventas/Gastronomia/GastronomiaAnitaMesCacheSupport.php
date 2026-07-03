@@ -139,6 +139,105 @@ final class GastronomiaAnitaMesCacheSupport
         ];
     }
 
+    /**
+     * Cache para cuadre jornada: ctamov + rendgastro + venta Informix.
+     *
+     * @return array{
+     *   manifest: array<string, mixed>,
+     *   ctamov: list<object>,
+     *   rendgastro: array<string, list<object>>,
+     *   venta: list<object>
+     * }
+     */
+    public function cargarCtamovRendg(int $empresaId, string $fechaDesde, string $fechaHasta): array
+    {
+        $dir = $this->directorioCache($empresaId, $fechaDesde, $fechaHasta);
+        if (! is_file($dir.'/ctamov.json') || ! is_file($dir.'/rendgastro.json')) {
+            throw new \RuntimeException('Cache Anita ctamov/rendg inexistente: '.$dir);
+        }
+
+        $manifest = is_file($dir.'/manifest.json')
+            ? $this->leerJson($dir.'/manifest.json')
+            : [
+                'empresa_id' => $empresaId,
+                'fecha_desde' => Carbon::parse($fechaDesde)->toDateString(),
+                'fecha_hasta' => Carbon::parse($fechaHasta)->toDateString(),
+                'directorio' => $dir,
+            ];
+
+        return [
+            'manifest' => $manifest,
+            'ctamov' => $this->leerJsonFilas($dir.'/ctamov.json'),
+            'rendgastro' => $this->leerJsonRendgastro($dir.'/rendgastro.json'),
+            'venta' => is_file($dir.'/venta.json') ? $this->leerJsonFilas($dir.'/venta.json') : [],
+        ];
+    }
+
+    public function cacheCtamovRendgCompleta(int $empresaId, string $fechaDesde, string $fechaHasta): bool
+    {
+        $dir = $this->directorioCache($empresaId, $fechaDesde, $fechaHasta);
+
+        return is_file($dir.'/ctamov.json')
+            && is_file($dir.'/rendgastro.json')
+            && is_file($dir.'/venta.json');
+    }
+
+    /**
+     * Descarga ctamov + rendgastro + venta Informix (cuadre jornada).
+     *
+     * @return array<string, mixed>
+     */
+    public function descargarCtamovRendg(int $empresaId, string $fechaDesde, string $fechaHasta, bool $forzar = false): array
+    {
+        $desde = Carbon::parse($fechaDesde)->toDateString();
+        $hasta = Carbon::parse($fechaHasta)->toDateString();
+        if ($desde > $hasta) {
+            throw new \InvalidArgumentException('fecha-desde no puede ser posterior a fecha-hasta.');
+        }
+
+        $dir = $this->directorioCache($empresaId, $desde, $hasta);
+        if (! $forzar && $this->cacheCtamovRendgCompleta($empresaId, $desde, $hasta)) {
+            return $this->cargarCtamovRendg($empresaId, $desde, $hasta)['manifest'];
+        }
+
+        File::ensureDirectoryExists($dir);
+
+        $empresa = Empresa::query()->findOrFail($empresaId);
+        $empresaCodigo = trim((string) ($empresa->codigo ?? $empresaId));
+        $fechaDesdeEntera = (int) str_replace('-', '', $desde);
+        $fechaHastaEntera = (int) str_replace('-', '', $hasta);
+
+        $ctamov = $this->listarCtamovBulk((int) $empresaCodigo, $fechaDesdeEntera, $fechaHastaEntera);
+        $rendgastro = $this->listarRendgastroPorDia($empresaId, $desde, $hasta);
+        $venta = $this->listarVentaBulk($empresaCodigo, $fechaDesdeEntera, $fechaHastaEntera);
+
+        $this->guardarJson($dir.'/ctamov.json', $ctamov);
+        $this->guardarJson($dir.'/rendgastro.json', $rendgastro);
+        $this->guardarJson($dir.'/venta.json', $venta);
+
+        $manifest = [
+            'empresa_id' => $empresaId,
+            'empresa_codigo' => $empresaCodigo,
+            'empresa_nombre' => (string) ($empresa->nombre ?? ''),
+            'fecha_desde' => $desde,
+            'fecha_hasta' => $hasta,
+            'generado_at' => now()->toIso8601String(),
+            'bridge' => ApiAnita::urlBridge(),
+            'directorio' => $dir,
+            'modo' => 'cuadre_jornada',
+            'counts' => [
+                'ctamov' => count($ctamov),
+                'venta' => count($venta),
+                'rendgastro_dias' => count($rendgastro),
+                'rendgastro_filas' => array_sum(array_map('count', $rendgastro)),
+            ],
+        ];
+
+        $this->guardarJson($dir.'/manifest.json', $manifest);
+
+        return $manifest;
+    }
+
     public function directorioCacheExportPk(int $empresaId, string $fechaDesde, string $fechaHasta): string
     {
         return $this->directorioCache($empresaId, $fechaDesde, $fechaHasta).'_export_pk';

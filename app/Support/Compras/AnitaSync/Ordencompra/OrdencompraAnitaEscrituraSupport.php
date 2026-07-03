@@ -4,10 +4,12 @@ namespace App\Support\Compras\AnitaSync\Ordencompra;
 
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Articulo;
+use App\Models\Compras\Ordencompra_Comprobante;
+use App\Models\Compras\Ordencompra_Comprobante_Cuota;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 
 /**
- * Arma campos/valores SQL para pendmaep, pendmovp y movpresup (ERP → Anita).
+ * Arma campos/valores SQL para pendmaep, pendmovp, movpresup, occuota y ocfpagocuota (ERP → Anita).
  * Numéricos sin dato → 0 explícito.
  */
 final class OrdencompraAnitaEscrituraSupport
@@ -98,7 +100,7 @@ final class OrdencompraAnitaEscrituraSupport
             'penmp_expreso' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoTransporte((int) ($oc->transporte_id ?? 0))),
             'penmp_cod_mon' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoMonedaAnita($ctx->monedaCabeceraId($oc))),
             'penmp_cotizacion' => RecepcionProveedorAnitaEscrituraSupport::decimalSql($cotizacion),
-            'penmp_estado' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->mapEstadoAnitaEntero((string) $oc->estadoordencompra)),
+            'penmp_estado' => RecepcionProveedorAnitaEscrituraSupport::textoSql($ctx->mapEstadoAnita((string) $oc->estadoordencompra), 1),
             'penmp_leyenda' => RecepcionProveedorAnitaEscrituraSupport::textoSql(substr($detalle, 0, 40), 40),
             'penmp_requisicion' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->numeroRequisicion((int) ($oc->requisicion_id ?? 0))),
             'penmp_ccosto' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoCentrocosto((int) ($oc->centrocosto_id ?? 0))),
@@ -208,6 +210,215 @@ final class OrdencompraAnitaEscrituraSupport
             'movp_articulo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($ctx->skuArticulo13SinPad((int) $linea->articulo_id), 13),
             'movp_fecha' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($fecha),
             'movp_cotizacion' => RecepcionProveedorAnitaEscrituraSupport::decimalSql($cotizacion),
+        ];
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @return array{campos: string, valores: string}
+     */
+    public static function occuotaInsert(
+        Ordencompra_Comprobante $comprobante,
+        OrdencompraAnitaErpContext $ctx,
+        array $clave,
+        int $nroCuota,
+    ): array {
+        $detalle = trim((string) ($comprobante->detalle ?? ''));
+        if ($detalle === '') {
+            $detalle = trim((string) ($comprobante->tipocomprobante ?? 'FACTURA'));
+        }
+        $cuotas = $comprobante->ordencompra_comprobante_cuotas ?? collect();
+        $primeraCuota = $cuotas->sortBy('id')->first();
+        $medioPago = $ctx->medioPagoAnitaDesdeFormapago(
+            $primeraCuota ? (int) ($primeraCuota->formapago_id ?? 0) : null
+        );
+
+        return RecepcionProveedorAnitaEscrituraSupport::insert([
+            'occ_tipo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['tipo'], 3),
+            'occ_letra' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['letra'], 1),
+            'occ_sucursal' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['sucursal']),
+            'occ_nro' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['nro']),
+            'occ_nro_cuota' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($nroCuota),
+            'occ_fecha_vto' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->fechaYmd($comprobante->fechavencimiento)),
+            'occ_monto' => RecepcionProveedorAnitaEscrituraSupport::decimalSql((float) ($comprobante->monto ?? 0)),
+            'occ_cond_pago' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoCondicionpago((int) ($comprobante->condicionpago_id ?? 0))),
+            'occ_medio_pago' => RecepcionProveedorAnitaEscrituraSupport::textoSql($medioPago, 1),
+            'occ_detalle' => RecepcionProveedorAnitaEscrituraSupport::textoSql(substr($detalle, 0, 50), 50),
+        ]);
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @return array{campos: string, valores: string}
+     */
+    public static function ocfpagocuotaInsert(
+        Ordencompra_Comprobante_Cuota $cuota,
+        OrdencompraAnitaErpContext $ctx,
+        array $clave,
+        int $nroCuotaOcc,
+        int $nroCuotaFpago,
+    ): array {
+        return RecepcionProveedorAnitaEscrituraSupport::insert([
+            'ocfp_tipo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['tipo'], 3),
+            'ocfp_letra' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['letra'], 1),
+            'ocfp_sucursal' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['sucursal']),
+            'ocfp_nro' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['nro']),
+            'ocfp_nro_cuota' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($nroCuotaOcc),
+            'ocfp_cuota_fpago' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($nroCuotaFpago),
+            'ocfp_fecha_vto' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->fechaYmd($cuota->fechavencimiento)),
+            'ocfp_monto' => RecepcionProveedorAnitaEscrituraSupport::decimalSql((float) ($cuota->monto ?? 0)),
+        ]);
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @return array{campos: string, valores: string}
+     */
+    public static function ocfpagocuotaInsertDesdeArray(
+        array $cuota,
+        array $clave,
+        int $nroCuotaOcc,
+        int $nroCuotaFpago,
+        OrdencompraAnitaErpContext $ctx,
+    ): array {
+        return RecepcionProveedorAnitaEscrituraSupport::insert([
+            'ocfp_tipo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['tipo'], 3),
+            'ocfp_letra' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['letra'], 1),
+            'ocfp_sucursal' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['sucursal']),
+            'ocfp_nro' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['nro']),
+            'ocfp_nro_cuota' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($nroCuotaOcc),
+            'ocfp_cuota_fpago' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($nroCuotaFpago),
+            'ocfp_fecha_vto' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->fechaYmd($cuota['fechavencimiento'] ?? null)),
+            'ocfp_monto' => RecepcionProveedorAnitaEscrituraSupport::decimalSql((float) ($cuota['monto'] ?? 0)),
+        ]);
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @return list<array{campos: string, valores: string}>
+     */
+    public static function ocvleyInsertsDesdeLinea(
+        Ordencompra_Articulo $linea,
+        array $clave,
+    ): array {
+        $texto = trim((string) ($linea->detalle ?? ''));
+        if ($texto === '' || mb_strlen($texto) <= 30) {
+            return [];
+        }
+
+        $nroOrden = (int) ($linea->penvp_orden ?? 0);
+        $partes = mb_str_split(mb_substr($texto, 30), 50);
+        $inserts = [];
+        foreach ($partes as $idx => $parte) {
+            if (trim($parte) === '') {
+                continue;
+            }
+            $inserts[] = RecepcionProveedorAnitaEscrituraSupport::insert([
+                'ocvl_tipo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['tipo'], 3),
+                'ocvl_letra' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['letra'], 1),
+                'ocvl_sucursal' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['sucursal']),
+                'ocvl_nro' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['nro']),
+                'ocvl_nro_orden' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($nroOrden),
+                'ocvl_linea' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($idx),
+                'ocvl_leyenda' => RecepcionProveedorAnitaEscrituraSupport::textoSql($parte, 50),
+            ]);
+        }
+
+        return $inserts;
+    }
+
+    /**
+     * @return array{campos: string, valores: string}
+     */
+    public static function legcompraInsert(
+        int $numeroOc,
+        OrdencompraAnitaErpContext $ctx,
+        string $estadoSector,
+        string $observacion,
+        ?int $fechaYmd = null,
+        ?string $hora = null,
+    ): array {
+        $fecha = $fechaYmd ?? (int) date('Ymd');
+        $horaTxt = $hora ?? $ctx->horaActual();
+
+        return RecepcionProveedorAnitaEscrituraSupport::insert([
+            'legc_id' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($numeroOc),
+            'legc_fecha' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($fecha),
+            'legc_hora' => RecepcionProveedorAnitaEscrituraSupport::textoSql($horaTxt, 8),
+            'legc_usuario' => RecepcionProveedorAnitaEscrituraSupport::textoSql($ctx->usuarioAnitaLogin(), 15),
+            'legc_estado' => RecepcionProveedorAnitaEscrituraSupport::textoSql($estadoSector, 1),
+            'legc_observacion' => RecepcionProveedorAnitaEscrituraSupport::textoSql(substr($observacion, 0, 160), 160),
+            'legc_id_carga' => RecepcionProveedorAnitaEscrituraSupport::enteroSql(0),
+        ]);
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @return array{campos: string, valores: string}
+     */
+    public static function pendfechaInsert(
+        array $clave,
+        string $proveedor6,
+        int $fechaFactura,
+        int $fechaPago,
+    ): array {
+        return RecepcionProveedorAnitaEscrituraSupport::insert([
+            'penpf_proveedor' => RecepcionProveedorAnitaEscrituraSupport::proveedorSql($proveedor6),
+            'penpf_tipo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['tipo'], 3),
+            'penpf_letra' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['letra'], 1),
+            'penpf_sucursal' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['sucursal']),
+            'penpf_nro' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) $clave['nro']),
+            'penpf_fecha_fac' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($fechaFactura),
+            'penpf_fecha_pago' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($fechaPago),
+        ]);
+    }
+
+    /** Sector legajo Anita compras (LEGC_COMPRAS). */
+    public static function sectorLegajoCompras(): string
+    {
+        return 'C';
+    }
+
+    /**
+     * @return array{fecha_fac: int, fecha_pago: int}
+     */
+    public static function fechasPendfechaDesdeOc(
+        Ordencompra $oc,
+        OrdencompraAnitaErpContext $ctx,
+    ): array {
+        $fechaFac = $ctx->fechaYmd($oc->fecha);
+        $fechaPago = 0;
+
+        foreach ($oc->ordencompra_comprobantes ?? [] as $comprobante) {
+            $cuotas = $comprobante->ordencompra_comprobante_cuotas ?? collect();
+            if ($cuotas->isEmpty()) {
+                $cuotasExpandidas = OrdencompraAnitaOcfpagoCuotaExpander::desdeComprobante($comprobante);
+                foreach ($cuotasExpandidas as $cuota) {
+                    $fv = $ctx->fechaYmd($cuota['fechavencimiento'] ?? null);
+                    if ($fv > 0 && ($fechaPago === 0 || $fv < $fechaPago)) {
+                        $fechaPago = $fv;
+                    }
+                }
+            } else {
+                foreach ($cuotas as $cuota) {
+                    $fv = $ctx->fechaYmd($cuota->fechavencimiento);
+                    if ($fv > 0 && ($fechaPago === 0 || $fv < $fechaPago)) {
+                        $fechaPago = $fv;
+                    }
+                }
+            }
+
+            if ($fechaPago === 0) {
+                $fv = $ctx->fechaYmd($comprobante->fechavencimiento);
+                if ($fv > 0 && ($fechaPago === 0 || $fv < $fechaPago)) {
+                    $fechaPago = $fv;
+                }
+            }
+        }
+
+        return [
+            'fecha_fac' => $fechaFac,
+            'fecha_pago' => $fechaPago,
         ];
     }
 }

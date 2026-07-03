@@ -555,7 +555,7 @@
                                 ])
                                 @include('caja.waitry_cierre_jornada.partials.campo_cuentacontable_config', [
                                     'campoId' => 'cuenta_ventas_kiosco_id',
-                                    'label' => 'Cuenta ventas de kiosco (cigarrillos)',
+                                    'label' => 'Cuenta ventas de cigarrillos (414020001 tabaco)',
                                 ])
                                 @include('caja.waitry_cierre_jornada.partials.campo_cuentacontable_config', [
                                     'campoId' => 'cuenta_fondo_fijo_maquinas_id',

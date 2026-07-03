@@ -62,4 +62,26 @@ final class GastronomiaConciliacionRendgAsientosDiaSupportTest extends TestCase
 
         $this->assertSame(GastronomiaConciliacionRendgAsientosDiaSupport::TIPO_TOTEM_PUENTE, $tipo);
     }
+
+    public function test_clasifica_por_codigo_snapshot_con_descripcion_venta_gastronomia(): void
+    {
+        $tipo = GastronomiaConciliacionRendgAsientosDiaSupport::clasificarAsientoCierreWaitry(
+            'sin_facturar_qr',
+            '1 — Waitry sin facturar (QR / Mercado Pago tras redistribución)',
+            'Venta gastronomia',
+        );
+
+        $this->assertSame(GastronomiaConciliacionRendgAsientosDiaSupport::TIPO_POST_CIERRE, $tipo);
+    }
+
+    public function test_descripcion_venta_gastronomia_sin_codigo_no_clasifica(): void
+    {
+        $tipo = GastronomiaConciliacionRendgAsientosDiaSupport::clasificarAsientoCierreWaitry(
+            null,
+            null,
+            'Venta gastronomia',
+        );
+
+        $this->assertNull($tipo);
+    }
 }

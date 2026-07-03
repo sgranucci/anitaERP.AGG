@@ -66,6 +66,7 @@ class ValidacionRecepcionProveedor extends FormRequest
             'items.*.articulo_id' => 'required|integer|exists:articulo,id',
             'items.*.ordencompra_articulo_id' => 'nullable|integer|exists:ordencompra_articulo,id',
             'items.*.cantidad' => 'nullable|numeric|min:0',
+            'items.*.cantidad_recepcionada_origen' => 'nullable|numeric|min:0',
             'items.*.cantidad_rechazada' => 'nullable|numeric|min:0',
             'items.*.motivorechazo' => 'nullable|string|max:255',
             'items.*.precio' => 'required|numeric|min:0',
@@ -107,19 +108,40 @@ class ValidacionRecepcionProveedor extends FormRequest
                 return;
             }
 
-            $tieneAccion = false;
-            foreach ($items as $item) {
-                if (is_array($item) && ! RecepcionProveedorAccionLineaOc::esPendiente($item)) {
-                    $tieneAccion = true;
-                    break;
+            $esDevolucion = $this->input('tipo') === 'DEVOLUCION';
+
+            if ($esDevolucion) {
+                $lineasConCantidad = 0;
+                foreach ($items as $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+                    if ((float) ($item['cantidad'] ?? 0) > 0.000001) {
+                        $lineasConCantidad++;
+                    }
                 }
-            }
-            if (! $tieneAccion) {
-                $validator->errors()->add('items', 'Indique al menos una línea a recibir, rechazar o cerrar en la OC.');
+                if ($lineasConCantidad === 0) {
+                    $validator->errors()->add('items', 'Indique al menos una línea con cantidad a devolver.');
+                }
+            } else {
+                $tieneAccion = false;
+                foreach ($items as $item) {
+                    if (is_array($item) && ! RecepcionProveedorAccionLineaOc::esPendiente($item)) {
+                        $tieneAccion = true;
+                        break;
+                    }
+                }
+                if (! $tieneAccion) {
+                    $validator->errors()->add('items', 'Indique al menos una línea a recibir, rechazar o cerrar en la OC.');
+                }
             }
 
             foreach ($items as $idx => $item) {
                 if (! is_array($item)) {
+                    continue;
+                }
+
+                if ($esDevolucion) {
                     continue;
                 }
 

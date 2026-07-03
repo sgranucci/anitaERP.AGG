@@ -107,6 +107,40 @@
         color: #6c757d;
         padding: 2rem 1rem;
     }
+    .tm-alerta-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 1060;
+        background: rgba(0, 0, 0, 0.45);
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+    .tm-alerta-overlay.tm-alerta-visible {
+        display: flex;
+    }
+    .tm-alerta-banner {
+        max-width: min(92vw, 540px);
+        width: 100%;
+        border-radius: 0.5rem;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    }
+    .tm-alerta-banner .alert {
+        margin-bottom: 0;
+        border-width: 2px;
+        font-size: 1rem;
+    }
+    .tm-alerta-banner .tm-alerta-titulo {
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+    .tm-alerta-banner .tm-alerta-texto {
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
     @media (min-width: 768px) {
         .tm-lista {
             max-width: 720px;
@@ -123,6 +157,8 @@
         preferencias: @json(route('transferencia_mercaderia_preferencias')),
         guardar: @json(route('transferencia_mercaderia_guardar')),
         destinatarios: @json(route('transferencia_mercaderia_destinatarios')),
+        validarLineaContable: @json(route('transferencia_mercaderia_validar_linea_contable')),
+        saldoArticulo: @json(route('transferencia_mercaderia_saldo_articulo')),
         articuloConsultaUrl: {!! json_encode(route('editar_articulo', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])) !!},
     };
 </script>
@@ -259,7 +295,7 @@
                         </div>
                         <div class="form-group col-12 mb-0">
                             <button type="button" id="tm_btn_cargar" class="btn btn-info btn-block">
-                                <i class="fa fa-refresh"></i> Cargar stock (artículos con depósito de entrega = salida)
+                                <i class="fa fa-refresh"></i> Cargar stock del depósito de salida
                             </button>
                         </div>
                     </div>
@@ -273,6 +309,18 @@
                 <div id="tm_estado" class="text-muted small mb-2"></div>
                 <div id="tm_lista" class="tm-lista"></div>
             </div>
+        </div>
+    </div>
+</div>
+
+<div id="tm_alerta_overlay" class="tm-alerta-overlay" role="alertdialog" aria-modal="true" aria-labelledby="tm_alerta_titulo">
+    <div class="tm-alerta-banner">
+        <div class="alert alert-danger mb-0">
+            <div id="tm_alerta_titulo" class="tm-alerta-titulo">No se pudo completar la operación</div>
+            <div id="tm_alerta_texto" class="tm-alerta-texto"></div>
+            <button type="button" id="tm_alerta_cerrar" class="btn btn-danger btn-block mt-3">
+                Entendido
+            </button>
         </div>
     </div>
 </div>

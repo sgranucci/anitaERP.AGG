@@ -10,6 +10,7 @@ use App\Repositories\Ventas\ClienteVipGastronomiaRepositoryInterface;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\WigosAccountInfoService;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
+use App\Support\Ventas\GastronomiaDescuentoClienteInternoSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use InvalidArgumentException;
@@ -210,7 +211,7 @@ final class CanjeMarketingCuentaService
         }
 
         $cuenta->cliente_id = null;
-        $cuenta->cliente_interno_descuento_id = null;
+        $cuenta->cliente_interno_descuento_id = $this->resolverClienteInternoDescuentoCanje($cuenta);
         $cuenta->save();
 
         return $this->cuentaService->cuentaConLineas($cuenta->id);
@@ -231,7 +232,7 @@ final class CanjeMarketingCuentaService
 
         $cuenta->descuento_gastronomia_id = $desc->id;
         $cuenta->cliente_id = null;
-        $cuenta->cliente_interno_descuento_id = null;
+        $cuenta->cliente_interno_descuento_id = $this->resolverClienteInternoDescuentoCanje($cuenta);
         $cuenta->save();
 
         return $this->cuentaService->cuentaConLineas($cuenta->id);
@@ -323,5 +324,10 @@ final class CanjeMarketingCuentaService
             'nombre_completo' => trim($vip->apellido.' '.$vip->nombre),
             'empresa_id' => (int) $vip->empresa_id,
         ];
+    }
+
+    private function resolverClienteInternoDescuentoCanje(CuentaGastronomia $cuenta): ?int
+    {
+        return GastronomiaDescuentoClienteInternoSupport::clienteInternoIdCanjeMarketing();
     }
 }

@@ -59,6 +59,11 @@
                 <i class="fas fa-undo text-muted mr-1"></i>
                 Este comprobante es una <strong>nota de crédito</strong>; no se puede generar otra NC sobre él.
             </div>
+        @elseif ($motivo_no_cambio_medio ?? null)
+            <div class="alert alert-warning py-2 mb-2">
+                <i class="fa fa-exchange-alt text-muted mr-1"></i>
+                {{ $motivo_no_cambio_medio }}
+            </div>
         @endif
 
         <div class="card card-outline card-primary mb-3">

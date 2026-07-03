@@ -401,6 +401,20 @@ final class CierreJornadaFacturadoAnitaSupport
      *
      * @return array<string, mixed>
      */
+    public static function datosAsientoVentasJornadaSoloTotem(int $empresaId, string $fechaJornada): array
+    {
+        if ($empresaId <= 0 || $fechaJornada === '') {
+            return self::datosAsientoVacios();
+        }
+
+        $totemId = (int) (GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId)['id'] ?? 0);
+        $emisiones = self::emisionesJornadaEmpresa($empresaId, $fechaJornada)
+            ->filter(fn (VentaGastronomiaEmision $e) => self::esFacturaCobroTotem($e, $empresaId, $totemId))
+            ->values();
+
+        return self::datosAsientoDesdeEmisiones($emisiones, $empresaId, false);
+    }
+
     public static function datosAsientoFacturaProcesoSinWaitry(int $empresaId, string $fechaJornada): array
     {
         if ($empresaId <= 0 || $fechaJornada === '') {
@@ -432,8 +446,11 @@ final class CierreJornadaFacturadoAnitaSupport
      *   advertencias: list<string>
      * }
      */
-    public static function datosAsientoDesdeEmisiones(Collection $emisiones, int $empresaId): array
-    {
+    public static function datosAsientoDesdeEmisiones(
+        Collection $emisiones,
+        int $empresaId,
+        bool $omitirFacturasTotem = true,
+    ): array {
         $totemId = (int) (GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId)['id'] ?? 0);
         /** @var array<int, array{concepto:string,cuenta_id:int,debe:float}> */
         $debePorCuenta = [];
@@ -465,7 +482,7 @@ final class CierreJornadaFacturadoAnitaSupport
                 continue;
             }
 
-            if (self::esFacturaCobroTotem($emision, $empresaId, $totemId)) {
+            if ($omitirFacturasTotem && self::esFacturaCobroTotem($emision, $empresaId, $totemId)) {
                 continue;
             }
 
@@ -476,19 +493,30 @@ final class CierreJornadaFacturadoAnitaSupport
             }
 
             $totalFacturado = round($totalFacturado + $monto, 2);
-            $impuestoInterno = self::sumarImpuestoInternoVenta($venta);
-            $base = self::desglosarBaseIvaConSigno($monto, $impuestoInterno);
+            $importeCigarrillos = CierreJornadaVentasCigarrillosSupport::importeLineasMenuCigarrillos($venta, $empresaId);
+            $impuestoInterno = CierreJornadaVentasCigarrillosSupport::resolverImpuestoInternoVenta(
+                $venta,
+                $empresaId,
+                $importeCigarrillos,
+            );
+            $desglose = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables(
+                $monto,
+                $impuestoInterno,
+                $importeCigarrillos,
+            );
 
             if (abs($impuestoInterno) > 0.0001) {
-                $ventasKiosco = round($ventasKiosco + $base['gravado'] + $impuestoInterno, 2);
-                $ivaCigarrillos = round($ivaCigarrillos + $base['iva'], 2);
+                $ventasKiosco = round($ventasKiosco + $desglose['ventas_kiosco'], 2);
+                $ventasGravadas = round($ventasGravadas + $desglose['ventas_gravadas'], 2);
+                $ivaCigarrillos = round($ivaCigarrillos + $desglose['iva_cigarrillos'], 2);
+                $ivaNormal = round($ivaNormal + $desglose['iva_normal'], 2);
                 $impuestoInternoTotal = round($impuestoInternoTotal + $impuestoInterno, 2);
                 if (! $esNotaCredito) {
                     $conImpuestoInterno++;
                 }
             } else {
-                $ventasGravadas = round($ventasGravadas + $base['gravado'], 2);
-                $ivaNormal = round($ivaNormal + $base['iva'], 2);
+                $ventasGravadas = round($ventasGravadas + $desglose['ventas_gravadas'], 2);
+                $ivaNormal = round($ivaNormal + $desglose['iva_normal'], 2);
             }
 
             $sumCobranza = 0.;

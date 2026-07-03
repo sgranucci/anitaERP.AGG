@@ -22,6 +22,7 @@ use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Support\Ventas\Gastronomia\GastronomiaVentaWaitryComandasSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
+use App\Support\Ventas\GastronomiaFacturaMedioPagoUiSupport;
 use App\Support\Ventas\GastronomiaNotaCreditoUiSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use App\Models\Ventas\JornadaGastronomia;
@@ -399,11 +400,21 @@ class GastronomiaFacturasDiaController extends Controller
             $meta,
             $ncVentaId,
             $jornadasAbiertasPorEmpresa,
+            $requiereTurno,
+            $turnoHabilitado,
         );
 
-        $puedeCambiarMedioPago = can('cambiar-medio-pago-gastronomia-facturas-dia', false)
+        $puedeCambiarMedioPago = GastronomiaFacturaMedioPagoUiSupport::puedeCambiarMedioPago(
+            $meta,
+            $cobranzas->isNotEmpty(),
+        );
+        $evaluacionCambioMedio = GastronomiaFacturaMedioPagoUiSupport::evaluarTurnoEmision($meta);
+        $motivoNoCambioMedio = (! $puedeCambiarMedioPago
+            && can('cambiar-medio-pago-gastronomia-facturas-dia', false)
             && $cobranzas->isNotEmpty()
-            && ! ($esComprobanteNc ?? false);
+            && ! $esComprobanteNc)
+            ? ($evaluacionCambioMedio['motivo'] ?? null)
+            : null;
 
         $waitryComandas = GastronomiaVentaWaitryComandasSupport::comandasDesdeEmision($meta);
 
@@ -432,6 +443,7 @@ class GastronomiaFacturasDiaController extends Controller
             'url_habilitacion_turno' => route('gastronomia_habilitacion_turno'),
             'identificador_pc' => $pc,
             'puede_cambiar_medio_pago' => $puedeCambiarMedioPago,
+            'motivo_no_cambio_medio' => $motivoNoCambioMedio,
             'puede_ver_formula' => can('listar-formula-articulo', false) || can('listar-articulos', false),
         ]);
     }

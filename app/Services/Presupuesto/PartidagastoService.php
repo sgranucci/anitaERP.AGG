@@ -244,10 +244,12 @@ class PartidagastoService
 		{
 			for ($j = 0; $j < count($data['periodos']); $j++)
 			{
-				$mes = substr($data['periodos'][$j], 4, 2);
+				$periodo = $data['periodos'][$j] ?? '';
+				$monto = (float) ($data['montos'][$j] ?? 0);
+				$mes = (int) substr(str_replace('/', '-', $periodo), 5, 2);
 
-				$montoMes[(int) $mes] += $data['montos'][$j];
-				$montoTotal += $data['montos'][$j];
+				$montoMes[$mes] += $monto;
+				$montoTotal += $monto;
 			}
 		}
 
@@ -383,10 +385,14 @@ class PartidagastoService
 		{
 			for ($j = 0; $j < count($data['periodos']); $j++)
 			{
-				$mes = substr($data['periodo_monto_armados'][$j], 5, 2);
+				$periodo = $data['periodos'][$j]
+					?? $data['periodo_monto_armados'][$j]
+					?? '';
+				$monto = (float) ($data['montos'][$j] ?? $data['monto_armados'][$j] ?? 0);
+				$mes = (int) substr(str_replace('/', '-', $periodo), 5, 2);
 
-				$montoMes[(int) $mes] += $data['monto_armados'][$j];
-				$montoTotal += $data['monto_armados'][$j];
+				$montoMes[$mes] += $monto;
+				$montoTotal += $monto;
 			}
 		}		
 

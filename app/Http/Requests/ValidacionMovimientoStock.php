@@ -110,6 +110,10 @@ class ValidacionMovimientoStock extends FormRequest
             }
 
             if ($tipo && (bool) $tipo->maneja_contabilidad && ! $this->validarComoTransferenciaNueva()) {
+                $validator->errors()->add(
+                    'tipotransaccion_stock_id',
+                    'Las transferencias con contabilidad (TRCONT) deben registrarse desde Transferencia de mercadería, no desde movimientos de stock.'
+                );
                 $ccDestino = (int) $this->input('centrocosto_destino_id', 0);
                 if ($ccDestino <= 0) {
                     $validator->errors()->add(

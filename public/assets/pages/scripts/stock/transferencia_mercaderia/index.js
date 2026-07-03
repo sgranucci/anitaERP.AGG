@@ -59,7 +59,7 @@
         $('#tm_btn_cargar').html(
             origenBien
                 ? '<i class="fa fa-refresh"></i> Cargar stock asignado al bien'
-                : '<i class="fa fa-refresh"></i> Cargar stock (artículos con depósito de entrega = salida)'
+                : '<i class="fa fa-refresh"></i> Cargar stock del depósito de salida'
         );
         actualizarPanelDestinatario();
         actualizarPanelCentrocosto();
@@ -97,6 +97,91 @@
 
     function tipotransaccionStockId() {
         return parseInt($('#tipotransaccion_stock_id').val(), 10) || 0;
+    }
+
+    function empresaId() {
+        return parseInt($('#empresa_id').val(), 10) || 0;
+    }
+
+    function validarLineaContableAsync(articuloId) {
+        if (!tipoManejaContabilidad() || !window.TM_URLS.validarLineaContable) {
+            return $.Deferred()
+                .resolve({ ok: true, permitido: true, contabilidad_activa: false })
+                .promise();
+        }
+        if (tipoOrigenBienUso()) {
+            return $.Deferred()
+                .resolve({
+                    ok: true,
+                    permitido: false,
+                    contabilidad_activa: true,
+                    motivo: 'TRCONT requiere depósito de salida (no bien de uso como origen).',
+                })
+                .promise();
+        }
+
+        return $.get(window.TM_URLS.validarLineaContable, {
+            articulo_id: articuloId,
+            deposito_salida_id: depositoSalidaId(),
+            empresa_id: empresaId(),
+            tipotransaccion_stock_id: tipotransaccionStockId(),
+        });
+    }
+
+    function todasLineasContablesValidas() {
+        if (!tipoManejaContabilidad() || tipoOrigenBienUso()) {
+            return true;
+        }
+        var ok = true;
+        filas.forEach(function (f) {
+            if (f.contable_valido === false) {
+                ok = false;
+            }
+        });
+        return ok;
+    }
+
+    function filtrarFilasContables(filasEntrada, done) {
+        if (!tipoManejaContabilidad() || tipoOrigenBienUso()) {
+            filasEntrada.forEach(function (f) {
+                f.contable_valido = true;
+            });
+            done(filasEntrada, 0);
+            return;
+        }
+
+        var validas = [];
+        var omitidas = 0;
+        var idx = 0;
+
+        function siguiente() {
+            if (idx >= filasEntrada.length) {
+                done(validas, omitidas);
+                return;
+            }
+            var f = filasEntrada[idx];
+            idx += 1;
+            validarLineaContableAsync(f.articulo_id)
+                .done(function (resp) {
+                    if (resp.ok && resp.permitido) {
+                        f.contable_valido = true;
+                        f.familia_contable = resp.familia || '';
+                        validas.push(f);
+                    } else if (resp.ok && !resp.contabilidad_activa) {
+                        f.contable_valido = true;
+                        validas.push(f);
+                    } else {
+                        omitidas += 1;
+                    }
+                    siguiente();
+                })
+                .fail(function () {
+                    omitidas += 1;
+                    siguiente();
+                });
+        }
+
+        siguiente();
     }
 
     function tipoRequiereAprobacion() {
@@ -166,6 +251,38 @@
         $e.toggleClass('text-danger', !!esError);
     }
 
+    function mostrarAlertaBanner(mensaje, titulo) {
+        $('#tm_alerta_titulo').text(titulo || 'No se pudo completar la operación');
+        $('#tm_alerta_texto').text(mensaje || '');
+        $('#tm_alerta_overlay').addClass('tm-alerta-visible');
+    }
+
+    function ocultarAlertaBanner() {
+        $('#tm_alerta_overlay').removeClass('tm-alerta-visible');
+    }
+
+    function consultarSaldoErp(articuloId, done) {
+        if (tipoOrigenBienUso() || !window.TM_URLS.saldoArticulo) {
+            done(0);
+            return;
+        }
+        var dep = depositoSalidaId();
+        if (!dep) {
+            done(0);
+            return;
+        }
+        $.get(window.TM_URLS.saldoArticulo, {
+            articulo_id: articuloId,
+            deposito_id: dep,
+        })
+            .done(function (resp) {
+                done(resp.ok ? parseFloat(resp.saldo) || 0 : 0);
+            })
+            .fail(function () {
+                done(0);
+            });
+    }
+
     function lineasConCantidad() {
         var out = [];
         $('#tm_lista .tm-item').each(function () {
@@ -192,7 +309,8 @@
     function actualizarBotonTransferir() {
         var n = lineasConCantidad().length;
         var $btn = $('#tm_btn_transferir');
-        $btn.prop('disabled', n === 0 || cargando);
+        var bloqueadoContable = tipoManejaContabilidad() && !tipoOrigenBienUso() && !todasLineasContablesValidas();
+        $btn.prop('disabled', n === 0 || cargando || bloqueadoContable);
         var label = tipoRequiereAprobacion() ? 'Enviar (' + n + ')' : 'Transferir (' + n + ')';
         $btn.text(label);
     }
@@ -229,6 +347,34 @@
     }
 
     function agregarFilaManual(f) {
+        if (!f || !f.articulo_id) {
+            return;
+        }
+
+        if (tipoManejaContabilidad() && !tipoOrigenBienUso()) {
+            validarLineaContableAsync(f.articulo_id)
+                .done(function (resp) {
+                    if (resp.contabilidad_activa && !resp.permitido) {
+                        var msgContable = resp.motivo || 'Línea no válida para TRCONT.';
+                        setEstado(msgContable, true);
+                        mostrarAlertaBanner(msgContable, 'Artículo no válido para TRCONT');
+                        return;
+                    }
+                    f.contable_valido = !resp.contabilidad_activa || !!resp.permitido;
+                    f.familia_contable = resp.familia || '';
+                    agregarFilaManualConfirmado(f);
+                })
+                .fail(function () {
+                    setEstado('Error al validar línea contable.', true);
+                });
+            return;
+        }
+
+        f.contable_valido = true;
+        agregarFilaManualConfirmado(f);
+    }
+
+    function agregarFilaManualConfirmado(f) {
         var existe = filas.some(function (x) {
             return parseInt(x.articulo_id, 10) === parseInt(f.articulo_id, 10);
         });
@@ -272,12 +418,20 @@
                 .attr('data-saldo', saldo);
 
             var $top = $('<div class="d-flex justify-content-between align-items-start"/>');
-            $top.append(
-                $('<div class="flex-grow-1 pr-2"/>').append(
-                    $('<div class="tm-desc"/>').text(desc),
-                    $('<div class="tm-meta"/>').text('SKU: ' + sku)
-                )
+            var $descBlock = $('<div class="flex-grow-1 pr-2"/>').append(
+                $('<div class="tm-desc"/>').text(desc),
+                $('<div class="tm-meta"/>').text('SKU: ' + sku)
             );
+            if (f.familia_contable === 'tito') {
+                $descBlock.append(
+                    $('<span class="badge badge-info ml-1"/>').text('TITO')
+                );
+            } else if (f.familia_contable === 'otros_activos') {
+                $descBlock.append(
+                    $('<span class="badge badge-secondary ml-1"/>').text('Otros activos')
+                );
+            }
+            $top.append($descBlock);
 
             if (articuloId && window.TM_URLS.articuloConsultaUrl) {
                 $top.append(
@@ -340,7 +494,7 @@
 
         cargando = true;
         $('#tm_btn_cargar').prop('disabled', true);
-        setEstado(origenBien ? 'Consultando stock asignado al bien…' : 'Consultando stock en Anita…');
+        setEstado(origenBien ? 'Consultando stock asignado al bien…' : 'Consultando saldos en el depósito de salida…');
 
         $.ajax({
             url: window.TM_URLS.inventario,
@@ -356,13 +510,25 @@
                     renderLista([]);
                     return;
                 }
-                setEstado(
+                var msgBase =
                     resp.filas.length +
-                        (origenBien
-                            ? ' artículo(s) asignados al bien de uso.'
-                            : ' artículo(s) con saldo (depósito de entrega = depósito de salida).')
-                );
-                renderLista(resp.filas);
+                    (origenBien
+                        ? ' artículo(s) asignados al bien de uso.'
+                        : ' artículo(s) con saldo en el depósito de salida.');
+
+                filtrarFilasContables(resp.filas || [], function (validas, omitidas) {
+                    if (tipoManejaContabilidad() && !tipoOrigenBienUso() && omitidas > 0) {
+                        setEstado(
+                            validas.length +
+                                ' artículo(s) válidos para TRCONT. Omitidos ' +
+                                omitidas +
+                                ' (no contabilizables o depósito distinto a última recepción).'
+                        );
+                    } else {
+                        setEstado(msgBase);
+                    }
+                    renderLista(validas);
+                });
             })
             .fail(function (xhr) {
                 var msg = 'Error de comunicación.';
@@ -444,7 +610,10 @@
                 }
             });
             if (invalido) {
-                alert('Alguna cantidad supera el saldo disponible.');
+                mostrarAlertaBanner(
+                    'Alguna cantidad supera el saldo disponible en el depósito de salida. Revise las cantidades indicadas.',
+                    'Saldo insuficiente'
+                );
                 return;
             }
         }
@@ -484,16 +653,17 @@
         })
             .done(function (resp) {
                 if (resp.ok) {
+                    ocultarAlertaBanner();
                     setEstado(resp.mensaje || 'Transferencia registrada.');
-                    alert(resp.mensaje || 'Listo.');
                     if (resp.requiere_aprobacion) {
                         window.location.href = $('a[href*="pendientes"]').attr('href') || window.location.href;
                         return;
                     }
                     cargarInventario();
                 } else {
-                    setEstado(resp.mensaje || 'No se pudo grabar.', true);
-                    alert(resp.mensaje || 'Error.');
+                    var msgError = resp.mensaje || 'No se pudo grabar.';
+                    setEstado(msgError, true);
+                    mostrarAlertaBanner(msgError, 'Error al transferir');
                 }
             })
             .fail(function (xhr) {
@@ -502,7 +672,7 @@
                     msg = xhr.responseJSON.mensaje;
                 }
                 setEstado(msg, true);
-                alert(msg);
+                mostrarAlertaBanner(msg, 'Error al transferir');
             })
             .always(function () {
                 cargando = false;
@@ -519,7 +689,22 @@
         $('#tipotransaccion_stock_id').on('change', function () {
             guardarPreferencias();
             actualizarPanelesDestino();
-            actualizarBotonTransferir();
+            if (filas.length) {
+                filtrarFilasContables(filas.slice(), function (validas, omitidas) {
+                    if (tipoManejaContabilidad() && omitidas > 0) {
+                        setEstado(
+                            validas.length +
+                                ' artículo(s) válidos para TRCONT. Omitidos ' +
+                                omitidas +
+                                ' al cambiar tipo.',
+                            omitidas > 0 && validas.length === 0
+                        );
+                    }
+                    renderLista(validas);
+                });
+            } else {
+                actualizarBotonTransferir();
+            }
         });
 
         actualizarPanelCentrocosto();
@@ -566,13 +751,22 @@
             if (!dataArticulo || !dataArticulo.id) {
                 return;
             }
-            agregarFilaManual({
-                articulo_id: parseInt(dataArticulo.id, 10),
-                sku: dataArticulo.sku || '',
-                descripcion: dataArticulo.descripcion || '',
-                saldo: 0,
+            var articuloId = parseInt(dataArticulo.id, 10);
+            consultarSaldoErp(articuloId, function (saldo) {
+                agregarFilaManual({
+                    articulo_id: articuloId,
+                    sku: dataArticulo.sku || '',
+                    descripcion: dataArticulo.descripcion || '',
+                    saldo: saldo,
+                });
             });
         };
+
+        $('#tm_alerta_cerrar, #tm_alerta_overlay').on('click', function (e) {
+            if (e.target === this) {
+                ocultarAlertaBanner();
+            }
+        });
 
         if (typeof activa_eventos_consultadeposito === 'function') {
             activa_eventos_consultadeposito();

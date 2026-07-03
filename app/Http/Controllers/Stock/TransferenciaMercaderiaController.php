@@ -6,12 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionTransferenciaMercaderia;
 use App\Models\Contable\BienUso;
 use App\Models\Contable\Centrocosto;
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Transferencia_Mercaderia_Token;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Services\Stock\TransferenciaMercaderiaService;
+use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
+use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
 use App\Support\Stock\TransferenciaBienUsoSupport;
@@ -177,6 +180,82 @@ class TransferenciaMercaderiaController extends Controller
         }
 
         return response()->json(['ok' => true, 'filas' => $filas]);
+    }
+
+    public function saldoArticulo(Request $request): JsonResponse
+    {
+        can('crear-transferencia-mercaderia');
+
+        $articuloId = (int) $request->input('articulo_id', 0);
+        $depositoId = (int) $request->input('deposito_id', 0);
+
+        if ($articuloId <= 0 || $depositoId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Artículo o depósito inválido.'], 422);
+        }
+
+        try {
+            $saldo = $this->transferenciaService->saldoArticuloEnDeposito($articuloId, $depositoId);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'saldo' => $saldo]);
+    }
+
+    public function validarLineaContable(Request $request): JsonResponse
+    {
+        can('crear-transferencia-mercaderia');
+
+        $articuloId = (int) $request->input('articulo_id', 0);
+        $depositoOrigenId = (int) $request->input('deposito_salida_id', 0);
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $tipoId = (int) $request->input('tipotransaccion_stock_id', 0);
+
+        if ($articuloId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Artículo no indicado.'], 422);
+        }
+
+        $tipo = $tipoId > 0
+            ? $this->tipotransaccionStockRepository->find($tipoId)
+            : null;
+
+        if ($tipo === null || ! TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipo)) {
+            return response()->json([
+                'ok' => true,
+                'permitido' => true,
+                'contabilidad_activa' => false,
+                'familia' => TransferenciaMercaderiaLineaContableSupport::FAMILIA_NO_CONTABILIZABLE,
+                'motivo' => '',
+            ]);
+        }
+
+        if ($empresaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Seleccione empresa.'], 422);
+        }
+
+        $articulo = Articulo::query()
+            ->with('articulo_cuentacontables')
+            ->find($articuloId);
+
+        if ($articulo === null) {
+            return response()->json(['ok' => false, 'mensaje' => 'Artículo no encontrado.'], 422);
+        }
+
+        $resultado = TransferenciaMercaderiaLineaContableSupport::validarLinea(
+            $articulo,
+            $empresaId,
+            $depositoOrigenId
+        );
+
+        return response()->json([
+            'ok' => true,
+            'contabilidad_activa' => true,
+            'permitido' => $resultado['permitido'],
+            'familia' => $resultado['familia'],
+            'motivo' => $resultado['motivo'],
+            'deposito_recepcion_id' => $resultado['deposito_recepcion_id'],
+            'deposito_recepcion_codigo' => $resultado['deposito_recepcion_codigo'],
+        ]);
     }
 
     public function guardar(ValidacionTransferenciaMercaderia $request): JsonResponse

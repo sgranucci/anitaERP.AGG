@@ -198,6 +198,31 @@ return [
     ],
 
     /**
+     * Cuadre jornada: contabilidad ctamov vs rendiciones (Z−NC) vs venta Informix vs venta ERP vs flash (caja).
+     * Comando: gastronomia:control-ctamov-rendg-dia-anita
+     */
+    'control_ctamov_rendg_dia_anita' => [
+        'tolerancia' => (float) env('GASTRONOMIA_CONTROL_CTAMOV_RENDG_TOLERANCIA', 2.0),
+        /** Base Informix del bridge para tabla flash (Σ flash_ayb + flash_estac). */
+        'flash_sistema' => env('GASTRONOMIA_CONTROL_CUADRE_JORNADA_FLASH_SISTEMA', 'caja'),
+        /** Directorio CSV del cuadre jornada (relativo a storage/app o ruta absoluta). */
+        'directorio_reportes' => env('GASTRONOMIA_CONTROL_CUADRE_JORNADA_DIR', 'reportes/gastronomia/cuadre_jornada'),
+        'email' => env('GASTRONOMIA_CONTROL_CUADRE_JORNADA_EMAIL', env('GASTRONOMIA_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com')),
+        /** @var array<int|string, list<int>> empresa_id => códigos ctav_cuenta (sin IVA; se suma cuenta_iva del cierre) */
+        'cuentas_ventas_por_empresa' => [
+            1 => [413010001, 414010001, 415010003, 414020001],
+            2 => [413010001, 414010001, 415010003, 414020001],
+            3 => [413010001, 414010001, 415010003, 414020001],
+        ],
+        /** @var array<int|string, list<int>> IVA crédito fiscal (114010-011: reversa IVA NC estacionamiento en ctamov) */
+        'cuentas_iva_credito_fiscal_por_empresa' => [
+            1 => [114010011],
+            2 => [114010011],
+            3 => [114010011],
+        ],
+    ],
+
+    /**
      * Reporte conciliación jornada: ventas ERP vs Anita vs rendgastro Z por PV (CSV por mail).
      * Schedule después de auditorías nocturnas (@ GASTRONOMIA_CONCILIACION_DIARIA_HORA).
      */
@@ -536,6 +561,12 @@ return [
 
     /** Código de cliente para facturar canjes de premios Wigos. */
     'canje_premio_cliente_codigo' => env('GASTRONOMIA_CANJE_PREMIO_CLIENTE_CODIGO', '500'),
+
+    /** Cliente interno canje premio Wigos categoría platino (Anita resv_cliente 001500 / CANJE PLATINO). */
+    'canje_premio_platino_cliente_codigo' => env('GASTRONOMIA_CANJE_PREMIO_PLATINO_CLIENTE_CODIGO', '1500'),
+
+    /** levelCode Wigos que imputan a canje_premio_platino_cliente_codigo (categoría platino = 3). */
+    'canje_premio_platino_level_codes' => env('GASTRONOMIA_CANJE_PREMIO_PLATINO_LEVEL_CODES', '3'),
 
     /** Días de validez del ticket Wigos desde la fecha del premio (COMAND_pide_canje: 2 días). */
     'canje_premio_vencimiento_dias' => max(1, (int) env('GASTRONOMIA_CANJE_PREMIO_VENCIMIENTO_DIAS', 2)),

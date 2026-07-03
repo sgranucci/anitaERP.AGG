@@ -10,6 +10,7 @@ use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Support\Stock\RecepcionProveedorEncuestaSupport;
+use App\Support\Stock\RecepcionProveedorEnlacePublicoSupport;
 use App\Support\Stock\RecepcionProveedorRequisicionEmailSupport;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -110,7 +111,7 @@ class StockRecepcionProveedorIngresadaAvisoHandler implements ModuloAvisoDespach
 
     public function linkConsulta(int $entityId): ?string
     {
-        return urlAppAbsoluta('stock/recepcion-proveedor/'.$entityId.'/editar');
+        return RecepcionProveedorEnlacePublicoSupport::urlConsultaMail($entityId);
     }
 
     public function generarPdf(int $entityId): ?array

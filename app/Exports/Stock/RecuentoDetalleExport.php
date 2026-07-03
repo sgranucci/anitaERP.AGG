@@ -23,13 +23,16 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'H';
+    private const COL_ULTIMA = 'I';
+
+    /** Filas meta en la vista: título, datos generales, comentario/costos. */
+    private const FILAS_META_ENCABEZADO = 3;
 
     private ?Recuento $recuento = null;
 
     private bool $hayFilaLogos = false;
 
-    private int $filaTituloExcel = 1;
+    private int $filaInicioMeta = 1;
 
     private int $filaCabecerasExcel = 4;
 
@@ -51,9 +54,9 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($paraLogos);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
 
-        $offsetMeta = $this->hayFilaLogos ? 1 : 0;
-        $this->filaTituloExcel = 1 + $offsetMeta;
-        $this->filaCabecerasExcel = 3 + $offsetMeta;
+        $offsetLogo = $this->hayFilaLogos ? 1 : 0;
+        $this->filaInicioMeta = $offsetLogo + 1;
+        $this->filaCabecerasExcel = $offsetLogo + self::FILAS_META_ENCABEZADO + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
         return $this;
@@ -78,6 +81,7 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
             'F' => '#,##0.######',
             'G' => '#,##0.0000',
             'H' => '#,##0.00',
+            'I' => '#,##0.00',
         ];
     }
 
@@ -92,6 +96,7 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
             'F' => 14,
             'G' => 12,
             'H' => 14,
+            'I' => 14,
         ];
     }
 
@@ -142,8 +147,12 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
                     }
                 }
 
-                $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.$colUltima.$filaTit);
+                $filaFinMeta = $this->filaInicioMeta + self::FILAS_META_ENCABEZADO - 1;
+                for ($fila = $this->filaInicioMeta; $fila <= $filaFinMeta; $fila++) {
+                    $sheet->mergeCells('A'.$fila.':'.$colUltima.$fila);
+                }
+
+                $filaTit = $this->filaInicioMeta;
                 $sheet->getRowDimension($filaTit)->setRowHeight(28);
                 $sheet->getStyle('A'.$filaTit.':'.$colUltima.$filaTit)->applyFromArray([
                     'font' => [
@@ -158,9 +167,9 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
                     ],
                 ]);
 
-                foreach ([$filaTit + 1, $filaTit + 2] as $filaMeta) {
-                    $sheet->mergeCells('A'.$filaMeta.':'.$colUltima.$filaMeta);
-                    $sheet->getStyle('A'.$filaMeta.':'.$colUltima.$filaMeta)->applyFromArray([
+                for ($fila = $filaTit + 1; $fila <= $filaFinMeta; $fila++) {
+                    $sheet->getRowDimension($fila)->setRowHeight(20);
+                    $sheet->getStyle('A'.$fila.':'.$colUltima.$fila)->applyFromArray([
                         'font' => [
                             'size' => 10,
                             'name' => 'Arial',
@@ -172,6 +181,20 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
                         ],
                     ]);
                 }
+
+                $filaCab = $this->filaCabecerasExcel;
+                $sheet->getStyle('A'.$filaCab.':'.$colUltima.$filaCab)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '17202A'],
+                        'size' => 11,
+                        'name' => 'Arial',
+                    ],
+                    'fill' => [
+                        'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                        'color' => ['rgb' => '85C1E9'],
+                    ],
+                ]);
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
 

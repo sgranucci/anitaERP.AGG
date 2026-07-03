@@ -6,6 +6,7 @@ use App\Contracts\Configuracion\ModuloAvisoHandlerInterface;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Support\Stock\RecepcionProveedorEncuestaSupport;
+use App\Support\Stock\RecepcionProveedorEnlacePublicoSupport;
 
 class StockRecepcionProveedorAvisoHandler implements ModuloAvisoHandlerInterface
 {
@@ -49,7 +50,7 @@ class StockRecepcionProveedorAvisoHandler implements ModuloAvisoHandlerInterface
 
     public function linkConsulta(int $entityId): ?string
     {
-        return urlAppAbsoluta('stock/recepcion-proveedor/'.$entityId.'/editar');
+        return RecepcionProveedorEnlacePublicoSupport::urlConsultaMail($entityId);
     }
 
     public function generarPdf(int $entityId): ?array

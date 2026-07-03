@@ -14,9 +14,8 @@ return [
     'transferencia_horas_validez_token' => (int) env('STOCK_TRANSFERENCIA_HORAS_TOKEN', 168),
 
     /*
-    | stkmov Anita para movimientos originados en anitaERP (transferencias, recuento, préstamo, etc.).
-    | Clave aislada: stkv_sucursal fijo + stkv_nro = movimientostock.id (no numerador Informix).
-    | Recepción proveedor (COM) y facturación ventas siguen con su bridge propio.
+    | stkmov Anita legacy desactivado para procesos ERP de stock (mov. manual, transferencias,
+    | recuento, préstamos, recepción proveedor COM). Facturación ventas sigue con su bridge.
     */
     /*
     | Sync depmae desde Anita por empresa (depmae:sincronizar-anita).
@@ -46,7 +45,7 @@ return [
     ), fn (int $id) => $id > 0)),
 
     'anita_stkmov' => [
-        'habilitado' => filter_var(env('STOCK_ANITA_STKMOV_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'habilitado' => filter_var(env('STOCK_ANITA_STKMOV_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
         'sistema_ventas' => env('STOCK_ANITA_STKMOV_SISTEMA', 'ventas'),
         // Sucursal virtual ERP: concat 99 + código empresa (1→991, 2→992). No numerador Anita legacy.
         'sucursal_erp' => (int) env('STOCK_ANITA_STKMOV_SUCURSAL_ERP', 99),
@@ -76,22 +75,29 @@ return [
         })(),
 
         'stkv_tipo_por_abreviatura' => [
-            // Transferencias: el servicio pasa TRS/TRE explícito (salida/entrada).
+            // Transferencias y ajustes manuales: solo ERP (sin stkmov Anita).
             'TRA' => null,
             'TAP' => null,
             'TBU' => null,
             'TBAP' => null,
             'FBU' => null,
             'TRCONT' => null,
-            'RCAJP' => 'RCP',
-            'RCAJN' => 'RCN',
-            'RCAJR' => 'RCR',
-            'PRSAL' => 'PRS',
-            'PRING' => 'PRI',
-            'PRRCH' => 'PRR',
-            'PRDSL' => 'PRD',
-            'PRDIN' => 'PRV',
-            'AJCON' => 'AJC',
+            'TRS' => null,
+            'TRE' => null,
+            'AJCON' => null,
+            'ENT' => null,
+            'SAL' => null,
+            'SAS' => null,
+            // Recuento de inventario: ajustes solo en ERP (sin stkmov Anita).
+            'RCAJP' => null,
+            'RCAJN' => null,
+            'RCAJR' => null,
+            // Préstamos: solo ERP (sin stkmov Anita).
+            'PRSAL' => null,
+            'PRING' => null,
+            'PRRCH' => null,
+            'PRDSL' => null,
+            'PRDIN' => null,
         ],
     ],
 

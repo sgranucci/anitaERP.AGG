@@ -298,7 +298,12 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                     );
 
                     if (! empty($resultadoFactura['cae_pendiente']) && is_array($resultadoFactura['cae_pendiente'])) {
-                        $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultadoFactura['cae_pendiente']);
+                        $vencaePendienteLote = $this->facturacionGastronomiaService->completarSolicitudCaePendiente(
+                            $resultadoFactura['cae_pendiente'],
+                        );
+                        if (is_array($vencaePendienteLote)) {
+                            $vencaePendientes[] = $vencaePendienteLote;
+                        }
                     }
 
                     $this->consumoFormulaService->registrarMovimientosIngredientesDesdeVentaEmitida(
@@ -636,7 +641,12 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                     );
 
                     if (! empty($resultadoFactura['cae_pendiente']) && is_array($resultadoFactura['cae_pendiente'])) {
-                        $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultadoFactura['cae_pendiente']);
+                        $vencaePendienteLote = $this->facturacionGastronomiaService->completarSolicitudCaePendiente(
+                            $resultadoFactura['cae_pendiente'],
+                        );
+                        if (is_array($vencaePendienteLote)) {
+                            $vencaePendientes[] = $vencaePendienteLote;
+                        }
                     }
 
                     $this->consumoFormulaService->registrarMovimientosIngredientesDesdeVentaEmitida(

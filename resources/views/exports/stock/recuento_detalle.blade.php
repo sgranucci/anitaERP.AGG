@@ -1,7 +1,8 @@
 @php
     use App\Models\Stock\Recuento;
 
-    $colspan = 8;
+    $colspan = 9;
+    $totalValorContado = 0.0;
     $totalValorDif = 0.0;
 @endphp
 <table>
@@ -46,6 +47,7 @@
             <th>Contado</th>
             <th>Diferencia a ajustar</th>
             <th>Costo u/c</th>
+            <th>Valor contado</th>
             <th>Valor dif.</th>
         </tr>
     </thead>
@@ -54,7 +56,12 @@
             @php
                 $dif = $item->diferencia();
                 $costoUc = $item->precio_ultima_compra ?? null;
+                $contado = (float) $item->cantidad_contada;
+                $valorContado = ($costoUc !== null) ? $contado * (float) $costoUc : null;
                 $valorDif = ($costoUc !== null && abs($dif) > 1e-9) ? $dif * (float) $costoUc : null;
+                if ($valorContado !== null) {
+                    $totalValorContado += $valorContado;
+                }
                 if ($valorDif !== null) {
                     $totalValorDif += $valorDif;
                 }
@@ -64,14 +71,16 @@
                 <td>{{ $item->detalle ?: optional($item->articulos)->descripcion }}</td>
                 <td>{{ optional($item->unidadmedida)->abreviatura ?? optional($item->articulos?->unidadesdemedidas)->abreviatura }}</td>
                 <td>{{ (float) $item->saldo_sistema }}</td>
-                <td>{{ (float) $item->cantidad_contada }}</td>
+                <td>{{ $contado }}</td>
                 <td>{{ $dif }}</td>
                 <td>@if ($costoUc !== null){{ (float) $costoUc }}@endif</td>
+                <td>@if ($valorContado !== null){{ (float) $valorContado }}@endif</td>
                 <td>@if ($valorDif !== null){{ (float) $valorDif }}@endif</td>
             </tr>
         @endforeach
         <tr>
-            <td colspan="7"><strong>Total valor diferencias (costo u/c)</strong></td>
+            <td colspan="7"><strong>Totales (costo u/c)</strong></td>
+            <td><strong>{{ $totalValorContado }}</strong></td>
             <td><strong>{{ $totalValorDif }}</strong></td>
         </tr>
     </tbody>

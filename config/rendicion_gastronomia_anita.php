@@ -52,7 +52,7 @@ return [
      */
     'auditoria_diaria' => [
         'habilitada' => filter_var(env('RENDICION_GASTRONOMIA_AUDITORIA_DIARIA', true), FILTER_VALIDATE_BOOLEAN),
-        'hora' => env('RENDICION_GASTRONOMIA_AUDITORIA_HORA', '07:00'),
+        'hora' => env('RENDICION_GASTRONOMIA_AUDITORIA_HORA', '08:00'),
         'empresa_id' => (int) env('RENDICION_GASTRONOMIA_AUDITORIA_EMPRESA_ID', 1),
         'empresas_ids' => array_values(array_filter(array_map(
             'intval',

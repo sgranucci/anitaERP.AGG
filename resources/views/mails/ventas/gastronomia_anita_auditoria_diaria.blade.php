@@ -12,6 +12,7 @@
     $circuitos = [
         'gastro' => 'Gastronomía (salón)',
         'estacionamiento' => 'Estacionamiento',
+        'vending' => 'Vending (rendgastro)',
     ];
 @endphp
 
@@ -24,6 +25,9 @@
 @foreach ($circuitos as $claveCircuito => $tituloCircuito)
     @php
         $bloque = $informe[$claveCircuito] ?? [];
+        if (! empty($bloque['omitida'])) {
+            continue;
+        }
         $post = $bloque['post']['resumen_global'] ?? [];
         $rep = $bloque['replicacion'] ?? [];
         if ((int) ($post['ventas_erp'] ?? 0) === 0 && (int) ($rep['replicadas'] ?? 0) === 0) {
@@ -38,7 +42,7 @@
             <th align="right">Valor</th>
         </tr>
         <tr>
-            <td>Ventas ERP (jornada)</td>
+            <td>Rendiciones ERP (jornada)</td>
             <td align="right">{{ (int) ($post['ventas_erp'] ?? 0) }}</td>
         </tr>
         <tr>
@@ -50,7 +54,7 @@
             <td align="right">{{ (int) ($post['conteo']['diferencia'] ?? 0) }}</td>
         </tr>
         <tr>
-            <td>Replicadas en esta corrida</td>
+            <td>{{ $claveCircuito === 'vending' ? 'Reparadas en esta corrida' : 'Replicadas en esta corrida' }}</td>
             <td align="right">{{ (int) ($rep['replicadas'] ?? 0) }}</td>
         </tr>
         <tr>
@@ -90,7 +94,34 @@
         </tr>
     </table>
 
-    @if (! empty($bloque['post']['por_puntoventa']))
+    @if ($claveCircuito === 'vending' && ! empty($bloque['post']['filas']))
+        <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; font-size:13px; width:100%; margin-bottom:16px;">
+            <tr style="background:#f0f0f0;">
+                <th align="left">Cierre</th>
+                <th align="left">nro_oper</th>
+                <th align="left">Máquina</th>
+                <th align="right">ERP X</th>
+                <th align="right">Anita X</th>
+                <th align="right">ERP Z</th>
+                <th align="right">Anita Z</th>
+                <th align="left">Estado</th>
+            </tr>
+            @foreach ($bloque['post']['filas'] as $fila)
+                <tr>
+                    <td>#{{ (int) ($fila['numero_cierre'] ?? 0) }}</td>
+                    <td>{{ (int) ($fila['nro_oper_anita'] ?? 0) }}</td>
+                    <td>{{ $fila['maquina'] ?? '—' }}</td>
+                    <td align="right">{{ $fmt($fila['erp_total_x'] ?? 0) }}</td>
+                    <td align="right">{{ $fila['anita_total_x'] === null ? '—' : $fmt($fila['anita_total_x']) }}</td>
+                    <td align="right">{{ $fmt($fila['erp_total_z'] ?? 0) }}</td>
+                    <td align="right">{{ $fila['anita_total_z'] === null ? '—' : $fmt($fila['anita_total_z']) }}</td>
+                    <td>{{ $fila['estado'] ?? '' }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+
+    @if ($claveCircuito !== 'vending' && ! empty($bloque['post']['por_puntoventa']))
         <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; font-size:13px; width:100%; margin-bottom:16px;">
             <tr style="background:#f0f0f0;">
                 <th align="left">PV</th>
@@ -147,7 +178,8 @@
 @endforeach
 
 <p style="margin-top:24px; font-size:12px; color:#666;">
-    Criterio ERP: <code>venta.fechajornada</code> + emisión gastronomía o estacionamiento.<br>
+    Criterio ERP: <code>venta.fechajornada</code> + emisión gastronomía, estacionamiento o <code>maquinavending_rendicion.fecha_jornada</code>.<br>
+    Criterio Anita vending: <code>rendgastro.rendg_total_x</code> / <code>rendg_total_z</code> por <code>rendg_nro_oper</code>.<br>
     Criterio Anita: cabecera por comprobante (<code>ven_sucursal + ven_fecha_vto + ven_tipo + ven_nro + ven_letra=B</code>).<br>
     Comando manual:
     <code>php artisan gastronomia:auditoria-anita-diaria --fecha={{ $fechaJornada }}</code>

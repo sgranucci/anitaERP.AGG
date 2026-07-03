@@ -79,7 +79,9 @@ class Partidagasto_MontoRepository implements Partidagasto_MontoRepositoryInterf
 			{
 				$periodos = $data['periodos'];
 				$montos = $data['montos'];
-				$creousuario_ids = $data['creousuario_ids'];
+				$creousuario_ids = $data['creousuario_ids']
+					?? $data['creousuario_ids_monto']
+					?? [];
 			}
 			else
 			{
@@ -87,6 +89,13 @@ class Partidagasto_MontoRepository implements Partidagasto_MontoRepositoryInterf
 				$montos = [];
 				$creousuario_ids = [];
 			}
+
+			$usuarioActualId = (int) Auth::id();
+			$creousuarioIdEn = static function (int $index) use ($creousuario_ids, $usuarioActualId): int {
+				$valor = $creousuario_ids[$index] ?? $usuarioActualId;
+
+				return (int) ($valor ?: $usuarioActualId);
+			};
 
 			if ($funcion == 'update')
 			{
@@ -108,7 +117,7 @@ class Partidagasto_MontoRepository implements Partidagasto_MontoRepositoryInterf
 									"partidagasto_id" => $id,
 									"periodo" => $periodos[$i],
 									"monto" => $montos[$i],
-									"creousuario_id" => $creousuario_ids[$i]
+									"creousuario_id" => $creousuarioIdEn($i)
 									]);
 					}
 				}
@@ -126,7 +135,7 @@ class Partidagasto_MontoRepository implements Partidagasto_MontoRepositoryInterf
 						"partidagasto_id" => $id,
 						"periodo" => $periodos[$i_movimiento],
 						"monto" => $montos[$i_movimiento],
-						"creousuario_id" => $creousuario_ids[$i_movimiento]
+						"creousuario_id" => $creousuarioIdEn($i_movimiento)
 						]);
 				}
 			}

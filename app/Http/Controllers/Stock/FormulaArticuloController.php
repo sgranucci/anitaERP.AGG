@@ -19,6 +19,7 @@ use App\Services\Stock\FormulaArticuloVinculoService;
 use App\Services\Stock\FormulaArticuloCostoTotalService;
 use App\Services\Stock\StkmaeUltimaCompraAnitaService;
 use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -318,6 +319,50 @@ class FormulaArticuloController extends Controller
         }
 
         return $this->formulaArticuloEstadoRepository->leeHistoria($formula_articulo_id);
+    }
+
+    /**
+     * Artículos de compra cuyo SKU alt./insumo apunta al artículo insumo indicado.
+     */
+    public function articulosCompraPorInsumo(int $articulo_id)
+    {
+        if (! can('listar-formula-articulo', false)
+            && ! can('editar-formula-articulo', false)
+            && ! can('listar-articulos', false)) {
+            abort(403);
+        }
+
+        $insumo = Articulo::query()->find($articulo_id, ['id', 'sku', 'descripcion', 'empresa_id']);
+        if (! $insumo) {
+            return response()->json(['datos' => [], 'insumo' => null, 'mensaje' => 'Artículo no encontrado.']);
+        }
+
+        RecepcionProveedorDepositoSupport::reiniciarCache();
+
+        $empresaId = (int) ($insumo->empresa_id ?? 0);
+        $empresaId = $empresaId > 0 ? $empresaId : null;
+
+        $rows = RecepcionProveedorDepositoSupport::resolverArticulosCompraDesdeInsumo($insumo, $empresaId)
+            ->sortBy('sku')
+            ->values()
+            ->map(static function (Articulo $compra): array {
+                return [
+                    'id' => (int) $compra->id,
+                    'sku' => (string) $compra->sku,
+                    'descripcion' => (string) ($compra->descripcion ?? ''),
+                    'skualternativo' => (string) ($compra->skualternativo ?? ''),
+                ];
+            })
+            ->all();
+
+        return response()->json([
+            'datos' => $rows,
+            'insumo' => [
+                'id' => (int) $insumo->id,
+                'sku' => (string) $insumo->sku,
+                'descripcion' => (string) ($insumo->descripcion ?? ''),
+            ],
+        ]);
     }
 
     /**

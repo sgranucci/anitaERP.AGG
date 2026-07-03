@@ -160,7 +160,7 @@ final class RecepcionProveedorAnitaColisionSupport
 
         return self::existeRecepmaeErp($codigoProveedor, $clave)
             || self::existeRecepmovProveedor($codigoProveedor, $clave)
-            || self::existeStkmovErp($clave);
+            || (RecepcionProveedorStkmovAnitaSupport::habilitado() && self::existeStkmovErp($clave));
     }
 
     /**
@@ -194,8 +194,12 @@ final class RecepcionProveedorAnitaColisionSupport
      */
     public static function tieneRecepmovOStkmov(string $codigoProveedor, array $clave): bool
     {
-        return self::existeRecepmovProveedor($codigoProveedor, $clave)
-            || self::existeStkmovErp($clave);
+        if (self::existeRecepmovProveedor($codigoProveedor, $clave)) {
+            return true;
+        }
+
+        return RecepcionProveedorStkmovAnitaSupport::habilitado()
+            && self::existeStkmovErp($clave);
     }
 
     private static function existeRecepmovProveedor(string $codigoProveedor, array $clave): bool

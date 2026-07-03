@@ -1,11 +1,13 @@
 @php
     use App\Models\Configuracion\Moneda;
+    use App\Support\Stock\RecepcionProveedorAccionLineaOc;
     use App\Support\Stock\RecepcionProveedorFormItemsSupport;
     use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 
     $moneda_query = $moneda_query ?? Moneda::query()->orderBy('nombre')->get();
 
-    $soloLectura = !($modoEdicion ?? false) || (($recepcion->estado ?? 'BORRADOR') !== 'BORRADOR');
+    $soloLectura = ! ($modoEdicion ?? false)
+        || ((($recepcion->estado ?? 'BORRADOR') !== 'BORRADOR') && ! ($modoDevolucion ?? false));
     $empresaIdOc = old('empresa_id', optional(optional($recepcion)->ordencompras)->empresa_id ?? optional($recepcion)->empresa_id ?? '');
     $depositoCabeceraEmpresaId = optional(optional($recepcion)->depositos)->empresa_id ?? null;
     $depositoCabeceraTipo = optional(optional($recepcion)->depositos)->tipodeposito ?? '';
@@ -93,6 +95,24 @@
             $empresaIdOc ? (int) $empresaIdOc : null
         );
         }
+    }
+    if ($modoDevolucion ?? false) {
+        $items = array_values(array_map(static function (array $item): array {
+            $tieneMaxOrigen = array_key_exists('cantidad_recepcionada_origen', $item)
+                && $item['cantidad_recepcionada_origen'] !== null
+                && $item['cantidad_recepcionada_origen'] !== '';
+            if (! $tieneMaxOrigen) {
+                $recibida = (float) ($item['cantidad'] ?? 0);
+                $item['cantidad_recepcionada_origen'] = $recibida;
+                $item['cantidad'] = $recibida;
+                $item['cantidad_rechazada'] = 0;
+                $item['accion_linea_oc'] = $recibida > 0.000001
+                    ? RecepcionProveedorAccionLineaOc::RECIBIR
+                    : RecepcionProveedorAccionLineaOc::PENDIENTE;
+            }
+
+            return $item;
+        }, $items ?? []));
     }
     $items = $items ?? [];
 
@@ -305,15 +325,23 @@
                 <th class="col-num">#</th>
                 <th class="col-art">Art.</th>
                 <th class="col-desc">Descripci&oacute;n</th>
-                <th class="col-qty text-right" title="Cantidad pedida en la OC (cajas, packs, bultos)">Cant. OC</th>
-                <th class="col-qty" title="Cantidad del remito en unidad de compra (ver columna Conversi&oacute;n)">Cant. recibida</th>
+                <th class="col-qty text-right" title="{{ ($modoDevolucion ?? false) ? 'Cantidad recepcionada en el COM origen' : 'Cantidad pedida en la OC (cajas, packs, bultos)' }}">
+                    {{ ($modoDevolucion ?? false) ? 'Recibida' : 'Cant. OC' }}
+                </th>
+                <th class="col-qty" title="{{ ($modoDevolucion ?? false) ? 'Cantidad a devolver (no puede superar lo recepcionado)' : 'Cantidad del remito en unidad de compra (ver columna Conversi&oacute;n)' }}">
+                    {{ ($modoDevolucion ?? false) ? 'Cant. a devolver' : 'Cant. recibida' }}
+                </th>
+                @if(!($modoDevolucion ?? false))
                 <th class="col-qty" title="Cantidad rechazada en la misma unidad de compra">Rechaz.</th>
+                @endif
                 <th class="col-conv text-right" title="Unidad de compra del remito, coeficiente y cantidad equivalente en unidad de stock ERP">Conversi&oacute;n</th>
                 <th class="col-precio text-right" title="Precio unitario seg&uacute;n remito/factura">Precio rec.</th>
                 <th class="col-importe text-right" title="Cantidad recibida &times; precio recepci&oacute;n">Total l&iacute;nea</th>
                 <th class="col-mon" title="Moneda / cotizaci&oacute;n">Mon./Cot.</th>
                 <th class="col-dep" title="Dep&oacute;sito">Dep.</th>
+                @if(!($modoDevolucion ?? false))
                 <th class="col-acc" title="Pendiente o cierre OC (opcional si la l&iacute;nea queda sin cantidad)">OC</th>
+                @endif
             </tr>
         </thead>
         <tbody id="tbody-items-recepcion">
@@ -492,6 +520,7 @@
 
 <script>
     window.recepcionProveedorItemsInicial = @json($items);
+    window.recepcionProveedorModoDevolucion = @json($modoDevolucion ?? false);
     window.recepcionProveedorSoloLectura = @json($soloLectura);
     window.recepcionProveedorId = @json($recepcion->id ?? null);
     window.recepcionProveedorDepositoCabeceraId = @json((int) $depositoCabeceraId ?: 0);

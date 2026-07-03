@@ -24,6 +24,22 @@ final class MovimientoStockVisibilidadSupport
         return can(self::PERMISO_VER_TODOS, false);
     }
 
+    /** Consulta / PDF COM de transferencias (mail aviso, pantalla transferencias, pendientes). */
+    public static function puedeConsultarTransferencia(): bool
+    {
+        return can('listar-movimientos-de-stock', false)
+            || can('crear-transferencia-mercaderia', false)
+            || can('aprobar-transferencia-mercaderia', false)
+            || can('listar-transferencias-pendientes', false);
+    }
+
+    public static function abortSiNoPuedeConsultarTransferencia(): void
+    {
+        if (! self::puedeConsultarTransferencia()) {
+            abort(403, 'No tiene permisos para consultar transferencias de mercadería.');
+        }
+    }
+
     public static function centrocostoFiltroUsuario(): ?int
     {
         if (self::puedeVerTodos()) {

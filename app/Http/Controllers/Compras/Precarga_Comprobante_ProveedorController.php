@@ -12,6 +12,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
+use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,18 +60,19 @@ class Precarga_Comprobante_ProveedorController extends Controller
     public function index(Request $request)
     {
         can('listar-precarga-proveedores');
-		
-        $busqueda = $request->busqueda;
 
-        $precarga = $this->precarga_comprobante_proveedorRepository->leePrecargaComprobanteProveedor($busqueda, true);
+        $filtros = PrecargaComprobanteProveedorListadoFiltros::resolverDesdeRequest($request);
 
-        $datas = [
+        $precarga = $this->precarga_comprobante_proveedorRepository->leePrecargaComprobanteProveedor($filtros, true);
+
+        return view('compras.precarga_comprobante_proveedor.index', [
             'datas' => $precarga,
-            'busqueda' => $busqueda,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => PrecargaComprobanteProveedorListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => PrecargaComprobanteProveedorListadoFiltros::CAMPOS,
             'pdfIaHabilitado' => (bool) config('comprobante_proveedor_pdf_ia.habilitado'),
-        ];
-
-        return view('compras.precarga_comprobante_proveedor.index', $datas);
+        ]);
     }
 
     public function previewPdfIa(Request $request)
@@ -167,44 +169,43 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-precarga-proveedores'); 
+        can('listar-precarga-proveedores');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        switch($formato)
-        {
-        case 'PDF':
-            $precarga = $this->precarga_comprobante_proveedorRepository->leePrecargaComprobanteProveedor($busqueda, false);
+        $filtros = PrecargaComprobanteProveedorListadoFiltros::resolverDesdeRequest($request, $busqueda);
 
-            $view =  \View::make('compras.precarga_comprobante_proveedor.listado', compact('precarga'))
-                        ->render();
-            $path = storage_path('pdf/listados');
-            $nombre_pdf = 'listado_precarga_comprobante_proveedor';
+        switch ($formato) {
+            case 'PDF':
+                $precarga = $this->precarga_comprobante_proveedorRepository->leePrecargaComprobanteProveedor($filtros, false);
 
-            $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+                $view = \View::make('compras.precarga_comprobante_proveedor.listado', compact('precarga'))
+                    ->render();
+                $path = storage_path('pdf/listados');
+                $nombre_pdf = 'listado_precarga_comprobante_proveedor';
 
-            return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
-        case 'EXCEL':
-            return (new CapexExport($this->precarga_comprobante_proveedorRepository))
-                        ->parametros($busqueda)
-                        ->download('precarga_comprobante_proveedor.xlsx');
-            break;
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
 
-        case 'CSV':
-            return (new CapexExport($this->precarga_comprobante_proveedorRepository))
-                        ->parametros($busqueda)
-                        ->download('precarga_comprobante_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
-        }   
+            case 'EXCEL':
+                return (new CapexExport($this->precarga_comprobante_proveedorRepository))
+                    ->parametros($filtros)
+                    ->download('precarga_comprobante_proveedor.xlsx');
 
-        $datas = ['datas' => $precarga, 'busqueda' => $busqueda];
+            case 'CSV':
+                return (new CapexExport($this->precarga_comprobante_proveedorRepository))
+                    ->parametros($filtros)
+                    ->download('precarga_comprobante_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
 
-		return view('compras.precarga_comprobante_proveedor.index', $datas);       
+        return redirect()->route(
+            'precarga_comprobante_proveedor',
+            PrecargaComprobanteProveedorListadoFiltros::paraQueryString($filtros)
+        );
     }
 
     public function verFacturaPdf(Request $request, int $id): BinaryFileResponse

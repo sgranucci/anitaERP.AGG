@@ -8,6 +8,7 @@ use App\Http\Requests\ValidacionRecepcionProveedor;
 use App\Models\Stock\Configuracion_RecepcionProveedor;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Models\Stock\Recepcion_Proveedor_Token;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
@@ -19,6 +20,7 @@ use App\Services\Stock\RecepcionProveedorService;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
+use App\Support\Configuracion\OperacionPublicaTokenSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -326,6 +328,54 @@ class RecepcionProveedorController extends Controller
         can('listar-recepcion-proveedor');
 
         return $this->pdfService->descargarCom($id, $request->boolean('inline'));
+    }
+
+    public function verPublico(string $token)
+    {
+        $row = OperacionPublicaTokenSupport::buscarActivo(
+            Recepcion_Proveedor_Token::class,
+            $token,
+            Recepcion_Proveedor_Token::ACCION_VISUALIZAR
+        );
+        if ($row === null) {
+            return response()->view('stock.prestamo.publico_resultado', [
+                'titulo' => 'Enlace no válido',
+                'detalle' => 'Este enlace ya fue utilizado, fue invalidado o expiró.',
+                'tipo' => 'error',
+            ], 410);
+        }
+
+        $recepcion = $this->service->buscar((int) $row->recepcion_proveedor_id);
+        $recepcion->loadMissing([
+            'proveedores',
+            'ordencompras',
+            'depositos',
+            'creousuarios',
+            'recepcion_proveedor_articulos.articulos',
+        ]);
+
+        return view('stock.recepcion_proveedor.publico_ver', [
+            'recepcion' => $recepcion,
+            'token' => $token,
+        ]);
+    }
+
+    public function imprimirComPublico(string $token)
+    {
+        $row = OperacionPublicaTokenSupport::buscarActivo(
+            Recepcion_Proveedor_Token::class,
+            $token,
+            Recepcion_Proveedor_Token::ACCION_VISUALIZAR
+        );
+        if ($row === null) {
+            return response()->view('stock.prestamo.publico_resultado', [
+                'titulo' => 'Enlace no válido',
+                'detalle' => 'Este enlace ya fue utilizado, fue invalidado o expiró.',
+                'tipo' => 'error',
+            ], 410);
+        }
+
+        return $this->pdfService->descargarCom((int) $row->recepcion_proveedor_id, true);
     }
 
     public function crearDevolucion(int $id)

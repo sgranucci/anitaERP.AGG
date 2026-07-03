@@ -2,6 +2,9 @@
 
 return [
 
+    // Validez por defecto de tokens visualizar en mails (horas). Módulos pueden sobreescribir.
+    'publico_horas_validez_token' => (int) env('MODULO_AVISO_PUBLICO_HORAS_TOKEN', 168),
+
     /*
     | Handler por clave modulo.codigo → clase que implementa ModuloAvisoHandlerInterface
     | o ModuloAvisoDespachoHandlerInterface.

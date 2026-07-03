@@ -32,7 +32,13 @@ Transferencia {{ $transferencia->codigo }}
                             </a>
                         @endif
                     @endcan
-                    <a href="{{ route('movimientostock') }}" class="btn btn-sm btn-default">Volver al listado</a>
+                    @if (can('listar-movimientos-de-stock', false))
+                        <a href="{{ route('movimientostock') }}" class="btn btn-sm btn-default">Volver al listado de movimientos</a>
+                    @elseif (can('listar-transferencias-pendientes', false))
+                        <a href="{{ route('transferencia_mercaderia_pendientes') }}" class="btn btn-sm btn-default">Volver a pendientes</a>
+                    @else
+                        <a href="{{ route('transferencia_mercaderia') }}" class="btn btn-sm btn-default">Volver a transferencias</a>
+                    @endif
                 </div>
             </div>
             <div class="card-body">

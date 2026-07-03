@@ -31,6 +31,11 @@ final class GastronomiaAnitaImportEmpresaSupport
             return '';
         }
 
+        // stkv_empresa no está poblado en bridge Kandiko (kancadmin); sucursal+nro alcanzan.
+        if ($prefijo === 'stkv') {
+            return '';
+        }
+
         $codigo = trim((string) $empresaCodigo);
         if ($codigo === '') {
             return '';

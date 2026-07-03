@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.0',
+    'version' => '1.1',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Recepción de proveedores y movimientos de stock',
 
@@ -64,6 +64,11 @@ return [
             'archivo' => 'circuito-transferencia.svg',
             'titulo' => 'Estados de una transferencia de mercadería',
             'seccion' => '11. Tipos y variantes de transferencia',
+        ],
+        'circuito_trcont' => [
+            'archivo' => 'circuito-trcont.svg',
+            'titulo' => 'Flujo operativo y contable de transferencia TRCONT',
+            'seccion' => '14. Transferencias con asiento contable (TRCONT)',
         ],
     ],
 ];

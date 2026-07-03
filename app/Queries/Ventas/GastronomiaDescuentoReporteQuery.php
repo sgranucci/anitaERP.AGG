@@ -201,6 +201,7 @@ final class GastronomiaDescuentoReporteQuery
             ->whereNotNull('cg.descuento_gastronomia_id');
 
         $this->aplicarExclusionInsumos($query);
+        $this->aplicarExclusionOpcionalesFormula($query);
         $this->aplicarFiltrosEstructurales($query, $filtros);
 
         if (($filtros['agrupar_por'] ?? '') === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
@@ -296,6 +297,26 @@ final class GastronomiaDescuentoReporteQuery
                     'UPPER(TRIM(ua_ins.nombre)) = ?',
                     [ArticuloUsoInsumoSupport::NOMBRE_USO_INSUMO],
                 );
+        });
+    }
+
+    /**
+     * Excluye renglones $0 de opcionales de fórmula agregados al emitir (no están en la cuenta).
+     * Import Anita no graba cuenta_gastronomia_linea: en ese caso se incluyen todas las venta_emision.
+     */
+    private function aplicarExclusionOpcionalesFormula(Builder $query): void
+    {
+        $query->where(function (Builder $outer): void {
+            $outer->whereNotExists(function ($sub): void {
+                $sub->select(DB::raw(1))
+                    ->from('cuenta_gastronomia_linea as cgl_any')
+                    ->whereColumn('cgl_any.cuenta_gastronomia_id', 'cg.id');
+            })->orWhereExists(function ($sub): void {
+                $sub->select(DB::raw(1))
+                    ->from('cuenta_gastronomia_linea as cgl')
+                    ->whereColumn('cgl.cuenta_gastronomia_id', 'cg.id')
+                    ->whereColumn('cgl.articulo_id', 've.articulo_id');
+            });
         });
     }
 

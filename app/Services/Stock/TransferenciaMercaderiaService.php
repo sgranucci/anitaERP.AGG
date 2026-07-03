@@ -8,17 +8,21 @@ use App\Models\Stock\Tipotransaccion_Stock;
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Models\Stock\Transferencia_Mercaderia_Articulo;
 use App\Models\Stock\Transferencia_Mercaderia_Token;
+use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\DepmaeControlStockSupport;
+use App\Support\Configuracion\OperacionPublicaTokenSupport;
+use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
+use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaSupport;
-use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
 use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
+use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Auth;
 use Carbon\Carbon;
@@ -43,7 +47,7 @@ class TransferenciaMercaderiaService
     public function __construct(
         private MovimientoStockService $movimientoStockService,
         private Tipotransaccion_StockRepositoryInterface $tipotransaccionStockRepository,
-        private StkdepSaldoAnitaService $stkdepSaldoAnitaService,
+        private Articulo_Saldo_DepositoRepositoryInterface $saldoDepositoRepository,
         private ModuloAvisoService $moduloAvisoService,
         private TransferenciaMercaderiaAsientoService $transferenciaAsientoService,
     ) {}
@@ -86,7 +90,49 @@ class TransferenciaMercaderiaService
     {
         $this->assertDepositoAutorizado($depositoSalidaId);
 
-        return $this->stkdepSaldoAnitaService->inventarioPorDepositoId($depositoSalidaId);
+        $rows = $this->saldoDepositoRepository->saldosDeposito($depositoSalidaId);
+        $out = [];
+        foreach ($rows as $row) {
+            $saldo = (float) ($row->cantidad ?? 0);
+            if ($saldo <= 0) {
+                continue;
+            }
+            $art = $row->articulos;
+            if ($art === null) {
+                continue;
+            }
+            $sku = trim((string) ($art->sku ?? ''));
+            if ($sku === '') {
+                continue;
+            }
+            $out[] = [
+                'sku_anita' => $sku,
+                'saldo' => $saldo,
+                'articulo_id' => (int) $art->id,
+                'sku' => $sku,
+                'descripcion' => (string) ($art->descripcion ?? ''),
+            ];
+        }
+
+        usort($out, static function (array $a, array $b): int {
+            return strcasecmp(
+                (string) ($a['descripcion'] ?? $a['sku'] ?? ''),
+                (string) ($b['descripcion'] ?? $b['sku'] ?? '')
+            );
+        });
+
+        return $out;
+    }
+
+    public function saldoArticuloEnDeposito(int $articuloId, int $depositoId): float
+    {
+        if ($articuloId <= 0 || $depositoId <= 0) {
+            return 0.0;
+        }
+
+        $this->assertDepositoAutorizado($depositoId);
+
+        return $this->saldoDepositoRepository->saldo($articuloId, $depositoId);
     }
 
     /**
@@ -310,6 +356,25 @@ class TransferenciaMercaderiaService
             return ['ok' => false, 'mensaje' => 'Debe indicar centro de costo destino para transferencias con contabilidad.'];
         }
 
+        if ($manejaContabilidad) {
+            if ($origenBienUso) {
+                return [
+                    'ok' => false,
+                    'mensaje' => 'Las transferencias contables (TRCONT) requieren depósito de salida (no bien de uso como origen).',
+                ];
+            }
+
+            try {
+                TransferenciaMercaderiaLineaContableSupport::assertLineasValidasParaTrcont(
+                    array_column($lineas, 'articulo_id'),
+                    $depositoSalidaId,
+                    $empresaId
+                );
+            } catch (\Throwable $e) {
+                return ['ok' => false, 'mensaje' => $e->getMessage()];
+            }
+        }
+
         if ($manejaContabilidad && ! $requiereAprobacion) {
             try {
                 $this->transferenciaAsientoService->assertCuadreAntesDeConfirmar(
@@ -318,7 +383,8 @@ class TransferenciaMercaderiaService
                         $tipoTransferencia,
                         $empresaId > 0 ? $empresaId : (int) ($depositoSalida?->empresa_id ?? $depositoEntrada?->empresa_id ?? 0),
                         $fecha,
-                        $ccDestinoId
+                        $ccDestinoId,
+                        $depositoSalidaId
                     )
                 );
             } catch (\Throwable $e) {
@@ -414,6 +480,7 @@ class TransferenciaMercaderiaService
                         'tipotransaccion_stock',
                     ]));
 
+                    $this->generarTokenConsultaPublica($transferencia->fresh());
                     $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
                 } else {
                     $this->generarTokensYNotificarAprobacion($transferencia->fresh(['articulos', 'depositoOrigen', 'depositoDestino']));
@@ -512,6 +579,7 @@ class TransferenciaMercaderiaService
                 'tipotransaccion_stock',
             ]));
 
+            $this->generarTokenConsultaPublica($transferencia->fresh());
             $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
 
             return $transferencia->fresh();
@@ -714,13 +782,7 @@ class TransferenciaMercaderiaService
             ];
         }
 
-        $inventario = $this->stkdepSaldoAnitaService->inventarioPorDepositoId($depositoSalidaId);
-        $saldoPorArticulo = [];
-        foreach ($inventario as $fila) {
-            if (! empty($fila['articulo_id'])) {
-                $saldoPorArticulo[(int) $fila['articulo_id']] = (float) $fila['saldo'];
-            }
-        }
+        $saldoPorArticulo = $this->saldosErpPorLineasResueltas($depositoSalidaId, $lineasResueltas);
 
         $detalle = $this->armarDetalleEvaluacionSaldos($lineasResueltas, $saldoPorArticulo, false);
         $viable = collect($detalle)->every(static fn (array $fila): bool => (bool) ($fila['ok'] ?? false));
@@ -773,21 +835,7 @@ class TransferenciaMercaderiaService
                 continue;
             }
 
-            if (! isset($saldoPorArticulo[$articuloId])) {
-                $detalle[] = [
-                    'articulo_id' => $articuloId,
-                    'sku' => $sku,
-                    'descripcion' => $desc,
-                    'cantidad_requerida' => $cantidad,
-                    'saldo_disponible' => null,
-                    'ok' => false,
-                    'motivo' => 'Sin saldo en el depósito de origen.',
-                ];
-
-                continue;
-            }
-
-            $saldo = $saldoPorArticulo[$articuloId];
+            $saldo = (float) ($saldoPorArticulo[$articuloId] ?? 0.0);
             if ($cantidad > $saldo + 0.000001) {
                 $detalle[] = [
                     'articulo_id' => $articuloId,
@@ -796,7 +844,9 @@ class TransferenciaMercaderiaService
                     'cantidad_requerida' => $cantidad,
                     'saldo_disponible' => $saldo,
                     'ok' => false,
-                    'motivo' => 'La cantidad supera el saldo disponible.',
+                    'motivo' => $saldo <= 0
+                        ? 'Sin saldo en el depósito de origen.'
+                        : 'La cantidad supera el saldo disponible.',
                 ];
 
                 continue;
@@ -849,24 +899,44 @@ class TransferenciaMercaderiaService
             return;
         }
 
-        $inventario = $this->stkdepSaldoAnitaService->inventarioPorDepositoId($depositoSalidaId);
-        $saldoPorArticulo = [];
-        foreach ($inventario as $fila) {
-            if (! empty($fila['articulo_id'])) {
-                $saldoPorArticulo[(int) $fila['articulo_id']] = (float) $fila['saldo'];
-            }
-        }
-
+        /** @var array<int, float> $cantidadPorArticulo */
+        $cantidadPorArticulo = [];
         foreach ($lineas as $linea) {
             $articuloId = (int) $linea['articulo_origen_id'];
             $cantidad = (float) $linea['cantidad_origen'];
-            if (! isset($saldoPorArticulo[$articuloId])) {
-                throw new \InvalidArgumentException('Artículo sin saldo en el depósito de salida.');
+            if ($articuloId <= 0 || $cantidad <= 0) {
+                continue;
             }
-            if ($cantidad > $saldoPorArticulo[$articuloId] + 0.000001) {
-                throw new \InvalidArgumentException('La cantidad supera el saldo disponible.');
-            }
+            $cantidadPorArticulo[$articuloId] = ($cantidadPorArticulo[$articuloId] ?? 0.0) + $cantidad;
         }
+
+        if ($cantidadPorArticulo === []) {
+            return;
+        }
+
+        MovimientoStockSalidaSaldoSupport::validarCantidadesPorDeposito(
+            $depositoSalidaId,
+            $cantidadPorArticulo,
+            $this->saldoDepositoRepository
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineasResueltas
+     * @return array<int, float>
+     */
+    private function saldosErpPorLineasResueltas(int $depositoSalidaId, array $lineasResueltas): array
+    {
+        $saldoPorArticulo = [];
+        foreach ($lineasResueltas as $linea) {
+            $articuloId = (int) $linea['articulo_origen_id'];
+            if ($articuloId <= 0 || array_key_exists($articuloId, $saldoPorArticulo)) {
+                continue;
+            }
+            $saldoPorArticulo[$articuloId] = $this->saldoDepositoRepository->saldo($articuloId, $depositoSalidaId);
+        }
+
+        return $saldoPorArticulo;
     }
 
     /**
@@ -971,7 +1041,6 @@ class TransferenciaMercaderiaService
         $data = array_merge($payloadLineas, [
             'tipotransaccion_stock_id' => $tipotransaccionId,
             'signo_cantidad' => TransferenciaMercaderiaSignoSupport::signoCantidad($esSalida),
-            'anita_stkmov_tipo' => $esSalida ? 'TRS' : 'TRE',
             'fecha' => $fecha,
             'fechajornada' => $fecha,
             'deposito_id' => $depositoId,
@@ -1031,6 +1100,25 @@ class TransferenciaMercaderiaService
         }
 
         $this->moduloAvisoService->enviar('stock', 'transferencia_pendiente_aprobacion', (int) $transferencia->id);
+    }
+
+    /**
+     * Enlace público de solo consulta (mail confirmada / post-aprobación), sin login ERP.
+     */
+    public function generarTokenConsultaPublica(Transferencia_Mercaderia $transferencia): Transferencia_Mercaderia_Token
+    {
+        $horas = max(1, (int) config('stock.transferencia_horas_validez_token', 168));
+        $usuarioId = (int) ($transferencia->usuario_destino_id ?? $transferencia->usuario_origen_id ?? 0);
+
+        $token = OperacionPublicaTokenSupport::renovarVisualizar(
+            Transferencia_Mercaderia_Token::class,
+            'transferencia_mercaderia_id',
+            (int) $transferencia->id,
+            $usuarioId > 0 ? $usuarioId : null,
+            $horas,
+        );
+
+        return Transferencia_Mercaderia_Token::query()->where('token', $token)->firstOrFail();
     }
 
     private function invalidarTokens(Transferencia_Mercaderia $transferencia): void
@@ -1117,9 +1205,11 @@ class TransferenciaMercaderiaService
         int $empresaId,
         string $fecha,
         int $ccDestinoId,
+        int $depositoOrigenId = 0,
     ): Transferencia_Mercaderia {
         $transferencia = new Transferencia_Mercaderia([
             'empresa_id' => $empresaId,
+            'deposito_origen_id' => $depositoOrigenId > 0 ? $depositoOrigenId : null,
             'centrocosto_destino_id' => $ccDestinoId,
             'codigo' => 'PREVIEW',
             'fecha' => $fecha,

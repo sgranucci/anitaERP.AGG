@@ -8,6 +8,8 @@ use App\Mail\Ventas\GastronomiaAnitaAuditoriaDiaria;
 use App\Models\Seguridad\Usuario;
 use App\Services\Caja\Estacionamiento\EstacionamientoChequeoVentasAnitaErpService;
 use App\Services\Caja\Estacionamiento\EstacionamientoReplicarVentasAnitaErpService;
+use App\Services\Ventas\MaquinavendingRendicionAuditoriaAnitaService;
+use App\Services\Ventas\MaquinavendingRendicionAnitaSyncService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -24,6 +26,8 @@ final class GastronomiaAnitaAuditoriaDiariaService
         private readonly GastronomiaReplicarVentasAnitaErpService $replicarGastroService,
         private readonly EstacionamientoChequeoVentasAnitaErpService $chequeoEstacionamientoService,
         private readonly EstacionamientoReplicarVentasAnitaErpService $replicarEstacionamientoService,
+        private readonly MaquinavendingRendicionAuditoriaAnitaService $auditoriaVendingService,
+        private readonly MaquinavendingRendicionAnitaSyncService $vendingAnitaSyncService,
     ) {
     }
 
@@ -95,6 +99,8 @@ final class GastronomiaAnitaAuditoriaDiariaService
             $replicacionEstacionamiento['omitida'] = false;
         }
 
+        $bloqueVending = $this->auditoriaVendingJornada($empresaId, $fecha, $dryRun, $tolerancia);
+
         $postGastro = $this->chequeoGastroService->auditoriaPorFechaJornada($fecha, $empresaId, $tolerancia);
         $postEstacionamiento = $this->chequeoEstacionamientoService->auditoriaPorFechaJornada(
             $fecha,
@@ -117,6 +123,7 @@ final class GastronomiaAnitaAuditoriaDiariaService
                 'post' => $postEstacionamiento,
                 'replicacion' => $replicacionEstacionamiento,
             ],
+            'vending' => $bloqueVending,
             'pre' => $preGastro,
             'post' => $postGastro,
             'replicacion' => $replicacionGastro,
@@ -125,6 +132,7 @@ final class GastronomiaAnitaAuditoriaDiariaService
                 $postEstacionamiento,
                 $replicacionGastro,
                 $replicacionEstacionamiento,
+                $bloqueVending,
                 $tolerancia,
                 $config,
             ),
@@ -157,6 +165,8 @@ final class GastronomiaAnitaAuditoriaDiariaService
             'faltantes_estacionamiento_final' => (int) ($postEstacionamiento['resumen_global']['conteo']['solo_erp'] ?? 0),
             'replicadas_gastro' => (int) ($replicacionGastro['replicadas'] ?? 0),
             'replicadas_estacionamiento' => (int) ($replicacionEstacionamiento['replicadas'] ?? 0),
+            'reparadas_vending' => (int) ($bloqueVending['replicacion']['replicadas'] ?? 0),
+            'diferencias_vending_final' => (int) ($bloqueVending['post']['resumen']['conteo']['requiere_reparacion'] ?? 0),
             'delta_total_gastro' => (float) ($postGastro['resumen_global']['delta_totales']['total'] ?? 0),
             'delta_total_estacionamiento' => (float) ($postEstacionamiento['resumen_global']['delta_totales']['total'] ?? 0),
             'requiere_alerta' => $informe['requiere_alerta'],
@@ -183,10 +193,68 @@ final class GastronomiaAnitaAuditoriaDiariaService
     }
 
     /**
+     * @return array{pre: array<string, mixed>, post: array<string, mixed>, replicacion: array<string, mixed>, omitida?: bool}
+     */
+    private function auditoriaVendingJornada(
+        int $empresaId,
+        string $fechaJornada,
+        bool $dryRun,
+        float $tolerancia,
+    ): array {
+        if (! $this->vendingAnitaSyncService->sincronizacionHabilitada()) {
+            return [
+                'omitida' => true,
+                'motivo' => 'RENDICION_MAQUINAVENDING_SINCRONIZAR_ANITA deshabilitado.',
+                'pre' => ['resumen_global' => ['ventas_erp' => 0, 'conteo' => []]],
+                'post' => ['resumen_global' => ['ventas_erp' => 0, 'conteo' => []]],
+                'replicacion' => $this->replicacionVacia($fechaJornada, 'vending'),
+            ];
+        }
+
+        $resultado = $this->auditoriaVendingService->auditarYRepararFechaJornada(
+            $empresaId,
+            $fechaJornada,
+            $dryRun,
+            $tolerancia,
+        );
+
+        return [
+            'pre' => $this->normalizarResumenVendingAuditoria($resultado['pre']),
+            'post' => $this->normalizarResumenVendingAuditoria($resultado['post']),
+            'replicacion' => $resultado['replicacion'],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $auditoria
+     * @return array{resumen_global: array<string, mixed>, filas: list<array<string, mixed>>}
+     */
+    private function normalizarResumenVendingAuditoria(array $auditoria): array
+    {
+        $conteo = $auditoria['resumen']['conteo'] ?? [];
+
+        return [
+            'resumen_global' => [
+                'ventas_erp' => (int) ($conteo['rendiciones'] ?? 0),
+                'conteo' => [
+                    'solo_erp' => (int) ($conteo['sin_cabecera'] ?? 0),
+                    'diferencia' => (int) ($conteo['requiere_reparacion'] ?? 0),
+                    'error' => 0,
+                ],
+                'delta_totales' => [
+                    'total' => 0.0,
+                ],
+            ],
+            'filas' => $auditoria['filas'] ?? [],
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $postGastro
      * @param  array<string, mixed>  $postEstacionamiento
      * @param  array<string, mixed>  $replicacionGastro
      * @param  array<string, mixed>  $replicacionEstacionamiento
+     * @param  array<string, mixed>  $bloqueVending
      * @param  array<string, mixed>  $config
      */
     private function requiereAlertaInforme(
@@ -194,6 +262,7 @@ final class GastronomiaAnitaAuditoriaDiariaService
         array $postEstacionamiento,
         array $replicacionGastro,
         array $replicacionEstacionamiento,
+        array $bloqueVending,
         float $tolerancia,
         array $config,
     ): bool {
@@ -207,8 +276,15 @@ final class GastronomiaAnitaAuditoriaDiariaService
             }
         }
 
+        $postVending = $bloqueVending['post']['resumen_global'] ?? [];
+        if ((int) ($postVending['conteo']['diferencia'] ?? 0) > 0
+            || (int) ($postVending['conteo']['solo_erp'] ?? 0) > 0) {
+            return true;
+        }
+
         if (($replicacionGastro['errores'] ?? []) !== []
-            || ($replicacionEstacionamiento['errores'] ?? []) !== []) {
+            || ($replicacionEstacionamiento['errores'] ?? []) !== []
+            || ($bloqueVending['replicacion']['errores'] ?? []) !== []) {
             return true;
         }
 

@@ -61,6 +61,23 @@ final class RendicionGastronomiaAnitaContextBuilder
             ? round((float) $totalZForzado, 2)
             : 0.0;
 
+        $movimientosRendvalor = $rendicion->movimientos;
+        if ($turno->habilitacion_en !== null) {
+            $hastaTotales = $turno->cierre_en
+                ? Carbon::parse($turno->cierre_en)
+                : Carbon::parse($rendicion->fecharendicion ?? now());
+            $totalesTurno = GastronomiaTurnoOperativoTotalesSupport::calcular(
+                (string) $turno->identificador_pc,
+                (int) $rendicion->empresa_id,
+                $fechaJornada,
+                Carbon::parse($turno->habilitacion_en),
+                $hastaTotales,
+            );
+            $movimientosRendvalor = RendicionAnitaMovimientosRendvalorSupport::desdePorMedioPago(
+                $totalesTurno['por_medio_pago'] ?? [],
+            );
+        }
+
         return [
             'nro_oper' => $nroOper,
             'tipo_oper' => substr((string) config('rendicion_gastronomia_anita.tipo_oper', 'F'), 0, 1),
@@ -91,7 +108,7 @@ final class RendicionGastronomiaAnitaContextBuilder
             // solo debe reflejar post-cierre Waitry (CIERRE-WAITRY), no fc_caea por turno.
             'tot_fc_caea' => 0.0,
             'tot_nc_caea' => 0.0,
-            'movimientos' => $rendicion->movimientos,
+            'movimientos' => $movimientosRendvalor,
         ];
     }
 

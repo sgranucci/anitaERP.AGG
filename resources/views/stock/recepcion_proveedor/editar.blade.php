@@ -88,15 +88,12 @@ Recepción {{ $recepcion->numerorecepcion }}
                     'recepcionId' => $recepcion->id,
                     'clase' => 'btn btn-danger mr-2 mb-2',
                 ])
-                @if($recepcion->estado === 'CONFIRMADA' && $recepcion->tipo === 'RECEPCION')
-                @can('devolver-recepcion-proveedor')
+                @if($recepcion->estado === 'CONFIRMADA' && $recepcion->tipo === 'RECEPCION' && can('devolver-recepcion-proveedor', false))
                 <a href="{{ route('crear_devolucion_recepcion_proveedor', $recepcion->id) }}" class="btn btn-warning">
                     <i class="fa fa-undo"></i> Devolución a proveedor
                 </a>
-                @endcan
                 @endif
-                @if($recepcion->estado === 'CONFIRMADA')
-                @can('anular-recepcion-proveedor')
+                @if($recepcion->estado === 'CONFIRMADA' && can('anular-recepcion-proveedor', false))
                 <form action="{{ route('anular_recepcion_proveedor', $recepcion->id) }}" method="POST" class="d-inline"
                       onsubmit="return confirm('¿Anular recepción? Revierte stock, asiento (ctamov) y registros Anita (recepmae/recepmov/recpunica).');">
                     @csrf
@@ -104,7 +101,6 @@ Recepción {{ $recepcion->numerorecepcion }}
                         <i class="fa fa-ban"></i> Anular recepción
                     </button>
                 </form>
-                @endcan
                 @endif
             </div>
             @endif

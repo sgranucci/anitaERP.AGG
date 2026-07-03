@@ -11,6 +11,7 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Stock\PrecioService;
 use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Ventas\GastronomiaDescuentoClienteInternoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -52,7 +53,7 @@ final class GastronomiaTicketCanjePremioService
         }
 
         $descuento = $this->resolverDescuentoConfigurado();
-        $cliente = $this->resolverClienteConfigurado();
+        $cliente = $this->resolverClienteCanjePremio(null);
 
         $primer = $items[0];
         $puntosTotal = 0.;
@@ -122,7 +123,7 @@ final class GastronomiaTicketCanjePremioService
 
         $validacion = $this->validarParaAplicar($numerocupon, (int) $cuenta->empresa_id, $listaprecioId);
         $descuento = $this->resolverDescuentoConfigurado();
-        $cliente = $this->resolverClienteConfigurado();
+        $cliente = $this->resolverClienteCanjePremio(null);
 
         $clienteInternoId = (int) ($descuento->cliente_id ?? 0);
         if ($clienteInternoId <= 0) {
@@ -529,17 +530,28 @@ final class GastronomiaTicketCanjePremioService
         return $descuento;
     }
 
-    private function resolverClienteConfigurado(): Cliente
+    private function resolverClienteCanjePremio(?int $levelCodeWigos): Cliente
     {
-        $codigo = trim((string) config('gastronomia.canje_premio_cliente_codigo', '500'));
-        $cliente = Cliente::query()->where('codigo', $codigo)->first();
+        $clienteId = GastronomiaDescuentoClienteInternoSupport::resolverClienteInternoCanjePremio($levelCodeWigos);
+        if ($clienteId === null || $clienteId <= 0) {
+            throw new InvalidArgumentException(
+                'No existe el cliente configurado para canje de premios Wigos.'
+            );
+        }
+
+        $cliente = Cliente::query()->find($clienteId);
         if (! $cliente) {
             throw new InvalidArgumentException(
-                'No existe el cliente configurado para canje de premios (código '.$codigo.').'
+                'No existe el cliente id '.$clienteId.' para canje de premios Wigos.'
             );
         }
 
         return $cliente;
+    }
+
+    private function resolverClienteConfigurado(): Cliente
+    {
+        return $this->resolverClienteCanjePremio(null);
     }
 
     /**

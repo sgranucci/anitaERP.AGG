@@ -6,7 +6,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\RendicionEstacionamientoMovimientoCaja;
 
 /**
- * Líneas rendvalor (medios de pago rendidos).
+ * Líneas rendvalor (medios de pago rendidos, neto: NC descontada en su cuenta).
  */
 final class RendicionEstacionamientoValorAnitaMapper
 {

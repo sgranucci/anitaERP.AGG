@@ -13,10 +13,30 @@ use App\Models\Stock\Tipotransaccion_Stock;
  */
 final class MovimientoStockStkmovAnitaSupport
 {
-    /** Abreviaturas cuyo stkmov ya lo graba otro bridge (COM recepción, facturación ventas). */
+    /** Abreviaturas cuyo stkmov no se replica en Anita (otros bridges o solo ERP). */
     private const ABREVIATURAS_OMITIR = [
         'RCING',
         'RCDEV',
+        'RCAJP',
+        'RCAJN',
+        'RCAJR',
+        'PRSAL',
+        'PRING',
+        'PRRCH',
+        'PRDSL',
+        'PRDIN',
+        'TRA',
+        'TAP',
+        'TBU',
+        'TBAP',
+        'FBU',
+        'TRCONT',
+        'TRS',
+        'TRE',
+        'AJCON',
+        'ENT',
+        'SAL',
+        'SAS',
     ];
 
     public static function habilitado(): bool
@@ -88,7 +108,10 @@ final class MovimientoStockStkmovAnitaSupport
         }
 
         if ($tipoOverride !== null && trim($tipoOverride) !== '') {
-            return true;
+            $tipoOverride = strtoupper(substr(trim($tipoOverride), 0, 3));
+
+            return ! in_array($tipoOverride, self::ABREVIATURAS_OMITIR, true)
+                && self::tipoStkmovHabilitadoEnConfig($tipoOverride) !== null;
         }
 
         return self::resolverTipoStkmov($movimiento, null) !== null;
@@ -117,6 +140,26 @@ final class MovimientoStockStkmovAnitaSupport
         }
 
         return strtoupper(substr($abrev, 0, 3));
+    }
+
+    private static function tipoStkmovHabilitadoEnConfig(string $tipo): ?string
+    {
+        $tipo = strtoupper(substr(trim($tipo), 0, 3));
+        if ($tipo === '') {
+            return null;
+        }
+
+        $mapa = config('stock.anita_stkmov.stkv_tipo_por_abreviatura', []);
+        if (is_array($mapa) && array_key_exists($tipo, $mapa)) {
+            $mapped = $mapa[$tipo];
+            if ($mapped === null || $mapped === '') {
+                return null;
+            }
+
+            return strtoupper(substr((string) $mapped, 0, 3));
+        }
+
+        return $tipo;
     }
 
     public static function esTransferencia(Tipotransaccion_Stock $tipo): bool

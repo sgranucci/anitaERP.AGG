@@ -14,6 +14,7 @@ use App\Services\Caja\Estacionamiento\EstacionamientoNotaCreditoService;
 use App\Services\Caja\Estacionamiento\EstacionamientoPvService;
 use App\Services\Caja\Estacionamiento\JornadaEstacionamientoService;
 use App\Services\Caja\Estacionamiento\EstacionamientoTurnoOperativoService;
+use App\Support\Caja\Estacionamiento\EstacionamientoFacturaMedioPagoUiSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoIdentificadorPc;
 use App\Support\Caja\Estacionamiento\EstacionamientoVentaDetalleSupport;
 use Carbon\Carbon;
@@ -288,9 +289,17 @@ class EstacionamientoFacturasDiaController extends Controller
             && $ncVentaId === null
             && (! $requiereTurno || $turnoHabilitado);
 
-        $puedeCambiarMedioPago = can('cambiar-medio-pago-estacionamiento-facturas-dia', false)
+        $puedeCambiarMedioPago = EstacionamientoFacturaMedioPagoUiSupport::puedeCambiarMedioPago(
+            $meta,
+            $cobranzas->isNotEmpty(),
+        );
+        $evaluacionCambioMedio = EstacionamientoFacturaMedioPagoUiSupport::evaluarTurnoEmision($meta);
+        $motivoNoCambioMedio = (! $puedeCambiarMedioPago
+            && can('cambiar-medio-pago-estacionamiento-facturas-dia', false)
             && $cobranzas->isNotEmpty()
-            && ! $esComprobanteNc;
+            && ! $esComprobanteNc)
+            ? ($evaluacionCambioMedio['motivo'] ?? null)
+            : null;
 
         return view('caja.estacionamiento.facturas_dia.ver', [
             'meta' => $meta,
@@ -307,6 +316,7 @@ class EstacionamientoFacturasDiaController extends Controller
             'url_habilitacion_turno' => route('estacionamiento_habilitacion_turno'),
             'identificador_pc' => $pc,
             'puede_cambiar_medio_pago' => $puedeCambiarMedioPago,
+            'motivo_no_cambio_medio' => $motivoNoCambioMedio,
         ]);
     }
 
@@ -394,6 +404,7 @@ class EstacionamientoFacturasDiaController extends Controller
                 'venta.caja_movimientos.cobranzas',
                 'configuracionPuntoventa',
                 'ticket',
+                'turnoOperativo.turno',
             ]);
 
         // Búsqueda numérica: id venta/cuenta/cobranza o número de comprobante (sin filtrar PC ni fecha).

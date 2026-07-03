@@ -107,7 +107,8 @@ class MaquinavendingRendicionController extends Controller
         can('crear-maquinavending-rendicion-gastronomia');
 
         try {
-            $rendicion = $this->service->guardar($request->validated());
+            $resultado = $this->service->guardar($request->validated());
+            $rendicion = $resultado['rendicion'];
         } catch (InvalidArgumentException $e) {
             return redirect()
                 ->back()
@@ -118,6 +119,10 @@ class MaquinavendingRendicionController extends Controller
         $redirect = redirect()
             ->route('consultar_maquinavending_rendicion_gastronomia')
             ->with('mensaje', 'Rendición vending #'.$rendicion->numero_cierre.' (empresa) registrada correctamente.');
+
+        if (($resultado['advertencias_anita'] ?? []) !== []) {
+            $redirect->with('advertencias', $resultado['advertencias_anita']);
+        }
 
         if (can('ver-comprobante-maquinavending-rendicion-gastronomia', false)) {
             $redirect->with('url_comprobante_pdf', route('maquinavending_rendicion_comprobante', [
@@ -164,7 +169,8 @@ class MaquinavendingRendicionController extends Controller
         }
 
         try {
-            $rendicion = $this->service->actualizar($rendicion, $request->validated());
+            $resultado = $this->service->actualizar($rendicion, $request->validated());
+            $rendicion = $resultado['rendicion'];
         } catch (InvalidArgumentException $e) {
             return redirect()
                 ->back()
@@ -175,6 +181,10 @@ class MaquinavendingRendicionController extends Controller
         $redirect = redirect()
             ->route('consultar_maquinavending_rendicion_gastronomia')
             ->with('mensaje', 'Rendición vending #'.$rendicion->numero_cierre.' actualizada correctamente.');
+
+        if (($resultado['advertencias_anita'] ?? []) !== []) {
+            $redirect->with('advertencias', $resultado['advertencias_anita']);
+        }
 
         if (can('ver-comprobante-maquinavending-rendicion-gastronomia', false)) {
             $redirect->with('url_comprobante_pdf', route('maquinavending_rendicion_comprobante', [
@@ -198,7 +208,7 @@ class MaquinavendingRendicionController extends Controller
         $numeroCierre = (int) $rendicion->numero_cierre;
 
         try {
-            $this->service->eliminar($rendicion);
+            $advertenciasAnita = $this->service->eliminar($rendicion);
         } catch (InvalidArgumentException $e) {
             if ($request->ajax()) {
                 return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()]);
@@ -228,9 +238,15 @@ class MaquinavendingRendicionController extends Controller
             return response()->json(['mensaje' => 'ok']);
         }
 
-        return redirect()
+        $redirect = redirect()
             ->route('consultar_maquinavending_rendicion_gastronomia')
             ->with('mensaje', 'Rendición vending #'.$numeroCierre.' eliminada correctamente.');
+
+        if (($advertenciasAnita ?? []) !== []) {
+            $redirect->with('advertencias', $advertenciasAnita);
+        }
+
+        return $redirect;
     }
 
     private function mensajeErrorEliminarRendicion(\Throwable $e): string

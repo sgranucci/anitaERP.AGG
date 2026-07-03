@@ -44,6 +44,49 @@ class RecepcionProveedorDepositoSupport
     }
 
     /**
+     * Valores posibles de skualternativo que apuntan al SKU del insumo indicado
+     * (inverso de candidatosSkuInsumo para consultas indexadas).
+     *
+     * @return list<string>
+     */
+    public static function candidatosSkualternativoParaInsumo(string $skuInsumo): array
+    {
+        $sku = trim($skuInsumo);
+        if ($sku === '' || $sku === '0') {
+            return [];
+        }
+
+        $candidatos = [$sku];
+
+        $numericoInsumo = preg_replace('/\D+/', '', $sku) ?? '';
+        if ($numericoInsumo !== '') {
+            $candidatos[] = $numericoInsumo;
+            $sinCerosIzq = ltrim($numericoInsumo, '0');
+            if ($sinCerosIzq !== '') {
+                $candidatos[] = $sinCerosIzq;
+            }
+            $candidatos[] = 'I'.$numericoInsumo;
+            if ($sinCerosIzq !== '' && $sinCerosIzq !== $numericoInsumo) {
+                $candidatos[] = 'I'.$sinCerosIzq;
+            }
+        }
+
+        if (preg_match('/^I(\d+)$/i', $sku, $coincidencia)) {
+            $parteNumerica = (string) $coincidencia[1];
+            $candidatos[] = $parteNumerica;
+            $sinCerosParte = ltrim($parteNumerica, '0');
+            if ($sinCerosParte !== '' && $sinCerosParte !== $parteNumerica) {
+                $candidatos[] = $sinCerosParte;
+            }
+        }
+
+        return array_values(array_unique(array_filter(
+            $candidatos,
+            static fn (string $valor): bool => $valor !== '' && $valor !== '0'
+        )));
+    }
+
+    /**
      * Resuelve el artículo insumo/granel vinculado por skualternativo del artículo de compra.
      */
     public static function resolverArticuloInsumo(Articulo $articuloCompra, ?int $empresaId = null): ?Articulo
@@ -109,10 +152,12 @@ class RecepcionProveedorDepositoSupport
             return collect();
         }
 
-        $query = Articulo::query()
-            ->whereNotNull('skualternativo')
-            ->where('skualternativo', '!=', '')
-            ->where('skualternativo', '!=', '0');
+        $candidatosAlt = self::candidatosSkualternativoParaInsumo($skuInsumo);
+        if ($candidatosAlt === []) {
+            return collect();
+        }
+
+        $query = Articulo::query()->whereIn('skualternativo', $candidatosAlt);
 
         if ($empresaId !== null && $empresaId > 0) {
             $query->where('empresa_id', $empresaId);

@@ -144,9 +144,6 @@ class DepmaeController extends Controller
 
         Depmae::create($request->only(['codigo', 'nombre', 'tipodeposito', 'empresa_id']));
 
-        $Depmae = new Depmae();
-        $Depmae->guardarAnita($request, $request->codigo);
-
         return redirect('stock/depmae')->with('mensaje', 'Deposito creado con exito');
     }
 
@@ -327,10 +324,6 @@ class DepmaeController extends Controller
         can('actualizar-depositos');
         Depmae::findOrFail($id)->update($request->only(['codigo', 'nombre', 'tipodeposito', 'empresa_id']));
 
-        // Actualiza anita
-        $Depmae = new Depmae();
-        $Depmae->actualizarAnita($request, $id);
-
         if ($request->input('origen') === 'modal_consulta') {
             return redirect()
                 ->route('editar_depmae', [
@@ -353,15 +346,6 @@ class DepmaeController extends Controller
     public function eliminar(Request $request, $id)
     {
         can('borrar-depositos');
-
-        $depmae = Depmae::findOrFail($id);
-
-        $Depmae = new Depmae();
-        if (config('app.empresa') == 'Calzados Ferli') {
-            $Depmae->eliminarAnita($id, (int) $depmae->empresa_id);
-        } else {
-            $Depmae->eliminarAnita($request->codigo, (int) $depmae->empresa_id);
-        }
 
         if ($request->ajax()) {
             if (Depmae::destroy($id)) {

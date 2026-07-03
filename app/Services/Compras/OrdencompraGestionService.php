@@ -215,6 +215,16 @@ class OrdencompraGestionService
         array $archivosPorOrden = []
     ): array {
         $lineasSinOrdenRequisicionArticuloIds = array_values(array_unique(array_map('intval', $lineasSinOrdenRequisicionArticuloIds)));
+        $ordenesPayloads = array_values(array_filter($ordenesPayloads, static fn ($p) => is_array($p)));
+
+        if ($ordenesPayloads === []) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'Debe elegir el origen de precio en al menos un ítem para generar una orden de compra. '
+                    .'No se puede cerrar la requisición sin crear ninguna OC.',
+            ];
+        }
+
         if ($lineasSinOrdenRequisicionArticuloIds !== []) {
             $n = Requisicion_Articulo::query()
                 ->where('requisicion_id', $requisicionId)
@@ -253,18 +263,24 @@ class OrdencompraGestionService
             }
         }
 
+        if ($creados === []) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'No se generó ninguna orden de compra. Verifique el origen de precio y los datos de cada ítem.',
+                'advertencias' => $advertencias,
+            ];
+        }
+
         if ($lineasSinOrdenRequisicionArticuloIds !== []) {
             $etiqueta = 'Línea cerrada sin orden de compra: no se seleccionó origen de precio al generar desde la requisición.';
             Requisicion_Articulo::query()
                 ->where('requisicion_id', $requisicionId)
                 ->whereIn('id', $lineasSinOrdenRequisicionArticuloIds)
                 ->update(['precio_origen_etiqueta' => $etiqueta]);
-            $advertencias[] = count($lineasSinOrdenRequisicionArticuloIds).' ítem(es) quedaron sin OC (línea cerrada en la requisición); la requisición pasa a «'.self::nombreEstadoRequisicionGeneroOc().'» si estaba aprobada.';
+            $advertencias[] = count($lineasSinOrdenRequisicionArticuloIds).' ítem(es) quedaron sin OC (línea cerrada en la requisición).';
         }
 
-        if ($creados !== [] || $lineasSinOrdenRequisicionArticuloIds !== []) {
-            $this->marcarRequisicionGeneroOc($requisicionId, Auth::user()->id, 'Generación de órdenes de compra desde requisición');
-        }
+        $this->marcarRequisicionGeneroOc($requisicionId, Auth::user()->id, 'Generación de órdenes de compra desde requisición');
 
         return [
             'mensaje' => 'ok',
@@ -295,7 +311,19 @@ class OrdencompraGestionService
         }
 
         try {
+            $this->normalizarOrigenPrecioRequisicionEnPayload($payload);
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        try {
             $this->validarOrigenPrecioDesdeRequisicion($payload);
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        try {
+            $this->validarProveedorObligatorioDesdeRequisicion($payload);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
@@ -832,6 +860,91 @@ class OrdencompraGestionService
         }
         $texto = OrdencompraCondicionesContratacionGenerator::desdeModelo($oc);
         $this->ordencompraRepository->update(['condiciones_contratacion' => $texto], $ordencompraId);
+    }
+
+    /**
+     * Si la línea viene de requisición con precio cargado pero sin origen explícito, asume REQUISICION.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function normalizarOrigenPrecioRequisicionEnPayload(array &$payload): void
+    {
+        $reqId = ! empty($payload['requisicion_id']) ? (int) $payload['requisicion_id'] : 0;
+        if ($reqId <= 0) {
+            return;
+        }
+
+        $articuloIds = $payload['articulo_ids'] ?? [];
+        $cantidades = $payload['cantidades'] ?? [];
+        $reqArtIds = $payload['requisicion_articulo_ids'] ?? [];
+        $tipos = is_array($payload['precio_origen_tipos'] ?? null) ? $payload['precio_origen_tipos'] : [];
+        $refs = is_array($payload['precio_origen_ref_ids'] ?? null) ? $payload['precio_origen_ref_ids'] : [];
+        $etiquetas = is_array($payload['precio_origen_etiquetas'] ?? null) ? $payload['precio_origen_etiquetas'] : [];
+        $precios = is_array($payload['precios'] ?? null) ? $payload['precios'] : [];
+
+        $n = is_array($articuloIds) ? count($articuloIds) : 0;
+        for ($i = 0; $i < $n; $i++) {
+            $aid = $articuloIds[$i] ?? null;
+            $cant = (float) ($cantidades[$i] ?? 0);
+            if ($aid === null || $aid === '' || $cant <= 0) {
+                continue;
+            }
+            $rid = isset($reqArtIds[$i]) ? (int) $reqArtIds[$i] : 0;
+            if ($rid <= 0) {
+                continue;
+            }
+            $tipo = trim((string) ($tipos[$i] ?? ''));
+            if ($tipo !== '') {
+                continue;
+            }
+
+            $ra = Requisicion_Articulo::query()
+                ->where('id', $rid)
+                ->where('requisicion_id', $reqId)
+                ->first();
+            if ($ra === null) {
+                continue;
+            }
+
+            $precioLinea = (float) ($precios[$i] ?? 0);
+            if ($precioLinea <= 0 && (float) $ra->precio > 0) {
+                $precioLinea = (float) $ra->precio;
+            }
+            if ($precioLinea <= 0) {
+                continue;
+            }
+
+            $tipos[$i] = OrdencompraOpcionesPrecioService::ORIGEN_REQUISICION;
+            $refs[$i] = (string) $ra->id;
+            $etiquetas[$i] = 'Precio cargado en la requisición';
+            if (empty($precios[$i])) {
+                $precios[$i] = $precioLinea;
+            }
+        }
+
+        $payload['precio_origen_tipos'] = $tipos;
+        $payload['precio_origen_ref_ids'] = $refs;
+        $payload['precio_origen_etiquetas'] = $etiquetas;
+        $payload['precios'] = $precios;
+    }
+
+    /**
+     * OC desde requisición: proveedor obligatorio (puede venir de lista/presupuesto o elegirse al final del wizard).
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function validarProveedorObligatorioDesdeRequisicion(array $payload): void
+    {
+        $reqId = ! empty($payload['requisicion_id']) ? (int) $payload['requisicion_id'] : 0;
+        if ($reqId <= 0) {
+            return;
+        }
+        $pid = (int) ($payload['proveedor_id'] ?? 0);
+        if ($pid <= 0) {
+            throw new \InvalidArgumentException('Debe indicar el proveedor de la orden de compra.');
+        }
     }
 
     /**

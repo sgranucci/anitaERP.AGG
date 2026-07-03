@@ -214,6 +214,19 @@ final class EstacionamientoTurnoOperativoTotalesSupport
     }
 
     /**
+     * Notas de crédito del día por PC (valor positivo para rendg_tot_nc).
+     */
+    public static function totalNotasCreditoPorPc(
+        string $identificadorPc,
+        int $empresaId,
+        string $fechaJornada,
+    ): float {
+        $totales = self::calcular($identificadorPc, $empresaId, $fechaJornada, null, null);
+
+        return round(abs((float) ($totales['total_notas_credito'] ?? 0)), 2);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function totalesDiaPorPuntoventa(
@@ -678,8 +691,9 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 $totalInvitaciones += $montoVenta;
                 $cantidadInvitaciones++;
             }
-            self::acumularMediosPago($medios, $porMedioGlobal);
         }
+        // NC incluye cobranza negativa en su medio; rendvalor debe reflejar neto por cuenta.
+        self::acumularMediosPago($medios, $porMedioGlobal);
 
         $usuarioId = $em->turnoOperativo?->usuario_habilitado_id;
         $key = $usuarioId !== null ? (string) $usuarioId : '0';
@@ -717,8 +731,8 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 $porUsuarioHabilitado[$key]['invitaciones']['total'] += $montoVenta;
                 $porUsuarioHabilitado[$key]['invitaciones']['cantidad']++;
             }
-            self::acumularMediosPago($medios, $porUsuarioHabilitado[$key]['por_medio_pago']);
         }
+        self::acumularMediosPago($medios, $porUsuarioHabilitado[$key]['por_medio_pago']);
     }
 
     /**

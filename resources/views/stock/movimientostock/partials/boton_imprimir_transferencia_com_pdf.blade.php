@@ -5,7 +5,7 @@
     $etiqueta = $etiqueta ?? 'Comprobante transferencia (PDF)';
     $titulo = $titulo ?? 'Comprobante de transferencia — PDF con logos y detalle de ítems';
 @endphp
-@if($transferenciaId > 0 && can('listar-movimientos-de-stock', false))
+@if($transferenciaId > 0 && \App\Support\Stock\MovimientoStockVisibilidadSupport::puedeConsultarTransferencia())
     @if($modo === 'tabla')
         <a href="{{ route('transferencia_movimientostock_com_pdf', ['id' => $transferenciaId, 'inline' => 1]) }}"
            class="btn-accion-tabla tooltipsC"

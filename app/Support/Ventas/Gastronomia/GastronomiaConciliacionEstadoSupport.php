@@ -182,6 +182,11 @@ final class GastronomiaConciliacionEstadoSupport
             return true;
         }
 
+        return self::requiereAlertaRendg($estadoRendg);
+    }
+
+    public static function requiereAlertaRendg(string $estadoRendg): bool
+    {
         return in_array($estadoRendg, ['DIF', 'SIN RENDG'], true);
     }
 }

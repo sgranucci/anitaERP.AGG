@@ -10,6 +10,69 @@
     var ultimoNumeroOcCargado = null;
     var centrocostoOcActivo = null;
     var COLSPAN_TABLA_ITEMS = 12;
+
+    function esModoDevolucion() {
+        return !!window.recepcionProveedorModoDevolucion;
+    }
+
+    function esFormularioDevolucion($form) {
+        $form = $form || $('#form-recepcion-proveedor');
+
+        return $form.length && (esModoDevolucion() || String($form.find('[name="tipo"]').val() || '') === 'DEVOLUCION');
+    }
+
+    function colspanTablaItems() {
+        return esModoDevolucion() ? 10 : COLSPAN_TABLA_ITEMS;
+    }
+
+    function prepararItemsDevolucionEnEnvio() {
+        itemsActuales.forEach(function (item, idx) {
+            var cant = parseFloat(item.cantidad || 0) || 0;
+            if (cant <= 0.000001) {
+                item.accion_linea_oc = 'PENDIENTE';
+                item.fl_cerrar_linea_oc = false;
+                item.cantidad_rechazada = 0;
+            } else {
+                item.accion_linea_oc = 'RECIBIR';
+            }
+            sincronizarAccionEnItem(item);
+            var accion = accionLineaItem(item);
+            var $tr = $lineaPorIdx(idx);
+            if ($tr.length) {
+                $tr.find('.item-accion-linea-oc').val(accion);
+                $tr.find('.item-fl-cerrar-linea-oc').val(accion === 'CERRAR' ? '1' : '0');
+            }
+        });
+    }
+
+    function validarItemsDevolucionAntesEnvio() {
+        var errores = [];
+        var lineasConCantidad = 0;
+
+        itemsActuales.forEach(function (item, idx) {
+            var cant = parseFloat(item.cantidad || 0) || 0;
+            if (cant <= 0.000001) {
+                return;
+            }
+            lineasConCantidad++;
+            var max = parseFloat(
+                item.cantidad_recepcionada_origen != null
+                    ? item.cantidad_recepcionada_origen
+                    : (item.cantidad_oc || 0)
+            ) || 0;
+            if (cant > max + 0.000001) {
+                errores.push(
+                    'Línea ' + (idx + 1) + ': cantidad a devolver (' + cant + ') supera lo recepcionado (' + max + ').'
+                );
+            }
+        });
+
+        if (lineasConCantidad === 0) {
+            errores.unshift('Indique al menos una línea con cantidad a devolver.');
+        }
+
+        return errores;
+    }
     var recepcionProveedorSubmitPendiente = null;
 
     function umCompraLinea(item) {
@@ -281,7 +344,7 @@
         var comentario = escHtml(item.comentario_precio || '');
         var style = mostrar ? '' : ' style="display:none;"';
         var html = '<tr class="item-recepcion-comentario-precio" data-idx="' + idx + '"' + style + '>';
-        html += '<td colspan="' + COLSPAN_TABLA_ITEMS + '" class="bg-transparent">';
+        html += '<td colspan="' + colspanTablaItems() + '" class="bg-transparent">';
         html += '<div class="d-flex align-items-center flex-wrap pl-4">';
         html += '<small class="text-warning mr-2 mb-1 font-weight-bold"><i class="fa fa-exclamation-triangle"></i> Diferencia de precio — comentario obligatorio:</small>';
         if (window.recepcionProveedorSoloLectura) {
@@ -297,7 +360,7 @@
         var motivo = escHtml(item.motivorechazo || '');
         var style = mostrar ? '' : ' style="display:none;"';
         var html = '<tr class="item-recepcion-motivo-rechazo" data-idx="' + idx + '"' + style + '>';
-        html += '<td colspan="' + COLSPAN_TABLA_ITEMS + '" class="bg-transparent">';
+        html += '<td colspan="' + colspanTablaItems() + '" class="bg-transparent">';
         html += '<div class="d-flex align-items-center flex-wrap pl-4">';
         html += '<small class="text-muted mr-2 mb-1">Motivo rechazo (obligatorio si C.rech. &gt; 0):</small>';
         if (window.recepcionProveedorSoloLectura) {
@@ -737,6 +800,17 @@
             window.recepcionProveedorEnviandoTrasModalAccion = false;
             return true;
         }
+        if (esFormularioDevolucion($form)) {
+            prepararItemsDevolucionEnEnvio();
+            var erroresDevolucion = validarItemsDevolucionAntesEnvio();
+            if (erroresDevolucion.length) {
+                e.preventDefault();
+                window.alert(erroresDevolucion.join('\n'));
+                return false;
+            }
+
+            return true;
+        }
         var pendientesDefinicion = lineasQueRequierenDefinicionEnGuardado();
         if (pendientesDefinicion.length) {
             e.preventDefault();
@@ -765,7 +839,7 @@
         var style = mostrar ? '' : ' style="display:none;"';
         var mostrarCerrar = mostrarOpcionCerrarSaldoOc(item) || !!(item && item.fl_cerrar_linea_oc);
         var html = '<tr class="item-recepcion-comentario-diferencia" data-idx="' + idx + '"' + style + '>';
-        html += '<td colspan="' + COLSPAN_TABLA_ITEMS + '" class="bg-transparent">';
+        html += '<td colspan="' + colspanTablaItems() + '" class="bg-transparent">';
         html += '<div class="d-flex align-items-center flex-wrap pl-4">';
         html += '<small class="text-warning mr-2 mb-1 font-weight-bold"><i class="fa fa-exclamation-triangle"></i> Comentario obligatorio (diferencia de cantidad):</small>';
         if (window.recepcionProveedorSoloLectura) {
@@ -1317,7 +1391,7 @@
         var cot = cotizacionItem(item, idx);
         item.moneda_id = monedaId;
         item.cotizacion = cot;
-        var soloLectura = window.recepcionProveedorSoloLectura;
+        var soloLectura = window.recepcionProveedorSoloLectura || esModoDevolucion();
         var html = '<div class="celda-moneda-cot-recepcion">';
         if (soloLectura) {
             html += '<span class="d-block text-nowrap">' + escHtml(abreviaturaMoneda(monedaId)) + '</span>';
@@ -1358,6 +1432,12 @@
         html += '<input type="hidden" name="items[' + idx + '][unidadmedida_id]" value="' + (parseInt(item.unidadmedida_id, 10) || '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][coeficienteconversion]" value="' + coefEfectivo(item) + '">';
         html += '<input type="hidden" name="items[' + idx + '][precio_ordencompra]" value="' + (item.precio_ordencompra != null ? item.precio_ordencompra : '') + '">';
+        if (esModoDevolucion()) {
+            html += '<input type="hidden" name="items[' + idx + '][cantidad_rechazada]" value="0">';
+            if (item.cantidad_recepcionada_origen != null && item.cantidad_recepcionada_origen !== '') {
+                html += '<input type="hidden" name="items[' + idx + '][cantidad_recepcionada_origen]" value="' + (parseFloat(item.cantidad_recepcionada_origen) || 0) + '">';
+            }
+        }
         sincronizarAccionEnItem(item);
         html += '<input type="hidden" class="item-accion-linea-oc" name="items[' + idx + '][accion_linea_oc]" value="' + escHtml(accionLineaItem(item)) + '">';
         html += '<input type="hidden" class="item-fl-cerrar-linea-oc" name="items[' + idx + '][fl_cerrar_linea_oc]" value="' + (accionLineaItem(item) === 'CERRAR' ? '1' : '0') + '">';
@@ -1407,29 +1487,50 @@
             var umCompra = umCompraLinea(item);
             var depId = depositoLinea(item);
             var soloLectura = window.recepcionProveedorSoloLectura;
+            var soloLecturaCantidad = soloLectura && !esModoDevolucion();
+            var soloLecturaOtros = soloLectura || esModoDevolucion();
+            var maxDevolucion = parseFloat(item.cantidad_recepcionada_origen || 0) || 0;
             var html = '<tr class="item-recepcion-linea' + extraClass + ' ' + rowClass + '" data-idx="' + idx + '">';
             html += '<td class="align-middle">' + (idx + 1) + htmlCamposOcultosLinea(item, idx, depId, tipo) + '</td>';
             html += '<td class="align-middle">' + htmlCeldaArticulo(item, idx) + '</td>';
             html += '<td class="align-middle"><input type="text" class="descripcionarticulo form-control form-control-sm" value="' + escHtml(item.descripcion || '') + '" readonly title="' + escHtml(item.descripcion || '') + '"></td>';
-            html += '<td class="text-right align-middle">' + (item.cantidad_oc != null ? item.cantidad_oc : '—') + '</td>';
-            html += '<td class="align-middle">' + htmlInputCantidadConUm('item-cantidad input-qty-recepcion', 'items[' + idx + '][cantidad]', (item.cantidad || 0), umCompra, soloLectura) + '</td>';
-            html += '<td class="align-middle">' + htmlInputCantidadConUm('item-cant-rechazada input-qty-rech-recepcion', 'items[' + idx + '][cantidad_rechazada]', (item.cantidad_rechazada || 0), umCompra, soloLectura) + '</td>';
-            html += '<td class="align-middle">' + htmlCeldaConversion(item, item.cantidad || 0, coef) + '</td>';
-            html += '<td class="align-middle">' + htmlCeldaPrecioUnitario(item, idx, soloLectura) + '</td>';
-            html += '<td class="align-middle">' + htmlCeldaImporteLinea(item, idx, soloLectura) + '</td>';
-            html += '<td class="align-middle">' + htmlMonedaCotizacion(item, idx) + '</td>';
-            html += '<td class="align-middle"><span class="item-deposito-texto">' + depositoLineaTexto(item) + '</span></td>';
-            html += '<td class="align-middle text-center col-acc-linea">';
-            if (!soloLectura && tipo === 'EXTRA') {
-                html += '<button type="button" class="btn btn-xs btn-danger btn-quitar-linea" data-idx="' + idx + '" title="Quitar l&iacute;nea"><i class="fa fa-trash"></i></button>';
+            html += '<td class="text-right align-middle">';
+            if (esModoDevolucion()) {
+                html += '<span class="d-block">' + (maxDevolucion > 0 ? maxDevolucion : '—') + '</span>';
+                html += '<small class="text-muted">recibida</small>';
             } else {
-                html += htmlCeldaAccionOc(item, idx, soloLectura);
+                html += (item.cantidad_oc != null ? item.cantidad_oc : '—');
             }
             html += '</td>';
+            html += '<td class="align-middle">';
+            html += htmlInputCantidadConUm('item-cantidad input-qty-recepcion', 'items[' + idx + '][cantidad]', (item.cantidad || 0), umCompra, soloLecturaCantidad);
+            if (esModoDevolucion() && maxDevolucion > 0) {
+                html += '<small class="text-muted d-block">m&aacute;x. ' + maxDevolucion + '</small>';
+            }
+            html += '</td>';
+            if (!esModoDevolucion()) {
+                html += '<td class="align-middle">' + htmlInputCantidadConUm('item-cant-rechazada input-qty-rech-recepcion', 'items[' + idx + '][cantidad_rechazada]', (item.cantidad_rechazada || 0), umCompra, soloLectura) + '</td>';
+            }
+            html += '<td class="align-middle">' + htmlCeldaConversion(item, item.cantidad || 0, coef) + '</td>';
+            html += '<td class="align-middle">' + htmlCeldaPrecioUnitario(item, idx, soloLecturaOtros) + '</td>';
+            html += '<td class="align-middle">' + htmlCeldaImporteLinea(item, idx, soloLecturaOtros) + '</td>';
+            html += '<td class="align-middle">' + htmlMonedaCotizacion(item, idx) + '</td>';
+            html += '<td class="align-middle"><span class="item-deposito-texto">' + depositoLineaTexto(item) + '</span></td>';
+            if (!esModoDevolucion()) {
+                html += '<td class="align-middle text-center col-acc-linea">';
+                if (!soloLectura && tipo === 'EXTRA') {
+                    html += '<button type="button" class="btn btn-xs btn-danger btn-quitar-linea" data-idx="' + idx + '" title="Quitar l&iacute;nea"><i class="fa fa-trash"></i></button>';
+                } else {
+                    html += htmlCeldaAccionOc(item, idx, soloLectura);
+                }
+                html += '</td>';
+            }
             html += '</tr>';
-            html += htmlFilaComentarioPrecio(item, idx, precioDiff || !!item.comentario_precio);
-            html += htmlFilaComentarioDiferencia(item, idx, lineaRequiereComentarioDiferencia(item) || !!item.comentario_diferencia);
-            html += htmlFilaMotivoRechazo(item, idx, cantRech > 0.000001 || !!item.motivorechazo);
+            if (!esModoDevolucion()) {
+                html += htmlFilaComentarioPrecio(item, idx, precioDiff || !!item.comentario_precio);
+                html += htmlFilaComentarioDiferencia(item, idx, lineaRequiereComentarioDiferencia(item) || !!item.comentario_diferencia);
+                html += htmlFilaMotivoRechazo(item, idx, cantRech > 0.000001 || !!item.motivorechazo);
+            }
             $tbody.append(html);
             actualizarEstiloLineaPorAccion(idx);
         });

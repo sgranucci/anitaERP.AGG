@@ -65,6 +65,25 @@ final class RendicionEstacionamientoAnitaContextBuilder
             ? round((float) $totalZForzado, 2)
             : 0.0;
 
+        $movimientosRendvalor = $rendicion->movimientos;
+        if ($turno->habilitacion_en !== null) {
+            $hastaTotales = $turno->cierre_en
+                ? Carbon::parse($turno->cierre_en)
+                : Carbon::parse($rendicion->fecharendicion ?? now());
+            $totalesTurno = EstacionamientoTurnoOperativoTotalesSupport::calcular(
+                (string) $turno->identificador_pc,
+                (int) $rendicion->empresa_id,
+                $fechaJornada,
+                Carbon::parse($turno->habilitacion_en),
+                $hastaTotales,
+            );
+            $movimientosRendvalor = RendicionAnitaMovimientosRendvalorSupport::desdePorMedioPago(
+                $totalesTurno['por_medio_pago'] ?? [],
+            );
+        }
+
+        $camposInvitacion = RendicionEstacionamientoAnitaInvitacionSupport::camposDesdeRendicion($rendicion);
+
         return [
             'nro_oper' => $nroOper,
             'tipo_oper' => substr((string) config('rendicion_estacionamiento_anita.tipo_oper', 'F'), 0, 1),
@@ -80,9 +99,9 @@ final class RendicionEstacionamientoAnitaContextBuilder
             'fecha_carga' => (int) now()->format('Ymd'),
             'total_x' => $totalX,
             'total_z' => $totalZ,
-            'invitacion' => round((float) $rendicion->totalinvitacion, 2),
+            'invitacion' => $camposInvitacion['invitacion'],
             'tot_nc' => round((float) $rendicion->totalnotacredito, 2),
-            'tot_redondeo' => round((float) $rendicion->totalredondeo + (float) $rendicion->totalredondeoinvitacion, 2),
+            'tot_redondeo' => $camposInvitacion['tot_redondeo'],
             'dif_caja' => round((float) $rendicion->sobrantefaltante, 2),
             'ultimo_ticket' => $ultimoTicketCae ?? 0,
             'nro_z' => (int) ($turno->numero_cierre ?? 0),
@@ -93,7 +112,7 @@ final class RendicionEstacionamientoAnitaContextBuilder
             'host' => substr((string) ($turno->identificador_pc ?? ''), 0, 15),
             'tot_fc_caea' => $totalesCaea['total_fc'],
             'tot_nc_caea' => $totalesCaea['total_nc'],
-            'movimientos' => $rendicion->movimientos,
+            'movimientos' => $movimientosRendvalor,
         ];
     }
 

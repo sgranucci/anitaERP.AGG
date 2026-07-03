@@ -6,7 +6,6 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Transferencia_Mercaderia;
-use App\Services\Stock\MovimientoStockStkmovAnitaService;
 use Illuminate\Support\Facades\DB;
 
 final class TransferenciaMercaderiaRepararCostosSupport
@@ -89,8 +88,6 @@ final class TransferenciaMercaderiaRepararCostosSupport
                 );
             }
 
-            $stkmovActualizados = self::sincronizarStkmovTransferencia($transferencia);
-
             DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -102,37 +99,8 @@ final class TransferenciaMercaderiaRepararCostosSupport
             'lineas' => $transferencia->articulos->count(),
             'movimientos_actualizados' => $movActualizados,
             'stkmae_actualizados' => $stkmaeActualizados ?? 0,
-            'stkmov_actualizados' => $stkmovActualizados ?? 0,
+            'stkmov_actualizados' => 0,
         ];
-    }
-
-    private static function sincronizarStkmovTransferencia(Transferencia_Mercaderia $transferencia): int
-    {
-        if ($transferencia->estado !== TransferenciaMercaderiaEstados::CONFIRMADA) {
-            return 0;
-        }
-
-        $transferencia->loadMissing('empresas');
-        $empresaCodigo = (int) ($transferencia->empresas->codigo ?? 0);
-        $service = app(MovimientoStockStkmovAnitaService::class);
-        $total = 0;
-
-        if ((int) ($transferencia->movimientostock_salida_id ?? 0) > 0) {
-            $total += $service->resincronizar(
-                (int) $transferencia->movimientostock_salida_id,
-                'TRS',
-                $empresaCodigo > 0 ? $empresaCodigo : null
-            );
-        }
-        if ((int) ($transferencia->movimientostock_entrada_id ?? 0) > 0) {
-            $total += $service->resincronizar(
-                (int) $transferencia->movimientostock_entrada_id,
-                'TRE',
-                $empresaCodigo > 0 ? $empresaCodigo : null
-            );
-        }
-
-        return $total;
     }
 
     /**

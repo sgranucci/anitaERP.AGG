@@ -237,8 +237,8 @@ return [
         ],
         [
             'herramienta' => 'Asiento contable',
-            'ubicacion' => 'Solapa (tipos con contabilidad)',
-            'accion' => 'Vista previa antes de guardar.',
+            'ubicacion' => 'Solapa (entradas/salidas con contabilidad, no TRCONT)',
+            'accion' => 'Vista previa antes de guardar movimiento suelto. TRCONT: capítulo 14.',
             'permiso' => 'crear-movimientos-de-stock',
         ],
         [
@@ -258,13 +258,19 @@ return [
         [
             'herramienta' => 'Tipo transferencia',
             'ubicacion' => 'Cabecera',
-            'accion' => 'Entre depósitos, a/desde bien de uso, con/sin aprobación.',
+            'accion' => 'Entre depósitos, a/desde bien de uso, con/sin aprobación. Tipos con (contabilidad) = TRCONT.',
+            'permiso' => 'transferir-mercaderia-entre-depositos',
+        ],
+        [
+            'herramienta' => 'Centro costo destino',
+            'ubicacion' => 'Cabecera — panel visible en TRCONT',
+            'accion' => 'Obligatorio para transferencias contables; imputa el DEBE del asiento.',
             'permiso' => 'transferir-mercaderia-entre-depositos',
         ],
         [
             'herramienta' => 'Cargar stock',
             'ubicacion' => 'Cabecera — botón',
-            'accion' => 'Lista artículos con saldo en depósito salida.',
+            'accion' => 'Lista artículos con saldo; en TRCONT filtra por depósito = última recepción de compra.',
             'permiso' => 'transferir-mercaderia-entre-depositos',
         ],
         [
@@ -290,7 +296,7 @@ return [
         [
             'herramienta' => 'Aprobar',
             'ubicacion' => 'Columna Acciones',
-            'accion' => 'Confirma ingreso en destino; estado Confirmada.',
+            'accion' => 'Confirma ingreso en destino; TRCONT genera asiento contable en este paso.',
             'permiso' => 'aprobar-transferencia-mercaderia',
         ],
         [

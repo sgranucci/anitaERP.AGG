@@ -437,6 +437,7 @@ final class GastronomiaFacturacionService
             $caePendiente,
             $this->debeDiferirVencaeAnita(),
             $caeRecuperadoArca,
+            ! $this->debeGrabarVencaeAnita(),
         );
     }
 
@@ -453,6 +454,10 @@ final class GastronomiaFacturacionService
      */
     public function ejecutarVencaePendienteGastronomia(array $vencaePendiente): void
     {
+        if (! $this->debeGrabarVencaeAnita()) {
+            return;
+        }
+
         $this->facturacionService->ejecutarVencaePendienteGastronomia($vencaePendiente);
     }
 
@@ -461,12 +466,20 @@ final class GastronomiaFacturacionService
      */
     public function debeDiferirVencaeAnita(): bool
     {
-        if (! config('gastronomia.sincronizar_anita_al_facturar', true)) {
+        if (! $this->debeGrabarVencaeAnita()) {
             return false;
         }
 
         return filter_var(config('gastronomia.anita_tras_respuesta', true), FILTER_VALIDATE_BOOLEAN)
             || filter_var(config('gastronomia.anita_tras_commit_al_facturar', true), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * CAE en tabla vencae de Informix solo si replica venta Anita al facturar.
+     */
+    public function debeGrabarVencaeAnita(): bool
+    {
+        return (bool) config('gastronomia.sincronizar_anita_al_facturar', true);
     }
 
     /**

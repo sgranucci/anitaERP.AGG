@@ -26,6 +26,18 @@ function urlCostosUltimaCompraFormula() {
     return '/stock/formula-articulo/costos-ultima-compra';
 }
 
+function urlArticulosCompraPorInsumo(articuloId) {
+    var cfg = window.formulaArticuloSubformulaConsulta || {};
+    var tpl = cfg.urlArticulosCompraPorInsumo;
+    if (tpl) {
+        return String(tpl).replace(/\/0(\?|$)/, '/' + parseInt(articuloId, 10) + '$1');
+    }
+    if (typeof carpetaBase !== 'undefined' && carpetaBase) {
+        return String(carpetaBase).replace(/\/$/, '') + '/stock/formula-articulo/articulos-compra-por-insumo/' + parseInt(articuloId, 10);
+    }
+    return '/stock/formula-articulo/articulos-compra-por-insumo/' + parseInt(articuloId, 10);
+}
+
 function formateaCostoUltimaCompra(valor) {
     if (valor === null || valor === undefined || valor === '') {
         return '';
@@ -113,6 +125,15 @@ function actualizaBotonVerSubformula($row) {
     var $btn = $row.find('.js-ver-subformula-linea');
     $btn.data('formula-id', fid > 0 ? fid : '');
     $btn.toggleClass('sin-subformula', fid <= 0);
+}
+
+function actualizaBotonArticulosCompraInsumo($row) {
+    var id = parseInt($row.find('.articulo_id').val(), 10) || 0;
+    var $btn = $row.find('.js-modal-articulos-compra-insumo');
+    if (!$btn.length) {
+        return;
+    }
+    $btn.toggleClass('sin-articulo', id <= 0);
 }
 
 function abrirModalSubformula(fid) {
@@ -377,6 +398,7 @@ $(document).ready(function () {
             if ($rowLinea.length && $rowLinea.closest('#tabla-formula-hijos').length) {
                 actualizaLinkSkuArticuloLinea($rowLinea);
                 actualizaCostoUltimaCompraFila($rowLinea);
+                actualizaBotonArticulosCompraInsumo($rowLinea);
                 var $cant = $rowLinea.find('input[name="cantidades[]"]').first();
                 if ($cant.length) {
                     setTimeout(function () {
@@ -430,11 +452,67 @@ $(document).ready(function () {
         });
     });
 
+    $(document).on('click', '.js-modal-articulos-compra-insumo', function (e) {
+        e.preventDefault();
+        var $row = $(this).closest('tr.fila-formula-hijo');
+        var articuloId = parseInt($row.find('.articulo_id').val(), 10) || 0;
+        if (articuloId <= 0) {
+            alert('Seleccione un art\u00edculo insumo primero (bot\u00f3n con icono de lupa).');
+            return;
+        }
+        var url = urlArticulosCompraPorInsumo(articuloId);
+        var $tb = $('#tbody-articulos-compra-insumo-modal');
+        var $sub = $('#modalArticulosCompraInsumoSubtitulo');
+        $tb.html('<tr><td colspan="4" class="text-muted">Cargando\u2026</td></tr>');
+        $sub.text('Art\u00edculos de compra cuyo campo SKU alt./insumo apunta al insumo de la l\u00ednea.');
+        $.get(url, function (resp) {
+            var rows = (resp && resp.datos) ? resp.datos : [];
+            var insumo = (resp && resp.insumo) ? resp.insumo : null;
+            if (insumo && (insumo.sku || insumo.descripcion)) {
+                var partesInsumo = [];
+                if (insumo.sku) {
+                    partesInsumo.push(String(insumo.sku));
+                }
+                if (insumo.descripcion) {
+                    partesInsumo.push(String(insumo.descripcion));
+                }
+                $sub.text('Insumo: ' + partesInsumo.join(' \u2014 ')
+                    + '. Art\u00edculos de compra con SKU alt./insumo que apuntan a este insumo.');
+            }
+            var html = '';
+            if (!rows.length) {
+                html = '<tr><td colspan="4" class="text-muted">Ning\u00fan art\u00edculo de compra vincula este insumo por SKU alt./insumo.</td></tr>';
+            } else {
+                rows.forEach(function (r) {
+                    var ida = r.id != null ? String(r.id) : '';
+                    var sku = r.sku != null ? String(r.sku) : '';
+                    var desc = r.descripcion != null ? String(r.descripcion) : '';
+                    var skuAlt = r.skualternativo != null ? String(r.skualternativo) : '';
+                    var link = urlEditarArticulo(parseInt(ida, 10) || 0);
+                    html += '<tr><td>' + $('<div>').text(ida).html() + '</td>' +
+                        '<td><a href="' + link + '" target="_blank" rel="noopener noreferrer" class="text-primary">' + $('<div>').text(sku).html() + '</a></td>' +
+                        '<td>' + $('<div>').text(desc).html() + '</td>' +
+                        '<td class="text-monospace">' + $('<div>').text(skuAlt).html() + '</td></tr>';
+                });
+            }
+            $tb.html(html);
+            $('#modalArticulosCompraInsumo').modal('show');
+        }).fail(function (xhr) {
+            var msg = 'Error al cargar el listado.';
+            if (xhr && xhr.status === 403) {
+                msg = 'No tiene permisos para consultar art\u00edculos de compra.';
+            }
+            $tb.html('<tr><td colspan="4" class="text-danger">' + msg + '</td></tr>');
+            $('#modalArticulosCompraInsumo').modal('show');
+        });
+    });
+
     $('.fila-formula-hijo').each(function () {
         var $row = $(this);
         formulaArticuloToggleOrdenOpcional($row);
         actualizaBotonVerSubformula($row);
         actualizaLinkSkuArticuloLinea($row);
+        actualizaBotonArticulosCompraInsumo($row);
     });
     formulaArticuloReindexFilas();
 
@@ -533,6 +611,7 @@ $(document).ready(function () {
         formulaArticuloToggleOrdenOpcional($r);
         actualizaBotonVerSubformula($r);
         actualizaLinkSkuArticuloLinea($r);
+        actualizaBotonArticulosCompraInsumo($r);
     });
 
     $(document).on('click', '.js-eliminar-fila-formula', function () {

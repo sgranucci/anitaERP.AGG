@@ -250,7 +250,7 @@ final class CierreJornadaProcesoConfigSupport
         $etiquetas = [
             'cuenta_ventas_id' => 'Cuenta de ventas',
             'cuenta_iva_id' => 'Cuenta de IVA',
-            'cuenta_ventas_kiosco_id' => 'Cuenta ventas de kiosco (cigarrillos)',
+            'cuenta_ventas_kiosco_id' => 'Cuenta ventas de cigarrillos (tabaco)',
             'cuenta_fondo_fijo_maquinas_id' => 'Cuenta de fondo fijo máquinas',
             'cuenta_diferencia_caja_id' => 'Cuenta diferencia de caja (invitaciones $0,01)',
         ];

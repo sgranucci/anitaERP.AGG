@@ -319,7 +319,9 @@ class RequisicionController extends Controller
         // Solo editable en PROVISORIO, PENDIENTE o EN COMPRAS (nombre exacto según enum, p. ej. "EN COMPRAS" con espacio)
         $nombrePendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
         $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $nombreAprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
         $nombreProvisorio = RequisicionProvisorioSupport::nombreEstadoProvisorio();
+        $edicionLimitadaAprobada = false;
         $estadoPermitido = (
             $data->estado === $nombrePendiente
             || $data->estado === $nombreEnCompras
@@ -328,6 +330,11 @@ class RequisicionController extends Controller
         // Compatibilidad registros viejos (p. ej. import) con guión bajo
         if (! $estadoPermitido && $data->estado === 'EN_COMPRAS') {
             $estadoPermitido = true;
+        }
+        // Aprobada: solo proveedor sugerido (p. ej. antes de generar OC desde el wizard)
+        if (! $estadoPermitido && ($data->estado ?? '') === $nombreAprobada && can('actualizar-requisicion', false)) {
+            $estadoPermitido = true;
+            $edicionLimitadaAprobada = true;
         }
         if (! $estadoPermitido) {
             return redirect()->route('solo_consulta_requisicion', $id)
@@ -381,7 +388,8 @@ class RequisicionController extends Controller
             'requisicion_wizard_multiples_oc_url',
             'es_provisorio',
             'estado_provisorio',
-            'puede_confirmar_provisorio'
+            'puede_confirmar_provisorio',
+            'edicionLimitadaAprobada'
         ));
     }
 
@@ -396,8 +404,10 @@ class RequisicionController extends Controller
         $ret = $this->requisicionService->actualizaRequisicion($request, $id);
 
         if ($ret['mensaje'] == 'ok') {
-            $mensaje = 'Requisición actualizada con éxito';
-            if (! empty($ret['modo_provisorio'])) {
+            $mensaje = ! empty($ret['solo_proveedor_aprobada'])
+                ? 'Proveedor sugerido actualizado con éxito'
+                : 'Requisición actualizada con éxito';
+            if (! empty($ret['modo_provisorio']) || ! empty($ret['solo_proveedor_aprobada'])) {
                 return redirect('compras/requisicion/'.$id.'/editar')->with('mensaje', $mensaje);
             }
 

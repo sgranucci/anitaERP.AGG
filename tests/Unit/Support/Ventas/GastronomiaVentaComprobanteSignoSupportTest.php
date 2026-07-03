@@ -23,7 +23,10 @@ class GastronomiaVentaComprobanteSignoSupportTest extends TestCase
     public function test_es_nota_credito_por_signo(): void
     {
         $this->assertTrue(GastronomiaVentaComprobanteSignoSupport::esNotaCreditoSigno(-1));
+        $this->assertTrue(GastronomiaVentaComprobanteSignoSupport::esNotaCreditoSigno('R'));
         $this->assertFalse(GastronomiaVentaComprobanteSignoSupport::esNotaCreditoSigno(1));
+        $this->assertFalse(GastronomiaVentaComprobanteSignoSupport::esNotaCreditoSigno('S'));
+        $this->assertSame(-1.0, GastronomiaVentaComprobanteSignoSupport::cantidadLineaVenta(1, 'R'));
     }
 
     public function test_sql_cantidad_usa_abs_y_signo_comprobante(): void

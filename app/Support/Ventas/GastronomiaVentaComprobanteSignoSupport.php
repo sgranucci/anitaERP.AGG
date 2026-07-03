@@ -53,6 +53,14 @@ final class GastronomiaVentaComprobanteSignoSupport
 
     public static function esNotaCreditoSigno(mixed $signo): bool
     {
+        if ($signo === 'R' || $signo === 'Resta') {
+            return true;
+        }
+
+        if ($signo === 'S' || $signo === 'Suma') {
+            return false;
+        }
+
         return (int) $signo === self::SIGNO_RESTA;
     }
 

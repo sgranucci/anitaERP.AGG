@@ -10,12 +10,12 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Asigna rendg_total_z en Anita al presentar la jornada (facturación bruta del día por PC, CAE+CAEA, sin NC).
+ * Asigna rendg_total_z y rendg_tot_nc en Anita al presentar la jornada (facturación bruta del día por PC, CAE+CAEA).
  *
- * Agrupa por identificador_pc de la terminal: el CAEA compartido (PV 00020) se consolida en el Z
- * de la portadora de esa PC, igual que gastronomía. rendg_tot_fc_caea por turno queda como desglose.
+ * Cierre Anita estacionamiento: debe = haber = Σ total_x en portadora (rendg_total_z).
+ * rendg_tot_nc queda en portadora para auditoría; no se resta de Z.
  *
- * Mientras la jornada no fue presentada en caja, las rendiciones de turno van con Z=0 en Anita.
+ * Mientras la jornada no fue presentada en caja, las rendiciones de turno van con Z=0 y NC=0 en Anita.
  * El recálculo se dispara al presentar o corregir la rendición tipo jornada en Caja.
  */
 final class RendicionEstacionamientoAnitaTotalZPorPcService
@@ -60,7 +60,7 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
     }
 
     /**
-     * Al anular el cierre de jornada, Anita debe volver a Z=0 hasta un nuevo cierre.
+     * Al anular el cierre de jornada, Anita debe volver a Z=0 y NC=0 hasta un nuevo cierre.
      */
     public function resetTotalZEnJornada(int $jornadaId): void
     {
@@ -71,7 +71,7 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
         $rendiciones = $this->rendicionesTurnoSincronizablesEnJornada($jornadaId);
         foreach ($rendiciones as $rendicion) {
             try {
-                $this->anitaSyncService->actualizarSoloTotalZEnAnita($rendicion, 0.0);
+                $this->anitaSyncService->actualizarTotalZYNcEnAnita($rendicion, 0.0, 0.0);
             } catch (\Throwable $e) {
                 Log::warning(self::LOG_EVENTO.'.reset_fallo', [
                     'jornada_id' => $jornadaId,
@@ -114,8 +114,13 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
                 continue;
             }
 
-            // Bruto del día por PC (CAE + CAEA compartido en rendgastro de la terminal originadora).
+            // Bruto y NC del día por PC (CAE + CAEA compartido en rendgastro de la terminal originadora).
             $totalDiaPc = EstacionamientoTurnoOperativoTotalesSupport::totalFacturasSinNotasCredito(
+                $identificadorPc,
+                $empresaId,
+                $fechaJornada,
+            );
+            $totNcDiaPc = EstacionamientoTurnoOperativoTotalesSupport::totalNotasCreditoPorPc(
                 $identificadorPc,
                 $empresaId,
                 $fechaJornada,
@@ -124,18 +129,19 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
             $portadora = $this->resolverRendicionPortadoraZ($grupoPc);
 
             foreach ($grupoPc as $rendicion) {
-                $totalZ = ($portadora !== null && (int) $rendicion->id === (int) $portadora->id)
-                    ? $totalDiaPc
-                    : 0.0;
+                $esPortadora = $portadora !== null && (int) $rendicion->id === (int) $portadora->id;
+                $totalZ = $esPortadora ? round($totalDiaPc, 2) : 0.0;
+                $totNc = $esPortadora ? $totNcDiaPc : 0.0;
 
                 try {
-                    $this->anitaSyncService->actualizarSoloTotalZEnAnita($rendicion, $totalZ);
+                    $this->anitaSyncService->actualizarTotalZYNcEnAnita($rendicion, $totalZ, $totNc);
                 } catch (\Throwable $e) {
                     Log::warning(self::LOG_EVENTO.'.fallo', [
                         'jornada_id' => $jornada->id,
                         'rendicion_id' => $rendicion->id,
                         'identificador_pc' => $identificadorPc,
                         'total_z' => $totalZ,
+                        'tot_nc' => $totNc,
                         'error' => $e->getMessage(),
                     ]);
                 }

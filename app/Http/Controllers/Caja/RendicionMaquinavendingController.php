@@ -94,17 +94,24 @@ class RendicionMaquinavendingController extends Controller
         try {
             $cabecera = $this->service->cabeceraDesdeRequest($request->validated());
             $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
-            $presentacion = $this->service->guardar($cabecera, $movimientos);
+            $resultado = $this->service->guardar($cabecera, $movimientos);
+            $presentacion = $resultado['presentacion'];
         } catch (InvalidArgumentException|\RuntimeException $e) {
             return redirect()->back()->withInput()->with('errores', [$e->getMessage()]);
         }
 
-        return redirect('caja/rendicionmaquinavending')
+        $redirect = redirect('caja/rendicionmaquinavending')
             ->with('mensaje', 'Rendición vending presentada en caja con éxito')
             ->with('url_comprobante_pdf', route('imprimir_rendicion_maquinavending', [
                 'id' => $presentacion->id,
                 'inline' => 1,
             ]));
+
+        if (($resultado['advertencias_anita'] ?? []) !== []) {
+            $redirect->with('advertencias', $resultado['advertencias_anita']);
+        }
+
+        return $redirect;
     }
 
     public function editar(int $id)
@@ -141,12 +148,19 @@ class RendicionMaquinavendingController extends Controller
         try {
             $cabecera = $this->service->cabeceraDesdeRequest($request->validated());
             $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
-            $this->service->actualizar($id, $cabecera, $movimientos);
+            $resultado = $this->service->actualizar($id, $cabecera, $movimientos);
         } catch (InvalidArgumentException|\RuntimeException $e) {
             return redirect()->back()->withInput()->with('errores', [$e->getMessage()]);
         }
 
-        return redirect('caja/rendicionmaquinavending')->with('mensaje', 'Rendición vending en caja actualizada con éxito');
+        $redirect = redirect('caja/rendicionmaquinavending')
+            ->with('mensaje', 'Rendición vending en caja actualizada con éxito');
+
+        if (($resultado['advertencias_anita'] ?? []) !== []) {
+            $redirect->with('advertencias', $resultado['advertencias_anita']);
+        }
+
+        return $redirect;
     }
 
     public function eliminar(Request $request, int $id)
@@ -154,13 +168,20 @@ class RendicionMaquinavendingController extends Controller
         can('borrar-rendicion-maquinavending-caja');
 
         try {
-            $this->service->eliminar($id);
+            $advertenciasAnita = $this->service->eliminar($id);
 
             if ($request->ajax()) {
                 return response()->json(['mensaje' => 'ok']);
             }
 
-            return redirect('caja/rendicionmaquinavending')->with('mensaje', 'Rendición vending eliminada con éxito');
+            $redirect = redirect('caja/rendicionmaquinavending')
+                ->with('mensaje', 'Rendición vending eliminada con éxito');
+
+            if ($advertenciasAnita !== []) {
+                $redirect->with('advertencias', $advertenciasAnita);
+            }
+
+            return $redirect;
         } catch (\Throwable $e) {
             if ($request->ajax()) {
                 return response()->json(['mensaje' => $e->getMessage() ?: 'ng']);

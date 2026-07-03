@@ -34,7 +34,27 @@ final class OrdencompraAnitaErpContext
     public static function desdeUsuarioActual(): self
     {
         $user = auth()->user();
-        $login = substr(trim((string) ($user->usuario ?? $user->name ?? 'ERP')), 0, 8);
+        if ($user === null) {
+            return new self('ERP');
+        }
+
+        return self::desdeLoginUsuario((string) ($user->usuario ?? $user->name ?? 'ERP'));
+    }
+
+    public static function desdeUsuarioId(?int $usuarioId): self
+    {
+        if ($usuarioId === null || $usuarioId <= 0) {
+            return new self('ERP');
+        }
+
+        $login = Usuario::query()->whereKey($usuarioId)->value('usuario');
+
+        return self::desdeLoginUsuario((string) ($login ?? 'ERP'));
+    }
+
+    private static function desdeLoginUsuario(string $login): self
+    {
+        $login = substr(trim($login), 0, 8);
 
         return new self($login !== '' ? $login : 'ERP');
     }
@@ -59,18 +79,37 @@ final class OrdencompraAnitaErpContext
 
     public function mapEstadoAnita(string $estadoErp): string
     {
-        return (string) $this->mapEstadoAnitaEntero($estadoErp);
+        return OrdencompraAnitaEstadosSupport::desdeEstadoErp($estadoErp);
     }
 
+    /** @deprecated Usar mapEstadoAnita() — penmp_estado es char(1) en Anita. */
     public function mapEstadoAnitaEntero(string $estadoErp): int
     {
-        return (int) match (strtoupper(trim($estadoErp))) {
-            OrdencompraEstados::APROBADA => 1,
-            OrdencompraEstados::CUMPLIDA => 3,
-            OrdencompraEstados::SUSPENDIDA => 4,
-            OrdencompraEstados::CERRADA => 5,
-            default => 0,
-        };
+        return (int) $this->mapEstadoAnita($estadoErp);
+    }
+
+    /**
+     * occ_medio_pago Anita (C/T/E/R/V) desde formapago ERP.
+     */
+    public function medioPagoAnitaDesdeFormapago(?int $formapagoId): string
+    {
+        if ($formapagoId === null || $formapagoId <= 0) {
+            return OrdencompraAnitaMedioPagoSupport::SOLO_REGISTRAR;
+        }
+
+        $key = 'fp_anita_'.$formapagoId;
+        if (array_key_exists($key, $this->cache)) {
+            return (string) $this->cache[$key];
+        }
+
+        $abrev = strtoupper(trim((string) \App\Models\Ventas\Formapago::query()->whereKey($formapagoId)->value('abreviatura')));
+
+        return (string) ($this->cache[$key] = OrdencompraAnitaMedioPagoSupport::desdeFormapagoAbreviatura($abrev));
+    }
+
+    public function usuarioAnitaLogin(): string
+    {
+        return substr($this->usuarioAnita, 0, 15);
     }
 
     public function mapTratamientoAnticipo(string $tratamiento): string

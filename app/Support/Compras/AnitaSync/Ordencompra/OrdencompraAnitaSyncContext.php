@@ -17,7 +17,6 @@ use App\Repositories\Presupuesto\CapexRepositoryInterface;
 use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
 use App\Services\Compras\OrdencompraGestionService;
-use App\Support\Compras\OrdencompraEstados;
 
 /**
  * Resolución de FK y utilidades compartidas entre mappers de sincronización OC.
@@ -74,15 +73,7 @@ class OrdencompraAnitaSyncContext
 
     public function mapEstadoOc(mixed $codigo): string
     {
-        return match (trim((string) $codigo)) {
-            '0' => OrdencompraEstados::PENDIENTE,
-            '1', 'A' => OrdencompraEstados::APROBADA,
-            '2' => OrdencompraEstados::PENDIENTE,
-            '3' => OrdencompraEstados::CUMPLIDA,
-            '4' => OrdencompraEstados::SUSPENDIDA,
-            '5' => OrdencompraEstados::CERRADA,
-            default => OrdencompraEstados::PENDIENTE,
-        };
+        return OrdencompraAnitaEstadosSupport::haciaEstadoErp($codigo);
     }
 
     public function mapTratamientoAnticipo(mixed $esAnticipo): string
@@ -236,17 +227,24 @@ class OrdencompraAnitaSyncContext
 
     public function fkFormapagoMedio(mixed $medioPago): int
     {
-        $abrev = trim((string) $medioPago);
-        if ($abrev === '') {
+        $medio = trim((string) $medioPago);
+        if ($medio === '') {
             return 1;
         }
-        $key = 'fp_'.$abrev;
-        if (array_key_exists($key, $this->cache)) {
-            return $this->cache[$key];
-        }
-        $id = Formapago::query()->where('abreviatura', $abrev)->value('id');
 
-        return $this->cache[$key] = $id ? (int) $id : 1;
+        $abrev = OrdencompraAnitaMedioPagoSupport::haciaFormapagoAbreviatura($medio);
+        if ($abrev !== null) {
+            $medio = $abrev;
+        }
+
+        $key = 'fp_'.$medio;
+        if (array_key_exists($key, $this->cache)) {
+            return (int) $this->cache[$key];
+        }
+
+        $id = Formapago::query()->where('abreviatura', $medio)->value('id');
+
+        return (int) ($this->cache[$key] = $id ? (int) $id : 1);
     }
 
     public function fkUsuarioAnita(mixed $usuarioAnita): int

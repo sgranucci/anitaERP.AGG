@@ -5275,6 +5275,10 @@ class FacturacionService
 		}							
 		$errVencae = $this->apiCallAnitaEscritura($apiAnita, $data, 'vencae insert');
 		if ($errVencae !== null) {
+			if ($this->esErrorDuplicadoComprobanteEnAnita((string) ($errVencae['mensaje'] ?? ''))) {
+				return 'Success';
+			}
+
 			return 'Error';
 		}
 
@@ -5898,10 +5902,15 @@ class FacturacionService
 	 * @param  array<string, mixed>  $caePendiente
 	 * @return array<string, mixed>|null  Datos para grabar vencae en Anita post-respuesta (gastronomía).
 	 */
-	public function completarSolicitudCaePendiente(array $caePendiente, bool $deferVencaeAnita = false, ?array $caeRecuperadoArca = null): ?array
+	public function completarSolicitudCaePendiente(
+		array $caePendiente,
+		bool $deferVencaeAnita = false,
+		?array $caeRecuperadoArca = null,
+		bool $omitirVencaeAnita = false,
+	): ?array
 	{
 		if ($caeRecuperadoArca !== null) {
-			return $this->aplicarCaeRecuperadoArca($caePendiente, $caeRecuperadoArca, $deferVencaeAnita);
+			return $this->aplicarCaeRecuperadoArca($caePendiente, $caeRecuperadoArca, $deferVencaeAnita, $omitirVencaeAnita);
 		}
 
 		$opcionesArca = is_array($caePendiente['opciones_emision_arca'] ?? null)
@@ -5920,9 +5929,10 @@ class FacturacionService
 			$caePendiente['venta_id'],
 			$deferVencaeAnita,
 			$opcionesArca,
+			$omitirVencaeAnita,
 		);
 
-		if (! $deferVencaeAnita) {
+		if ($omitirVencaeAnita || ! $deferVencaeAnita) {
 			return null;
 		}
 
@@ -6003,6 +6013,7 @@ class FacturacionService
 		$venta_id,
 		bool $deferVencaeAnita = false,
 		array $opcionesEmisionArca = [],
+		bool $omitirVencaeAnita = false,
 	) {
 		// Solicita CAE o CAEA
 		$flGrabaCae = false;
@@ -6078,7 +6089,7 @@ class FacturacionService
 										],
 										$venta_id);
 
-		if ($puntoventa->modofacturacion != 'M' && ! $deferVencaeAnita)
+		if ($puntoventa->modofacturacion != 'M' && ! $deferVencaeAnita && ! $omitirVencaeAnita)
 		{
 			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_inicio');
 			// Graba cae en Anita
@@ -6102,7 +6113,12 @@ class FacturacionService
 	 * @param  array{cae:string,fechavencimientocae:string}  $caeRecuperadoArca
 	 * @return array<string, mixed>|null
 	 */
-	private function aplicarCaeRecuperadoArca(array $caePendiente, array $caeRecuperadoArca, bool $deferVencaeAnita): ?array
+	private function aplicarCaeRecuperadoArca(
+		array $caePendiente,
+		array $caeRecuperadoArca,
+		bool $deferVencaeAnita,
+		bool $omitirVencaeAnita = false,
+	): ?array
 	{
 		$ventaId = (int) ($caePendiente['venta_id'] ?? 0);
 		if ($ventaId <= 0) {
@@ -6125,7 +6141,7 @@ class FacturacionService
 			'fechavencimientocae' => $fechaVto,
 		], $ventaId);
 
-		if ($puntoventa !== null && ($puntoventa->modofacturacion ?? '') !== 'M' && ! $deferVencaeAnita) {
+		if ($puntoventa !== null && ($puntoventa->modofacturacion ?? '') !== 'M' && ! $deferVencaeAnita && ! $omitirVencaeAnita) {
 			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_inicio');
 			$vencae = Self::grabaVenCae(
 				$tipoAnita,
@@ -6142,7 +6158,7 @@ class FacturacionService
 			}
 		}
 
-		if ($deferVencaeAnita) {
+		if ($deferVencaeAnita && ! $omitirVencaeAnita) {
 			return $this->armarVencaePendienteDesdeCaePendiente($caePendiente);
 		}
 

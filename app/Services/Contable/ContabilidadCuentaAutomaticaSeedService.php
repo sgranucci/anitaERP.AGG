@@ -16,6 +16,7 @@ class ContabilidadCuentaAutomaticaSeedService
     private const CODIGO_SUGERIDO_POR_CLAVE = [
         CuentaAutomaticaClaves::CAJA_CHEQUES_DIFERIDOS => '211010013',
         CuentaAutomaticaClaves::CAJA_VALORES_A_DEPOSITAR => '111040000',
+        CuentaAutomaticaClaves::STOCK_TRANSFERENCIA_OTROS_ACTIVOS => '117010001',
     ];
 
     /**

@@ -197,4 +197,29 @@ class CierreJornadaFacturadoAnitaSupportTest extends TestCase
         $this->assertSame(1000.0, $datos['total']);
         $this->assertSame(1, $datos['cantidad_emisiones']);
     }
+
+    public function test_datos_asiento_solo_totem_no_excluye_emisiones_totem(): void
+    {
+        $venta = new Venta(['id' => 12, 'total' => 121.0]);
+        $venta->setRelation('venta_impuestos', collect());
+        $venta->setRelation('cobranzasDirectas', collect());
+        $venta->setRelation('caja_movimientos', collect());
+
+        $emTotem = new VentaGastronomiaEmision(['venta_id' => 12, 'venta_factura_origen_id' => null]);
+        $emTotem->setRelation('venta', $venta);
+        $emTotem->setRelation('cuenta', (object) ['waitry_cobro_totem' => true]);
+
+        $datosIncluidos = CierreJornadaFacturadoAnitaSupport::datosAsientoDesdeEmisiones(
+            new Collection([$emTotem]),
+            1,
+            false,
+        );
+        $datosExcluidos = CierreJornadaFacturadoAnitaSupport::datosAsientoDesdeEmisiones(
+            new Collection([$emTotem]),
+            1,
+        );
+
+        $this->assertSame(121.0, $datosIncluidos['total']);
+        $this->assertSame(0.0, $datosExcluidos['total']);
+    }
 }

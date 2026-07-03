@@ -4,6 +4,8 @@ namespace App\Support\Ventas\Gastronomia;
 
 use App\Models\Caja\Cuentacaja;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
+use App\Models\Ventas\JornadaGastronomia;
 use InvalidArgumentException;
 
 /**
@@ -11,6 +13,8 @@ use InvalidArgumentException;
  */
 final class CierreJornadaProcesoAsientosGrabacionSupport
 {
+    public const DESCRIPCION_ASIENTO = 'Venta gastronomia';
+
     private const TOLERANCIA_CUADRE = 0.02;
 
     /**
@@ -72,7 +76,7 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
                 );
             }
 
-            $observacion = 'Cierre Waitry jornada '.$fechaJornada.' — '.$titulo;
+            $observacion = self::DESCRIPCION_ASIENTO;
 
             $out[] = [
                 'codigo' => $codigo,
@@ -146,15 +150,13 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
                 $cacheCuentas,
             );
 
-            $concepto = trim((string) ($ln['concepto'] ?? 'Cierre Waitry'));
-
             $cuentacontableIds[] = $cuentacontableId;
             $debes[] = $debe > 0.0001 ? $debe : '';
             $haberes[] = $haber > 0.0001 ? $haber : '';
             $monedaIds[] = 1;
             $centrocostoIds[] = null;
             $cotizaciones[] = 1.;
-            $observaciones[] = $concepto;
+            $observaciones[] = self::DESCRIPCION_ASIENTO;
         }
 
         return [
@@ -226,5 +228,53 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
         throw new InvalidArgumentException(
             'No se pudo resolver cuenta contable para cuenta caja/contable id '.$cuentaRefId.'.',
         );
+    }
+
+    /**
+     * Metadatos de asientos grabados en el snapshot del proceso (codigo/titulo por asiento_id).
+     *
+     * @return array<int, array{codigo: string, titulo: string}>
+     */
+    public static function mapaAsientosGrabadosPorEmpresaJornada(int $empresaId, string $fechaJornada): array
+    {
+        $jornadaId = JornadaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', $fechaJornada)
+            ->value('id');
+
+        if ($jornadaId === null) {
+            return [];
+        }
+
+        $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()
+            ->where('jornada_gastronomia_id', $jornadaId)
+            ->first();
+
+        if ($snapshot === null) {
+            return [];
+        }
+
+        $payload = is_array($snapshot->payload) ? $snapshot->payload : [];
+        $asientos = $payload['asientos_proceso_grabacion']['asientos'] ?? [];
+        if (! is_array($asientos)) {
+            return [];
+        }
+
+        $mapa = [];
+        foreach ($asientos as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $asientoId = (int) ($item['asiento_id'] ?? 0);
+            if ($asientoId <= 0) {
+                continue;
+            }
+            $mapa[$asientoId] = [
+                'codigo' => trim((string) ($item['codigo'] ?? '')),
+                'titulo' => trim((string) ($item['titulo'] ?? '')),
+            ];
+        }
+
+        return $mapa;
     }
 }

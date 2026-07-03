@@ -10,6 +10,7 @@ use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaColaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaFacturaItemsPayloadSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
@@ -34,6 +35,7 @@ final class GastronomiaNotaCreditoService
         private readonly GastronomiaFormulaConsumoService $consumoFormulaService,
         private readonly GastronomiaCobranzaService $cobranzaGastronomiaService,
         private readonly GastronomiaJornadaService $jornadaService,
+        private readonly GastronomiaTurnoOperativoService $turnoOperativoService,
         private readonly GastronomiaInsumoStkmovAnitaService $insumoStkmovAnitaService,
         private readonly GastronomiaCuentaService $cuentaService,
         private readonly GastronomiaFacturaTicketService $facturaTicketService,
@@ -92,11 +94,13 @@ final class GastronomiaNotaCreditoService
         }
 
         $empresaId = (int) $cfg->empresa_id;
+        $identificadorPc = GastronomiaIdentificadorPc::resolver($request);
 
         try {
             if (config('gastronomia.jornada_obligatoria', true)) {
                 $this->jornadaService->exigirJornadaAbierta($empresaId);
             }
+            $this->turnoOperativoService->exigirTurnoHabilitadoSiConfigurado($identificadorPc, $empresaId);
         } catch (InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -115,7 +119,8 @@ final class GastronomiaNotaCreditoService
             return ['ok' => false, 'error' => 'No se encontró la cuenta gastronómica asociada a la factura.'];
         }
 
-        $payload = $this->armarPayloadNotaCredito($ventaOrigen, $tipoNcId, $cfg, $leyendaUsuario);
+        $cuenta->loadMissing('lineas');
+        $payload = $this->armarPayloadNotaCredito($ventaOrigen, $tipoNcId, $cfg, $leyendaUsuario, $cuenta);
         $mediosPago = $this->armarMediosCobranzaDevolucion($ventaOrigen);
 
         $profiler?->marcar('preparacion_payload');
@@ -132,6 +137,7 @@ final class GastronomiaNotaCreditoService
                 $payload,
                 $mediosPago,
                 $profiler,
+                $identificadorPc,
             ) {
                 $ventaAnitaRevertir = null;
                 $vencaePendiente = null;
@@ -193,7 +199,7 @@ final class GastronomiaNotaCreditoService
                     ['venta_id' => $ventaNc->id],
                     [
                         'cuenta_gastronomia_id' => $cuenta->id,
-                        'identificador_pc' => GastronomiaIdentificadorPc::resolver(),
+                        'identificador_pc' => $identificadorPc,
                         'configuracion_puntoventa_gastronomia_id' => $cfg->id,
                         'venta_factura_origen_id' => $ventaFacturaId,
                     ],
@@ -284,32 +290,11 @@ final class GastronomiaNotaCreditoService
         int $tipoNcId,
         ConfiguracionPuntoventaGastronomia $cfg,
         string $leyendaUsuario = '',
+        ?CuentaGastronomia $cuenta = null,
     ): array {
-        $ventaOrigen->loadMissing(['venta_emisiones']);
-
-        $articuloIds = [];
-        $cantidades = [];
-        $precios = [];
-        $descripciones = [];
-        $impuestoIds = [];
-        $incluyeImpuestos = [];
-
-        foreach ($ventaOrigen->venta_emisiones->sortBy('numeroitem') as $em) {
-            if ((int) ($em->articulo_id ?? 0) <= 0) {
-                continue;
-            }
-            $articuloIds[] = (int) $em->articulo_id;
-            $cantidades[] = (float) $em->cantidad;
-            $precios[] = (float) $em->precio;
-            $descripciones[] = (string) ($em->detalle ?? '');
-            $impuestoIds[] = (int) ($em->impuesto_id ?? 0);
-            $incl = (string) ($em->incluyeimpuesto ?? '1');
-            $incluyeImpuestos[] = in_array($incl, ['S', '1', 'Y'], true) ? '1' : 'N';
-        }
-
-        if ($articuloIds === []) {
-            throw new InvalidArgumentException('La factura no tiene ítems con artículo para revertir.');
-        }
+        $items = $cuenta instanceof CuentaGastronomia && $cuenta->lineas->isNotEmpty()
+            ? GastronomiaFacturaItemsPayloadSupport::desdeCuenta($cuenta)
+            : GastronomiaFacturaItemsPayloadSupport::desdeVentaEmisiones($ventaOrigen);
 
         $fechaHoy = now()->format('Y-m-d');
         $leyendaManual = trim($leyendaUsuario);
@@ -340,13 +325,18 @@ final class GastronomiaNotaCreditoService
             'descuentolinea' => 0.,
             'descuentopie' => (float) ($ventaOrigen->descuento ?? 0),
             'descuentoimportepie' => 0.,
-            'articulo_ids' => $articuloIds,
-            'cantidades' => $cantidades,
-            'precios' => $precios,
-            'descripcionarticulos' => $descripciones,
-            'impuesto_ids' => $impuestoIds,
-            'incluyeimpuestos' => $incluyeImpuestos,
+            'articulo_ids' => $items['articulo_ids'],
+            'cantidades' => $items['cantidades'],
+            'precios' => $items['precios'],
+            'descripcionarticulos' => $items['descripcionarticulos'],
+            'opcionales_por_item' => $items['opcionales_por_item'],
+            'omitir_stkmov_anita_por_item' => $items['omitir_stkmov_anita_por_item'],
         ];
+
+        if (self::tieneImpuestosExplicitos($items['impuesto_ids'])) {
+            $payload['impuesto_ids'] = $items['impuesto_ids'];
+            $payload['incluyeimpuestos'] = $items['incluyeimpuestos'];
+        }
 
         if (trim((string) ($ventaOrigen->nombre ?? '')) !== '' || trim((string) ($ventaOrigen->numerodocumento ?? '')) !== '') {
             $payload['venta_receptor'] = [
@@ -364,6 +354,20 @@ final class GastronomiaNotaCreditoService
         $empresaId = (int) ($ventaOrigen->empresa_id ?: $cfg->empresa_id);
 
         return $this->jornadaService->aplicarFechasAlPayload($payload, $empresaId);
+    }
+
+    /**
+     * @param  list<int>  $impuestoIds
+     */
+    private static function tieneImpuestosExplicitos(array $impuestoIds): bool
+    {
+        foreach ($impuestoIds as $impuestoId) {
+            if ((int) $impuestoId > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

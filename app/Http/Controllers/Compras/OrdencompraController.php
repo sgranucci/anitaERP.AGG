@@ -687,6 +687,12 @@ class OrdencompraController extends Controller
         if ($ordenes === [] && $lineasSin === []) {
             return response()->json(['message' => 'No hay órdenes para generar ni líneas a cerrar.'], 422);
         }
+        if ($ordenes === [] && $lineasSin !== []) {
+            return response()->json([
+                'message' => 'Debe elegir el origen de precio en al menos un ítem para generar una orden de compra. '
+                    .'No se puede cerrar la requisición sin crear ninguna OC.',
+            ], 422);
+        }
 
         // Archivos por grupo (campo `archivos_grupo_{idx}[]` cuando se postea multipart).
         $archivosPorOrden = [];

@@ -453,7 +453,7 @@
                                             <i class="fas fa-boxes text-info"></i>
                                         </a>
                                     @endif
-                                    @if (can('cambiar-medio-pago-estacionamiento-facturas-dia', false) && $v && $cobDirecta)
+                                    @if (\App\Support\Caja\Estacionamiento\EstacionamientoFacturaMedioPagoUiSupport::puedeCambiarMedioPago($r, $cobDirecta !== null))
                                         <button type="button"
                                             class="btn-accion-tabla tooltipsC js-fd-cambiar-medio-pago"
                                             data-venta-id="{{ $v->id }}"

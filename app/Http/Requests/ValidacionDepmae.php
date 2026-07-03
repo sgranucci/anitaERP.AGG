@@ -7,6 +7,8 @@ use Illuminate\Validation\Rule;
 
 class ValidacionDepmae extends FormRequest
 {
+    public const CODIGO_REGEX = '/^[A-Za-z0-9._ -]+$/';
+
     /**
      * Determine if the user is authorized to make this request.
      *
@@ -15,6 +17,15 @@ class ValidacionDepmae extends FormRequest
     public function authorize()
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $codigo = trim((string) $this->input('codigo', ''));
+
+        if ($codigo !== '') {
+            $this->merge(['codigo' => $codigo]);
+        }
     }
 
     /**
@@ -29,7 +40,8 @@ class ValidacionDepmae extends FormRequest
         return [
             'codigo' => [
                 'required',
-                'max:20',
+                'max:10',
+                'regex:'.self::CODIGO_REGEX,
                 Rule::unique('depmae', 'codigo')->ignore($id)->where(function ($query) {
                     return $query->where('empresa_id', $this->get('empresa_id'));
                 }),
@@ -45,6 +57,14 @@ class ValidacionDepmae extends FormRequest
         return [
             'codigo' => 'código',
             'nombre' => 'descripción',
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'codigo.regex' => 'El código admite letras, números, espacios, punto, guión y guión bajo (máx. 10 caracteres).',
+            'codigo.max' => 'El código no puede superar 10 caracteres.',
         ];
     }
 }

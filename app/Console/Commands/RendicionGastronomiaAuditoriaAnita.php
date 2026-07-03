@@ -103,9 +103,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                     ['Estado', 'Cantidad'],
                     [
                         ['OK', (string) ($conteo['ok'] ?? 0)],
-                        ['DIF venta (cabecera Anita)', (string) ($conteo['dif_venta'] ?? 0)],
                         ['DIF rendg (rendgastro neto)', (string) ($conteo['dif_rendg'] ?? 0)],
-                        ['DIF ambos', (string) ($conteo['dif_ambos'] ?? 0)],
                         ['Sin rendgastro', (string) ($conteo['sin_rendg'] ?? 0)],
                     ],
                 );
@@ -113,11 +111,8 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                 $totalDia = $informe['total_dia'] ?? null;
                 if ($totalDia !== null) {
                     $this->line(sprintf(
-                        'Total día: ERP neto $ %s | Anita $ %s | Δ venta $ %s (%s) | rendg neto $ %s | Δ rendg $ %s (%s) | %s',
+                        'Total día: ERP neto $ %s | rendg neto $ %s | Δ rendg $ %s (%s) | %s',
                         $this->fmt($totalDia['erp_z'] ?? null),
-                        $this->fmt($totalDia['ventas_anita'] ?? null),
-                        $this->fmtDiff($totalDia['diff_anita'] ?? null),
-                        $totalDia['estado_anita'] ?? '—',
                         $this->fmt($totalDia['anita_z'] ?? null),
                         $this->fmtDiff($totalDia['diff_z'] ?? null),
                         $totalDia['estado_rendg'] ?? '—',
@@ -131,12 +126,9 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                         $fila['tipo_fila'] ?? '—',
                         $fila['puntoventa'],
                         $fila['estado'],
-                        $fila['estado_anita'] ?? '—',
                         $fila['estado_rendg'] ?? '—',
                         $fila['cantidad_facturas_erp'] ?? 0,
                         $this->fmt($fila['erp_z'] ?? null),
-                        $this->fmt($fila['ventas_anita'] ?? null),
-                        $this->fmtDiff($fila['diff_anita'] ?? null),
                         $this->fmt($fila['anita_z'] ?? null),
                         $this->fmtDiff($fila['diff_z'] ?? null),
                     ];
@@ -144,7 +136,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
 
                 if ($filasTabla !== []) {
                     $this->table(
-                        ['Tipo', 'Clave', 'Estado', 'Venta', 'Rendg', 'Fac', 'ERP neto', 'Anita venta', 'Δ venta', 'Rendg neto', 'Δ rendg'],
+                        ['Tipo', 'Clave', 'Estado', 'Rendg', 'Fac', 'ERP neto', 'Rendg neto', 'Δ rendg'],
                         $filasTabla,
                     );
                 } else {

@@ -6,6 +6,7 @@ use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
+use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -108,6 +109,34 @@ class ValidacionTransferenciaMercaderia extends FormRequest
                 $ccDestino = (int) $this->input('centrocosto_destino_id', 0);
                 if ($ccDestino <= 0) {
                     $validator->errors()->add('centrocosto_destino_id', 'Debe indicar centro de costo destino para transferencias con contabilidad.');
+                }
+
+                $origenBien = TransferenciaBienUsoSupport::tipoOrigenBienUso($tipo);
+                if ($origenBien) {
+                    $validator->errors()->add(
+                        'tipotransaccion_stock_id',
+                        'Las transferencias contables (TRCONT) requieren depósito de salida (no bien de uso como origen).'
+                    );
+                } elseif ($salidaId > 0) {
+                    $articuloIds = [];
+                    foreach ($this->input('lineas', []) as $linea) {
+                        $articuloId = (int) ($linea['articulo_id'] ?? 0);
+                        if ($articuloId > 0 && (float) ($linea['cantidad'] ?? 0) > 0) {
+                            $articuloIds[] = $articuloId;
+                        }
+                    }
+
+                    if ($articuloIds !== []) {
+                        try {
+                            TransferenciaMercaderiaLineaContableSupport::assertLineasValidasParaTrcont(
+                                $articuloIds,
+                                $salidaId,
+                                $empresaId
+                            );
+                        } catch (\Throwable $e) {
+                            $validator->errors()->add('lineas', $e->getMessage());
+                        }
+                    }
                 }
             }
         });

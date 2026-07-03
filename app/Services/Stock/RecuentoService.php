@@ -29,7 +29,6 @@ class RecuentoService
         private readonly Recuento_ItemRepositoryInterface $itemRepository,
         private readonly Recuento_ArchivoRepositoryInterface $archivoRepository,
         private readonly Articulo_Saldo_DepositoRepositoryInterface $saldoRepository,
-        private readonly MovimientoStockStkmovAnitaService $stkmovAnitaService,
     ) {}
 
     public function listar()
@@ -619,8 +618,6 @@ class RecuentoService
                 (int) $recuento->empresa_id,
             );
         }
-
-        $this->stkmovAnitaService->sincronizar((int) $movimiento->id);
 
         return (int) $movimiento->id;
     }

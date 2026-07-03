@@ -234,10 +234,29 @@ final class GastronomiaFacturacionAuditoriaCtamovSupport
      */
     public static function asientosCierreJornada(int $empresaId, string $fechaJornada): array
     {
-        return DB::table('asiento')
+        $mapaGrabados = CierreJornadaProcesoAsientosGrabacionSupport::mapaAsientosGrabadosPorEmpresaJornada(
+            $empresaId,
+            $fechaJornada,
+        );
+        $idsSnapshot = array_keys($mapaGrabados);
+
+        $query = DB::table('asiento')
             ->where('empresa_id', $empresaId)
-            ->whereDate('fecha', $fechaJornada)
-            ->where('observacion', 'like', 'Cierre Waitry jornada '.$fechaJornada.'%')
+            ->whereDate('fecha', $fechaJornada);
+
+        if ($idsSnapshot !== []) {
+            $query->whereIn('id', $idsSnapshot);
+        } else {
+            $query->where(function ($q) use ($fechaJornada) {
+                $q->where('observacion', 'like', 'Cierre Waitry jornada '.$fechaJornada.'%')
+                    ->orWhere(
+                        'observacion',
+                        CierreJornadaProcesoAsientosGrabacionSupport::DESCRIPCION_ASIENTO,
+                    );
+            });
+        }
+
+        return $query
             ->orderBy('id')
             ->get(['id', 'numeroasiento', 'observacion'])
             ->all();

@@ -9,6 +9,7 @@ window.formulaArticuloSubformulaConsulta = {
     urlFormulaBase: @json(rtrim(config('app.app_carpeta'), '/') . '/stock/formula-articulo'),
     urlArticuloBase: @json(rtrim(config('app.app_carpeta'), '/') . '/stock/articulo'),
     urlCostosUltimaCompra: @json(route('costos_ultima_compra_formula_articulo')),
+    urlArticulosCompraPorInsumo: @json(route('articulos_compra_por_insumo_formula', ['articulo_id' => 0])),
     mostrarCodigoComoNumero: @json(\App\Support\Stock\FormulaArticuloNumero::mostrarCodigo())
 };
 </script>
@@ -112,5 +113,6 @@ window.formulaArticuloSubformulaConsulta = {
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultaformula')
 @include('stock.formula_articulo.partials.modal_articulos_formula')
+@include('stock.formula_articulo.partials.modal_articulos_compra_insumo')
 @include('stock.formula_articulo.partials.modal_ver_formula_articulo')
 @endsection

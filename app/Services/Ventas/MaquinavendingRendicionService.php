@@ -11,6 +11,7 @@ use App\Models\Ventas\MaquinavendingRendicionMedioPago;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\MaquinavendingRendicionRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\MaquinavendingRendicionAnitaAdvertenciaSupport;
 use App\Support\Ventas\MaquinavendingRendicionPermiso;
 use App\Services\Stock\PrecioService;
 use Carbon\Carbon;
@@ -79,8 +80,9 @@ class MaquinavendingRendicionService
 
     /**
      * @param  array<string, mixed>  $payload
+     * @return array{rendicion: MaquinavendingRendicion, advertencias_anita: list<string>}
      */
-    public function guardar(array $payload): MaquinavendingRendicion
+    public function guardar(array $payload): array
     {
         $empresaId = (int) ($payload['empresa_id'] ?? 0);
         $maquinaId = (int) ($payload['maquinavending_id'] ?? 0);
@@ -98,7 +100,7 @@ class MaquinavendingRendicionService
             $empresaId,
         );
 
-        return DB::transaction(function () use (
+        $rendicionId = DB::transaction(function () use (
             $empresaId,
             $maquina,
             $fechaRendicion,
@@ -124,16 +126,24 @@ class MaquinavendingRendicionService
             ]);
 
             $this->persistirDetalle($rendicion, $lineas, $medios);
-            $this->programarSyncAnita((int) $rendicion->id);
 
-            return $this->repository->findOrFail((int) $rendicion->id);
+            return (int) $rendicion->id;
         });
+
+        $rendicion = $this->repository->findOrFail($rendicionId);
+        $advertenciasAnita = $this->sincronizarAnitaTrasGuardar($rendicion, 'al registrar la rendición');
+
+        return [
+            'rendicion' => $rendicion,
+            'advertencias_anita' => $advertenciasAnita,
+        ];
     }
 
     /**
      * @param  array<string, mixed>  $payload
+     * @return array{rendicion: MaquinavendingRendicion, advertencias_anita: list<string>}
      */
-    public function actualizar(MaquinavendingRendicion $rendicion, array $payload): MaquinavendingRendicion
+    public function actualizar(MaquinavendingRendicion $rendicion, array $payload): array
     {
         $this->assertPuedeModificar($rendicion);
 
@@ -154,7 +164,7 @@ class MaquinavendingRendicionService
             $empresaId,
         );
 
-        return DB::transaction(function () use (
+        $rendicionId = DB::transaction(function () use (
             $rendicion,
             $fechaRendicion,
             $fechaJornada,
@@ -180,13 +190,20 @@ class MaquinavendingRendicionService
                 ->delete();
 
             $this->persistirDetalle($rendicion, $lineas, $medios);
-            $this->programarSyncAnita((int) $rendicion->id);
 
-            return $this->repository->findOrFail((int) $rendicion->id);
+            return (int) $rendicion->id;
         });
+
+        $fresh = $this->repository->findOrFail($rendicionId);
+        $advertenciasAnita = $this->sincronizarAnitaTrasGuardar($fresh, 'al actualizar la rendición');
+
+        return [
+            'rendicion' => $fresh,
+            'advertencias_anita' => $advertenciasAnita,
+        ];
     }
 
-    public function eliminar(MaquinavendingRendicion $rendicion): void
+    public function eliminar(MaquinavendingRendicion $rendicion): array
     {
         $this->assertPuedeModificar($rendicion);
 
@@ -196,7 +213,7 @@ class MaquinavendingRendicionService
 
         $rendicion->load(['mediosPago.cuentacaja', 'maquinavending.puntoventa']);
 
-        DB::transaction(function () use ($rendicion) {
+        $snapshot = DB::transaction(function () use ($rendicion) {
             $snapshot = $rendicion->replicate();
             $snapshot->setRawAttributes($rendicion->getAttributes());
             $snapshot->setRelations($rendicion->getRelations());
@@ -210,17 +227,10 @@ class MaquinavendingRendicionService
                 ->delete();
             $rendicion->delete();
 
-            DB::afterCommit(function () use ($snapshot) {
-                try {
-                    $this->anitaSyncService->eliminarEnAnita($snapshot);
-                } catch (\Throwable $e) {
-                    Log::error('maquinavending_rendicion.anita_delete.fallo', [
-                        'rendicion_id' => (int) ($snapshot->id ?? 0),
-                        'mensaje' => $e->getMessage(),
-                    ]);
-                }
-            });
+            return $snapshot;
         });
+
+        return $this->eliminarAnitaTrasBorrar($snapshot);
     }
 
     public function assertPuedeModificar(MaquinavendingRendicion $rendicion): void
@@ -354,19 +364,58 @@ class MaquinavendingRendicionService
         }
     }
 
-    private function programarSyncAnita(int $rendicionId): void
+    /**
+     * @return list<string>
+     */
+    private function sincronizarAnitaTrasGuardar(MaquinavendingRendicion $rendicion, string $contexto): array
     {
-        DB::afterCommit(function () use ($rendicionId) {
-            try {
-                $fresh = $this->repository->findOrFail($rendicionId);
-                $this->anitaSyncService->sincronizarDespuesDeGuardar($fresh);
-            } catch (\Throwable $e) {
-                Log::error('maquinavending_rendicion.anita_sync.fallo', [
-                    'rendicion_id' => $rendicionId,
-                    'mensaje' => $e->getMessage(),
-                ]);
-            }
-        });
+        if (! $this->anitaSyncService->sincronizacionHabilitada()) {
+            return [];
+        }
+
+        try {
+            $this->anitaSyncService->sincronizarDespuesDeGuardar($rendicion);
+        } catch (\Throwable $e) {
+            Log::error('maquinavending_rendicion.anita_sync.fallo', [
+                'rendicion_id' => (int) $rendicion->id,
+                'mensaje' => $e->getMessage(),
+            ]);
+
+            return [
+                MaquinavendingRendicionAnitaAdvertenciaSupport::mensajeDesdeExcepcion($rendicion, $e, $contexto),
+            ];
+        }
+
+        return [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function eliminarAnitaTrasBorrar(MaquinavendingRendicion $snapshot): array
+    {
+        if (! $this->anitaSyncService->sincronizacionHabilitada()) {
+            return [];
+        }
+
+        try {
+            $this->anitaSyncService->eliminarEnAnita($snapshot);
+        } catch (\Throwable $e) {
+            Log::error('maquinavending_rendicion.anita_delete.fallo', [
+                'rendicion_id' => (int) ($snapshot->id ?? 0),
+                'mensaje' => $e->getMessage(),
+            ]);
+
+            return [
+                MaquinavendingRendicionAnitaAdvertenciaSupport::mensajeDesdeExcepcion(
+                    $snapshot,
+                    $e,
+                    'al eliminar la rendición',
+                ),
+            ];
+        }
+
+        return [];
     }
 
     /**

@@ -28,7 +28,16 @@ class MovimientoStockAsientoService
 
     public function debeGenerarAsiento(?Tipotransaccion_Stock $tipo): bool
     {
-        return (bool) ($tipo?->maneja_contabilidad ?? false);
+        if (! (bool) ($tipo?->maneja_contabilidad ?? false)) {
+            return false;
+        }
+
+        // Contabilidad de transferencias TRCONT: solo vía TransferenciaMercaderiaAsientoService.
+        if (($tipo->operacion ?? '') === 'T') {
+            return false;
+        }
+
+        return true;
     }
 
     /**

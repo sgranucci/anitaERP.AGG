@@ -4,6 +4,7 @@ namespace App\Support\Ventas\Gastronomia;
 
 use App\Models\Caja\Cuentacaja;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Ventas\Venta;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
@@ -60,7 +61,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             }
 
             $impuestoInterno = round((float) ($mov['impuesto_interno'] ?? 0), 2);
-            $base = self::desglosarBaseIva($total, $impuestoInterno);
+            $importeCigarrillos = self::importeCigarrillosDesdeMov($mov, $empresaId);
 
             if ($grupo === CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_MEDIO_REAL) {
                 $medios = self::mediosPlanificadosFacturado($mov, $empresaId);
@@ -69,22 +70,24 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                     $n,
                     $mov,
                     $medios,
-                    $base,
+                    $total,
+                    $impuestoInterno,
+                    $importeCigarrillos,
                     $cuentaVentas,
                     $cuentaIva,
                     $cuentaVentasKiosco,
-                    $impuestoInterno,
                 );
             } elseif ($grupo === CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM) {
                 $n++;
                 $asientos[] = self::asientoTotemPrincipal(
                     $n,
                     $mov,
-                    $base,
+                    $total,
+                    $impuestoInterno,
+                    $importeCigarrillos,
                     $cuentaVentas,
                     $cuentaIva,
                     $cuentaVentasKiosco,
-                    $impuestoInterno,
                     $empresaId,
                 );
                 $n++;
@@ -104,11 +107,12 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                     $n,
                     $mov,
                     $medios,
-                    $base,
+                    $total,
+                    $impuestoInterno,
+                    $importeCigarrillos,
                     $cuentaVentas,
                     $cuentaIva,
                     $cuentaVentasKiosco,
-                    $impuestoInterno,
                     $cuentaFondoFijo,
                 );
             }
@@ -371,6 +375,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
 
         $totalFactura = 0.;
         $impuestoInternoTotal = 0.;
+        $importeCigarrillosTotal = 0.;
         /** @var array<int, array{concepto:string,cuenta_id:int,debe:float}> */
         $debePorCuenta = [];
 
@@ -381,6 +386,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             }
             $totalFactura += $totalComanda;
             $impuestoInternoTotal += round((float) ($mov['impuesto_interno'] ?? 0), 2);
+            $importeCigarrillosTotal += self::importeCigarrillosDesdeMov($mov, $empresaId);
 
             foreach (self::mediosPlanificadosCobranzaFacturaProceso($mov, $empresaId) as $medio) {
                 $cuentaId = (int) ($medio['cuentacaja_id'] ?? 0);
@@ -401,7 +407,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
 
         $totalFactura = round($totalFactura, 2);
         $impuestoInternoTotal = round($impuestoInternoTotal, 2);
-        $base = self::desglosarBaseIva($totalFactura, $impuestoInternoTotal);
+        $importeCigarrillosTotal = round($importeCigarrillosTotal, 2);
 
         $lineas = [];
         foreach ($debePorCuenta as $ln) {
@@ -409,7 +415,14 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         }
         $lineas = array_merge(
             $lineas,
-            self::lineasHaberVentas($base, $cuentaVentas, $cuentaIva, $cuentaVentasKiosco, $impuestoInternoTotal),
+            self::lineasHaberVentas(
+                $totalFactura,
+                $impuestoInternoTotal,
+                $importeCigarrillosTotal,
+                $cuentaVentas,
+                $cuentaIva,
+                $cuentaVentasKiosco,
+            ),
         );
 
         $debe = 0.;
@@ -854,14 +867,14 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             $idKiosco = self::intOrNull($configContable['cuenta_ventas_kiosco_id'] ?? null);
             $requeridas[] = [
                 'tipo' => 'contable',
-                'concepto' => 'Cuenta ventas de kiosco (cigarrillos)',
+                'concepto' => 'Cuenta ventas de cigarrillos (tabaco)',
                 'cuenta_id' => $idKiosco,
                 'origen' => 'config cierre',
                 'ok' => $idKiosco !== null && $idKiosco > 0,
                 'opcional' => true,
             ];
             if ($idKiosco === null || $idKiosco <= 0) {
-                $advertencias[] = 'Hay facturas con impuesto interno (cigarrillos): configure cuenta ventas de kiosco en el cierre Waitry; '
+                $advertencias[] = 'Hay facturas con impuesto interno (cigarrillos): configure cuenta ventas de cigarrillos en el cierre Waitry; '
                     .'mientras tanto se usará la cuenta de ventas general para el haber kiosco.';
             }
         }
@@ -1377,17 +1390,24 @@ final class CierreJornadaProcesoAsientosPreviewSupport
 
         foreach ($movs as $mov) {
             $total = round((float) ($mov['total'] ?? 0), 2);
-            $impuestoInterno = round((float) ($mov['impuesto_interno'] ?? 0), 2);
-            $base = self::desglosarBaseIva($total, $impuestoInterno);
+            $importeCigarrillos = self::importeCigarrillosDesdeMov($mov, $empresaId);
+            $impuestoInterno = self::impuestoInternoDesdeMov($mov, $empresaId, $importeCigarrillos);
+            $desglose = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables(
+                $total,
+                $impuestoInterno,
+                $importeCigarrillos,
+            );
             $totalFacturado += $total;
             $impuestoInternoTotal += $impuestoInterno;
-            if ($impuestoInterno > 0.0001) {
-                $ventasKiosco += round($base['gravado'] + $impuestoInterno, 2);
-                $ivaCigarrillos += $base['iva'];
+            if (abs($impuestoInterno) > 0.0001) {
+                $ventasKiosco += $desglose['ventas_kiosco'];
+                $ventasGravadas += $desglose['ventas_gravadas'];
+                $ivaCigarrillos += $desglose['iva_cigarrillos'];
+                $ivaNormal += $desglose['iva_normal'];
                 $conImpuestoInterno++;
             } else {
-                $ventasGravadas += $base['gravado'];
-                $ivaNormal += $base['iva'];
+                $ventasGravadas += $desglose['ventas_gravadas'];
+                $ivaNormal += $desglose['iva_normal'];
             }
 
             foreach (self::mediosPuenteTotem($mov, $total, $empresaId) as $medio) {
@@ -1619,11 +1639,12 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         int $numero,
         array $mov,
         array $medios,
-        array $base,
+        float $total,
+        float $impuestoInterno,
+        float $importeCigarrillos,
         int $cuentaVentas,
         int $cuentaIva,
         int $cuentaVentasKiosco,
-        float $impuestoInterno,
     ): array {
         $lineas = [];
         foreach ($medios as $m) {
@@ -1633,7 +1654,17 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                 $m['monto'],
             );
         }
-        $lineas = array_merge($lineas, self::lineasHaberVentas($base, $cuentaVentas, $cuentaIva, $cuentaVentasKiosco, $impuestoInterno));
+        $lineas = array_merge(
+            $lineas,
+            self::lineasHaberVentas(
+                $total,
+                $impuestoInterno,
+                $importeCigarrillos,
+                $cuentaVentas,
+                $cuentaIva,
+                $cuentaVentasKiosco,
+            ),
+        );
 
         return self::armarAsiento(
             $numero,
@@ -1644,25 +1675,34 @@ final class CierreJornadaProcesoAsientosPreviewSupport
     }
 
     /**
-     * @param  array{gravado:float,iva:float,neto_venta:float}  $base
      * @return array<string, mixed>
      */
     private static function asientoTotemPrincipal(
         int $numero,
         array $mov,
-        array $base,
+        float $total,
+        float $impuestoInterno,
+        float $importeCigarrillos,
         int $cuentaVentas,
         int $cuentaIva,
         int $cuentaVentasKiosco,
-        float $impuestoInterno,
         int $empresaId,
     ): array {
         $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
-        $total = round((float) ($mov['total'] ?? 0), 2);
         $lineas = [
             self::lineaDebe('TOTEM (puente cobro tótem)', (int) ($totem['id'] ?? 0), $total),
         ];
-        $lineas = array_merge($lineas, self::lineasHaberVentas($base, $cuentaVentas, $cuentaIva, $cuentaVentasKiosco, $impuestoInterno));
+        $lineas = array_merge(
+            $lineas,
+            self::lineasHaberVentas(
+                $total,
+                $impuestoInterno,
+                $importeCigarrillos,
+                $cuentaVentas,
+                $cuentaIva,
+                $cuentaVentasKiosco,
+            ),
+        );
 
         return self::armarAsiento($numero, 'Facturado — asiento TOTEM → ventas/IVA', $mov, $lineas);
     }
@@ -1720,18 +1760,29 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         int $numero,
         array $mov,
         array $medios,
-        array $base,
+        float $total,
+        float $impuestoInterno,
+        float $importeCigarrillos,
         int $cuentaVentas,
         int $cuentaIva,
         int $cuentaVentasKiosco,
-        float $impuestoInterno,
         int $cuentaFondoFijo,
     ): array {
         $lineas = [];
         foreach ($medios as $m) {
             $lineas[] = self::lineaDebe('A facturar — '.$m['label'], $m['cuentacaja_id'], $m['monto']);
         }
-        $lineas = array_merge($lineas, self::lineasHaberVentas($base, $cuentaVentas, $cuentaIva, $cuentaVentasKiosco, $impuestoInterno));
+        $lineas = array_merge(
+            $lineas,
+            self::lineasHaberVentas(
+                $total,
+                $impuestoInterno,
+                $importeCigarrillos,
+                $cuentaVentas,
+                $cuentaIva,
+                $cuentaVentasKiosco,
+            ),
+        );
         if ($cuentaFondoFijo > 0) {
             $lineas[] = [
                 'tipo' => 'info',
@@ -1752,38 +1803,61 @@ final class CierreJornadaProcesoAsientosPreviewSupport
     }
 
     /**
-     * @param  array{gravado:float,iva:float,neto_venta:float}  $base
      * @return list<array<string, mixed>>
      */
     private static function lineasHaberVentas(
-        array $base,
+        float $total,
+        float $impuestoInterno,
+        float $importeCigarrillos,
         int $cuentaVentas,
         int $cuentaIva,
         int $cuentaVentasKiosco,
-        float $impuestoInterno,
     ): array {
         $cuentaKiosco = $cuentaVentasKiosco > 0 ? $cuentaVentasKiosco : $cuentaVentas;
-        if ($impuestoInterno > 0.0001) {
-            return self::lineasHaberVentasConsolidado(
-                0.,
-                round($base['gravado'] + $impuestoInterno, 2),
-                0.,
-                $base['iva'],
-                $cuentaVentas,
-                $cuentaKiosco,
-                $cuentaIva,
-            );
-        }
+        $desglose = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables(
+            $total,
+            $impuestoInterno,
+            $importeCigarrillos,
+        );
 
         return self::lineasHaberVentasConsolidado(
-            $base['gravado'],
-            0.,
-            $base['iva'],
-            0.,
+            $desglose['ventas_gravadas'],
+            $desglose['ventas_kiosco'],
+            $desglose['iva_normal'],
+            $desglose['iva_cigarrillos'],
             $cuentaVentas,
             $cuentaKiosco,
             $cuentaIva,
         );
+    }
+
+    private static function importeCigarrillosDesdeMov(array $mov, int $empresaId): float
+    {
+        $ventaId = (int) ($mov['venta_id'] ?? 0);
+        if ($ventaId <= 0 || $empresaId <= 0) {
+            return 0.0;
+        }
+
+        return CierreJornadaVentasCigarrillosSupport::importeLineasMenuCigarrillosPorVentaId($ventaId, $empresaId);
+    }
+
+    private static function impuestoInternoDesdeMov(array $mov, int $empresaId, float $importeCigarrillos): float
+    {
+        $impuestoInterno = round((float) ($mov['impuesto_interno'] ?? 0), 2);
+        if (abs($impuestoInterno) > 0.0001) {
+            return $impuestoInterno;
+        }
+
+        $ventaId = (int) ($mov['venta_id'] ?? 0);
+        if ($ventaId <= 0 || $empresaId <= 0 || abs($importeCigarrillos) <= 0.0001) {
+            return $impuestoInterno;
+        }
+
+        $venta = Venta::query()->find($ventaId);
+
+        return $venta !== null
+            ? CierreJornadaVentasCigarrillosSupport::resolverImpuestoInternoVenta($venta, $empresaId, $importeCigarrillos)
+            : $impuestoInterno;
     }
 
     /**

@@ -66,16 +66,6 @@
                         <p>{{ $p }}</p>
                     @endforeach
 
-                    @if (!empty($sec['items']))
-                        <ul>
-                            @foreach ($sec['items'] as $item)
-                                <li>{{ $item }}</li>
-                            @endforeach
-                        </ul>
-                    @endif
-
-                    @include('stock.manual.partials.herramientas-seccion', ['sec' => $sec])
-
                     @if (!empty($sec['tabla']))
                         @if (!empty($sec['tabla']['caption']))
                             <p class="table-caption">{{ $sec['tabla']['caption'] }}</p>
@@ -101,6 +91,46 @@
                             </table>
                         </div>
                     @endif
+
+                    @if (!empty($sec['items']))
+                        <ul>
+                            @foreach ($sec['items'] as $item)
+                                <li>{{ $item }}</li>
+                            @endforeach
+                        </ul>
+                    @endif
+
+                    @if (!empty($sec['tabla2']))
+                        @if (!empty($sec['tabla2']['caption']))
+                            <p class="table-caption">{{ $sec['tabla2']['caption'] }}</p>
+                        @endif
+                        <div class="mc-table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        @foreach ($sec['tabla2']['headers'] as $h)
+                                            <th>{{ $h }}</th>
+                                        @endforeach
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($sec['tabla2']['rows'] as $row)
+                                        <tr>
+                                            @foreach ($row as $cell)
+                                                <td>{{ $cell }}</td>
+                                            @endforeach
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+
+                    @foreach ($sec['parrafos2'] ?? [] as $p)
+                        <p>{{ $p }}</p>
+                    @endforeach
+
+                    @include('stock.manual.partials.herramientas-seccion', ['sec' => $sec])
                 </article>
             @endforeach
 

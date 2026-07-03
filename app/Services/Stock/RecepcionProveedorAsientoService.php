@@ -735,7 +735,6 @@ class RecepcionProveedorAsientoService
             $lineasHaber[] = [
                 'cuentacontable_id' => $ctaId,
                 'importe' => round($aplicar, 2),
-                'observacion' => 'Cierre anticipo cuenta '.$codigo,
             ];
             $restante -= $aplicar;
         }

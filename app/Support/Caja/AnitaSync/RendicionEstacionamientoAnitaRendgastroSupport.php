@@ -154,6 +154,49 @@ final class RendicionEstacionamientoAnitaRendgastroSupport
         return $detalle;
     }
 
+    /**
+     * Z/NC portadora para cierre Anita: debe = haber = Σ total_x de las cabeceras del PV.
+     *
+     * Σ total_x incluye CAEA mezclado (rendg_tot_fc_caea es desglose). rendg_tot_nc en portadora
+     * es informativo/auditoría; no restar NC de rendg_total_z (Anita no suma tot_nc aparte al haber en estacionamiento).
+     *
+     * @param  list<object>  $cabeceras
+     * @return array{z: float, nc: float}
+     */
+    public function totalesZPortadoraParaCierre(
+        array $cabeceras,
+        float $ncDia,
+        float $ncTurnoPortadora = 0.0,
+    ): array {
+        unset($ncTurnoPortadora);
+
+        $sumX = 0.0;
+        foreach ($cabeceras as $fila) {
+            $sumX += round((float) ($fila->rendg_total_x ?? 0), 2);
+        }
+
+        return [
+            'z' => round($sumX, 2),
+            'nc' => round($ncDia, 2),
+        ];
+    }
+
+    /**
+     * @deprecated Use totalesZPortadoraParaCierre() con nc del turno portador.
+     *
+     * @param  list<object>  $cabeceras
+     * @return array{z: float, nc: float}
+     */
+    public function totalesZPortadoraDesdeCabeceras(array $cabeceras): array
+    {
+        $nc = 0.0;
+        foreach ($cabeceras as $fila) {
+            $nc += round((float) ($fila->rendg_tot_nc ?? 0), 2);
+        }
+
+        return $this->totalesZPortadoraParaCierre($cabeceras, $nc, 0.0);
+    }
+
     public function codigoPuntoventaEntero(?string $codigo): int
     {
         $codigo = trim((string) $codigo);

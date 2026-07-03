@@ -127,6 +127,14 @@ final class RendicionEstacionamientoLimpiarRendgastroAnitaService
             ];
         }
 
+        $todas = $this->rendgastroSupport->listarCabecerasPorSucursal($empresaId, $fechaEntera, $sucursal);
+        $estacionamiento = $this->rendgastroSupport->filtrarCabecerasSoloEstacionamiento(
+            $todas,
+            $empresaId,
+            $nroOperErp,
+            $turnoOperIds,
+        );
+
         $erpZ = EstacionamientoTurnoOperativoTotalesSupport::totalFacturasSinNotasCreditoPorPuntoventa(
             (int) $pv->id,
             $empresaId,
@@ -136,14 +144,6 @@ final class RendicionEstacionamientoLimpiarRendgastroAnitaService
             (int) $pv->id,
             $empresaId,
             $fechaJornada,
-        );
-
-        $todas = $this->rendgastroSupport->listarCabecerasPorSucursal($empresaId, $fechaEntera, $sucursal);
-        $estacionamiento = $this->rendgastroSupport->filtrarCabecerasSoloEstacionamiento(
-            $todas,
-            $empresaId,
-            $nroOperErp,
-            $turnoOperIds,
         );
 
         if ($estacionamiento === []) {
@@ -161,6 +161,16 @@ final class RendicionEstacionamientoLimpiarRendgastroAnitaService
 
         $portadora = $this->rendgastroSupport->elegirPortadora($estacionamiento);
         $portadoraNro = (int) ($portadora->rendg_nro_oper ?? 0);
+        $ncCabeceras = 0.0;
+        foreach ($estacionamiento as $fila) {
+            $ncCabeceras += round((float) ($fila->rendg_tot_nc ?? 0), 2);
+        }
+        $totalesPortadora = $this->rendgastroSupport->totalesZPortadoraParaCierre(
+            $estacionamiento,
+            round(max($ncCabeceras, $erpNc), 2),
+        );
+        $totalZ = $totalesPortadora['z'];
+        $totNc = $totalesPortadora['nc'];
         $detalle = [];
 
         foreach ($estacionamiento as $fila) {
@@ -170,8 +180,8 @@ final class RendicionEstacionamientoLimpiarRendgastroAnitaService
             }
 
             $esPortadora = $nroOper === $portadoraNro;
-            $z = $esPortadora ? $erpZ : 0.0;
-            $nc = $esPortadora ? $erpNc : 0.0;
+            $z = $esPortadora ? $totalZ : 0.0;
+            $nc = $esPortadora ? $totNc : 0.0;
 
             if (! $dryRun) {
                 $this->anitaSyncService->actualizarTotalZYNcPorNroOper($nroOper, $z, $nc);

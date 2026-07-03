@@ -2,6 +2,7 @@
 
 namespace App\Queries\Ventas;
 
+use App\Support\Stock\ArticuloUsoDescartableSupport;
 use App\Support\Stock\ArticuloUsoInsumoSupport;
 use App\Support\Ventas\GastronomiaVentasArticulosReporteFiltros;
 use App\Support\Ventas\GastronomiaVentaComprobanteSignoSupport;
@@ -99,7 +100,7 @@ final class GastronomiaVentasArticulosReporteQuery
             ->whereNull('v.deleted_at')
             ->whereNull('vge.venta_factura_origen_id');
 
-        $this->aplicarExclusionInsumos($query);
+        $this->aplicarExclusionInsumosYDescartables($query);
 
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
         if ($empresaId > 0) {
@@ -120,15 +121,18 @@ final class GastronomiaVentasArticulosReporteQuery
         return $query;
     }
 
-    private function aplicarExclusionInsumos(Builder $query): void
+    private function aplicarExclusionInsumosYDescartables(Builder $query): void
     {
         $query->whereNotExists(function ($sub) {
             $sub->select(DB::raw(1))
-                ->from('usoarticulo as ua_ins')
-                ->whereColumn('ua_ins.id', 'a.usoarticulo_id')
+                ->from('usoarticulo as ua_excl')
+                ->whereColumn('ua_excl.id', 'a.usoarticulo_id')
                 ->whereRaw(
-                    'UPPER(TRIM(ua_ins.nombre)) = ?',
-                    [ArticuloUsoInsumoSupport::NOMBRE_USO_INSUMO],
+                    'UPPER(TRIM(ua_excl.nombre)) IN (?, ?)',
+                    [
+                        ArticuloUsoInsumoSupport::NOMBRE_USO_INSUMO,
+                        ArticuloUsoDescartableSupport::NOMBRE_USO_DESCARTABLES,
+                    ],
                 );
         });
     }

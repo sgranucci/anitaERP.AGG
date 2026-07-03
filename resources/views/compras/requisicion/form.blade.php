@@ -6,6 +6,10 @@
     }
     // Solo consulta cuando $visualizar es truthy (no bastaba isset(): en editar viene false y ocultaba edición).
     $soloLectura = isset($visualizar) && $visualizar;
+    $edicionLimitadaAprobada = !empty($edicionLimitadaAprobada);
+    $cabeceraSoloLectura = $soloLectura || $edicionLimitadaAprobada;
+    $proveedorEditable = ! $soloLectura || $edicionLimitadaAprobada;
+    $lineasSoloLectura = $cabeceraSoloLectura;
 
     if (isset($data) && $data) {
         $solicitanteTexto = trim((string) (optional($data->usuarios)->nombre ?? ''));
@@ -17,6 +21,15 @@
     <div class="row">
         <div class="col-sm-6">
             <input type="hidden" name="requisicion_id" id="requisicion_id" value="{{ (isset($data) && $data) ? $data->id : '' }}">
+            @if($edicionLimitadaAprobada && isset($data))
+                <input type="hidden" name="empresa_id" value="{{ old('empresa_id', $data->empresa_id) }}">
+                <input type="hidden" name="fecha" value="{{ old('fecha', $data->fecha ? substr($data->fecha, 0, 10) : '') }}">
+                <input type="hidden" name="fechaentrega" value="{{ old('fechaentrega', $data->fechaentrega ? substr($data->fechaentrega, 0, 10) : '') }}">
+                <input type="hidden" name="centrocosto_id" value="{{ old('centrocosto_id', $data->centrocosto_id) }}">
+                <input type="hidden" name="tratamiento" value="{{ old('tratamiento', $data->tratamiento) }}">
+                <input type="hidden" name="contrataciondirecta" value="{{ old('contrataciondirecta', $data->contrataciondirecta) }}">
+                <input type="hidden" name="estado" value="{{ old('estado', $data->estado) }}">
+            @endif
             <input type="hidden" name="oficinacompra_id" id="oficinacompra_id" value="{{ old('oficinacompra_id', (isset($data) && $data) ? ($data->oficinacompra_id ?? '') : '') }}">
             @if(isset($oficinacompra_query))
                 <script>
@@ -30,7 +43,7 @@
             @include('includes.form-empresa-asignada', [
                 'empresa_query' => $empresa_query,
                 'empresa_id' => (isset($data) && $data) ? $data->empresa_id : null,
-                'solo_lectura' => $soloLectura,
+                'solo_lectura' => $cabeceraSoloLectura,
                 'col_input' => 'col-lg-5',
             ])
 
@@ -51,21 +64,21 @@
             <div class="form-group row">
                 <label for="fecha" class="col-lg-3 control-label requerido">Fecha</label>
                 <div class="col-lg-3">
-                    <input type="date" name="fecha" id="fecha" class="form-control" value="{{ old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d')) }}" required {{ $soloLectura ? 'readonly' : '' }}>
+                    <input type="date" name="fecha" id="fecha" class="form-control" value="{{ old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d')) }}" required {{ $cabeceraSoloLectura ? 'readonly' : '' }}>
                 </div>
             </div>
 
             <div class="form-group row">
                 <label for="fechaentrega" class="col-lg-3 control-label requerido">Fecha entrega</label>
                 <div class="col-lg-3">
-                    <input type="date" name="fechaentrega" id="fechaentrega" class="form-control" value="{{ old('fechaentrega', (isset($data) && $data && $data->fechaentrega) ? substr($data->fechaentrega, 0, 10) : date('Y-m-d')) }}" required {{ $soloLectura ? 'readonly' : '' }}>
+                    <input type="date" name="fechaentrega" id="fechaentrega" class="form-control" value="{{ old('fechaentrega', (isset($data) && $data && $data->fechaentrega) ? substr($data->fechaentrega, 0, 10) : date('Y-m-d')) }}" required {{ $cabeceraSoloLectura ? 'readonly' : '' }}>
                 </div>
             </div>
 
             <div class="form-group row">
                 <label for="centrocosto_id" class="col-lg-3 control-label requerido">Centro costo</label>
                 <div class="col-lg-4">
-                    <select name="centrocosto_id" id="centrocosto_id" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="centrocosto_id" id="centrocosto_id" class="form-control" required {{ $cabeceraSoloLectura ? 'disabled' : '' }}>
                         @php $centrocostoUsuario_id = (isset($data) && $data) ? $data->centrocosto_id : (auth()->user()->centrocosto_id ?? 1); @endphp
                         @foreach ($centrocosto_query as $cc)
                             @if ($cc->id > 0)
@@ -92,9 +105,9 @@
                 <div class="col-lg-9">
                     <input type="hidden" id="proveedor_id" name="proveedor_id" value="{{ old('proveedor_id', (isset($data) && $data) ? ($data->proveedor_id ?? '') : '') }}">
                     <div class="d-flex flex-wrap align-items-center">
-                        <input type="text" class="form-control codigoproveedor mr-2" id="codigoproveedor" name="codigoproveedor" value="{{ old('codigoproveedor', optional($reqProveedor)->codigo ?? '') }}" style="width: 6.5rem; max-width: 30%; flex-shrink: 0;" {{ $soloLectura ? 'readonly' : '' }}>
+                        <input type="text" class="form-control codigoproveedor mr-2" id="codigoproveedor" name="codigoproveedor" value="{{ old('codigoproveedor', optional($reqProveedor)->codigo ?? '') }}" style="width: 6.5rem; max-width: 30%; flex-shrink: 0;" {{ !$proveedorEditable ? 'readonly' : '' }}>
                         <input type="text" class="form-control mr-2" id="nombreproveedor" name="nombreproveedor" value="{{ old('nombreproveedor', optional($reqProveedor)->nombre ?? '') }}" readonly style="min-width: 8rem; flex: 1 1 8rem;">
-                        @if(!$soloLectura)
+                        @if($proveedorEditable)
                         <button type="button" title="Consulta proveedores (F1)" class="btn-accion-tabla consultaproveedor tooltipsC mr-2 mr-md-3 flex-shrink-0">
                             <i class="fa fa-search text-primary"></i>
                         </button>
@@ -112,7 +125,7 @@
             <div class="form-group row">
                 <label for="formapago_id" class="col-lg-3 control-label">Forma de pago</label>
                 <div class="col-lg-4">
-                    <select name="formapago_id" id="formapago_id" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="formapago_id" id="formapago_id" class="form-control" {{ $cabeceraSoloLectura ? 'disabled' : '' }}>
                         <option value="">—</option>
                         @foreach ($formapago_query as $fp)
                             <option value="{{ $fp->id }}" {{ (int) old('formapago_id', (isset($data) && $data) ? $data->formapago_id : '') === (int) $fp->id ? 'selected' : '' }}>
@@ -130,7 +143,7 @@
             <div class="form-group row">
                 <label for="tratamiento" class="col-lg-3 control-label requerido">Tratamiento</label>
                 <div class="col-lg-4">
-                    <select name="tratamiento" id="tratamiento" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="tratamiento" id="tratamiento" class="form-control" required {{ $cabeceraSoloLectura ? 'disabled' : '' }}>
                         @foreach ($tratamiento_enum as $t)
                             <option value="{{ $t['nombre'] }}" {{ old('tratamiento', (isset($data) && $data) ? $data->tratamiento : 'Normal') == $t['nombre'] ? 'selected' : '' }}>
                                 {{ $t['nombre'] }}
@@ -143,14 +156,14 @@
             <div class="form-group row">
                 <label for="motivotratamiento" class="col-lg-3 control-label">Motivo tratamiento</label>
                 <div class="col-lg-8">
-                    <input type="text" name="motivotratamiento" id="motivotratamiento" class="form-control" value="{{ old('motivotratamiento', (isset($data) && $data) ? $data->motivotratamiento : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                    <input type="text" name="motivotratamiento" id="motivotratamiento" class="form-control" value="{{ old('motivotratamiento', (isset($data) && $data) ? $data->motivotratamiento : '') }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }}>
                 </div>
             </div>
 
             <div class="form-group row">
                 <label for="contrataciondirecta" class="col-lg-3 control-label requerido">Contratación directa</label>
                 <div class="col-lg-4">
-                    <select name="contrataciondirecta" id="contrataciondirecta" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="contrataciondirecta" id="contrataciondirecta" class="form-control" required {{ $cabeceraSoloLectura ? 'disabled' : '' }}>
                         @foreach ($contratacionDirecta_enum as $t)
                             <option value="{{ $t['nombre'] }}" {{ old('contrataciondirecta', (isset($data) && $data) ? $data->contrataciondirecta : 'Normal') == $t['nombre'] ? 'selected' : '' }}>
                                 {{ $t['nombre'] }}
@@ -163,7 +176,7 @@
             <div class="form-group row">
                 <label for="comentario" class="col-lg-3 control-label">Comentario</label>
                 <div class="col-lg-8">
-                    <input type="text" name="comentario" id="comentario" class="form-control" value="{{ old('comentario', (isset($data) && $data) ? $data->comentario : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                    <input type="text" name="comentario" id="comentario" class="form-control" value="{{ old('comentario', (isset($data) && $data) ? $data->comentario : '') }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }}>
                 </div>
             </div>
 
@@ -175,7 +188,7 @@
                         <input type="hidden" name="estado" value="{{ $estado_provisorio ?? 'PROVISORIO' }}">
                         <input type="text" id="estado" class="form-control" value="{{ $estado_provisorio ?? 'PROVISORIO' }}" readonly>
                     @else
-                    <select name="estado" id="estado" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="estado" id="estado" class="form-control" {{ $cabeceraSoloLectura ? 'disabled' : '' }}>
                         @foreach ($estado_enum as $e)
                             @if(($e['nombre'] ?? '') === 'PROVISORIO')
                                 @continue
@@ -195,7 +208,7 @@
         <div class="form-group row">
             <label for="detalle" class="col-lg-3 col-form-label">Detalle</label>
             <div class="col-lg-6">
-                <textarea name="detalle" id="detalle" rows="3" class="form-control">{{ old('detalle', (isset($data) && $data) ? $data->detalle : '') }}</textarea>
+                <textarea name="detalle" id="detalle" rows="3" class="form-control" {{ $cabeceraSoloLectura ? 'readonly' : '' }}>{{ old('detalle', (isset($data) && $data) ? $data->detalle : '') }}</textarea>
             </div>
         </div>
     </div>
@@ -231,7 +244,7 @@
                 <th style="width: 11%;">CC destino</th>
                 <th style="width: 23%;">Partida presupuesto</th>
                 <th style="width: 23%;">Capex</th>
-                @if(!$soloLectura)
+                @if(!$lineasSoloLectura)
                 <th style="width: 4%;"></th>
                 @endif
             </tr>
@@ -258,20 +271,20 @@
                         <button type="button" title="Consultar listas de precios de compra (si no hay artículo, muestra las últimas listas vigentes del proveedor)" style="padding:1;" class="btn-accion-tabla consultalistasprecio tooltipsC flex-shrink-0">
                                 <i class="fa fa-tags text-info"></i>
                         </button>
-                        <input type="text" class="codigoarticulo codigoarticulolocal form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;" name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
+                        <input type="text" class="codigoarticulo codigoarticulolocal form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;" name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }} >
                     </div>
                 </td>
                 <td>
                     <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{ old('descripcionarticulos.'.$idx, optional($linea->articulos)->descripcion ?? '') }}" readonly>
                 </td>
                 <td>
-                    <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                    <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }}>
                 </td>
                 <td>
-                    <input type="number" step="0.0001" name="precios[]" class="form-control precio-linea" value="{{ old('precios.'.$idx, $linea->precio ?? '0') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                    <input type="number" step="0.0001" name="precios[]" class="form-control precio-linea" value="{{ old('precios.'.$idx, $linea->precio ?? '0') }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }}>
                 </td>
                 <td>
-                    <select name="moneda_linea_ids[]" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="moneda_linea_ids[]" class="form-control" {{ $cabeceraSoloLectura ? 'disabled' : '' }}>
                         @foreach ($moneda_query as $moneda)
                             <option value="{{ $moneda->id }}" {{ (int) old('moneda_linea_ids.'.$idx, $linea->moneda_id ?? 1) === (int) $moneda->id ? 'selected' : '' }}>
                                 {{ $moneda->abreviatura }}
@@ -280,7 +293,7 @@
                     </select>
                 </td>
                 <td>
-                    <select name="centrocostodestino_ids[]" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="centrocostodestino_ids[]" class="form-control" {{ $cabeceraSoloLectura ? 'disabled' : '' }}>
                         @foreach ($centrocosto_query as $cc)
                             <option value="{{ $cc->id }}" {{ (int) old('centrocostodestino_ids.'.$idx, $linea->centrocostodestino_id ?? $centrocostoDefaultDestino) === (int) $cc->id ? 'selected' : '' }}>
                                 {{ $cc->codigo }}-{{ $cc->nombre }}
@@ -294,7 +307,7 @@
                         <button type="button" title="Consulta partidas (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
-                        <input type="text" class="codigopartidagasto form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigopartidagastos[]" value="{{ optional($linea->partidagastos)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
+                        <input type="text" class="codigopartidagasto form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigopartidagastos[]" value="{{ optional($linea->partidagastos)->codigo ?? '' }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }} >
                         <input type="text" class="descripcionpartidagasto form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcionpartidagastos[]" value="{{ old('descripcionpartidagastos.'.$idx, optional($linea->partidagastos?->articulos)->detalle ?? '') }}" readonly title="{{ old('descripcionpartidagastos.'.$idx, optional($linea->partidagastos?->articulos)->detalle ?? '') }}">
                     </div>
                 </td>
@@ -304,11 +317,11 @@
                         <button type="button" title="Consulta CAPEX (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                         </button>
-                        <input type="text" class="codigocapex form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigocapexs[]" value="{{ optional($linea->capexs)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }} >
+                        <input type="text" class="codigocapex form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigocapexs[]" value="{{ optional($linea->capexs)->codigo ?? '' }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }} >
                         <input type="text" class="descripcioncapex form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcioncapexs[]" value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly title="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}">
                     </div>
                 </td>
-                @if(!$soloLectura)
+                @if(!$lineasSoloLectura)
                 <td class="text-center">
                     <button type="button" title="Eliminar línea" class="btn-accion-tabla eliminar_requisicion_articulo tooltipsC">
                         <i class="fa fa-times-circle text-danger"></i>
@@ -319,7 +332,7 @@
             @endforeach
         </tbody>
     </table>
-    @if(!$soloLectura)
+    @if(!$lineasSoloLectura)
     <div class="d-flex flex-wrap align-items-center justify-content-start mt-2">
         <button type="button" class="btn btn-danger" id="agrega_renglon_requisicion_articulo">+ Agrega rengl&oacute;n</button>
     </div>

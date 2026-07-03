@@ -153,6 +153,10 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 					if ($haberes[$i_movimiento] != null && $haberes[$i_movimiento] != 0)
 						$monto = -$haberes[$i_movimiento];
 
+					if (abs($monto) <= 0.0001) {
+						continue;
+					}
+
 					$asiento_movimiento = $this->model->create([
 									"asiento_id" => $id,
 									"cuentacontable_id" => $cuentacontable_ids[$i_movimiento],

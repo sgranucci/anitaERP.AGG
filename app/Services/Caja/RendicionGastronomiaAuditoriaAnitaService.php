@@ -133,21 +133,19 @@ final class RendicionGastronomiaAuditoriaAnitaService
             if (! in_array($tipoFila, ['pc', 'estacionamiento_pv'], true)) {
                 continue;
             }
-            if (GastronomiaConciliacionEstadoSupport::requiereAlerta(
-                (string) ($fila['estado_anita'] ?? ''),
+            if (GastronomiaConciliacionEstadoSupport::requiereAlertaRendg(
                 (string) ($fila['estado_rendg'] ?? ''),
             )) {
                 $requiereAlerta = true;
                 break;
             }
-            if (in_array((string) ($fila['estado'] ?? ''), ['DIF rendg', 'DIF ambos', 'SIN RENDG', 'DIF'], true)) {
+            if (in_array((string) ($fila['estado'] ?? ''), ['DIF rendg', 'SIN RENDG', 'DIF'], true)) {
                 $requiereAlerta = true;
                 break;
             }
         }
         if (! $requiereAlerta && $totalDia !== null) {
-            $requiereAlerta = GastronomiaConciliacionEstadoSupport::requiereAlerta(
-                (string) ($totalDia['estado_anita'] ?? ''),
+            $requiereAlerta = GastronomiaConciliacionEstadoSupport::requiereAlertaRendg(
                 (string) ($totalDia['estado_rendg'] ?? ''),
             );
         }

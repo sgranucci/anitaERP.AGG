@@ -17,7 +17,7 @@ class RendicionEstacionamientoRepararJornadaAnita extends Command
                             {--solo-fecha : Repara por fecha sin exigir jornada en ERP (Anita-only)}
                             {--dry-run : Simula sin escribir en Anita}';
 
-    protected $description = 'Repara rendg_total_z y rendg_tot_nc en Anita por fecha de jornada, empresa y PV estacionamiento (portadora: turno N, si no T, si no M)';
+    protected $description = 'Repara rendgastro/rendvalor en Anita (Z, NC, invitación/redondeo, medios netos) por fecha de jornada, empresa y PV estacionamiento';
 
     public function handle(RendicionEstacionamientoRepararJornadaAnitaService $service): int
     {

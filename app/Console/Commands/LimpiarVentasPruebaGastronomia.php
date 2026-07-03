@@ -164,6 +164,11 @@ class LimpiarVentasPruebaGastronomia extends Command
             ->orWhere('venta_factura_origen_id', $ventaId)
             ->delete();
 
+        DB::table('venta_estacionamiento_emision')
+            ->where('venta_id', $ventaId)
+            ->orWhere('venta_factura_origen_id', $ventaId)
+            ->delete();
+
         DB::table('cuenta_gastronomia')->where('venta_id', $ventaId)->update(['venta_id' => null]);
 
         DB::table('ordentrabajo_tarea')->where('venta_id', $ventaId)->delete();

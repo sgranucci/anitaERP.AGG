@@ -68,16 +68,25 @@
                 <th class="num">Contado</th>
                 <th class="num">Diferencia a ajustar</th>
                 <th class="num">Costo u/c</th>
+                <th class="num">Valor contado</th>
                 <th class="num">Valor dif.</th>
             </tr>
         </thead>
         <tbody>
-            @php $totalValorDif = 0.0; @endphp
+            @php
+                $totalValorContado = 0.0;
+                $totalValorDif = 0.0;
+            @endphp
             @foreach ($recuento->items as $item)
                 @php
                     $dif = $item->diferencia();
                     $costoUc = $item->precio_ultima_compra ?? null;
+                    $contado = (float) $item->cantidad_contada;
+                    $valorContado = ($costoUc !== null) ? $contado * (float) $costoUc : null;
                     $valorDif = ($costoUc !== null && abs($dif) > 1e-9) ? $dif * (float) $costoUc : null;
+                    if ($valorContado !== null) {
+                        $totalValorContado += $valorContado;
+                    }
                     if ($valorDif !== null) {
                         $totalValorDif += $valorDif;
                     }
@@ -99,6 +108,13 @@
                         @endif
                     </td>
                     <td class="num">
+                        @if ($valorContado !== null)
+                            {{ number_format($valorContado, 2, '.', '') }}
+                        @else
+                            —
+                        @endif
+                    </td>
+                    <td class="num">
                         @if ($valorDif !== null)
                             {{ number_format($valorDif, 2, '.', '') }}
                         @else
@@ -110,7 +126,8 @@
         </tbody>
         <tfoot>
             <tr>
-                <th colspan="7" class="num">Total valor diferencias (costo u/c)</th>
+                <th colspan="7" class="num">Totales (costo u/c)</th>
+                <th class="num">{{ number_format($totalValorContado, 2, '.', '') }}</th>
                 <th class="num">{{ number_format($totalValorDif, 2, '.', '') }}</th>
             </tr>
         </tfoot>

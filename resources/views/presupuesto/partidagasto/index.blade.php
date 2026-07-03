@@ -30,7 +30,7 @@ use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
                         'toggleId' => 'btn-toggle-filtros-partidagasto',
                         'inputId' => 'filtro_valor',
                         'nuevoRegistroUrl' => route('crear_partidagasto'),
-                        'nuevoRegistroCan' => 'crear-partida-gasto',
+                        'nuevoRegistroCan' => 'crear-partidagasto',
                     ])
                 </div>
             </div>
@@ -94,12 +94,12 @@ use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
                                 </ul>
                             </td>
                             <td>
-                       			@if (can('editar-partida-gasto', false))
+                       			@if (can('editar-partidagasto', false))
                                 	<a href="{{route('editar_partidagasto', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-partida-gasto', false))
+                       			@if (can('borrar-partidagasto', false))
                                 <form action="{{route('eliminar_partidagasto', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">

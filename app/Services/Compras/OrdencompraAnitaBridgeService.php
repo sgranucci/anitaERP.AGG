@@ -8,11 +8,14 @@ use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEscrituraSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaErpContext;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaLineaSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
+use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaOcfpagoCuotaExpander;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaWhereSupport;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Escritura ERP → Anita (pendmaep, pendmovp, movpresup) con rollback ante fallos.
+ * Escritura ERP → Anita (pendmaep, pendmovp, movpresup, ocvley, occuota, ocfpagocuota,
+ * pendfecha, legcompra) con rollback ante fallos.
  */
 class OrdencompraAnitaBridgeService
 {
@@ -32,7 +35,14 @@ class OrdencompraAnitaBridgeService
 
         $ctx = OrdencompraAnitaErpContext::desdeUsuarioActual();
         $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
-        $estado = ['cabecera_nueva' => false, 'detalle_grabado' => false, 'numero' => (int) $oc->numeroordencompra];
+        $estado = [
+            'cabecera_nueva' => false,
+            'detalle_grabado' => false,
+            'comprobantes_grabados' => false,
+            'pendfecha_grabado' => false,
+            'legcompra_grabado' => false,
+            'numero' => (int) $oc->numeroordencompra,
+        ];
 
         try {
             OrdencompraAnitaLineaSupport::asignarClavesLineas($oc);
@@ -49,6 +59,15 @@ class OrdencompraAnitaBridgeService
 
             $this->grabarDetalle($oc, $ctx, $clave);
             $estado['detalle_grabado'] = true;
+
+            $this->grabarComprobantesCuotas($oc, $ctx, $clave);
+            $estado['comprobantes_grabados'] = true;
+
+            $this->grabarPendfecha($oc, $ctx, $clave);
+            $estado['pendfecha_grabado'] = true;
+
+            $this->grabarLegcompraAlta($oc, $ctx);
+            $estado['legcompra_grabado'] = true;
 
             OrdencompraAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador((int) $oc->numeroordencompra);
         } catch (\Throwable $e) {
@@ -69,7 +88,14 @@ class OrdencompraAnitaBridgeService
         $ctx = OrdencompraAnitaErpContext::desdeUsuarioActual();
         $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
         $backup = $this->leerBackupAnita($clave);
-        $estado = ['cabecera_nueva' => false, 'detalle_grabado' => false, 'numero' => (int) $oc->numeroordencompra];
+        $estado = [
+            'cabecera_nueva' => false,
+            'detalle_grabado' => false,
+            'comprobantes_grabados' => false,
+            'pendfecha_grabado' => false,
+            'legcompra_grabado' => false,
+            'numero' => (int) $oc->numeroordencompra,
+        ];
 
         try {
             OrdencompraAnitaLineaSupport::asignarClavesLineas($oc);
@@ -86,11 +112,85 @@ class OrdencompraAnitaBridgeService
             $this->grabarDetalle($oc, $ctx, $clave);
             $estado['detalle_grabado'] = true;
 
+            $this->grabarComprobantesCuotas($oc, $ctx, $clave);
+            $estado['comprobantes_grabados'] = true;
+
+            $this->grabarPendfecha($oc, $ctx, $clave);
+            $estado['pendfecha_grabado'] = true;
+
+            $this->asegurarLegcompra($oc, $ctx);
+
             OrdencompraAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador((int) $oc->numeroordencompra);
         } catch (\Throwable $e) {
             $this->revertirConBackup($clave, $estado, $backup);
             throw new \RuntimeException('Error al actualizar la orden de compra en Anita: '.$e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * Repara legcompra y pendfecha faltantes en Anita para OCs ya grabadas en pendmaep.
+     *
+     * @return array{numero: int, legcompra: string, pendfecha: string}
+     */
+    public function repararRegistrosAnitaFaltantes(Ordencompra $oc): array
+    {
+        if (! $this->habilitado()) {
+            throw new \RuntimeException('Escritura OC Anita deshabilitada.');
+        }
+
+        $this->cargarRelaciones($oc);
+        $numero = (int) $oc->numeroordencompra;
+        if ($numero <= 0) {
+            throw new \RuntimeException('La orden de compra no tiene número asignado.');
+        }
+
+        $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
+        if (! $this->existePendmaep($clave)) {
+            throw new \RuntimeException("La OC #{$numero} no existe en pendmaep (Anita).");
+        }
+
+        $ctx = OrdencompraAnitaErpContext::desdeUsuarioId(
+            $oc->creousuario_id !== null ? (int) $oc->creousuario_id : null
+        );
+        $created = $oc->created_at !== null ? Carbon::parse($oc->created_at) : Carbon::now();
+        $fechaYmd = $ctx->fechaYmd($created->format('Y-m-d'));
+        $hora = $created->format('H:i:s');
+
+        $result = [
+            'numero' => $numero,
+            'legcompra' => 'ok',
+            'pendfecha' => 'ok',
+        ];
+
+        if (! $this->existeLegcompra($numero)) {
+            $insert = OrdencompraAnitaEscrituraSupport::legcompraInsert(
+                $numero,
+                $ctx,
+                OrdencompraAnitaEscrituraSupport::sectorLegajoCompras(),
+                'Alta de OC (reparacion legcompra faltante)',
+                $fechaYmd > 0 ? $fechaYmd : null,
+                $hora,
+            );
+
+            $api = new ApiAnita;
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+                'tabla' => config('ordencompra_anita.tablas.historia'),
+                'campos' => $insert['campos'],
+                'valores' => $insert['valores'],
+            ], 'ordencompra legcompra reparacion');
+
+            $result['legcompra'] = 'insertado';
+        }
+
+        $proveedor6 = $ctx->codigoProveedor6((int) $oc->proveedor_id);
+        if (! $this->existePendfecha($clave, $proveedor6)) {
+            $this->grabarPendfecha($oc, $ctx, $clave);
+            $result['pendfecha'] = 'insertado';
+        }
+
+        return $result;
     }
 
     public function sincronizarBaja(Ordencompra $oc): void
@@ -107,10 +207,14 @@ class OrdencompraAnitaBridgeService
 
         $this->assertSinRecepcionesAplicadas($clave);
 
+        $oc->loadMissing('proveedores');
+        $ctx = OrdencompraAnitaErpContext::desdeUsuarioActual();
         $estado = ['cabecera_nueva' => false, 'detalle_grabado' => true, 'numero' => (int) $oc->numeroordencompra];
 
         try {
             $this->eliminarDetalle($clave);
+            $this->eliminarPendfecha($clave, $ctx->codigoProveedor6((int) $oc->proveedor_id));
+            $this->eliminarLegcompra((int) $oc->numeroordencompra);
             $this->eliminarPendmaep($clave);
         } catch (\Throwable $e) {
             throw new \RuntimeException('Error al eliminar la orden de compra en Anita: '.$e->getMessage(), 0, $e);
@@ -130,7 +234,8 @@ class OrdencompraAnitaBridgeService
             'ordencompra_articulos.partidagastos.presupuestos',
             'ordencompra_articulos.partidagastos.presupuesto_escenarios',
             'ordencompra_articulos.capexs',
-            'ordencompra_comprobantes.condicionpagos',
+            'ordencompra_comprobantes.condicionpagos.condicionpagocuotas',
+            'ordencompra_comprobantes.ordencompra_comprobante_cuotas.formapagos',
         ]);
     }
 
@@ -251,14 +356,123 @@ class OrdencompraAnitaBridgeService
                 'campos' => $insertMovp['campos'],
                 'valores' => $insertMovp['valores'],
             ], 'ordencompra movpresup insert');
+
+            foreach (OrdencompraAnitaEscrituraSupport::ocvleyInsertsDesdeLinea($linea, $clave) as $insertOcvley) {
+                $api->apiCallEscritura([
+                    'acc' => 'insert',
+                    'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+                    'tabla' => config('ordencompra_anita.tablas.leyenda_linea'),
+                    'campos' => $insertOcvley['campos'],
+                    'valores' => $insertOcvley['valores'],
+                ], 'ordencompra ocvley insert');
+            }
         }
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
+    private function grabarComprobantesCuotas(Ordencompra $oc, OrdencompraAnitaErpContext $ctx, array $clave): void
+    {
+        $comprobantes = $oc->ordencompra_comprobantes->sortBy('id')->values();
+        if ($comprobantes->isEmpty()) {
+            return;
+        }
+
+        $api = new ApiAnita;
+        $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
+        $nroCuotaOcc = 0;
+
+        foreach ($comprobantes as $comprobante) {
+            $nroCuotaOcc++;
+            $insertOcc = OrdencompraAnitaEscrituraSupport::occuotaInsert($comprobante, $ctx, $clave, $nroCuotaOcc);
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'sistema' => $sistema,
+                'tabla' => config('ordencompra_anita.tablas.cuota'),
+                'campos' => $insertOcc['campos'],
+                'valores' => $insertOcc['valores'],
+            ], 'ordencompra occuota insert');
+
+            $cuotas = $comprobante->ordencompra_comprobante_cuotas->sortBy('id')->values();
+            if ($cuotas->isEmpty()) {
+                $cuotasExpandidas = OrdencompraAnitaOcfpagoCuotaExpander::desdeComprobante($comprobante);
+                $nroCuotaFpago = 0;
+                foreach ($cuotasExpandidas as $cuota) {
+                    $nroCuotaFpago++;
+                    $insertOcfp = OrdencompraAnitaEscrituraSupport::ocfpagocuotaInsertDesdeArray(
+                        $cuota,
+                        $clave,
+                        $nroCuotaOcc,
+                        $nroCuotaFpago,
+                        $ctx
+                    );
+                    $api->apiCallEscritura([
+                        'acc' => 'insert',
+                        'sistema' => $sistema,
+                        'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
+                        'campos' => $insertOcfp['campos'],
+                        'valores' => $insertOcfp['valores'],
+                    ], 'ordencompra ocfpagocuota insert expand');
+                }
+
+                continue;
+            }
+
+            $nroCuotaFpago = 0;
+            foreach ($cuotas as $cuota) {
+                $nroCuotaFpago++;
+                $insertOcfp = OrdencompraAnitaEscrituraSupport::ocfpagocuotaInsert(
+                    $cuota,
+                    $ctx,
+                    $clave,
+                    $nroCuotaOcc,
+                    $nroCuotaFpago
+                );
+                $api->apiCallEscritura([
+                    'acc' => 'insert',
+                    'sistema' => $sistema,
+                    'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
+                    'campos' => $insertOcfp['campos'],
+                    'valores' => $insertOcfp['valores'],
+                ], 'ordencompra ocfpagocuota insert');
+            }
+        }
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
+    private function eliminarComprobantesCuotas(array $clave): void
+    {
+        $api = new ApiAnita;
+        $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
+
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'sistema' => $sistema,
+            'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
+            'whereArmado' => OrdencompraAnitaWhereSupport::ocfpagocuota($clave),
+        ], 'ordencompra ocfpagocuota delete');
+
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'sistema' => $sistema,
+            'tabla' => config('ordencompra_anita.tablas.cuota'),
+            'whereArmado' => OrdencompraAnitaWhereSupport::occuota($clave),
+        ], 'ordencompra occuota delete');
     }
 
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
     private function eliminarDetalle(array $clave): void
     {
+        $this->eliminarComprobantesCuotas($clave);
+
         $api = new ApiAnita;
         $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
+
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'sistema' => $sistema,
+            'tabla' => config('ordencompra_anita.tablas.leyenda_linea'),
+            'whereArmado' => OrdencompraAnitaWhereSupport::ocvley($clave),
+        ], 'ordencompra ocvley delete');
 
         $api->apiCallEscritura([
             'acc' => 'delete',
@@ -276,6 +490,112 @@ class OrdencompraAnitaBridgeService
     }
 
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
+    private function grabarPendfecha(Ordencompra $oc, OrdencompraAnitaErpContext $ctx, array $clave): void
+    {
+        $proveedor6 = $ctx->codigoProveedor6((int) $oc->proveedor_id);
+        $this->eliminarPendfecha($clave, $proveedor6);
+
+        $fechas = OrdencompraAnitaEscrituraSupport::fechasPendfechaDesdeOc($oc, $ctx);
+        $insert = OrdencompraAnitaEscrituraSupport::pendfechaInsert(
+            $clave,
+            $proveedor6,
+            (int) $fechas['fecha_fac'],
+            (int) $fechas['fecha_pago']
+        );
+
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'insert',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.fecha_oc'),
+            'campos' => $insert['campos'],
+            'valores' => $insert['valores'],
+        ], 'ordencompra pendfecha insert');
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
+    private function eliminarPendfecha(array $clave, string $proveedor6): void
+    {
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.fecha_oc'),
+            'whereArmado' => OrdencompraAnitaWhereSupport::pendfecha($clave, $proveedor6),
+        ], 'ordencompra pendfecha delete');
+    }
+
+    private function grabarLegcompraAlta(Ordencompra $oc, OrdencompraAnitaErpContext $ctx): void
+    {
+        $insert = OrdencompraAnitaEscrituraSupport::legcompraInsert(
+            (int) $oc->numeroordencompra,
+            $ctx,
+            OrdencompraAnitaEscrituraSupport::sectorLegajoCompras(),
+            'Alta de OC'
+        );
+
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'insert',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.historia'),
+            'campos' => $insert['campos'],
+            'valores' => $insert['valores'],
+        ], 'ordencompra legcompra insert alta');
+    }
+
+    private function asegurarLegcompra(Ordencompra $oc, OrdencompraAnitaErpContext $ctx): void
+    {
+        if ($this->existeLegcompra((int) $oc->numeroordencompra)) {
+            return;
+        }
+
+        $this->grabarLegcompraAlta($oc, $ctx);
+    }
+
+    private function existeLegcompra(int $numeroOc): bool
+    {
+        $api = new ApiAnita;
+        $raw = $api->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.historia'),
+            'campos' => 'legc_id',
+            'whereArmado' => OrdencompraAnitaWhereSupport::legcompraPorNumeroOc($numeroOc),
+            'limit' => 'FIRST 1',
+        ], 'ordencompra legcompra existe');
+
+        return ApiAnita::primeraFilaLista((string) $raw) !== null;
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
+    private function existePendfecha(array $clave, string $proveedor6): bool
+    {
+        $api = new ApiAnita;
+        $raw = $api->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.fecha_oc'),
+            'campos' => 'penpf_nro',
+            'whereArmado' => OrdencompraAnitaWhereSupport::pendfecha($clave, $proveedor6),
+            'limit' => 'FIRST 1',
+        ], 'ordencompra pendfecha existe');
+
+        return ApiAnita::primeraFilaLista((string) $raw) !== null;
+    }
+
+    private function eliminarLegcompra(int $numeroOc): void
+    {
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.historia'),
+            'whereArmado' => OrdencompraAnitaWhereSupport::legcompraPorNumeroOc($numeroOc),
+        ], 'ordencompra legcompra delete');
+    }
+
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
     private function eliminarPendmaep(array $clave): void
     {
         $api = new ApiAnita;
@@ -288,14 +608,20 @@ class OrdencompraAnitaBridgeService
     }
 
     /**
-     * @param  array{cabecera_nueva: bool, detalle_grabado: bool, numero: int}  $estado
+     * @param  array{cabecera_nueva: bool, detalle_grabado: bool, comprobantes_grabados: bool, pendfecha_grabado?: bool, legcompra_grabado?: bool, numero: int}  $estado
      * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
      */
     private function revertir(array $clave, array $estado): void
     {
         try {
-            if ($estado['detalle_grabado']) {
+            if ($estado['detalle_grabado'] || ($estado['comprobantes_grabados'] ?? false)) {
                 $this->eliminarDetalle($clave);
+            }
+            if ($estado['pendfecha_grabado'] ?? false) {
+                $this->eliminarPendfecha($clave, $this->proveedor6DesdeClave($clave));
+            }
+            if ($estado['legcompra_grabado'] ?? false) {
+                $this->eliminarLegcompra((int) $estado['numero']);
             }
             if ($estado['cabecera_nueva']) {
                 $this->eliminarPendmaep($clave);
@@ -308,10 +634,28 @@ class OrdencompraAnitaBridgeService
         }
     }
 
+    /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
+    private function proveedor6DesdeClave(array $clave): string
+    {
+        $api = new ApiAnita;
+        $raw = $api->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.cabecera'),
+            'campos' => 'penmp_proveedor',
+            'whereArmado' => OrdencompraAnitaWhereSupport::pendmaep($clave),
+            'limit' => 'FIRST 1',
+        ], 'ordencompra pendmaep proveedor rollback');
+
+        $fila = ApiAnita::primeraFilaLista((string) $raw);
+
+        return str_pad(trim((string) ($fila->penmp_proveedor ?? '0')), 6, '0', STR_PAD_LEFT);
+    }
+
     /**
-     * @param  array{cabecera_nueva: bool, detalle_grabado: bool, numero: int}  $estado
+     * @param  array{cabecera_nueva: bool, detalle_grabado: bool, comprobantes_grabados: bool, numero: int}  $estado
      * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
-     * @param  array{cabecera: ?object, lineas: list<object>, movpresup: list<object>}  $backup
+     * @param  array{cabecera: ?object, lineas: list<object>, movpresup: list<object>, ocvley: list<object>, occuota: list<object>, ocfpagocuota: list<object>, pendfecha: ?object}  $backup
      */
     private function revertirConBackup(array $clave, array $estado, array $backup): void
     {
@@ -324,6 +668,13 @@ class OrdencompraAnitaBridgeService
             }
 
             $this->restaurarDetalleDesdeBackup($backup, $clave);
+
+            if ($estado['pendfecha_grabado'] ?? false) {
+                $this->eliminarPendfecha($clave, $this->proveedor6DesdeClave($clave));
+                if ($backup['pendfecha'] !== null) {
+                    $this->restaurarPendfechaDesdeBackup($backup['pendfecha']);
+                }
+            }
         } catch (\Throwable $e) {
             Log::error('OrdencompraAnitaBridge: rollback actualización incompleto', [
                 'numero_oc' => $estado['numero'] ?? null,
@@ -334,7 +685,7 @@ class OrdencompraAnitaBridgeService
 
     /**
      * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
-     * @return array{cabecera: ?object, lineas: list<object>, movpresup: list<object>}
+     * @return array{cabecera: ?object, lineas: list<object>, movpresup: list<object>, ocvley: list<object>, occuota: list<object>, ocfpagocuota: list<object>, pendfecha: ?object}
      */
     private function leerBackupAnita(array $clave): array
     {
@@ -384,12 +735,61 @@ class OrdencompraAnitaBridgeService
             'whereArmado' => OrdencompraAnitaWhereSupport::movpresup($clave),
         ]);
 
+        $occRaw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => $sistema,
+            'tabla' => config('ordencompra_anita.tablas.cuota'),
+            'campos' => implode(', ', [
+                'occ_tipo', 'occ_letra', 'occ_sucursal', 'occ_nro', 'occ_nro_cuota',
+                'occ_fecha_vto', 'occ_monto', 'occ_cond_pago', 'occ_medio_pago', 'occ_detalle',
+            ]),
+            'whereArmado' => OrdencompraAnitaWhereSupport::occuota($clave),
+        ]);
+
+        $ocfpRaw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => $sistema,
+            'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
+            'campos' => implode(', ', [
+                'ocfp_tipo', 'ocfp_letra', 'ocfp_sucursal', 'ocfp_nro', 'ocfp_nro_cuota',
+                'ocfp_cuota_fpago', 'ocfp_fecha_vto', 'ocfp_monto',
+            ]),
+            'whereArmado' => OrdencompraAnitaWhereSupport::ocfpagocuota($clave),
+        ]);
+
+        $ocvlRaw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => $sistema,
+            'tabla' => config('ordencompra_anita.tablas.leyenda_linea'),
+            'campos' => implode(', ', [
+                'ocvl_tipo', 'ocvl_letra', 'ocvl_sucursal', 'ocvl_nro', 'ocvl_nro_orden',
+                'ocvl_linea', 'ocvl_leyenda',
+            ]),
+            'whereArmado' => OrdencompraAnitaWhereSupport::ocvley($clave),
+        ]);
+
         $cab = ApiAnita::primeraFilaLista((string) $cabRaw);
+        $proveedor6 = str_pad(trim((string) ($cab->penmp_proveedor ?? '0')), 6, '0', STR_PAD_LEFT);
+        $penpfRaw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => $sistema,
+            'tabla' => config('ordencompra_anita.tablas.fecha_oc'),
+            'campos' => implode(', ', [
+                'penpf_proveedor', 'penpf_tipo', 'penpf_letra', 'penpf_sucursal', 'penpf_nro',
+                'penpf_fecha_fac', 'penpf_fecha_pago',
+            ]),
+            'whereArmado' => OrdencompraAnitaWhereSupport::pendfecha($clave, $proveedor6),
+            'limit' => 'FIRST 1',
+        ]);
 
         return [
             'cabecera' => $cab,
             'lineas' => ApiAnita::decodificarListaFilas((string) $lineasRaw),
             'movpresup' => ApiAnita::decodificarListaFilas((string) $movpRaw),
+            'ocvley' => ApiAnita::decodificarListaFilas((string) $ocvlRaw),
+            'occuota' => ApiAnita::decodificarListaFilas((string) $occRaw),
+            'ocfpagocuota' => ApiAnita::decodificarListaFilas((string) $ocfpRaw),
+            'pendfecha' => ApiAnita::primeraFilaLista((string) $penpfRaw),
         ];
     }
 
@@ -422,13 +822,57 @@ class OrdencompraAnitaBridgeService
     }
 
     /**
-     * @param  array{cabecera: ?object, lineas: list<object>, movpresup: list<object>}  $backup
+     * @param  array{cabecera: ?object, lineas: list<object>, movpresup: list<object>, ocvley: list<object>, occuota: list<object>, ocfpagocuota: list<object>, pendfecha: ?object}  $backup
      * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
      */
     private function restaurarDetalleDesdeBackup(array $backup, array $clave): void
     {
         $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
         $api = new ApiAnita;
+
+        foreach ($backup['occuota'] as $fila) {
+            $cols = [];
+            $vals = [];
+            foreach ((array) $fila as $col => $val) {
+                if (! is_string($col) || ! str_starts_with($col, 'occ_')) {
+                    continue;
+                }
+                $cols[] = $col;
+                $vals[] = $this->valorSqlBackup($col, $val);
+            }
+            if ($cols === []) {
+                continue;
+            }
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'sistema' => $sistema,
+                'tabla' => config('ordencompra_anita.tablas.cuota'),
+                'campos' => implode(', ', $cols),
+                'valores' => implode(', ', $vals),
+            ], 'ordencompra occuota restore backup');
+        }
+
+        foreach ($backup['ocfpagocuota'] as $fila) {
+            $cols = [];
+            $vals = [];
+            foreach ((array) $fila as $col => $val) {
+                if (! is_string($col) || ! str_starts_with($col, 'ocfp_')) {
+                    continue;
+                }
+                $cols[] = $col;
+                $vals[] = $this->valorSqlBackup($col, $val);
+            }
+            if ($cols === []) {
+                continue;
+            }
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'sistema' => $sistema,
+                'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
+                'campos' => implode(', ', $cols),
+                'valores' => implode(', ', $vals),
+            ], 'ordencompra ocfpagocuota restore backup');
+        }
 
         foreach ($backup['lineas'] as $fila) {
             $cols = [];
@@ -473,6 +917,53 @@ class OrdencompraAnitaBridgeService
                 'valores' => implode(', ', $vals),
             ], 'ordencompra movpresup restore backup');
         }
+
+        foreach ($backup['ocvley'] as $fila) {
+            $cols = [];
+            $vals = [];
+            foreach ((array) $fila as $col => $val) {
+                if (! is_string($col) || ! str_starts_with($col, 'ocvl_')) {
+                    continue;
+                }
+                $cols[] = $col;
+                $vals[] = $this->valorSqlBackup($col, $val);
+            }
+            if ($cols === []) {
+                continue;
+            }
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'sistema' => $sistema,
+                'tabla' => config('ordencompra_anita.tablas.leyenda_linea'),
+                'campos' => implode(', ', $cols),
+                'valores' => implode(', ', $vals),
+            ], 'ordencompra ocvley restore backup');
+        }
+    }
+
+    private function restaurarPendfechaDesdeBackup(object $fila): void
+    {
+        $cols = [];
+        $vals = [];
+        foreach ((array) $fila as $col => $val) {
+            if (! is_string($col) || ! str_starts_with($col, 'penpf_')) {
+                continue;
+            }
+            $cols[] = $col;
+            $vals[] = $this->valorSqlBackup($col, $val);
+        }
+        if ($cols === []) {
+            return;
+        }
+
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'insert',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.fecha_oc'),
+            'campos' => implode(', ', $cols),
+            'valores' => implode(', ', $vals),
+        ], 'ordencompra pendfecha restore backup');
     }
 
     private function valorSqlBackup(string $columna, mixed $valor): string
@@ -489,7 +980,7 @@ class OrdencompraAnitaBridgeService
             return "''";
         }
 
-        if (is_numeric($s) && ! preg_match('/^(penmp_letra|penvp_letra|movp_letra|penvp_incl_imp|penmp_es_anticipo|penmp_entrega|penmp_leyenda|penmp_hora_ing|penmp_estado_aprob|penmp_hora_aprob|penmp_razon_susp)/', $columna)) {
+        if (is_numeric($s) && ! preg_match('/^(penmp_letra|penvp_letra|movp_letra|penvp_incl_imp|penmp_es_anticipo|penmp_entrega|penmp_leyenda|penmp_hora_ing|penmp_estado_aprob|penmp_hora_aprob|penmp_razon_susp|penmp_estado|occ_medio_pago|occ_letra|ocfp_letra)/', $columna)) {
             if (preg_match('/(precio|dto|cant|importe|cotizacion)/', $columna)) {
                 return number_format((float) $s, 4, '.', '');
             }

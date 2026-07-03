@@ -28,6 +28,7 @@ use App\Support\Compras\AnitaSync\Ordencompra\CabeceraFieldMapper;
 use App\Support\Compras\AnitaSync\Ordencompra\ComprobanteCuotaFieldMapper;
 use App\Support\Compras\AnitaSync\Ordencompra\ComprobanteFieldMapper;
 use App\Support\Compras\AnitaSync\Ordencompra\HistoriaFieldMapper;
+use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEstadosSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaSyncContext;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraEstados;
@@ -200,6 +201,10 @@ class OrdencompraAnitaSyncService
 
         $clave = AnitaOcClave::desdePendmaep($cabecera);
         $lineas = $this->leerPendmovp($clave);
+        $payload['estadoordencompra'] = OrdencompraAnitaEstadosSupport::haciaEstadoErpImportacion(
+            $cabecera->penmp_estado ?? '0',
+            $lineas
+        );
         if ($lineas === []) {
             Log::warning('OrdencompraAnitaSync: importación OC sin líneas pendmovp (posible fallo del bridge Anita)', [
                 'numero_oc' => $numeroOc,

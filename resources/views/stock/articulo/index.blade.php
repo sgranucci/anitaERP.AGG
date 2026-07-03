@@ -100,6 +100,9 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
     						<tr>
         						<td>
             						{{ $articulo->codigoarticulo ?? '' }}
+                                    @if (!empty($articulo->fl_precio_promedio_transferencia))
+                                        <span class="badge badge-info ml-1" title="Artículo TITO (transferencia contable)">TITO</span>
+                                    @endif
         						</td>
         						<td>
             						{{ $articulo->codigobarra ?? '' }}

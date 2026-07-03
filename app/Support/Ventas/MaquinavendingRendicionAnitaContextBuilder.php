@@ -42,6 +42,9 @@ final class MaquinavendingRendicionAnitaContextBuilder
             $numeroCierre = (int) $rendicion->id;
         }
 
+        // rendg_ult_ticket / rendmva_nro_oper: nro_oper global (no Nº cierre por empresa).
+        $nroTicketMvart = $nroOper > 0 ? $nroOper : $numeroCierre;
+
         $presentacionCaja = $rendicion->rendicionCaja;
         $totalZ = 0.0;
         $cajaId = $cajaDefault > 0 ? $cajaDefault : 1;
@@ -58,7 +61,7 @@ final class MaquinavendingRendicionAnitaContextBuilder
 
         return [
             'nro_oper' => $nroOper,
-            'nro_ticket' => $numeroCierre,
+            'nro_ticket' => $nroTicketMvart,
             'tipo_oper' => substr((string) config('rendicion_maquinavending_anita.tipo_oper', 'F'), 0, 1),
             'empresa_id' => $empresaId,
             'caja_id' => $cajaId,
@@ -76,7 +79,7 @@ final class MaquinavendingRendicionAnitaContextBuilder
             'tot_nc' => 0.0,
             'tot_redondeo' => 0.0,
             'dif_caja' => round($totalCobrado - $totalVentas, 2),
-            'ultimo_ticket' => $numeroCierre,
+            'ultimo_ticket' => $nroTicketMvart,
             'nro_z' => $numeroCierre,
             'turno_letra' => ' ',
             'sucursal_cae' => self::codigoPuntoventaEntero($pv?->codigo),

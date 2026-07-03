@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas\GastronomiaAnitaImport;
 
-use App\Models\Ventas\Cliente;
 use App\Models\Ventas\DescuentoGastronomia;
+use App\Support\Ventas\GastronomiaDescuentoClienteInternoSupport;
 use stdClass;
 
 /**
@@ -21,7 +21,7 @@ final class GastronomiaAnitaImportDescuentoSupport
      *   codigo_cliente: ?string
      * }
      */
-    public static function resolverDesdeResvta(?stdClass $resvta): array
+    public static function resolverDesdeResvta(?stdClass $resvta, int $empresaId = 0): array
     {
         $vacío = [
             'descuento_gastronomia_id' => null,
@@ -40,7 +40,7 @@ final class GastronomiaAnitaImportDescuentoSupport
         if ($codigoDescuento === null) {
             return array_merge($vacío, [
                 'codigo_cliente' => $codigoCliente,
-                'cliente_interno_descuento_id' => self::resolverClienteInternoId($codigoCliente),
+                'cliente_interno_descuento_id' => self::resolverClienteInternoId($codigoCliente, $empresaId, null),
             ]);
         }
 
@@ -48,7 +48,7 @@ final class GastronomiaAnitaImportDescuentoSupport
 
         return [
             'descuento_gastronomia_id' => $descuento?->id !== null ? (int) $descuento->id : null,
-            'cliente_interno_descuento_id' => self::resolverClienteInternoId($codigoCliente),
+            'cliente_interno_descuento_id' => self::resolverClienteInternoId($codigoCliente, $empresaId, $codigoDescuento),
             'codigo_descuento' => $codigoDescuento,
             'codigo_cliente' => $codigoCliente,
         ];
@@ -95,18 +95,13 @@ final class GastronomiaAnitaImportDescuentoSupport
         return null;
     }
 
-    private static function resolverClienteInternoId(?string $codigoCliente): ?int
+    private static function resolverClienteInternoId(?string $codigoCliente, int $empresaId, ?string $codigoDescuento): ?int
     {
-        if ($codigoCliente === null || $codigoCliente === '') {
-            return null;
-        }
-
-        $cliente = Cliente::query()
-            ->where('codigo', $codigoCliente)
-            ->orWhere('codigo', ltrim($codigoCliente, '0') ?: $codigoCliente)
-            ->first();
-
-        return $cliente !== null ? (int) $cliente->id : null;
+        return GastronomiaDescuentoClienteInternoSupport::resolverDesdeCodigoAnita(
+            $codigoCliente,
+            $empresaId,
+            $codigoDescuento,
+        );
     }
 
     private static function normalizarCodigoAnita(mixed $raw): ?string

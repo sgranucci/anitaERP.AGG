@@ -865,7 +865,15 @@ class RendicionGastronomiaCajaService
             }
         }
 
-        if (! $yaTieneNc && ($ncCant > 0 || abs($ncMonto) >= 0.005)) {
+        $sumMovimientos = 0.0;
+        foreach ($data->movimientos as $m) {
+            $sumMovimientos += round((float) $m->monto, 2);
+        }
+        $sumMovimientos = round($sumMovimientos, 2);
+        $totalCobrado = round((float) $data->totalcobrado, 2);
+        $movimientosYaNetos = abs($sumMovimientos - $totalCobrado) <= self::TOLERANCIA;
+
+        if (! $yaTieneNc && ! $movimientosYaNetos && ($ncCant > 0 || abs($ncMonto) >= 0.005)) {
             $lineas[] = [
                 'nombre' => 'Notas de crédito ('.$ncCant.' comp.)',
                 'codigo' => '',
@@ -1212,7 +1220,7 @@ class RendicionGastronomiaCajaService
     }
 
     /**
-     * Medios de cobro del turno + fila virtual de notas de crédito (como cierre de turno).
+     * Medios de cobro netos del turno (NC descontadas en su cuenta de caja).
      *
      * @param  array<string, mixed>  $totales  Resultado de GastronomiaTurnoOperativoTotalesSupport::calcular()
      * @return list<array{cuentacaja_id:int, codigo:string, nombre:string, monto:float, esperado?:float, cotizacion:float, es_nota_credito?:bool, desde_contado_cierre?:bool}>
@@ -1238,19 +1246,6 @@ class RendicionGastronomiaCajaService
                 'esperado' => $esperado,
                 'cotizacion' => 1.0,
                 'desde_contado_cierre' => $desdeContadoCierre,
-            ];
-        }
-
-        $ncTotal = round((float) ($totales['total_notas_credito'] ?? 0), 2);
-        $ncCant = (int) ($totales['cantidad_notas_credito'] ?? 0);
-        if ($ncCant > 0 || abs($ncTotal) >= 0.005) {
-            $movimientos[] = [
-                'cuentacaja_id' => 0,
-                'codigo' => '',
-                'nombre' => 'Notas de crédito ('.$ncCant.' comp.)',
-                'monto' => $ncTotal,
-                'cotizacion' => 1.0,
-                'es_nota_credito' => true,
             ];
         }
 

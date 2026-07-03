@@ -16,7 +16,7 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
                             {--dry-run : Audita y simula replicación, sin escribir ni enviar mail}
                             {--sin-mail : No envía correo aunque haya alertas}';
 
-    protected $description = 'Audita ventas gastronomía y estacionamiento de la jornada anterior, replica faltantes en Anita y alerta por mail';
+    protected $description = 'Audita ventas gastronomía, estacionamiento y vending de la jornada anterior, replica faltantes en Anita y alerta por mail';
 
     public function handle(GastronomiaAnitaAuditoriaDiariaService $service): int
     {
@@ -35,7 +35,7 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Jornada %s | empresas: %s | gastro + estacionamiento%s%s',
+            'Jornada %s | empresas: %s | gastro + estacionamiento + vending%s%s',
             $fecha,
             implode(', ', $empresas),
             $dryRun ? ' | MODO SIMULACIÓN' : '',
@@ -63,8 +63,11 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
                 continue;
             }
 
-            foreach (['gastro' => 'Gastronomía', 'estacionamiento' => 'Estacionamiento'] as $clave => $etiqueta) {
+            foreach (['gastro' => 'Gastronomía', 'estacionamiento' => 'Estacionamiento', 'vending' => 'Vending'] as $clave => $etiqueta) {
                 $bloque = $informe[$clave] ?? [];
+                if (! empty($bloque['omitida'])) {
+                    continue;
+                }
                 $pre = $bloque['pre']['resumen_global'] ?? [];
                 $post = $bloque['post']['resumen_global'] ?? [];
                 $rep = $bloque['replicacion'] ?? [];
@@ -77,9 +80,10 @@ class GastronomiaAuditoriaAnitaDiaria extends Command
                 $this->table(
                     ['Concepto', 'Antes', 'Después'],
                     [
+                        ['Rendiciones ERP', (string) ($pre['ventas_erp'] ?? 0), (string) ($post['ventas_erp'] ?? 0)],
                         ['Sin cabecera Anita', (string) ($pre['conteo']['solo_erp'] ?? 0), (string) ($post['conteo']['solo_erp'] ?? 0)],
                         ['Diferencia importes', (string) ($pre['conteo']['diferencia'] ?? 0), (string) ($post['conteo']['diferencia'] ?? 0)],
-                        ['Replicadas', '—', (string) ($rep['replicadas'] ?? 0)],
+                        [$clave === 'vending' ? 'Reparadas' : 'Replicadas', '—', (string) ($rep['replicadas'] ?? 0)],
                         ['Delta total ERP−Anita', (string) ($pre['delta_totales']['total'] ?? 0), (string) ($post['delta_totales']['total'] ?? 0)],
                     ],
                 );

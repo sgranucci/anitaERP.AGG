@@ -27,7 +27,7 @@
 
 @if ($requiereAlerta)
     <p style="color:#dc3545; font-weight:bold;">
-        Hay desvíos fuera de tolerancia en cabecera venta Anita (Δ venta) y/o rendgastro (Δ rendg).
+        Hay desvíos fuera de tolerancia entre ERP y rendgastro (Δ rendg).
     </p>
 @else
     <p style="color:#28a745; font-weight:bold;">Consistente en todas las empresas auditadas.</p>
@@ -46,18 +46,13 @@
     </h3>
     <p style="margin:0 0 8px 0;">
         OK {{ (int) ($conteo['ok'] ?? 0) }}
-        · DIF venta {{ (int) ($conteo['dif_venta'] ?? 0) }}
         · DIF rendg {{ (int) ($conteo['dif_rendg'] ?? 0) }}
-        · DIF ambos {{ (int) ($conteo['dif_ambos'] ?? 0) }}
         · Sin rendg {{ (int) ($conteo['sin_rendg'] ?? 0) }}
     </p>
 
     @if ($totalDia !== null)
         <p style="margin:0 0 8px 0;">
             Total día: ERP $ {{ $fmt($totalDia['erp_z'] ?? null) }}
-            · venta Anita $ {{ $fmt($totalDia['ventas_anita'] ?? null) }}
-            · Δ venta $ {{ $fmtDiff($totalDia['diff_anita'] ?? null) }}
-            ({{ $totalDia['estado_anita'] ?? '—' }})
             · rendg $ {{ $fmt($totalDia['anita_z'] ?? null) }}
             · Δ rendg $ {{ $fmtDiff($totalDia['diff_z'] ?? null) }}
             ({{ $totalDia['estado_rendg'] ?? '—' }})
@@ -71,12 +66,9 @@
                 <th align="left">Tipo</th>
                 <th align="left">Clave</th>
                 <th>Estado</th>
-                <th>Venta</th>
                 <th>Rendg</th>
                 <th align="right">Fac</th>
                 <th align="right">ERP total</th>
-                <th align="right">Anita venta</th>
-                <th align="right">Δ venta</th>
                 <th align="right">Rendg Z</th>
                 <th align="right">Δ rendg</th>
             </tr>
@@ -85,12 +77,9 @@
                     <td>{{ $fila['tipo_fila'] ?? '—' }}</td>
                     <td>{{ $fila['puntoventa'] ?? '—' }}</td>
                     <td>{{ $fila['estado'] ?? '—' }}</td>
-                    <td>{{ $fila['estado_anita'] ?? '—' }}</td>
                     <td>{{ $fila['estado_rendg'] ?? '—' }}</td>
                     <td align="right">{{ (int) ($fila['cantidad_facturas_erp'] ?? 0) }}</td>
                     <td align="right">{{ $fmt($fila['erp_z'] ?? null) }}</td>
-                    <td align="right">{{ $fmt($fila['ventas_anita'] ?? null) }}</td>
-                    <td align="right">{{ $fmtDiff($fila['diff_anita'] ?? null) }}</td>
                     <td align="right">{{ $fmt($fila['anita_z'] ?? null) }}</td>
                     <td align="right">{{ $fmtDiff($fila['diff_z'] ?? null) }}</td>
                 </tr>
@@ -102,9 +91,8 @@
 @endforeach
 
 <p style="margin-top:24px; font-size:12px; color:#666;">
-    <strong>Δ venta</strong>: ERP vs cabecera <code>venta</code> Informix (ven_monto).<br>
     <strong>Δ rendg</strong>: ERP vs <code>rendg_total_z</code> en rendgastro por PC (salón) o por PV (estacionamiento).<br>
-    Filas <strong>ESTAC …</strong>: circuito estacionamiento (sin Δ venta cabecera Anita).<br>
+    Filas <strong>ESTAC …</strong>: circuito estacionamiento por PV.<br>
     Comando manual:
     <code>php artisan rendicion-gastronomia:auditoria-anita --fecha={{ $informe['fecha_jornada'] ?? '' }}</code>
 </p>

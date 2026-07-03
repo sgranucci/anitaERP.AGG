@@ -4,11 +4,11 @@ namespace App\Repositories\Compras;
 
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
-use Auth;
 
 class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_ProveedorRepositoryInterface
 {
@@ -129,12 +129,25 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
         return $this->find($id);
     }
 
-    public function leePrecargaComprobanteProveedor($busqueda, $flPaginando = null)
+    public function leePrecargaComprobanteProveedor($filtros, $flPaginando = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $usuario_id = Auth::user()->id;
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => PrecargaComprobanteProveedorListadoFiltros::MODO_TODOS,
+                'campo' => 'nombreproveedor',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = PrecargaComprobanteProveedorListadoFiltros::filtrosVacios();
+        }
+
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
 
         $select = ['precarga_comprobante_proveedor.id as id',
@@ -152,6 +165,7 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             'precarga_comprobante_proveedor.numeroordencompra as numeroordencompra',
             'precarga_comprobante_proveedor.total as total',
             'precarga_comprobante_proveedor.estado as estado',
+            'precarga_comprobante_proveedor.origen_entrada as origen_entrada',
             'precarga_comprobante_proveedor.rutaalmacenamiento as rutaalmacenamiento',
         ];
 
@@ -160,44 +174,13 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             ->leftjoin('proveedor', 'proveedor.id', '=', 'precarga_comprobante_proveedor.proveedor_id')
             ->join('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'precarga_comprobante_proveedor.tipotransaccion_compra_id');
 
-        $columns[] = ['columna' => 'precarga_comprobante_proveedor.id',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'empresa.nombre',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'proveedor.nombre',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'tipotransaccion_compra.nombre',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'precarga_comprobante_proveedor.letra',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'precarga_comprobante_proveedor.sucursal',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'precarga_comprobante_proveedor.numerocomprobante',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'precarga_comprobante_proveedor.numeroordencompra',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'precarga_comprobante_proveedor.fechafactura',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'precarga_comprobante_proveedor.fecharecepcionemail',
-            'clausula' => 'LIKE'];
-        $columns[] = ['columna' => 'precarga_comprobante_proveedor.estado',
-            'clausula' => 'LIKE'];
-
-        $count = count($columns);
-
         $precarga_comprobante_proveedors->whereIn('precarga_comprobante_proveedor.empresa_id', $empresas);
 
-        $precarga_comprobante_proveedors->where(function ($query) use ($count, $busqueda, $columns, $usuario_id) {
-            for ($i = 0; $i < $count; $i++) {
-                if ($columns[$i]['clausula'] == 'LIKE') {
-                    $query->orWhere($columns[$i]['columna'], 'LIKE', '%'.$busqueda.'%');
-                } else {
-                    $query->orWhere($columns[$i]['columna'], $columns[$i]['clausula'], $busqueda);
-                }
-            }
-        });
+        if (PrecargaComprobanteProveedorListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            PrecargaComprobanteProveedorListadoFiltros::aplicar($precarga_comprobante_proveedors, $filtros);
+        }
 
-        $precarga_comprobante_proveedors->orderBy('id', 'desc');
+        $precarga_comprobante_proveedors->orderBy('precarga_comprobante_proveedor.id', 'desc');
 
         if (isset($flPaginando)) {
             if ($flPaginando) {

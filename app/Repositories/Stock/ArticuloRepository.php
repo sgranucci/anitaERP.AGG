@@ -111,6 +111,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 'articulo.ubicacionparte as ubicacionparte',
                                 'articulo.depositoentrega_id as depositoentrega_id',
                                 'articulo.nofactura',
+                                'articulo.fl_precio_promedio_transferencia',
                                 'articulo.estado as estado')
                                 ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
                                 ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')

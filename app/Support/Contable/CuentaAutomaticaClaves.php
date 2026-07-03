@@ -31,6 +31,9 @@ final class CuentaAutomaticaClaves
     /** Cheques recibidos de terceros en ingreso/egreso y cobranzas. */
     public const CAJA_VALORES_A_DEPOSITAR = 'caja.valores_a_depositar';
 
+    /** Cuenta compra «Otros activos» en transferencias contables (TRCONT). */
+    public const STOCK_TRANSFERENCIA_OTROS_ACTIVOS = 'stock.transferencia_otros_activos';
+
     /**
      * @return array<string, array{
      *   grupo: string,
@@ -119,6 +122,13 @@ final class CuentaAutomaticaClaves
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => 'caja.valores_a_depositar_cuenta_id',
+            ],
+            self::STOCK_TRANSFERENCIA_OTROS_ACTIVOS => [
+                'grupo' => 'Stock — transferencias',
+                'descripcion' => 'Otros activos (cuenta compra en TRCONT, ej. 117010001)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
             ],
         ];
     }

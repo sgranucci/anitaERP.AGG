@@ -37,10 +37,10 @@
                                 id="fl_precio_promedio_transferencia" value="1"
                                 @if (old('fl_precio_promedio_transferencia', $producto->fl_precio_promedio_transferencia ?? false)) checked @endif>
                             <label class="form-check-label" for="fl_precio_promedio_transferencia">
-                                Precio promedio (3 &uacute;lt. compras) en asiento de transferencia
+                                Art&iacute;culo TITO (precio promedio 3 &uacute;lt. compras en TRCONT)
                             </label>
                         </div>
-                        <small class="text-muted">Si no est&aacute; marcado, el asiento contable usa el precio de &uacute;ltima compra (stkmae).</small>
+                        <small class="text-muted">Art&iacute;culos TITO usan promedio de recepciones en el asiento contable de transferencia TRCONT. Los dem&aacute;s contabilizables usan &uacute;ltima compra (stkmae).</small>
                     </div>
                 </div>
             </div>

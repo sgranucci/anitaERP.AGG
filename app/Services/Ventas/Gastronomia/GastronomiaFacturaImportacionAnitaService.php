@@ -203,7 +203,7 @@ final class GastronomiaFacturaImportacionAnitaService
             return 'omitido';
         }
 
-        $descuentoImport = GastronomiaAnitaImportDescuentoSupport::resolverDesdeResvta($resvta);
+        $descuentoImport = GastronomiaAnitaImportDescuentoSupport::resolverDesdeResvta($resvta, (int) $ctx['empresa_id']);
         $lineasEmision = GastronomiaAnitaImportDescuentoSupport::debeUsarLineaFicticiaVenMontoDesc($resvta, $cab)
             ? []
             : $lineasStk;
@@ -364,7 +364,7 @@ final class GastronomiaFacturaImportacionAnitaService
         $fechaJornada = $this->parseFechaJornadaAnita($cab, $fecha);
         $total = round(abs((float) ($venta->total ?? $cab->ven_monto ?? 0)), 2);
         $mozo = $this->resolverMozo($cab, (int) $ctx['empresa_id']);
-        $descuentoImport = GastronomiaAnitaImportDescuentoSupport::resolverDesdeResvta($resvta);
+        $descuentoImport = GastronomiaAnitaImportDescuentoSupport::resolverDesdeResvta($resvta, (int) $ctx['empresa_id']);
         $lineasEmision = GastronomiaAnitaImportDescuentoSupport::debeUsarLineaFicticiaVenMontoDesc($resvta, $cab)
             ? []
             : $this->leerStkmov($sucursal, $nro, $tipoAnita, $empresaCodigo, (int) $ctx['empresa_id']);
@@ -739,6 +739,31 @@ final class GastronomiaFacturaImportacionAnitaService
         $lista = json_decode($raw);
 
         return is_array($lista) ? $lista : [];
+    }
+
+    /**
+     * Reemplaza renglones ficticios de import Anita por líneas stkmov reales (desde cache local).
+     *
+     * @param  list<stdClass|object>  $lineasStk
+     * @return int Cantidad de renglones creados
+     */
+    public function regenerarEmisionesDesdeStkmov(
+        int $ventaId,
+        array $lineasStk,
+        int $monedaId,
+        Carbon $timestamp,
+    ): int {
+        if ($lineasStk === []) {
+            throw new InvalidArgumentException('Sin líneas stkmov para regenerar emisión.');
+        }
+
+        return (int) DB::transaction(function () use ($ventaId, $lineasStk, $monedaId, $timestamp): int {
+            Venta_Emision::query()->where('venta_id', $ventaId)->delete();
+            $cab = (object) ['ven_monto_desc' => 0, 'ven_cod_mon' => $monedaId];
+            $this->crearEmisiones($ventaId, $lineasStk, $cab, 0., $monedaId, $timestamp, null);
+
+            return (int) Venta_Emision::query()->where('venta_id', $ventaId)->count();
+        });
     }
 
     /**

@@ -7,11 +7,12 @@ use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaRendgastroSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
+use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Repara rendg_total_z y rendg_tot_nc en Anita por fecha de jornada, empresa y PV CAE.
+ * Repara rendg_total_z, rendg_tot_nc y rendvalor (neto por medio) en Anita por fecha de jornada, empresa y PV CAE.
  *
  * Portadora del Z/NC del día: secuencia de turno N → T → M (no depende del orden de carga en caja).
  * Si hay varias cabeceras del mismo turno, desempate por hora y nro_oper.
@@ -144,13 +145,14 @@ final class RendicionEstacionamientoRepararJornadaAnitaService
             ];
         }
 
-        $totales = $this->resolverTotalesDia($pv, $empresaId, $fechaJornada, $cabeceras);
+        $portadora = $this->rendgastroSupport->elegirPortadora($cabeceras);
+        $portadoraNro = (int) ($portadora->rendg_nro_oper ?? 0);
+        $totales = $this->resolverTotalesDia($pv, $empresaId, $fechaJornada, $cabeceras, $portadoraNro);
         $totalZ = $totales['z'];
         $totNc = $totales['nc'];
 
-        $portadora = $this->rendgastroSupport->elegirPortadora($cabeceras);
-        $portadoraNro = (int) ($portadora->rendg_nro_oper ?? 0);
         $detalle = [];
+        $rendvalorReparadas = 0;
 
         foreach ($this->rendgastroSupport->detalleCabecerasOrdenado($cabeceras, $portadoraNro) as $d) {
             $nroOper = (int) $d['nro_oper'];
@@ -160,6 +162,16 @@ final class RendicionEstacionamientoRepararJornadaAnitaService
 
             if (! $dryRun) {
                 $this->anitaSyncService->actualizarTotalZYNcPorNroOper($nroOper, $z, $nc);
+
+                $rendicion = RendicionEstacionamientoCaja::query()
+                    ->where('empresa_id', $empresaId)
+                    ->where('nro_oper_anita', $nroOper)
+                    ->first();
+                if ($rendicion !== null) {
+                    $this->anitaSyncService->actualizarInvitacionYRedondeoPorNroOper($nroOper, $rendicion);
+                    $this->anitaSyncService->reaplicarRendvalorEnAnita($rendicion);
+                    $rendvalorReparadas++;
+                }
             }
 
             $detalle[] = array_merge($d, [
@@ -187,13 +199,12 @@ final class RendicionEstacionamientoRepararJornadaAnitaService
             'portadora_turno' => $portadoraTurno,
             'portadora_hora' => (string) ($portadora->rendg_hora ?? ''),
             'cabeceras' => count($detalle),
+            'rendvalor_reparadas' => $dryRun ? 0 : $rendvalorReparadas,
             'detalle' => $detalle,
         ];
     }
 
     /**
-     * Z/NC del día = suma de rendg_total_x / rendg_tot_nc de todas las cabeceras del PV en rendgastro.
-     *
      * @param  list<object>  $cabeceras
      * @return array{z: float, nc: float, origen: string}
      */
@@ -202,19 +213,23 @@ final class RendicionEstacionamientoRepararJornadaAnitaService
         int $empresaId,
         string $fechaJornada,
         array $cabeceras,
+        int $portadoraNro,
     ): array {
-        unset($pv, $empresaId, $fechaJornada);
-
-        $zAnita = 0.0;
-        $ncAnita = 0.0;
+        $ncCabeceras = 0.0;
         foreach ($cabeceras as $fila) {
-            $zAnita += round((float) ($fila->rendg_total_x ?? 0), 2);
-            $ncAnita += round((float) ($fila->rendg_tot_nc ?? 0), 2);
+            $ncCabeceras += round((float) ($fila->rendg_tot_nc ?? 0), 2);
         }
+        $ncErp = EstacionamientoTurnoOperativoTotalesSupport::totalNotasCreditoPorPuntoventa(
+            (int) $pv->id,
+            $empresaId,
+            $fechaJornada,
+        );
+        $nc = round(max($ncCabeceras, $ncErp), 2);
+        $totales = $this->rendgastroSupport->totalesZPortadoraParaCierre($cabeceras, $nc);
 
         return [
-            'z' => round($zAnita, 2),
-            'nc' => round($ncAnita, 2),
+            'z' => $totales['z'],
+            'nc' => $totales['nc'],
             'origen' => 'anita_x',
         ];
     }

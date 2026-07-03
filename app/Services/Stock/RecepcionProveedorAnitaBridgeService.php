@@ -14,6 +14,7 @@ use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 use App\Support\Stock\RecepcionProveedorAnitaCorrespondenciaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use App\Support\Stock\AnitaStkmovClaveErpSupport;
+use App\Support\Stock\RecepcionProveedorStkmovAnitaSupport;
 use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
 use App\Support\Stock\StockAnitaBridgeSupport;
 use App\Support\Stock\DepmaeAnitaCodigoSupport;
@@ -93,7 +94,9 @@ class RecepcionProveedorAnitaBridgeService
             $this->grabarAplicped($recepcion, $codigoProveedor, $clave, $ordenesAnita);
             StkmaePrecioCompraAnitaBridgeSupport::actualizarDesdeRecepcion($recepcion);
             $recepcion->forceFill(['stkmae_precio_anita_sync_at' => now()])->save();
-            $this->grabarStkmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita, $usuario);
+            if (RecepcionProveedorStkmovAnitaSupport::habilitado()) {
+                $this->grabarStkmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita, $usuario);
+            }
             $this->actualizarPendmovp($recepcion, 1);
             $estado['pendmov_aplicado'] = true;
         } catch (\Throwable $e) {
@@ -358,9 +361,17 @@ class RecepcionProveedorAnitaBridgeService
         }
 
         $recepmov = $this->contarRecepmovPorClave($clave);
+        if ($recepmov < $lineasErp) {
+            return true;
+        }
+
+        if (! RecepcionProveedorStkmovAnitaSupport::habilitado()) {
+            return false;
+        }
+
         $stkmov = $this->contarStkmovPorClave($clave, (int) $recepcion->empresa_id);
 
-        return $recepmov < $lineasErp || $stkmov < $lineasErp;
+        return $stkmov < $lineasErp;
     }
 
     /**
@@ -418,7 +429,9 @@ class RecepcionProveedorAnitaBridgeService
             $this->grabarAplicped($recepcion, $codigoProveedor, $clave, $ordenesAnita);
             StkmaePrecioCompraAnitaBridgeSupport::actualizarDesdeRecepcion($recepcion);
             $recepcion->forceFill(['stkmae_precio_anita_sync_at' => now()])->save();
-            $this->grabarStkmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita, $usuario);
+            if (RecepcionProveedorStkmovAnitaSupport::habilitado()) {
+                $this->grabarStkmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita, $usuario);
+            }
             $this->actualizarPendmovp($recepcion, 1);
             $pendmovpReaplicado = true;
         } catch (\Throwable $e) {
@@ -1036,7 +1049,7 @@ class RecepcionProveedorAnitaBridgeService
         ]));
 
         if (! is_array($rows) || $rows === []) {
-            return 'A';
+            return \App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEstadosSupport::PENTREGAR;
         }
 
         $algunaActividad = false;
@@ -1057,11 +1070,10 @@ class RecepcionProveedorAnitaBridgeService
             }
         }
 
-        if ($todasCompletas) {
-            return 'C';
-        }
-
-        return $algunaActividad ? 'P' : 'A';
+        return \App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEstadosSupport::desdeRecepcionPendmovp(
+            $algunaActividad,
+            $todasCompletas
+        );
     }
 
     private function codigoMonedaAnita(int $monedaId): string

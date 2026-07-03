@@ -106,7 +106,7 @@ class MovimientoStockController extends Controller
 
     public function consultarTransferencia(int $id)
     {
-        can('listar-movimientos-de-stock');
+        MovimientoStockVisibilidadSupport::abortSiNoPuedeConsultarTransferencia();
 
         MovimientoStockVisibilidadSupport::abortSiNoAccesibleTransferencia($id);
 
@@ -441,7 +441,7 @@ class MovimientoStockController extends Controller
 
     public function imprimirTransferenciaCom(Request $request, int $id)
     {
-        can('listar-movimientos-de-stock');
+        MovimientoStockVisibilidadSupport::abortSiNoPuedeConsultarTransferencia();
 
         MovimientoStockVisibilidadSupport::abortSiNoAccesibleTransferencia($id);
 

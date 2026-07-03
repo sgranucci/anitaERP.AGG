@@ -166,7 +166,7 @@ class RecepcionProveedorAsientoDescripcionCtamovService
             $necesitaErp = trim((string) ($asiento->observacion ?? '')) !== $descripcionErp;
             if (! $necesitaErp) {
                 foreach ($asiento->asiento_movimientos as $mov) {
-                    if ($this->movimientoNecesitaDescripcion((string) ($mov->observacion ?? ''))) {
+                    if (trim((string) ($mov->observacion ?? '')) !== $descripcionCtamov) {
                         $necesitaErp = true;
                         break;
                     }
@@ -212,25 +212,8 @@ class RecepcionProveedorAsientoDescripcionCtamovService
             ->whereKey($asientoId)
             ->update(['observacion' => $descripcionErp]);
 
-        foreach (Asiento_Movimiento::query()->where('asiento_id', $asientoId)->get(['id', 'observacion']) as $mov) {
-            if (! $this->movimientoNecesitaDescripcion((string) ($mov->observacion ?? ''))) {
-                continue;
-            }
-
-            Asiento_Movimiento::query()
-                ->whereKey($mov->id)
-                ->update(['observacion' => $descripcionCtamov]);
-        }
-    }
-
-    private function movimientoNecesitaDescripcion(string $observacion): bool
-    {
-        $observacion = trim($observacion);
-        if ($observacion === '') {
-            return true;
-        }
-
-        return preg_match('/^Recepci[oó]n proveedor #?\d+(\s|$)/u', $observacion) === 1
-            || preg_match('/^Rec\. #?\d+/u', $observacion) === 1;
+        Asiento_Movimiento::query()
+            ->where('asiento_id', $asientoId)
+            ->update(['observacion' => $descripcionCtamov]);
     }
 }

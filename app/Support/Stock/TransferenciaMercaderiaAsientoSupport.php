@@ -76,9 +76,16 @@ final class TransferenciaMercaderiaAsientoSupport
         $advertencias = [];
         $totalMovimiento = 0.0;
 
+        $depositoOrigenId = (int) ($transferencia->deposito_origen_id ?? 0);
+
         foreach ($transferencia->articulos as $linea) {
             $articulo = $linea->articuloOrigen;
             if (! $articulo instanceof Articulo) {
+                continue;
+            }
+
+            if ($depositoOrigenId > 0
+                && ! TransferenciaMercaderiaLineaContableSupport::lineaGeneraAsiento($articulo, $empresaId, $depositoOrigenId)) {
                 continue;
             }
 
@@ -144,7 +151,7 @@ final class TransferenciaMercaderiaAsientoSupport
         }
 
         if ($debeAgrupado === [] && $haberAgrupado === []) {
-            $msg = 'No hay líneas contables para la transferencia.';
+            $msg = 'La transferencia TRCONT no puede contabilizarse con los artículos indicados. Use otro tipo de transferencia sin contabilidad.';
             if ($advertencias !== []) {
                 $msg .= ' '.implode(' ', $advertencias);
             }

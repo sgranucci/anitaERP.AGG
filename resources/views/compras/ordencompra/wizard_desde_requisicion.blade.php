@@ -160,7 +160,7 @@ Generar órdenes de compra desde requisición
 
             <div class="card-body">
                 <div class="alert alert-info">
-                    <strong>Cómo funciona:</strong> primero elija el <em>origen de precio</em> de cada ítem (lista del proveedor, presupuesto o precio cargado en la requisición). En base a esa elección, el sistema agrupa los ítems en una o más órdenes de compra. Cada OC detectada aparece en la sección inferior, donde podrá ajustar la cabecera, agregar comprobantes a venir y archivos asociados. Antes de generar se le pedirá una confirmación final.
+                    <strong>Cómo funciona:</strong> elija el <em>origen de precio</em> de cada ítem (lista del proveedor, presupuesto o precio cargado en la requisición). Si la línea ya tiene precio en la requisición, se usará automáticamente. Las listas de precio y presupuestos traen proveedor; si solo usa el precio de la requisición, al generar se le pedirá el proveedor en un paso final. Cada OC detectada aparece abajo para ajustar cabecera, comprobantes y archivos.
                 </div>
 
                 <div class="card wizard-oc-articulos-card mb-3" id="wizard-oc-articulos">
@@ -470,6 +470,38 @@ Generar órdenes de compra desde requisición
                     </div>
                     <div class="modal-footer py-2">
                         <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Modal: proveedor faltante (precio desde requisición sin proveedor en cabecera) --}}
+        <div class="modal fade" id="modalWizardProveedorFaltante" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning">
+                        <h5 class="modal-title">Indique el proveedor</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-2">Una o más órdenes usan el <strong>precio cargado en la requisición</strong> y no tienen proveedor asignado. Elija el proveedor para cada OC antes de continuar.</p>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th style="width: 8%;" class="text-center">OC</th>
+                                        <th style="width: 10%;" class="text-right">Ítems</th>
+                                        <th>Proveedor</th>
+                                        <th style="width: 12%;">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="wz-proveedor-faltante-lista"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" id="wz-proveedor-faltante-continuar" disabled><i class="fa fa-arrow-right"></i> Continuar</button>
                     </div>
                 </div>
             </div>

@@ -140,9 +140,28 @@ final class GastronomiaConciliacionRendgAsientosDiaSupport
     public function auditarAsientosFacturacionJornada(int $empresaId, string $fechaJornada): array
     {
         $prefijo = 'Cierre Waitry jornada '.$fechaJornada.' — ';
-        $rows = DB::table('asiento')
-            ->where('empresa_id', $empresaId)
-            ->where('observacion', 'like', $prefijo.'%')
+        $mapaGrabados = CierreJornadaProcesoAsientosGrabacionSupport::mapaAsientosGrabadosPorEmpresaJornada(
+            $empresaId,
+            $fechaJornada,
+        );
+        $idsSnapshot = array_keys($mapaGrabados);
+
+        $query = DB::table('asiento')
+            ->where('empresa_id', $empresaId);
+
+        if ($idsSnapshot !== []) {
+            $query->whereIn('id', $idsSnapshot);
+        } else {
+            $query->where(function ($q) use ($prefijo) {
+                $q->where('observacion', 'like', $prefijo.'%')
+                    ->orWhere(
+                        'observacion',
+                        CierreJornadaProcesoAsientosGrabacionSupport::DESCRIPCION_ASIENTO,
+                    );
+            });
+        }
+
+        $rows = $query
             ->orderBy('id')
             ->get(['id', 'numeroasiento', 'observacion']);
 
@@ -157,7 +176,13 @@ final class GastronomiaConciliacionRendgAsientosDiaSupport
         $otros = [];
 
         foreach ($rows as $row) {
-            $tipo = self::clasificarObservacionCierreWaitry((string) ($row->observacion ?? ''));
+            $asientoId = (int) ($row->id ?? 0);
+            $meta = $mapaGrabados[$asientoId] ?? null;
+            $tipo = self::clasificarAsientoCierreWaitry(
+                is_array($meta) ? ($meta['codigo'] ?? null) : null,
+                is_array($meta) ? ($meta['titulo'] ?? null) : null,
+                (string) ($row->observacion ?? ''),
+            );
             $total = self::totalDebeAsiento((int) ($row->id ?? 0));
             $item = [
                 'asiento_id' => (int) ($row->id ?? 0),
@@ -199,7 +224,35 @@ final class GastronomiaConciliacionRendgAsientosDiaSupport
 
     public static function clasificarObservacionCierreWaitry(string $observacion): ?string
     {
+        return self::clasificarAsientoCierreWaitry(null, null, $observacion);
+    }
+
+    public static function clasificarAsientoCierreWaitry(
+        ?string $codigo,
+        ?string $titulo,
+        string $observacion,
+    ): ?string {
+        $titulo = trim((string) $titulo);
+        if ($titulo !== '' && preg_match('/agregados CAEA migrados/i', $titulo) === 1) {
+            return self::TIPO_AGREGADOS_CAEA;
+        }
+
         $obs = trim($observacion);
+        if ($obs !== '' && preg_match('/agregados CAEA migrados/i', $obs) === 1) {
+            return self::TIPO_AGREGADOS_CAEA;
+        }
+
+        $codigo = trim((string) $codigo);
+        if ($codigo !== '') {
+            return match ($codigo) {
+                'sin_facturar_qr' => self::TIPO_POST_CIERRE,
+                'ventas_medio_real' => self::TIPO_FACTURA_DIA,
+                'totem_ventas_iva' => self::TIPO_TOTEM_VENTAS,
+                'totem_puente' => self::TIPO_TOTEM_PUENTE,
+                default => null,
+            };
+        }
+
         if ($obs === '' || ! str_contains($obs, 'Cierre Waitry jornada')) {
             return null;
         }

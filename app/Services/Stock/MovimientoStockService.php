@@ -37,7 +37,6 @@ class MovimientoStockService
         PedidoRepositoryInterface $pedidoRepository,
         Pedido_ArticuloRepositoryInterface $pedido_articuloRepository,
         private MovimientoStockAsientoService $asientoService,
-        private MovimientoStockStkmovAnitaService $stkmovAnitaService,
         private Articulo_Saldo_DepositoRepositoryInterface $saldoDepositoRepository,
     ) {
         $this->movimientostockRepository = $movimientostockrepository;
@@ -336,11 +335,6 @@ class MovimientoStockService
 				$ctamovNuevo = $resultadoAsiento['ctamov_nuevo'] ?? null;
 				$ctamovSincronizadoEnEdicion = (bool) ($resultadoAsiento['ctamov_sincronizado_edicion'] ?? false);
 				$movimientoIdCtamovResync = $ctamovSincronizadoEnEdicion ? $movimientostock_id : null;
-			}
-
-			if ($funcion === 'create' && $movimientostock_id > 0 && empty($data['omitir_stkmov_anita'])) {
-				$tipoStkmov = isset($data['anita_stkmov_tipo']) ? (string) $data['anita_stkmov_tipo'] : null;
-				$this->stkmovAnitaService->sincronizar((int) $movimientostock_id, $tipoStkmov);
 			}
 
 			DB::commit();

@@ -420,6 +420,10 @@ class RequisicionService
             return ['mensaje' => 'error', 'errores' => 'No puede modificar esta requisición en compras: su oficina de compra no coincide con la de la requisición.'];
         }
 
+        if ($this->esEstadoRequisicionAprobada($existente->estado ?? '')) {
+            return $this->actualizaProveedorSugeridoRequisicionAprobada($request, (int) $id, $existente);
+        }
+
         $data = $request->all();
         $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
 
@@ -493,6 +497,62 @@ class RequisicionService
         }
 
         return ['mensaje' => 'ok', 'modo_provisorio' => $esProvisorio];
+    }
+
+    /**
+     * Requisición APROBADA: solo actualiza proveedor sugerido (cabecera), sin tocar líneas ni estado.
+     *
+     * @return array{mensaje: string, errores?: string, solo_proveedor_aprobada?: bool}
+     */
+    private function actualizaProveedorSugeridoRequisicionAprobada($request, int $id, Requisicion $existente): array
+    {
+        if (! $this->esEstadoRequisicionAprobada($existente->estado ?? '')) {
+            return ['mensaje' => 'error', 'errores' => 'La requisición no está en estado APROBADA.'];
+        }
+
+        $proveedorId = $request->input('proveedor_id');
+        $proveedorId = ($proveedorId !== null && $proveedorId !== '') ? (int) $proveedorId : null;
+
+        $syncAnitaActivo = config('requisicion.anita.sync_activo', true);
+        $habiaEnAnita = $syncAnitaActivo
+            && RequisicionAnitaColisionSupport::existeNroEnReqmae((int) $existente->numerorequisicion);
+        $numerorequisicion = (int) $existente->numerorequisicion;
+
+        DB::beginTransaction();
+        $anitaIntentada = false;
+
+        try {
+            $this->requisicionRepository->update(['proveedor_id' => $proveedorId], $id);
+
+            if ($syncAnitaActivo) {
+                $anitaIntentada = true;
+                $requisicion = $this->requisicionRepository->find($id);
+                if (! $requisicion) {
+                    throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
+                }
+                $this->requisicionAnitaSyncService->escribirActualizacion($requisicion);
+                $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            if ($anitaIntentada) {
+                $this->compensarRollbackAnitaActualizacion($id, $numerorequisicion, $habiaEnAnita);
+            }
+
+            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
+        }
+
+        return ['mensaje' => 'ok', 'solo_proveedor_aprobada' => true];
+    }
+
+    private function esEstadoRequisicionAprobada(string $estado): bool
+    {
+        $nombreAprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+
+        return $estado === $nombreAprobada;
     }
 
     public function actualizaSoloRequisicion($estado, $id)

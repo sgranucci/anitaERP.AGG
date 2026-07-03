@@ -31,7 +31,8 @@ Devolución — {{ $recepcion->numerorecepcion }}
                 <div class="card-body">
                     <div class="alert alert-info">
                         Devolución contra recepción <strong>{{ $recepcion->numerorecepcion }}</strong>.
-                        Indique cantidades a devolver (no pueden superar las recepcionadas).
+                        Las cantidades vienen precargadas con lo recepcionado (devolución total habitual).
+                        Ajuste solo las líneas que correspondan; no pueden superar lo recepcionado.
                     </div>
                     @include('stock.recepcion_proveedor.form', ['modoEdicion' => true, 'recepcion' => $recepcion, 'modoDevolucion' => true])
                 </div>

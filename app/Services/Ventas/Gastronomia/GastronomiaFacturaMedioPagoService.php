@@ -13,6 +13,7 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Support\Ventas\GastronomiaCuentacajaIconoSupport;
 use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
+use App\Support\Ventas\GastronomiaFacturaMedioPagoUiSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -50,6 +51,11 @@ final class GastronomiaFacturaMedioPagoService
         $venta = $this->resolverVentaGastronomia($ventaId);
         if ($venta === null) {
             return ['ok' => false, 'error' => 'La venta no corresponde a una emisión gastronomía.'];
+        }
+
+        $bloqueoTurno = $this->evaluarBloqueoModificacionCobranza($ventaId);
+        if ($bloqueoTurno !== null) {
+            return ['ok' => false, 'error' => $bloqueoTurno];
         }
 
         $empresaId = (int) ($venta->puntoventas?->empresa_id ?? 0);
@@ -149,6 +155,11 @@ final class GastronomiaFacturaMedioPagoService
         $venta = $this->resolverVentaGastronomia($ventaId);
         if ($venta === null) {
             return ['ok' => false, 'error' => 'La venta no corresponde a una emisión gastronomía.'];
+        }
+
+        $bloqueoTurno = $this->evaluarBloqueoModificacionCobranza($ventaId);
+        if ($bloqueoTurno !== null) {
+            return ['ok' => false, 'error' => $bloqueoTurno];
         }
 
         $totalFacturaOriginal = round((float) $venta->total, 2);
@@ -252,6 +263,26 @@ final class GastronomiaFacturaMedioPagoService
         return Venta::query()
             ->with(['puntoventas'])
             ->find($ventaId);
+    }
+
+    private function evaluarBloqueoModificacionCobranza(int $ventaId): ?string
+    {
+        $emision = VentaGastronomiaEmision::query()
+            ->with(['venta', 'configuracionPuntoventa'])
+            ->where('venta_id', $ventaId)
+            ->first();
+
+        if ($emision === null) {
+            return 'La venta no corresponde a una emisión gastronomía.';
+        }
+
+        if ($emision->venta_factura_origen_id !== null) {
+            return 'No puede modificar el medio de pago de una nota de crédito.';
+        }
+
+        $evaluacion = GastronomiaFacturaMedioPagoUiSupport::evaluarTurnoEmision($emision);
+
+        return $evaluacion['permite'] ? null : ($evaluacion['motivo'] ?? 'No se puede modificar el medio de pago.');
     }
 
     /**

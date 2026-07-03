@@ -796,6 +796,16 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\ViandaTipoMenuRepositoryInterface',
+            'App\Repositories\Ventas\ViandaTipoMenuRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\ViandaUsuarioRepositoryInterface',
+            'App\Repositories\Ventas\ViandaUsuarioRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\MaquinavendingRendicionRepositoryInterface',
             'App\Repositories\Ventas\MaquinavendingRendicionRepository',
         );

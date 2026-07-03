@@ -158,6 +158,9 @@
             #tabla-formula-hijos .js-ver-subformula-linea.sin-subformula {
                 opacity: 0.45;
             }
+            #tabla-formula-hijos .js-modal-articulos-compra-insumo.sin-articulo {
+                opacity: 0.45;
+            }
         </style>
         <div class="table-responsive">
             <table class="table table-bordered" id="tabla-formula-hijos" data-gastronomia-opcional="{{ $formulaGastronomiaOpcional ? '1' : '0' }}">
@@ -222,6 +225,9 @@
                                     @include('stock.formula_articulo.partials.link_sku_articulo_linea', ['articuloId' => $oaid, 'sku' => $osku, 'lineaIndex' => $i])
                                     <input type="text" readonly name="articulo_descs[{{ $i }}]" class="form-control form-control-sm descripcionarticulo text-truncate" value="{{ $odesc }}" placeholder="Descripci&oacute;n" title="{{ $odesc }}" />
                                     <button type="button" title="Consulta art&iacute;culos" class="btn btn-sm btn-outline-secondary consultaarticulo tooltipsC flex-shrink-0"><i class="fa fa-search text-primary"></i></button>
+                                    @if (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false))
+                                    <button type="button" title="Art&iacute;culos de compra con SKU alt./insumo apuntando a este insumo" class="btn btn-sm btn-outline-info js-modal-articulos-compra-insumo tooltipsC flex-shrink-0{{ $oaid ? '' : ' sin-articulo' }}"><i class="fa fa-shopping-cart"></i></button>
+                                    @endif
                                 </div>
                             </td>
                             <td class="p-1 align-middle"><input type="number" step="0.01" name="cantidades[{{ $i }}]" class="form-control form-control-sm" value="{{ old("cantidades.$i", $h->cantidad ?? '') }}" /></td>

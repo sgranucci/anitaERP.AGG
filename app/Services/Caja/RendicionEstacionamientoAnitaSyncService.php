@@ -7,6 +7,7 @@ use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Caja\RendicionEstacionamientoSecuenciaEmpresa;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaContextBuilder;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaIdempotenciaSupport;
+use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaInvitacionSupport;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaRendgastroSupport;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaTotalZPorPcService;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoCabeceraAnitaMapper;
@@ -193,7 +194,18 @@ class RendicionEstacionamientoAnitaSyncService
 
     private function insertarEnAnitaConTotalZ(RendicionEstacionamientoCaja $rendicion, ?float $totalZ): void
     {
+        $this->insertarEnAnitaConTotalZYNc($rendicion, $totalZ, null);
+    }
+
+    private function insertarEnAnitaConTotalZYNc(
+        RendicionEstacionamientoCaja $rendicion,
+        ?float $totalZ,
+        ?float $totNc,
+    ): void {
         $ctx = RendicionEstacionamientoAnitaContextBuilder::desdeRendicion($rendicion, $totalZ);
+        if ($totNc !== null) {
+            $ctx['tot_nc'] = round($totNc, 2);
+        }
         $this->insertarEnAnitaDesdeContexto($ctx, $rendicion);
     }
 
@@ -333,6 +345,20 @@ class RendicionEstacionamientoAnitaSyncService
      */
     public function actualizarSoloTotalZEnAnita(RendicionEstacionamientoCaja $rendicion, float $totalZ): void
     {
+        $this->actualizarTotalZYNcEnAnita($rendicion, $totalZ, null);
+    }
+
+    /**
+     * Actualiza rendg_total_z y rendg_tot_nc en rendgastro (sin tocar rendvalor).
+     * Usado al recalcular Z/NC por PC desde Caja cuando la jornada ya está cerrada.
+     *
+     * @param  float|null  $totNc  null = no modificar rendg_tot_nc (solo Z)
+     */
+    public function actualizarTotalZYNcEnAnita(
+        RendicionEstacionamientoCaja $rendicion,
+        float $totalZ,
+        ?float $totNc = null,
+    ): void {
         if ($rendicion->esRendicionJornada() || ! $this->sincronizacionHabilitada()) {
             return;
         }
@@ -344,7 +370,7 @@ class RendicionEstacionamientoAnitaSyncService
         $rendicion->load(['movimientos.cuentacaja', 'puntoventaCae', 'puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada']);
 
         if (! $this->existsCabeceraEnAnita($rendicion)) {
-            $this->insertarEnAnitaConTotalZ($rendicion, $totalZ);
+            $this->insertarEnAnitaConTotalZYNc($rendicion, $totalZ, $totNc);
 
             return;
         }
@@ -355,14 +381,20 @@ class RendicionEstacionamientoAnitaSyncService
             return;
         }
 
-        $api = new ApiAnita;
-        $api->apiCallEscritura([
-            'acc' => 'update',
-            'tabla' => $this->tablaCabecera(),
-            'sistema' => $this->sistema(),
-            'valores' => 'rendg_total_z = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($totalZ),
-            'whereArmado' => RendicionEstacionamientoCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
-        ], 'rendgastro update total_z', self::LOG_EVENTO);
+        if ($totNc === null) {
+            $api = new ApiAnita;
+            $api->apiCallEscritura([
+                'acc' => 'update',
+                'tabla' => $this->tablaCabecera(),
+                'sistema' => $this->sistema(),
+                'valores' => 'rendg_total_z = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($totalZ),
+                'whereArmado' => RendicionEstacionamientoCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
+            ], 'rendgastro update total_z', self::LOG_EVENTO);
+
+            return;
+        }
+
+        $this->actualizarTotalZYNcPorNroOper($nroOper, $totalZ, $totNc);
     }
 
     /**
@@ -395,6 +427,37 @@ class RendicionEstacionamientoAnitaSyncService
         ], 'rendgastro update total_z+nc', self::LOG_EVENTO);
     }
 
+    /**
+     * Invitaciones en rendg_tot_redondeo negativo (centavos no cobrados); rendg_invitacion = 0 evita duplicar en haber.
+     */
+    public function actualizarInvitacionYRedondeoPorNroOper(int $nroOper, RendicionEstacionamientoCaja $rendicion): void
+    {
+        if (! $this->sincronizacionHabilitada()) {
+            throw new \RuntimeException('RENDICION_ESTACIONAMIENTO_SINCRONIZAR_ANITA está deshabilitado.');
+        }
+
+        if ($nroOper <= 0) {
+            throw new \InvalidArgumentException('nro_oper inválido para actualizar Anita.');
+        }
+
+        if ($this->omitirSiSucursalVendingNroOper($nroOper)) {
+            return;
+        }
+
+        $campos = RendicionEstacionamientoAnitaInvitacionSupport::camposDesdeRendicion($rendicion);
+        $api = new ApiAnita;
+        $valores = 'rendg_invitacion = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($campos['invitacion'])
+            .', rendg_tot_redondeo = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($campos['tot_redondeo']);
+
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'tabla' => $this->tablaCabecera(),
+            'sistema' => $this->sistema(),
+            'valores' => $valores,
+            'whereArmado' => RendicionEstacionamientoCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
+        ], 'rendgastro update invitacion+redondeo', self::LOG_EVENTO);
+    }
+
     /** @deprecated Use actualizarSoloTotalZEnAnita() */
     public function actualizarCabeceraTotalZEnAnita(RendicionEstacionamientoCaja $rendicion, float $totalZ): void
     {
@@ -404,6 +467,34 @@ class RendicionEstacionamientoAnitaSyncService
     public function actualizarEnAnita(RendicionEstacionamientoCaja $rendicion): void
     {
         $this->actualizarEnAnitaConTotalZ($rendicion, null);
+    }
+
+    /**
+     * Reescribe rendvalor en Anita con neto por medio (NC descontada en su cuenta).
+     * No modifica rendgastro (Z/NC de cabecera).
+     */
+    public function reaplicarRendvalorEnAnita(RendicionEstacionamientoCaja $rendicion): void
+    {
+        if ($rendicion->esRendicionJornada() || ! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
+        $rendicion->load(['movimientos.cuentacaja', 'puntoventaCae', 'puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada']);
+
+        $ctx = RendicionEstacionamientoAnitaContextBuilder::desdeRendicion($rendicion, null);
+        $nroOper = (int) ($ctx['nro_oper'] ?? 0);
+        $tipoOper = (string) ($ctx['tipo_oper'] ?? '');
+        if ($nroOper <= 0 || $tipoOper === '') {
+            return;
+        }
+
+        if (! $this->existsCabeceraEnAnita($rendicion)) {
+            return;
+        }
+
+        $api = new ApiAnita;
+        $this->eliminarValores($api, $nroOper, $tipoOper);
+        $this->insertarValores($api, $ctx);
     }
 
     private function actualizarEnAnitaConTotalZ(RendicionEstacionamientoCaja $rendicion, ?float $totalZ): void

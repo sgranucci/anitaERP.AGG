@@ -961,6 +961,7 @@ Route::delete('stock/formula-articulo/{id}', 'Stock\FormulaArticuloController@el
 Route::get('stock/lista-formula-articulo/{formato?}/{busqueda?}', 'Stock\FormulaArticuloController@listar')->name('listar_formula_articulo');
 Route::get('stock/formula-articulo/{id}/archivo/{archivo}', 'Stock\FormulaArticuloController@descargarArchivo')->name('formula_articulo_archivo');
 Route::get('stock/leer_historia_formula_articulo/{formula_articulo_id}', 'Stock\FormulaArticuloController@leerHistoria')->name('leer_historia_formula_articulo');
+Route::get('stock/formula-articulo/articulos-compra-por-insumo/{articulo_id}', 'Stock\FormulaArticuloController@articulosCompraPorInsumo')->name('articulos_compra_por_insumo_formula');
 Route::get('stock/formula-articulo/{id}/articulos-asociados', 'Stock\FormulaArticuloController@articulosAsociados')->name('articulos_asociados_formula_articulo');
 Route::get('stock/formula-articulo/{id}/modal', 'Stock\FormulaArticuloController@modal')->name('formula_articulo_modal');
 
@@ -1032,6 +1033,8 @@ Route::get('stock/transferencia-mercaderia/pendientes', 'Stock\TransferenciaMerc
 Route::get('stock/transferencia-mercaderia/destinatarios', 'Stock\TransferenciaMercaderiaController@destinatarios')->name('transferencia_mercaderia_destinatarios');
 Route::post('stock/transferencia-mercaderia/preferencias', 'Stock\TransferenciaMercaderiaController@preferencias')->name('transferencia_mercaderia_preferencias');
 Route::get('stock/transferencia-mercaderia/inventario', 'Stock\TransferenciaMercaderiaController@inventario')->name('transferencia_mercaderia_inventario');
+Route::get('stock/transferencia-mercaderia/saldo-articulo', 'Stock\TransferenciaMercaderiaController@saldoArticulo')->name('transferencia_mercaderia_saldo_articulo');
+Route::get('stock/transferencia-mercaderia/validar-linea-contable', 'Stock\TransferenciaMercaderiaController@validarLineaContable')->name('transferencia_mercaderia_validar_linea_contable');
 Route::post('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@guardar')->name('transferencia_mercaderia_guardar');
 Route::post('stock/transferencia-mercaderia/{id}/aprobar', 'Stock\TransferenciaMercaderiaController@aprobar')->name('transferencia_mercaderia_aprobar');
 Route::post('stock/transferencia-mercaderia/{id}/rechazar', 'Stock\TransferenciaMercaderiaController@rechazar')->name('transferencia_mercaderia_rechazar');
@@ -1084,6 +1087,8 @@ Route::delete('stock/recepcion-proveedor/{id}', 'Stock\RecepcionProveedorControl
 Route::post('stock/recepcion-proveedor/ocr-preview', 'Stock\RecepcionProveedorController@procesarOcrPreview')->name('recepcion_proveedor_ocr_preview');
 Route::post('stock/recepcion-proveedor/{id}/ocr', 'Stock\RecepcionProveedorController@subirOcr')->name('recepcion_proveedor_ocr');
 Route::get('stock/recepcion-proveedor/{id}/archivo/{archivo}', 'Stock\RecepcionProveedorController@descargarArchivo')->name('recepcion_proveedor_archivo');
+Route::get('stock/recepcion-proveedor/publico/{token}/ver', 'Stock\RecepcionProveedorController@verPublico')->name('recepcion_proveedor_ver_publico');
+Route::get('stock/recepcion-proveedor/publico/{token}/com-pdf', 'Stock\RecepcionProveedorController@imprimirComPublico')->name('recepcion_proveedor_com_pdf_publico');
 Route::get('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRecepcionProveedorController@index')->name('configuracion_recepcion_proveedor');
 Route::put('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRecepcionProveedorController@actualizar')->name('actualizar_configuracion_recepcion_proveedor');
 Route::post('configuracion/recepcion-proveedor/tolerancias', 'Configuracion\ConfiguracionRecepcionProveedorController@guardarTolerancias')->name('guardar_tolerancias_recepcion_proveedor');
@@ -1392,6 +1397,22 @@ Route::get('ventas/gastronomia/maquinas-vending/api/selects-por-empresa/{empresa
 Route::get('ventas/gastronomia/maquinas-vending/{id}/editar', 'Ventas\MaquinavendingController@editar')->name('editar_maquinavending_gastronomia');
 Route::put('ventas/gastronomia/maquinas-vending/{id}', 'Ventas\MaquinavendingController@actualizar')->name('actualizar_maquinavending_gastronomia');
 Route::delete('ventas/gastronomia/maquinas-vending/{id}', 'Ventas\MaquinavendingController@eliminar')->name('eliminar_maquinavending_gastronomia');
+
+Route::get('ventas/gastronomia/viandas/tipos-menu', 'Ventas\ViandaTipoMenuController@index')->name('consultar_vianda_tipo_menu_gastronomia');
+Route::get('ventas/gastronomia/viandas/tipos-menu/crear', 'Ventas\ViandaTipoMenuController@crear')->name('crear_vianda_tipo_menu_gastronomia');
+Route::post('ventas/gastronomia/viandas/tipos-menu', 'Ventas\ViandaTipoMenuController@guardar')->name('guardar_vianda_tipo_menu_gastronomia');
+Route::post('ventas/gastronomia/viandas/tipos-menu/sincronizar-anita', 'Ventas\ViandaTipoMenuController@sincronizarDesdeAnita')->name('sincronizar_vianda_tipo_menu_gastronomia_anita');
+Route::get('ventas/gastronomia/viandas/tipos-menu/{id}/editar', 'Ventas\ViandaTipoMenuController@editar')->name('editar_vianda_tipo_menu_gastronomia');
+Route::put('ventas/gastronomia/viandas/tipos-menu/{id}', 'Ventas\ViandaTipoMenuController@actualizar')->name('actualizar_vianda_tipo_menu_gastronomia');
+Route::delete('ventas/gastronomia/viandas/tipos-menu/{id}', 'Ventas\ViandaTipoMenuController@eliminar')->name('eliminar_vianda_tipo_menu_gastronomia');
+
+Route::get('ventas/gastronomia/viandas/usuarios', 'Ventas\ViandaUsuarioController@index')->name('consultar_vianda_usuario_gastronomia');
+Route::get('ventas/gastronomia/viandas/usuarios/crear', 'Ventas\ViandaUsuarioController@crear')->name('crear_vianda_usuario_gastronomia');
+Route::post('ventas/gastronomia/viandas/usuarios', 'Ventas\ViandaUsuarioController@guardar')->name('guardar_vianda_usuario_gastronomia');
+Route::post('ventas/gastronomia/viandas/usuarios/sincronizar-anita', 'Ventas\ViandaUsuarioController@sincronizarDesdeAnita')->name('sincronizar_vianda_usuario_gastronomia_anita');
+Route::get('ventas/gastronomia/viandas/usuarios/{id}/editar', 'Ventas\ViandaUsuarioController@editar')->name('editar_vianda_usuario_gastronomia');
+Route::put('ventas/gastronomia/viandas/usuarios/{id}', 'Ventas\ViandaUsuarioController@actualizar')->name('actualizar_vianda_usuario_gastronomia');
+Route::delete('ventas/gastronomia/viandas/usuarios/{id}', 'Ventas\ViandaUsuarioController@eliminar')->name('eliminar_vianda_usuario_gastronomia');
 
 Route::get('ventas/gastronomia/maquinas-vending/rendiciones', 'Ventas\MaquinavendingRendicionController@index')->name('consultar_maquinavending_rendicion_gastronomia');
 Route::get('ventas/listar-maquinavending-rendicion/{formato?}/{busqueda?}', 'Ventas\MaquinavendingRendicionController@listar')->name('lista_maquinavending_rendicion');

@@ -115,7 +115,7 @@
                                 <td>
                                     <input type="hidden" name="items[]" class="form-control item" readonly value="{{ $loop->index+1 }}" />
                                     <input type="hidden" name="partidagasto_monto_ids[]" class="form-control partidagasto_monto_id" readonly value="{{ $partida->id }}" />
-                                    <input type="hidden" name="creousuario_ids_monto[]" class="creousuario_id_monto" value="{{ $partida->creousuario_id }}" />
+                                    <input type="hidden" name="creousuario_ids[]" class="creousuario_id_monto" value="{{ $partida->creousuario_id }}" />
                                     <input type="month" name="periodos[]" min="2010/01" placeholder="Formato: AAAA-MM" class="form-control periodo" value="{{$partida->periodo}}">   
                                 </td>
                                 <td>

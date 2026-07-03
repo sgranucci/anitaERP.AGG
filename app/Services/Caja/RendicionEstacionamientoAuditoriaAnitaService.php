@@ -195,11 +195,21 @@ final class RendicionEstacionamientoAuditoriaAnitaService
         $portadora = $this->rendgastroSupport->elegirPortadora($cabeceras);
         $portadoraNro = (int) ($portadora->rendg_nro_oper ?? 0);
         $zPortadora = round((float) ($portadora->rendg_total_z ?? 0), 2);
+        $ncPortadora = round((float) ($portadora->rendg_tot_nc ?? 0), 2);
+        $sumX = 0.0;
+        foreach ($cabeceras as $cab) {
+            $sumX += round((float) ($cab->rendg_total_x ?? 0), 2);
+        }
+        $sumX = round($sumX, 2);
+        // Bruto ERP: Z almacenado = Σ total_x; si Z viejo venía neto (Σ total_x − NC), reconstituir.
+        $zBrutoPortadora = abs($zPortadora - $sumX) <= $tolerancia
+            ? $zPortadora
+            : round($zPortadora + $ncPortadora, 2);
         $caeaNeto = $this->rendgastroGastroSupport->totalCaeaNetoCabeceras($cabeceras);
         $anitaZ = $this->resolverAnitaZPorPuntoventa(
             (int) $pv->id,
             $erpZ,
-            $zPortadora,
+            $zBrutoPortadora,
             $caeaNeto,
             $tolerancia,
         );
@@ -294,8 +304,9 @@ final class RendicionEstacionamientoAuditoriaAnitaService
     }
 
     /**
-     * CAE: Z portadora (sin CAEA embebido si Z ya incluye fc_caea del día).
-     * CAEA compartido: neto rendg_tot_fc_caea de la PC originadora.
+     * Concilia Z Anita con ERP. rendg_total_z portadora = bruto (NC en turno portador) o bruto − NC (NC en otro turno).
+     * Para comparar con facturas ERP del PV CAE se usa el bruto Z + rendg_tot_nc (− CAEA embebido si aplica).
+     * PV CAEA compartido: neto rendg_tot_fc_caea de la PC originadora.
      */
     private function resolverAnitaZPorPuntoventa(
         int $puntoventaId,

@@ -19,6 +19,8 @@ final class GastronomiaNotaCreditoUiSupport
         VentaGastronomiaEmision $emision,
         ?int $ncVentaId,
         array $jornadasAbiertasPorEmpresa,
+        bool $requiereHabilitacionTurno = false,
+        bool $turnoHabilitado = true,
     ): bool {
         if (! can('generar-nota-credito-gastronomia-facturas-dia', false)) {
             return false;
@@ -29,8 +31,15 @@ final class GastronomiaNotaCreditoUiSupport
         }
 
         $empresaId = self::empresaIdDesdeEmision($emision);
+        if ($empresaId <= 0 || empty($jornadasAbiertasPorEmpresa[$empresaId])) {
+            return false;
+        }
 
-        return $empresaId > 0 && ! empty($jornadasAbiertasPorEmpresa[$empresaId]);
+        if ($requiereHabilitacionTurno && ! $turnoHabilitado) {
+            return false;
+        }
+
+        return true;
     }
 
     public static function esFacturaElegibleParaNc(VentaGastronomiaEmision $emision, ?int $ncVentaId = null): bool

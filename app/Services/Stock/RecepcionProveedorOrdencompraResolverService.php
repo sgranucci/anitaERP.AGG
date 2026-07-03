@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\Models\Compras\Ordencompra;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Services\Compras\OrdencompraAnitaSyncService;
+use App\Services\Compras\OrdencompraRecepcionCumplimientoService;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
 use App\Support\Stock\RecepcionProveedorCentrocostoLineaSupport;
@@ -22,6 +23,7 @@ class RecepcionProveedorOrdencompraResolverService
     public function __construct(
         private readonly OrdencompraRepositoryInterface $ordencompraRepository,
         private readonly OrdencompraAnitaSyncService $ordencompraAnitaSyncService,
+        private readonly OrdencompraRecepcionCumplimientoService $ordencompraRecepcionCumplimientoService,
     ) {
     }
 
@@ -52,6 +54,7 @@ class RecepcionProveedorOrdencompraResolverService
 
         $this->ensurePenvpOrdenEnLineasOc($oc);
         RecepcionProveedorCentrocostoLineaSupport::assertOcRecepcionable($oc);
+        $this->sincronizarEstadoOcSiSaldoPendiente($oc, $usuarioId);
         RecepcionProveedorOcPendienteSupport::assertPermiteNuevaRecepcion($oc);
 
         return [
@@ -70,6 +73,7 @@ class RecepcionProveedorOrdencompraResolverService
         $this->ensurePenvpOrdenEnLineasOc($oc);
         RecepcionProveedorCentrocostoLineaSupport::assertOcRecepcionable($oc);
         if ($validarNuevaRecepcion) {
+            $this->sincronizarEstadoOcSiSaldoPendiente($oc);
             RecepcionProveedorOcPendienteSupport::assertPermiteNuevaRecepcion($oc);
         }
 
@@ -77,6 +81,12 @@ class RecepcionProveedorOrdencompraResolverService
             'cabecera' => $oc,
             'lineas' => $this->armarLineasPrecarga($oc),
         ];
+    }
+
+    private function sincronizarEstadoOcSiSaldoPendiente(Ordencompra $oc, ?int $usuarioId = null): void
+    {
+        $this->ordencompraRecepcionCumplimientoService->sincronizarEstadoCabeceraOc($oc, $usuarioId);
+        $oc->refresh();
     }
 
     /** @return list<array<string, mixed>> */

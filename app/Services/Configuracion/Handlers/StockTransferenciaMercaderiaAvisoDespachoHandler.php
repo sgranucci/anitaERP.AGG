@@ -8,6 +8,7 @@ use App\Models\Configuracion\ModuloAvisoTipo;
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Models\Stock\Transferencia_Mercaderia_Token;
 use App\Services\Configuracion\ModuloAvisoService;
+use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +18,7 @@ class StockTransferenciaMercaderiaAvisoDespachoHandler implements ModuloAvisoDes
 {
     public function __construct(
         private readonly ModuloAvisoService $moduloAvisoService,
+        private readonly TransferenciaMercaderiaService $transferenciaService,
     ) {}
 
     public function despachar(ModuloAvisoTipo $tipo, int $entityId, array $opciones = []): void
@@ -56,7 +58,16 @@ class StockTransferenciaMercaderiaAvisoDespachoHandler implements ModuloAvisoDes
             return urlAppAbsoluta('stock/transferencia-mercaderia/pendientes');
         }
 
-        return urlAppAbsoluta('stock/transferencia-mercaderia');
+        if (in_array($transferencia->estado, [
+            TransferenciaMercaderiaEstados::CONFIRMADA,
+            TransferenciaMercaderiaEstados::RECHAZADA,
+        ], true)) {
+            $tokenRow = $this->transferenciaService->generarTokenConsultaPublica($transferencia);
+
+            return urlAppAbsoluta('stock/transferencia-mercaderia/publico/'.$tokenRow->token.'/ver');
+        }
+
+        return null;
     }
 
     public function generarPdf(int $entityId): ?array

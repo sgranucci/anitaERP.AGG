@@ -35,6 +35,37 @@ final class CierreJornadaProcesoAsientosGrabacionSupportTest extends TestCase
         $this->assertSame(495.87, $payload['haberes'][1]);
     }
 
+    public function test_armar_payloads_usa_descripcion_venta_gastronomia(): void
+    {
+        $payloads = CierreJornadaProcesoAsientosGrabacionSupport::armarPayloadsAsientos(
+            [[
+                'codigo' => 'sin_facturar_qr',
+                'titulo' => '1 — Waitry sin facturar (QR / Mercado Pago tras redistribución)',
+                'lineas' => [
+                    ['concepto' => 'Medio de cobro — QR', 'cuenta_id' => 10, 'debe' => 100., 'haber' => 0.],
+                    ['concepto' => 'Ventas gravadas', 'cuenta_id' => 20, 'debe' => 0., 'haber' => 100.],
+                ],
+            ]],
+            1,
+            ['cuenta_ventas_id' => 10, 'cuenta_iva_id' => 20],
+            '2026-06-01',
+            '2026-06-01',
+        );
+
+        $this->assertCount(1, $payloads);
+        $this->assertSame(
+            CierreJornadaProcesoAsientosGrabacionSupport::DESCRIPCION_ASIENTO,
+            $payloads[0]['payload']['observacion'] ?? null,
+        );
+        $this->assertSame(
+            [
+                CierreJornadaProcesoAsientosGrabacionSupport::DESCRIPCION_ASIENTO,
+                CierreJornadaProcesoAsientosGrabacionSupport::DESCRIPCION_ASIENTO,
+            ],
+            $payloads[0]['payload']['observaciones'] ?? null,
+        );
+    }
+
     public function test_armar_payloads_lanza_si_asiento_no_cuadra(): void
     {
         $this->expectException(InvalidArgumentException::class);

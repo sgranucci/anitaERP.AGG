@@ -87,6 +87,11 @@ window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_
                 </div>
                 <div class="card-body">
                     @if(empty($visualizar))
+                    @if(!empty($edicionLimitadaAprobada))
+                    <div class="alert alert-warning mb-3">
+                        <strong>Requisición aprobada:</strong> solo puede modificar el <em>proveedor sugerido</em> y guardar con <strong>Actualizar</strong>. El resto de los datos y líneas quedan en solo lectura.
+                    </div>
+                    @endif
                     <div id="requisicion-aviso-arbol-grabacion" class="alert alert-secondary mb-3 d-none" role="alert">
                         <span id="requisicion-aviso-arbol-spinner" class="fa fa-spinner fa-spin mr-1" style="display:none;" aria-hidden="true"></span>
                         <strong>Aviso:</strong> <span class="texto"></span>
@@ -131,7 +136,7 @@ window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_
                             @include('compras.requisicion.partials.acciones_provisorio')
                         @else
                         <div class="flex-shrink-0">
-                            <button type="button" id="botonform0" class="btn btn-primary">Actualizar</button>
+                            <button type="button" id="botonform0" class="btn btn-primary">{{ !empty($edicionLimitadaAprobada) ? 'Actualizar proveedor' : 'Actualizar' }}</button>
                         </div>
                         @endif
                         <div id="requisicion-footer-presupuesto-actions" class="d-none">

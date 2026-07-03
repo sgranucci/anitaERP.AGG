@@ -26,18 +26,19 @@ final class GastronomiaAnitaImportCacheSupport
 
     private const RESVTA_CAMPOS = 'resv_tipo,resv_letra,resv_sucursal,resv_nro,resv_fecha,resv_hora,resv_host,resv_cubierto,resv_mozo,resv_total,resv_tot_efectivo,resv_tot_fiserv,resv_tot_qr,resv_tot_ctacte,resv_tot_tarjeta,resv_tipo_dto,resv_cliente';
 
-    public function directorioCache(int $empresaId, string $fechaDesde, string $fechaHasta): string
+    public function directorioCache(int $empresaId, string $fechaDesde, string $fechaHasta, string $sufijo = ''): string
     {
         $desde = Carbon::parse($fechaDesde)->format('Ymd');
         $hasta = Carbon::parse($fechaHasta)->format('Ymd');
         $base = trim((string) config('gastronomia_anita_import.cache_directorio', 'anita_import_cache'));
+        $sufijo = preg_replace('/[^a-zA-Z0-9_-]+/', '', $sufijo) ?? '';
 
-        return storage_path('app/'.$base.'/empresa_'.$empresaId.'_'.$desde.'_'.$hasta);
+        return storage_path('app/'.$base.'/empresa_'.$empresaId.'_'.$desde.'_'.$hasta.($sufijo !== '' ? '_'.$sufijo : ''));
     }
 
-    public function cacheCompleta(int $empresaId, string $fechaDesde, string $fechaHasta): bool
+    public function cacheCompleta(int $empresaId, string $fechaDesde, string $fechaHasta, string $sufijo = ''): bool
     {
-        $dir = $this->directorioCache($empresaId, $fechaDesde, $fechaHasta);
+        $dir = $this->directorioCache($empresaId, $fechaDesde, $fechaHasta, $sufijo);
 
         return is_file($dir.'/manifest.json')
             && is_file($dir.'/venta.json')
@@ -48,21 +49,28 @@ final class GastronomiaAnitaImportCacheSupport
     }
 
     /**
+     * @param  array<int, array{min:int,max:int}|list<array{min:int,max:int}>>|null  $rangosPorSucursal  Si se indica, solo consulta esas sucursal/número al bridge (no todo el mes).
      * @return array<string, mixed>
      */
-    public function descargar(int $empresaId, string $fechaDesde, string $fechaHasta, bool $forzar = false): array
-    {
+    public function descargar(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+        bool $forzar = false,
+        ?array $rangosPorSucursal = null,
+        string $sufijoCache = '',
+    ): array {
         $desde = Carbon::parse($fechaDesde)->toDateString();
         $hasta = Carbon::parse($fechaHasta)->toDateString();
         if ($desde > $hasta) {
             throw new \InvalidArgumentException('fecha-desde no puede ser posterior a fecha-hasta.');
         }
 
-        if (! $forzar && $this->cacheCompleta($empresaId, $desde, $hasta)) {
-            return $this->leerManifest($empresaId, $desde, $hasta);
+        if (! $forzar && $this->cacheCompleta($empresaId, $desde, $hasta, $sufijoCache)) {
+            return $this->leerManifest($empresaId, $desde, $hasta, $sufijoCache);
         }
 
-        $dir = $this->directorioCache($empresaId, $desde, $hasta);
+        $dir = $this->directorioCache($empresaId, $desde, $hasta, $sufijoCache);
         File::ensureDirectoryExists($dir);
 
         $empresa = Empresa::query()->findOrFail($empresaId);
@@ -71,8 +79,22 @@ final class GastronomiaAnitaImportCacheSupport
         $fechaHastaEntera = (int) str_replace('-', '', $hasta);
 
         $consultasBridge = 0;
-        $venta = $this->listarVentaBulk($empresaId, $empresaCodigo, $fechaDesdeEntera, $fechaHastaEntera, $consultasBridge);
-        $rangos = $this->rangosPorSucursalDesdeVenta($venta);
+        if ($rangosPorSucursal !== null && $rangosPorSucursal !== []) {
+            $venta = $this->listarVentaBulkPorSucursales(
+                $empresaId,
+                $empresaCodigo,
+                $fechaDesdeEntera,
+                $fechaHastaEntera,
+                $rangosPorSucursal,
+                $consultasBridge,
+            );
+            $rangos = $rangosPorSucursal;
+            $modo = 'import_bulk_scoped';
+        } else {
+            $venta = $this->listarVentaBulk($empresaId, $empresaCodigo, $fechaDesdeEntera, $fechaHastaEntera, $consultasBridge);
+            $rangos = $this->rangosPorSucursalDesdeVenta($venta);
+            $modo = 'import_bulk';
+        }
 
         $stkmov = $this->listarDetalleBulk($empresaId, 'stkmov', self::STKMOV_CAMPOS, 'stkv', $rangos, $empresaCodigo, $consultasBridge);
         $vengrav = $this->listarDetalleBulk($empresaId, 'vengrav', self::VENGRAV_CAMPOS, 'veng', $rangos, null, $consultasBridge);
@@ -93,7 +115,9 @@ final class GastronomiaAnitaImportCacheSupport
             'fecha_desde' => $desde,
             'fecha_hasta' => $hasta,
             'generado_at' => now()->toIso8601String(),
-            'modo' => 'import_bulk',
+            'modo' => $modo,
+            'cache_sufijo' => $sufijoCache !== '' ? $sufijoCache : null,
+            'rangos_sucursal' => $rangos,
             'bridge' => $bridge['servidor'] ?? ApiAnita::urlBridge(),
             'ifx_server' => $bridge['ifx_server'] ?? null,
             'directorio' => $dir,
@@ -113,19 +137,19 @@ final class GastronomiaAnitaImportCacheSupport
         return $manifest;
     }
 
-    public function crearReader(int $empresaId, string $fechaDesde, string $fechaHasta): GastronomiaAnitaImportCacheReader
+    public function crearReader(int $empresaId, string $fechaDesde, string $fechaHasta, string $sufijo = ''): GastronomiaAnitaImportCacheReader
     {
         $desde = Carbon::parse($fechaDesde)->toDateString();
         $hasta = Carbon::parse($fechaHasta)->toDateString();
 
-        if (! $this->cacheCompleta($empresaId, $desde, $hasta)) {
+        if (! $this->cacheCompleta($empresaId, $desde, $hasta, $sufijo)) {
             throw new \RuntimeException(
                 'Cache import Anita inexistente o incompleta para empresa '.$empresaId.' '.$desde.'..'.$hasta
                 .'. Ejecute descargar() o gastronomia:precargar-cache-import-anita.'
             );
         }
 
-        $dir = $this->directorioCache($empresaId, $desde, $hasta);
+        $dir = $this->directorioCache($empresaId, $desde, $hasta, $sufijo);
 
         return new GastronomiaAnitaImportCacheReader(
             $this->leerJsonFilas($dir.'/venta.json'),
@@ -139,12 +163,13 @@ final class GastronomiaAnitaImportCacheSupport
     /**
      * @return array<string, mixed>
      */
-    public function leerManifest(int $empresaId, string $fechaDesde, string $fechaHasta): array
+    public function leerManifest(int $empresaId, string $fechaDesde, string $fechaHasta, string $sufijo = ''): array
     {
         $dir = $this->directorioCache(
             $empresaId,
             Carbon::parse($fechaDesde)->toDateString(),
             Carbon::parse($fechaHasta)->toDateString(),
+            $sufijo,
         );
 
         return $this->leerJson($dir.'/manifest.json');
@@ -181,6 +206,59 @@ final class GastronomiaAnitaImportCacheSupport
     }
 
     /**
+     * Una consulta bridge por sucursal (solo rangos del plan de importación).
+     *
+     * @param  array<int, array{min:int,max:int}|list<array{min:int,max:int}>>  $rangosPorSucursal
+     * @return list<object>
+     */
+    private function listarVentaBulkPorSucursales(
+        int $empresaId,
+        string $empresaCodigo,
+        int $fechaDesdeEntera,
+        int $fechaHastaEntera,
+        array $rangosPorSucursal,
+        int &$consultasBridge,
+    ): array {
+        $filas = [];
+        ksort($rangosPorSucursal);
+        foreach ($this->rangosSucursalComoLista($rangosPorSucursal) as $sucursal => $rango) {
+            $min = (int) ($rango['min'] ?? 0);
+            $max = (int) ($rango['max'] ?? 0);
+            if ($sucursal <= 0 || $min <= 0 || $max < $min) {
+                continue;
+            }
+
+            $where = " WHERE ven_letra = 'B'"
+                ." AND ven_sucursal = '".$sucursal."'"
+                ." AND ven_nro >= '".$min."'"
+                ." AND ven_nro <= '".$max."'"
+                ." AND ven_fecha_vto >= '".$fechaDesdeEntera."'"
+                ." AND ven_fecha_vto <= '".$fechaHastaEntera."' "
+                .GastronomiaAnitaImportEmpresaSupport::whereEmpresa('ven', $empresaCodigo);
+
+            $parsed = $this->apiCall($empresaId, [
+                'acc' => 'list',
+                'tabla' => 'venta',
+                'campos' => self::VENTA_CAMPOS,
+                'whereArmado' => $where,
+                'orderBy' => 'ven_nro',
+            ], $consultasBridge);
+
+            if ($parsed['error_lectura'] !== null) {
+                throw new \RuntimeException(
+                    'No se pudo listar venta Anita sucursal '.$sucursal.' (bulk scoped): '.$parsed['error_lectura']
+                );
+            }
+
+            foreach ($parsed['filas'] as $fila) {
+                $filas[] = $fila;
+            }
+        }
+
+        return $filas;
+    }
+
+    /**
      * @param  list<object>  $venta
      * @return array<int, array{min:int,max:int}>
      */
@@ -206,7 +284,7 @@ final class GastronomiaAnitaImportCacheSupport
     }
 
     /**
-     * @param  array<int, array{min:int,max:int}>  $rangos
+     * @param  array<int, array{min:int,max:int}|list<array{min:int,max:int}>>  $rangos
      * @return list<object>
      */
     private function listarDetalleBulk(
@@ -219,7 +297,7 @@ final class GastronomiaAnitaImportCacheSupport
         int &$consultasBridge,
     ): array {
         $filas = [];
-        foreach ($rangos as $sucursal => $rango) {
+        foreach ($this->rangosSucursalComoLista($rangos) as $sucursal => $rango) {
             $where = " WHERE ".$prefijo."_letra = 'B'"
                 ." AND ".$prefijo."_sucursal = '".$sucursal."'"
                 ." AND ".$prefijo."_nro >= '".$rango['min']."'"
@@ -261,6 +339,41 @@ final class GastronomiaAnitaImportCacheSupport
         return ApiAnita::parsearRespuestaLista(
             (new ApiAnita)->apiCall(GastronomiaAnitaImportBridgeSupport::mergePayload($payload, $empresaId)),
         );
+    }
+
+    /**
+     * @param  array<int, array{min:int,max:int}|list<array{min:int,max:int}>>  $rangosPorSucursal
+     * @return \Generator<int, array{min:int,max:int}, mixed, void>
+     */
+    private function rangosSucursalComoLista(array $rangosPorSucursal): \Generator
+    {
+        foreach ($rangosPorSucursal as $sucursal => $def) {
+            $sucursal = (int) $sucursal;
+            if (isset($def['min'], $def['max']) && ! isset($def[0])) {
+                yield $sucursal => [
+                    'min' => (int) $def['min'],
+                    'max' => (int) $def['max'],
+                ];
+
+                continue;
+            }
+
+            if (! is_array($def)) {
+                continue;
+            }
+
+            foreach ($def as $rango) {
+                if (! is_array($rango)) {
+                    continue;
+                }
+                $min = (int) ($rango['min'] ?? 0);
+                $max = (int) ($rango['max'] ?? 0);
+                if ($min <= 0 || $max < $min) {
+                    continue;
+                }
+                yield $sucursal => ['min' => $min, 'max' => $max];
+            }
+        }
     }
 
     private function guardarJson(string $ruta, mixed $data): void

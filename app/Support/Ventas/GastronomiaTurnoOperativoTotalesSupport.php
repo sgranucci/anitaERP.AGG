@@ -698,9 +698,10 @@ final class GastronomiaTurnoOperativoTotalesSupport
                 $porMozo[$key]['invitaciones']['total'] += $montoVenta;
                 $porMozo[$key]['invitaciones']['cantidad']++;
             }
-            self::acumularMediosPago($medios, $porMozo[$key]['por_medio_pago']);
-            self::acumularMediosPago($medios, $porMedioGlobal);
         }
+        // NC incluye cobranza negativa en su medio; rendvalor debe reflejar neto por cuenta.
+        self::acumularMediosPago($medios, $porMozo[$key]['por_medio_pago']);
+        self::acumularMediosPago($medios, $porMedioGlobal);
     }
 
     /**

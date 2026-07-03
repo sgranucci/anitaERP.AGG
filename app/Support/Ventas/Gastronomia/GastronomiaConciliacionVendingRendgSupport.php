@@ -46,6 +46,119 @@ final class GastronomiaConciliacionVendingRendgSupport
     }
 
     /**
+     * Cuadre jornada: incluye legacy (host VENDING NRO.*, suc ≥ 1200) aunque no exista PV en ERP.
+     */
+    public function esCabeceraVendingCuadreJornada(object $fila, int $empresaId): bool
+    {
+        if ($this->esCabeceraVending($fila, $empresaId)) {
+            return true;
+        }
+
+        if ($this->rendgastroSupport->esCabeceraPostCierreWaitry($fila)
+            || $this->rendgastroSupport->esCabeceraEstacionamiento($fila)
+            || $this->rendgastroSupport->esCabeceraAgregadosCaea($fila)) {
+            return false;
+        }
+
+        $host = mb_strtoupper(trim((string) ($fila->rendg_host ?? '')));
+        if ($host === '' || ! str_starts_with($host, 'VENDING NRO')) {
+            return false;
+        }
+
+        $sucursal = (int) ($fila->rendg_sucursal ?? 0);
+
+        return $sucursal >= 1200;
+    }
+
+    /**
+     * RMV Z vending en rendgastro Anita (rendg_total_z − rendg_tot_nc por PV). Solo datos del cache/bridge.
+     *
+     * @param  list<object>  $cabecerasRendgDia
+     * @return array{
+     *   total: float,
+     *   por_pv: list<array{
+     *     pv_sucursal: int,
+     *     pv_codigo: string,
+     *     rmv_z: float,
+     *     rmv_nc: float,
+     *     neto: float,
+     *     rendg_nro_oper: int|null
+     *   }>
+     * }
+     */
+    public function ventaAnitaVendingDesdeRendg(int $empresaId, array $cabecerasRendgDia): array
+    {
+        $pvPorSucursal = $this->puntoventasVendingPorSucursal($empresaId);
+
+        /** @var array<int, list<object>> $porSucursal */
+        $porSucursal = [];
+        foreach ($cabecerasRendgDia as $fila) {
+            if (! $this->esCabeceraVendingCuadreJornada($fila, $empresaId)) {
+                continue;
+            }
+            $sucursal = (int) ($fila->rendg_sucursal ?? 0);
+            if ($sucursal <= 0) {
+                continue;
+            }
+            $porSucursal[$sucursal][] = $fila;
+        }
+
+        $porPv = [];
+        $total = 0.0;
+
+        foreach ($porSucursal as $sucursal => $grupo) {
+            $neto = $this->rendgastroSupport->netoGrupoHost($grupo);
+            $portadora = $this->rendgastroSupport->elegirPortadora($grupo);
+            $z = round((float) ($portadora->rendg_total_z ?? 0), 2);
+            $nc = round($this->rendgastroSupport->sumaNcCabeceras($grupo), 2);
+            $pv = $pvPorSucursal[$sucursal] ?? null;
+
+            $porPv[] = [
+                'pv_sucursal' => $sucursal,
+                'pv_codigo' => $pv !== null ? (string) ($pv->codigo ?? (string) $sucursal) : (string) $sucursal,
+                'rmv_z' => $z,
+                'rmv_nc' => $nc,
+                'neto' => $neto,
+                'rendg_nro_oper' => $portadora !== null ? (int) ($portadora->rendg_nro_oper ?? 0) : null,
+            ];
+            $total += $neto;
+        }
+
+        usort($porPv, static fn (array $a, array $b): int => $a['pv_sucursal'] <=> $b['pv_sucursal']);
+
+        return [
+            'total' => round($total, 2),
+            'por_pv' => $porPv,
+        ];
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    public function totalesMaquinavendingErpPorJornada(int $empresaId, string $desde, string $hasta): array
+    {
+        $rows = MaquinavendingRendicion::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', '>=', $desde)
+            ->whereDate('fecha_jornada', '<=', $hasta)
+            ->selectRaw('DATE(fecha_jornada) as fecha_jornada')
+            ->selectRaw('SUM(total_ventas) as neto')
+            ->groupByRaw('DATE(fecha_jornada)')
+            ->get();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $fecha = substr((string) ($row->fecha_jornada ?? ''), 0, 10);
+            if ($fecha === '') {
+                continue;
+            }
+            $map[$fecha] = round((float) ($row->neto ?? 0), 2);
+        }
+
+        return $map;
+    }
+
+    /**
      * @return array{
      *   filas: list<array<string, mixed>>,
      *   totales: array{ventas_erp: float, rendgastro_z: float, cantidad: int}

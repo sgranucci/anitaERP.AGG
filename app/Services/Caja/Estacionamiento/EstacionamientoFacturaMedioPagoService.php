@@ -11,6 +11,7 @@ use App\Models\Caja\Usocuentacaja;
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Ventas\Venta;
+use App\Support\Caja\Estacionamiento\EstacionamientoFacturaMedioPagoUiSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoVentaDetalleSupport;
 use App\Support\Ventas\GastronomiaCuentacajaIconoSupport;
 use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
@@ -50,6 +51,11 @@ final class EstacionamientoFacturaMedioPagoService
         $venta = $this->resolverVentaEstacionamiento($ventaId);
         if ($venta === null) {
             return ['ok' => false, 'error' => 'La venta no corresponde a una emisión estacionamiento.'];
+        }
+
+        $bloqueoTurno = $this->evaluarBloqueoModificacionCobranza($ventaId);
+        if ($bloqueoTurno !== null) {
+            return ['ok' => false, 'error' => $bloqueoTurno];
         }
 
         $empresaId = (int) ($venta->puntoventas?->empresa_id ?? 0);
@@ -150,6 +156,11 @@ final class EstacionamientoFacturaMedioPagoService
         $venta = $this->resolverVentaEstacionamiento($ventaId);
         if ($venta === null) {
             return ['ok' => false, 'error' => 'La venta no corresponde a una emisión estacionamiento.'];
+        }
+
+        $bloqueoTurno = $this->evaluarBloqueoModificacionCobranza($ventaId);
+        if ($bloqueoTurno !== null) {
+            return ['ok' => false, 'error' => $bloqueoTurno];
         }
 
         $totalFacturaOriginal = round((float) $venta->total, 2);
@@ -253,6 +264,26 @@ final class EstacionamientoFacturaMedioPagoService
         return Venta::query()
             ->with(['puntoventas'])
             ->find($ventaId);
+    }
+
+    private function evaluarBloqueoModificacionCobranza(int $ventaId): ?string
+    {
+        $emision = VentaEstacionamientoEmision::query()
+            ->with(['turnoOperativo.turno'])
+            ->where('venta_id', $ventaId)
+            ->first();
+
+        if ($emision === null) {
+            return 'La venta no corresponde a una emisión estacionamiento.';
+        }
+
+        if ($emision->venta_factura_origen_id !== null) {
+            return 'No puede modificar el medio de pago de una nota de crédito.';
+        }
+
+        $evaluacion = EstacionamientoFacturaMedioPagoUiSupport::evaluarTurnoEmision($emision);
+
+        return $evaluacion['permite'] ? null : ($evaluacion['motivo'] ?? 'No se puede modificar el medio de pago.');
     }
 
     /**

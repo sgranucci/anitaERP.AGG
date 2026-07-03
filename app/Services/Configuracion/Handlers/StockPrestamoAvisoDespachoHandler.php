@@ -16,6 +16,7 @@ use App\Repositories\Stock\Deposito_AdministradorRepositoryInterface;
 use App\Repositories\Stock\PrestamoRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Configuracion\PrestamoAvisoPlantillaSupport;
+use App\Support\Stock\PrestamoEnlacePublicoSupport;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -59,7 +60,7 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
 
     public function linkConsulta(int $entityId): ?string
     {
-        return url('stock/prestamo/'.$entityId.'/editar');
+        return PrestamoEnlacePublicoSupport::urlConsultaMail($entityId);
     }
 
     public function generarPdf(int $entityId): ?array

@@ -14,6 +14,8 @@ return [
         'sistema_compras' => env('RECEPCION_PROVEEDOR_ANITA_SISTEMA', 'compras'),
         // stkmov vive en Informix ventas (mismo bridge que facturación), no en compras.
         'sistema_ventas' => env('RECEPCION_PROVEEDOR_ANITA_SISTEMA_VENTAS', 'ventas'),
+        // false: COM no replica stkmov (stock en ERP); sigue recepmae/recepmov/aplicped/pendmovp.
+        'stkmov_habilitado' => filter_var(env('RECEPCION_PROVEEDOR_ANITA_STKMOV_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
         // Clave t_comp (ventas) para resolver tcomp_refer → numerador COM
         't_comp_clave_numerador' => env('RECEPCION_PROVEEDOR_ANITA_T_COMP_CLAVE', 'COM'),
         'sistema_contab' => env('RECEPCION_PROVEEDOR_ANITA_CONTAB', 'contab'),

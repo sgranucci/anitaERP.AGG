@@ -347,7 +347,13 @@
                 · mostrando facturas del día en esta terminal
             @endif
         </div>
-        @if (can('generar-nota-credito-gastronomia-facturas-dia', false) && empty($jornadas_abiertas_por_empresa ?? []))
+        @if (($requiere_habilitacion_turno ?? false) && ! ($turno_habilitado ?? false))
+            <div class="alert alert-warning py-2 mb-2">
+                No hay turno habilitado en esta terminal (<strong>{{ $identificador_pc }}</strong>).
+                Debe <a href="{{ $url_habilitacion_turno ?? route('gastronomia_habilitacion_turno') }}">habilitar el turno</a>
+                antes de generar notas de crédito desde este listado.
+            </div>
+        @elseif (can('generar-nota-credito-gastronomia-facturas-dia', false) && empty($jornadas_abiertas_por_empresa ?? []))
             <div class="alert alert-warning py-2 mb-2">
                 No hay jornada abierta en ninguna empresa asignada.
                 Debe abrir la jornada en Ventas → Gastronomía → Jornada antes de generar notas de crédito.
@@ -570,6 +576,8 @@
                                     $r,
                                     $ncVentaId,
                                     $jornadas_abiertas_por_empresa ?? [],
+                                    $requiere_habilitacion_turno ?? false,
+                                    $turno_habilitado ?? false,
                                 );
                             @endphp
                             <tr>
@@ -644,7 +652,7 @@
                                             <i class="fas fa-boxes text-info"></i>
                                         </a>
                                     @endif
-                                    @if (can('cambiar-medio-pago-gastronomia-facturas-dia', false) && $v && $cobDirecta)
+                                    @if (\App\Support\Ventas\GastronomiaFacturaMedioPagoUiSupport::puedeCambiarMedioPago($r, $cobDirecta !== null))
                                         <button type="button"
                                             class="btn-accion-tabla tooltipsC js-fd-cambiar-medio-pago"
                                             data-venta-id="{{ $v->id }}"

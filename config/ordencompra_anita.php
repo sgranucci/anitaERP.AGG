@@ -40,7 +40,9 @@ return [
         'presupuesto_linea' => 'movpresup',
         'leyenda_linea' => 'ocvley',
         'cuota' => 'occuota',
+        'cuota_fpago' => 'ocfpagocuota',
         'historia' => 'legcompra',
+        'fecha_oc' => 'pendfecha',
     ],
 
     'cabecera' => [

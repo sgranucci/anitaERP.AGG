@@ -92,6 +92,58 @@
 		return true;
 	}
 
+	function precioLineaNumerico(lin) {
+		var p = parseFloat(String(lin.precio == null ? '' : lin.precio).replace(',', '.'));
+		return Number.isFinite(p) && p > 0 ? p : 0;
+	}
+
+	/** Precio ya cargado en la requisición: origen REQUISICION sin obligar al usuario a abrir el modal de origen. */
+	function origenFallbackDesdeRequisicion(lin) {
+		if (precioLineaNumerico(lin) <= 0) {
+			return null;
+		}
+		var prov = requisicionProveedorId > 0 ? requisicionProveedorId : 0;
+		return {
+			tipo: 'REQUISICION',
+			ref_id: lin.requisicion_articulo_id,
+			etiqueta: 'Precio cargado en la requisición',
+			precio: lin.precio,
+			moneda_id: lin.moneda_id,
+			proveedor_id: prov,
+			condicioncompra_id: 0,
+			condicionentrega_id: 0,
+			condicionpago_id: 0,
+		};
+	}
+
+	function aplicarFallbackOrigenEnLineas() {
+		lineas.forEach(function (lin) {
+			if (!lin.origen) {
+				var fb = origenFallbackDesdeRequisicion(lin);
+				if (fb) {
+					lin.origen = fb;
+				}
+			}
+		});
+	}
+
+	function asignarProveedorAGrupo(gidx, pid) {
+		var g = grupos[gidx];
+		if (!g || normId(pid) <= 0) {
+			return;
+		}
+		g.lineasIdx.forEach(function (linIdx) {
+			if (lineas[linIdx] && lineas[linIdx].origen) {
+				lineas[linIdx].origen.proveedor_id = pid;
+			}
+		});
+		recalcGruposYRender();
+		renderArticulos();
+		if ($('#modalWizardProveedorFaltante').hasClass('show')) {
+			renderModalProveedorFaltante();
+		}
+	}
+
 	function fmtNum(n, dec) {
 		var x = parseFloat(n);
 		if (!Number.isFinite(x)) {
@@ -226,6 +278,8 @@
 	// Recalcular grupos
 	// ---------------------------------------------------------------------
 	function recalcGruposYRender() {
+		aplicarFallbackOrigenEnLineas();
+
 		var sigueGrupos = grupos.map(function (g) {
 			return {
 				key: g.key,
@@ -304,7 +358,7 @@
 		}
 
 		var $av = $('#wizard-oc-lineas-sin-origen-aviso');
-		if (sinOrigen.length) {
+		if (sinOrigen.length && grupos.length) {
 			$av.find('.cant').text(sinOrigen.length);
 			$av.removeClass('d-none');
 		} else {
@@ -409,17 +463,15 @@
 		var $btn = $('#wizard-oc-btn-generar');
 		var $hint = $('#wizard-oc-btn-generar-hint');
 		var cantOcs = grupos.length;
-		var nSinOrigen = countLineasSinOrigen();
-		var hayAccion = cantOcs > 0 || nSinOrigen > 0;
-		var puede = hayAccion && todosGruposTienenProveedor();
+		var puede = cantOcs > 0;
 
 		$('#wizard-oc-btn-generar-cantidad').text(cantOcs);
 		$btn.prop('disabled', !puede);
 
-		if (!hayAccion) {
-			$hint.text('');
+		if (cantOcs === 0) {
+			$hint.text('Indique origen de precio o cargue un precio en al menos un ítem para detectar una OC.');
 		} else if (!todosGruposTienenProveedor()) {
-			$hint.text('Indique proveedor en cada orden detectada (solapa «Cabecera por OC» o botón de búsqueda) para habilitar la generación.');
+			$hint.text('Al generar se le pedirá el proveedor para la(s) OC que usen precio de la requisición.');
 		} else {
 			$hint.text('');
 		}
@@ -488,6 +540,7 @@
 
 				renderArticulos();
 				recalcGruposYRender();
+				renderArticulos();
 			})
 			.fail(function () {
 				$('#wizard-oc-tabla-articulos-body').html('<tr><td colspan="12" class="text-danger text-center">No se pudo cargar la plantilla de la requisición.</td></tr>');
@@ -737,14 +790,8 @@
 		if (!Number.isFinite(pid) || pid <= 0) {
 			return;
 		}
-		grupos[gidx].proveedor_id = pid;
+		asignarProveedorAGrupo(gidx, pid);
 		window.wzCambiarProveedorGrupo = null;
-		renderGruposResumen(lineasSinOrigenParaResumen());
-		var $pane = $('#wizard-oc-cabeceras [data-gidx="' + gidx + '"]');
-		$pane.find('.wz-grupo-proveedor-nombre').val(proveedorNombre(pid) || '');
-		var tabLabel = 'OC ' + (gidx + 1) + ' — ' + (proveedorNombre(pid) || '<sin prov.>');
-		$('#wz-oc-tab-' + gidx).text(tabLabel);
-		actualizarBotonGenerar();
 		$('#consultaproveedorModal').modal('hide');
 	});
 
@@ -1236,25 +1283,43 @@
 		return p;
 	}
 
-	$(document).on('click', '#wizard-oc-btn-generar', function () {
+		return p;
+	}
+
+	function renderModalProveedorFaltante() {
+		var $body = $('#wz-proveedor-faltante-lista').empty();
+		var pendientes = 0;
+		grupos.forEach(function (g, idx) {
+			if (normId(g.proveedor_id) > 0) {
+				return;
+			}
+			pendientes++;
+			var $tr = $('<tr></tr>');
+			$tr.append('<td class="text-center">' + (idx + 1) + '</td>');
+			$tr.append('<td class="text-right">' + g.lineasIdx.length + '</td>');
+			$tr.append(
+				'<td class="wz-prov-faltante-nombre">' +
+					(proveedorNombre(g.proveedor_id) || '<span class="text-danger">Sin asignar</span>') +
+					'</td>'
+			);
+			$tr.append(
+				'<td class="text-nowrap">' +
+					'<button type="button" class="btn btn-sm btn-outline-primary wz-prov-faltante-buscar" data-gidx="' + idx + '" title="Elegir proveedor">' +
+					'<i class="fa fa-search"></i> Elegir</button></td>'
+			);
+			$body.append($tr);
+		});
+		$('#wz-proveedor-faltante-continuar').prop('disabled', pendientes > 0);
+	}
+
+	function abrirConfirmGenerar() {
 		var sinOrigen = [];
-		lineas.forEach(function (l, i) { if (!l.origen) { sinOrigen.push(l.requisicion_articulo_id); } });
+		lineas.forEach(function (l) {
+			if (!l.origen) {
+				sinOrigen.push(l.requisicion_articulo_id);
+			}
+		});
 		var cantOcs = grupos.length;
-
-		if (cantOcs === 0 && sinOrigen.length === 0) {
-			alert('No hay órdenes para generar ni líneas a cerrar.');
-			return;
-		}
-		// Validaciones mínimas de cabecera compartida
-		if (!$('#wz_empresa_id').val()) { alert('Indique la empresa.'); return; }
-		if (!$('#wz_fecha').val() || !$('#wz_fechaentrega').val()) { alert('Indique las fechas de documento y entrega.'); return; }
-		if (!$('#wz_centrocosto_id').val()) { alert('Indique el centro de costo.'); return; }
-		if (!$('#wz_detalle').val()) { alert('Indique el detalle compartido.'); return; }
-
-		if (!todosGruposTienenProveedor()) {
-			alert('Cada orden detectada debe tener proveedor. Use el botón de búsqueda en la solapa de cabecera de la OC correspondiente.');
-			return;
-		}
 
 		$('#wz-confirm-cantidad').text(cantOcs);
 		var $det = $('#wz-confirm-detalle').empty();
@@ -1270,6 +1335,49 @@
 			$('#wz-confirm-sin-origen-aviso').hide();
 		}
 		$('#modalWizardConfirmGenerar').modal('show');
+	}
+
+	$(document).on('click', '#wizard-oc-btn-generar', function () {
+		aplicarFallbackOrigenEnLineas();
+		recalcGruposYRender();
+
+		var cantOcs = grupos.length;
+		if (cantOcs === 0) {
+			alert('Debe haber al menos un ítem con precio para generar una orden de compra. Elija el origen del precio o cargue un precio en la línea.');
+			return;
+		}
+		if (!$('#wz_empresa_id').val()) { alert('Indique la empresa.'); return; }
+		if (!$('#wz_fecha').val() || !$('#wz_fechaentrega').val()) { alert('Indique las fechas de documento y entrega.'); return; }
+		if (!$('#wz_centrocosto_id').val()) { alert('Indique el centro de costo.'); return; }
+		if (!$('#wz_detalle').val()) { alert('Indique el detalle compartido.'); return; }
+
+		if (!todosGruposTienenProveedor()) {
+			renderModalProveedorFaltante();
+			$('#modalWizardProveedorFaltante').modal('show');
+			return;
+		}
+
+		abrirConfirmGenerar();
+	});
+
+	$(document).on('click', '.wz-prov-faltante-buscar', function () {
+		var gidx = parseInt($(this).data('gidx'), 10);
+		window.wzCambiarProveedorGrupo = gidx;
+		if (typeof window.activa_eventos_consultaproveedor === 'function') {
+			window.activa_eventos_consultaproveedor();
+		}
+		if (typeof window.buscar_datos_proveedor === 'function') {
+			window.buscar_datos_proveedor('');
+		}
+		$('#consultaproveedorModal').modal('show');
+	});
+
+	$(document).on('click', '#wz-proveedor-faltante-continuar', function () {
+		if (!todosGruposTienenProveedor()) {
+			return;
+		}
+		$('#modalWizardProveedorFaltante').modal('hide');
+		abrirConfirmGenerar();
 	});
 
 	$(document).on('click', '#wz-confirm-aceptar', function () {

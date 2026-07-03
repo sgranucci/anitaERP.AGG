@@ -8,6 +8,7 @@ use App\Models\Ventas\MaquinavendingRendicion;
 use App\Support\Caja\RendicionMaquinavendingCajaListadoFiltros;
 use App\Support\Caja\RendicionMaquinavendingCajaPermiso;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\MaquinavendingRendicionAnitaAdvertenciaSupport;
 use App\Services\Ventas\MaquinavendingRendicionAnitaSyncService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -154,10 +155,11 @@ class RendicionMaquinavendingCajaService
     /**
      * @param  array<string, mixed>  $cabecera
      * @param  list<array{cuentacaja_id:int, monto:float, cotizacion:float}>  $movimientos
+     * @return array{presentacion: RendicionMaquinavendingCaja, advertencias_anita: list<string>}
      */
-    public function guardar(array $cabecera, array $movimientos): RendicionMaquinavendingCaja
+    public function guardar(array $cabecera, array $movimientos): array
     {
-        return DB::transaction(function () use ($cabecera, $movimientos) {
+        $rendicion = DB::transaction(function () use ($cabecera, $movimientos) {
             $rendicionVentasId = (int) ($cabecera['maquinavending_rendicion_id'] ?? 0);
             if ($rendicionVentasId <= 0) {
                 throw new InvalidArgumentException('Debe seleccionar una rendición vending registrada en Ventas.');
@@ -193,33 +195,33 @@ class RendicionMaquinavendingCajaService
             $rendicion = RendicionMaquinavendingCaja::create($cabecera);
             $this->persistirMovimientos($rendicion, $movimientos);
 
-            $totalZ = round((float) ($cabecera['totalfactura'] ?? 0), 2);
-            $rendicionVentasIdFinal = (int) $rendicionVentas->id;
-            DB::afterCommit(function () use ($rendicionVentasIdFinal, $totalZ) {
-                try {
-                    $fresh = MaquinavendingRendicion::query()->find($rendicionVentasIdFinal);
-                    if ($fresh) {
-                        $this->anitaSyncService->actualizarSoloTotalZ($fresh, $totalZ);
-                    }
-                } catch (\Throwable $e) {
-                    Log::error('rendicion_maquinavending_caja.anita_total_z.fallo', [
-                        'rendicion_ventas_id' => $rendicionVentasIdFinal,
-                        'mensaje' => $e->getMessage(),
-                    ]);
-                }
-            });
-
-            return $rendicion->fresh(['movimientos.cuentacaja', 'empresa', 'caja', 'maquinavendingRendicion']);
+            return [
+                'presentacion' => $rendicion,
+                'total_z' => round((float) ($cabecera['totalfactura'] ?? 0), 2),
+                'rendicion_ventas_id' => (int) $rendicionVentas->id,
+            ];
         });
+
+        $advertenciasAnita = $this->sincronizarAnitaTrasPresentacionCaja(
+            (int) $rendicion['rendicion_ventas_id'],
+            (float) $rendicion['total_z'],
+            'al presentar en caja',
+        );
+
+        return [
+            'presentacion' => $rendicion['presentacion']->fresh(['movimientos.cuentacaja', 'empresa', 'caja', 'maquinavendingRendicion']),
+            'advertencias_anita' => $advertenciasAnita,
+        ];
     }
 
     /**
      * @param  array<string, mixed>  $cabecera
      * @param  list<array{cuentacaja_id:int, monto:float, cotizacion:float}>  $movimientos
+     * @return array{presentacion: RendicionMaquinavendingCaja, advertencias_anita: list<string>}
      */
-    public function actualizar(int $id, array $cabecera, array $movimientos): RendicionMaquinavendingCaja
+    public function actualizar(int $id, array $cabecera, array $movimientos): array
     {
-        return DB::transaction(function () use ($id, $cabecera, $movimientos) {
+        $resultado = DB::transaction(function () use ($id, $cabecera, $movimientos) {
             $rendicion = RendicionMaquinavendingCaja::query()->findOrFail($id);
             RendicionMaquinavendingCajaPermiso::assertModificacionPermitida($rendicion);
 
@@ -237,29 +239,28 @@ class RendicionMaquinavendingCajaService
                 ->delete();
             $this->persistirMovimientos($rendicion, $movimientos);
 
-            $totalZ = round((float) ($cabecera['totalfactura'] ?? 0), 2);
-            $rendicionVentasIdFinal = (int) $rendicionVentasId;
-            DB::afterCommit(function () use ($rendicionVentasIdFinal, $totalZ) {
-                try {
-                    $fresh = MaquinavendingRendicion::query()->find($rendicionVentasIdFinal);
-                    if ($fresh) {
-                        $this->anitaSyncService->actualizarSoloTotalZ($fresh, $totalZ);
-                    }
-                } catch (\Throwable $e) {
-                    Log::error('rendicion_maquinavending_caja.anita_total_z.fallo', [
-                        'rendicion_ventas_id' => $rendicionVentasIdFinal,
-                        'mensaje' => $e->getMessage(),
-                    ]);
-                }
-            });
-
-            return $rendicion->fresh(['movimientos.cuentacaja', 'empresa', 'caja', 'maquinavendingRendicion']);
+            return [
+                'presentacion' => $rendicion,
+                'total_z' => round((float) ($cabecera['totalfactura'] ?? 0), 2),
+                'rendicion_ventas_id' => (int) $rendicionVentasId,
+            ];
         });
+
+        $advertenciasAnita = $this->sincronizarAnitaTrasPresentacionCaja(
+            (int) $resultado['rendicion_ventas_id'],
+            (float) $resultado['total_z'],
+            'al actualizar presentación en caja',
+        );
+
+        return [
+            'presentacion' => $resultado['presentacion']->fresh(['movimientos.cuentacaja', 'empresa', 'caja', 'maquinavendingRendicion']),
+            'advertencias_anita' => $advertenciasAnita,
+        ];
     }
 
-    public function eliminar(int $id): void
+    public function eliminar(int $id): array
     {
-        DB::transaction(function () use ($id) {
+        $rendicionVentasId = DB::transaction(function () use ($id) {
             $rendicion = RendicionMaquinavendingCaja::query()
                 ->with('maquinavendingRendicion')
                 ->findOrFail($id);
@@ -274,22 +275,19 @@ class RendicionMaquinavendingCajaService
                 ->delete();
             $rendicion->delete();
 
-            if ($rendicionVentasId > 0) {
-                DB::afterCommit(function () use ($rendicionVentasId) {
-                    try {
-                        $fresh = MaquinavendingRendicion::query()->find($rendicionVentasId);
-                        if ($fresh) {
-                            $this->anitaSyncService->resetTotalZ($fresh);
-                        }
-                    } catch (\Throwable $e) {
-                        Log::error('rendicion_maquinavending_caja.anita_total_z_reset.fallo', [
-                            'rendicion_ventas_id' => $rendicionVentasId,
-                            'mensaje' => $e->getMessage(),
-                        ]);
-                    }
-                });
-            }
+            return $rendicionVentasId;
         });
+
+        $advertenciasAnita = [];
+        if ($rendicionVentasId > 0) {
+            $advertenciasAnita = $this->sincronizarAnitaTrasPresentacionCaja(
+                $rendicionVentasId,
+                0.0,
+                'al anular presentación en caja',
+            );
+        }
+
+        return $advertenciasAnita;
     }
 
     public function findConDetalle(int $id): RendicionMaquinavendingCaja
@@ -477,5 +475,47 @@ class RendicionMaquinavendingCajaService
                 'cotizacion' => $row['cotizacion'],
             ]);
         }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function sincronizarAnitaTrasPresentacionCaja(int $rendicionVentasId, float $totalZ, string $contexto): array
+    {
+        if ($rendicionVentasId <= 0 || ! $this->anitaSyncService->sincronizacionHabilitada()) {
+            return [];
+        }
+
+        $fresh = MaquinavendingRendicion::query()->find($rendicionVentasId);
+        if ($fresh === null) {
+            return [];
+        }
+
+        try {
+            $this->anitaSyncService->actualizarSoloTotalZ($fresh, $totalZ);
+            $fresh->refresh();
+            $leido = $this->anitaSyncService->leerTotalesCabeceraEnAnita($fresh);
+            $leidoZ = $leido !== null ? (float) ($leido['total_z'] ?? 0) : null;
+            if ($leidoZ === null || abs($leidoZ - round($totalZ, 2)) > self::TOLERANCIA) {
+                return [
+                    MaquinavendingRendicionAnitaAdvertenciaSupport::mensajeTotalZNoConfirmado(
+                        $fresh,
+                        round($totalZ, 2),
+                        $leidoZ,
+                    ),
+                ];
+            }
+        } catch (\Throwable $e) {
+            Log::error('rendicion_maquinavending_caja.anita_total_z.fallo', [
+                'rendicion_ventas_id' => $rendicionVentasId,
+                'mensaje' => $e->getMessage(),
+            ]);
+
+            return [
+                MaquinavendingRendicionAnitaAdvertenciaSupport::mensajeDesdeExcepcion($fresh, $e, $contexto),
+            ];
+        }
+
+        return [];
     }
 }

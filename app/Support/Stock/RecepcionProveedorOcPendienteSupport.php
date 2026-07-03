@@ -163,7 +163,17 @@ final class RecepcionProveedorOcPendienteSupport
         $numero = (int) $oc->numeroordencompra;
         $estado = (string) ($oc->estadoordencompra ?? '');
 
-        if (in_array($estado, [OrdencompraEstados::CUMPLIDA, OrdencompraEstados::CERRADA], true)) {
+        if ($estado === OrdencompraEstados::CUMPLIDA) {
+            if (! self::tieneSaldoPendiente((int) $oc->id)) {
+                throw new \RuntimeException(
+                    "Orden de compra {$numero} está {$estado}. No puede cargar otra recepción."
+                );
+            }
+
+            return;
+        }
+
+        if ($estado === OrdencompraEstados::CERRADA) {
             throw new \RuntimeException(
                 "Orden de compra {$numero} está {$estado}. No puede cargar otra recepción."
             );

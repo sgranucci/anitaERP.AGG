@@ -10,7 +10,6 @@ use App\Support\Caja\AnitaSync\MaquinavendingRendicionMvartAnitaMapper;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaValorAnitaMapper;
 use App\Support\Caja\MaquinavendingRendicionNroOperPisoSupport;
 use App\Support\Caja\RendicionGastronomiaSecuenciaSupport;
-use App\Support\Stock\StockAnitaBridgeSupport;
 use App\Support\Ventas\MaquinavendingRendicionAnitaContextBuilder;
 use Illuminate\Support\Facades\Log;
 
@@ -78,8 +77,8 @@ class MaquinavendingRendicionAnitaSyncService
         $calculo = RendicionGastronomiaSecuenciaSupport::calcularSiguiente(
             $ultimoAnita,
             $ultimoErp,
-            MaquinavendingRendicionNroOperPisoSupport::pisoParaEmpresa($empresaId),
-            MaquinavendingRendicionNroOperPisoSupport::techoParaEmpresa($empresaId),
+            MaquinavendingRendicionNroOperPisoSupport::pisoGlobal(),
+            MaquinavendingRendicionNroOperPisoSupport::techoGlobal(),
         );
 
         if (! $consultaAnitaOk) {
@@ -97,9 +96,16 @@ class MaquinavendingRendicionAnitaSyncService
 
     public function ultimoNroOperEnErp(int $empresaId): int
     {
-        $query = MaquinavendingRendicion::query()->where('empresa_id', $empresaId);
-        $piso = MaquinavendingRendicionNroOperPisoSupport::pisoParaEmpresa($empresaId);
-        $techo = MaquinavendingRendicionNroOperPisoSupport::techoParaEmpresa($empresaId);
+        unset($empresaId);
+
+        $empresaIds = MaquinavendingRendicionNroOperPisoSupport::empresaIdsVending();
+        $query = MaquinavendingRendicion::query();
+        if ($empresaIds !== []) {
+            $query->whereIn('empresa_id', $empresaIds);
+        }
+
+        $piso = MaquinavendingRendicionNroOperPisoSupport::pisoGlobal();
+        $techo = MaquinavendingRendicionNroOperPisoSupport::techoGlobal();
 
         if ($piso > 0) {
             $query->where('nro_oper_anita', '>=', $piso);
@@ -111,9 +117,14 @@ class MaquinavendingRendicionAnitaSyncService
         $maxCol = (int) ($query->whereNotNull('nro_oper_anita')->max('nro_oper_anita') ?? 0);
         $maxCodigo = 0;
 
-        foreach (MaquinavendingRendicion::query()->where('empresa_id', $empresaId)->pluck('codigo') as $codigo) {
+        $codigosQuery = MaquinavendingRendicion::query();
+        if ($empresaIds !== []) {
+            $codigosQuery->whereIn('empresa_id', $empresaIds);
+        }
+
+        foreach ($codigosQuery->pluck('codigo') as $codigo) {
             $n = RendicionGastronomiaSecuenciaSupport::extraerNroOperDesdeCodigo((string) $codigo);
-            if ($n === null || ! MaquinavendingRendicionNroOperPisoSupport::enRangoEmpresa($empresaId, $n)) {
+            if ($n === null || ! MaquinavendingRendicionNroOperPisoSupport::enRangoGlobal($n)) {
                 continue;
             }
             $maxCodigo = max($maxCodigo, $n);
@@ -124,9 +135,12 @@ class MaquinavendingRendicionAnitaSyncService
 
     public function ultimoNroOperEnAnita(int $empresaId): int
     {
+        unset($empresaId);
+
         $tipoOper = $this->tipoOper();
-        $where = " WHERE rendg_empresa = '".$empresaId."' AND rendg_tipo_oper = '".$tipoOper."' "
-            .MaquinavendingRendicionNroOperPisoSupport::filtroSqlAnita($empresaId);
+        $where = " WHERE rendg_tipo_oper = '".$tipoOper."' "
+            .MaquinavendingRendicionNroOperPisoSupport::filtroSqlHostVending()
+            .MaquinavendingRendicionNroOperPisoSupport::filtroSqlGlobal();
 
         $api = new ApiAnita;
         $rows = ApiAnita::decodificarListaFilas($api->apiCall([
@@ -235,6 +249,36 @@ class MaquinavendingRendicionAnitaSyncService
         $this->insertarArticulos($ctx);
     }
 
+    /**
+     * @return array{total_x: float, total_z: float}|null
+     */
+    public function leerTotalesCabeceraEnAnita(MaquinavendingRendicion $rendicion): ?array
+    {
+        $nroOper = (int) ($rendicion->nro_oper_anita
+            ?? MaquinavendingRendicionCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
+        if ($nroOper <= 0) {
+            return null;
+        }
+
+        $api = new ApiAnita;
+        $rows = ApiAnita::decodificarListaFilas($api->apiCall([
+            'acc' => 'list',
+            'sistema' => $this->sistema(),
+            'tabla' => $this->tablaCabecera(),
+            'campos' => 'rendg_total_x, rendg_total_z',
+            'whereArmado' => MaquinavendingRendicionCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
+        ]));
+
+        if ($rows === []) {
+            return null;
+        }
+
+        return [
+            'total_x' => round((float) ($rows[0]->rendg_total_x ?? 0), 2),
+            'total_z' => round((float) ($rows[0]->rendg_total_z ?? 0), 2),
+        ];
+    }
+
     public function actualizarSoloTotalZ(MaquinavendingRendicion $rendicion, float $totalZ): void
     {
         if (! $this->sincronizacionHabilitada()) {
@@ -244,7 +288,7 @@ class MaquinavendingRendicionAnitaSyncService
         $nroOper = (int) ($rendicion->nro_oper_anita
             ?? MaquinavendingRendicionCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
         if ($nroOper <= 0) {
-            return;
+            throw new \RuntimeException('La rendición no tiene nro_oper Anita asignado.');
         }
 
         if (! $this->existsCabeceraEnAnita($rendicion)) {
@@ -252,15 +296,12 @@ class MaquinavendingRendicionAnitaSyncService
             $rendicion->refresh();
             $nroOper = (int) ($rendicion->nro_oper_anita ?? $nroOper);
             if ($nroOper <= 0 || ! $this->existsCabeceraEnAnita($rendicion)) {
-                return;
+                throw new \RuntimeException('No existe cabecera rendgastro en Anita tras intentar sincronizar.');
             }
         }
 
         $api = new ApiAnita;
-        $nroTicket = (int) $rendicion->numero_cierre;
-        if ($nroTicket <= 0) {
-            $nroTicket = (int) $rendicion->id;
-        }
+        $nroTicket = $nroOper;
 
         $api->apiCallEscritura([
             'acc' => 'update',
@@ -444,9 +485,8 @@ class MaquinavendingRendicionAnitaSyncService
             return;
         }
 
-        $empresaId = (int) ($ctx['empresa_id'] ?? 0);
         $nroTicket = (int) ($ctx['nro_ticket'] ?? 0);
-        if ($empresaId <= 0 || $nroTicket <= 0) {
+        if ($nroTicket <= 0) {
             return;
         }
 
@@ -463,7 +503,7 @@ class MaquinavendingRendicionAnitaSyncService
                         'acc' => 'insert',
                         'campos' => MaquinavendingRendicionMvartAnitaMapper::camposInsert(),
                         'valores' => MaquinavendingRendicionMvartAnitaMapper::valoresInsert($linea, $ctx),
-                    ], $empresaId),
+                    ]),
                     'rendmvart insert vending '.((int) ($linea['ubicacion'] ?? 0)),
                     self::LOG_EVENTO,
                 );
@@ -482,7 +522,7 @@ class MaquinavendingRendicionAnitaSyncService
                             $nroTicket,
                             $ubicacion,
                         ),
-                    ], $empresaId),
+                    ]),
                     'rendmvart update vending '.$ubicacion,
                     self::LOG_EVENTO,
                 );
@@ -496,8 +536,7 @@ class MaquinavendingRendicionAnitaSyncService
     private function eliminarArticulos(array $ctx): void
     {
         $nroTicket = (int) ($ctx['nro_ticket'] ?? 0);
-        $empresaId = (int) ($ctx['empresa_id'] ?? 0);
-        if ($nroTicket <= 0 || $empresaId <= 0) {
+        if ($nroTicket <= 0) {
             return;
         }
 
@@ -507,7 +546,7 @@ class MaquinavendingRendicionAnitaSyncService
                 'acc' => 'delete',
                 'tabla' => $this->tablaArticulo(),
                 'whereArmado' => MaquinavendingRendicionMvartAnitaMapper::wherePorOperacion($nroTicket),
-            ], $empresaId),
+            ]),
             'rendmvart delete vending',
             self::LOG_EVENTO,
         );
@@ -515,24 +554,36 @@ class MaquinavendingRendicionAnitaSyncService
 
     private function eliminarArticulosDesdeRendicion(MaquinavendingRendicion $rendicion): void
     {
-        $nroTicket = (int) $rendicion->numero_cierre;
+        $nroTicket = (int) ($rendicion->nro_oper_anita
+            ?? MaquinavendingRendicionCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
+        if ($nroTicket <= 0) {
+            $nroTicket = (int) $rendicion->numero_cierre;
+        }
         if ($nroTicket <= 0) {
             return;
         }
 
         $this->eliminarArticulos([
             'nro_ticket' => $nroTicket,
-            'empresa_id' => (int) $rendicion->empresa_id,
         ]);
     }
 
     /**
+     * rendmvart en el mismo bridge Biyemas que rendgastro (no host Kandiko/Rebisco).
+     *
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function payloadVentas(array $payload, int $empresaId): array
+    private function payloadVentas(array $payload): array
     {
-        return StockAnitaBridgeSupport::mergePayload($payload, $empresaId);
+        $payload['sistema'] = $this->sistemaVentas();
+
+        return $payload;
+    }
+
+    private function sistemaVentas(): string
+    {
+        return (string) config('rendicion_maquinavending_anita.sistema_ventas', 'ventas');
     }
 
     private function esErrorDuplicadoInformix(\Throwable $e): bool
