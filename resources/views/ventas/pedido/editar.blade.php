@@ -4,7 +4,7 @@
 @endsection
 
 @section("scripts")
-<script>window.REQUIERE_VALIDACION_PADRON_OPERACION = true;</script>
+<script>window.VALIDACION_PADRON_POST_CARGA = true;</script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}" type="text/javascript"></script>
@@ -22,6 +22,15 @@
 
 	function sub()
 	{
+        if ($('#formgeneral').hasClass('pedido-bloqueado-padron')) {
+            if (typeof window.notificarBloqueoPadronCliente === 'function') {
+                window.notificarBloqueoPadronCliente('Problemas en ARCA: no puede guardar el pedido con este cliente.');
+            } else {
+                alert('Problemas en ARCA: no puede guardar el pedido con este cliente.');
+            }
+            return false;
+        }
+
         if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
             return false;
         }
@@ -128,7 +137,7 @@
                         <div class="row">
                             <div class="col-lg-6">
                                 @if (!empty($puedeActualizarPedido))
-                                    <button type="submit" onclick="sub()" class="btn btn-success">Guardar</button>
+                                    <button type="submit" onclick="sub()" class="btn btn-success pedido-carga-bloqueable">Guardar</button>
                                 @endif
                                 @if (!empty($soloConsulta))
                                     <button type="button" class="btn btn-secondary @if(!empty($puedeActualizarPedido)) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>

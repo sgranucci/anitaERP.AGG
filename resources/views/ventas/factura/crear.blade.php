@@ -4,6 +4,7 @@
 @endsection
 
 @section("scripts")
+<script>window.VALIDACION_PADRON_POST_CARGA = true;</script>
 <script>window.REQUIERE_VALIDACION_PADRON_OPERACION = true;</script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
@@ -71,7 +72,7 @@
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-6">
-							<button type="button" onclick="subm()" class="btn btn-success" data-padron-accion-factura="1">Guardar</button>
+							<button type="button" onclick="subm()" class="btn btn-success factura-carga-bloqueable" data-padron-accion-factura="1">Guardar</button>
                         </div>
                     </div>
                 </div>

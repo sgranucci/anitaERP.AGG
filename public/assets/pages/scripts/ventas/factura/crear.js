@@ -77,8 +77,17 @@
 	}
 
 	// Realiza submit
-	function subm()
+    function subm()
 	{
+		if (typeof window.formularioVentasBloqueadoPorPadron === 'function' && window.formularioVentasBloqueadoPorPadron()) {
+			if (typeof window.notificarBloqueoPadronCliente === 'function') {
+				window.notificarBloqueoPadronCliente('Problemas en ARCA: no puede guardar la factura con este cliente.');
+			} else {
+				alert('Problemas en ARCA: no puede guardar la factura con este cliente.');
+			}
+			return;
+		}
+
         var tipotransaccion_id = $("#tipotransaccion_id").val();
 		var puntoventa_id = $("#puntoventa_id").val();
 
@@ -1197,7 +1206,7 @@
 
 		// Si no tiene items agrega el primero
 		if (!$('.item-factura').length && !$('.item-pedido').length) {
-			agregaRenglon();
+			agregaRenglon(null, { enfocarArticulo: false });
 		}
 
 		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof initFacturaEnterNavigation === 'function') {
@@ -1205,8 +1214,15 @@
 		}
     });
 
-    function agregaRenglon(){
-		if (event != undefined)
+    function agregaRenglon(event, opciones){
+		if (typeof window.formularioVentasBloqueadoPorPadron === 'function' && window.formularioVentasBloqueadoPorPadron()) {
+			if (event && typeof event.preventDefault === 'function') {
+				event.preventDefault();
+			}
+			return;
+		}
+
+		if (event != undefined && typeof event.preventDefault === 'function')
         	event.preventDefault();
         var renglon = $('#template-renglon').html();
 
@@ -1215,7 +1231,8 @@
 
 		activa_eventos(false);
 
-		if (window.FL_FACTURA_LAYOUT_PEDIDO) {
+		opciones = opciones || {};
+		if (window.FL_FACTURA_LAYOUT_PEDIDO && opciones.enfocarArticulo !== false) {
 			$('#itemspedido-table').find('tr').last().find('.codigoarticulo').focus();
 		}
     }

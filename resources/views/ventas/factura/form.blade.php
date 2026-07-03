@@ -62,9 +62,10 @@
             </a>                
 			<label for="Tiposuspension" id="nombretiposuspension" style="padding: 0px;" class="col-form-label text-danger"></label>
 		</div>
+		<div id="aviso-padron-operacion-factura" class="alert d-none col-12 mb-2" role="alert"></div>
 		<div class="form-group row">
    			<label for="vendedor" class="col-lg-3 col-form-label requerido">Vendedor</label>
-        	<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-8 form-control required" data-fouc>
+        	<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-8 form-control factura-carga-bloqueable required" data-fouc>
         		<option value="">-- Seleccionar vendedor --</option>
         		@foreach($vendedor_query as $key => $value)
         			@if( (int) $value->id == (int) old('vendedor_id', $data->vendedor_id ?? ''))
@@ -85,13 +86,13 @@
 					}
 				@endphp
 				<input type="hidden" class="col-form-label transporte_id" id="transporte_id" name="transporte_id" value="{{ old('transporte_id', $data->transporte_id ?? '') }}">
-				<input type="text" class="col-lg-2 codigotransporte" id="codigotransporte" name="codigotransporte" value="{{ old('codigotransporte', $transporteFactura->codigo ?? '') }}">
+				<input type="text" class="col-lg-2 codigotransporte factura-carga-bloqueable" id="codigotransporte" name="codigotransporte" value="{{ old('codigotransporte', $transporteFactura->codigo ?? '') }}">
 				<input type="text" class="col-lg-5 form-control nombretransporte" id="nombretransporte" name="nombretransporte" value="{{ old('nombretransporte', $transporteFactura->nombre ?? '') }}" readonly>
 				<button type="button" title="Consulta repartos" style="padding:1;" class="btn-accion-tabla consultatransporte tooltipsC">
 					<i class="fa fa-search text-primary"></i>
 				</button>
 			@else
-        	<select name="transporte_id" id="transporte_id" data-placeholder="Transporte" class="col-lg-8 form-control" data-fouc>
+        	<select name="transporte_id" id="transporte_id" data-placeholder="Transporte" class="col-lg-8 form-control factura-carga-bloqueable" data-fouc>
         		<option value="">-- Seleccionar transporte --</option>
         		@foreach($transporte_query as $key => $value)
         			@if( (int) $value->id == (int) old('transporte_id', $data->transporte_id ?? ''))
@@ -179,7 +180,7 @@
 		</div>		
 		<div class="form-group row">
 			<label for="deposito" class="col-lg-3 col-form-label requerido">Depósito</label>
-			<select name="deposito_id" id="deposito_id" data-placeholder="Depósito" class="col-lg-8 form-control required" data-fouc>
+			<select name="deposito_id" id="deposito_id" data-placeholder="Depósito" class="col-lg-8 form-control factura-carga-bloqueable required" data-fouc>
 				<option value="">-- Seleccionar depósito  --</option>
 				@foreach($deposito_query as $key => $value)
 					@if( (int) $value->id == (int) old('deposito_id', $data->deposito_id ?? '1'))
@@ -193,7 +194,7 @@
 	</div>
 </div>
 
-<div class="card">
+<div class="card" id="factura-carga-contenido">
     <div class="card-body">
     	<table class="table table-hover" id="itemspedido-table">
     		<thead>
@@ -283,7 +284,7 @@
 		@endif
 	    <div class="row col-md-12">
         	<div class="col-md-2">
-        		<button id="agrega_renglon" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
+        		<button id="agrega_renglon" class="pull-right btn btn-danger factura-carga-bloqueable">+ Agrega rengl&oacute;n</button>
         	</div>
 		</div>
 		<div class="row">
@@ -291,7 +292,7 @@
                	<!-- textarea -->
 			   <div class="form-group" id="div_leyendafacturacion">
 	                <label>Leyendas</label>
-    	            <textarea id="leyendafactura" name="leyendafactura" class="form-control" cols="80" rows="6" placeholder="Leyendas de factura ...">{{$data->leyenda ?? ''}}</textarea>
+    	            <textarea id="leyendafactura" name="leyendafactura" class="form-control factura-carga-bloqueable" cols="80" rows="6" placeholder="Leyendas de factura ...">{{$data->leyenda ?? ''}}</textarea>
             	</div>
 			</div>
 			<div class="col-sm-6">
@@ -363,6 +364,7 @@
 <input type="hidden" id="tipotransacciondefault_id" name="tipotransacciondefault_id" class="form-control" value="{{$tipotransacciondefault_id}}" />
 <input type="hidden" id="modofacturacion" name="modofacturacion" class="form-control" value="{{$data->puntoventas->modofacturacion ?? ''}}" />
 <input type="hidden" id="ordenventa_id" name="ordenventa_id" class="form-control" value="{{$data->ordenventa_id ?? ''}}" />
+<input type="hidden" id="estadocliente" value="{{ $data->clientes->estado ?? '' }}">
 
 @include('ventas.factura.modal')
 @include('ventas.factura.templatetotalfactura')

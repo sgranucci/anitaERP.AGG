@@ -496,6 +496,25 @@
 		agregaRenglon(event);
 	}
 
+	function enfocarCodigoClientePedidoAlCargar() {
+		window.setTimeout(function () {
+			var el = document.getElementById('codigocliente');
+			if (!el || el.disabled || el.readOnly || el.offsetParent === null) {
+				return;
+			}
+			try {
+				el.focus({ preventScroll: true });
+			} catch (e) {
+				el.focus();
+			}
+			if (typeof el.select === 'function') {
+				el.select();
+			}
+		}, 150);
+	}
+
+	window.enfocarCodigoClientePedidoAlCargar = enfocarCodigoClientePedidoAlCargar;
+
 	function initPedidoEnterNavigation() {
 		var form = document.getElementById('formgeneral');
 
@@ -890,8 +909,6 @@
 
 		activa_eventos(true);
 		TotalPedido();
-
-		$("#codigocliente").focus();
 	});
 
 	function activa_eventos(flInicio)
@@ -1293,9 +1310,9 @@
         $(document).on('click', '.anulaitem', anulaItem);
 		$(document).on('click', '.historiaitem', historiaItem);
 
-		// Si no tiene items agrega el primero
+		// Si no tiene items agrega el primero (sin robar foco del cliente)
 		if(!$('.item-pedido').length)
-			agregaRenglon(event);
+			agregaRenglon(event, { enfocarArticulo: false });
 
 		let cliente_id = $("#cliente_id").val();
 		if (cliente_id == CLIENTE_STOCK_ID)
@@ -1303,10 +1320,21 @@
 		else
 			$("#divlote").hide();
 
-		$("#codigocliente").focus();
+		enfocarCodigoClientePedidoAlCargar();
     });
 
-    function agregaRenglon(event){
+    function agregaRenglon(event, opciones){
+		opciones = opciones || {};
+
+		if ($('#formgeneral').hasClass('pedido-bloqueado-padron')) {
+			if (typeof window.notificarBloqueoPadronCliente === 'function') {
+				window.notificarBloqueoPadronCliente('Problemas en ARCA: no puede agregar ítems con este cliente.');
+			} else {
+				alert('Problemas en ARCA: no puede agregar ítems con este cliente.');
+			}
+			return;
+		}
+
 		if (event != undefined)
         	event.preventDefault();
         var renglon = $('#template-renglon').html();
@@ -1316,7 +1344,9 @@
 
 		activa_eventos(false);
 
-		$('#itemspedido-table').find('tr').last().find('.codigoarticulo').focus();
+		if (opciones.enfocarArticulo !== false) {
+			$('#itemspedido-table').find('tr').last().find('.codigoarticulo').focus();
+		}
 	}
 
 	// Anula item 
@@ -2153,7 +2183,7 @@
 					codigosOk: [],
 				});
 			});
-	});
+	}
 
 	$('#facturarPedidoModal').on('hidden.bs.modal', function () {
 

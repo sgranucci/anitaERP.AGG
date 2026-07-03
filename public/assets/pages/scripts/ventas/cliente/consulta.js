@@ -3,6 +3,19 @@ var ptrnombrecliente;
 var ultimaConsultaClienteTermino = '';
 var ultimoDatosClienteHtml = '';
 
+if (typeof window.clienteEstaHabilitadoParaFacturacion !== 'function') {
+    window.clienteEstaHabilitadoParaFacturacion = function (estado) {
+        var e = String(estado || '').toUpperCase();
+        return e === '0' || e === 'R';
+    };
+}
+
+function enfocarCampoTrasClienteCargado() {
+    if ($('#codigotransporte').length > 0) {
+        $('#codigotransporte').focus();
+    }
+}
+
 function mensajeInicialConsultaCliente() {
     return '<tr><td colspan="7" class="text-muted">Ingrese al menos 2 caracteres para buscar (solo clientes activos).</td></tr>';
 }
@@ -102,7 +115,7 @@ function aplicarSeleccionClienteFactura(fila) {
         return;
     }
 
-    if (window.REQUIERE_VALIDACION_PADRON_OPERACION === true && $.isNumeric(fila.id)) {
+    if ($.isNumeric(fila.id)) {
         leeUnCliente(fila.id, 0);
         return;
     }
@@ -127,9 +140,6 @@ function aplicarSeleccionClienteFactura(fila) {
     }
     if ($('#codigocliente').length && fila.codigo) {
         $('#codigocliente').val(fila.codigo);
-    }
-    if ($.isNumeric(fila.id)) {
-        leeUnCliente(fila.id, 0);
     }
 }
 
@@ -224,10 +234,6 @@ function activa_eventos_consultacliente()
 
             aplicarSeleccionClienteFactura(fila);
             $('#consultaclienteModal').modal('hide');
-
-            if ($('#codigotransporte').length > 0) {
-                $('#codigotransporte').focus();
-            }
         });
 
     // Si cambia el filtro blanquea el modal
@@ -259,8 +265,6 @@ function activa_eventos_consultacliente()
         if ($.isNumeric(codigocliente))
         {
             leeUnCliente(0, codigocliente);
-
-            $("#codigotransporte").focus();
         } 
         else
             $("#nombrecliente").val("");
@@ -360,6 +364,7 @@ function leeUnCliente(cliente_id, codigocliente)
                         $('#codigocliente').val(data.codigo);
                         $("#cliente_id").val(data.id);
                         $("#nombrecliente").val(nombreClienteDisplayConCodigo(data.codigo, data.nombre));
+                        $("#estadocliente").val(data.estado != null ? data.estado : '');
 
                         $("#domicilio").val(data.domicilio);
                         $("#codigopostal").val(data.codigopostal);
@@ -395,28 +400,22 @@ function leeUnCliente(cliente_id, codigocliente)
                             $("#desc_pais").val(data.paises['nombre']);
 
                         invocarDatosClienteTrasSeleccion(data.id, data);
+                        enfocarCampoTrasClienteCargado();
                     }
 
-                    if (typeof window.ejecutarValidacionPadronOperacion === 'function'
+                    aplicarDatosClienteEnFormulario();
+
+                    if (typeof window.validarPadronClientePostCarga === 'function') {
+                        window.validarPadronClientePostCarga(data.id, {
+                            condicionivaId: data.condicioniva_id,
+                            estadoCliente: data.estado,
+                        });
+                    } else if (typeof window.ejecutarValidacionPadronOperacion === 'function'
                         && window.REQUIERE_VALIDACION_PADRON_OPERACION === true) {
                         window.ejecutarValidacionPadronOperacion(data.id, {
                             condicionivaId: data.condicioniva_id,
-                        }).done(function () {
-                            aplicarDatosClienteEnFormulario();
-                        }).fail(function (err) {
-                            if (typeof window.limpiarSeleccionClienteOperacion === 'function') {
-                                window.limpiarSeleccionClienteOperacion();
-                            }
-                            var msg = (err && err.message) ? err.message : 'Problemas en ARCA: no se puede operar con este cliente.';
-                            if (typeof window.notificarBloqueoPadronCliente === 'function') {
-                                window.notificarBloqueoPadronCliente(msg);
-                            } else {
-                                alert(msg);
-                            }
-                            $('#codigocliente').focus();
+                            estadoCliente: data.estado,
                         });
-                    } else {
-                        aplicarDatosClienteEnFormulario();
                     }
                 }
             }

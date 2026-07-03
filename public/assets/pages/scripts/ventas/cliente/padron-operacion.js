@@ -5,12 +5,21 @@
         clienteId: null,
         ok: null,
         mensaje: null,
+        estadoCliente: null,
     };
 
     var SELECTOR_BOTONES_FACTURA = '[data-padron-accion-factura]';
+    var SELECTOR_AVISO_PADRON = '#aviso-padron-operacion-pedido, #aviso-padron-operacion-factura';
+    var SELECTOR_CONTENIDO_CARGA = '#pedido-carga-contenido, #factura-carga-contenido';
+    var CLASE_CAMPOS_BLOQUEABLES = '.pedido-carga-bloqueable, .factura-carga-bloqueable';
+    var CLASE_FORM_BLOQUEADO = 'ventas-bloqueado-padron';
 
-    function requiereValidacionPadron() {
+    function requiereValidacionPadronSeleccion() {
         return window.REQUIERE_VALIDACION_PADRON_OPERACION === true;
+    }
+
+    function requiereValidacionPadronPostCarga() {
+        return window.VALIDACION_PADRON_POST_CARGA === true;
     }
 
     function carpeta() {
@@ -43,8 +52,68 @@
         return parseInt(val, 10);
     }
 
+    function esClienteRegularizado(estado) {
+        return String(estado || '').toUpperCase() === 'R';
+    }
+
+    function actualizarAvisoPadronOperacion(texto, tipo) {
+        var $aviso = $(SELECTOR_AVISO_PADRON);
+        if (!$aviso.length) {
+            return;
+        }
+
+        $aviso.each(function () {
+            var $el = $(this);
+            if (!texto) {
+                $el.addClass('d-none').removeClass('alert-warning alert-danger alert-success').text('');
+                return;
+            }
+
+            $el.removeClass('d-none alert-warning alert-danger alert-success');
+            if (tipo === 'ok') {
+                $el.addClass('alert-success');
+            } else if (tipo === 'bloqueo') {
+                $el.addClass('alert-danger');
+            } else {
+                $el.addClass('alert-warning');
+            }
+            $el.text(texto);
+        });
+    }
+
+    function aplicarBloqueoCargaVentas(bloquear, motivo) {
+        if (!requiereValidacionPadronPostCarga()) {
+            return;
+        }
+
+        var $form = $('#formgeneral');
+        if (!$form.length) {
+            return;
+        }
+
+        var $campos = $form.find(CLASE_CAMPOS_BLOQUEABLES);
+        $(SELECTOR_CONTENIDO_CARGA).each(function () {
+            $campos = $campos.add($(this).find(
+                'input:not([type="hidden"]):not([readonly]), select, textarea, button'
+            ));
+        });
+
+        $campos.prop('disabled', !!bloquear);
+        $form.toggleClass(CLASE_FORM_BLOQUEADO, !!bloquear);
+        $form.toggleClass('pedido-bloqueado-padron', !!bloquear);
+
+        if (bloquear) {
+            actualizarAvisoPadronOperacion(
+                motivo || 'Problemas en ARCA: no puede cargar ítems con este cliente.',
+                'bloqueo'
+            );
+        } else {
+            actualizarAvisoPadronOperacion('', null);
+        }
+    }
+
     function actualizarBotonesFacturaSegunPadron() {
-        if (!requiereValidacionPadron()) {
+        if (!requiereValidacionPadronSeleccion() && !requiereValidacionPadronPostCarga()) {
             $(SELECTOR_BOTONES_FACTURA).prop('disabled', false).removeClass('disabled').removeAttr('title');
             return;
         }
@@ -73,10 +142,21 @@
         return e === '0' || e === 'R';
     };
 
+    window.clienteEsRegularizadoParaOperacion = function (estado) {
+        return esClienteRegularizado(estado);
+    };
+
+    window.formularioVentasBloqueadoPorPadron = function () {
+        return $('#formgeneral').hasClass(CLASE_FORM_BLOQUEADO);
+    };
+
     window.invalidarEstadoPadronOperacion = function () {
         estadoPadron.clienteId = null;
         estadoPadron.ok = null;
         estadoPadron.mensaje = null;
+        estadoPadron.estadoCliente = null;
+        aplicarBloqueoCargaVentas(false);
+        actualizarAvisoPadronOperacion('', null);
         actualizarBotonesFacturaSegunPadron();
     };
 
@@ -88,13 +168,17 @@
     };
 
     window.padronOperacionClienteOk = function (clienteId) {
-        if (!requiereValidacionPadron()) {
+        if (!requiereValidacionPadronSeleccion() && !requiereValidacionPadronPostCarga()) {
             return true;
         }
 
         var id = parseInt(clienteId, 10);
         if (!id) {
             return false;
+        }
+
+        if (esClienteRegularizado(estadoPadron.estadoCliente)) {
+            return true;
         }
 
         return estadoPadron.clienteId === id && estadoPadron.ok === true;
@@ -128,30 +212,52 @@
     window.ejecutarValidacionPadronOperacion = function (clienteId, opts) {
         opts = opts || {};
         var id = parseInt(clienteId, 10);
+        var postCarga = opts.postCarga === true;
+        var debeValidar = opts.forzar || requiereValidacionPadronSeleccion() || (postCarga && requiereValidacionPadronPostCarga());
 
-        if (!requiereValidacionPadron() || !id) {
+        if (opts.estadoCliente) {
+            estadoPadron.estadoCliente = opts.estadoCliente;
+        }
+
+        if (esClienteRegularizado(opts.estadoCliente || estadoPadron.estadoCliente)) {
             estadoPadron.clienteId = id || null;
             estadoPadron.ok = true;
             estadoPadron.mensaje = null;
+            aplicarBloqueoCargaVentas(false);
+            actualizarAvisoPadronOperacion('', null);
             actualizarBotonesFacturaSegunPadron();
+            return $.Deferred().resolve({ ok: true, regularizado: true }).promise();
+        }
 
+        if ((!debeValidar) || !id) {
+            estadoPadron.clienteId = id || null;
+            estadoPadron.ok = true;
+            estadoPadron.mensaje = null;
+            aplicarBloqueoCargaVentas(false);
+            actualizarBotonesFacturaSegunPadron();
             return $.Deferred().resolve({ ok: true, skipped: true }).promise();
         }
 
         if (!opts.forzar
             && estadoPadron.clienteId === id
             && estadoPadron.ok === true) {
+            aplicarBloqueoCargaVentas(false);
             actualizarBotonesFacturaSegunPadron();
-
             return $.Deferred().resolve({ ok: true, cached: true }).promise();
         }
 
         if (!opts.forzar
             && estadoPadron.clienteId === id
             && estadoPadron.ok === false) {
+            if (postCarga) {
+                aplicarBloqueoCargaVentas(true, estadoPadron.mensaje);
+            }
             actualizarBotonesFacturaSegunPadron();
-
             return $.Deferred().reject({ message: estadoPadron.mensaje }).promise();
+        }
+
+        if (postCarga) {
+            actualizarAvisoPadronOperacion('Validando padr\u00f3n ARCA del cliente\u2026', 'pendiente');
         }
 
         actualizarBotonesFacturaSegunPadron();
@@ -161,6 +267,8 @@
                 estadoPadron.clienteId = id;
                 estadoPadron.ok = true;
                 estadoPadron.mensaje = null;
+                aplicarBloqueoCargaVentas(false);
+                actualizarAvisoPadronOperacion('', null);
                 actualizarBotonesFacturaSegunPadron();
             })
             .fail(function (xhr) {
@@ -168,29 +276,34 @@
                 estadoPadron.clienteId = id;
                 estadoPadron.ok = false;
                 estadoPadron.mensaje = msg;
+                if (postCarga) {
+                    aplicarBloqueoCargaVentas(true, msg);
+                    window.notificarBloqueoPadronCliente(msg);
+                }
                 actualizarBotonesFacturaSegunPadron();
             });
     };
 
     /**
-     * Ejecuta acción de facturación usando cache de padrón (sin reconsultar ARCA salvo cache miss).
+     * Tras cargar datos del cliente: valida ARCA en background sin bloquear la carga inicial.
+     * Solo activo en pantallas con VALIDACION_PADRON_POST_CARGA (pedido / factura mostrador).
      */
+    window.validarPadronClientePostCarga = function (clienteId, opts) {
+        opts = opts || {};
+        opts.postCarga = true;
+        return window.ejecutarValidacionPadronOperacion(clienteId, opts);
+    };
+
     window.ejecutarSiPadronOperacionOk = function (clienteId, accion, opts) {
         opts = opts || {};
-
-        if (!requiereValidacionPadron()) {
-            if (typeof accion === 'function') {
-                accion();
-            }
-
-            return $.Deferred().resolve({ ok: true, skipped: true }).promise();
-        }
 
         var id = parseInt(clienteId, 10);
         if (!id) {
             window.notificarBloqueoPadronCliente('Debe seleccionar un cliente.');
             return $.Deferred().reject({ message: 'Debe seleccionar un cliente.' }).promise();
         }
+
+        opts.forzar = true;
 
         return window.ejecutarValidacionPadronOperacion(id, opts)
             .done(function () {
@@ -222,7 +335,7 @@
     };
 
     window.validarPadronOperacionAntesSubmitForm = function (event) {
-        if (!requiereValidacionPadron()) {
+        if (!requiereValidacionPadronSeleccion() && !requiereValidacionPadronPostCarga()) {
             return true;
         }
 
@@ -242,6 +355,12 @@
 
         var id = clienteIdDesdeFormulario();
 
+        if (esClienteRegularizado(estadoPadron.estadoCliente)
+            || esClienteRegularizado($('#estadocliente').val())) {
+            $(form).data('padron-omitir-validacion', true).trigger('submit');
+            return false;
+        }
+
         if (estadoPadron.clienteId === id && estadoPadron.ok === false) {
             window.notificarBloqueoPadronCliente(estadoPadron.mensaje || 'Problemas en ARCA: no se puede operar con este cliente.');
             return false;
@@ -254,6 +373,7 @@
 
         window.ejecutarValidacionPadronOperacion(id, {
             condicionivaId: $('#condicioniva_id').val() || '',
+            estadoCliente: $('#estadocliente').val() || estadoPadron.estadoCliente,
         }).done(function () {
             $(form).data('padron-omitir-validacion', true).trigger('submit');
         }).fail(function (err) {
@@ -265,14 +385,17 @@
     };
 
     window.inicializarPadronOperacionDesdeFormulario = function () {
-        if (!requiereValidacionPadron()) {
+        if (!requiereValidacionPadronSeleccion() && !requiereValidacionPadronPostCarga()) {
             return;
         }
 
         var id = clienteIdDesdeFormulario();
+        var estadoCliente = $('#estadocliente').val() || null;
+
         if (id > 0) {
-            window.ejecutarValidacionPadronOperacion(id, {
+            window.validarPadronClientePostCarga(id, {
                 condicionivaId: $('#condicioniva_id').val() || '',
+                estadoCliente: estadoCliente,
             });
         } else {
             actualizarBotonesFacturaSegunPadron();
@@ -280,7 +403,7 @@
     };
 
     $(function () {
-        if (!requiereValidacionPadron()) {
+        if (!requiereValidacionPadronSeleccion() && !requiereValidacionPadronPostCarga()) {
             return;
         }
 

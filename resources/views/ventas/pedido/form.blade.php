@@ -32,9 +32,10 @@
 			</button>			
 			<label for="Tiposuspension" id="nombretiposuspension" style="padding: 0px;" class="col-form-label text-danger"></label>		
 		</div>
+		<div id="aviso-padron-operacion-pedido" class="alert d-none col-12 mb-2" role="alert"></div>
 		<div class="form-group row">
    			<label for="vendedor" class="col-lg-3 col-form-label requerido">Vendedor</label>
-        	<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-8 form-control" data-fouc required>
+        	<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-8 form-control pedido-carga-bloqueable" data-fouc required>
         		<option value="">-- Seleccionar vendedor --</option>
         		@foreach($vendedor_query as $key => $value)
         			@if( (int) $value->id == (int) old('vendedor_id', $pedido->vendedor_id ?? ''))
@@ -48,7 +49,7 @@
 		<div class="form-group row">
 			<label for="transporte" class="col-lg-3 col-form-label requerido">Reparto</label>
 			<input type="hidden" class="col-form-label transporte_id" id="transporte_id" name="transporte_id" value="{{$pedido->transporte_id ?? ''}}" >
-			<input type="text" class="col-lg-2 codigotransporte" id="codigotransporte" name="codigotransporte" value="{{$pedido->transportes->codigo ?? ''}}" required>
+			<input type="text" class="col-lg-2 codigotransporte pedido-carga-bloqueable" id="codigotransporte" name="codigotransporte" value="{{$pedido->transportes->codigo ?? ''}}" required>
 			<input type="text" class="col-lg-5 form-control nombretransporte" id="nombretransporte" name="nombretransporte" value="{{$pedido->transportes->nombre ?? ''}}" readonly>
 			<button type="button" title="Consulta repartos" style="padding:1;" class="btn-accion-tabla consultatransporte tooltipsC">
 				<i class="fa fa-search text-primary"></i>
@@ -59,7 +60,7 @@
     		<label for="lugarentrega" id="label-lugarentrega" class="col-lg-3 col-form-label">Lugar de Entrega</label>
     		<div class="col-lg-8">
     			<div class="input-group">
-    				<input type="text" name="lugarentrega" id="lugarentrega" class="form-control" value="{{old('lugarentrega', $pedido->lugarentrega ?? '')}}" placeholder="Seleccione un lugar de entrega del cliente">
+    				<input type="text" name="lugarentrega" id="lugarentrega" class="form-control pedido-carga-bloqueable" value="{{old('lugarentrega', $pedido->lugarentrega ?? '')}}" placeholder="Seleccione un lugar de entrega del cliente">
     				<div class="input-group-append" id="div-cambiar-lugarentrega" style="display: none;">
     					<button type="button" id="btn-cambiar-lugarentrega" class="btn btn-outline-secondary btn-sm" title="Cambiar lugar de entrega">
     						Cambiar
@@ -88,7 +89,7 @@
 		<div class="form-group row">
     		<label for="fechaentrega" class="col-lg-3 col-form-label required">Entrega</label>
     		<div class="col-lg-3 row">
-    			<input type="date" name="fechaentrega" id="fechaentrega" class="form-control" value="{{substr(old('fechaentrega', $pedido->fechaentrega ?? date('Y-m-d')),0,10)}}" requerido>
+    			<input type="date" name="fechaentrega" id="fechaentrega" class="form-control pedido-carga-bloqueable" value="{{substr(old('fechaentrega', $pedido->fechaentrega ?? date('Y-m-d')),0,10)}}" requerido>
     		</div>
 			<div class="col-lg-6 row" id="divlote">
 				<label for="lote" class="col-lg-2 col-form-label">Lote</label>
@@ -121,7 +122,7 @@
 	</div>
 </div>
 
-<div class="card">
+<div class="card" id="pedido-carga-contenido">
     <div class="card-body">
     	<table class="table table-hover" id="itemspedido-table">
     		<thead>
@@ -259,13 +260,13 @@
 		@include('ventas.pedido.template')
         <div class="row col-md-12">
         	<div class="col-md-2">
-        		<button id="agrega_renglon" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
+        		<button id="agrega_renglon" class="pull-right btn btn-danger pedido-carga-bloqueable">+ Agrega rengl&oacute;n</button>
         	</div>
 			<div class="col-md-6">
                	<!-- textarea -->
                	<div class="form-group">
                		<label>Leyendas</label>
-               		<textarea name="leyenda" class="form-control" rows="3" placeholder="Leyendas ...">{{old('leyenda', $pedido->leyenda ?? '')}}</textarea>
+               		<textarea name="leyenda" class="form-control pedido-carga-bloqueable" rows="3" placeholder="Leyendas ...">{{old('leyenda', $pedido->leyenda ?? '')}}</textarea>
                	</div>
             </div>
         	<div class="col-md-4 row">
