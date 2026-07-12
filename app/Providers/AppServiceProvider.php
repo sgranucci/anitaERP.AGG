@@ -1262,6 +1262,11 @@ class AppServiceProvider extends ServiceProvider
             'App\Repositories\Contable\AsientoRepository',
         );
 
+        // Una sola lectura Anita del período (mes) compartida entre mayor por concepto y EFE.
+        $this->app->singleton(
+            \App\Support\Contable\MayorConcepto\MayorConceptoAnitaBridgeReader::class
+        );
+
         $this->app->bind(
             'App\Repositories\Contable\Asiento_MovimientoRepositoryInterface',
             'App\Repositories\Contable\Asiento_MovimientoRepository',

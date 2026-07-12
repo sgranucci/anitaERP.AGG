@@ -36,7 +36,7 @@ class EfeOppComGastoResolverSupport
     private int $empresaId = 0;
 
     public function __construct(
-        private readonly MayorConceptoAnitaBridgeReader $bridgeReader = new MayorConceptoAnitaBridgeReader(),
+        private readonly MayorConceptoAnitaBridgeReader $bridgeReader,
     ) {
     }
 

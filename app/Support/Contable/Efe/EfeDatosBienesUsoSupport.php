@@ -28,11 +28,11 @@ class EfeDatosBienesUsoSupport
     private const TIPOS_APLICACION_GASTO = ['FIB', 'FGA', 'COM', 'FIS', 'FNB', 'FNA', 'PEP'];
 
     public function __construct(
-        private readonly MayorConceptoAnitaBridgeReader $bridgeReader = new MayorConceptoAnitaBridgeReader(),
-        private readonly EfeAnitaBridgeReader $efeBridgeReader = new EfeAnitaBridgeReader(),
-        private readonly EfeDatosPagosCobrosSupport $pagosCobrosSupport = new EfeDatosPagosCobrosSupport(),
-        private readonly EfeClasificacionConceptoSupport $clasificacionSupport = new EfeClasificacionConceptoSupport(),
-        private readonly MayorConceptoMemoriaMotor $motor = new MayorConceptoMemoriaMotor(),
+        private readonly MayorConceptoAnitaBridgeReader $bridgeReader,
+        private readonly EfeAnitaBridgeReader $efeBridgeReader,
+        private readonly EfeDatosPagosCobrosSupport $pagosCobrosSupport,
+        private readonly EfeClasificacionConceptoSupport $clasificacionSupport,
+        private readonly MayorConceptoMemoriaMotor $motor,
     ) {
     }
 

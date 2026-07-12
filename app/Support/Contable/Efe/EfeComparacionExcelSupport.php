@@ -31,7 +31,14 @@ class EfeComparacionExcelSupport
         $conceptos = array_unique(array_merge(array_keys($referencia), array_keys($erpPorConcepto)));
         sort($conceptos);
 
+        // 58/59/61/63 se acumulan en concepto 8 (col B Excel y Resumen ERP).
+        $rollup = [58, 59, 61, 63];
+
         foreach ($conceptos as $conceptoId) {
+            if (in_array((int) $conceptoId, $rollup, true)) {
+                continue;
+            }
+
             $excel = (float) ($referencia[$conceptoId] ?? 0.0);
             $erp = (float) ($erpPorConcepto[$conceptoId] ?? 0.0);
             if (abs($excel) < 0.005 && abs($erp) < 0.005) {
@@ -116,11 +123,32 @@ class EfeComparacionExcelSupport
                 continue;
             }
 
-            $valor = $sheet->getCell('B'.$fila)->getValue();
-            $out[$conceptoId] = is_numeric($valor) ? (float) $valor : 0.0;
+            $valor = $this->celdaNumerica($sheet, 'B'.$fila);
+            $out[$conceptoId] = $valor;
         }
 
         return $out;
+    }
+
+    /**
+     * Lee valor numérico de celda: cache de fórmula (getOldCalculatedValue) o número directo.
+     */
+    private function celdaNumerica(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet, string $coord): float
+    {
+        $cell = $sheet->getCell($coord);
+        $valor = $cell->getValue();
+        if (is_numeric($valor)) {
+            return (float) $valor;
+        }
+
+        if (is_string($valor) && str_starts_with(ltrim($valor), '=')) {
+            $cached = $cell->getOldCalculatedValue();
+            if (is_numeric($cached)) {
+                return (float) $cached;
+            }
+        }
+
+        return 0.0;
     }
 
     /**
@@ -145,8 +173,7 @@ class EfeComparacionExcelSupport
             $reader->setLoadSheetsOnly(['Sumarias']);
             $sheet = $reader->load($rutaReferencia)->getSheetByName('Sumarias');
             if ($sheet !== null) {
-                $v = $sheet->getCell('E68')->getValue();
-                $excelE68 = is_numeric($v) ? (float) $v : 0.0;
+                $excelE68 = $this->celdaNumerica($sheet, 'E68');
             }
         }
 
@@ -175,8 +202,7 @@ class EfeComparacionExcelSupport
                 for ($fila = 200; $fila <= 230; $fila++) {
                     $a = trim((string) $sheet->getCell('A'.$fila)->getValue());
                     if (stripos($a, 'Saldo final') === 0) {
-                        $v = $sheet->getCell('B'.$fila)->getValue();
-                        $excel = is_numeric($v) ? (float) $v : null;
+                        $excel = $this->celdaNumerica($sheet, 'B'.$fila);
                         break;
                     }
                 }

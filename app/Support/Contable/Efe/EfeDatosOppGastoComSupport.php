@@ -24,8 +24,8 @@ class EfeDatosOppGastoComSupport
     ];
 
     public function __construct(
-        private readonly EfeOppComGastoResolverSupport $resolverSupport = new EfeOppComGastoResolverSupport(),
-        private readonly EfeClasificacionConceptoSupport $clasificacionSupport = new EfeClasificacionConceptoSupport(),
+        private readonly EfeOppComGastoResolverSupport $resolverSupport,
+        private readonly EfeClasificacionConceptoSupport $clasificacionSupport,
     ) {
     }
 

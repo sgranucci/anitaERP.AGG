@@ -56,6 +56,11 @@ class CompararEfeExcelCommand extends Command
         $posfinDet = $this->compararPosFinDetalle($resultado['posicion_financiera'] ?? [], $rutaExcel);
 
         $this->newLine();
+        $aud = $resultado['auditoria_panel']['conciliacion'] ?? [];
+        $this->line('Auditoría mayor por concepto: '
+            .((! empty($resultado['auditoria_panel']['cuadra'])) ? 'CUADRA' : 'CON Δ')
+            .' · asientos '.((int) ($aud['asientos_analizados'] ?? 0))
+            .' · descuadrados '.((int) ($aud['asientos_descuadrados'] ?? 0)));
         $this->line('Datos: '.count($resultado['filas_datos'] ?? []).' líneas');
         $this->line('Sumarias E68 ERP (miles): '.$sum['total_e68'].' · Excel: '.$sum['excel_e68'].' · Δ '.$sum['diff']);
         $this->line('Concepto 2 BIENES DE USO: ERP '.$c2['neto'].' · Excel ref '

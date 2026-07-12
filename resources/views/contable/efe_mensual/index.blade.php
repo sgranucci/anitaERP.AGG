@@ -37,9 +37,10 @@
             <form method="get" action="{{ route('efe_mensual') }}" id="form-efe-mensual" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Genera el Excel de flujo de fondos mensual reutilizando el motor de imputación del
-                        <strong>Mayor por concepto</strong>. La solapa <em>Datos</em> y el resumen por concepto se
-                        calculan en Anita; las demás solapas conservan la plantilla y sus fórmulas.
+                        Genera el Excel de flujo de fondos mensual reutilizando el motor y la auditoría del
+                        <strong>Mayor por concepto</strong> (una lectura Anita del mes; lookups previos al mes
+                        van al bridge on-demand). La solapa <em>Datos</em> y el resumen por concepto se
+                        calculan sobre ese motor; las demás solapas conservan la plantilla y sus fórmulas.
                     </p>
 
                     @include('includes.form-empresa-asignada', [
@@ -141,8 +142,23 @@
                             · Pagos: {{ number_format((float) ($totales['total_pagos'] ?? 0), 2, ',', '.') }}
                             · Cobros: {{ number_format((float) ($totales['total_cobros'] ?? 0), 2, ',', '.') }}
                             · Neto resumen: {{ number_format((float) ($totales['neto_resumen'] ?? 0), 2, ',', '.') }}
+                            @if (isset($totales['auditoria_asientos_analizados']))
+                                · Auditoría mayor:
+                                @if (! empty($totales['auditoria_cuadra']))
+                                    <span class="badge badge-success">cuadra</span>
+                                @else
+                                    <span class="badge badge-warning">
+                                        {{ (int) ($totales['auditoria_asientos_descuadrados'] ?? 0) }} asientos Δ
+                                    </span>
+                                @endif
+                                ({{ (int) ($totales['auditoria_asientos_analizados'] ?? 0) }} analizados)
+                            @endif
                         </div>
                     @endif
+
+                    @include('contable.mayor_concepto.partials.conciliacion_asientos_panel', [
+                        'auditoria_panel' => $auditoria_panel ?? null,
+                    ])
 
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0" id="tabla-paginada">

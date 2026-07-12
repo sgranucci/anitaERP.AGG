@@ -3,6 +3,7 @@
 namespace App\Services\Contable;
 
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Contable\MayorConcepto\MayorConceptoAnitaBridgeReader;
 use App\Support\Contable\MayorConcepto\MayorConceptoAuditoriaSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoConciliacionAsientoSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
@@ -25,6 +26,15 @@ class MayorConceptoReporteService
         private readonly MayorConceptoAuditoriaSupport $auditoriaSupport,
         private readonly MayorConceptoConciliacionAsientoSupport $conciliacionAsientoSupport,
     ) {
+    }
+
+    /**
+     * Bridge Anita del período cargado por el motor (mes en una lectura).
+     * EFE y post-procesos lo reutilizan; datos anteriores al mes se piden on-demand.
+     */
+    public function bridgeReader(): MayorConceptoAnitaBridgeReader
+    {
+        return $this->procesador->bridgeReader();
     }
 
     /**

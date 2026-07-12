@@ -18,8 +18,8 @@ class EfeDatosGamingSuppliesSupport
     private array $auxpagPorRec = [];
 
     public function __construct(
-        private readonly MayorConceptoAnitaBridgeReader $bridgeReader = new MayorConceptoAnitaBridgeReader(),
-        private readonly EfeClasificacionConceptoSupport $clasificacionSupport = new EfeClasificacionConceptoSupport(),
+        private readonly MayorConceptoAnitaBridgeReader $bridgeReader,
+        private readonly EfeClasificacionConceptoSupport $clasificacionSupport,
     ) {
     }
 

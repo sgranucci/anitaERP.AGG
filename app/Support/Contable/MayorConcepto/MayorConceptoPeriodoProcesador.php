@@ -70,6 +70,15 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
+     * Bridge Anita del período (mes). Reutilizable por EFE / post-procesos sin re-leer.
+     * Lookups puntuales (COM/aplicped/axphist) van al bridge on-demand.
+     */
+    public function bridgeReader(): MayorConceptoAnitaBridgeReader
+    {
+        return $this->reader;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function generar(

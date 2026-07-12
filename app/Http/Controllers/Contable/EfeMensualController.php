@@ -49,6 +49,7 @@ class EfeMensualController extends Controller
         $filasPreview = null;
         $totales = null;
         $erroresBridge = [];
+        $auditoriaPanel = null;
 
         if ($request->boolean('consultar') && EfeMensualListadoFiltros::tieneCriteriosAplicados($filtros)) {
             $resultado = $this->generarYCachear($filtros);
@@ -64,6 +65,7 @@ class EfeMensualController extends Controller
             $resumenPagos = $resultado['resumen_pagos'] ?? [];
             $totales = $resultado['totales'] ?? null;
             $erroresBridge = $resultado['errores_bridge'] ?? [];
+            $auditoriaPanel = $resultado['auditoria_panel'] ?? null;
             $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
             $filasPreview = $this->paginarFilas($resumenPagos, $perPage, $request);
         }
@@ -91,6 +93,7 @@ class EfeMensualController extends Controller
             'filas_preview' => $filasPreview,
             'totales' => $totales,
             'errores_bridge' => $erroresBridge,
+            'auditoria_panel' => $auditoriaPanel,
             'empresa' => $empresa,
             'moneda' => $moneda,
             'periodo_texto' => $this->reporteService->formatearPeriodoTexto($filtros),
@@ -143,6 +146,7 @@ class EfeMensualController extends Controller
     {
         $resultado = $this->reporteService->generarDesdeFiltros($filtros);
         unset($resultado['mayor_concepto']['mayor_plano_analitico']);
+        unset($resultado['mayor_concepto']['analitico_por_asiento']);
         session([
             self::SESSION_CACHE_KEY => [
                 'firma' => EfeMensualListadoFiltros::firma($filtros),

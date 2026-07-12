@@ -49,11 +49,19 @@ class EfeMensualReporteService
     {
         MayorConceptoRuntimeSupport::elevarLimites();
 
+        // Motor mayor por concepto: una lectura Anita del mes (subdiario/ctamov/auxpag/ctaconc).
+        // El bridge es singleton: post-procesos Datos reutilizan el mismo período en memoria;
+        // COM/aplicped/axphist anteriores al mes se piden al bridge on-demand.
         $filtrosMayor = EfeMensualListadoFiltros::filtrosParaMayorConcepto($filtros);
         $resultadoMayor = $this->mayorConceptoService->generarDesdeFiltros($filtrosMayor);
+        $auditoriaPanel = $this->compactarAuditoriaPanel(
+            $this->mayorConceptoService->armarAuditoriaPanel($resultadoMayor)
+        );
+
         $filasDatos = $this->armarFilasDatos($resultadoMayor, (int) ($filtros['empresa_id'] ?? 0), $filtros);
         $resumenPagos = $this->armarResumenPagos($filasDatos);
         $conceptos = $this->listarConceptosInforme();
+        // Sumarias: mayor plano del mes + mes anterior (saldo inicial) vía bridge propio.
         $sumarias = $this->sumariasSupport->generar($filtros);
         $posicionFinanciera = $this->posicionFinancieraSupport->generar($filtros);
 
@@ -66,6 +74,7 @@ class EfeMensualReporteService
                 'solo_moneda_origen' => (bool) ($filtros['solo_moneda_origen'] ?? false),
             ],
             'mayor_concepto' => $resultadoMayor,
+            'auditoria_panel' => $auditoriaPanel,
             'filas_datos' => $filasDatos,
             'resumen_pagos' => $resumenPagos,
             'conceptos_informe' => $conceptos,
@@ -78,12 +87,32 @@ class EfeMensualReporteService
                 'neto_resumen' => round(array_sum(array_column($resumenPagos, 'neto')), 2),
                 'sumarias_e68_miles' => round(array_sum(array_column($sumarias, 'saldo_ajustado')) / 1000, 2),
                 'posfin_saldo_final' => $posicionFinanciera['saldo_final'] ?? null,
+                'auditoria_cuadra' => (bool) ($auditoriaPanel['cuadra'] ?? false),
+                'auditoria_asientos_analizados' => (int) ($auditoriaPanel['conciliacion']['asientos_analizados'] ?? 0),
+                'auditoria_asientos_descuadrados' => (int) ($auditoriaPanel['conciliacion']['asientos_descuadrados'] ?? 0),
             ],
             'errores_bridge' => array_values(array_unique(array_merge(
                 $resultadoMayor['errores_bridge'] ?? [],
                 $posicionFinanciera['errores_bridge'] ?? [],
             ))),
         ];
+    }
+
+    /**
+     * Recorta filas cuadradas para no hinchar sesión/cache (mismo criterio que mayor concepto).
+     *
+     * @param  array<string, mixed>  $panel
+     * @return array<string, mixed>
+     */
+    private function compactarAuditoriaPanel(array $panel): array
+    {
+        $cuadradas = $panel['conciliacion']['filas_cuadradas'] ?? [];
+        if (is_array($cuadradas) && count($cuadradas) > 50) {
+            $panel['conciliacion']['filas_cuadradas'] = array_slice($cuadradas, 0, 50);
+            $panel['conciliacion']['filas_cuadradas_recortadas'] = true;
+        }
+
+        return $panel;
     }
 
     /**
