@@ -1719,6 +1719,12 @@ class MayorConceptoPeriodoProcesador
                 continue;
             }
 
+            // Con prorrateo parcial (113 / disp fuera del analítico), el 113 no se emite nativo:
+            // las contrapartidas ya se escalan al neto de anclas ≤ límite (igual que multilinea).
+            if ($aplicaProrrateoParcial) {
+                continue;
+            }
+
             $cuentaDispCredito = $anclaPrincipal > 0 ? $anclaPrincipal : $cuenta;
 
             $lineas[] = $this->lineaReporte(
@@ -1828,6 +1834,10 @@ class MayorConceptoPeriodoProcesador
                     ],
                 );
             }
+        }
+
+        if ($aplicaProrrateoParcial && $lineas !== []) {
+            $lineas = $this->reconciliarRedondeoNetoVentaMaquinasMultilinea($lineasOp, $lineas);
         }
 
         return $lineas;
