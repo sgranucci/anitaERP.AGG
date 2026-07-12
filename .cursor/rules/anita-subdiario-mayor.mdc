@@ -1,0 +1,83 @@
+---
+description: Mayor Anita desde subdiario + ctamov (convención D/H subd_cuenta y contrapartida)
+alwaysApply: true
+---
+
+# Mayor Anita: subdiario + ctamov
+
+Todo proceso que arme **mayor analítico** desde Anita debe leer **subdiario y ctamov** y combinar ambas fuentes. **No** usar solo `ctamov`: muchas cuentas (retenciones 214xxx, OP, comprobantes) imputan solo en subdiario.
+
+Referencias canónicas:
+
+| Uso | Implementación |
+|---|---|
+| Mayor por cuenta (l-mayor.c) | `MayorPlanoCuentaProcesador` + `MayorPlanoCuentaAnitaBridgeReader` |
+| Helpers D/H reutilizables | `App\Support\Contable\Anita\AnitaSubdiarioMayorSupport` |
+| Mayor filtrado por cuentas/período | `App\Support\Contable\Anita\AnitaMayorAnaliticoSupport` |
+| Mayor concepto / conciliación | `MayorConceptoPeriodoProcesador::construirMayorPlanoAnalitico` |
+
+## Convención subdiario (obligatoria)
+
+`subd_tipo_mov` indica el lado de **`subd_cuenta`**. **`subd_contrapartida`** va al lado opuesto.
+
+| `subd_tipo_mov` | `subd_cuenta` | `subd_contrapartida` |
+|---|---|---|
+| **`D`** | Debe | Haber |
+| **`H`** | Haber | Debe |
+
+```php
+use App\Support\Contable\Anita\AnitaSubdiarioMayorSupport;
+
+// Expandir una línea de subdiario
+foreach (AnitaSubdiarioMayorSupport::imputacionesLineaSubdiario($linea) as $imp) {
+    // $imp['cuenta'], $imp['dh'] ('D'|'H'), $imp['importe']
+}
+
+// ctamov: pierna nativa ctav_cuenta + ctav_d_h
+$imp = AnitaSubdiarioMayorSupport::imputacionLineaCtamov($lineaCtamov);
+```
+
+## Reglas de lectura
+
+1. **Subdiario**: filtrar por `subd_cuenta IN (…)` **OR** `subd_contrapartida IN (…)`; aplicar convención D/H en **ambas** piernas.
+2. **Ctamov**: filtrar por `ctav_cuenta`; usar `ctav_d_h` directo (sin espejar contrapartida).
+3. **Sumar ambas fuentes** en el período (patrón l-mayor: no son excluyentes).
+4. Empresa Anita: `SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId)` o el mismo criterio que el módulo origen (mayor plano usa `empresa_id` ERP cuando coincide con Anita).
+
+## Correcto
+
+```php
+$movimientos = app(AnitaMayorAnaliticoSupport::class)->listarMovimientosPeriodo(
+    $empresaAnita,
+    (int) str_replace('-', '', $fechaDesde),
+    (int) str_replace('-', '', $fechaHasta),
+    [214010013],
+);
+```
+
+## Prohibido
+
+```php
+// ❌ Solo ctamov para mayor / conciliación contable
+ApiAnita::list('ctamov', ... WHERE ctav_cuenta = 214010013 ...);
+
+// ❌ Ignorar subd_contrapartida o invertir mal el D/H
+$haber = $tipoMov === 'H' ? $importe : 0; // sin mirar si la cuenta es subd_cuenta o contrapartida
+
+// ❌ Duplicar la convención D/H en cada módulo sin usar AnitaSubdiarioMayorSupport
+```
+
+## Al agregar conciliación o reporte contra mayor Anita
+
+1. ¿Necesita detalle por cuenta? → `AnitaMayorAnaliticoSupport` o `MayorPlanoCuentaProcesador` con `incluye_subdiario=true`.
+2. ¿Varias cuentas de retención / pasivo? → filtrar subdiario por cuenta **y** contrapartida.
+3. ¿Totales Debe/Haber? → `AnitaSubdiarioMayorSupport::debeHaberDesdeDh()`.
+
+## Comprobación rápida
+
+```bash
+rg "tabla.*ctamov" app/Services/Contable/Sicore app/Support/Contable --glob '*.php'
+rg "AnitaSubdiarioMayorSupport|AnitaMayorAnaliticoSupport|incluye_subdiario" app --glob '*.php'
+php -l app/Support/Contable/Anita/AnitaSubdiarioMayorSupport.php
+php -l app/Support/Contable/Anita/AnitaMayorAnaliticoSupport.php
+```

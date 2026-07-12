@@ -380,7 +380,34 @@ $(function () {
         var proveedorInicial = parseInt($('#proveedor_id').val() || '0', 10);
         if (proveedorInicial > 0) {
             window.cpValidarProveedorArca(proveedorInicial);
+            if (typeof window.cpValidarProveedorArcaApoc === 'function') {
+                window.cpValidarProveedorArcaApoc(proveedorInicial);
+            }
         }
+    })();
+
+    (function initProveedorArcaApocComprobante() {
+        var $cfg = $('#cp-proveedor-arca-apoc-config');
+        if (!$cfg.length || typeof window.ArcaApocValidacionAsync === 'undefined') {
+            return;
+        }
+
+        window.cpLimpiarAvisoProveedorArcaApoc = function () {
+            window.ArcaApocValidacionAsync.limpiarUltimoModal();
+        };
+
+        window.cpValidarProveedorArcaApoc = function (proveedorId) {
+            var id = parseInt(proveedorId || '0', 10);
+            if (id <= 0) {
+                window.cpLimpiarAvisoProveedorArcaApoc();
+                return;
+            }
+            window.ArcaApocValidacionAsync.encolar({
+                $config: $cfg,
+                proveedorId: id,
+                suspenderUi: false,
+            });
+        };
     })();
 
     var paramsUrl = new URLSearchParams(window.location.search);

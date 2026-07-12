@@ -15,6 +15,9 @@ use App\Support\Stock\DepmaeListadoFiltros;
 ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -31,7 +34,7 @@ use App\Support\Stock\DepmaeListadoFiltros;
                         'toggleTarget' => '#panel-filtros-depmae',
                         'toggleId' => 'btn-toggle-filtros-depmae',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_depmae'),
+                        'nuevoRegistroUrl' => route('crear_depmae', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-depositos',
                     ])
                 </div>
@@ -54,7 +57,7 @@ use App\Support\Stock\DepmaeListadoFiltros;
                             <th>Empresa</th>
                             <th>Tipo de dep&oacute;sito</th>
                             <th>C&oacute;digo ANITA</th>
-                            <th class="width80" data-orderable="false"></th>
+                            <th class="width120" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -65,9 +68,9 @@ use App\Support\Stock\DepmaeListadoFiltros;
                             <td>{{ optional($data->empresas)->nombre ?? '—' }}</td>
                             <td>{{ Depmae::etiquetaTipoDeposito($data->tipodeposito) ?: '—' }}</td>
                             <td>{{ $data->codigo }}</td>
-                            <td>
+                            <td class="text-nowrap">
                        			@if (can('editar-depositos', false))
-                                	<a href="{{ route('editar_depmae', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                	<a href="{{ route('editar_depmae', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif

@@ -9,6 +9,7 @@ use App\Models\Contable\BienUso;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\BienUsoRepositoryInterface;
 use App\Support\Contable\BienUsoListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Contable\BienUsoVisibilidadSupport;
 use App\Support\Stock\BienUsoAsignacionSupport;
 use Illuminate\Http\Request;
@@ -88,11 +89,12 @@ class BienUsoController extends Controller
         return redirect()->route('bien_uso', BienUsoListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-bien-uso');
 
         $data = new BienUso;
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, BienUsoListadoFiltros::class);
 
         return view('contable.bien_uso.crear', [
             'data' => $data,
@@ -100,6 +102,7 @@ class BienUsoController extends Controller
             'centrocosto_opciones' => BienUsoVisibilidadSupport::opcionesCentrocostoAbm(),
             'tipo_bien_enum' => BienUso::$enumTipoBien,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'filtrosQuery' => $filtrosQuery,
         ]);
     }
 
@@ -111,12 +114,13 @@ class BienUsoController extends Controller
 
         $this->repository->create($request->all());
 
-        return redirect('contable/bien-uso')->with('mensaje', 'Bien de uso creado con éxito');
+        return redirect()->route('bien_uso', QueryRetornoListado::desdeRequest($request, BienUsoListadoFiltros::class))
+            ->with('mensaje', 'Bien de uso creado con éxito');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
         if ($soloConsulta) {
             can('listar-bien-uso');
         } else {
@@ -131,6 +135,8 @@ class BienUsoController extends Controller
         $transferenciasPendientes = BienUsoAsignacionSupport::transferenciasPendientesEntrada((int) $data->id);
         $transferenciasPendientesSalida = BienUsoAsignacionSupport::transferenciasPendientesSalida((int) $data->id);
 
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, BienUsoListadoFiltros::class);
+
         return view('contable.bien_uso.editar', [
             'data' => $data,
             'estado_enum' => BienUso::$enumEstado,
@@ -142,6 +148,7 @@ class BienUsoController extends Controller
             'historial' => $historial,
             'transferenciasPendientes' => $transferenciasPendientes,
             'transferenciasPendientesSalida' => $transferenciasPendientesSalida,
+            'filtrosQuery' => $filtrosQuery,
         ]);
     }
 
@@ -159,7 +166,8 @@ class BienUsoController extends Controller
 
         $this->repository->update($request->all(), $id);
 
-        return redirect('contable/bien-uso')->with('mensaje', 'Bien de uso actualizado con éxito');
+        return redirect()->route('bien_uso', QueryRetornoListado::desdeRequest($request, BienUsoListadoFiltros::class))
+            ->with('mensaje', 'Bien de uso actualizado con éxito');
     }
 
     public function eliminar(Request $request, $id)

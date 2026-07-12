@@ -26,6 +26,9 @@ $( "#botonform0" ).click(function() {
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('consulta_cliente_uif', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -34,12 +37,12 @@ $( "#botonform0" ).click(function() {
             <div class="card-header">
                 <h3 class="card-title">Crear Cliente UIF</h3>
                 <div class="card-tools">
-                    <a href="{{route('consulta_cliente_uif')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('guarda_cliente_uif')}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{ route('guarda_cliente_uif', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf
                 <div class="d-flex align-items-center flex-wrap" style="margin: 5px;">
                     <div class="flex-grow-1" style="min-width: 0;"></div>

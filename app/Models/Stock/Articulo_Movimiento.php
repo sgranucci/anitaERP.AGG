@@ -13,11 +13,11 @@ class Articulo_Movimiento extends Model
 {
     //use SoftDeletes;
     protected $fillable = ['fecha','fechajornada', 'tipotransaccion_id', 'tipotransaccion_stock_id', 'venta_id', 'venta_emision_id', 'movimientostock_id',
-                        'pedido_combinacion_id', 'ordentrabajo_id', 'lote', 'articulo_id', 'combinacion_id', 
+                        'pedido_combinacion_id', 'ordentrabajo_id', 'lote', 'articulo_id', 'numeroparte', 'combinacion_id', 
                         'concepto', 'modulo_id', 'cantidad', 
                         'precio', 'costo', 'listaprecio_id', 'incluyeimpuesto', 
                         'moneda_id', 'descuento', 'descuentointegrado', 'deposito_id', 'bien_uso_id', 'loteimportacion_id',
-                        'pedido_articulo_id'];
+                        'pedido_articulo_id', 'vianda_consumo_id'];
 
     protected $table = 'articulo_movimiento';
 
@@ -89,6 +89,11 @@ class Articulo_Movimiento extends Model
     public function bienes_uso()
     {
         return $this->belongsTo(\App\Models\Contable\BienUso::class, 'bien_uso_id');
+    }
+
+    public function viandaConsumo()
+    {
+        return $this->belongsTo(\App\Models\Ventas\ViandaConsumo::class, 'vianda_consumo_id');
     }
 
 }

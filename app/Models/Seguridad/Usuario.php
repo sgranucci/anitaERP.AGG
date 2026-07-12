@@ -36,6 +36,22 @@ class Usuario extends Authenticatable implements Auditable
         'suspendido' => 'boolean',
     ];
 
+    /**
+     * Usuarios habilitados para elegir en consultas, asignaciones y procesos operativos.
+     */
+    public function scopeSoloActivos($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('usuario.suspendido', false)
+                ->orWhereNull('usuario.suspendido');
+        });
+    }
+
+    public function estaSuspendido(): bool
+    {
+        return (bool) ($this->suspendido ?? false);
+    }
+
     public function roles()
     {
         return $this->belongsToMany(Rol::class, 'usuario_rol');

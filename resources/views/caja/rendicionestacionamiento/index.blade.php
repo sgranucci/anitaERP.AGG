@@ -23,6 +23,9 @@ use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
 ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('caja.rendicionestacionamiento.partials.flash_mensajes')
@@ -39,7 +42,7 @@ use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
                         'toggleTarget' => '#panel-filtros-rendicion-estacionamiento',
                         'toggleId' => 'btn-toggle-filtros-rendicion-estacionamiento',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_rendicionestacionamiento'),
+                        'nuevoRegistroUrl' => route('crear_rendicionestacionamiento', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-rendicion-estacionamiento-caja',
                     ])
                 </div>
@@ -64,6 +67,8 @@ use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
                             <th>Punto venta</th>
                             <th>Origen</th>
                             <th>Jornada</th>
+                            <th class="text-right" title="Total ventas del turno/jornada">Ventas</th>
+                            <th class="text-right" title="Total invitaciones">Invit.</th>
                             <th class="text-right">Cobrado</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
@@ -106,14 +111,22 @@ use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
                                 @endif
                             </td>
                             <td>{{ $row->jornada?->fecha_jornada?->format('d/m/Y') ?? $row->turnoOperativo?->jornada?->fecha_jornada?->format('d/m/Y') }}</td>
-                            <td class="text-right">${{ number_format((float) $row->totalcobrado, 2, ',', '.') }}</td>
+                            <td class="text-right text-nowrap">${{ number_format((float) $row->totalfactura, 2, ',', '.') }}</td>
+                            <td class="text-right text-nowrap">
+                                @if ((float) $row->totalinvitacion > 0.009)
+                                    ${{ number_format((float) $row->totalinvitacion, 2, ',', '.') }}
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td class="text-right text-nowrap">${{ number_format((float) $row->totalcobrado, 2, ',', '.') }}</td>
                             <td class="text-nowrap">
                                 @if (
                                     can('editar-rendicion-estacionamiento-caja', false)
                                     && \App\Support\Caja\RendicionEstacionamientoCajaPermiso::puedeActualizarPorFecha($row)
                                     && \App\Support\Caja\RendicionEstacionamientoCajaPermiso::puedeModificarRendicionTurno($row)
                                 )
-                                <a href="{{ route('editar_rendicionestacionamiento', ['id' => $row->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                <a href="{{ route('editar_rendicionestacionamiento', ['id' => $row->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 </a>
                                 @endif
@@ -144,7 +157,7 @@ use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
                                     can('borrar-rendicion-estacionamiento-caja', false)
                                     && \App\Support\Caja\RendicionEstacionamientoCajaPermiso::puedeModificarRendicionTurno($row)
                                 )
-                                <form action="{{ route('eliminar_rendicionestacionamiento', ['id' => $row->id]) }}" class="d-inline form-eliminar" method="POST">
+                                <form action="{{ route('eliminar_rendicionestacionamiento', ['id' => $row->id] + $retornoListadoQuery) }}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method('delete')
                                     <button type="submit" onclick="eliminarRendicionEstacionamiento(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
                                         <i class="fa fa-times-circle text-danger"></i>

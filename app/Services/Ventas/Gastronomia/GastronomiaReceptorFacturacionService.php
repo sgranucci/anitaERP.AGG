@@ -118,7 +118,51 @@ final class GastronomiaReceptorFacturacionService
             return null;
         }
 
+        if ($this->esClientePlantillaInternaGastronomia($clienteId)) {
+            return null;
+        }
+
         return $clienteId;
+    }
+
+    /**
+     * Clientes del maestro usados solo para imputación interna / descuento (VIP, canje, plantilla descuento).
+     * No deben usarse como cliente de facturación ni para calcular percepciones.
+     */
+    public function esClientePlantillaInternaGastronomia(int $clienteId): bool
+    {
+        if ($clienteId <= 0) {
+            return false;
+        }
+
+        if ($this->esIdClienteSoloContableInterno($clienteId)) {
+            return true;
+        }
+
+        if ($this->esIdClienteConfiguradoCanje($clienteId)) {
+            return true;
+        }
+
+        if (DescuentoGastronomia::query()->where('cliente_id', $clienteId)->exists()) {
+            return true;
+        }
+
+        $cliente = Cliente::query()->find($clienteId);
+        if ($cliente === null) {
+            return false;
+        }
+
+        $codigo = strtoupper(trim((string) ($cliente->codigo ?? '')));
+        if ($codigo === '') {
+            return false;
+        }
+
+        $condicionCfId = (int) config('arca_wsfe.receptor.consumidor_final_condicion_iva_id', 3);
+        if ((int) ($cliente->condicioniva_id ?? 0) === $condicionCfId && str_contains($codigo, 'VIP')) {
+            return true;
+        }
+
+        return false;
     }
 
     public function nombreConsumidorFinalFactura(): string
@@ -252,7 +296,7 @@ final class GastronomiaReceptorFacturacionService
 
         $doc = trim((string) ($cliente->numerodocumento ?? ''));
         $docDigitos = preg_replace('/\D/', '', $doc) ?? '';
-        $tipodocExt = (int) ($cliente->tipodocumentos->codigoexterno ?? 0);
+        $tipodocExt = (int) ($cliente->tipodocumentos?->codigoexterno ?? 0);
         $nombre = trim((string) ($cliente->nombre ?? ''));
         $domicilio = trim((string) ($cliente->domicilio ?? ''));
 

@@ -15,7 +15,7 @@ class ActualizarGastronomiaCostoMensualCatalogo extends Command
                             {--sin-anita : No replica en Anita (stkpre); solo ERP precio}
                             {--dry-run : Solo contar candidatos sin calcular ni grabar}';
 
-    protected $description = 'Calcula costo por fórmula (última compra Anita) de artículos catálogo V… y graba en lista 5000+mes (ej. junio → 5006).';
+    protected $description = 'Calcula costo catálogo V… (fórmula + última compra Anita) y graba en lista 5000+mes. Usado por gastronomía, viandas y reportes.';
 
     public function handle(GastronomiaCostoMensualCatalogoService $service): int
     {

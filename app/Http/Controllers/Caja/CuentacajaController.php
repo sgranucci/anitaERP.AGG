@@ -15,6 +15,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Support\Caja\CuentacajaListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Caja\CuentacajaListadoExport;
 
 class CuentacajaController extends Controller
@@ -107,7 +108,7 @@ class CuentacajaController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-cuentas-de-caja');
         $data = new Cuentacaja();
@@ -116,9 +117,10 @@ class CuentacajaController extends Controller
         $banco_query = $this->bancoRepository->all();
         $usocuentacaja_query = $this->usocuentacajaRepository->all();
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, CuentacajaListadoFiltros::class);
 
         return view('caja.cuentacaja.crear', compact('data', 'empresa_query', 'banco_query',
-                                                    'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query'));
+                                                    'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query', 'filtrosQuery'));
     }
 
     /**
@@ -131,7 +133,8 @@ class CuentacajaController extends Controller
     {
 		$this->repository->create($request->all());
 
-        return redirect('caja/cuentacaja')->with('mensaje', 'Cuenta de caja creada con éxito');
+        return redirect()->route('cuentacaja', QueryRetornoListado::desdeRequest($request, CuentacajaListadoFiltros::class))
+            ->with('mensaje', 'Cuenta de caja creada con éxito');
     }
 
 
@@ -141,9 +144,9 @@ class CuentacajaController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
         if ($soloConsulta) {
             can('listar-cuentas-de-caja');
         } else {
@@ -157,8 +160,10 @@ class CuentacajaController extends Controller
         $usocuentacaja_query = $this->usocuentacajaRepository->all();
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
 
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, CuentacajaListadoFiltros::class);
+
         return view('caja.cuentacaja.editar', compact('data', 'empresa_query', 'banco_query',
-                                                    'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query', 'soloConsulta'));
+                                                    'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query', 'soloConsulta', 'filtrosQuery'));
     }
 
     /**
@@ -178,7 +183,8 @@ class CuentacajaController extends Controller
 
         $this->repository->update($request->all(), $id);
 
-        return redirect('caja/cuentacaja')->with('mensaje', 'Cuenta de caja actualizada con éxito');
+        return redirect()->route('cuentacaja', QueryRetornoListado::desdeRequest($request, CuentacajaListadoFiltros::class))
+            ->with('mensaje', 'Cuenta de caja actualizada con éxito');
     }
 
     /**
@@ -284,9 +290,25 @@ class CuentacajaController extends Controller
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));
 	}
 
-    public function leerCuentaCajaPorCodigo($codigo)
+    public function leerCuentaCajaPorCodigo(Request $request, $codigo)
     {
-        return $this->repository->findPorCodigo($codigo);
+        $query = Cuentacaja::query()->where('codigo', $codigo);
+        $empresaId = (int) $request->query('empresa_id');
+        if ($empresaId > 0) {
+            $query->paraEmpresa($empresaId);
+        }
+
+        $cuenta = $query->first();
+        if ($cuenta === null) {
+            return response()->json([
+                'id' => 0,
+                'error' => $empresaId > 0
+                    ? 'No se encontró cuenta de caja para esa empresa.'
+                    : 'No se encontró cuenta de caja.',
+            ], 404);
+        }
+
+        return $cuenta;
     }
 
 }

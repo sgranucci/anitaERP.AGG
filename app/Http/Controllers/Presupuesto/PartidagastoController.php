@@ -16,6 +16,7 @@ use App\Models\Presupuesto\Partidagasto_Estado;
 use App\Models\Presupuesto\Partidagasto;
 use App\Queries\Presupuesto\PartidagastoQueryInterface;
 use App\Support\Presupuesto\PartidagastoListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Presupuesto\PartidagastoExport;
 use App\Exports\Presupuesto\PartidagastoOrdenCompraExport;
 use App\Exports\Presupuesto\GeneraAsientoPartidagastoExport;
@@ -85,6 +86,12 @@ class PartidagastoController extends Controller
             'filtrosQuery' => PartidagastoListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => PartidagastoListadoFiltros::CAMPOS,
             'estado_enum' => $estado_enum,
+            'puede_ver_empresa' => can('editar-empresas', false) || can('listar-empresas', false),
+            'puede_ver_presupuesto' => can('editar-presupuesto', false) || can('listar-presupuesto', false),
+            'puede_ver_centrocosto' => can('editar-centro-costo', false) || can('listar-centro-costo', false),
+            'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
+            'puede_ver_proveedor' => can('editar-proveedor', false) || can('listar-proveedor', false),
+            'puede_ver_cuentacontable' => can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false),
         ]);
     }
 
@@ -135,7 +142,7 @@ class PartidagastoController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-partidagasto');
 
@@ -144,9 +151,10 @@ class PartidagastoController extends Controller
         $moneda_query = $this->monedaRepository->all();
         $presupuesto_query = $this->presupuestoRepository->all();
         $estado_enum = Partidagasto_Estado::$enumEstado;
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, PartidagastoListadoFiltros::class);
 
         return view('presupuesto.partidagasto.crear', compact('empresa_query', 'centrocosto_query', 'presupuesto_query',
-                                                            'moneda_query', 'estado_enum'));
+                                                            'moneda_query', 'estado_enum', 'filtrosQuery'));
     }
 
     /**
@@ -164,7 +172,8 @@ class PartidagastoController extends Controller
         else
             $mensaje = $partidagasto['errores'];
 
-        return redirect('presupuesto/partidagasto')->with('mensaje', $mensaje);
+        return redirect()->route('consultar_partidagasto', QueryRetornoListado::desdeRequest($request, PartidagastoListadoFiltros::class))
+            ->with('mensaje', $mensaje);
 	}
 
     /**
@@ -173,7 +182,7 @@ class PartidagastoController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-partidagasto');
 
@@ -183,9 +192,10 @@ class PartidagastoController extends Controller
         $presupuesto_query = $this->presupuestoRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $estado_enum = Partidagasto_Estado::$enumEstado;
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, PartidagastoListadoFiltros::class);
 
         return view('presupuesto.partidagasto.editar', compact('data', 'empresa_query', 'centrocosto_query', 'presupuesto_query',
-                                                            'moneda_query','estado_enum'));
+                                                            'moneda_query','estado_enum', 'filtrosQuery'));
     }
 
     /**
@@ -206,7 +216,8 @@ class PartidagastoController extends Controller
         else
             $mensaje = $partidagasto['errores'];
 
-        return redirect('presupuesto/partidagasto')->with('mensaje', $mensaje);
+        return redirect()->route('consultar_partidagasto', QueryRetornoListado::desdeRequest($request, PartidagastoListadoFiltros::class))
+            ->with('mensaje', $mensaje);
     }
 
     /**

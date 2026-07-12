@@ -11,19 +11,19 @@
     <meta charset="UTF-8">
     <title>Transferencia {{ $transferencia->codigo }}</title>
     <style>
-        body { font-family: DejaVu Sans, sans-serif; font-size: 8px; color: #1a1a1a; }
+        body { font-family: DejaVu Sans, sans-serif; font-size: 10px; color: #1a1a1a; }
         .header { width: 100%; border-bottom: 2px solid {{ $colorBorde }}; margin-bottom: 12px; padding-bottom: 8px; }
-        .header td { vertical-align: middle; border: none; }
-        h1 { margin: 0; font-size: 15px; color: {{ $colorBorde }}; }
-        .meta { font-size: 8px; color: #444; margin-top: 4px; }
+        .header td { vertical-align: middle; border: none; font-size: 10px; }
+        h1 { margin: 0; font-size: 17px; color: {{ $colorBorde }}; }
+        .meta { font-size: 9px; color: #444; margin-top: 4px; }
         table.data { width: 100%; border-collapse: collapse; }
-        table.data th { background: {{ $colorCabecera }}; color: #17202A; font-weight: bold; padding: 4px; border: 1px solid #ccc; font-size: 7px; }
-        table.data td { padding: 4px; border: 1px solid #ccc; vertical-align: top; font-size: 7px; }
+        table.data th { background: {{ $colorCabecera }}; color: #17202A; font-weight: bold; padding: 5px 3px; border: 1px solid #ccc; font-size: 9px; }
+        table.data td { padding: 5px 3px; border: 1px solid #ccc; vertical-align: top; font-size: 9px; }
         table.data tr:nth-child(even) { background: #f5f5f5; }
         .num { text-align: right; }
-        .totales { margin-top: 10px; text-align: right; font-size: 9px; font-weight: bold; }
-        .obs { margin-top: 8px; font-size: 8px; border: 1px solid #ccc; padding: 6px; }
-        .info td { padding: 2px 6px 2px 0; font-size: 8px; vertical-align: top; }
+        .totales { margin-top: 10px; text-align: right; font-size: 11px; font-weight: bold; }
+        .obs { margin-top: 8px; font-size: 9px; border: 1px solid #ccc; padding: 6px; }
+        .info td { padding: 3px 8px 3px 0; font-size: 9px; vertical-align: top; }
     </style>
 </head>
 <body>

@@ -10,6 +10,8 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
+use App\Support\Database\EloquentActualizacionPorLotesSupport;
+use App\Support\Ventas\GastronomiaAutoDescarteVaciasSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
@@ -463,11 +465,19 @@ final class GastronomiaJornadaService
             return 0;
         }
 
-        return CuentaGastronomia::query()
+        $query = CuentaGastronomia::query()
             ->where('empresa_id', $empresaId)
             ->where('estado', CuentaGastronomia::ESTADO_ABIERTA)
-            ->whereDoesntHave('lineas')
-            ->update(['estado' => CuentaGastronomia::ESTADO_CERRADA]);
+            ->whereDoesntHave('lineas');
+
+        return EloquentActualizacionPorLotesSupport::actualizarCandidatosEnLotes(
+            $query,
+            ['estado' => CuentaGastronomia::ESTADO_CERRADA],
+            GastronomiaAutoDescarteVaciasSupport::opcionesActualizacionPorLotes(
+                'gastronomia.auto_descarte_vacias.jornada',
+                ['empresa_id' => $empresaId],
+            ),
+        );
     }
 
     /**

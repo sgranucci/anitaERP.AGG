@@ -6,48 +6,47 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionViandaTipoMenu;
 use App\Models\Ventas\ViandaTipoMenu;
 use App\Repositories\Ventas\ViandaTipoMenuRepositoryInterface;
-use App\Services\Ventas\ViandaTipoMenuAnitaSyncService;
+use App\Support\Ventas\Vianda\ViandaEmpresaSupport;
 use App\Support\Ventas\ViandaDiaSemanaSupport;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class ViandaTipoMenuController extends Controller
 {
     public function __construct(
         private ViandaTipoMenuRepositoryInterface $repository,
-        private ViandaTipoMenuAnitaSyncService $anitaSyncService,
     ) {
     }
 
-    public function index()
+    public function index(Request $request)
     {
         can('listar-vianda-tipo-menu-gastronomia');
 
-        if (config('app.anita_sync_vianda_tipo_menu_gastronomia_index')
-            && ! $this->repository->existeRegistro()) {
-            try {
-                $this->anitaSyncService->sincronizarConAnita();
-            } catch (\Throwable $e) {
-                Log::warning('ViandaTipoMenu index auto-sync Anita: '.$e->getMessage(), ['exception' => $e]);
-            }
+        $empresaFiltro = (int) $request->input('empresa_id', 0);
+        if ($empresaFiltro > 0 && ! ViandaEmpresaSupport::empresaPermitida($empresaFiltro)) {
+            abort(403, 'No tiene acceso a la empresa seleccionada.');
         }
 
-        $datas = $this->repository->all();
+        $datas = $this->repository->all($empresaFiltro > 0 ? $empresaFiltro : null);
         $sinRegistros = $datas->isEmpty();
         $diasSemana = ViandaDiaSemanaSupport::ETIQUETAS;
 
-        return view('ventas.vianda_tipo_menu.index', compact('datas', 'sinRegistros', 'diasSemana'));
+        return view('ventas.vianda_tipo_menu.index', compact('datas', 'sinRegistros', 'diasSemana') + [
+            'empresa_query' => ViandaEmpresaSupport::empresasSeleccionables(),
+            'empresa_id' => $empresaFiltro > 0 ? $empresaFiltro : null,
+            'mostrarFiltroEmpresa' => ViandaEmpresaSupport::empresasSeleccionables()->isNotEmpty(),
+        ]);
     }
 
     public function crear()
     {
         can('crear-vianda-tipo-menu-gastronomia');
 
-        $data = new ViandaTipoMenu(['estado' => 'A']);
+        $data = new ViandaTipoMenu(['estado' => 'A', 'empresa_id' => 1]);
         $diasSemana = ViandaDiaSemanaSupport::ETIQUETAS;
         $articulosPorDia = $this->repository->agruparArticulosPorDia($data);
+        $empresa_query = ViandaEmpresaSupport::empresasSeleccionables();
 
-        return view('ventas.vianda_tipo_menu.crear', compact('data', 'diasSemana', 'articulosPorDia'));
+        return view('ventas.vianda_tipo_menu.crear', compact('data', 'diasSemana', 'articulosPorDia', 'empresa_query'));
     }
 
     public function guardar(ValidacionViandaTipoMenu $request)
@@ -64,10 +63,14 @@ class ViandaTipoMenuController extends Controller
         can('editar-vianda-tipo-menu-gastronomia');
 
         $data = $this->repository->findOrFail($id);
+        if (! ViandaEmpresaSupport::empresaPermitida((int) $data->empresa_id)) {
+            abort(403, 'No tiene acceso a la empresa de este tipo de menú.');
+        }
         $diasSemana = ViandaDiaSemanaSupport::ETIQUETAS;
         $articulosPorDia = $this->repository->agruparArticulosPorDia($data);
+        $empresa_query = ViandaEmpresaSupport::empresasSeleccionables((int) $data->empresa_id);
 
-        return view('ventas.vianda_tipo_menu.editar', compact('data', 'diasSemana', 'articulosPorDia'));
+        return view('ventas.vianda_tipo_menu.editar', compact('data', 'diasSemana', 'articulosPorDia', 'empresa_query'));
     }
 
     public function actualizar(ValidacionViandaTipoMenu $request, $id)
@@ -92,41 +95,5 @@ class ViandaTipoMenuController extends Controller
         }
 
         abort(404);
-    }
-
-    public function sincronizarDesdeAnita(Request $request)
-    {
-        can('sincronizar-vianda-tipo-menu-gastronomia-anita');
-
-        if (! config('app.anita_sync_vianda_tipo_menu_gastronomia_index')) {
-            abort(403);
-        }
-
-        if (! $request->isMethod('post')) {
-            abort(405);
-        }
-
-        ini_set('memory_limit', '-1');
-        ini_set('max_execution_time', '0');
-        set_time_limit(0);
-        ignore_user_abort(true);
-
-        try {
-            $ret = $this->anitaSyncService->sincronizarConAnita();
-
-            $msg = 'Sincronización desde Anita: '.$ret['importados'].' nuevos, '.$ret['actualizados'].' actualizados, '
-                .$ret['articulos_lineas'].' líneas de artículos.';
-            if (! empty($ret['errores'])) {
-                $msg .= ' '.implode(' ', array_slice($ret['errores'], 0, 5));
-            }
-
-            return redirect()->route('consultar_vianda_tipo_menu_gastronomia')->with('mensaje', $msg);
-        } catch (\Throwable $e) {
-            Log::warning('ViandaTipoMenu sincronizarDesdeAnita: '.$e->getMessage(), ['exception' => $e]);
-
-            return redirect()->route('consultar_vianda_tipo_menu_gastronomia')->with('errores', [
-                'No se completó la sincronización desde Anita. Detalle: '.$e->getMessage(),
-            ]);
-        }
     }
 }

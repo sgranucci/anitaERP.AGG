@@ -39,6 +39,18 @@ class RecepcionProveedorAnitaClaveSupport
         return $empresaId > 0 ? $empresaId : 0;
     }
 
+    /** Código ctav_empresa en contab.ctamov (campo codigo de empresa ERP). */
+    public static function codigoEmpresaContabAnita(Recepcion_Proveedor $recepcion): int
+    {
+        $recepcion->loadMissing('empresas');
+        $codigo = trim((string) ($recepcion->empresas->codigo ?? ''));
+        if ($codigo !== '' && ctype_digit($codigo)) {
+            return (int) $codigo;
+        }
+
+        return (int) ($recepcion->empresa_id ?: 1);
+    }
+
     /** @deprecated Usar sucursalDesdeEmpresaId (sucursal COM = empresa_id ERP). */
     public static function sucursalDesdeEmpresaCodigo(int $empresaId): int
     {

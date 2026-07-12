@@ -16,6 +16,7 @@ class ValidacionViandaTipoMenu extends FormRequest
     public function rules()
     {
         $rules = [
+            'empresa_id' => 'required|integer|exists:empresa,id',
             'nombre' => 'required|string|max:255',
             'estado' => 'required|in:A,I',
             'articulo_por_dia' => 'nullable|array',
@@ -27,6 +28,14 @@ class ValidacionViandaTipoMenu extends FormRequest
         }
 
         return $rules;
+    }
+
+    public function messages()
+    {
+        return [
+            'empresa_id.required' => 'Debe seleccionar la empresa del tipo de menú.',
+            'empresa_id.exists' => 'La empresa seleccionada no existe.',
+        ];
     }
 
     public function withValidator(Validator $validator): void

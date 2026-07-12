@@ -4,9 +4,11 @@ namespace App\Services\Caja;
 
 use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Caja\RendicionEstacionamientoMovimientoCaja;
+use App\Models\Caja\RendicionEstacionamientoSecuenciaEmpresa;
 use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 use App\Support\Caja\RendicionEstacionamientoCajaListadoFiltros;
+use App\Support\Caja\RendicionEstacionamientoSecuenciaSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Caja\Estacionamiento\EstacionamientoCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaTurnoMediosContadoCierreSupport;
@@ -870,13 +872,13 @@ class RendicionEstacionamientoCajaService
             $this->exigirRendicionTurnoModificablePorTurnoId($turnoId);
 
             $empresaId = (int) $cabecera['empresa_id'];
-            $fuenteNro = null;
 
-            if (trim((string) ($cabecera['codigo'] ?? '')) === '') {
-                $propuesta = $this->proponerNumeracionAnita($empresaId);
-                $cabecera['codigo'] = $propuesta['codigo'];
-                $fuenteNro = $propuesta['fuente'];
-            }
+            // El nro_oper Anita es de asignación exclusiva del sistema: se reserva de forma
+            // atómica al guardar (no se confía en el código propuesto por el cliente, que puede
+            // venir repetido si se abrieron dos formularios en paralelo).
+            $reserva = $this->reservarNroOperUnico($empresaId, (string) ($cabecera['codigo'] ?? ''));
+            $cabecera['codigo'] = $reserva['codigo'];
+            $fuenteNro = $reserva['fuente'];
 
             $cabecera['tipo'] = RendicionEstacionamientoCaja::TIPO_TURNO;
             $cabecera = $this->anitaSyncService->enriquecerCabeceraConTracking($cabecera, $fuenteNro);
@@ -889,6 +891,60 @@ class RendicionEstacionamientoCajaService
 
             return $rendicion;
         });
+    }
+
+    /**
+     * Reserva un nro_oper Anita único para la empresa, serializando la numeración con un lock
+     * de fila sobre la secuencia (dentro de la transacción de guardado). Evita que dos
+     * rendiciones de turno distintas queden con el mismo nro_oper y colisionen en rendgastro.
+     *
+     * @return array{codigo: string, fuente: string}
+     */
+    private function reservarNroOperUnico(int $empresaId, string $codigoCliente): array
+    {
+        RendicionEstacionamientoSecuenciaEmpresa::query()->firstOrCreate(['empresa_id' => $empresaId]);
+        RendicionEstacionamientoSecuenciaEmpresa::query()
+            ->where('empresa_id', $empresaId)
+            ->lockForUpdate()
+            ->first();
+
+        $nroCliente = RendicionEstacionamientoSecuenciaSupport::extraerNroOperDesdeCodigo(trim($codigoCliente));
+        if ($nroCliente !== null && ! $this->nroOperOcupadoEnErp($empresaId, $nroCliente)) {
+            return [
+                'codigo' => (string) $nroCliente,
+                'fuente' => RendicionEstacionamientoSecuenciaSupport::FUENTE_ERP,
+            ];
+        }
+
+        $propuesta = $this->anitaSyncService->proponerSiguienteNroOper($empresaId);
+        $siguiente = (int) $propuesta['nro_oper'];
+        while ($this->nroOperOcupadoEnErp($empresaId, $siguiente)) {
+            $siguiente++;
+        }
+
+        RendicionEstacionamientoSecuenciaEmpresa::query()
+            ->where('empresa_id', $empresaId)
+            ->update(['proximo_nro' => $siguiente]);
+
+        return [
+            'codigo' => (string) $siguiente,
+            'fuente' => $propuesta['fuente'],
+        ];
+    }
+
+    private function nroOperOcupadoEnErp(int $empresaId, int $nroOper): bool
+    {
+        if ($nroOper <= 0) {
+            return true;
+        }
+
+        return RendicionEstacionamientoCaja::query()
+            ->where('empresa_id', $empresaId)
+            ->where(function ($q) use ($nroOper) {
+                $q->where('nro_oper_anita', $nroOper)
+                    ->orWhere('codigo', (string) $nroOper);
+            })
+            ->exists();
     }
 
     /**
@@ -1124,10 +1180,25 @@ class RendicionEstacionamientoCajaService
     }
 
     /**
+     * Fecha/hora de presentación en caja: se fija al crear (now) y no se modifica en edición.
+     */
+    public function resolverFecharendicionInmutable(?int $rendicionId = null): string
+    {
+        if ($rendicionId !== null && $rendicionId > 0) {
+            $existente = RendicionEstacionamientoCaja::query()->find($rendicionId);
+            if ($existente?->fecharendicion !== null) {
+                return $existente->fecharendicion->format('Y-m-d H:i:s');
+            }
+        }
+
+        return now()->format('Y-m-d H:i:s');
+    }
+
+    /**
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    public function cabeceraDesdeRequest(array $validated): array
+    public function cabeceraDesdeRequest(array $validated, ?int $rendicionId = null): array
     {
         $tipo = (string) ($validated['tipo'] ?? RendicionEstacionamientoCaja::TIPO_TURNO);
 
@@ -1138,7 +1209,7 @@ class RendicionEstacionamientoCajaService
             'puntoventa_cae_id' => (int) $validated['puntoventa_cae_id'],
             'puntoventa_caea_id' => (int) $validated['puntoventa_caea_id'],
             'caja_id' => (int) $validated['caja_id'],
-            'fecharendicion' => Carbon::parse($validated['fecharendicion'])->format('Y-m-d H:i:s'),
+            'fecharendicion' => $this->resolverFecharendicionInmutable($rendicionId),
             'iniciodelfondo' => round((float) $validated['iniciodelfondo'], 2),
             'totalfactura' => round((float) $validated['totalfactura'], 2),
             'totalcobrado' => round((float) $validated['totalcobrado'], 2),

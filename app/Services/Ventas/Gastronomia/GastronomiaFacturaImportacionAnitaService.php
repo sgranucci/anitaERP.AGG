@@ -26,6 +26,7 @@ use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportDescuentoSup
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportEstacionamientoSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportMediosPagoSupport;
 use App\Support\Ventas\GastronomiaAnitaImportEmpresaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -867,9 +868,16 @@ final class GastronomiaFacturaImportacionAnitaService
      */
     private function crearImpuestos(int $ventaId, stdClass $cab, array $vengrav, Carbon $timestamp): void
     {
+        $total = round(abs((float) ($cab->ven_monto ?? 0)), 2);
+
+        if (GastronomiaAnitaVenGravadoSupport::esCortesiaMinima($total)) {
+            $this->grabarFilasImpuesto($ventaId, GastronomiaAnitaVenGravadoSupport::filasVentaImpuestoImportCortesiaMinima(), $timestamp);
+
+            return;
+        }
+
         $gravado = round((float) ($cab->ven_gravado ?? 0) + (float) ($cab->ven_exento ?? 0), 2);
         $iva = round((float) ($cab->ven_impuesto1 ?? 0), 2);
-        $total = round(abs((float) ($cab->ven_monto ?? 0)), 2);
 
         $filas = [
             ['concepto' => 'Subtotal', 'base' => 0., 'tasa' => 0., 'importe' => $gravado, 'impuesto_id' => null],
@@ -905,6 +913,14 @@ final class GastronomiaFacturaImportacionAnitaService
 
         $filas[] = ['concepto' => 'Total', 'base' => 0., 'tasa' => 0., 'importe' => $total, 'impuesto_id' => null];
 
+        $this->grabarFilasImpuesto($ventaId, $filas, $timestamp);
+    }
+
+    /**
+     * @param  list<array{concepto: string, base?: float, baseimponible?: float, tasa: float, importe: float, impuesto_id: int|null}>  $filas
+     */
+    private function grabarFilasImpuesto(int $ventaId, array $filas, Carbon $timestamp): void
+    {
         foreach ($filas as $f) {
             if (abs($f['importe']) < 0.0001 && $f['concepto'] !== 'Total') {
                 continue;
@@ -912,7 +928,7 @@ final class GastronomiaFacturaImportacionAnitaService
             $vi = Venta_Impuesto::query()->create([
                 'venta_id' => $ventaId,
                 'concepto' => $f['concepto'],
-                'baseimponible' => $f['base'],
+                'baseimponible' => $f['baseimponible'] ?? $f['base'] ?? 0.,
                 'tasa' => $f['tasa'],
                 'importe' => $f['importe'],
                 'provincia_id' => null,

@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use App\Support\Stock\RecepcionProveedorPrecioPendienteSupport;
 use Illuminate\Support\Collection;
 
 /**
@@ -16,7 +17,7 @@ class OrdencompraRecepcionesListadoService
     /**
      * @return array{
      *     recepciones: list<array<string, mixed>>,
-     *     resumen: array{cantidad: int, con_precio_diferencia: int, pendientes_aplicar_precio: int}
+     *     resumen: array{cantidad: int, con_precio_diferencia: int, pendientes_aplicar_precio: int, precio_pendiente_aprobacion: int}
      * }
      */
     public function listar(int $ordencompraId): array
@@ -42,6 +43,7 @@ class OrdencompraRecepcionesListadoService
 
         $conPrecioDiff = 0;
         $pendientesAplicar = 0;
+        $precioPendienteAprobacion = 0;
         $items = [];
 
         foreach ($recepciones as $rec) {
@@ -49,6 +51,7 @@ class OrdencompraRecepcionesListadoService
             $pendienteAplicar = collect($lineas)->contains(
                 static fn (array $l) => ! empty($l['pendiente_aplicar_precio_oc'])
             );
+            $esPrecioPendiente = (bool) $rec->fl_precio_pendiente_aprobacion;
 
             if ($rec->fl_precio_diferencia
                 || RecepcionProveedorDiferenciaSupport::recepcionTieneDiferenciaPrecioEstricta($rec)) {
@@ -56,6 +59,9 @@ class OrdencompraRecepcionesListadoService
             }
             if ($pendienteAplicar) {
                 $pendientesAplicar++;
+            }
+            if ($esPrecioPendiente) {
+                $precioPendienteAprobacion++;
             }
 
             $items[] = [
@@ -67,6 +73,7 @@ class OrdencompraRecepcionesListadoService
                 'numerorecepcion' => $rec->numerorecepcion,
                 'flags' => [
                     'fl_precio_diferencia' => (bool) $rec->fl_precio_diferencia,
+                    'fl_precio_pendiente_aprobacion' => $esPrecioPendiente,
                     'fl_diferencia_cantidad' => (bool) $rec->fl_diferencia_cantidad,
                     'fl_articulo_extra' => (bool) $rec->fl_articulo_extra,
                     'fl_faltante_oc' => (bool) $rec->fl_faltante_oc,
@@ -82,6 +89,10 @@ class OrdencompraRecepcionesListadoService
                 'anita_ref' => $this->anitaRefRecepcion($rec),
                 'lineas' => $lineas,
                 'pendiente_aplicar_precio_oc' => $pendienteAplicar,
+                'precio_pendiente_aprobacion' => $esPrecioPendiente,
+                'puede_aplicar_precios_solicitados' => $esPrecioPendiente
+                    && $rec->estado === RecepcionProveedorEstados::BORRADOR
+                    && RecepcionProveedorPrecioPendienteSupport::puedeModificarPrecioEnOrdencompra(),
                 'puede_editar' => $rec->estado === RecepcionProveedorEstados::BORRADOR,
                 'es_devolucion' => $rec->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION,
                 'urls' => [
@@ -97,6 +108,7 @@ class OrdencompraRecepcionesListadoService
                 'cantidad' => count($items),
                 'con_precio_diferencia' => $conPrecioDiff,
                 'pendientes_aplicar_precio' => $pendientesAplicar,
+                'precio_pendiente_aprobacion' => $precioPendienteAprobacion,
             ],
         ];
     }
@@ -113,11 +125,13 @@ class OrdencompraRecepcionesListadoService
             $ocArtId = (int) ($linea->ordencompra_articulo_id ?? 0);
             $precioOcSnap = (float) ($linea->precio_ordencompra ?? 0);
             $precioRec = (float) ($linea->precio ?? 0);
+            $precioSolicitado = $linea->precio_solicitado !== null ? (float) $linea->precio_solicitado : null;
             $precioOcActual = $ocArtId > 0 ? ($preciosOcActuales->get($ocArtId) ?? null) : null;
             $tipoLinea = (string) ($linea->tipo_linea ?? RecepcionProveedorDiferenciaSupport::TIPO_OC);
 
             $tieneDiff = (bool) $linea->fl_precio_diferencia
-                || ($precioOcSnap > 0 && abs($precioRec - $precioOcSnap) >= 0.0001);
+                || ($precioOcSnap > 0 && abs($precioRec - $precioOcSnap) >= 0.0001)
+                || ($precioSolicitado !== null && $precioOcSnap > 0 && abs($precioSolicitado - $precioOcSnap) >= 0.0001);
 
             $pendienteAplicar = $ocArtId > 0
                 && $tipoLinea !== RecepcionProveedorDiferenciaSupport::TIPO_EXTRA
@@ -137,6 +151,7 @@ class OrdencompraRecepcionesListadoService
                 'cantidad_rechazada' => (float) ($linea->cantidad_rechazada ?? 0),
                 'precio_ordencompra_snapshot' => $precioOcSnap > 0 ? $precioOcSnap : null,
                 'precio_recepcion' => $precioRec,
+                'precio_solicitado' => $precioSolicitado,
                 'precio_oc_actual' => $precioOcActual,
                 'fl_precio_diferencia' => $tieneDiff,
                 'fl_cantidad_diferencia' => (bool) $linea->fl_cantidad_diferencia,

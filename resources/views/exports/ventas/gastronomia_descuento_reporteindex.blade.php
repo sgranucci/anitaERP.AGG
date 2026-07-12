@@ -20,13 +20,7 @@
         'resumen_totales' => $resumenTotales,
         'total_bloques' => $totalBloques,
     ])
-    @foreach ($bloques as $bloque)
-        <tr>
-            <td colspan="{{ $colspan }}" style="font-size: 11pt; font-weight: bold; color: #17202A;">
-                {{ $bloque['codigo'] ?? '' }} &mdash; {{ $bloque['nombre'] ?? '' }}
-                &middot; {{ $resultado['periodo_texto'] ?? '' }}
-            </td>
-        </tr>
+    @if ($totalBloques > 0)
         <tr>
             <th>Artículo</th>
             <th>Descripción</th>
@@ -35,6 +29,14 @@
             <th>Costo total</th>
             <th>Precio vta.</th>
             <th>Total venta</th>
+        </tr>
+    @endif
+    @foreach ($bloques as $bloque)
+        <tr>
+            <td colspan="{{ $colspan }}" style="font-size: 11pt; font-weight: bold; color: #17202A;">
+                {{ $bloque['codigo'] ?? '' }} &mdash; {{ $bloque['nombre'] ?? '' }}
+                &middot; {{ $resultado['periodo_texto'] ?? '' }}
+            </td>
         </tr>
         @foreach ($bloque['filas'] ?? [] as $fila)
             <tr>

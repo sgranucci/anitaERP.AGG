@@ -14,6 +14,9 @@
 @endphp
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -30,7 +33,7 @@
                         'toggleTarget' => '#panel-filtros-ubicacion-impresora',
                         'toggleId' => 'btn-toggle-filtros-ubicacion-impresora',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_ubicacion_impresora'),
+                        'nuevoRegistroUrl' => route('crear_ubicacion_impresora', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-ubicacion-impresora',
                     ])
                 </div>
@@ -62,7 +65,7 @@
                             <td>{{ $data->descripcion }}</td>
                             <td>
                                 @if (can('editar-ubicacion-impresora', false))
-                                    <a href="{{ route('editar_ubicacion_impresora', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                    <a href="{{ route('editar_ubicacion_impresora', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
                                     </a>
                                 @endif

@@ -14,12 +14,14 @@ class ArticuloParteUnicaController extends Controller
     ) {
     }
 
-    public function index(int $articuloId)
+    public function index(int $articuloId, \Illuminate\Http\Request $request)
     {
         can('editar-articulos');
 
+        $estado = (string) $request->query('estado', 'A');
+
         return response()->json(
-            $this->service->listarPorArticulo($articuloId, 20)
+            $this->service->listarPorArticulo($articuloId, 20, $estado)
         );
     }
 

@@ -14,6 +14,7 @@ use App\Repositories\Ventas\CategoriafidelidadEntregaGastronomiaRepositoryInterf
 use App\Repositories\Ventas\CategoriafidelidadGastronomiaRepositoryInterface;
 use App\Services\Stock\PrecioService;
 use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Ventas\GastronomiaDescuentoClienteInternoSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Wigos\WigosTrackdataNormalizer;
 use Carbon\Carbon;
@@ -68,7 +69,7 @@ final class GastronomiaCategoriafidelidadCanjeService
         }
 
         $descuento = $this->resolverDescuentoConfigurado();
-        $cliente = $this->resolverClienteConfigurado();
+        $cliente = $this->resolverClienteInternoPorLevelCode((int) $cuentaWigos['level_code'], $descuento);
 
         return [
             'trackdata' => $this->normalizarTrackdata($trackdata),
@@ -141,11 +142,10 @@ final class GastronomiaCategoriafidelidadCanjeService
         }
 
         $descuento = $this->resolverDescuentoConfigurado();
-        $cliente = $this->resolverClienteConfigurado();
-        $clienteInternoId = (int) ($descuento->cliente_id ?? 0);
-        if ($clienteInternoId <= 0) {
-            $clienteInternoId = (int) $cliente->id;
-        }
+        $clienteInternoId = $this->resolverClienteInternoIdPorLevelCode(
+            (int) ($validacion['tarjeta']['level_code'] ?? 0),
+            $descuento,
+        );
 
         $item = null;
         foreach ($validacion['articulos'] as $art) {
@@ -412,6 +412,37 @@ final class GastronomiaCategoriafidelidadCanjeService
             throw new InvalidArgumentException(
                 'No existe el cliente configurado para canje de fidelidad (código '.$codigo.').'
             );
+        }
+
+        return $cliente;
+    }
+
+    /**
+     * Platino (levelCode Wigos, ej. 3) → cliente 1500; resto → canje_fidelidad_cliente_codigo (500).
+     */
+    private function resolverClienteInternoIdPorLevelCode(int $levelCode, ?DescuentoGastronomia $descuento = null): int
+    {
+        $descuento ??= $this->resolverDescuentoConfigurado();
+        $clienteInternoId = (int) ($descuento->cliente_id ?? 0);
+        if ($clienteInternoId > 0) {
+            return $clienteInternoId;
+        }
+
+        $resolved = GastronomiaDescuentoClienteInternoSupport::resolverClienteInternoCanjePremio(
+            $levelCode > 0 ? $levelCode : null
+        );
+        if ($resolved !== null && $resolved > 0) {
+            return $resolved;
+        }
+
+        return (int) $this->resolverClienteConfigurado()->id;
+    }
+
+    private function resolverClienteInternoPorLevelCode(int $levelCode, ?DescuentoGastronomia $descuento = null): Cliente
+    {
+        $cliente = Cliente::query()->find($this->resolverClienteInternoIdPorLevelCode($levelCode, $descuento));
+        if ($cliente === null) {
+            throw new InvalidArgumentException('No existe el cliente interno configurado para el canje de fidelidad.');
         }
 
         return $cliente;

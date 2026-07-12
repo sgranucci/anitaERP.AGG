@@ -33,6 +33,17 @@ return [
     'jornada_obligatoria' => filter_var(env('GASTRONOMIA_JORNADA_OBLIGATORIA', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
+     * Auto-descarte de cuentas ABIERTA sin ítems al cerrar último turno del día o jornada.
+     * Actualización por lotes + retry ante deadlock (1213) / lock wait timeout (1205).
+     */
+    'auto_descarte_vacias' => [
+        'tamano_lote' => max(1, (int) env('GASTRONOMIA_AUTO_DESCARTE_LOTE', 100)),
+        'max_iteraciones' => max(1, (int) env('GASTRONOMIA_AUTO_DESCARTE_MAX_ITER', 500)),
+        'reintentos_deadlock' => max(1, (int) env('GASTRONOMIA_AUTO_DESCARTE_REINTENTOS', 5)),
+        'espera_reintento_ms' => max(50, (int) env('GASTRONOMIA_AUTO_DESCARTE_ESPERA_MS', 150)),
+    ],
+
+    /**
      * true = habilitación de turno por PC antes de facturar (AGG).
      * false = caja directo: sin habilitación/cierre de turno operativo.
      */
@@ -47,6 +58,19 @@ return [
      * Respaldo si la configuración del punto de venta gastronomía no define tipotransaccion_caja_id.
      */
     'tipotransaccion_caja_id' => env('GASTRONOMIA_TIPO_TRANSACCION_CAJA_ID'),
+
+    /**
+     * Al recuperar un comprobante autorizado en ARCA (rollback/deadlock) genera la cobranza en
+     * efectivo por el total, para que el cierre de jornada cuadre los medios de pago (la factura
+     * quedaba sin cobranza y descuadraba el asiento vs Diferencia de caja). Cortesías $0,01 se omiten.
+     */
+    'recuperacion_arca_genera_cobranza_efectivo' => filter_var(env('GASTRONOMIA_RECUPERACION_ARCA_GENERA_COBRANZA_EFECTIVO', true), FILTER_VALIDATE_BOOLEAN),
+
+    /**
+     * Tras recuperar ARCA: si el cierre de jornada Waitry ya grabó el asiento «ventas_medio_real» de esa
+     * fecha, recalcularlo completo (ERP + Anita ctamov) incluyendo la factura y cobranza nuevas.
+     */
+    'recuperacion_arca_actualiza_asiento_cierre_jornada' => filter_var(env('GASTRONOMIA_RECUPERACION_ARCA_ACTUALIZA_ASIENTO_CIERRE_JORNADA', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
      * Respaldo si la configuración del punto de venta gastronomía no define tipotransaccion_id.
@@ -228,7 +252,7 @@ return [
      */
     'conciliacion_diaria_reporte' => [
         'habilitada' => filter_var(env('GASTRONOMIA_CONCILIACION_DIARIA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
-        'hora' => env('GASTRONOMIA_CONCILIACION_DIARIA_HORA', '08:00'),
+        'hora' => env('GASTRONOMIA_CONCILIACION_DIARIA_HORA', '09:00'),
         'empresas_ids' => array_values(array_filter(array_map(
             'intval',
             explode(',', (string) env('GASTRONOMIA_CONCILIACION_DIARIA_EMPRESAS_IDS', '1,2,3')),
@@ -252,6 +276,8 @@ return [
         'refrescar_cache_anita' => filter_var(env('GASTRONOMIA_CONCILIACION_REFRESCAR_CACHE_ANITA', true), FILTER_VALIDATE_BOOLEAN),
         /** Reintentos bridge cuando usar_cache_anita=false o fallback live. */
         'anita_reintentos_bridge' => max(1, (int) env('GASTRONOMIA_CONCILIACION_ANITA_REINTENTOS_BRIDGE', 3)),
+        /** Control flash (Informix caja: flash_ayb + flash_estac) vs rendgastro neto por unidad de negocio (AyB / estacionamiento). */
+        'control_flash_habilitado' => filter_var(env('GASTRONOMIA_CONCILIACION_CONTROL_FLASH_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
     /**
@@ -339,6 +365,18 @@ return [
      */
     'ticket_guardar_preview' => filter_var(
         env('GASTRONOMIA_TICKET_GUARDAR_PREVIEW', env('APP_ENV', 'production') === 'local'),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /**
+     * Viandas — al marchar la comanda, mostrar el voucher en pantalla (preview + botón
+     * Reimprimir) antes de liberar la terminal.
+     *   false (default): imprime directo a la impresora (como facturación) y vuelve al login
+     *                    del próximo empleado; solo muestra el comprobante si la impresión falla.
+     *   true:            muestra el voucher en pantalla con la vista previa y el botón imprimir.
+     */
+    'vianda_voucher_preview_pantalla' => filter_var(
+        env('VIANDA_VOUCHER_PREVIEW_PANTALLA', false),
         FILTER_VALIDATE_BOOLEAN
     ),
 
@@ -477,6 +515,9 @@ return [
     /** Abreviatura tipoasiento para grabación de asientos del proceso cierre Waitry (default VTA). */
     'cierre_jornada_tipoasiento_abreviatura' => env('GASTRONOMIA_CIERRE_JORNADA_TIPOASIENTO_ABREVIATURA', 'VTA'),
 
+    /** Centro de costo (código ccosto) en líneas de asientos del cierre Waitry cuando la cuenta maneja CC. */
+    'cierre_jornada_centrocosto_codigo' => env('GASTRONOMIA_CIERRE_JORNADA_CENTROCOSTO_CODIGO', '85'),
+
     /**
      * Porcentaje del tope CF (ARCA) para agrupar comandas en cada lote de facturación del proceso Waitry.
      * Default 20 = lotes ~20 % de ARCA_WSFE_RECEPTOR_CF_UMBRAL_MONTO.
@@ -574,6 +615,7 @@ return [
     /** Descuento y cliente para canje diario fidelidad por tarjeta (factura $0,01). */
     'canje_fidelidad_descuento_codigo' => env('GASTRONOMIA_CANJE_FIDELIDAD_DESCUENTO_CODIGO', '10'),
 
+    /** Cliente interno fidelidad no platino; platino usa canje_premio_platino_cliente_codigo (1500). */
     'canje_fidelidad_cliente_codigo' => env('GASTRONOMIA_CANJE_FIDELIDAD_CLIENTE_CODIGO', '500'),
 
     /**
@@ -630,12 +672,14 @@ return [
     'ventas_articulos_listaprecio_venta_id' => (int) env('GASTRONOMIA_VENTAS_ARTICULOS_LISTAPRECIO_VENTA_ID', 0),
 
     /**
-     * Costo mensual catálogo V…: fórmula + última compra Anita → lista 5000+mes (solo ERP precio; stkpre opcional).
+     * Costo catálogo V…: fórmula + última compra Anita → lista 5000+mes (ERP precio; stkpre opcional).
      * Comando: php artisan gastronomia:actualizar-costo-mensual-catalogo
+     * Schedule: diario al inicio de jornada + último día del mes (cierre).
      */
     'costo_mensual_catalogo' => [
         'habilitado' => filter_var(env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
-        'hora' => env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_HORA', '23:30'),
+        'hora' => env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_HORA', '07:00'),
+        'hora_ultimo_dia_mes' => env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_HORA_ULTIMO_DIA', '23:30'),
         'usuario_id' => (int) env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_USUARIO_ID', 1),
         'moneda_id' => (int) env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_MONEDA_ID', 1),
         'sincronizar_anita' => filter_var(env('GASTRONOMIA_COSTO_MENSUAL_SINCRONIZAR_ANITA', false), FILTER_VALIDATE_BOOLEAN),

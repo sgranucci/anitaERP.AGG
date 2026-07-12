@@ -9,7 +9,9 @@
 <script src="{{asset("assets/pages/scripts/compras/proveedor/domicilio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/arca-padron.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/arca-validacion-abm.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/arca-apoc-validacion-abm.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/imprimirHtml.js")}}" type="text/javascript"></script>
 <script>
@@ -29,6 +31,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('proveedor', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -72,13 +77,13 @@
                             <i class="fa fa-fw fa-reply-all"></i> Volver a consulta
                         </a>
                     @else
-                        <a href="{{route('proveedor')}}" class="btn btn-outline-info btn-sm">
+                        <a href="{{$volverListadoUrl}}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
                     @endif
                 </div>
             </div>
-            <form action="{{route('actualizar_proveedor', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{route('actualizar_proveedor', ['id' => $data->id] + ($filtrosQuery ?? []))}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method("put")
                 <div class="col-lg-8" align="right" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">
@@ -115,6 +120,7 @@
                     @include('compras.proveedor.form5')
                     @include('compras.proveedor.suspensionmodal')
                     @include('compras.proveedor.partials.arca_validacion_support', ['proveedorId' => $data->id])
+                    @include('compras.proveedor.partials.arca_apoc_validacion_support', ['proveedorId' => $data->id])
                 </div>
                 <div class="card-footer" style="padding-top: 0">
                 	<div class="row">
@@ -126,6 +132,7 @@
             </form>
             @include('compras.proveedor.arca-cuit-entry-modal')
             @include('includes.compras.arca_impuestos_validacion_modal')
+            @include('includes.compras.arca_apoc_validacion_modal')
         </div>
     </div>
 </div>

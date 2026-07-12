@@ -5,6 +5,16 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script>
+(function ($) {
+    'use strict';
+    $(function () {
+        $('#form-filtro-empresa-vianda-tipo-menu').find('#empresa_id').on('change', function () {
+            this.form.submit();
+        });
+    });
+})(jQuery);
+</script>
 @endsection
 
 @section('contenido')
@@ -13,30 +23,32 @@
         @include('includes.mensaje')
         @if (! empty($sinRegistros ?? false))
         <div class="alert alert-info">
-            @if (config('app.anita_sync_vianda_tipo_menu_gastronomia_index'))
-            No hay tipos de men&uacute; de vianda en el ERP. Para importar desde Anita (tipomvianda / artmvianda) use
-            <strong>Sincronizar desde Anita</strong> o ejecute:
+            No hay tipos de men&uacute; de vianda en el ERP. Para importar desde Anita ejecute
             <code>php artisan vianda:sincronizar-tipos-menu-anita</code>
-            @else
-            No hay tipos de men&uacute; de vianda. Cree registros con <strong>Nuevo registro</strong>.
-            @endif
+            o cree registros con <strong>Nuevo registro</strong>.
         </div>
         @endif
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Tipos de men&uacute; de vianda</h3>
-                <div class="card-tools">
-                    @if (config('app.anita_sync_vianda_tipo_menu_gastronomia_index') && can('sincronizar-vianda-tipo-menu-gastronomia-anita', false))
-                    <form action="{{ route('sincronizar_vianda_tipo_menu_gastronomia_anita') }}" method="POST" class="d-inline"
-                          onsubmit="return confirm('¿Importar tipos de menú y artículos por día desde Anita?');">
-                        @csrf
-                        <button type="submit" class="btn btn-outline-primary btn-sm">
-                            <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (! empty($mostrarFiltroEmpresa))
+                    <form method="get" action="{{ route('consultar_vianda_tipo_menu_gastronomia') }}" class="form-inline mr-2 mb-1 mb-sm-0" id="form-filtro-empresa-vianda-tipo-menu">
+                        @include('includes.listado.filtro_empresa_asignada_inline', [
+                            'empresa_query' => $empresa_query ?? [],
+                            'empresa_id' => $empresa_id ?? null,
+                            'label_class' => 'mr-1 mb-0 small text-white-50',
+                            'select_class' => 'form-control-sm',
+                            'permite_todas' => true,
+                            'opcion_todas' => 'Todas (asignadas)',
+                        ])
+                        <button type="submit" class="btn btn-light btn-sm" title="Consultar">
+                            <i class="fa fa-search"></i>
                         </button>
                     </form>
                     @endif
                     @if (can('crear-vianda-tipo-menu-gastronomia', false))
-                    <a href="{{ route('crear_vianda_tipo_menu_gastronomia') }}" class="btn btn-outline-secondary btn-sm">
+                    <a href="{{ route('crear_vianda_tipo_menu_gastronomia') }}" class="btn btn-outline-secondary btn-sm mb-1 mb-sm-0">
                         <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
                     </a>
                     @endif
@@ -47,19 +59,21 @@
                     <thead>
                         <tr>
                             <th class="width20">ID</th>
+                            <th>Empresa</th>
                             <th>Nombre</th>
                             <th class="width80">Estado</th>
                             <th>C&oacute;d. Anita</th>
                             @foreach ($diasSemana as $dia => $etiqueta)
                             <th>{{ $etiqueta }}</th>
                             @endforeach
-                            <th class="width80" data-orderable="false"></th>
+                            <th class="width120 text-nowrap" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($datas as $data)
                         <tr>
                             <td>{{ $data->id }}</td>
+                            <td>{{ optional($data->empresa)->nombre ?: '—' }}</td>
                             <td>{{ $data->nombre }}</td>
                             <td>{{ $data->etiquetaEstado() }}</td>
                             <td>{{ $data->codigo_anita ?: '—' }}</td>
@@ -88,7 +102,8 @@
                                 @endif
                             </td>
                             @endforeach
-                            <td>
+                            <td class="text-nowrap">
+                                <span class="d-inline-flex flex-nowrap align-items-center">
                                 @if (can('editar-vianda-tipo-menu-gastronomia', false))
                                     <a href="{{ route('editar_vianda_tipo_menu_gastronomia', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
@@ -102,6 +117,7 @@
                                     </button>
                                 </form>
                                 @endif
+                                </span>
                             </td>
                         </tr>
                         @endforeach

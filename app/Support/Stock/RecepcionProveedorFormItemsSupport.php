@@ -169,6 +169,7 @@ class RecepcionProveedorFormItemsSupport
                 'articulo_stock_id' => $item['articulo_stock_id'] ?? $insumo?->id,
                 'articulo_stock_sku' => $item['articulo_stock_sku'] ?? $insumo?->sku,
                 'skualternativo' => $item['skualternativo'] ?? ($articulo->skualternativo ?? ''),
+                'tipoarticulo_id' => (int) ($item['tipoarticulo_id'] ?? $articulo?->tipoarticulo_id ?? 0) ?: null,
                 'maneja_parte_unica' => array_key_exists('maneja_parte_unica', $item)
                     ? (bool) $item['maneja_parte_unica']
                     : RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($articulo),
@@ -179,7 +180,7 @@ class RecepcionProveedorFormItemsSupport
         return $enriquecidos;
     }
 
-    /** @return array{numero_oc: ?int, proveedor_nombre: ?string, proveedor_id: ?int, empresa_id: ?int, empresa_nombre: ?string} */
+    /** @return array{numero_oc: ?int, proveedor_nombre: ?string, proveedor_id: ?int, empresa_id: ?int, empresa_nombre: ?string, descuento_ordencompra: float} */
     public static function datosCabeceraDesdeOrdencompra(
         ?int $ordencompraId,
         ?string $proveedorNombreOld = null,
@@ -192,6 +193,7 @@ class RecepcionProveedorFormItemsSupport
         $proveedorId = null;
         $empresaId = null;
         $empresaNombre = null;
+        $descuentoOrdencompra = 0.0;
 
         if ($ordencompraId !== null && $ordencompraId > 0) {
             $oc = Ordencompra::query()->with(['proveedores', 'empresas'])->find($ordencompraId);
@@ -201,6 +203,7 @@ class RecepcionProveedorFormItemsSupport
                 $proveedorId = (int) $oc->proveedor_id;
                 $empresaId = (int) $oc->empresa_id;
                 $empresaNombre = optional($oc->empresas)->nombre;
+                $descuentoOrdencompra = (float) ($oc->descuento ?? 0);
             }
         }
 
@@ -210,6 +213,7 @@ class RecepcionProveedorFormItemsSupport
             'proveedor_id' => $proveedorId,
             'empresa_id' => $empresaId,
             'empresa_nombre' => $empresaNombre,
+            'descuento_ordencompra' => $descuentoOrdencompra,
         ];
     }
 
@@ -297,6 +301,14 @@ class RecepcionProveedorFormItemsSupport
         $ocData = $resolver->resolverPorId((int) $recepcion->ordencompra_id);
         $lineasOc = $ocData['lineas'];
 
+        $lineasOcPorOcArt = [];
+        foreach ($lineasOc as $lineaOc) {
+            $ocArtId = (int) ($lineaOc['ordencompra_articulo_id'] ?? 0);
+            if ($ocArtId > 0) {
+                $lineasOcPorOcArt[$ocArtId] = $lineaOc;
+            }
+        }
+
         $guardadasPorOcArt = [];
         $extras = [];
         foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
@@ -312,7 +324,10 @@ class RecepcionProveedorFormItemsSupport
         foreach ($lineasOc as $lineaOc) {
             $ocArtId = (int) ($lineaOc['ordencompra_articulo_id'] ?? 0);
             if ($ocArtId > 0 && isset($guardadasPorOcArt[$ocArtId])) {
-                $items[] = self::mapearLineaRecepcionParaGrilla($guardadasPorOcArt[$ocArtId]);
+                $items[] = self::enriquecerLineaGrillaConSaldoOc(
+                    self::mapearLineaRecepcionParaGrilla($guardadasPorOcArt[$ocArtId]),
+                    $lineasOcPorOcArt[$ocArtId] ?? $lineaOc
+                );
             } else {
                 $items[] = $lineaOc;
             }
@@ -328,6 +343,23 @@ class RecepcionProveedorFormItemsSupport
             (int) ($recepcion->proveedor_id ?? 0) ?: null,
             (int) ($recepcion->empresa_id ?? 0) ?: null
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $lineaGrilla
+     * @param  array<string, mixed>  $lineaOc
+     * @return array<string, mixed>
+     */
+    private static function enriquecerLineaGrillaConSaldoOc(array $lineaGrilla, array $lineaOc): array
+    {
+        if (array_key_exists('cantidad_recibida', $lineaOc)) {
+            $lineaGrilla['cantidad_recibida'] = $lineaOc['cantidad_recibida'];
+        }
+        if (array_key_exists('cantidad_oc', $lineaOc) && ($lineaGrilla['cantidad_oc'] ?? null) === null) {
+            $lineaGrilla['cantidad_oc'] = $lineaOc['cantidad_oc'];
+        }
+
+        return $lineaGrilla;
     }
 
     /** @return array<string, mixed> */

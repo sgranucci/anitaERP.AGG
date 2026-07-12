@@ -181,7 +181,8 @@ En el mismo preflight (no exclusivas de canje):
 | `WIGOS_ACCOUNT_INFO_URL` | Plantilla con `%s` o `?trackdata=` |
 | `WIGOS_ACCOUNT_INFO_TIMEOUT` | Segundos (mín. 3) |
 | `GASTRONOMIA_CANJE_FIDELIDAD_DESCUENTO_CODIGO` | Descuento (default `10`) |
-| `GASTRONOMIA_CANJE_FIDELIDAD_CLIENTE_CODIGO` | Cliente factura (default `500`) |
+| `GASTRONOMIA_CANJE_FIDELIDAD_CLIENTE_CODIGO` | Cliente interno no platino (default `500`) |
+| `GASTRONOMIA_CANJE_PREMIO_PLATINO_CLIENTE_CODIGO` / `GASTRONOMIA_CANJE_PREMIO_PLATINO_LEVEL_CODES` | Fidelidad platino (levelCode Wigos, ej. `3`) → cliente interno `1500` |
 
 `levelCode` de Wigos = `categoriafidelidad_gastronomia.codigo`.
 

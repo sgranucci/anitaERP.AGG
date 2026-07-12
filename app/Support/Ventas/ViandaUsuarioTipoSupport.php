@@ -27,4 +27,9 @@ final class ViandaUsuarioTipoSupport
     {
         return isset(self::ETIQUETAS[strtoupper(trim((string) $tipo))]);
     }
+
+    public static function esAdministrador(?string $tipo): bool
+    {
+        return strtoupper(trim((string) $tipo)) === 'A';
+    }
 }

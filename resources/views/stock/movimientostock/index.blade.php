@@ -7,6 +7,7 @@ Movimientos de Stock
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/filtro.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/revertir.js') }}" type="text/javascript"></script>
 @endsection
 
 <?php use App\Support\Stock\MovimientoStockFerliSupport;
@@ -43,7 +44,7 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
             @if(!empty($alcance_centro_costo))
                 <div class="px-3 py-2 border-bottom bg-white text-muted small">
                     <i class="fa fa-filter"></i>
-                    Mostrando movimientos de su sector: <strong>{{ $alcance_centro_costo }}</strong>
+                    Listado limitado (movimientos de usuarios de su centro de costo): <strong>{{ $alcance_centro_costo }}</strong>
                 </div>
             @endif
             <div class="card-body table-responsive p-0">

@@ -20,7 +20,16 @@ var totalHaberAsiento = 0;
 		});
 
 		// Muestra sumatoria de montos del asiento
+		if (window.AsientoMontosFormato) {
+			AsientoMontosFormato.initEnContenedor('#tbody-cuenta-asiento-table');
+		}
 		sumaMontoAsiento();
+
+		$(document).on('asiento:monto-actualizado', function () {
+			if ($('#tbody-cuenta-asiento-table').length) {
+				sumaMontoAsiento();
+			}
+		});
     });
 
 	function activa_eventosAsiento(flInicio)
@@ -30,8 +39,9 @@ var totalHaberAsiento = 0;
 		{
 			$('.consultacuenta').off('click');
 			$('.codigoasiento').off('change');
-			$('.debeasiento').off('change');
-			$('.haberasiento').off('change');
+			$('.debeasiento').off('change input');
+			$('.haberasiento').off('change input');
+			$('.cotizacionasiento').off('change input');
 			$('.monedaasiento').off('change');
 		}
 		
@@ -104,12 +114,17 @@ var totalHaberAsiento = 0;
 			leeCentroCostoAsiento(codigocontablexcodigo);
 		});
 
-		$('.debeasiento').on('change', function (event) {
+		$('.debeasiento').on('change input', function (event) {
 			event.preventDefault();
 			sumaMontoAsiento();
 		});
 
-		$('.haberasiento').on('change', function (event) {
+		$('.haberasiento').on('change input', function (event) {
+			event.preventDefault();
+			sumaMontoAsiento();
+		});
+
+		$('.cotizacionasiento').on('change input', function (event) {
 			event.preventDefault();
 			sumaMontoAsiento();
 		});
@@ -140,6 +155,10 @@ var totalHaberAsiento = 0;
 		//leeCotizacionAsiento(ptrUltimoRenglon);
 
 		activa_eventosAsiento(false);
+
+		if (window.AsientoMontosFormato) {
+			AsientoMontosFormato.initEnContenedor($("#tbody-cuenta-asiento-table tr.item-cuenta-asiento").last());
+		}
     }
 
     function borraRenglonCuentaAsiento(event) {
@@ -281,42 +300,67 @@ var totalHaberAsiento = 0;
 		let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 	
 		$.get(url_cot, function(data){
-			$(ptr).parents("tr").find('.cotizacionasiento').val(data.cotizacionventa);
+			var $cot = $(ptr).parents("tr").find('.cotizacionasiento');
+			$cot.val(data.cotizacionventa);
+			if (window.AsientoMontosFormato) {
+				AsientoMontosFormato.formatearInput($cot[0]);
+			}
 			sumaMontoAsiento();
 		});
+	}
+
+	function parseMontoArAsiento(valor) {
+		if (valor == null || valor === '') {
+			return 0;
+		}
+		var t = String(valor).trim().replace(/\s/g, '');
+		if (t.indexOf(',') >= 0) {
+			t = t.replace(/\./g, '').replace(',', '.');
+		} else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+			t = t.replace(/\./g, '');
+		}
+		var n = parseFloat(t);
+		return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+	}
+
+	function parseMontoAsiento(valor) {
+		if (window.AsientoMontosFormato && window.AsientoMontosFormato.parseDecimal) {
+			return AsientoMontosFormato.parseDecimal(valor);
+		}
+		return parseMontoArAsiento(valor);
+	}
+
+	function formateaMontoTotalAsiento(n) {
+		if (window.AsientoMontosFormato) {
+			return AsientoMontosFormato.fmt(n);
+		}
+		return Number(n || 0).toFixed(2);
 	}
 
 	function sumaMontoAsiento()
 	{
 		let totalDebeAsiento = 0;
 		let totalHaberAsiento = 0;
-		let monedaDefault = $("#tbody-cuenta-asiento-table").children(':first').find('.monedaasiento').val();
 
 		$("#tbody-cuenta-asiento-table .debeasiento").each(function() {
-            let valor = parseFloat($(this).val());
-			let moneda = $(this).parents("tr").find('.monedaasiento').val();
-			let cotizacion = $(this).parents("tr").find('.cotizacionasiento').val();
+            let valor = parseMontoAsiento($(this).val());
 
-            if (valor >= 0)
-			{
-				let coef = calculaCoeficienteMoneda(monedaDefault, moneda, cotizacion);
-
-                totalDebeAsiento += valor * coef;
+            if (valor > 0.000001) {
+                totalDebeAsiento += valor;
 			}
         });
 
         $("#tbody-cuenta-asiento-table .haberasiento").each(function() {
-            let valor = parseFloat($(this).val());
-			let moneda = $(this).parents("tr").find('.monedaasiento').val();
-			let cotizacion = $(this).parents("tr").find('.cotizacionasiento').val();
+            let valor = parseMontoAsiento($(this).val());
 
-			if (valor >= 0)
-			{
-				let coef = calculaCoeficienteMoneda(monedaDefault, moneda, cotizacion);
-
-				totalHaberAsiento += valor * coef;
+			if (valor > 0.000001) {
+				totalHaberAsiento += valor;
 			}
     	});
-		$("#totaldebeasiento").val(totalDebeAsiento.toFixed(2));
-		$("#totalhaberasiento").val(totalHaberAsiento.toFixed(2));
+
+		totalDebeAsiento = Math.round(totalDebeAsiento * 100) / 100;
+		totalHaberAsiento = Math.round(totalHaberAsiento * 100) / 100;
+
+		$("#totaldebeasiento").val(formateaMontoTotalAsiento(totalDebeAsiento));
+		$("#totalhaberasiento").val(formateaMontoTotalAsiento(totalHaberAsiento));
 	}

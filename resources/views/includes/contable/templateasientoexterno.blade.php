@@ -34,13 +34,13 @@
             <input type="hidden" class="monedaasiento_id_previo" name="monedaasiento_id_previo[]" value="" >
         </td>
         <td>
-            <input type="number" name="debeasientos[]" class="form-control debeasiento" value="">
+            <input type="text" inputmode="decimal" name="debeasientos[]" class="form-control text-right debeasiento" value="">
         </td>
         <td>
-            <input type="number" name="haberasientos[]" class="form-control haberasiento" value="">
+            <input type="text" inputmode="decimal" name="haberasientos[]" class="form-control text-right haberasiento" value="">
         </td>
         <td>
-            <input type="number" name="cotizacionasientos[]" class="form-control cotizacionasiento" value="0">
+            <input type="text" inputmode="decimal" name="cotizacionasientos[]" class="form-control text-right cotizacionasiento" value="">
         </td>
         <td>
             <input type="text" name="observacionasientos[]" class="form-control observacionasiento" value="">

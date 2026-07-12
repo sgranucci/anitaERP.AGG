@@ -29,6 +29,7 @@ use App\Repositories\Uif\So_UifRepositoryInterface;
 use App\Services\Uif\ClienteUifFotoDocumento;
 use App\Support\Uif\ClienteUifInformeReportablesSupport;
 use App\Support\Uif\ClienteUifListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Carbon\Carbon;
@@ -173,7 +174,7 @@ class Cliente_UifController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear($uif_id = null)
+    public function crear(Request $request, $uif_id = null)
     {
         can('crear-cliente-uif');
 
@@ -201,6 +202,7 @@ class Cliente_UifController extends Controller
         $essupervisor = esSupervisorUif() ? 'S' : 'N';
         $uifPerfil = perfilClienteUif();
         $sexo_aprendizaje_map = $this->clienteUifSexoAprendizajeService->mapaParaFrontend();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ClienteUifListadoFiltros::class);
 
         return view('uif.cliente_uif.crear', compact('localidad_uif_query', 'provincia_uif_query', 'actividad_uif_query',
                                                             'empresa_query', 'estadocivil_uif_query', 'sala_query',
@@ -209,7 +211,7 @@ class Cliente_UifController extends Controller
                                                             'pais_uif_query', 'pep_uif_query', 'so_uif_query', 'tipodocumento_query',
                                                             'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
                                                             'cumplenormativaso_enum', 'firmodeclaracionjurada_enum',
-                                                            'riesgopep_enum', 'essupervisor', 'uifPerfil', 'sexo_aprendizaje_map'));
+                                                            'riesgopep_enum', 'essupervisor', 'uifPerfil', 'sexo_aprendizaje_map', 'filtrosQuery'));
     }
 
     /**
@@ -228,7 +230,8 @@ class Cliente_UifController extends Controller
             return redirect()->back()->withInput()->withErrors(['errores' => $result['errores']]);
         }
 
-        return redirect('uif/cliente_uif')->with('mensaje', 'Cliente creado con éxito');
+        return redirect()->route('consulta_cliente_uif', QueryRetornoListado::desdeRequest($request, ClienteUifListadoFiltros::class))
+            ->with('mensaje', 'Cliente creado con éxito');
 	}
 
     /**
@@ -275,6 +278,7 @@ class Cliente_UifController extends Controller
         $essupervisor = esSupervisorUif() ? 'S' : 'N';
         $uifPerfil = perfilClienteUif();
         $sexo_aprendizaje_map = $this->clienteUifSexoAprendizajeService->mapaParaFrontend();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ClienteUifListadoFiltros::class);
 
         return view('uif.cliente_uif.editar', compact('data', 
                                                     'localidad_uif_query', 'provincia_uif_query', 'actividad_uif_query',
@@ -285,7 +289,7 @@ class Cliente_UifController extends Controller
                                                     'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
                                                     'cumplenormativaso_enum', 'firmodeclaracionjurada_enum', 'riesgopep_enum',
                                                     'essupervisor', 'uifPerfil', 'sexo_aprendizaje_map',
-                                                    'ocultarVolver', 'soloSolapaPremios'));
+                                                    'ocultarVolver', 'soloSolapaPremios', 'filtrosQuery'));
     }
 
     /**
@@ -307,7 +311,8 @@ class Cliente_UifController extends Controller
             return redirect()->back()->withInput()->withErrors(['errores' => $result['errores']]);
         }
 
-        return redirect('uif/cliente_uif')->with('mensaje', 'Cliente actualizado con éxito');
+        return redirect()->route('consulta_cliente_uif', QueryRetornoListado::desdeRequest($request, ClienteUifListadoFiltros::class))
+            ->with('mensaje', 'Cliente actualizado con éxito');
     }
 
     /**

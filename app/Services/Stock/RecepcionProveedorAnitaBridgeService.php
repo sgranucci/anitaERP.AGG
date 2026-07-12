@@ -13,6 +13,7 @@ use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 use App\Support\Stock\RecepcionProveedorAnitaCorrespondenciaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
 use App\Support\Stock\AnitaStkmovClaveErpSupport;
 use App\Support\Stock\RecepcionProveedorStkmovAnitaSupport;
 use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
@@ -732,6 +733,7 @@ class RecepcionProveedorAnitaBridgeService
         $api = new ApiAnita;
         $signo = $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION ? -1 : 1;
         $cfg = config('recepcion_proveedor.anita');
+        $ordenMax = 0;
 
         foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
             $linea->loadMissing(['articulos.categorias', 'articulos.impuestos']);
@@ -745,6 +747,7 @@ class RecepcionProveedorAnitaBridgeService
                     'Línea sin recv_orden válido (artículo '.trim($sku).', recepción '.$recepcion->numerorecepcion.').'
                 );
             }
+            $ordenMax = max($ordenMax, $orden);
 
             $insert = RecepcionProveedorAnitaEscrituraSupport::recepmovInsert(
                 $codigoProveedor,
@@ -775,6 +778,78 @@ class RecepcionProveedorAnitaBridgeService
                 'valores' => $insert['valores'],
             ], 'recepcion recepmov insert orden '.$orden);
         }
+
+        $this->grabarRecepmovImpuestoInterno($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenMax);
+    }
+
+    /**
+     * Línea recepmov sintética para el impuesto interno de cigarrillos (SKU IMPINTERNO):
+     * hace que la suma de montos de recepmov coincida con el asiento COM (que lo discrimina).
+     * No genera stkmov/aplicped/pendmovp (no está en la OC ni mueve stock).
+     *
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function grabarRecepmovImpuestoInterno(
+        Recepcion_Proveedor $recepcion,
+        string $codigoProveedor,
+        array $clave,
+        int $fechaAnita,
+        int $empresaCodigo,
+        int $ordenMax
+    ): void {
+        if (! RecepcionProveedorImpuestoInternoSupport::recepcionRequiereImpuestoInterno($recepcion)) {
+            return;
+        }
+
+        $importe = (float) ($recepcion->impuesto_interno ?? 0);
+        if ($importe <= 0.000001) {
+            return;
+        }
+
+        $articulo = RecepcionProveedorImpuestoInternoSupport::resolverArticuloImpuestoInterno();
+        if ($articulo === null) {
+            Log::warning('RecepcionProveedorAnitaBridge: sin artículo IMPINTERNO, no se graba línea recepmov de impuesto interno', [
+                'recepcion_id' => $recepcion->id,
+                'sku' => RecepcionProveedorImpuestoInternoSupport::skuArticuloImpuestoInterno(),
+            ]);
+
+            return;
+        }
+
+        $articulo->loadMissing(['categorias', 'impuestos']);
+        $sku = RecepcionProveedorAnitaEscrituraSupport::skuAnita13((string) ($articulo->sku ?? ''));
+
+        $insert = RecepcionProveedorAnitaEscrituraSupport::recepmovImpuestoInternoInsert(
+            $codigoProveedor,
+            $clave,
+            $ordenMax,
+            $sku,
+            substr((string) ($articulo->descripcion ?? 'IMPUESTO INTERNO'), 0, 30),
+            $importe,
+            (int) ($recepcion->deposito_id ?? 1),
+            $fechaAnita,
+            $this->codigoMonedaAnita((int) $recepcion->moneda_id),
+            (int) optional($recepcion->centrocostos)->codigo ?? 0,
+            $empresaCodigo,
+            (float) ($recepcion->cotizacion ?? 1),
+            (string) optional($articulo->categorias)->codigo,
+            RecepcionProveedorAnitaEscrituraSupport::tipoIvaAnitaCodigo($articulo),
+        );
+
+        if ($insert === null) {
+            return;
+        }
+
+        $orden = $ordenMax + 1;
+        $cfg = config('recepcion_proveedor.anita');
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'insert',
+            'sistema' => $cfg['sistema_compras'],
+            'tabla' => $cfg['tablas']['recepcion_linea'],
+            'campos' => $insert['campos'],
+            'valores' => $insert['valores'],
+        ], 'recepcion recepmov insert IMPINTERNO orden '.$orden);
     }
 
     /**

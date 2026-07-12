@@ -28,13 +28,14 @@ class RecepcionProveedorDiferenciaSupport
      *   faltantes: list<string>
      * }
      */
-    public static function analizar(Ordencompra $oc, array $items, bool $omitirFaltantes = false): array
+    public static function analizar(Ordencompra $oc, array $items, bool $omitirFaltantes = false, bool $esDevolucion = false): array
     {
         $empresaId = (int) $oc->empresa_id;
         $ccOc = (int) ($oc->centrocosto_id ?? 0);
         $tolEmpresa = RecepcionProveedorToleranciaSupport::resolver($empresaId, $ccOc);
 
         $ocPorId = $oc->ordencompra_articulos->keyBy('id');
+        $recibidosConfirmadosOc = RecepcionProveedorOcPendienteSupport::cantidadesRecibidasPorLineaOc((int) $oc->id);
         $recibidosPorOcArt = [];
         $pendientesPorOcArt = [];
         $cerrarPorOcArt = [];
@@ -81,15 +82,30 @@ class RecepcionProveedorDiferenciaSupport
 
             $ocArt = $ocArtId > 0 ? $ocPorId->get($ocArtId) : ($sustituidoId > 0 ? $ocPorId->get($sustituidoId) : null);
             $cantOc = (float) ($item['cantidad_oc'] ?? ($ocArt->cantidad ?? 0));
-            $cantRec = (float) ($item['cantidad'] ?? 0) + (float) ($item['cantidad_rechazada'] ?? 0);
+            $cantRemito = (float) ($item['cantidad'] ?? 0) + (float) ($item['cantidad_rechazada'] ?? 0);
+            $yaRecibidaOc = (float) ($item['cantidad_recibida'] ?? 0);
+            if ($yaRecibidaOc <= 0.000001 && $ocArtId > 0) {
+                $yaRecibidaOc = (float) ($recibidosConfirmadosOc[$ocArtId] ?? 0);
+            }
+            $cantRecTotal = $yaRecibidaOc + $cantRemito;
             $cantRechazada = (float) ($item['cantidad_rechazada'] ?? 0);
             $cantAceptada = (float) ($item['cantidad'] ?? 0);
-            $precioOc = (float) ($item['precio_ordencompra'] ?? ($ocArt->precio ?? $item['precio'] ?? 0));
+            $precioOc = (float) ($item['precio_ordencompra'] ?? 0);
+            if ($precioOc <= 0 && $ocArt !== null) {
+                $precioOc = RecepcionProveedorConversionSupport::precioUnitarioNetoDesdeLineaOc(
+                    (float) ($ocArt->precio ?? 0),
+                    (float) ($ocArt->descuento ?? 0),
+                    (float) ($oc->descuento ?? 0),
+                );
+            }
+            if ($precioOc <= 0) {
+                $precioOc = (float) ($item['precio'] ?? 0);
+            }
             $precioRec = (float) ($item['precio'] ?? 0);
 
             $claveOc = $sustituidoId > 0 ? $sustituidoId : $ocArtId;
             if ($claveOc > 0 && $tipoLinea !== self::TIPO_EXTRA) {
-                $recibidosPorOcArt[$claveOc] = ($recibidosPorOcArt[$claveOc] ?? 0) + $cantRec;
+                $recibidosPorOcArt[$claveOc] = ($recibidosPorOcArt[$claveOc] ?? 0) + $cantRemito;
             }
             if ($accionLinea === RecepcionProveedorAccionLineaOc::CERRAR && $claveOc > 0) {
                 $cerrarPorOcArt[$claveOc] = true;
@@ -104,7 +120,7 @@ class RecepcionProveedorDiferenciaSupport
 
             if ($tipoLinea === self::TIPO_EXTRA) {
                 $flExtra = true;
-                $resumenes[] = "Extra: {$sku} x {$cantRec}";
+                $resumenes[] = "Extra: {$sku} x {$cantRemito}";
             } elseif ($tipoLinea === self::TIPO_SUSTITUTO) {
                 $flExtra = true;
                 $resumenes[] = "Sustituto: {$sku} por línea OC #{$sustituidoId}";
@@ -118,24 +134,38 @@ class RecepcionProveedorDiferenciaSupport
             }
             $tol = RecepcionProveedorToleranciaSupport::resolver($empresaId, $ccLinea);
 
-            $flCantDiff = $accionLinea === RecepcionProveedorAccionLineaOc::RECIBIR
+            $flCantDiff = ! $esDevolucion
+                && $accionLinea === RecepcionProveedorAccionLineaOc::RECIBIR
                 && $tipoLinea !== self::TIPO_EXTRA
                 && $cantOc > 0
-                && ! RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($cantOc, $cantRec, $tol);
-            $precioDistintoOc = $tipoLinea !== self::TIPO_EXTRA
+                && ! RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($cantOc, $cantRecTotal, $tol);
+            $precioDistintoOc = ! $esDevolucion
+                && $tipoLinea !== self::TIPO_EXTRA
                 && $precioOc > 0
                 && abs($precioRec - $precioOc) >= 0.0001;
-            $precioFueraTolerancia = $precioOc > 0
+            $precioFueraTolerancia = ! $esDevolucion
+                && $precioOc > 0
                 && ! RecepcionProveedorToleranciaSupport::precioDentroTolerancia($precioOc, $precioRec, $tol);
+
+            $esParcialConSaldoPendiente = RecepcionProveedorAccionLineaOc::esRecepcionParcialConSaldoPendiente(
+                array_merge($item, ['cantidad_recibida' => $yaRecibidaOc])
+            );
 
             if ($flCantDiff) {
                 $flCant = true;
-                $resumenes[] = "{$sku}: cant. OC {$cantOc} vs rec. {$cantRec}";
-                $comentCant = trim((string) ($item['comentario_diferencia'] ?? ''));
-                if ($comentCant === '') {
-                    throw new \RuntimeException(
-                        'Línea '.($idx + 1)." ({$sku}): cantidad distinta a la OC. Indique comentario."
-                    );
+                $resumenCant = "{$sku}: pedido OC {$cantOc}";
+                if ($yaRecibidaOc > 0.000001) {
+                    $resumenCant .= ", ya recepcionado {$yaRecibidaOc}";
+                }
+                $resumenCant .= ", este remito {$cantRemito}";
+                $resumenes[] = $resumenCant;
+                if (! $esParcialConSaldoPendiente) {
+                    $comentCant = trim((string) ($item['comentario_diferencia'] ?? ''));
+                    if ($comentCant === '') {
+                        throw new \RuntimeException(
+                            'Línea '.($idx + 1)." ({$sku}): cantidad distinta a la OC. Indique comentario."
+                        );
+                    }
                 }
             }
             if ($precioDistintoOc) {
@@ -199,8 +229,8 @@ class RecepcionProveedorDiferenciaSupport
                 $faltantes[] = "{$sku} (pedido {$ped}, recibido 0)";
             } elseif ($rec + 0.000001 < $ped
                 && ! RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($ped, $rec, $tolEmpresa)) {
-                $flFaltante = true;
-                $faltantes[] = "{$sku} (pedido {$ped}, recibido {$rec})";
+                // Recepción parcial en este remito: el saldo restante queda pendiente (no es faltante).
+                continue;
             }
         }
 

@@ -12,6 +12,7 @@ use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use App\Support\Stock\RecepcionProveedorPrecioPendienteSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -22,6 +23,93 @@ class OrdencompraRecepcionPrecioSyncService
     public function __construct(
         private readonly OrdencompraArticuloPrecioHistoriaService $precioHistoriaService,
     ) {}
+
+    /**
+     * Propaga precio_solicitado de un borrador pendiente hacia ordencompra_articulo + Anita.
+     *
+     * @return int Cantidad de líneas OC actualizadas
+     */
+    public function actualizarPreciosDesdePreciosSolicitadosBorrador(Recepcion_Proveedor $recepcion): int
+    {
+        if ($recepcion->tipo !== Recepcion_Proveedor::TIPO_RECEPCION) {
+            return 0;
+        }
+
+        if ($recepcion->estado !== RecepcionProveedorEstados::BORRADOR) {
+            throw new \RuntimeException('Solo se pueden aplicar precios solicitados desde recepciones BORRADOR.');
+        }
+
+        $recepcion->loadMissing([
+            'ordencompras',
+            'recepcion_proveedor_articulos.articulos',
+        ]);
+
+        $oc = $recepcion->ordencompras;
+        if (! $oc) {
+            return 0;
+        }
+
+        $actualizadas = 0;
+        $cambiosLegajo = [];
+
+        foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
+            if (! RecepcionProveedorPrecioPendienteSupport::lineaTienePrecioSolicitadoPendiente($linea)) {
+                continue;
+            }
+
+            $ocArtId = (int) ($linea->ordencompra_articulo_id ?? 0);
+            if ($ocArtId <= 0) {
+                continue;
+            }
+
+            $ocArt = Ordencompra_Articulo::query()->find($ocArtId);
+            if (! $ocArt || (int) $ocArt->ordencompra_id !== (int) $oc->id) {
+                continue;
+            }
+
+            $precioAnterior = (float) $ocArt->precio;
+            $precioNuevo = (float) $linea->precio_solicitado;
+
+            if (abs($precioAnterior - $precioNuevo) < 0.0001) {
+                continue;
+            }
+
+            $ocArt->update(['precio' => $precioNuevo]);
+            $this->actualizarPendmovpPrecio($recepcion, $linea, $precioNuevo);
+
+            $this->precioHistoriaService->registrar(
+                $ocArt,
+                $precioAnterior,
+                $precioNuevo,
+                $recepcion,
+                $linea,
+                OrdencompraArticuloPrecioHistoriaOrigen::APLICACION_MANUAL,
+            );
+
+            $sku = trim((string) ($linea->articulos?->sku ?? ''));
+            if ($sku === '') {
+                $sku = 'Art.'.(int) ($ocArt->articulo_id ?? 0);
+            }
+            $cambiosLegajo[] = [
+                'sku' => $sku,
+                'precio_anterior' => $precioAnterior,
+                'precio_nuevo' => $precioNuevo,
+            ];
+
+            $actualizadas++;
+        }
+
+        if ($actualizadas > 0) {
+            $this->precioHistoriaService->registrarResumenLegajo(
+                $oc,
+                $recepcion,
+                $cambiosLegajo,
+                OrdencompraArticuloPrecioHistoriaOrigen::APLICACION_MANUAL
+            );
+        }
+
+        return $actualizadas;
+    }
 
     /**
      * @return int Cantidad de líneas OC actualizadas

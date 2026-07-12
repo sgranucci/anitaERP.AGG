@@ -99,6 +99,25 @@ class EfeAnitaBridgeReader
     }
 
     /**
+     * Conceptos bingo (concbingo) con cuentas contables.
+     *
+     * @return list<object>
+     */
+    public function listarConcbingoExtendido(): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'concbingo',
+            'concb_concepto,concb_desc,concb_tipo_conc,concb_porcentaje,concb_cta_contable,concb_contrapartida',
+            '',
+            $errores,
+            'concbingo-cierre-bingo',
+        );
+    }
+
+    /**
      * Conceptos bingo (concbingo).
      *
      * @return list<object>

@@ -53,6 +53,16 @@ final class EstacionamientoFacturaPayloadSupport
         return $nombre;
     }
 
+    public static function impuestoGravadoId(): int
+    {
+        return (int) config('estacionamiento.impuesto_gravado_id', 3);
+    }
+
+    public static function impuestoExentoId(): int
+    {
+        return (int) config('estacionamiento.impuesto_exento_id', 1);
+    }
+
     /**
      * @return list<int>
      */
@@ -62,9 +72,21 @@ final class EstacionamientoFacturaPayloadSupport
             return [];
         }
 
-        $impuestoId = (int) config('estacionamiento.impuesto_exento_id', 1);
+        return array_fill(0, $cantidadLineas, self::impuestoGravadoId());
+    }
 
-        return array_fill(0, $cantidadLineas, $impuestoId);
+    /**
+     * Precios de lista estacionamiento: IVA incluido (Factura B consumidor final).
+     *
+     * @return list<string>
+     */
+    public static function incluyeImpuestosParaLineas(int $cantidadLineas): array
+    {
+        if ($cantidadLineas <= 0) {
+            return [];
+        }
+
+        return array_fill(0, $cantidadLineas, '1');
     }
 
     public static function resolverItemEstacionamientoIdDesdeDetalle(?string $detalle): ?int

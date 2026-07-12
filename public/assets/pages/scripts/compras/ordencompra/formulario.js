@@ -1649,6 +1649,7 @@ $(function () {
 
 	function ocBadgesDiferencias(flags, resumen) {
 		var badges = [];
+		if (flags && flags.fl_precio_pendiente_aprobacion) badges.push('<span class="badge badge-info mr-1">Precio OC pend.</span>');
 		if (flags && flags.fl_precio_diferencia) badges.push('<span class="badge badge-warning mr-1">Precio</span>');
 		if (flags && flags.fl_diferencia_cantidad) badges.push('<span class="badge badge-info mr-1">Cantidad</span>');
 		if (flags && flags.fl_articulo_extra) badges.push('<span class="badge badge-secondary mr-1">Extra</span>');
@@ -1668,7 +1669,7 @@ $(function () {
 		var html = '<table class="table table-sm table-bordered mb-0 bg-white"><thead class="thead-light"><tr>'
 			+ '<th>SKU</th><th>Descripción</th><th class="text-right">Cant.</th>'
 			+ '<th class="text-right">Precio OC (snap.)</th><th class="text-right">Precio OC actual</th>'
-			+ '<th class="text-right">Precio recep.</th><th>Obs. precio</th></tr></thead><tbody>';
+			+ '<th class="text-right">Precio recep.</th><th class="text-right">Precio solicitado</th><th>Obs. precio</th></tr></thead><tbody>';
 		lineas.forEach(function (l) {
 			var rowClass = l.fl_precio_diferencia ? 'table-warning' : '';
 			html += '<tr class="' + rowClass + '">'
@@ -1678,6 +1679,7 @@ $(function () {
 				+ '<td class="text-right">' + ocFmtNumero(l.precio_ordencompra_snapshot) + '</td>'
 				+ '<td class="text-right">' + ocFmtNumero(l.precio_oc_actual) + '</td>'
 				+ '<td class="text-right font-weight-bold">' + ocFmtNumero(l.precio_recepcion) + '</td>'
+				+ '<td class="text-right">' + ocFmtNumero(l.precio_solicitado) + '</td>'
 				+ '<td class="small">' + ocEsc(l.comentario_precio) + '</td>'
 				+ '</tr>';
 		});
@@ -1710,6 +1712,9 @@ $(function () {
 			if (resumen.pendientes_aplicar_precio) {
 				txtResumen += ' · ' + resumen.pendientes_aplicar_precio + ' con precios OC pendientes de aplicar';
 			}
+			if (resumen.precio_pendiente_aprobacion) {
+				txtResumen += ' · ' + resumen.precio_pendiente_aprobacion + ' borrador(es) esperando aprobación de precio';
+			}
 			$('#oc-recepciones-resumen').removeClass('d-none').text(txtResumen);
 
 			recepciones.forEach(function (r) {
@@ -1730,6 +1735,10 @@ $(function () {
 				if (r.pendiente_aplicar_precio_oc) {
 					acciones += '<button type="button" class="btn btn-warning btn-xs oc-aplicar-precios-rec" data-recepcion-id="' + r.id + '" title="Aplicar precios de recepción a la OC">'
 						+ '<i class="fa fa-refresh"></i> Precios OC</button>';
+				}
+				if (r.puede_aplicar_precios_solicitados) {
+					acciones += '<button type="button" class="btn btn-info btn-xs oc-aplicar-precios-solicitados-rec" data-recepcion-id="' + r.id + '" title="Aplicar precios solicitados del borrador a la OC y liberar confirmación">'
+						+ '<i class="fa fa-check-circle"></i> Aprobar precios</button>';
 				}
 				acciones += '</div>';
 
@@ -1798,6 +1807,32 @@ $(function () {
 			}
 		}).fail(function (xhr) {
 			var msg = (xhr.responseJSON && xhr.responseJSON.mensaje) ? xhr.responseJSON.mensaje : 'Error al aplicar precios.';
+			alert(msg);
+		}).always(function () {
+			$btn.prop('disabled', false);
+		});
+	});
+
+	$(document).on('click', '.oc-aplicar-precios-solicitados-rec', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		var recId = $(this).data('recepcion-id');
+		var ocId = $('#ordencompra_id_actual').val();
+		if (!ocId || !recId) return;
+		if (!confirm('¿Aplicar los precios solicitados del borrador a la OC, sincronizar Anita y avisar al usuario para confirmar la COM?')) return;
+		var $btn = $(this).prop('disabled', true);
+		$.ajax({
+			url: carpetaBase + '/compras/ordencompra/' + ocId + '/aplicar-precios-solicitados-recepcion/' + recId,
+			method: 'POST',
+			data: { _token: $('meta[name="csrf-token"]').attr('content') }
+		}).done(function (resp) {
+			alert((resp && resp.mensaje) ? resp.mensaje : 'Precios aplicados y recepción liberada.');
+			ocCargarRecepciones();
+			if ($('#oc-solapa-historia-precios').is(':visible')) {
+				ocCargarHistoriaPrecios();
+			}
+		}).fail(function (xhr) {
+			var msg = (xhr.responseJSON && xhr.responseJSON.mensaje) ? xhr.responseJSON.mensaje : 'Error al aplicar precios solicitados.';
 			alert(msg);
 		}).always(function () {
 			$btn.prop('disabled', false);

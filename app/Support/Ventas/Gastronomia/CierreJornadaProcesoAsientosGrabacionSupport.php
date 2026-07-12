@@ -15,6 +15,10 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
 {
     public const DESCRIPCION_ASIENTO = 'Venta gastronomia';
 
+    public const DESCRIPCION_ASIENTO_COMPENSACION_FONDO_FIJO = 'Reducion de Fondo fijo';
+
+    public const CODIGO_ASIENTO_COMPENSACION_FONDO_FIJO = 'compensacion_efectivo_no_facturado';
+
     private const TOLERANCIA_CUADRE = 0.02;
 
     /**
@@ -50,11 +54,16 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
                 continue;
             }
 
+            $observacion = $codigo === self::CODIGO_ASIENTO_COMPENSACION_FONDO_FIJO
+                ? self::DESCRIPCION_ASIENTO_COMPENSACION_FONDO_FIJO
+                : self::DESCRIPCION_ASIENTO;
+
             $payloadLineas = self::payloadDesdeLineasPreview(
                 $lineas,
                 $empresaId,
                 $configContable,
                 $cacheCuentas,
+                $observacion,
             );
 
             if ($payloadLineas['cuentacontable_ids'] === []) {
@@ -75,8 +84,6 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
                     'El asiento «'.$titulo.'» no cuadra (debe '.$debe.' vs haber '.$haber.').',
                 );
             }
-
-            $observacion = self::DESCRIPCION_ASIENTO;
 
             $out[] = [
                 'codigo' => $codigo,
@@ -116,6 +123,7 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
         int $empresaId,
         array $configContable,
         array &$cacheCuentas,
+        string $descripcionLinea = self::DESCRIPCION_ASIENTO,
     ): array {
         $cuentacontableIds = [];
         $debes = [];
@@ -154,9 +162,11 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
             $debes[] = $debe > 0.0001 ? $debe : '';
             $haberes[] = $haber > 0.0001 ? $haber : '';
             $monedaIds[] = 1;
-            $centrocostoIds[] = null;
+            $centrocostoIds[] = CierreJornadaProcesoAsientosCentrocostoSupport::resolverCentrocostoIdParaCuentacontable(
+                $cuentacontableId,
+            );
             $cotizaciones[] = 1.;
-            $observaciones[] = self::DESCRIPCION_ASIENTO;
+            $observaciones[] = $descripcionLinea;
         }
 
         return [

@@ -14,23 +14,43 @@
         return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     }
 
+    function estadoFiltro() {
+        return ($('#filtro-estado-partes-unicas').val() || 'A').trim();
+    }
+
+    function badgeEstado(estado) {
+        if (estado === 'B') {
+            return '<span class="badge badge-danger">Dado de baja</span>';
+        }
+
+        return '<span class="badge badge-success">Activo</span>';
+    }
+
     function cargarPartes(page) {
         paginaActual = page || 1;
         $('#partes-unicas-loading').show();
-        $.getJSON(baseUrl, { page: paginaActual })
+        $.getJSON(baseUrl, { page: paginaActual, estado: estadoFiltro() })
             .done(function (data) {
+                var cols = puedeEditar ? 5 : 4;
                 var rows = '';
                 (data.data || []).forEach(function (p) {
+                    var estado = (p.estado || 'A');
                     rows += '<tr>';
                     rows += '<td><strong>' + escHtml(p.numeroparte) + '</strong></td>';
+                    rows += '<td>' + badgeEstado(estado) + '</td>';
                     rows += '<td>' + escHtml((p.created_at || '').substring(0, 16).replace('T', ' ')) + '</td>';
+                    rows += '<td>' + escHtml((p.fecha_baja || '').substring(0, 16).replace('T', ' ')) + '</td>';
                     if (puedeEditar) {
-                        rows += '<td><button type="button" class="btn btn-xs btn-danger btn-eliminar-parte" data-id="' + p.id + '" title="Eliminar"><i class="fa fa-trash"></i></button></td>';
+                        if (estado === 'B') {
+                            rows += '<td class="text-muted small">—</td>';
+                        } else {
+                            rows += '<td><button type="button" class="btn btn-xs btn-danger btn-eliminar-parte" data-id="' + p.id + '" title="Eliminar"><i class="fa fa-trash"></i></button></td>';
+                        }
                     }
                     rows += '</tr>';
                 });
                 if (!rows) {
-                    rows = '<tr><td colspan="' + (puedeEditar ? 3 : 2) + '" class="text-muted text-center">Sin números de parte</td></tr>';
+                    rows = '<tr><td colspan="' + cols + '" class="text-muted text-center">Sin números de parte</td></tr>';
                 }
                 $('#tbody-partes-unicas').html(rows);
 
@@ -48,6 +68,10 @@
     }
 
     $(document).on('click', '#botonform9', function () {
+        cargarPartes(1);
+    });
+
+    $(document).on('change', '#filtro-estado-partes-unicas', function () {
         cargarPartes(1);
     });
 

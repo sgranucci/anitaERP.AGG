@@ -36,6 +36,7 @@
                             <th>Contab.</th>
                             <th>Dest. bien</th>
                             <th>Orig. bien</th>
+                            <th>Baja NPU</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -52,6 +53,7 @@
                             <td>{{ $data->maneja_contabilidad ? 'Sí' : 'No' }}</td>
                             <td>{{ $data->destino_bien_uso ? 'Sí' : 'No' }}</td>
                             <td>{{ $data->origen_bien_uso ? 'Sí' : 'No' }}</td>
+                            <td>{{ $data->baja_npu ? 'Sí' : 'No' }}</td>
                             <td>
                        			@if (can('editar-tipos-transaccion-stock', false))
                                 	<a href="{{route('editar_tipotransaccion_stock', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

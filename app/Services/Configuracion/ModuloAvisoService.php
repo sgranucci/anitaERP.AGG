@@ -82,7 +82,7 @@ class ModuloAvisoService
                     if (! empty($tipo->mail_remitente)) {
                         $mailable->from($tipo->mail_remitente);
                     }
-                    Mail::to($email)->send($mailable);
+                    Mail::to($email)->queue($mailable);
                 } catch (\Throwable $e) {
                     Log::error('ModuloAvisoService: falló envío a destinatario', [
                         'email' => $email,

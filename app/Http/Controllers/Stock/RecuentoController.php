@@ -14,6 +14,7 @@ use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\RecuentoRepositoryInterface;
 use App\Services\Stock\RecuentoService;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
+use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\RecuentoListadoFiltros;
 use App\Support\Stock\RecuentoModoCierreSupport;
 use App\Support\Stock\RecuentoVisibilidadSupport;
@@ -174,8 +175,9 @@ class RecuentoController extends Controller
     {
         can('ver-recuento');
         $recuento = $this->service->buscar($id);
+        $puede_ver_kardex = MovimientosArticuloDepositoSupport::puedeConsultar();
 
-        return view('stock.recuento.ver', compact('recuento'));
+        return view('stock.recuento.ver', compact('recuento', 'puede_ver_kardex'));
     }
 
     public function suspender(Request $request, int $id)

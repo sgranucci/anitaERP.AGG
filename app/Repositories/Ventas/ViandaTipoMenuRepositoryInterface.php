@@ -4,7 +4,7 @@ namespace App\Repositories\Ventas;
 
 interface ViandaTipoMenuRepositoryInterface
 {
-    public function all();
+    public function all(?int $empresaId = null);
 
     public function existeRegistro(): bool;
 

@@ -4,6 +4,7 @@ namespace App\Services\Arca;
 
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use Exception;
 use SoapClient;
 use SoapFault;
@@ -403,6 +404,99 @@ class ArcaWsfeFacturaElectronicaService
     }
 
     /**
+     * Informa comprobante emitido bajo CAEA (WSFE FECAEARegInformativo / RG 4291).
+     *
+     * @param  object  $puntoventa
+     * @param  array<string, mixed>  $datos
+     * @param  array{caea: string, fechavencimientocae?: string, fechavencimiento?: string}  $caeaVigente
+     * @return array{resultado: string, observaciones: string, caea: string}
+     *
+     * @throws Exception
+     */
+    public function feCaeaRegInformativoDomestico(
+        int $empresaId,
+        object $puntoventa,
+        int $cbteTipo,
+        array $datos,
+        array $caeaVigente,
+    ): array {
+        $this->assertTransporteSoap();
+        if (($puntoventa->webservice ?? '') !== 'wsfev1') {
+            throw new Exception('ARCA WSFE: FECAEARegInformativo solo aplica a webservice wsfev1.');
+        }
+
+        $caeaNum = preg_replace('/\D+/', '', (string) ($caeaVigente['caea'] ?? '')) ?? '';
+        if ($caeaNum === '') {
+            throw new Exception('WSFE — FECAEARegInformativo: CAEA vacío.');
+        }
+
+        $cuit = $this->cuitEmisor($empresaId);
+        $ctx = $this->resolveWsaaContext($empresaId);
+        $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
+        $client = $this->soapClient();
+
+        $ptoVta = (int) $puntoventa->codigo;
+        $det = $this->buildFeCaeaDetRequest($cbteTipo, $ptoVta, $datos, $caeaNum);
+
+        $feReq = [
+            'FeCabReq' => [
+                'CantReg' => 1,
+                'PtoVta' => $ptoVta,
+                'CbteTipo' => $cbteTipo,
+            ],
+            'FeDetReq' => [
+                'FECAEADetRequest' => $det,
+            ],
+        ];
+
+        try {
+            $raw = $client->FECAEARegInformativo([
+                'Auth' => [
+                    'Token' => $ts['token'],
+                    'Sign' => $ts['sign'],
+                    'Cuit' => $cuit,
+                ],
+                'FeCAEARegInfReq' => $feReq,
+            ]);
+        } catch (SoapFault $e) {
+            throw new Exception($this->formatSoapFault('FECAEARegInformativo', $e, $client));
+        }
+
+        $result = $raw->FECAEARegInformativoResult ?? null;
+        if ($result === null) {
+            throw new Exception('WSFE: FECAEARegInformativo sin resultado.');
+        }
+
+        $cabErrs = $this->normalizeErrCollection($result->Errors ?? null);
+        $feDet = $result->FeDetResp ?? null;
+        $detResp = $this->unwrapFeCaeaDetResponse($feDet);
+
+        $detErrs = $this->normalizeErrCollection($detResp->Errors ?? null);
+        $obs = $this->normalizeObsCollection($detResp->Observaciones ?? null);
+
+        $allErrs = array_merge($cabErrs, $detErrs);
+        if ($allErrs !== []) {
+            throw new Exception('WSFE — FECAEARegInformativo: '.$this->formatErrList($allErrs));
+        }
+
+        $resultado = (string) ($detResp->Resultado ?? '');
+        if ($resultado !== 'A' && $resultado !== 'P') {
+            $msg = 'Resultado: '.$resultado;
+            if ($obs !== []) {
+                $msg .= ' | '.$this->formatObsList($obs);
+            }
+
+            throw new Exception('WSFE — comprobante CAEA no informado. '.$msg);
+        }
+
+        return [
+            'resultado' => $resultado,
+            'observaciones' => $obs !== [] ? $this->formatObsList($obs) : '',
+            'caea' => $caeaNum,
+        ];
+    }
+
+    /**
      * @return array{
      *     caea: string,
      *     periodo: int,
@@ -719,8 +813,8 @@ class ArcaWsfeFacturaElectronicaService
             'ImpOpEx' => $this->money($datos['exento']),
             'ImpTrib' => $this->money($datos['tributo']),
             'ImpIVA' => $this->money($datos['iva']),
-            'MonId' => (string) $datos['moneda'],
-            'MonCotiz' => $this->moneyCotiz($datos['cotizacion'] ?? 1),
+            'MonId' => LibroIvaDigitalMapeosSupport::codigoMonedaAfip((string) ($datos['moneda'] ?? 'PES')),
+            'MonCotiz' => $this->moneyCotiz($this->cotizacionParaMonedaAfip($datos)),
         ];
 
         if ($concepto === 2 || $concepto === 3) {
@@ -751,6 +845,23 @@ class ArcaWsfeFacturaElectronicaService
         $iva = $this->buildIva($datos['impuestos'] ?? []);
         if ($iva !== null) {
             $det['Iva'] = $iva;
+        }
+
+        return $det;
+    }
+
+    /**
+     * @param  array<string, mixed>  $datos
+     * @return array<string, mixed>
+     */
+    private function buildFeCaeaDetRequest(int $cbteTipo, int $ptoVta, array $datos, string $caeaNum): array
+    {
+        $det = $this->buildFecaDetRequest($cbteTipo, $ptoVta, $datos);
+        $det['CAEA'] = $caeaNum;
+
+        $cbteFchHsGen = trim((string) ($datos['cbte_fch_hs_gen'] ?? ''));
+        if ($cbteFchHsGen !== '') {
+            $det['CbteFchHsGen'] = preg_replace('/\D+/', '', $cbteFchHsGen);
         }
 
         return $det;
@@ -1035,6 +1146,22 @@ class ArcaWsfeFacturaElectronicaService
         return (object) [];
     }
 
+    private function unwrapFeCaeaDetResponse(?object $feDet): object
+    {
+        if ($feDet === null) {
+            return (object) [];
+        }
+        $r = $feDet->FECAEADetResponse ?? null;
+        if (is_array($r)) {
+            return (object) ($r[0] ?? []);
+        }
+        if (is_object($r)) {
+            return $r;
+        }
+
+        return (object) [];
+    }
+
     /**
      * @return list<array{code: string, msg: string}>
      */
@@ -1142,5 +1269,25 @@ class ArcaWsfeFacturaElectronicaService
     private function moneyCotiz(mixed $v): string
     {
         return number_format((float) $v, 6, '.', '');
+    }
+
+    /**
+     * WSFE [726]: MonCotiz obligatorio e igual a 1 cuando MonId=PES.
+     *
+     * @param  array<string, mixed>  $datos
+     */
+    private function cotizacionParaMonedaAfip(array $datos): float
+    {
+        $monId = LibroIvaDigitalMapeosSupport::codigoMonedaAfip((string) ($datos['moneda'] ?? 'PES'));
+        if ($monId === 'PES') {
+            return 1.0;
+        }
+
+        $cotizacion = (float) ($datos['cotizacion'] ?? 1);
+        if ($cotizacion <= 0) {
+            return 1.0;
+        }
+
+        return $cotizacion;
     }
 }

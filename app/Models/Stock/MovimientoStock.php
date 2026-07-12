@@ -17,7 +17,7 @@ class MovimientoStock extends Model
 	use MovimientoStockTrait;
 
     protected $table = "movimientostock";
-    protected $fillable = ['fecha', 'fechajornada', 'tipotransaccion_stock_id', 'mventa_id', 'codigo', 'leyenda', 'estado', 'usuario_id', 'asiento_id', 'centrocosto_destino_id'];
+    protected $fillable = ['fecha', 'fechajornada', 'tipotransaccion_stock_id', 'mventa_id', 'codigo', 'leyenda', 'estado', 'usuario_id', 'asiento_id', 'centrocosto_destino_id', 'movimientostock_origen_id', 'movimientostock_revertido_por_id'];
 
 	public function estadoEnum()
 	{

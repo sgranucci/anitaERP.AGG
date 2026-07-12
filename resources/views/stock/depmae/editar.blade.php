@@ -8,6 +8,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('depmae', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -24,13 +27,13 @@
                 </h3>
                 <div class="card-tools">
                     @if (empty($ocultarVolver))
-                    <a href="{{route('depmae')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                     @endif
                 </div>
             </div>
-            <form action="{{route('actualizar_depmae', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" @if(!empty($soloConsulta) && empty($puedeActualizarDeposito)) onsubmit="return false;" @endif>
+            <form action="{{ route('actualizar_depmae', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" @if(!empty($soloConsulta) && empty($puedeActualizarDeposito)) onsubmit="return false;" @endif>
                 @csrf @method("put")
                 @if (! empty($soloConsulta))
                     <input type="hidden" name="origen" value="modal_consulta">

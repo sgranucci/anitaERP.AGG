@@ -25,6 +25,7 @@
                 <th>Jornada</th>
                 <th class="num">Inicio fondo</th>
                 <th class="num">Facturado</th>
+                <th class="num">Invitaciones</th>
                 <th class="num">Cobrado</th>
                 <th class="num">Sobr./falt.</th>
             </tr>
@@ -41,6 +42,7 @@
                 <td>{{ $row->turnoOperativo?->jornada?->fecha_jornada?->format('d/m/Y') }}</td>
                 <td class="num">{{ number_format((float) $row->iniciodelfondo, 2, ',', '.') }}</td>
                 <td class="num">{{ number_format((float) $row->totalfactura, 2, ',', '.') }}</td>
+                <td class="num">{{ number_format((float) $row->totalinvitacion, 2, ',', '.') }}</td>
                 <td class="num">{{ number_format((float) $row->totalcobrado, 2, ',', '.') }}</td>
                 <td class="num">{{ number_format((float) $row->sobrantefaltante, 2, ',', '.') }}</td>
             </tr>

@@ -140,10 +140,10 @@ return [
      * Receptor en comprobantes (RG4444 / manual WSFEv1). Compartido entre unidades de negocio.
      */
     'receptor' => [
-        /** Umbral en pesos: bajo → Consumidor Final (tipo doc. 99, nro. 0); sobre → cliente maestro o datos manuales. */
+        /** Umbral en pesos (RG 5700/2025 sobre RG 1415): bajo → Consumidor Final (tipo doc. 99, nro. 0); igual o sobre → identificar DNI/CUIT. */
         'consumidor_final_umbral_monto' => (float) env(
             'ARCA_WSFE_RECEPTOR_CF_UMBRAL_MONTO',
-            env('GASTRONOMIA_CONSUMIDOR_FINAL_TOPE_MONTO', 10000000)
+            env('GASTRONOMIA_CONSUMIDOR_FINAL_TOPE_MONTO', 10_000_000)
         ),
         'consumidor_final_razon_social' => env(
             'ARCA_WSFE_RECEPTOR_CF_RAZON_SOCIAL',

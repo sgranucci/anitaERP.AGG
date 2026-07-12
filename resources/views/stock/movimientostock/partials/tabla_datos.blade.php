@@ -3,6 +3,7 @@
 
     $puedeEditar = $puede_editar ?? can('editar-movimientos-de-stock', false);
     $puedeBorrar = $puede_borrar ?? can('borrar-movimientos-de-stock', false);
+    $puedeRevertir = $puede_revertir ?? can('revertir-movimientos-de-stock', false);
     $puedeListar = $puede_listar ?? can('listar-movimientos-de-stock', false);
     $mostrarAcciones = $mostrar_acciones ?? true;
     $esFerli = MovimientoStockFerliSupport::esCalzadosFerli();
@@ -11,6 +12,7 @@
     @php
         /** @var \App\Support\Stock\MovimientoStockListadoFila $fila */
         $estadoLabel = $fila->etiquetaEstadoListado();
+        $puedeModificarVentanaFila = \App\Support\Stock\MovimientoStockEdicionVentanaSupport::puedeModificarPorFecha($fila->fecha);
     @endphp
     <tr data-entry-id="{{ $fila->pkId }}" data-fila-tipo="{{ $fila->filaTipo }}">
         <td>
@@ -52,27 +54,43 @@
                             <i class="fa fa-eye"></i>
                         </a>
                     @endif
-                    @if ($puedeEditar && $fila->movSalidaId)
+                    @if ($puedeRevertir && $fila->estadoTransferencia === \App\Support\Stock\TransferenciaMercaderiaEstados::CONFIRMADA && ! ($fila->transferencia->transferencia_revertido_por_id ?? null))
+                        <form action="{{ route('revertir_transferencia_movimientostock', ['id' => $fila->pkId]) }}" class="d-inline form-revertir-movstock" method="POST">
+                            @csrf
+                            <button type="submit" class="btn-accion-tabla tooltipsC" title="Revertir transferencia (genera movimientos inversos y asiento al revés si corresponde)">
+                                <i class="fa fa-undo text-info"></i>
+                            </button>
+                        </form>
+                    @endif
+                    @if ($puedeEditar && $fila->movSalidaId && $puedeModificarVentanaFila)
                         <a href="{{ route('editar_movimientostock', ['id' => $fila->movSalidaId]) }}" class="btn-accion-tabla tooltipsC" title="Editar egreso ({{ $fila->movSalidaId }})">
                             <i class="fa fa-sign-out-alt text-warning"></i>
                         </a>
                     @endif
-                    @if ($puedeEditar && $fila->movEntradaId)
+                    @if ($puedeEditar && $fila->movEntradaId && $puedeModificarVentanaFila)
                         <a href="{{ route('editar_movimientostock', ['id' => $fila->movEntradaId]) }}" class="btn-accion-tabla tooltipsC" title="Editar ingreso ({{ $fila->movEntradaId }})">
                             <i class="fa fa-sign-in-alt text-success"></i>
                         </a>
                     @endif
                 @else
-                    @if ($puedeEditar && $fila->movimiento)
+                    @if ($puedeEditar && $fila->movimiento && $puedeModificarVentanaFila)
                         <a href="{{ route('editar_movimientostock', ['id' => $fila->movimiento->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                             <i class="fa fa-edit"></i>
                         </a>
                     @endif
-                    @if ($puedeBorrar && $fila->movimiento)
+                    @if ($puedeBorrar && $fila->movimiento && $puedeModificarVentanaFila)
                         <form action="{{ route('eliminar_movimientostock', ['id' => $fila->movimiento->id]) }}" class="d-inline form-eliminar" method="POST">
                             @csrf @method('delete')
                             <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
                                 <i class="fa fa-times-circle text-danger"></i>
+                            </button>
+                        </form>
+                    @endif
+                    @if ($puedeRevertir && $fila->movimiento && ($fila->movimiento->estado ?? 'A') === 'A' && ! ($fila->movimiento->movimientostock_revertido_por_id ?? null) && ! ($fila->movimiento->movimientostock_origen_id ?? null))
+                        <form action="{{ route('revertir_movimientostock', ['id' => $fila->movimiento->id]) }}" class="d-inline form-revertir-movstock" method="POST">
+                            @csrf
+                            <button type="submit" class="btn-accion-tabla tooltipsC" title="Revertir movimiento (compensatorio + asiento al revés si corresponde)">
+                                <i class="fa fa-undo text-info"></i>
                             </button>
                         </form>
                     @endif

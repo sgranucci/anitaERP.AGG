@@ -28,6 +28,20 @@
         }
     }
 
+    function abrirConsultaUsuarioCampo($ctx) {
+        var $btn = $ctx.find('.consultausuario').first();
+        if ($btn.length) {
+            $btn.trigger('click');
+        }
+    }
+
+    function abrirConsultaTipoTransaccionCampo($ctx) {
+        var $btn = $ctx.find('.consultatipotransaccionstock').first();
+        if ($btn.length) {
+            $btn.trigger('click');
+        }
+    }
+
     var FORM_IDS = ['formgeneral', 'form-recuento'];
     var TABLA_ARTICULO_SELECTORS = ['#tabla-items-movimientostock', '#tabla-recuento-items'];
 
@@ -92,19 +106,38 @@
             return;
         }
 
-        if (esTeclaF2(e) && target.classList.contains('abreviaturatipotransaccionstock') && !target.readOnly) {
-            var ctxTipo = target.closest('.tm-tipotransaccion-stock-campo');
-            if (!ctxTipo) {
+        if (esTeclaF1(e) && (target.id === 'usuario_destino_id' || target.id === 'ms_usuario_destino_nombre')) {
+            var ctxUsuario = target.closest('.tm-usuario-destino-campo');
+            if (!ctxUsuario) {
                 return;
             }
-            if (modalAbierto('#consultatipotransaccionstockModal')) {
+            if (modalAbierto('#consultausuarioModal')) {
                 return;
             }
             e.preventDefault();
             e.stopPropagation();
-            var $btn = $(ctxTipo).find('.consultatipotransaccionstock').first();
-            if ($btn.length) {
-                $btn.trigger('click');
+            abrirConsultaUsuarioCampo($(ctxUsuario));
+            return;
+        }
+
+        if (esTeclaF1(e) || esTeclaF2(e)) {
+            var esAbrevTipo = target.classList.contains('abreviaturatipotransaccionstock');
+            var esNombreTipo = target.classList.contains('nombretipotransaccionstock');
+            if (esAbrevTipo || esNombreTipo) {
+                if (esAbrevTipo && target.readOnly) {
+                    return;
+                }
+                var ctxTipo = target.closest('.tm-tipotransaccion-stock-campo');
+                if (!ctxTipo) {
+                    return;
+                }
+                if (modalAbierto('#consultatipotransaccionstockModal')) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                abrirConsultaTipoTransaccionCampo($(ctxTipo));
+                return;
             }
         }
     }, true);

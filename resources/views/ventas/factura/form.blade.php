@@ -63,6 +63,7 @@
 			<label for="Tiposuspension" id="nombretiposuspension" style="padding: 0px;" class="col-form-label text-danger"></label>
 		</div>
 		<div id="aviso-padron-operacion-factura" class="alert d-none col-12 mb-2" role="alert"></div>
+		@include('ventas.cliente.partials.arca_apoc_operacion_support')
 		<div class="form-group row">
    			<label for="vendedor" class="col-lg-3 col-form-label requerido">Vendedor</label>
         	<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-8 form-control factura-carga-bloqueable required" data-fouc>

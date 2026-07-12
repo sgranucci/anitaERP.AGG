@@ -13,6 +13,7 @@ use App\Support\Caja\RendicionEstacionamientoCajaListadoFiltros;
 use App\Support\Caja\RendicionEstacionamientoCajaPermiso;
 use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\QueryRetornoListado;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -114,14 +115,14 @@ class RendicionEstacionamientoController extends Controller
         return $filtros;
     }
 
-    public function crear(?int $caja = null)
+    public function crear(Request $request, ?int $caja = null)
     {
         can('crear-rendicion-estacionamiento-caja');
 
         [$cajaId, $nombreCaja] = $this->resolverCaja($caja);
         if ($cajaId <= 0) {
             return redirect()
-                ->route('rendicionestacionamiento')
+                ->route('rendicionestacionamiento', QueryRetornoListado::desdeRequest($request, RendicionEstacionamientoCajaListadoFiltros::class))
                 ->with('errores', ['No tiene caja asignada para hoy. Debe ingresar desde Movimientos de caja o solicitar asignación de cajero.']);
         }
 
@@ -130,6 +131,7 @@ class RendicionEstacionamientoController extends Controller
         $codigoPropuesto = $empresaDefaultId > 0
             ? $this->service->proponerCodigoAnita($empresaDefaultId)
             : '';
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, RendicionEstacionamientoCajaListadoFiltros::class);
 
         return view('caja.rendicionestacionamiento.crear', [
             'caja_id' => $cajaId,
@@ -138,6 +140,7 @@ class RendicionEstacionamientoController extends Controller
             'empresa_default_id' => $empresaDefaultId,
             'codigo_propuesto' => $codigoPropuesto,
             'data' => null,
+            'filtrosQuery' => $filtrosQuery,
         ]);
     }
 
@@ -153,7 +156,10 @@ class RendicionEstacionamientoController extends Controller
             return redirect()->back()->withInput()->with('errores', [$e->getMessage()]);
         }
 
-        return redirect('caja/rendicionestacionamiento')->with('mensaje', 'Rendición de estacionamiento registrada con éxito');
+        return redirect()->route(
+            'rendicionestacionamiento',
+            QueryRetornoListado::desdeRequest($request, RendicionEstacionamientoCajaListadoFiltros::class),
+        )->with('mensaje', 'Rendición de estacionamiento registrada con éxito');
     }
 
     public function imprimir(Request $request, int $id)
@@ -201,19 +207,35 @@ class RendicionEstacionamientoController extends Controller
             : $pdf->download($nombreArchivo);
     }
 
-    public function editar(int $id)
+    public function editar(Request $request, int $id)
     {
-        can('editar-rendicion-estacionamiento-caja');
+        $soloConsulta = QueryRetornoListado::esModalConsulta($request);
+        if ($soloConsulta) {
+            can('listar-rendicion-estacionamiento-caja');
+        } else {
+            can('editar-rendicion-estacionamiento-caja');
+        }
+
+        $retornoIndex = QueryRetornoListado::desdeRequest($request, RendicionEstacionamientoCajaListadoFiltros::class);
 
         $data = $this->service->findConDetalle($id);
-        if (! RendicionEstacionamientoCajaPermiso::puedeActualizarPorFecha($data)) {
-            return redirect('caja/rendicionestacionamiento')
-                ->with('errores', [RendicionEstacionamientoCajaPermiso::mensajeRestriccionFecha()]);
+
+        if (! $soloConsulta) {
+            if (! RendicionEstacionamientoCajaPermiso::puedeActualizarPorFecha($data)) {
+                return redirect()->route('rendicionestacionamiento', $retornoIndex)
+                    ->with('errores', [RendicionEstacionamientoCajaPermiso::mensajeRestriccionFecha()]);
+            }
+            if (! RendicionEstacionamientoCajaPermiso::puedeModificarRendicionTurno($data)) {
+                return redirect()->route('rendicionestacionamiento', $retornoIndex)
+                    ->with('errores', [RendicionEstacionamientoCajaPermiso::mensajeJornadaPresentadaBloqueoTurno()]);
+            }
         }
-        if (! RendicionEstacionamientoCajaPermiso::puedeModificarRendicionTurno($data)) {
-            return redirect('caja/rendicionestacionamiento')
-                ->with('errores', [RendicionEstacionamientoCajaPermiso::mensajeJornadaPresentadaBloqueoTurno()]);
-        }
+
+        $puedeActualizarRendicion = ! $soloConsulta
+            && can('actualizar-rendicion-estacionamiento-caja', false)
+            && RendicionEstacionamientoCajaPermiso::puedeActualizarPorFecha($data)
+            && RendicionEstacionamientoCajaPermiso::puedeModificarRendicionTurno($data);
+        $ocultarVolver = $soloConsulta;
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $nombreCaja = (string) ($data->caja?->nombre ?? '');
@@ -238,6 +260,8 @@ class RendicionEstacionamientoController extends Controller
             }
         }
 
+        $filtrosQuery = $soloConsulta ? [] : $retornoIndex;
+
         return view('caja.rendicionestacionamiento.editar', compact(
             'data',
             'empresaQuery',
@@ -245,6 +269,10 @@ class RendicionEstacionamientoController extends Controller
             'totalesTurno',
             'totalesDia',
             'auditoriaJornada',
+            'soloConsulta',
+            'filtrosQuery',
+            'puedeActualizarRendicion',
+            'ocultarVolver',
         ));
     }
 
@@ -253,24 +281,54 @@ class RendicionEstacionamientoController extends Controller
         can('actualizar-rendicion-estacionamiento-caja');
 
         $rendicion = $this->service->findConDetalle($id);
+        $esModalConsulta = QueryRetornoListado::esModalConsulta($request);
+        $retornoIndex = QueryRetornoListado::desdeRequest($request, RendicionEstacionamientoCajaListadoFiltros::class);
         if (! RendicionEstacionamientoCajaPermiso::puedeActualizarPorFecha($rendicion)) {
-            return redirect('caja/rendicionestacionamiento')
-                ->with('errores', [RendicionEstacionamientoCajaPermiso::mensajeRestriccionFecha()]);
+            return $this->redirectTrasErrorActualizarRendicion($esModalConsulta, $id, $retornoIndex, RendicionEstacionamientoCajaPermiso::mensajeRestriccionFecha());
         }
         if (! RendicionEstacionamientoCajaPermiso::puedeModificarRendicionTurno($rendicion)) {
-            return redirect('caja/rendicionestacionamiento')
-                ->with('errores', [RendicionEstacionamientoCajaPermiso::mensajeJornadaPresentadaBloqueoTurno()]);
+            return $this->redirectTrasErrorActualizarRendicion($esModalConsulta, $id, $retornoIndex, RendicionEstacionamientoCajaPermiso::mensajeJornadaPresentadaBloqueoTurno());
         }
 
         try {
-            $cabecera = $this->service->cabeceraDesdeRequest($request->validated());
+            $cabecera = $this->service->cabeceraDesdeRequest($request->validated(), $id);
             $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
             $this->service->actualizar($id, $cabecera, $movimientos);
         } catch (InvalidArgumentException|\RuntimeException $e) {
             return redirect()->back()->withInput()->with('errores', [$e->getMessage()]);
         }
 
-        return redirect('caja/rendicionestacionamiento')->with('mensaje', 'Rendición de estacionamiento actualizada con éxito');
+        if (QueryRetornoListado::esModalConsulta($request)) {
+            return redirect()->route('editar_rendicionestacionamiento', [
+                'id' => $id,
+                'origen' => 'modal_consulta',
+                'vista' => 'consulta',
+            ])->with('mensaje', 'Rendición de estacionamiento actualizada con éxito');
+        }
+
+        return redirect()->route('rendicionestacionamiento', $retornoIndex)
+            ->with('mensaje', 'Rendición de estacionamiento actualizada con éxito');
+    }
+
+    /**
+     * @param  array<string, string|int>  $retornoIndex
+     */
+    private function redirectTrasErrorActualizarRendicion(
+        bool $esModalConsulta,
+        int $id,
+        array $retornoIndex,
+        string $mensaje,
+    ) {
+        if ($esModalConsulta) {
+            return redirect()->route('editar_rendicionestacionamiento', [
+                'id' => $id,
+                'origen' => 'modal_consulta',
+                'vista' => 'consulta',
+            ])->with('errores', [$mensaje]);
+        }
+
+        return redirect()->route('rendicionestacionamiento', $retornoIndex)
+            ->with('errores', [$mensaje]);
     }
 
     public function eliminar(Request $request, int $id)
@@ -290,11 +348,15 @@ class RendicionEstacionamientoController extends Controller
         try {
             $this->service->eliminar($id);
 
-            return redirect('caja/rendicionestacionamiento')
-                ->with('mensaje', 'Rendición de estacionamiento eliminada con éxito');
+            return redirect()->route(
+                'rendicionestacionamiento',
+                QueryRetornoListado::desdeRequest($request, RendicionEstacionamientoCajaListadoFiltros::class),
+            )->with('mensaje', 'Rendición de estacionamiento eliminada con éxito');
         } catch (\Throwable $e) {
-            return redirect('caja/rendicionestacionamiento')
-                ->with('errores', [$e->getMessage() ?: 'No se pudo eliminar la rendición']);
+            return redirect()->route(
+                'rendicionestacionamiento',
+                QueryRetornoListado::desdeRequest($request, RendicionEstacionamientoCajaListadoFiltros::class),
+            )->with('errores', [$e->getMessage() ?: 'No se pudo eliminar la rendición']);
         }
     }
 

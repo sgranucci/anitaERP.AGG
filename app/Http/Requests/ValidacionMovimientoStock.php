@@ -4,7 +4,9 @@ namespace App\Http\Requests;
 
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
+use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
+use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -109,6 +111,21 @@ class ValidacionMovimientoStock extends FormRequest
                 );
             }
 
+            if ($tipo && BajaNpuMovimientoStockSupport::esTipoBajaNpu($tipo) && ($this->isMethod('put') || $this->isMethod('patch'))) {
+                $validator->errors()->add(
+                    'tipotransaccion_stock_id',
+                    'Los movimientos de baja NPU no pueden editarse; registre uno nuevo si corresponde.'
+                );
+            }
+
+            if ($tipo && BajaNpuMovimientoStockSupport::esTipoBajaNpu($tipo) && ! $this->validarComoTransferenciaNueva()) {
+                try {
+                    BajaNpuMovimientoStockSupport::validarAntesDeGrabar($this->all(), $tipo);
+                } catch (\RuntimeException $e) {
+                    $validator->errors()->add('numeropartes', $e->getMessage());
+                }
+            }
+
             if ($tipo && (bool) $tipo->maneja_contabilidad && ! $this->validarComoTransferenciaNueva()) {
                 $validator->errors()->add(
                     'tipotransaccion_stock_id',
@@ -180,12 +197,17 @@ class ValidacionMovimientoStock extends FormRequest
                 return;
             }
 
-            if ($salidaId > 0 && ! Depmae::autorizadoParaUsuarioYEmpresa($salidaId, $empresaId)) {
+            if ($salidaId > 0 && ! TransferenciaMercaderiaIntercompanySupport::depositoSalidaAutorizado($salidaId, $empresaId)) {
                 $validator->errors()->add('deposito_salida_id', 'El depósito origen no pertenece a la empresa seleccionada o no está autorizado para su usuario.');
             }
 
-            if (! $destinoBien && $entradaId > 0 && ! Depmae::autorizadoParaUsuarioYEmpresa($entradaId, $empresaId)) {
-                $validator->errors()->add('deposito_entrada_id', 'El depósito destino no pertenece a la empresa seleccionada o no está autorizado para su usuario.');
+            if (! $destinoBien && $entradaId > 0 && ! TransferenciaMercaderiaIntercompanySupport::depositoEntradaAutorizado($entradaId, $empresaId)) {
+                $validator->errors()->add(
+                    'deposito_entrada_id',
+                    TransferenciaMercaderiaIntercompanySupport::puedeUsar()
+                        ? 'El depósito destino no existe o no es válido.'
+                        : 'El depósito destino no pertenece a la empresa seleccionada.'
+                );
             }
 
             $articulos = $this->input('articulos_id', []);

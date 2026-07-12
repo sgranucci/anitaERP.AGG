@@ -383,9 +383,25 @@ class RendicionMaquinavendingCajaService
     }
 
     /**
-     * @param  array<string, mixed>  $cabecera
+     * Fecha/hora de presentación en caja: se fija al crear (now) y no se modifica en edición.
      */
-    public function cabeceraDesdeRequest(array $validated): array
+    public function resolverFecharendicionInmutable(?int $rendicionId = null): string
+    {
+        if ($rendicionId !== null && $rendicionId > 0) {
+            $existente = RendicionMaquinavendingCaja::query()->find($rendicionId);
+            if ($existente?->fecharendicion !== null) {
+                return $existente->fecharendicion->format('Y-m-d H:i:s');
+            }
+        }
+
+        return now()->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    public function cabeceraDesdeRequest(array $validated, ?int $rendicionId = null): array
     {
         return [
             'codigo' => trim((string) ($validated['codigo'] ?? '')),
@@ -395,7 +411,7 @@ class RendicionMaquinavendingCajaService
             'puntoventa_cae_id' => (int) ($validated['puntoventa_cae_id'] ?? 0),
             'puntoventa_caea_id' => (int) ($validated['puntoventa_caea_id'] ?? 0),
             'caja_id' => (int) ($validated['caja_id'] ?? 0),
-            'fecharendicion' => Carbon::parse($validated['fecharendicion'] ?? now()),
+            'fecharendicion' => $this->resolverFecharendicionInmutable($rendicionId),
             'iniciodelfondo' => round((float) ($validated['iniciodelfondo'] ?? 0), 2),
             'totalfactura' => round((float) ($validated['totalfactura'] ?? 0), 2),
             'totalcobrado' => round((float) ($validated['totalcobrado'] ?? 0), 2),

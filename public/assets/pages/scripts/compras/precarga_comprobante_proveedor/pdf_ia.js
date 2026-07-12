@@ -30,6 +30,7 @@ $(function () {
         $('#precarga-pdf-ia-btn-confirmar').addClass('d-none');
         $('#precarga-pdf-ia-btn-analizar').prop('disabled', false).removeClass('d-none');
         $('#precarga-pdf-ia-advertencias').addClass('d-none').empty();
+        $('#precarga-pdf-ia-constatacion').addClass('d-none').empty();
     }
 
     function renderPreview(data) {
@@ -43,6 +44,53 @@ $(function () {
         var numero = [res.letra || '', res.sucursal || '', res.numero_factura || ''].join(' ').trim();
         $('#precarga-pdf-ia-numero').text(numero);
         $('#precarga-pdf-ia-total').text(res.total != null ? res.total : '');
+
+        var constArca = res.constatacion_arca || {};
+        $('#precarga-pdf-ia-total-arca').text(
+            constArca.total_arca != null ? constArca.total_arca : (constArca.ejecutada ? '—' : 'No constatado')
+        );
+        $('#precarga-pdf-ia-cae').text(res.numerocae || (data.extraccion && data.extraccion.numerocae) || '');
+        $('#precarga-pdf-ia-fecha').text(res.fecha_factura || '');
+        var estadoArca = '—';
+        if (constArca.ejecutada === false) {
+            estadoArca = 'No ejecutada';
+        } else if (constArca.resultado === 'A' && constArca.ok) {
+            estadoArca = 'Autorizado (OK)';
+        } else if (constArca.resultado === 'A') {
+            estadoArca = 'Autorizado con observaciones';
+        } else if (constArca.resultado === 'R') {
+            estadoArca = 'Rechazado';
+        } else if (constArca.ok === false) {
+            estadoArca = 'Error';
+        }
+        $('#precarga-pdf-ia-estado-arca').text(estadoArca);
+
+        var $constBox = $('#precarga-pdf-ia-constatacion');
+        $constBox.addClass('d-none').empty();
+        if (constArca.ejecutada) {
+            var constClass = (constArca.ok && constArca.resultado === 'A') ? 'alert-success' : 'alert-danger';
+            if (constArca.ok && constArca.resultado === 'A') {
+                constClass = 'alert-success';
+            } else if (constArca.resultado === 'A') {
+                constClass = 'alert-warning';
+            } else {
+                constClass = 'alert-danger';
+            }
+            var constHtml = '<strong>Constatación ARCA (WSCDC):</strong> ' + estadoArca;
+            if (res.pararevisar) {
+                constHtml += ' — <span class="font-weight-bold">Precarga con errores (para revisar)</span>';
+            }
+            if (constArca.discrepancias && constArca.discrepancias.length) {
+                constHtml += '<ul class="mb-0 pl-3 mt-1">';
+                constArca.discrepancias.forEach(function (d) {
+                    constHtml += '<li>' + $('<div>').text(d).html() + '</li>';
+                });
+                constHtml += '</ul>';
+            }
+            $constBox.removeClass('d-none alert-info alert-success alert-warning alert-danger')
+                .addClass(constClass)
+                .html(constHtml);
+        }
 
         var $tbody = $('#precarga-pdf-ia-conceptos-tbody').empty();
         (data.conceptos || []).forEach(function (c) {

@@ -139,6 +139,7 @@
                 <input type="hidden" name="ocultar_precio_cero" value="{{ $ocultarPrecioCero ? 1 : 0 }}">
                 @include('stock.precio.partials.filtros_listado', [
                     'limpiarUrl' => route('precio'),
+                    'listasPrecio' => $listasPrecio,
                 ])
             </form>
             <div class="card-body p-2">

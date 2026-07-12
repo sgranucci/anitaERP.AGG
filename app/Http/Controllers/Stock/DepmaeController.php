@@ -9,8 +9,11 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Exports\Stock\DepmaeListadoExport;
 use App\Http\Requests\ValidacionDepmae;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\DepmaeListadoFiltros;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
+use App\Support\Stock\RecepcionProveedorIntercompanySupport;
+use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 
 class DepmaeController extends Controller
@@ -47,7 +50,8 @@ class DepmaeController extends Controller
             || can('editar-requisicion-sala', false)
             || can('actualizar-requisicion-sala', false)
             || can('listar-requisicion-sala', false)
-            || can('cumplir-requisicion-sala', false);
+            || can('cumplir-requisicion-sala', false)
+            || can('cumplir-requisicion-compra', false);
     }
 
     /**
@@ -121,15 +125,16 @@ class DepmaeController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-depositos');
 
         $tipodeposito_enum = Depmae::$enumTipoDeposito;
         $data = new Depmae();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, DepmaeListadoFiltros::class);
 
-        return view('stock.depmae.crear', compact('tipodeposito_enum', 'data', 'empresa_query'));
+        return view('stock.depmae.crear', compact('tipodeposito_enum', 'data', 'empresa_query', 'filtrosQuery'));
     }
 
     /**
@@ -144,7 +149,8 @@ class DepmaeController extends Controller
 
         Depmae::create($request->only(['codigo', 'nombre', 'tipodeposito', 'empresa_id']));
 
-        return redirect('stock/depmae')->with('mensaje', 'Deposito creado con exito');
+        return redirect()->route('depmae', QueryRetornoListado::desdeRequest($request, DepmaeListadoFiltros::class))
+            ->with('mensaje', 'Deposito creado con exito');
     }
 
 
@@ -154,9 +160,9 @@ class DepmaeController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
         if ($soloConsulta) {
             if (! $this->puedeConsultarDeposito()) {
                 abort(403);
@@ -171,7 +177,17 @@ class DepmaeController extends Controller
         $ocultarVolver = $soloConsulta;
         $puedeActualizarDeposito = can('actualizar-depositos', false);
 
-        return view('stock.depmae.editar', compact('data', 'tipodeposito_enum', 'empresa_query', 'soloConsulta', 'ocultarVolver', 'puedeActualizarDeposito'));
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, DepmaeListadoFiltros::class);
+
+        return view('stock.depmae.editar', compact(
+            'data',
+            'tipodeposito_enum',
+            'empresa_query',
+            'soloConsulta',
+            'ocultarVolver',
+            'puedeActualizarDeposito',
+            'filtrosQuery',
+        ));
     }
 
     private function urlEditarDepositoConsulta(int $id): string
@@ -183,6 +199,20 @@ class DepmaeController extends Controller
         ]);
     }
 
+    private function consultaDepositoIntercompany(Request $request): bool
+    {
+        if (! $request->boolean('intercompany')) {
+            return false;
+        }
+
+        if (! TransferenciaMercaderiaIntercompanySupport::puedeUsar()
+            && ! RecepcionProveedorIntercompanySupport::puedeUsar()) {
+            abort(403);
+        }
+
+        return true;
+    }
+
     public function consultaDeposito(Request $request)
     {
         if (! $this->puedeConsultarDeposito()) {
@@ -191,6 +221,7 @@ class DepmaeController extends Controller
 
         $consulta = strtoupper(trim((string) ($request->get('consulta') ?? '')));
         $omitirFiltroUsuario = $request->boolean('omitir_filtro_usuario');
+        $intercompany = $this->consultaDepositoIntercompany($request);
         $empresaIds = collect($request->input('empresa_ids', []))
             ->map(fn ($id) => (int) $id)
             ->filter(fn ($id) => $id > 0)
@@ -202,16 +233,18 @@ class DepmaeController extends Controller
         $query = Depmae::query()->select('id', 'codigo', 'nombre', 'tipodeposito', 'empresa_id')
             ->with('empresas:id,nombre');
 
-        if ($empresaIds !== []) {
-            $query->whereIn('empresa_id', $empresaIds);
-        } elseif ($empresaId > 0) {
-            $query->paraEmpresa($empresaId);
-        } else {
-            $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
+        if (! $intercompany) {
+            if ($empresaIds !== []) {
+                $query->whereIn('empresa_id', $empresaIds);
+            } elseif ($empresaId > 0) {
+                $query->paraEmpresa($empresaId);
+            } else {
+                $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
+            }
         }
 
         if (! $omitirFiltroUsuario) {
-            UsuarioDepositoAutorizado::aplicarFiltroQuery($query, $empresaId > 0 ? $empresaId : null);
+            UsuarioDepositoAutorizado::aplicarFiltroQuery($query, $intercompany ? null : ($empresaId > 0 ? $empresaId : null));
         }
 
         if ($consulta !== '') {
@@ -225,7 +258,7 @@ class DepmaeController extends Controller
             });
         }
 
-        if ($empresaIds !== [] || $empresaId > 0) {
+        if ($intercompany || $empresaIds !== [] || $empresaId > 0) {
             $query->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->orderBy('nombre');
         } else {
             $query->orderBy('nombre');
@@ -233,7 +266,7 @@ class DepmaeController extends Controller
 
         $data = $query->limit(200)->get();
         $puedeAbrirAbmDeposito = can('editar-depositos', false) || can('listar-depositos', false);
-        $mostrarEmpresa = MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados();
+        $mostrarEmpresa = MovimientosArticuloDepositoSupport::mostrarEmpresaConsultaDeposito();
         $colspanVacio = $mostrarEmpresa ? 6 : 5;
 
         $output = ['data' => '', 'mostrar_empresa' => $mostrarEmpresa];
@@ -281,19 +314,22 @@ class DepmaeController extends Controller
             ->all();
         $empresaId = (int) $request->input('empresa_id', 0);
         $omitirFiltroUsuario = $request->boolean('omitir_filtro_usuario');
+        $intercompany = $this->consultaDepositoIntercompany($request);
 
         $query = Depmae::query()->where('codigo', trim($codigo))->with('empresas:id,nombre');
 
-        if ($empresaIds !== []) {
-            $query->whereIn('empresa_id', $empresaIds);
-        } elseif ($empresaId > 0) {
-            $query->paraEmpresa($empresaId);
-        } else {
-            $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
+        if (! $intercompany) {
+            if ($empresaIds !== []) {
+                $query->whereIn('empresa_id', $empresaIds);
+            } elseif ($empresaId > 0) {
+                $query->paraEmpresa($empresaId);
+            } else {
+                $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
+            }
         }
 
         if (! $omitirFiltroUsuario) {
-            UsuarioDepositoAutorizado::aplicarFiltroQuery($query, $empresaId > 0 ? $empresaId : null);
+            UsuarioDepositoAutorizado::aplicarFiltroQuery($query, $intercompany ? null : ($empresaId > 0 ? $empresaId : null));
         }
 
         $deposito = $query->first();
@@ -334,7 +370,8 @@ class DepmaeController extends Controller
                 ->with('mensaje', 'Deposito actualizado con exito');
         }
 
-        return redirect('stock/depmae')->with('mensaje', 'Deposito actualizado con exito');
+        return redirect()->route('depmae', QueryRetornoListado::desdeRequest($request, DepmaeListadoFiltros::class))
+            ->with('mensaje', 'Deposito actualizado con exito');
     }
 
     /**

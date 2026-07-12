@@ -6,6 +6,7 @@
     var depositoCabeceraId = parseInt(window.recepcionProveedorDepositoCabeceraId, 10) || 0;
     var depositoCabeceraEmpresaId = parseInt(window.recepcionProveedorDepositoCabeceraEmpresaId, 10) || 0;
     var depositoCabeceraTipo = window.recepcionProveedorDepositoCabeceraTipo || '';
+    var depositoCabeceraEmpresaNombre = window.recepcionProveedorDepositoCabeceraEmpresaNombre || '';
     var cargandoOc = false;
     var ultimoNumeroOcCargado = null;
     var centrocostoOcActivo = null;
@@ -20,6 +21,67 @@
 
         return $form.length && (esModoDevolucion() || String($form.find('[name="tipo"]').val() || '') === 'DEVOLUCION');
     }
+
+    function urlConsultaOcRecepcion(ordencompraId) {
+        var id = parseInt(ordencompraId, 10) || 0;
+        if (id <= 0) {
+            return '#';
+        }
+
+        return carpetaBase + '/compras/ordencompra/' + id + '/editar?origen=modal_consulta&vista=consulta';
+    }
+
+    function actualizarBotonConsultarOc() {
+        if (!window.recepcionProveedorPuedeConsultarOc) {
+            return;
+        }
+        var $btn = $('#btn-consultar-oc-recepcion');
+        if (!$btn.length) {
+            return;
+        }
+        var ocId = parseInt($('#ordencompra_id').val(), 10) || 0;
+        if (ocId > 0) {
+            $btn.attr('href', urlConsultaOcRecepcion(ocId)).removeClass('d-none');
+        } else {
+            $btn.attr('href', '#').addClass('d-none');
+        }
+    }
+
+    window.recepcionProveedorActualizarBotonConsultarOc = actualizarBotonConsultarOc;
+
+    function formatearPorcentajeDescuentoOc(valor) {
+        var n = parseFloat(valor) || 0;
+        if (n <= 0) {
+            return '';
+        }
+
+        return n.toLocaleString('es-AR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function actualizarAvisoDescuentoOc(descuento) {
+        var $aviso = $('#rp-aviso-descuento-oc');
+        if (!$aviso.length) {
+            return;
+        }
+        var pct = parseFloat(descuento) || 0;
+        if (pct <= 0.000001) {
+            $aviso.addClass('d-none');
+            $('#rp-aviso-descuento-oc-texto').empty();
+
+            return;
+        }
+        var texto = 'La orden de compra tiene un descuento general del '
+            + '<strong>' + formatearPorcentajeDescuentoOc(pct) + '%</strong> '
+            + 'aplicado neto en los precios unitarios de esta recepci\u00f3n '
+            + '(coincide con factura y \u00faltima compra).';
+        $('#rp-aviso-descuento-oc-texto').html(texto);
+        $aviso.removeClass('d-none');
+    }
+
+    window.recepcionProveedorActualizarAvisoDescuentoOc = actualizarAvisoDescuentoOc;
 
     function colspanTablaItems() {
         return esModoDevolucion() ? 10 : COLSPAN_TABLA_ITEMS;
@@ -118,12 +180,30 @@
         return (parseFloat(item.cantidad || 0) || 0) + (parseFloat(item.cantidad_rechazada || 0) || 0);
     }
 
+    /** Cantidad ya recepcionada en COM confirmadas (no incluye este remito). */
+    function cantidadYaRecibidaOc(item) {
+        return parseFloat(item.cantidad_recibida || 0) || 0;
+    }
+
+    /** Acumulado OC: recepciones confirmadas + cantidad de este remito. */
+    function cantidadTotalAcumuladaOc(item) {
+        return cantidadYaRecibidaOc(item) + cantidadTotalRecibida(item);
+    }
+
     function escHtml(s) {
         return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     }
 
     function empresaIdRecepcion() {
         return parseInt($('#empresa_id').val(), 10) || 0;
+    }
+
+    function puedeIntercompanyRecepcion() {
+        return !!window.recepcionProveedorPuedeIntercompany;
+    }
+
+    function modoIntercompanyActivo() {
+        return puedeIntercompanyRecepcion() && $('#rp_modo_intercompany').val() === '1';
     }
 
     function esTipoDepositoFormula(tipo) {
@@ -149,8 +229,26 @@
         }
         depositoCabeceraTipo = data && data.tipodeposito ? String(data.tipodeposito) : '';
         depositoCabeceraEmpresaId = parseInt(data && data.empresa_id, 10) || 0;
+        depositoCabeceraEmpresaNombre = (data && data.empresa_nombre) ? String(data.empresa_nombre) : '';
         $dep.data('tipodeposito', depositoCabeceraTipo);
         $dep.data('empresa-id', depositoCabeceraEmpresaId || '');
+        actualizarAvisoIntercompany();
+    }
+
+    function actualizarAvisoIntercompany() {
+        var $aviso = $('#rp_aviso_intercompany');
+        if (!$aviso.length) {
+            return;
+        }
+        var empresaOc = empresaIdRecepcion();
+        var esInter = depositoCabeceraActivo() > 0
+            && depositoCabeceraEmpresaId > 0
+            && empresaOc > 0
+            && depositoCabeceraEmpresaId !== empresaOc;
+        $aviso.toggleClass('d-none', !esInter);
+        if (esInter) {
+            $('#rp_aviso_intercompany_empresa').text(depositoCabeceraEmpresaNombre || 'otra empresa');
+        }
     }
 
     function limpiarDepositoCabeceraRecepcion() {
@@ -167,6 +265,9 @@
     function depositoCabeceraValidoParaEmpresa(empresaId) {
         var depId = depositoCabeceraActivo();
         if (!depId || !empresaId) {
+            return true;
+        }
+        if (modoIntercompanyActivo()) {
             return true;
         }
         if (depositoCabeceraEmpresaId > 0) {
@@ -326,7 +427,7 @@
     function htmlCeldaArticulo(item, idx) {
         var tipo = item.tipo_linea || 'OC';
         var esExtra = tipo === 'EXTRA';
-        var editableArt = esExtra && !window.recepcionProveedorSoloLectura;
+        var editableArt = esExtra && !window.recepcionProveedorSoloLectura && puedeAgregarArticuloExtraRecepcion();
         var html = '<div class="celda-articulo-recepcion d-flex align-items-center flex-nowrap mb-0">';
         html += badgesLinea(item);
         html += '<input type="hidden" class="articulo_id" name="items[' + idx + '][articulo_id]" value="' + (item.articulo_id || '') + '">';
@@ -473,9 +574,29 @@
             return false;
         }
         var oc = parseFloat(item.cantidad_oc || 0);
-        var rec = cantidadTotalRecibida(item);
+        var rec = cantidadTotalAcumuladaOc(item);
 
         return oc > 0.000001 && rec > 0.000001 && rec < oc - 0.0001;
+    }
+
+    function lineaTieneExcesoCantidadOc(item) {
+        if (!item || !lineaEsDeOc(item)) {
+            return false;
+        }
+        var oc = parseFloat(item.cantidad_oc || 0);
+        var rec = cantidadTotalAcumuladaOc(item);
+
+        return oc > 0.000001 && rec > oc + 0.0001;
+    }
+
+    function cantidadSaldoPendienteOc(item) {
+        var oc = parseFloat(item.cantidad_oc || 0) || 0;
+
+        return Math.max(0, oc - cantidadTotalAcumuladaOc(item));
+    }
+
+    function lineaEsRecepcionParcialConSaldo(item) {
+        return mostrarOpcionCerrarSaldoOc(item);
     }
 
     function lineaEsDeOc(item) {
@@ -492,8 +613,12 @@
             return;
         }
         if (cantidadTotalRecibida(item) > 0.000001) {
-            item.accion_linea_oc = 'RECIBIR';
-            item.fl_cerrar_linea_oc = false;
+            item.accion_linea_oc = item.fl_cerrar_linea_oc && mostrarOpcionCerrarSaldoOc(item)
+                ? 'CERRAR'
+                : 'RECIBIR';
+            if (!mostrarOpcionCerrarSaldoOc(item)) {
+                item.fl_cerrar_linea_oc = false;
+            }
 
             return;
         }
@@ -553,7 +678,7 @@
             return false;
         }
         return item.cantidad_oc > 0
-            && Math.abs(cantidadTotalRecibida(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
+            && Math.abs(cantidadTotalAcumuladaOc(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
     }
 
     function lineaRequiereComentarioDiferencia(item) {
@@ -562,7 +687,11 @@
             return true;
         }
 
-        return lineaTieneDiferenciaCantidad(item);
+        return lineaTieneExcesoCantidadOc(item);
+    }
+
+    function lineaMuestraOpcionesSaldoParcial(item) {
+        return lineaEsRecepcionParcialConSaldo(item);
     }
 
     function actualizarEstiloLineaPorAccion(idx) {
@@ -599,9 +728,11 @@
             item.comentario_diferencia = $.trim($comentarioDiferenciaPorIdx(idx).find('.item-comentario-diferencia').val() || '');
             item.comentario_precio = $.trim($comentarioPorIdx(idx).find('.item-comentario-precio').val() || '');
             item.precio = parseFloat($(this).find('.item-precio').val()) || 0;
-            var $cerrarSaldo = $comentarioDiferenciaPorIdx(idx).find('.item-cerrar-saldo-oc');
-            if ($cerrarSaldo.length) {
-                item.fl_cerrar_linea_oc = $cerrarSaldo.is(':checked');
+            var $subDiff = $comentarioDiferenciaPorIdx(idx);
+            if ($subDiff.find('.item-saldo-parcial-btn.active[data-val="CERRAR"]').length) {
+                item.fl_cerrar_linea_oc = true;
+            } else if ($subDiff.find('.item-saldo-parcial-btn').length) {
+                item.fl_cerrar_linea_oc = false;
             }
             var $selAcc = $(this).find('.item-accion-oc-select');
             if ($selAcc.length) {
@@ -673,7 +804,9 @@
             html += '<div class="d-flex flex-wrap align-items-start mb-2">';
             html += '<div class="mr-3 mb-1"><strong>' + sku + '</strong></div>';
             html += '<div class="flex-grow-1 small text-muted mb-1" title="' + descripcion + '">' + (descripcion || '&mdash;') + '</div>';
-            html += '<div class="mb-1 text-nowrap"><span class="badge badge-light">Cant. OC: ' + (item.cantidad_oc != null ? item.cantidad_oc : '&mdash;') + '</span></div>';
+            html += '<div class="mb-1 text-nowrap">';
+            html += htmlBadgeSaldoOc(item);
+            html += '</div>';
             html += '</div>';
             html += '<div class="d-flex flex-wrap align-items-center mb-2">';
             html += '<span class="small text-muted mr-2 mb-1">Acci&oacute;n:</span>';
@@ -837,23 +970,42 @@
     function htmlFilaComentarioDiferencia(item, idx, mostrar) {
         var comentario = escHtml(item.comentario_diferencia || '');
         var style = mostrar ? '' : ' style="display:none;"';
-        var mostrarCerrar = mostrarOpcionCerrarSaldoOc(item) || !!(item && item.fl_cerrar_linea_oc);
+        var esParcial = lineaEsRecepcionParcialConSaldo(item);
+        var cerrarSaldo = !!(item && item.fl_cerrar_linea_oc);
+        var saldoPend = esParcial ? cantidadSaldoPendienteOc(item) : 0;
         var html = '<tr class="item-recepcion-comentario-diferencia" data-idx="' + idx + '"' + style + '>';
         html += '<td colspan="' + colspanTablaItems() + '" class="bg-transparent">';
         html += '<div class="d-flex align-items-center flex-wrap pl-4">';
-        html += '<small class="text-warning mr-2 mb-1 font-weight-bold"><i class="fa fa-exclamation-triangle"></i> Comentario obligatorio (diferencia de cantidad):</small>';
+        if (esParcial) {
+            html += '<small class="text-muted mr-2 mb-1">Saldo restante <strong>' + saldoPend + '</strong> en OC:</small>';
+            if (window.recepcionProveedorSoloLectura) {
+                html += '<small class="mb-1 ' + (cerrarSaldo ? 'text-danger' : 'text-success') + '">'
+                    + (cerrarSaldo ? 'Cierre de saldo OC' : 'Pendiente para otra entrega') + '</small>';
+            } else {
+                html += '<div class="btn-group btn-group-sm mb-1 mr-2 item-saldo-parcial-opt" role="group">';
+                html += '<button type="button" class="btn item-saldo-parcial-btn '
+                    + (cerrarSaldo ? 'btn-outline-secondary' : 'btn-success active') + '" data-val="PENDIENTE">Pendiente</button>';
+                html += '<button type="button" class="btn item-saldo-parcial-btn '
+                    + (cerrarSaldo ? 'btn-danger active' : 'btn-outline-danger') + '" data-val="CERRAR">Cerrar saldo</button>';
+                html += '</div>';
+            }
+        }
+        if (lineaRequiereComentarioDiferencia(item) || (esParcial && cerrarSaldo)) {
+            html += '<small class="text-warning mr-2 mb-1 font-weight-bold"><i class="fa fa-exclamation-triangle"></i> Comentario obligatorio:</small>';
+        }
         if (window.recepcionProveedorSoloLectura) {
-            html += '<small class="text-body mb-1">' + (comentario || '—') + '</small>';
-            if (item && item.fl_cerrar_linea_oc) {
-                html += '<small class="text-danger ml-2 mb-1">Cierre de saldo OC</small>';
+            if (comentario) {
+                html += '<small class="text-body mb-1">' + comentario + '</small>';
             }
         } else {
-            html += '<input type="text" class="form-control form-control-sm item-comentario-diferencia mb-1" name="items[' + idx + '][comentario_diferencia]" value="' + comentario + '" maxlength="500" placeholder="Motivo del faltante o diferencia de cantidad">';
-            html += '<label class="custom-control custom-checkbox ml-3 mb-1 align-self-center item-cerrar-saldo-wrap"' + (mostrarCerrar ? '' : ' style="display:none;"') + '>';
-            html += '<input type="checkbox" class="custom-control-input item-cerrar-saldo-oc"' + (item && item.fl_cerrar_linea_oc ? ' checked' : '') + '>';
-            html += '<span class="custom-control-label text-danger small">Cerrar saldo pendiente en OC</span></label>';
+            var mostrarComent = lineaRequiereComentarioDiferencia(item) || (esParcial && cerrarSaldo);
+            html += '<input type="text" class="form-control form-control-sm item-comentario-diferencia mb-1"'
+                + (mostrarComent ? '' : ' style="display:none;"')
+                + ' name="items[' + idx + '][comentario_diferencia]" value="' + comentario + '" maxlength="500"'
+                + ' placeholder="' + (cerrarSaldo ? 'Motivo del cierre de saldo OC' : 'Motivo del exceso de cantidad') + '">';
         }
         html += '</div></td></tr>';
+
         return html;
     }
 
@@ -865,26 +1017,44 @@
             return;
         }
         sincronizarAccionEnItem(item);
+        var esParcial = lineaEsRecepcionParcialConSaldo(item);
         var requiere = lineaRequiereComentarioDiferencia(item);
-        var $cerrarWrap = $sub.find('.item-cerrar-saldo-wrap');
-        if ($cerrarWrap.length) {
-            if (mostrarOpcionCerrarSaldoOc(item)) {
-                $cerrarWrap.show();
-            } else {
-                $cerrarWrap.hide();
-                $cerrarWrap.find('.item-cerrar-saldo-oc').prop('checked', false);
-                item.fl_cerrar_linea_oc = false;
+        var cerrarSaldo = !!(item.fl_cerrar_linea_oc);
+        if (esParcial) {
+            $sub.show();
+            $tr.toggleClass('table-warning', cerrarSaldo || requiere);
+            if (!window.recepcionProveedorSoloLectura) {
+                $sub.find('.item-saldo-parcial-btn').each(function () {
+                    var val = String($(this).data('val') || '');
+                    var activo = (val === 'CERRAR') === cerrarSaldo;
+                    $(this).toggleClass('active', activo);
+                    if (val === 'CERRAR') {
+                        $(this).toggleClass('btn-danger', activo);
+                        $(this).toggleClass('btn-outline-danger', !activo);
+                    } else {
+                        $(this).toggleClass('btn-success', activo);
+                        $(this).toggleClass('btn-outline-secondary', !activo && val === 'PENDIENTE');
+                    }
+                });
+                var $coment = $sub.find('.item-comentario-diferencia');
+                if (cerrarSaldo || requiere) {
+                    $coment.show();
+                } else {
+                    $coment.hide().val('');
+                    item.comentario_diferencia = '';
+                }
             }
-        }
-        if (requiere) {
+        } else if (requiere) {
             $sub.show();
             $tr.addClass('table-warning');
+            $sub.find('.item-comentario-diferencia').show();
         } else {
             $sub.hide();
             if (!$sub.find('.item-comentario-diferencia').prop('readonly')) {
                 $sub.find('.item-comentario-diferencia').val('');
                 item.comentario_diferencia = '';
             }
+            $tr.removeClass('table-warning');
         }
     }
 
@@ -922,9 +1092,17 @@
             if (lineaTieneDiferenciaPrecio(precioOc, precioRec) && $.trim(item.comentario_precio || '') === '') {
                 errores.push('Línea ' + (idx + 1) + ': indique comentario de diferencia de precio.');
             }
+            if ((item.tipo_linea || 'OC') === 'EXTRA' && !puedeAgregarArticuloExtraRecepcion()
+                && accion !== 'PENDIENTE') {
+                errores.push('Línea ' + (idx + 1) + ': no tiene permiso para artículos extra fuera de la OC.');
+            }
         });
         if (!tieneAccion) {
             errores.unshift('Indique al menos una línea a recibir, rechazar o cerrar en la OC.');
+        }
+        var errImpuestoInterno = validarImpuestoInternoCigarrillos();
+        if (errImpuestoInterno) {
+            errores.push(errImpuestoInterno);
         }
 
         return errores;
@@ -945,10 +1123,24 @@
                 });
             }
             if (lineaTieneDiferenciaCantidad(item)) {
+                var yaRec = cantidadYaRecibidaOc(item);
+                var enRemito = cantidadTotalRecibida(item);
+                var textoDiff = sku + ': pedido OC ' + item.cantidad_oc;
+                if (yaRec > 0.000001) {
+                    textoDiff += ', ya recepcionado ' + yaRec;
+                }
+                textoDiff += ', este remito ' + enRemito;
+                if (accion === 'CERRAR') {
+                    textoDiff += ' — cierre de saldo OC';
+                } else if (lineaEsRecepcionParcialConSaldo(item)) {
+                    textoDiff += ' — saldo ' + cantidadSaldoPendienteOc(item) + ' pendiente';
+                }
+                if (item.comentario_diferencia) {
+                    textoDiff += ' — ' + item.comentario_diferencia;
+                }
                 filas.push({
-                    tipo: 'warning',
-                    texto: sku + ': cant. OC ' + item.cantidad_oc + ' vs rec. ' + cantidadTotalRecibida(item)
-                        + (item.comentario_diferencia ? ' — ' + item.comentario_diferencia : '')
+                    tipo: accion === 'CERRAR' ? 'danger' : 'warning',
+                    texto: textoDiff
                 });
             }
             var precioOc = precioOcItem(item);
@@ -1049,7 +1241,7 @@
             var precioOc = precioOcItem(item);
             var precioRec = parseFloat(item.precio || 0);
             var cantDiff = item && item.cantidad_oc > 0
-                && Math.abs(cantidadTotalRecibida(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
+                && Math.abs(cantidadTotalAcumuladaOc(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
             if (!lineaTieneDiferenciaPrecio(precioOc, precioRec) && !cantDiff
                 && item && item.tipo_linea !== 'EXTRA' && item.tipo_linea !== 'SUSTITUTO') {
                 $tr.removeClass('table-danger table-warning');
@@ -1078,7 +1270,8 @@
                 $sub.find('.item-comentario-precio').val('');
             }
             if (item && item.tipo_linea !== 'EXTRA' && item.tipo_linea !== 'SUSTITUTO') {
-                var cantDiff = item.cantidad_oc > 0 && Math.abs(cantidadTotalRecibida(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
+                var cantDiff = item.cantidad_oc > 0
+                    && Math.abs(cantidadTotalAcumuladaOc(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
                 if (!cantDiff) {
                     $tr.removeClass('table-warning');
                 }
@@ -1208,7 +1401,7 @@
         return importe;
     }
 
-    function aplicarPreciosLinea(idx, cantidad, precio, importeOpcional, comentarioPrecio) {
+    function aplicarPreciosLinea(idx, cantidad, precio, importeOpcional, comentarioPrecio, precioSolicitado) {
         var item = itemsActuales[idx];
         var $tr = $lineaPorIdx(idx);
         if (!item || !$tr.length) {
@@ -1216,10 +1409,16 @@
         }
 
         item.cantidad = parseFloat(cantidad) || 0;
-        if (importeOpcional !== undefined && importeOpcional !== null && !isNaN(importeOpcional)) {
+        if (importeOpcional !== undefined && importeOpcional !== null && !isNaN(importeOpcional) && puedeModificarPrecioRecepcion()) {
             sincronizarPrecioDesdeImporte(item, importeOpcional, item.cantidad);
         } else {
             item.precio = redondearPrecioUnitario(precio);
+        }
+
+        if (precioSolicitado !== undefined && precioSolicitado !== null) {
+            item.precio_solicitado = redondearPrecioUnitario(precioSolicitado);
+        } else if (puedeModificarPrecioRecepcion()) {
+            item.precio_solicitado = null;
         }
 
         if (comentarioPrecio !== undefined) {
@@ -1228,6 +1427,9 @@
 
         $tr.find('.item-cantidad').val(item.cantidad);
         $tr.find('.item-precio').val(item.precio);
+        $tr.find('.item-precio-solicitado').val(
+            item.precio_solicitado != null && item.precio_solicitado !== '' ? item.precio_solicitado : ''
+        );
         var $subComent = $comentarioPorIdx(idx);
         if ($subComent.length) {
             $subComent.find('.item-comentario-precio').val(item.comentario_precio || '');
@@ -1237,16 +1439,59 @@
         actualizarComentarioPrecioFila(idx);
         actualizarMotivoRechazoFila(idx);
         actualizarTotalRecepcion();
+        if (!puedeModificarPrecioRecepcion()) {
+            var $celdaPrecio = $tr.find('td').eq(esModoDevolucion() ? 6 : 7);
+            if ($celdaPrecio.length) {
+                $celdaPrecio.html(htmlCeldaPrecioUnitario(item, idx, false));
+            }
+        }
+    }
+
+    function puedeModificarPrecioRecepcion() {
+        return !!window.recepcionProveedorPuedeModificarPrecio;
+    }
+
+    function puedeAgregarArticuloExtraRecepcion() {
+        return !!window.recepcionProveedorPuedeAgregarArticuloExtra;
+    }
+
+    function precioEfectivoLinea(item) {
+        if (puedeModificarPrecioRecepcion()) {
+            return parseFloat(item.precio || 0) || 0;
+        }
+        var solicitado = item.precio_solicitado != null && item.precio_solicitado !== ''
+            ? parseFloat(item.precio_solicitado)
+            : null;
+        if (solicitado !== null && !isNaN(solicitado) && solicitado > 0) {
+            return solicitado;
+        }
+
+        return parseFloat(item.precio || 0) || 0;
     }
 
     function htmlCeldaPrecioUnitario(item, idx, soloLectura) {
-        var precio = parseFloat(item.precio || 0) || 0;
-        if (soloLectura) {
-            return '<span class="text-right d-block item-precio-text">' + formatearImporteRecepcion(precio) + '</span>'
+        var precioOc = parseFloat(item.precio_ordencompra != null ? item.precio_ordencompra : item.precio) || 0;
+        var precio = parseFloat(item.precio || 0) || precioOc;
+        var precioSolicitado = item.precio_solicitado != null && item.precio_solicitado !== ''
+            ? parseFloat(item.precio_solicitado)
+            : null;
+        var bloqueadoPrecio = soloLectura || !puedeModificarPrecioRecepcion();
+
+        if (bloqueadoPrecio) {
+            var html = '<span class="text-right d-block item-precio-text">' + formatearImporteRecepcion(precio) + '</span>'
                 + '<input type="hidden" class="item-precio" name="items[' + idx + '][precio]" value="' + precio + '">';
+            if (precioSolicitado !== null && !isNaN(precioSolicitado) && Math.abs(precioSolicitado - precioOc) >= 0.0001) {
+                html += '<small class="d-block text-info text-right" title="Precio solicitado seg&uacute;n factura/remito">'
+                    + 'Sol.: ' + formatearImporteRecepcion(precioSolicitado) + '</small>';
+            }
+            html += '<input type="hidden" class="item-precio-solicitado" name="items[' + idx + '][precio_solicitado]" value="'
+                + (precioSolicitado !== null && !isNaN(precioSolicitado) ? precioSolicitado : '') + '">';
+
+            return html;
         }
 
-        return '<input type="number" step="0.000001" min="0" class="form-control form-control-sm text-right item-precio input-precio-recepcion" name="items[' + idx + '][precio]" value="' + precio + '">';
+        return '<input type="number" step="0.000001" min="0" class="form-control form-control-sm text-right item-precio input-precio-recepcion" name="items[' + idx + '][precio]" value="' + precio + '">'
+            + '<input type="hidden" class="item-precio-solicitado" name="items[' + idx + '][precio_solicitado]" value="">';
     }
 
     function htmlCeldaImporteLinea(item, idx, soloLectura) {
@@ -1303,6 +1548,12 @@
 
         var soloLectura = !!window.recepcionProveedorSoloLectura;
         var precioOc = precioOcItem(item);
+        var precioMostrar = puedeModificarPrecioRecepcion()
+            ? (parseFloat(item.precio || 0) || 0)
+            : precioOc;
+        var precioSolicitado = item.precio_solicitado != null && item.precio_solicitado !== ''
+            ? parseFloat(item.precio_solicitado)
+            : precioMostrar;
         $('#modal-linea-precio-idx').val(idx);
         $('#modalRecepcionLineaPrecioTitulo').text('Precios de la línea ' + (idx + 1));
         $('#modal-linea-precio-subtitulo').text(
@@ -1312,11 +1563,24 @@
         $('#modal-linea-precio-oc').val(formatearImporteRecepcion(precioOc));
         $('#modal-linea-um-compra').text(umCompraLinea(item));
         $('#modal-linea-cantidad').val(parseFloat(item.cantidad || 0) || 0).prop('readonly', soloLectura);
-        $('#modal-linea-precio-unit').val(parseFloat(item.precio || 0) || 0).prop('readonly', soloLectura);
-        $('#modal-linea-importe').val(importeLineaRecepcion(item).toFixed(2)).prop('readonly', soloLectura);
+        var $lblPrecioUnit = $('#modal-linea-precio-unit-label');
+        if ($lblPrecioUnit.length) {
+            $lblPrecioUnit.text(
+                puedeModificarPrecioRecepcion() || soloLectura
+                    ? 'Precio recepción (unit.)'
+                    : 'Precio factura/remito (unit.)'
+            );
+        }
+        $('#modal-linea-precio-unit').val(
+            puedeModificarPrecioRecepcion() || soloLectura ? precioMostrar : precioSolicitado
+        ).prop('readonly', soloLectura);
+        $('#modal-linea-importe').val(importeLineaRecepcion(item).toFixed(2)).prop('readonly', soloLectura || !puedeModificarPrecioRecepcion());
         $('#modal-linea-comentario-precio').val(item.comentario_precio || '').prop('readonly', soloLectura);
         $('#btn-modal-linea-precio-aplicar').toggle(!soloLectura);
-        actualizarAvisoDiffModalLineaPrecio(precioOc, parseFloat(item.precio || 0) || 0);
+        actualizarAvisoDiffModalLineaPrecio(
+            precioOc,
+            puedeModificarPrecioRecepcion() || soloLectura ? precioMostrar : precioSolicitado
+        );
         $('#modalRecepcionLineaPrecio').modal('show');
     }
 
@@ -1329,22 +1593,36 @@
             return;
         }
         var cant = parseFloat($('#modal-linea-cantidad').val()) || 0;
-        var precio = parseFloat($('#modal-linea-precio-unit').val()) || 0;
+        var precioIngresado = parseFloat($('#modal-linea-precio-unit').val()) || 0;
         var importe = parseFloat($('#modal-linea-importe').val());
         var precioOc = parseFloat($('#modalRecepcionLineaPrecio').data('precio-oc')) || 0;
         var comentario = $.trim($('#modal-linea-comentario-precio').val() || '');
-        if (lineaTieneDiferenciaPrecio(precioOc, precio) && comentario === '') {
+        var item = itemsActuales[idx] || {};
+        var precio = precioIngresado;
+        var precioSolicitado = null;
+
+        if (!puedeModificarPrecioRecepcion()) {
+            precio = precioOc > 0 ? precioOc : (parseFloat(item.precio || 0) || 0);
+            precioSolicitado = precioIngresado;
+            if (lineaTieneDiferenciaPrecio(precioOc, precioSolicitado) && comentario === '') {
+                alert('Indique el motivo de la diferencia de precio respecto a la OC.');
+                $('#modal-linea-comentario-precio').trigger('focus');
+                return;
+            }
+            item.precio_solicitado = precioSolicitado;
+        } else if (lineaTieneDiferenciaPrecio(precioOc, precio) && comentario === '') {
             alert('Indique el motivo de la diferencia de precio respecto a la OC.');
             $('#modal-linea-comentario-precio').trigger('focus');
             return;
         }
-        aplicarPreciosLinea(idx, cant, precio, importe, comentario);
+
+        aplicarPreciosLinea(idx, cant, precio, importe, comentario, precioSolicitado);
         $('#modalRecepcionLineaPrecio').modal('hide');
     }
 
     function importeLineaRecepcion(item) {
         var cant = parseFloat(item.cantidad || 0) || 0;
-        var precio = parseFloat(item.precio || 0) || 0;
+        var precio = precioEfectivoLinea(item);
 
         return Math.round(cant * precio * 100) / 100;
     }
@@ -1354,6 +1632,72 @@
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
+    }
+
+    function tipoArticuloCigarrilloId() {
+        var id = parseInt(window.recepcionProveedorTipoarticuloCigarrilloId, 10);
+        return id > 0 ? id : null;
+    }
+
+    function lineaEsCigarrilloRecibida(item) {
+        var tipoCig = tipoArticuloCigarrilloId();
+        if (!tipoCig || !item) {
+            return false;
+        }
+        if (parseInt(item.tipoarticulo_id, 10) !== tipoCig) {
+            return false;
+        }
+        if (esModoDevolucion()) {
+            return false;
+        }
+        if (accionLineaItem(item) === 'PENDIENTE') {
+            return false;
+        }
+        return (parseFloat(item.cantidad || 0) || 0) > 0.000001;
+    }
+
+    function recepcionHayCigarrillosRecibidos() {
+        return (itemsActuales || []).some(function (item) {
+            return lineaEsCigarrilloRecibida(item);
+        });
+    }
+
+    function actualizarCampoImpuestoInterno() {
+        var $wrap = $('#recepcion-impuesto-interno-wrap');
+        if (!$wrap.length || window.recepcionProveedorSoloLectura && !$wrap.find('#recepcion-impuesto-interno').length) {
+            if ($wrap.length) {
+                $wrap.toggle(recepcionHayCigarrillosRecibidos());
+            }
+            return;
+        }
+        var visible = recepcionHayCigarrillosRecibidos();
+        $wrap.toggle(visible);
+        var $input = $('#recepcion-impuesto-interno');
+        if ($input.length) {
+            $input.prop('required', visible);
+            if (!visible) {
+                $input.val('');
+            }
+        }
+    }
+
+    function validarImpuestoInternoCigarrillos() {
+        if (esModoDevolucion() || !recepcionHayCigarrillosRecibidos()) {
+            return null;
+        }
+        var $input = $('#recepcion-impuesto-interno');
+        if (!$input.length) {
+            return null;
+        }
+        var raw = $.trim($input.val());
+        if (raw === '') {
+            return 'Indique el impuesto interno de la factura (hay l\u00edneas con cigarrillos recibidos).';
+        }
+        var valor = parseFloat(raw.replace(',', '.'));
+        if (isNaN(valor) || valor < 0) {
+            return 'El impuesto interno debe ser un importe num\u00e9rico mayor o igual a cero.';
+        }
+        return null;
     }
 
     function actualizarTotalRecepcion() {
@@ -1384,6 +1728,7 @@
         });
 
         $total.text(partes.join(' · '));
+        actualizarCampoImpuestoInterno();
     }
 
     function htmlMonedaCotizacion(item, idx) {
@@ -1412,6 +1757,53 @@
         return html;
     }
 
+    function formatearCantidadOc(n) {
+        var v = parseFloat(n);
+        if (isNaN(v)) {
+            return '—';
+        }
+        return String(v).replace(/\.?0+$/, function (m) {
+            return m.indexOf('.') === 0 ? '' : m;
+        }) || '0';
+    }
+
+    function htmlBadgeSaldoOc(item) {
+        var oc = parseFloat(item.cantidad_oc);
+        if (isNaN(oc)) {
+            return '<span class="badge badge-light">Cant. OC: &mdash;</span>';
+        }
+        var yaRec = cantidadYaRecibidaOc(item);
+        var pend = Math.max(0, oc - yaRec);
+        var html = '<span class="badge badge-light">Pedida: ' + formatearCantidadOc(oc) + '</span>';
+        if (yaRec > 0.000001) {
+            html += ' <span class="badge badge-info">Ingr.: ' + formatearCantidadOc(yaRec) + '</span>';
+        }
+        if (pend > 0.000001) {
+            html += ' <span class="badge badge-warning">Pend.: ' + formatearCantidadOc(pend) + '</span>';
+        }
+
+        return html;
+    }
+
+    function htmlCeldaCantidadOc(item) {
+        var oc = parseFloat(item.cantidad_oc);
+        if (isNaN(oc)) {
+            return '—';
+        }
+        var yaRec = cantidadYaRecibidaOc(item);
+        var pend = Math.max(0, oc - yaRec);
+        var html = '<span class="d-block font-weight-bold">' + formatearCantidadOc(oc) + '</span>';
+        html += '<small class="text-muted d-block">pedida</small>';
+        if (yaRec > 0.000001) {
+            html += '<small class="text-info d-block">ingr. ' + formatearCantidadOc(yaRec) + '</small>';
+        }
+        if (pend > 0.000001) {
+            html += '<small class="text-warning d-block">pend. ' + formatearCantidadOc(pend) + '</small>';
+        }
+
+        return html;
+    }
+
     function htmlCamposOcultosLinea(item, idx, depId, tipo) {
         item.moneda_id = monedaIdItem(item, idx);
         item.cotizacion = cotizacionItem(item, idx);
@@ -1419,6 +1811,7 @@
         html += '<input type="hidden" name="items[' + idx + '][deposito_id]" value="' + (depId > 0 ? depId : '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][tipo_linea]" value="' + escHtml(tipo) + '">';
         html += '<input type="hidden" name="items[' + idx + '][cantidad_oc]" value="' + (item.cantidad_oc != null ? item.cantidad_oc : '') + '">';
+        html += '<input type="hidden" name="items[' + idx + '][cantidad_recibida]" value="' + (item.cantidad_recibida != null ? item.cantidad_recibida : '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][ordencompra_articulo_id]" value="' + (item.ordencompra_articulo_id || '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][ordencompra_articulo_sustituido_id]" value="' + (item.ordencompra_articulo_sustituido_id || '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][descuento]" value="' + (item.descuento || 0) + '">';
@@ -1462,6 +1855,7 @@
         $tbody.empty();
         if (!itemsActuales.length) {
             actualizarTotalRecepcion();
+            actualizarCampoImpuestoInterno();
             return;
         }
         itemsActuales.forEach(function (item, idx) {
@@ -1499,7 +1893,7 @@
                 html += '<span class="d-block">' + (maxDevolucion > 0 ? maxDevolucion : '—') + '</span>';
                 html += '<small class="text-muted">recibida</small>';
             } else {
-                html += (item.cantidad_oc != null ? item.cantidad_oc : '—');
+                html += htmlCeldaCantidadOc(item);
             }
             html += '</td>';
             html += '<td class="align-middle">';
@@ -1518,7 +1912,7 @@
             html += '<td class="align-middle"><span class="item-deposito-texto">' + depositoLineaTexto(item) + '</span></td>';
             if (!esModoDevolucion()) {
                 html += '<td class="align-middle text-center col-acc-linea">';
-                if (!soloLectura && tipo === 'EXTRA') {
+                if (!soloLectura && tipo === 'EXTRA' && puedeAgregarArticuloExtraRecepcion()) {
                     html += '<button type="button" class="btn btn-xs btn-danger btn-quitar-linea" data-idx="' + idx + '" title="Quitar l&iacute;nea"><i class="fa fa-trash"></i></button>';
                 } else {
                     html += htmlCeldaAccionOc(item, idx, soloLectura);
@@ -1528,7 +1922,9 @@
             html += '</tr>';
             if (!esModoDevolucion()) {
                 html += htmlFilaComentarioPrecio(item, idx, precioDiff || !!item.comentario_precio);
-                html += htmlFilaComentarioDiferencia(item, idx, lineaRequiereComentarioDiferencia(item) || !!item.comentario_diferencia);
+                html += htmlFilaComentarioDiferencia(item, idx, lineaRequiereComentarioDiferencia(item)
+                    || lineaEsRecepcionParcialConSaldo(item)
+                    || !!item.comentario_diferencia);
                 html += htmlFilaMotivoRechazo(item, idx, cantRech > 0.000001 || !!item.motivorechazo);
             }
             $tbody.append(html);
@@ -1536,6 +1932,7 @@
         });
         actualizarLinksArticuloGrilla();
         actualizarTotalRecepcion();
+        actualizarCampoImpuestoInterno();
     }
 
     function cargarOc(mostrarAlertaSiVacio, opciones) {
@@ -1570,11 +1967,16 @@
                     centrocostoOcActivo = parseInt(data.lineas[0].centrocosto_id, 10) || null;
                 }
                 sincronizarEmpresaDesdeOc(data);
+                actualizarAvisoDescuentoOc(data.descuento_ordencompra);
                 renderItems(data.lineas);
+                actualizarBotonConsultarOc();
             })
             .fail(function (xhr) {
                 ultimoNumeroOcCargado = null;
                 centrocostoOcActivo = null;
+                $('#ordencompra_id').val('');
+                actualizarAvisoDescuentoOc(0);
+                actualizarBotonConsultarOc();
                 alert(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al cargar OC');
             })
             .always(function () {
@@ -1593,12 +1995,13 @@
         $numeroOc.on('keydown.recepprovOc', function (e) {
             if (e.key === 'Enter' || e.keyCode === 13) {
                 e.preventDefault();
-                cargarOc(true);
+                // Enter explícito: siempre recargar desde servidor (precios/cantidades OC pueden haber cambiado).
+                cargarOc(true, { forzar: true });
                 return;
             }
             if (e.key === 'Tab' || e.keyCode === 9) {
                 if (!e.shiftKey && parseInt($numeroOc.val(), 10)) {
-                    cargarOc(false);
+                    cargarOc(false, { forzar: true });
                 }
             }
         });
@@ -1661,6 +2064,10 @@
     }
 
     function agregarLineaExtra() {
+        if (!puedeAgregarArticuloExtraRecepcion()) {
+            alert('No tiene permiso para agregar artículos fuera de la orden de compra.');
+            return;
+        }
         if (!$('#ordencompra_id').val()) {
             alert('Cargue primero una orden de compra.');
             return;
@@ -1747,12 +2154,21 @@
             activa_eventos_consultaarticulo();
         }
 
+        window.payloadExtraConsultaDeposito = function () {
+            if (modoIntercompanyActivo()) {
+                return { intercompany: 1 };
+            }
+            return {};
+        };
+
         window.onDepositoAplicadoEnFormulario = function (data, $ctx) {
             if ($ctx && $ctx.attr('id') === 'tm_deposito_entrada') {
                 var ocEmpresa = empresaIdRecepcion();
                 var depEmpresa = parseInt(data && data.empresa_id, 10) || 0;
-                if (window.recepcionProveedorEmpresaDesdeOc && ocEmpresa > 0 && depEmpresa > 0 && depEmpresa !== ocEmpresa) {
-                    alert('El depósito debe pertenecer a la empresa de la orden de compra.');
+                if (!modoIntercompanyActivo()
+                    && window.recepcionProveedorEmpresaDesdeOc
+                    && ocEmpresa > 0 && depEmpresa > 0 && depEmpresa !== ocEmpresa) {
+                    alert('El depósito debe pertenecer a la empresa de la orden de compra. Active "Ver depósitos de otras empresas" para ingresar en un depósito intercompany.');
                     limpiarDepositoCabeceraRecepcion();
                     return;
                 }
@@ -1767,10 +2183,26 @@
             depositoCabeceraId = depositoCabeceraActivo();
             if (!depositoCabeceraId) {
                 depositoCabeceraEmpresaId = 0;
+                depositoCabeceraEmpresaNombre = '';
                 depositoCabeceraTipo = '';
                 aplicarMetadatosDepositoCabecera(null);
             }
+            actualizarAvisoIntercompany();
             renderItems(itemsActuales);
+        });
+
+        $('#rp_btn_intercompany').on('click', function () {
+            var $modo = $('#rp_modo_intercompany');
+            var activo = $modo.val() !== '1';
+            $modo.val(activo ? '1' : '0');
+            $(this).toggleClass('btn-outline-secondary', !activo)
+                .toggleClass('btn-warning', activo)
+                .html(activo
+                    ? '<i class="fa fa-building"></i> Mostrando dep&oacute;sitos de todas las empresas'
+                    : '<i class="fa fa-building"></i> Ver dep&oacute;sitos de otras empresas');
+            if ($('#consultadepositoModal').hasClass('show') && typeof buscar_datos_deposito === 'function') {
+                buscar_datos_deposito($('#consultadeposito').val());
+            }
         });
 
         window.recepcionProveedorEmpresaDesdeOc = !!(window.recepcionProveedorOrdencompraIdInicial && window.recepcionProveedorEmpresaIdInicial);
@@ -1778,8 +2210,10 @@
             aplicarMetadatosDepositoCabecera({
                 tipodeposito: $('#recepcion_deposito_id').data('tipodeposito') || '',
                 empresa_id: depositoCabeceraEmpresaId,
+                empresa_nombre: depositoCabeceraEmpresaNombre,
             });
         }
+        actualizarAvisoIntercompany();
 
         if (window.recepcionProveedorItemsInicial && window.recepcionProveedorItemsInicial.length) {
             renderItems(window.recepcionProveedorItemsInicial);
@@ -1791,6 +2225,8 @@
         if (window.recepcionProveedorNumeroOcInicial) {
             ultimoNumeroOcCargado = window.recepcionProveedorNumeroOcInicial;
         }
+        actualizarAvisoDescuentoOc(window.recepcionProveedorDescuentoOcInicial || 0);
+        actualizarBotonConsultarOc();
 
         var $formRecepcion = $('#form-recepcion-proveedor');
 
@@ -1896,6 +2332,7 @@
             actualizarEstiloLineaPorAccion(idx);
             actualizarComentarioPrecioFila(idx);
             actualizarTotalRecepcion();
+            actualizarCampoImpuestoInterno();
         });
 
         $(document).on('change', '.item-accion-oc-select', function () {
@@ -1918,15 +2355,21 @@
                 item.comentario_diferencia = '';
             }
             actualizarEstiloLineaPorAccion(idx);
+            actualizarCampoImpuestoInterno();
         });
 
-        $(document).on('change', '.item-cerrar-saldo-oc', function () {
-            var idx = parseInt($(this).closest('tr').data('idx'), 10);
+        $(document).on('click', '.item-saldo-parcial-btn', function (e) {
+            e.preventDefault();
+            var idx = parseInt($(this).closest('tr.item-recepcion-comentario-diferencia').data('idx'), 10);
             var item = itemsActuales[idx];
             if (!item) {
                 return;
             }
-            item.fl_cerrar_linea_oc = $(this).is(':checked');
+            var val = String($(this).data('val') || 'PENDIENTE');
+            item.fl_cerrar_linea_oc = val === 'CERRAR';
+            if (val === 'PENDIENTE') {
+                item.comentario_diferencia = '';
+            }
             sincronizarAccionEnItem(item);
             actualizarEstiloLineaPorAccion(idx);
         });
@@ -2149,6 +2592,8 @@
             if (res.lineas && res.lineas.length) {
                 renderItems(res.lineas);
             }
+            actualizarAvisoDescuentoOc(res.descuento_ordencompra);
+            actualizarBotonConsultarOc();
             var msg = 'OCR ' + (res.ocr_estado || 'OK');
             if (res.numero_oc_detectado) {
                 msg += '\nOC detectada: ' + res.numero_oc_detectado;

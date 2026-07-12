@@ -61,7 +61,17 @@ class FacturaElectronicaService
 	{
 		if ($puntoventa->modofacturacion == 'A') // CAEA
 		{
-			// Si es CAEA debe buscar ultimo numero emitido
+			try {
+				$n = $this->ultimoComprobanteAutorizadoEnArca($puntoventa, (int) $tipotransaccion, $opciones);
+
+				return $n > 0 ? (string) $n : -1;
+			} catch (\Throwable $e) {
+				if (ArcaWsfeEmisionResiliencia::esErrorTransporte($e->getMessage())) {
+					throw $e;
+				}
+
+				return -1;
+			}
 		}
 		else
 		{
@@ -157,6 +167,45 @@ class FacturaElectronicaService
 			}
 		}
 		return $ultimoNumero;
+	}
+
+	/**
+	 * Último comprobante registrado en ARCA/AFIP (FECompUltimoAutorizado / MTXCA).
+	 * Usado en informe quincenal CAEA para detectar comprobantes ya informados.
+	 *
+	 * @throws \Throwable en error de transporte SOAP
+	 */
+	public function ultimoComprobanteAutorizadoEnArca(object $puntoventa, int $cbteTipo, array $opciones = []): int
+	{
+		if (! $this->debeUsarSoapWsfe($puntoventa) && ! $this->debeUsarSoapMtxca($puntoventa)) {
+			throw new \InvalidArgumentException(
+				'Punto de venta '.$puntoventa->codigo.' no usa WSFE/MTXCA SOAP; no se puede consultar último autorizado.',
+			);
+		}
+
+		$empresaId = (int) ($puntoventa->empresa_id ?? 0);
+		if ($empresaId < 1) {
+			throw new \InvalidArgumentException('Punto de venta sin empresa asociada.');
+		}
+
+		$webservice = (string) ($puntoventa->webservice ?? '');
+		$soapTimeoutPos = ArcaWsfeEmisionResiliencia::soapTimeoutPosParaOpciones($opciones, $webservice);
+
+		if ($this->debeUsarSoapMtxca($puntoventa)) {
+			return $this->arcaMtxcaFacturaElectronicaService->consultarUltimoComprobanteAutorizado(
+				$empresaId,
+				(int) $puntoventa->codigo,
+				$cbteTipo,
+				$soapTimeoutPos,
+			);
+		}
+
+		return $this->arcaWsfeFacturaElectronicaService->feCompUltimoAutorizado(
+			$empresaId,
+			(int) $puntoventa->codigo,
+			$cbteTipo,
+			$soapTimeoutPos,
+		);
 	}
 
 	public function solicitaCAE($nroinscripcion, $tipotransaccion, $puntoventa, $datos, array $opciones = [])
@@ -523,6 +572,71 @@ class FacturaElectronicaService
 		}
 
 		return ['Error' => 'No pudo asignar CAEA: no está en arca_caea para la quincena (verifique arca:solicitar-caea-quincenal)'];
+	}
+
+	/**
+	 * Presentación quincenal: informa a ARCA un comprobante emitido bajo CAEA.
+	 *
+	 * @param  array<string, mixed>  $datos
+	 * @param  array{caea: string, fechavencimientocae?: string}  $caeaVigente
+	 * @return array{ok: bool, resultado?: string, observaciones?: string, error?: string}
+	 */
+	public function informarComprobanteCaea(
+		$nroinscripcion,
+		$tipotransaccion,
+		$puntoventa,
+		array $datos,
+		array $caeaVigente,
+	): array {
+		$empresaId = (int) ($puntoventa->empresa_id ?? 0);
+		if ($empresaId < 1) {
+			return ['ok' => false, 'error' => 'Punto de venta sin empresa asociada.'];
+		}
+
+		if ($this->debeUsarSoapMtxca($puntoventa)) {
+			try {
+				$out = $this->arcaMtxcaFacturaElectronicaService->informarComprobanteCaeaDomestico(
+					$empresaId,
+					$puntoventa,
+					(int) $tipotransaccion,
+					$datos,
+					$caeaVigente,
+				);
+
+				return [
+					'ok' => true,
+					'resultado' => (string) ($out['resultado'] ?? 'A'),
+					'observaciones' => (string) ($out['observaciones'] ?? ''),
+				];
+			} catch (\Throwable $e) {
+				return ['ok' => false, 'error' => $e->getMessage()];
+			}
+		}
+
+		if ($this->debeUsarSoapWsfe($puntoventa)) {
+			try {
+				$out = $this->arcaWsfeFacturaElectronicaService->feCaeaRegInformativoDomestico(
+					$empresaId,
+					$puntoventa,
+					(int) $tipotransaccion,
+					$datos,
+					$caeaVigente,
+				);
+
+				return [
+					'ok' => true,
+					'resultado' => (string) ($out['resultado'] ?? 'A'),
+					'observaciones' => (string) ($out['observaciones'] ?? ''),
+				];
+			} catch (\Throwable $e) {
+				return ['ok' => false, 'error' => $e->getMessage()];
+			}
+		}
+
+		return [
+			'ok' => false,
+			'error' => 'Transporte SOAP no activo para el webservice del punto de venta (ARCA_WSFE_TRANSPORTE / ARCA_MTXCA_TRANSPORTE).',
+		];
 	}
 
 	public function consultaCompEnviado($nroinscripcion, $tipotransaccion, $puntoventa, $numero)

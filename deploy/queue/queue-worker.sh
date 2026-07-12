@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="/var/www/html/anitaERP"
 PID_FILE="$ROOT/storage/logs/queue-worker.pid"
 LOG_FILE="$ROOT/storage/logs/queue-worker.log"
-CMD=(php artisan queue:work database --sleep=3 --tries=3 --timeout=360 --max-time=3600)
+CMD=(php artisan queue:work database --sleep=3 --tries=3 --timeout=1900 --max-time=3600)
 
 cd "$ROOT"
 

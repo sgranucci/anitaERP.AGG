@@ -6,7 +6,9 @@ use App\Models\Sala\RequisicionSala;
 use App\Models\Sala\RequisicionSalaArticulo;
 use App\Models\Sala\RequisicionSalaEstado;
 use App\Models\Sala\TecnicoLaboratorio;
+use App\Models\Stock\Articulo_ParteUnica;
 use App\Models\Stock\Depmae;
+use App\Models\Stock\Transferencia_Mercaderia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Sala\RequisicionSalaEstadoRepositoryInterface;
 use App\Repositories\Sala\RequisicionSalaRepositoryInterface;
@@ -27,6 +29,7 @@ class CumplirRequisicionSalaService
         private RequisicionSalaEstadoRepositoryInterface $requisicionSalaEstadoRepository,
         private TransferenciaMercaderiaService $transferenciaService,
         private EmpresaRepositoryInterface $empresaRepository,
+        private CumplimientoRequisicionSalaPersistenciaService $persistenciaService,
     ) {
     }
 
@@ -145,6 +148,19 @@ class CumplirRequisicionSalaService
             return ['mensaje' => 'error', 'errores' => 'Debe indicar al menos una l&iacute;nea con cantidad a cumplir o cierre de &iacute;tem.'];
         }
 
+        $lineasPayload = array_values(array_filter($lineasPayload, static function ($fila): bool {
+            if (! is_array($fila)) {
+                return false;
+            }
+            $entrega = (float) ($fila['cantidad_entrega'] ?? 0);
+            $estadoParcial = trim((string) ($fila['estadoparcial'] ?? ''));
+
+            return $entrega > 0 || self::esCierraItem($estadoParcial);
+        }));
+        if ($lineasPayload === []) {
+            return ['mensaje' => 'error', 'errores' => 'Debe indicar al menos una l&iacute;nea con cantidad a cumplir o cierre de &iacute;tem.'];
+        }
+
         $depositoLabDefault = $this->resolverDepositoLaboratorioId();
         if ($depositoLabDefault <= 0) {
             return ['mensaje' => 'error', 'errores' => 'Dep&oacute;sito de laboratorio (406) no configurado en depmae.'];
@@ -168,6 +184,8 @@ class CumplirRequisicionSalaService
         $transferenciaIds = [];
         $filasImpresion = [];
         $cabecerasImpresion = [];
+        $snapshotsPersistencia = [];
+        $empresasGrabar = [];
         $depositoOrigenImpresion = Depmae::query()->find($depositoLabDefault);
 
         DB::beginTransaction();
@@ -184,6 +202,7 @@ class CumplirRequisicionSalaService
                     $req,
                     $depositoOrigenImpresion
                 );
+                $empresasGrabar[(int) $req->empresa_id] = true;
 
                 $transferenciasPorOrigen = [];
                 $hayMovimiento = false;
@@ -195,7 +214,8 @@ class CumplirRequisicionSalaService
                         $depositoLabDefault,
                         $transferenciasPorOrigen,
                         $filasImpresion,
-                        $cabecerasImpresion[$reqId]
+                        $cabecerasImpresion[$reqId],
+                        $snapshotsPersistencia
                     );
                     if ($resultado) {
                         $hayMovimiento = true;
@@ -228,6 +248,21 @@ class CumplirRequisicionSalaService
                 throw new \RuntimeException('No hay cantidades ni cierres de &iacute;tem para grabar.');
             }
 
+            $empresaIds = array_keys($empresasGrabar);
+            $empresaPersistir = count($empresaIds) === 1 ? (int) $empresaIds[0] : null;
+            $leyendaTx = trim((string) ($payload['leyenda'] ?? ''));
+            if (is_array($payload['leyenda'] ?? null)) {
+                $leyendaTx = trim(implode("\n", array_filter(array_map('trim', $payload['leyenda']), static fn ($l) => $l !== '')));
+            }
+
+            $cumplimiento = $this->persistenciaService->persistir(
+                $usuarioId,
+                $leyendaTx !== '' ? $leyendaTx : null,
+                $snapshotsPersistencia,
+                $transferenciaIds,
+                $empresaPersistir
+            );
+
             DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -240,18 +275,55 @@ class CumplirRequisicionSalaService
             $leyendaRaw = implode("\n", array_filter(array_map('trim', $leyendaRaw), static fn ($l) => $l !== ''));
         }
         $leyenda = trim((string) $leyendaRaw);
+        $cabeceras = array_values($cabecerasImpresion);
+        $transferenciasImpresion = $this->armarTransferenciasImpresion($transferenciaIds);
 
         return [
             'mensaje' => 'ok',
+            'cumplimiento_id' => (int) $cumplimiento->id,
+            'cumplimiento_numero' => (int) $cumplimiento->numero,
             'transferencias' => $transferenciaIds,
+            'transferencias_detalle' => $transferenciasImpresion,
             'impresion' => [
+                'cumplimiento_id' => (int) $cumplimiento->id,
+                'cumplimiento_numero' => (int) $cumplimiento->numero,
                 'referencia' => CumplirRequisicionSalaPdfService::armarReferenciaImpresion($cabeceras),
                 'cabeceras' => $cabeceras,
                 'filas' => $filasImpresion,
+                'transferencias' => $transferenciasImpresion,
                 'leyenda' => $leyenda !== '' ? $leyenda : null,
                 'usuario' => Auth::user()?->nombre ?? Auth::user()?->email ?? '',
             ],
         ];
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return list<array{id: int, codigo: string, origen_codigo: ?string, origen: ?string, destino_codigo: ?string, destino: ?string}>
+     */
+    private function armarTransferenciasImpresion(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return Transferencia_Mercaderia::query()
+            ->with(['depositoOrigen', 'depositoDestino'])
+            ->whereIn('id', $ids)
+            ->orderBy('id')
+            ->get()
+            ->map(static function (Transferencia_Mercaderia $t): array {
+                return [
+                    'id' => (int) $t->id,
+                    'codigo' => (string) ($t->codigo ?? ''),
+                    'origen_codigo' => $t->depositoOrigen?->codigo,
+                    'origen' => $t->depositoOrigen?->nombre,
+                    'destino_codigo' => $t->depositoDestino?->codigo,
+                    'destino' => $t->depositoDestino?->nombre,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**
@@ -265,7 +337,8 @@ class CumplirRequisicionSalaService
         int $depositoLabDefault,
         array &$transferenciasPorOrigen,
         array &$filasImpresion,
-        array $cabeceraReq
+        array $cabeceraReq,
+        array &$snapshotsPersistencia
     ): bool {
         $pendiente = (float) $linea->cantidad - (float) ($linea->cantidadentregada ?? 0);
         if ($pendiente <= 0) {
@@ -291,9 +364,6 @@ class CumplirRequisicionSalaService
         }
 
         $tecnicoId = (int) ($fila['tecnico_laboratorio_id'] ?? 0);
-        if ($tecnicoId <= 0 && $entrega > 0) {
-            throw new \RuntimeException('Debe indicar t&eacute;cnico de laboratorio para el art&iacute;culo '.$linea->articulos?->sku);
-        }
 
         $depositoOrigenId = (int) ($fila['deposito_origen_id'] ?? $depositoLabDefault);
         if ($depositoOrigenId <= 0) {
@@ -318,6 +388,36 @@ class CumplirRequisicionSalaService
             $nuevaEntregada = (float) $linea->cantidad;
         }
 
+        $numeroparteGrabar = $this->resolverNumeroparteCumple($linea, $fila, $entrega, $cierraItem);
+        $tecnicoIdResuelto = $this->resolverTecnicoLaboratorioId($linea, $tecnicoId);
+
+        $snapshotsPersistencia[] = [
+            'requisicion_sala_id' => (int) $linea->requisicion_sala_id,
+            'requisicion_sala_articulo_id' => (int) $linea->id,
+            'articulo_id' => (int) $linea->articulo_id,
+            'cantidad_entrega' => $entrega,
+            'cantidad_pendiente_antes' => $pendiente,
+            'cantidadentregada_antes' => (float) ($linea->cantidadentregada ?? 0),
+            'deposito_origen_id' => $depositoOrigenId,
+            'tecnico_laboratorio_id' => $tecnicoIdResuelto,
+            'numeroparte' => $numeroparteGrabar ?? $linea->numeroparte,
+            'uid' => $linea->uid,
+            'destino' => (string) ($linea->destino ?? ''),
+            'estado_linea' => $estadoLinea,
+            'estadoparcial' => $entrega < $pendiente || $cierraItem ? $estadoParcial : null,
+            'fecha_entrega' => $fechaEntrega !== '' ? $fechaEntrega : null,
+            'numeroremito' => $fila['numeroremito'] ?? $linea->numeroremito,
+            'nombreresponsable' => $fila['nombreresponsable'] ?? $linea->nombreresponsable,
+            'estado_linea_antes' => (string) ($linea->estado ?? ' '),
+            'estadoparcial_antes' => $linea->estadoparcial,
+            'fecha_entrega_antes' => $linea->fecha_entrega,
+            'numeroremito_antes' => $linea->numeroremito,
+            'nombreresponsable_antes' => $linea->nombreresponsable,
+            'tecnico_laboratorio_id_antes' => $linea->tecnico_laboratorio_id,
+            'deposito_origen_id_antes' => $linea->deposito_origen_id,
+            'numeroparte_antes' => $linea->numeroparte,
+        ];
+
         $linea->update([
             'cantidadentregada' => $nuevaEntregada,
             'estado' => $estadoLinea !== '' ? $estadoLinea : $linea->estado,
@@ -325,12 +425,13 @@ class CumplirRequisicionSalaService
             'fecha_entrega' => $fechaEntrega !== '' ? $fechaEntrega : $linea->fecha_entrega,
             'numeroremito' => $fila['numeroremito'] ?? $linea->numeroremito,
             'nombreresponsable' => $fila['nombreresponsable'] ?? $linea->nombreresponsable,
-            'tecnico_laboratorio_id' => $tecnicoId > 0 ? $tecnicoId : $linea->tecnico_laboratorio_id,
+            'tecnico_laboratorio_id' => $tecnicoIdResuelto,
             'deposito_origen_id' => $depositoOrigenId,
+            'numeroparte' => $numeroparteGrabar ?? $linea->numeroparte,
         ]);
 
         $depOrigen = Depmae::query()->find($depositoOrigenId);
-        $tecnico = $tecnicoId > 0 ? TecnicoLaboratorio::query()->find($tecnicoId) : null;
+        $tecnico = $tecnicoIdResuelto ? TecnicoLaboratorio::query()->find($tecnicoIdResuelto) : null;
         $pendienteRestante = max(0, $pendiente - $entrega);
         if ($cierraItem) {
             $pendienteRestante = 0;
@@ -341,14 +442,14 @@ class CumplirRequisicionSalaService
             $filasImpresion[] = [
                 'requisicion_nro' => $cabeceraReq['numerorequisicion'] ?? '',
                 'sku' => $linea->articulos?->sku,
-                'descripcion' => $linea->articulos?->nombre ?? $linea->detalle,
+                'descripcion' => $linea->descripcionArticulo(),
                 'entrega' => $entrega,
                 'pendiente_restante' => $pendienteRestante,
                 'precio' => (float) ($linea->precio ?? 0),
                 'deposito_origen_codigo' => $depOrigen?->codigo,
                 'deposito_origen' => $depOrigen?->nombre,
                 'uid' => $linea->uid,
-                'npu' => $linea->numeroparte,
+                'npu' => $numeroparteGrabar ?? $linea->numeroparte,
                 'tecnico' => $tecnico?->nombre,
                 'motivo_parcial' => $motivoNombre,
             ];
@@ -358,10 +459,25 @@ class CumplirRequisicionSalaService
             $transferenciasPorOrigen[$depositoOrigenId][] = [
                 'articulo_id' => (int) $linea->articulo_id,
                 'cantidad' => $entrega,
+                'numeroparte' => $numeroparteGrabar,
             ];
         }
 
         return true;
+    }
+
+    private function lineaRequiereTecnico(RequisicionSalaArticulo $linea): bool
+    {
+        return (string) ($linea->destino ?? '') === 'R';
+    }
+
+    private function resolverTecnicoLaboratorioId(RequisicionSalaArticulo $linea, int $tecnicoId): ?int
+    {
+        if (! $this->lineaRequiereTecnico($linea)) {
+            return null;
+        }
+
+        return $tecnicoId > 0 ? $tecnicoId : ($linea->tecnico_laboratorio_id ? (int) $linea->tecnico_laboratorio_id : null);
     }
 
     /**
@@ -432,10 +548,21 @@ class CumplirRequisicionSalaService
     private function agruparLineasTransferencia(array $lineas): array
     {
         $map = [];
+        $salida = [];
         foreach ($lineas as $linea) {
             $articuloId = (int) ($linea['articulo_id'] ?? 0);
             $cantidad = (float) ($linea['cantidad'] ?? 0);
+            $numeroparte = trim((string) ($linea['numeroparte'] ?? ''));
             if ($articuloId <= 0 || $cantidad <= 0) {
+                continue;
+            }
+            if ($numeroparte !== '') {
+                $salida[] = [
+                    'articulo_id' => $articuloId,
+                    'cantidad' => $cantidad,
+                    'numeroparte' => $numeroparte,
+                ];
+
                 continue;
             }
             if (! isset($map[$articuloId])) {
@@ -443,12 +570,45 @@ class CumplirRequisicionSalaService
             }
             $map[$articuloId] += $cantidad;
         }
-        $salida = [];
         foreach ($map as $articuloId => $cantidad) {
             $salida[] = ['articulo_id' => (int) $articuloId, 'cantidad' => $cantidad];
         }
 
         return $salida;
+    }
+
+    private function resolverNumeroparteCumple(
+        RequisicionSalaArticulo $linea,
+        array $fila,
+        float $entrega,
+        bool $cierraItem
+    ): ?string {
+        if ($entrega <= 0 && ! $cierraItem) {
+            $actual = trim((string) ($linea->numeroparte ?? ''));
+
+            return $actual !== '' ? $actual : null;
+        }
+
+        $npu = trim((string) ($fila['numeroparte'] ?? $linea->numeroparte ?? ''));
+        if ($npu === '') {
+            return null;
+        }
+        if (strlen($npu) > 50) {
+            throw new \RuntimeException('El NPU no puede superar 50 caracteres.');
+        }
+
+        $articuloId = (int) $linea->articulo_id;
+        if ($articuloId > 0) {
+            try {
+                \App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport::assertActivaParaUso($npu, $articuloId);
+            } catch (\RuntimeException $e) {
+                throw $e;
+            }
+        } elseif (\App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport::estaDadaDeBaja($npu)) {
+            throw new \RuntimeException('El NPU '.$npu.' fue dado de baja y no puede utilizarse.');
+        }
+
+        return $npu;
     }
 
     private function resolverEstadoCabecera(int $requisicionSalaId): string

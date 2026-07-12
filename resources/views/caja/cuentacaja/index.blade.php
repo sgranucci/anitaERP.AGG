@@ -13,6 +13,9 @@
 use App\Support\Caja\CuentacajaListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -29,7 +32,7 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                         'toggleTarget' => '#panel-filtros-cuentacaja',
                         'toggleId' => 'btn-toggle-filtros-cuentacaja',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_cuentacaja'),
+                        'nuevoRegistroUrl' => route('crear_cuentacaja', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-cuentas-de-caja',
                     ])
                 </div>
@@ -82,7 +85,7 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                             <td><small>{{ $data->usocuentacajas->pluck('nombre')->implode(', ') }}</small></td>
                             <td>
                        			@if (can('editar-cuentas-de-caja', false))
-                                	<a href="{{route('editar_cuentacaja', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                	<a href="{{route('editar_cuentacaja', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif

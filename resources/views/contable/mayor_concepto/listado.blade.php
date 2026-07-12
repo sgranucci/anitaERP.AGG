@@ -126,83 +126,44 @@
     @endif
 
     @php
-        $panelAud = $auditoriaPanel ?? null;
-        $audDisp = $panelAud['disponibilidad'] ?? ($auditoria ?? null);
-        $audContra = $panelAud['contrapartidas'] ?? ($auditoriaContrapartidas ?? null);
+        $conc = ($auditoriaPanel ?? null)['conciliacion'] ?? null;
+        $filasDescPdf = $conc['filas_descuadradas'] ?? [];
     @endphp
-    @if (! empty($audDisp) || ! empty($audContra))
-        <h3 style="font-size: 11px; margin: 0 0 6px 0;">Auditoría vs mayor plano</h3>
+    @if (! empty($conc) && (int) ($conc['asientos_analizados'] ?? 0) > 0)
+        <h3 style="font-size: 11px; margin: 0 0 6px 0;">Conciliación analítico vs concepto</h3>
         <p class="meta" style="margin: 0 0 8px 0;">
-            Caja/banco: {{ ! empty($audDisp['cuadra']) ? 'cuadra' : 'con diferencias' }}
-            @if (! empty($audContra))
-                · Contrapartidas (op. disp.): {{ ! empty($audContra['cuadra']) ? 'cuadra' : 'con diferencias ('.((int) ($audContra['cuentas_descuadradas'] ?? 0)).' cuentas)' }}
-            @endif
+            {{ $conc['regla'] ?? 'Neto analítico + Neto concepto = 0' }} ·
+            Tolerancia ±{{ number_format((float) ($conc['tolerancia'] ?? 1), 2, ',', '.') }} ·
+            {{ (int) ($conc['asientos_cuadrados'] ?? 0) }}/{{ (int) ($conc['asientos_analizados'] ?? 0) }} asientos cuadrados
+            ({{ number_format((float) ($conc['porcentaje_cuadrado'] ?? 0), 1, ',', '.') }}%)
         </p>
-        @if (! empty($audDisp['filas']))
-            <table class="data" style="margin-bottom: 8px;">
-                <thead>
-                    <tr>
-                        <th>Cuenta disp.</th>
-                        <th>Descripción</th>
-                        <th class="text-right">Plano D</th>
-                        <th class="text-right">Plano H</th>
-                        <th class="text-right">Imput. D</th>
-                        <th class="text-right">Imput. H</th>
-                        <th class="text-right">Δ D</th>
-                        <th class="text-right">Δ H</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($audDisp['filas'] as $fila)
-                        <tr @if (empty($fila['cuadra'])) style="background-color: #fff3cd;" @endif>
-                            <td>{{ $fila['cuenta_codigo'] ?? '' }}</td>
-                            <td>{{ $fila['cuenta_nombre'] ?? '' }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['plano_debe'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['plano_haber'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['imputado_debe'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['imputado_haber'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['diferencia_debe'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['diferencia_haber'] ?? 0), 2, ',', '.') }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        @endif
-        @php
-            $diffsContraPdf = array_values(array_filter(
-                $audContra['filas'] ?? [],
-                fn ($f) => empty($f['cuadra']),
-            ));
-        @endphp
-        @if ($diffsContraPdf !== [])
+        @if ($filasDescPdf !== [])
             <table class="data" style="margin-bottom: 12px;">
                 <thead>
                     <tr>
-                        <th>Contrapartida</th>
-                        <th>Descripción</th>
-                        <th class="text-right">Plano D</th>
-                        <th class="text-right">Plano H</th>
-                        <th class="text-right">Imput. D</th>
-                        <th class="text-right">Imput. H</th>
-                        <th class="text-right">Δ D</th>
-                        <th class="text-right">Δ H</th>
+                        <th>N. asiento</th>
+                        <th>Fecha</th>
+                        <th class="text-right">Neto anal.</th>
+                        <th class="text-right">Neto conc.</th>
+                        <th class="text-right">Diferencia</th>
+                        <th>Origen</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (array_slice($diffsContraPdf, 0, 20) as $fila)
+                    @foreach ($filasDescPdf as $fila)
                         <tr style="background-color: #fff3cd;">
-                            <td>{{ $fila['cuenta_codigo'] ?? '' }}</td>
-                            <td>{{ $fila['cuenta_nombre'] ?? '' }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['plano_debe'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['plano_haber'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['imputado_debe'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['imputado_haber'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['diferencia_debe'] ?? 0), 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format((float) ($fila['diferencia_haber'] ?? 0), 2, ',', '.') }}</td>
+                            <td>{{ $fila['nro_asiento'] ?? '' }}</td>
+                            <td>{{ $fila['fecha_fmt'] ?? '' }}</td>
+                            <td class="text-right">{{ number_format((float) ($fila['neto_analitico'] ?? 0), 2, ',', '.') }}</td>
+                            <td class="text-right">{{ number_format((float) ($fila['neto_concepto'] ?? 0), 2, ',', '.') }}</td>
+                            <td class="text-right">{{ number_format((float) ($fila['diferencia'] ?? 0), 2, ',', '.') }}</td>
+                            <td>{{ $fila['origen'] ?? '' }}</td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
+        @else
+            <p class="meta" style="margin: 0 0 12px 0; color: #155724;">Todos los asientos cuadran.</p>
         @endif
     @endif
 

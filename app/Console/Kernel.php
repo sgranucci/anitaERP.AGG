@@ -54,6 +54,13 @@ class Kernel extends ConsoleKernel
             ->dailyAt('06:30')
             ->when(fn () => config('arca.caea.pedido_automatico', true));
 
+        $schedule->command('arca:auditar-proveedores-facturas-apocrifas')
+            ->dailyAt((string) config('arca_wsapoc.auditoria_nocturna.hora', '05:30'))
+            ->runInBackground()
+            ->withoutOverlapping(240)
+            ->appendOutputTo(storage_path('logs/arca-wsapoc-auditoria-schedule.log'))
+            ->when(fn () => filter_var(config('arca_wsapoc.auditoria_nocturna.habilitada', true), FILTER_VALIDATE_BOOLEAN));
+
         $schedule->command('arca:monitorear-conectividad')
             ->everyFiveMinutes()
             ->withoutOverlapping(8)
@@ -118,9 +125,18 @@ class Kernel extends ConsoleKernel
             ->when(fn () => (bool) config('queue.verificacion_pico.habilitada', true));
 
         $schedule->command('gastronomia:actualizar-costo-mensual-catalogo')
-            ->lastDayOfMonth((string) config('gastronomia.costo_mensual_catalogo.hora', '23:30'))
+            ->dailyAt((string) config('gastronomia.costo_mensual_catalogo.hora', '07:00'))
             ->runInBackground()
             ->withoutOverlapping(240)
+            ->appendOutputTo(storage_path('logs/costo-mensual-catalogo-schedule.log'))
+            ->when(fn () => (bool) config('gastronomia.costo_mensual_catalogo.habilitado', true));
+
+        // Cierre de mes: última pasada del costo catálogo (lista 5000+mes) tras la jornada.
+        $schedule->command('gastronomia:actualizar-costo-mensual-catalogo')
+            ->lastDayOfMonth((string) config('gastronomia.costo_mensual_catalogo.hora_ultimo_dia_mes', '23:30'))
+            ->runInBackground()
+            ->withoutOverlapping(240)
+            ->appendOutputTo(storage_path('logs/costo-mensual-catalogo-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.costo_mensual_catalogo.habilitado', true));
     }
 

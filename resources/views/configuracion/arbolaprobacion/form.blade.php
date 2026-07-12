@@ -77,7 +77,7 @@
                 <select id="filtro_centrocosto_id" data-placeholder="Filtra Centro de Costo" class="form-control" data-fouc>
                     <option value="">-- Elija centro de costo --</option>
                     @foreach($centrocosto_query as $key => $value)
-                        <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                        <option value="{{ $value->id }}">{{ $value->codigo }} - {{ $value->nombre }}</option>    
                     @endforeach
                 </select>
             </div>
@@ -132,9 +132,9 @@
                             <option value="">-- Elija centro de costo --</option>
                             @foreach($centrocosto_query as $key => $value)
                                 @if( (int) $value->id == (int) old('centrocosto_ids[]', $arbolaprobacion_niveles->centrocosto_id ?? ''))
-                                    <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                                    <option value="{{ $value->id }}" selected="select">{{ $value->codigo }} - {{ $value->nombre }}</option>    
                                 @else
-                                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                                    <option value="{{ $value->id }}">{{ $value->codigo }} - {{ $value->nombre }}</option>    
                                 @endif
                             @endforeach
                         </select>

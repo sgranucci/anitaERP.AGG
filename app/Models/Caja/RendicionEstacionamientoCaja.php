@@ -5,6 +5,7 @@ namespace App\Models\Caja;
 use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 use App\Models\Configuracion\Empresa;
+use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Puntoventa;
 use Illuminate\Database\Eloquent\Model;
@@ -41,6 +42,10 @@ class RendicionEstacionamientoCaja extends Model
         'jornada_estacionamiento_id',
         'numeracion_comprobantes_json',
         'observacion',
+        'asiento_id',
+        'cierre_contable_en',
+        'cierre_contable_usuario_id',
+        'cierre_contable_legacy',
     ];
 
     protected $casts = [
@@ -56,6 +61,8 @@ class RendicionEstacionamientoCaja extends Model
         'totalredondeo' => 'float',
         'totalredondeoinvitacion' => 'float',
         'sobrantefaltante' => 'float',
+        'cierre_contable_en' => 'datetime',
+        'cierre_contable_legacy' => 'boolean',
     ];
 
     public function empresa()
@@ -106,5 +113,34 @@ class RendicionEstacionamientoCaja extends Model
     public function movimientos()
     {
         return $this->hasMany(RendicionEstacionamientoMovimientoCaja::class, 'rendicion_estacionamiento_caja_id');
+    }
+
+    public function asiento()
+    {
+        return $this->belongsTo(Asiento::class, 'asiento_id');
+    }
+
+    public function cierreContableUsuario()
+    {
+        return $this->belongsTo(Usuario::class, 'cierre_contable_usuario_id');
+    }
+
+    public function tieneCierreContable(): bool
+    {
+        if ((bool) ($this->cierre_contable_legacy ?? false)) {
+            return true;
+        }
+
+        return (int) ($this->asiento_id ?? 0) > 0 && $this->cierre_contable_en !== null;
+    }
+
+    public function esCierreContableLegacy(): bool
+    {
+        return (bool) ($this->cierre_contable_legacy ?? false);
+    }
+
+    public function puedeCerrarContablemente(): bool
+    {
+        return $this->esRendicionTurno() && ! $this->tieneCierreContable();
     }
 }

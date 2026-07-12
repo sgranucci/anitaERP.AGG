@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Pdf\DompdfPaperSupport;
 
 class RecepcionProveedorPdfService
 {
@@ -19,6 +20,7 @@ class RecepcionProveedorPdfService
         $recepcion = $this->repository->find($recepcionId);
         $recepcion->loadMissing([
             'empresas', 'proveedores', 'ordencompras', 'monedas',
+            'depositos.empresas',
             'recepcion_proveedor_articulos.articulos',
             'recepcion_proveedor_articulos.monedas',
             'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
@@ -34,7 +36,7 @@ class RecepcionProveedorPdfService
         $html = view('stock.recepcion_proveedor.com_pdf', compact('recepcion', 'logos', 'total'))->render();
 
         $pdf = app('dompdf.wrapper');
-        $pdf->setPaper('legal', 'portrait');
+        DompdfPaperSupport::aplicar($pdf, DompdfPaperSupport::CONTEXTO_COMPROBANTE);
         $pdf->loadHTML($html, 'UTF-8');
 
         $filename = 'COM_'.preg_replace('/[^\w\-]+/', '_', $recepcion->numerorecepcion).'.pdf';

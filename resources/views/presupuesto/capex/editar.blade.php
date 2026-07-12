@@ -10,6 +10,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('consultar_capex', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -27,7 +30,7 @@
                     </h3>
                     <div class="card-tools">
                         @if (empty($ocultarVolver))
-                            <a href="{{ route('consultar_capex') }}" class="btn btn-outline-info btn-sm">
+                            <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                                 <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                             </a>
                         @endif
@@ -54,7 +57,7 @@
                     <h3 class="card-title">Visualizar Capex - Número {{ $data->codigo ?? '' }} - Id {{ $data->id }} - Proyecto {{ $data->codigoproyecto ?? '' }}</h3>
                 @endif
             </div>
-            <form action="{{ route('actualizar_capex', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" @if(!empty($soloConsulta) && empty($puedeActualizarCapex)) onsubmit="return false;" @endif>
+            <form action="{{ route('actualizar_capex', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" @if(!empty($soloConsulta) && empty($puedeActualizarCapex)) onsubmit="return false;" @endif>
                 @csrf @method("put")
                 @if (! empty($soloConsulta))
                     <input type="hidden" name="origen" value="modal_consulta">

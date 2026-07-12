@@ -8,6 +8,7 @@ Requisiciones
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/enviar-arbol.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/volver-compras.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.banner_confirmando_styles')
 @include('compras.requisicion.partials.banner_enviando_arbol_styles')
@@ -17,8 +18,12 @@ Requisiciones
 <?php use App\Support\Compras\RequisicionListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 @include('compras.requisicion.partials.comprobantes_asociados_modal')
 @include('compras.requisicion.partials.modal_firmante_retome_arbol')
+@include('compras.requisicion.partials.modal_centrocosto_retome_arbol')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -36,7 +41,7 @@ Requisiciones
                         'toggleTarget' => '#panel-filtros-requisicion',
                         'toggleId' => 'btn-toggle-filtros-requisicion',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_requisicion'),
+                        'nuevoRegistroUrl' => route('crear_requisicion', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-requisicion',
                         'nuevoRegistroLabel' => 'Nuevo registro',
                     ])
@@ -98,7 +103,7 @@ Requisiciones
                             </td>
                             <td>
                                 @if (can('editar-requisicion', false))
-                                <a href="{{ route('editar_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="{{ $esProvisorioFila ? 'Editar provisorio' : 'Editar' }}">
+                                <a href="{{ route('editar_requisicion', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="{{ $esProvisorioFila ? 'Editar provisorio' : 'Editar' }}">
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 @if ($esProvisorioFila && can('confirmar-requisicion', false))
@@ -122,19 +127,42 @@ Requisiciones
                                 </button>
                                 @endif
                                 @endif
+                                @include('compras.requisicion.partials.boton_volver_compras', [
+                                    'data' => $data,
+                                    'filtrosQuery' => $retornoListadoQuery,
+                                    'claseBoton' => 'btn-accion-tabla tooltipsC text-warning',
+                                ])
                                 @if (can('listar-requisicion', false) || can('editar-requisicion', false))
                                 <a href="{{ route('imprimir_pdf_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Listar la requisición (PDF)" target="_blank" rel="noopener noreferrer">
                                     <i class="fas fa-print"></i>
                                 </a>
                                 @endif
-                                @if (can('crear-ordencompra', false) && ($data->estado ?? '') === ($estado_aprobada_requisicion ?? ''))
-                                <a href="{{ route('requisicion_wizard_multiples_oc', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC text-success" title="Generar órdenes de compra (oficina y permisos se validan al abrir)">
+                                @php
+                                    $estadoReq = $data->estado ?? '';
+                                    $puedeWizardOcListado = can('crear-ordencompra', false)
+                                        && (
+                                            $estadoReq === ($estado_aprobada_requisicion ?? '')
+                                            || $estadoReq === ($estado_genero_oc_requisicion ?? 'GENERO ORDEN COMPRA')
+                                            || $estadoReq === 'GENERO OC'
+                                        );
+                                @endphp
+                                @if ($puedeWizardOcListado)
+                                <a href="{{ route('requisicion_wizard_multiples_oc', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC text-success" title="Generar órdenes de compra (ítems pendientes; permisos al abrir)">
                                     <i class="fa fa-shopping-cart"></i>
                                 </a>
                                 @endif
+                                @php
+                                    $puedeCumplirListado = can('cumplir-requisicion-compra', false)
+                                        && ($data->estado ?? '') === ($estado_aprobada_requisicion ?? 'APROBADA');
+                                @endphp
+                                @if ($puedeCumplirListado)
+                                <a href="{{ route('crear_cumplir_requisicion_compra', ['requisicion_id' => $data->id]) }}" class="btn-accion-tabla tooltipsC text-info" title="Cumplir requisición (genera transferencia)">
+                                    <i class="fa fa-truck-loading"></i>
+                                </a>
+                                @endif
                                 @if ((int) ($data->ordencompra_vinculadas_count ?? 0) > 0 && (can('editar-requisicion', false) || can('listar-requisicion', false)))
-                                <button type="button" class="btn-accion-tabla tooltipsC text-warning js-requisicion-comprobantes" title="Ver comprobantes asociados (órdenes de compra)" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
-                                    <i class="fas fa-link"></i>
+                                <button type="button" class="btn-accion-tabla tooltipsC text-warning js-requisicion-comprobantes" title="Ver órdenes de compra vinculadas" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
+                                    <i class="fa fa-shopping-cart"></i>
                                 </button>
                                 @endif
                                 @if (can('borrar-requisicion', false)

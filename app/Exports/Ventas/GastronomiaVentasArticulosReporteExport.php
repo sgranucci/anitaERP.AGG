@@ -43,7 +43,7 @@ class GastronomiaVentasArticulosReporteExport implements FromView, ShouldAutoSiz
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
-    private string $colUltima = 'K';
+    private string $colUltima = 'L';
 
     /** @var array<string, mixed> */
     private array $resultado = [];
@@ -97,14 +97,15 @@ class GastronomiaVentasArticulosReporteExport implements FromView, ShouldAutoSiz
             'A' => 16,
             'B' => 32,
             'C' => 10,
-            'D' => 12,
+            'D' => 10,
             'E' => 12,
-            'F' => 14,
-            'G' => 12,
+            'F' => 12,
+            'G' => 14,
             'H' => 12,
-            'I' => 14,
+            'I' => 12,
             'J' => 14,
             'K' => 14,
+            'L' => 14,
         ];
     }
 
@@ -169,7 +170,7 @@ class GastronomiaVentasArticulosReporteExport implements FromView, ShouldAutoSiz
                     $filaUltima++;
                 }
                 if ($filaUltima >= $this->filaCabecerasExcel) {
-                    $sheet->getStyle('C'.$this->filaCabecerasExcel.':K'.$filaUltima)->applyFromArray([
+                    $sheet->getStyle('C'.$this->filaCabecerasExcel.':L'.$filaUltima)->applyFromArray([
                         'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
                     ]);
                 }

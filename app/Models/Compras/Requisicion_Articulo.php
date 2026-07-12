@@ -15,7 +15,7 @@ class Requisicion_Articulo extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [
-        'requisicion_id', 'fechaentrega', 'articulo_id', 'cantidad', 'precio', 'moneda_id', 'cantidadalternativa',
+        'requisicion_id', 'fechaentrega', 'articulo_id', 'cantidad', 'cantidadentregada', 'precio', 'moneda_id', 'cantidadalternativa',
         'detalle', 'centrocostodestino_id', 'preciooriginal', 'motivoahorro', 'partidagasto_id', 'capex_id',
         'precio_origen_etiqueta',
         'anita_nro_interno', 'anita_nro_orden',
@@ -31,6 +31,11 @@ class Requisicion_Articulo extends Model implements Auditable
     public function articulos()
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
+    }
+
+    public function cambiosArticulo()
+    {
+        return $this->hasMany(RequisicionArticuloCambio::class, 'requisicion_articulo_id');
     }
 
     public function monedas()

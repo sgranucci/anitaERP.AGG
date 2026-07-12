@@ -3,18 +3,22 @@ $(function () {
 		window.carpetaBase = window.location.pathname.split('/public')[0] + '/public';
 	}
 
-	var $modal = $('#modalRequisicionFirmanteRetomeArbol');
-	var $lista = $('#requisicionFirmanteRetomeArbolLista');
-	var $error = $('#requisicionFirmanteRetomeArbolError');
-	var $texto = $('#requisicionFirmanteRetomeArbolTexto');
+	var $modalFirmante = $('#modalRequisicionFirmanteRetomeArbol');
+	var $listaFirmante = $('#requisicionFirmanteRetomeArbolLista');
+	var $errorFirmante = $('#requisicionFirmanteRetomeArbolError');
+	var $textoFirmante = $('#requisicionFirmanteRetomeArbolTexto');
+	var $modalCentrocosto = $('#modalRequisicionCentrocostoRetomeArbol');
+	var $listaCentrocosto = $('#requisicionCentrocostoRetomeArbolLista');
+	var $errorCentrocosto = $('#requisicionCentrocostoRetomeArbolError');
+	var $textoCentrocosto = $('#requisicionCentrocostoRetomeArbolTexto');
 	var envioPendiente = null;
 	var enviandoAlArbol = false;
 
-	function limpiarErrorModal() {
+	function limpiarErrorModal($error) {
 		$error.addClass('d-none').text('');
 	}
 
-	function mostrarErrorModal(msg) {
+	function mostrarErrorModal($error, msg) {
 		$error.removeClass('d-none').text(msg || 'No se pudo completar el envío al árbol.');
 	}
 
@@ -34,6 +38,13 @@ $(function () {
 			return '';
 		}
 		return f.nombre || f.usuario || ('Usuario ' + f.id);
+	}
+
+	function etiquetaCentrocosto(cc) {
+		if (!cc) {
+			return '';
+		}
+		return cc.etiqueta || ((cc.codigo || '') + ' ' + (cc.nombre || '')).trim() || ('Centro de costo ' + cc.id);
 	}
 
 	function firmantePorId(firmantes, destinatarioId) {
@@ -67,13 +78,16 @@ $(function () {
 		$('body').append(html);
 	}
 
-	function mostrarBannerEnviandoArbol(firmante, nivel) {
+	function mostrarBannerEnviandoArbol(firmante, nivel, centrocosto) {
 		asegurarBannerEnviandoArbol();
 		var nombre = nombreFirmante(firmante);
 		var detalle = detalleFirmante(firmante);
 		var destHtml = '<strong>Destinatario:</strong> ' + $('<div>').text(nombre).html();
 		if (detalle) {
 			destHtml += '<br><small class="text-muted">' + $('<div>').text(detalle).html() + '</small>';
+		}
+		if (centrocosto) {
+			destHtml += '<br><small class="text-muted"><strong>Centro de costo:</strong> ' + $('<div>').text(etiquetaCentrocosto(centrocosto)).html() + '</small>';
 		}
 		$('#requisicion-banner-enviando-arbol-destinatario').html(destHtml);
 		if (nivel) {
@@ -102,13 +116,40 @@ $(function () {
 			html += '</label>';
 		});
 		html += '</div>';
-		$lista.html(html);
+		$listaFirmante.html(html);
 	}
 
-	function mensajeConfirmacionUnFirmante(firmante, nivel) {
+	function renderCentrosCosto(centrosCosto) {
+		var html = '<div class="list-group">';
+		centrosCosto.forEach(function (cc, idx) {
+			html += '<label class="list-group-item list-group-item-action mb-0">';
+			html += '<input type="radio" name="centrocosto_retome_arbol" class="mr-2" value="' + cc.id + '"' + (idx === 0 ? ' checked' : '') + '>';
+			html += '<strong>' + $('<div>').text(etiquetaCentrocosto(cc)).html() + '</strong>';
+			html += '</label>';
+		});
+		html += '</div>';
+		$listaCentrocosto.html(html);
+	}
+
+	function centrocostoPorId(centrosCosto, centrocostoId) {
+		if (!centrosCosto || !centrosCosto.length || !centrocostoId) {
+			return null;
+		}
+		for (var i = 0; i < centrosCosto.length; i++) {
+			if (parseInt(centrosCosto[i].id, 10) === parseInt(centrocostoId, 10)) {
+				return centrosCosto[i];
+			}
+		}
+		return null;
+	}
+
+	function mensajeConfirmacionUnFirmante(firmante, nivel, centrocosto) {
 		var nombre = nombreFirmante(firmante);
 		var detalle = detalleFirmante(firmante);
 		var msg = '\u00bfEnviar esta requisici\u00f3n al \u00e1rbol de aprobaci\u00f3n?\n\n';
+		if (centrocosto) {
+			msg += 'Centro de costo de destino: ' + etiquetaCentrocosto(centrocosto) + '\n';
+		}
 		msg += 'Destinatario: ' + nombre;
 		if (detalle) {
 			msg += ' (' + detalle + ')';
@@ -119,17 +160,29 @@ $(function () {
 		return msg;
 	}
 
-	function enviarAlArbol(requisicionId, postUrl, destinatarioId, redirectUrl, firmantes, nivel) {
+	function consultarPreview(previewUrl, centrocostoId) {
+		var params = {};
+		if (centrocostoId) {
+			params.centrocostodestino_arbol_id = centrocostoId;
+		}
+		return $.get(previewUrl, params);
+	}
+
+	function enviarAlArbol(requisicionId, postUrl, destinatarioId, redirectUrl, firmantes, nivel, centrocostoId, centrosCosto) {
 		if (enviandoAlArbol) {
 			return;
 		}
 		enviandoAlArbol = true;
 
 		var firmante = firmantePorId(firmantes, destinatarioId);
-		if ($modal.hasClass('show')) {
-			$modal.modal('hide');
+		var centrocosto = centrocostoPorId(centrosCosto, centrocostoId);
+		if ($modalFirmante.hasClass('show')) {
+			$modalFirmante.modal('hide');
 		}
-		mostrarBannerEnviandoArbol(firmante, nivel);
+		if ($modalCentrocosto.hasClass('show')) {
+			$modalCentrocosto.modal('hide');
+		}
+		mostrarBannerEnviandoArbol(firmante, nivel, centrocosto);
 
 		var payload = {
 			_token: $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').first().val(),
@@ -137,6 +190,9 @@ $(function () {
 		};
 		if (destinatarioId) {
 			payload.destinatario_usuario_id = destinatarioId;
+		}
+		if (centrocostoId) {
+			payload.centrocostodestino_arbol_id = centrocostoId;
 		}
 
 		$.ajax({
@@ -150,23 +206,91 @@ $(function () {
 				return;
 			}
 			ocultarBannerEnviandoArbol();
-			mostrarErrorModal((data && data.errores) ? data.errores : 'No se pudo enviar al \u00e1rbol de aprobaci\u00f3n.');
-			if (!$modal.hasClass('show') && firmantes && firmantes.length > 1) {
-				$modal.modal('show');
+			if (data && data.mensaje === 'seleccionar_centrocosto') {
+				mostrarModalCentrocosto(data.centros_costo || [], envioPendiente);
+				return;
+			}
+			mostrarErrorModal($errorFirmante, (data && data.errores) ? data.errores : 'No se pudo enviar al \u00e1rbol de aprobaci\u00f3n.');
+			if (!$modalFirmante.hasClass('show') && firmantes && firmantes.length > 1) {
+				$modalFirmante.modal('show');
 			}
 		}).fail(function (xhr) {
 			ocultarBannerEnviandoArbol();
 			var msg = 'No se pudo enviar al \u00e1rbol de aprobaci\u00f3n.';
-			if (xhr.responseJSON && xhr.responseJSON.errores) {
-				msg = xhr.responseJSON.errores;
+			var data = xhr.responseJSON || null;
+			if (data && data.errores) {
+				msg = data.errores;
+			}
+			if (data && data.mensaje === 'seleccionar_centrocosto') {
+				mostrarModalCentrocosto(data.centros_costo || [], envioPendiente);
+				return;
 			}
 			if (firmantes && firmantes.length > 1) {
-				mostrarErrorModal(msg);
-				$modal.modal('show');
+				mostrarErrorModal($errorFirmante, msg);
+				$modalFirmante.modal('show');
 			} else {
 				alert(msg);
 			}
 		});
+	}
+
+	function mostrarModalCentrocosto(centrosCosto, context) {
+		if (!context) {
+			return;
+		}
+		envioPendiente = context;
+		envioPendiente.centrosCosto = centrosCosto || [];
+		$textoCentrocosto.text('La requisici\u00f3n tiene renglones con distintos centros de costo de destino. Elija con cu\u00e1l continuar el \u00e1rbol de aprobaci\u00f3n.');
+		renderCentrosCosto(envioPendiente.centrosCosto);
+		limpiarErrorModal($errorCentrocosto);
+		$modalCentrocosto.modal('show');
+	}
+
+	function continuarFlujoFirmantes(data, context) {
+		var firmantes = data.firmantes || [];
+		var nivel = data.nivel || null;
+		var centrocostoId = data.centrocosto_arbol_id || context.centrocostoId || null;
+		context.centrocostoId = centrocostoId;
+		context.firmantes = firmantes;
+		context.nivel = nivel;
+
+		if (!data.requiere_seleccion) {
+			var firmanteUnico = firmantes[0] || null;
+			var centrocosto = centrocostoPorId(context.centrosCosto, centrocostoId);
+			if (!window.confirm(mensajeConfirmacionUnFirmante(firmanteUnico, nivel, centrocosto))) {
+				return;
+			}
+			enviarAlArbol(
+				context.requisicionId,
+				context.postUrl,
+				null,
+				context.redirectUrl,
+				firmantes,
+				nivel,
+				centrocostoId,
+				context.centrosCosto
+			);
+			return;
+		}
+
+		$textoFirmante.text('Hay m\u00e1s de un firmante en el nivel ' + (nivel || '') + ' del \u00e1rbol. Elija a qui\u00e9n enviar la requisici\u00f3n.');
+		renderFirmantes(firmantes);
+		limpiarErrorModal($errorFirmante);
+		$modalFirmante.modal('show');
+	}
+
+	function procesarRespuestaPreview(data, context) {
+		if (!data || data.mensaje !== 'ok') {
+			alert((data && data.errores) ? data.errores : 'No se pudieron consultar los firmantes del \u00e1rbol.');
+			return;
+		}
+
+		if (data.requiere_seleccion_centrocosto) {
+			mostrarModalCentrocosto(data.centros_costo || [], context);
+			return;
+		}
+
+		continuarFlujoFirmantes(data, context);
 	}
 
 	function iniciarEnvio($btn) {
@@ -186,36 +310,21 @@ $(function () {
 
 		$btn.prop('disabled', true);
 
-		$.get(previewUrl)
+		var context = {
+			requisicionId: requisicionId,
+			postUrl: postUrl,
+			previewUrl: previewUrl,
+			redirectUrl: redirectUrl,
+			centrocostoId: null,
+			centrosCosto: [],
+			firmantes: [],
+			nivel: null,
+			$btn: $btn
+		};
+
+		consultarPreview(previewUrl, null)
 			.done(function (data) {
-				if (!data || data.mensaje !== 'ok') {
-					alert((data && data.errores) ? data.errores : 'No se pudieron consultar los firmantes del \u00e1rbol.');
-					return;
-				}
-
-				var firmantes = data.firmantes || [];
-				var nivel = data.nivel || null;
-
-				if (!data.requiere_seleccion) {
-					var firmanteUnico = firmantes[0] || null;
-					if (!window.confirm(mensajeConfirmacionUnFirmante(firmanteUnico, nivel))) {
-						return;
-					}
-					enviarAlArbol(requisicionId, postUrl, null, redirectUrl, firmantes, nivel);
-					return;
-				}
-
-				envioPendiente = {
-					requisicionId: requisicionId,
-					postUrl: postUrl,
-					redirectUrl: redirectUrl,
-					nivel: nivel,
-					firmantes: firmantes
-				};
-				$texto.text('Hay m\u00e1s de un firmante en el nivel ' + (nivel || '') + ' del \u00e1rbol. Elija a qui\u00e9n enviar la requisici\u00f3n.');
-				renderFirmantes(firmantes);
-				limpiarErrorModal();
-				$modal.modal('show');
+				procesarRespuestaPreview(data, context);
 			})
 			.fail(function (xhr) {
 				var msg = 'No se pudieron consultar los firmantes del \u00e1rbol.';
@@ -236,16 +345,47 @@ $(function () {
 		iniciarEnvio($(this));
 	});
 
+	$('#requisicionCentrocostoRetomeArbolConfirmar').on('click', function () {
+		if (!envioPendiente || enviandoAlArbol) {
+			return;
+		}
+		var seleccionado = parseInt($listaCentrocosto.find('input[name="centrocosto_retome_arbol"]:checked').val(), 10) || 0;
+		if (seleccionado <= 0) {
+			mostrarErrorModal($errorCentrocosto, 'Seleccione un centro de costo de destino para continuar.');
+			return;
+		}
+		limpiarErrorModal($errorCentrocosto);
+		var $btnConfirmar = $(this);
+		$btnConfirmar.prop('disabled', true);
+		envioPendiente.centrocostoId = seleccionado;
+
+		consultarPreview(envioPendiente.previewUrl, seleccionado)
+			.done(function (data) {
+				$modalCentrocosto.modal('hide');
+				procesarRespuestaPreview(data, envioPendiente);
+			})
+			.fail(function (xhr) {
+				var msg = 'No se pudieron consultar los firmantes del \u00e1rbol.';
+				if (xhr.responseJSON && xhr.responseJSON.errores) {
+					msg = xhr.responseJSON.errores;
+				}
+				mostrarErrorModal($errorCentrocosto, msg);
+			})
+			.always(function () {
+				$btnConfirmar.prop('disabled', false);
+			});
+	});
+
 	$('#requisicionFirmanteRetomeArbolConfirmar').on('click', function () {
 		if (!envioPendiente || enviandoAlArbol) {
 			return;
 		}
-		var seleccionado = parseInt($lista.find('input[name="firmante_retome_arbol"]:checked').val(), 10) || 0;
+		var seleccionado = parseInt($listaFirmante.find('input[name="firmante_retome_arbol"]:checked').val(), 10) || 0;
 		if (seleccionado <= 0) {
-			mostrarErrorModal('Seleccione un firmante para continuar.');
+			mostrarErrorModal($errorFirmante, 'Seleccione un firmante para continuar.');
 			return;
 		}
-		limpiarErrorModal();
+		limpiarErrorModal($errorFirmante);
 		var $btnConfirmar = $(this);
 		$btnConfirmar.prop('disabled', true);
 		enviarAlArbol(
@@ -254,16 +394,27 @@ $(function () {
 			seleccionado,
 			envioPendiente.redirectUrl,
 			envioPendiente.firmantes,
-			envioPendiente.nivel
+			envioPendiente.nivel,
+			envioPendiente.centrocostoId,
+			envioPendiente.centrosCosto
 		);
 	});
 
-	$modal.on('hidden.bs.modal', function () {
+	$modalFirmante.on('hidden.bs.modal', function () {
 		if (!enviandoAlArbol) {
 			envioPendiente = null;
 		}
-		$lista.empty();
-		limpiarErrorModal();
+		$listaFirmante.empty();
+		limpiarErrorModal($errorFirmante);
 		$('#requisicionFirmanteRetomeArbolConfirmar').prop('disabled', false);
+	});
+
+	$modalCentrocosto.on('hidden.bs.modal', function () {
+		if (!enviandoAlArbol && !$modalFirmante.hasClass('show')) {
+			envioPendiente = null;
+		}
+		$listaCentrocosto.empty();
+		limpiarErrorModal($errorCentrocosto);
+		$('#requisicionCentrocostoRetomeArbolConfirmar').prop('disabled', false);
 	});
 });

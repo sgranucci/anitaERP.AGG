@@ -23,6 +23,9 @@
 use App\Support\Presupuesto\CapexListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -39,7 +42,7 @@ use App\Support\Presupuesto\CapexListadoFiltros; ?>
                         'toggleTarget' => '#panel-filtros-capex',
                         'toggleId' => 'btn-toggle-filtros-capex',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_capex'),
+                        'nuevoRegistroUrl' => route('crear_capex', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-capex',
                     ])
                 </div>
@@ -75,16 +78,11 @@ use App\Support\Presupuesto\CapexListadoFiltros; ?>
                         </thead>
                         <tbody>
                             @forelse ($capex as $data)
-                            <tr>
-                                <td>
-                                    @include('presupuesto.partials.celda_link_consulta', [
-                                        'mostrarLinks' => true,
-                                        'puede' => $puede_ver_capex ?? false,
-                                        'id' => $data->id ?? 0,
-                                        'routeName' => 'editar_capex',
-                                        'texto' => $data->id,
-                                    ])
-                                </td>
+                            @php
+                                $esAnuladoFila = ($data->estado ?? '') === 'ANULADO';
+                            @endphp
+                            <tr @if($esAnuladoFila) class="table-secondary" @endif>
+                                <td>{{ $data->id }}</td>
                                 <td>
                                     @include('presupuesto.partials.celda_link_consulta', [
                                         'mostrarLinks' => true,
@@ -109,38 +107,16 @@ use App\Support\Presupuesto\CapexListadoFiltros; ?>
                                         'puede' => $puede_ver_centrocosto ?? false,
                                         'id' => $data->centrocosto_id ?? 0,
                                         'routeName' => 'editar_centrocosto',
-                                        'texto' => $data->nombrecentrocosto ?? '',
+                                        'texto' => trim(($data->codigocentrocosto ?? '').' '.($data->nombrecentrocosto ?? '')),
                                     ])
                                 </td>
-                                <td>
-                                    @include('presupuesto.partials.celda_link_consulta', [
-                                        'mostrarLinks' => true,
-                                        'puede' => $puede_ver_capex ?? false,
-                                        'id' => $data->id ?? 0,
-                                        'routeName' => 'editar_capex',
-                                        'texto' => $data->nombre ?? '',
-                                    ])
-                                </td>
+                                <td>{{ $data->nombre ?? '' }}</td>
                                 <td>{{ $data->detalle ?? '' }}</td>
+                                <td>{{ $data->codigoproyecto }}</td>
+                                <td>{{ $data->codigo }}</td>
                                 <td>
-                                    @include('presupuesto.partials.celda_link_consulta', [
-                                        'mostrarLinks' => true,
-                                        'puede' => $puede_ver_capex ?? false,
-                                        'id' => $data->id ?? 0,
-                                        'routeName' => 'editar_capex',
-                                        'texto' => $data->codigoproyecto,
-                                    ])
+                                    @include('presupuesto.capex.partials.estado_badge', ['estado' => $data->estado ?? ''])
                                 </td>
-                                <td>
-                                    @include('presupuesto.partials.celda_link_consulta', [
-                                        'mostrarLinks' => true,
-                                        'puede' => $puede_ver_capex ?? false,
-                                        'id' => $data->id ?? 0,
-                                        'routeName' => 'editar_capex',
-                                        'texto' => $data->codigo,
-                                    ])
-                                </td>
-                                <td>{{ $data->estado }}</td>
                                 <td>
                                     <ul class="mb-0 pl-3">
                                         @foreach($data->capex_partidas as $partida)
@@ -156,7 +132,7 @@ use App\Support\Presupuesto\CapexListadoFiltros; ?>
                                 </td>
                                 <td class="text-nowrap">
                                     @if (can('editar-capex', false))
-                                        <a href="{{ route('editar_capex', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                        <a href="{{ route('editar_capex', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                             <i class="fa fa-edit"></i>
                                         </a>
                                     @endif

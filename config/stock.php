@@ -14,6 +14,15 @@ return [
     'transferencia_horas_validez_token' => (int) env('STOCK_TRANSFERENCIA_HORAS_TOKEN', 168),
 
     /*
+    | Ventana de edición de movimientos de stock.
+    | true  → solo se pueden modificar o eliminar movimientos cuya fecha sea la del día.
+    |          Los de fechas anteriores quedan únicamente con la opción Revertir (auditable).
+    | false → edición/eliminación sin restricción de fecha (comportamiento histórico).
+    | Para AGG queda activo.
+    */
+    'movimiento_edicion_solo_dia' => filter_var(env('STOCK_MOV_EDICION_SOLO_DIA', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
     | stkmov Anita legacy desactivado para procesos ERP de stock (mov. manual, transferencias,
     | recuento, préstamos, recepción proveedor COM). Facturación ventas sigue con su bridge.
     */
@@ -92,6 +101,7 @@ return [
             'RCAJP' => null,
             'RCAJN' => null,
             'RCAJR' => null,
+            'NPUBJ' => null,
             // Préstamos: solo ERP (sin stkmov Anita).
             'PRSAL' => null,
             'PRING' => null,

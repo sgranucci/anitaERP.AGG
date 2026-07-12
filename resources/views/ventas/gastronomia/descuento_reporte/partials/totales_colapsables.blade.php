@@ -15,7 +15,14 @@
                 aria-expanded="false"
                 aria-controls="collapse-totales-descuentos">
             <i class="fa fa-chevron-down mr-1"></i>
-            Totales por {{ ($filtros['agrupar_por'] ?? 'codigo_descuento') === 'cliente_descuento' ? 'cliente' : 'descuento' }}
+            Totales por @php
+                echo match ($filtros['agrupar_por'] ?? 'codigo_descuento') {
+                    'cliente_descuento' => 'cliente',
+                    'mozo_descuento' => 'mozo',
+                    'cliente_vip' => 'cliente VIP',
+                    default => 'descuento',
+                };
+            @endphp
             <span class="text-muted font-weight-normal ml-2">
                 ({{ count($resultado['totales'] ?? []) }} sectores)
             </span>

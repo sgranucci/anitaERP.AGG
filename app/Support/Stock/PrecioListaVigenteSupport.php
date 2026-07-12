@@ -4,6 +4,7 @@ namespace App\Support\Stock;
 
 use App\Models\Stock\Precio;
 use Carbon\Carbon;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -12,16 +13,58 @@ use Illuminate\Support\Facades\DB;
  */
 class PrecioListaVigenteSupport
 {
+    private const JOIN_ALIAS_VIGENTE = 'precio_vigente_filtro';
+
+    /**
+     * Subquery con el id vigente por par articulo_id + listaprecio_id.
+     *
+     * @param  int[]|null  $articuloIds
+     */
+    public static function subqueryIdsVigentes(
+        string $fechaReferencia,
+        ?array $articuloIds = null,
+        ?int $listaprecioId = null
+    ): QueryBuilder {
+        $maxFechaPorPar = DB::table('precio')
+            ->select('articulo_id', 'listaprecio_id')
+            ->selectRaw('MAX(fechavigencia) as max_fv');
+        self::aplicarAlcanceSubqueryVigente($maxFechaPorPar, $fechaReferencia, $articuloIds, $listaprecioId);
+        $maxFechaPorPar->groupBy('articulo_id', 'listaprecio_id');
+
+        $idsVigentes = DB::table('precio as p2')
+            ->selectRaw('MAX(p2.id) as vigente_id')
+            ->joinSub($maxFechaPorPar, 'vf', function ($join) {
+                $join->on('p2.articulo_id', '=', 'vf.articulo_id')
+                    ->on('p2.listaprecio_id', '=', 'vf.listaprecio_id')
+                    ->on('p2.fechavigencia', '=', 'vf.max_fv');
+            });
+        self::aplicarAlcanceSubqueryVigente($idsVigentes, $fechaReferencia, $articuloIds, $listaprecioId, 'p2');
+        $idsVigentes->groupBy('p2.articulo_id', 'p2.listaprecio_id');
+
+        return $idsVigentes;
+    }
+
     /**
      * Restringe el query a una sola fila vigente por articulo_id + listaprecio_id.
      *
      * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     * @param  int[]|null  $articuloIds
      */
-    public static function aplicarFiltroVigenteEnQuery($query, string $fechaReferencia, string $precioAlias = 'precio'): void
-    {
-        $query->whereRaw(
-            "{$precioAlias}.id = (SELECT MAX(p4.id) FROM precio AS p4 WHERE p4.articulo_id = {$precioAlias}.articulo_id AND p4.listaprecio_id = {$precioAlias}.listaprecio_id AND p4.fechavigencia <= ? AND p4.fechavigencia = (SELECT MAX(p5.fechavigencia) FROM precio AS p5 WHERE p5.articulo_id = {$precioAlias}.articulo_id AND p5.listaprecio_id = {$precioAlias}.listaprecio_id AND p5.fechavigencia <= ?))",
-            [$fechaReferencia, $fechaReferencia]
+    public static function aplicarFiltroVigenteEnQuery(
+        $query,
+        string $fechaReferencia,
+        string $precioAlias = 'precio',
+        ?array $articuloIds = null,
+        ?int $listaprecioId = null
+    ): void {
+        $joinAlias = self::JOIN_ALIAS_VIGENTE;
+
+        $query->joinSub(
+            self::subqueryIdsVigentes($fechaReferencia, $articuloIds, $listaprecioId),
+            $joinAlias,
+            function ($join) use ($precioAlias, $joinAlias) {
+                $join->on("{$precioAlias}.id", '=', "{$joinAlias}.vigente_id");
+            }
         );
     }
 
@@ -41,9 +84,8 @@ class PrecioListaVigenteSupport
         $precios = Precio::query()
             ->select('precio.articulo_id', 'precio.precio', 'precio.moneda_id', 'moneda.abreviatura as moneda_abreviatura')
             ->leftJoin('moneda', 'moneda.id', '=', 'precio.moneda_id')
-            ->whereIn('precio.articulo_id', $articuloIds)
-            ->where('precio.listaprecio_id', $listaprecioId);
-        self::aplicarFiltroVigenteEnQuery($precios, $fecha);
+            ->whereIn('precio.articulo_id', $articuloIds);
+        self::aplicarFiltroVigenteEnQuery($precios, $fecha, 'precio', $articuloIds, $listaprecioId);
         $precios = $precios->get();
 
         $mapa = [];
@@ -96,5 +138,28 @@ class PrecioListaVigenteSupport
             'nombre' => $nombres[$id],
             'mostrar' => true,
         ];
+    }
+
+    /**
+     * @param  int[]|null  $articuloIds
+     */
+    private static function aplicarAlcanceSubqueryVigente(
+        QueryBuilder $query,
+        string $fechaReferencia,
+        ?array $articuloIds,
+        ?int $listaprecioId,
+        string $alias = ''
+    ): void {
+        $prefix = $alias !== '' ? "{$alias}." : '';
+
+        $query->where("{$prefix}fechavigencia", '<=', $fechaReferencia);
+
+        if ($articuloIds !== null && $articuloIds !== []) {
+            $query->whereIn("{$prefix}articulo_id", $articuloIds);
+        }
+
+        if ($listaprecioId !== null && $listaprecioId > 0) {
+            $query->where("{$prefix}listaprecio_id", $listaprecioId);
+        }
     }
 }

@@ -10,7 +10,7 @@ class GastronomiaCorregirLeyendaAsientoCompensacionFf extends Command
     protected $signature = 'gastronomia:corregir-leyenda-asiento-compensacion-ff
                             {--dry-run : Solo muestra qué se actualizaría}';
 
-    protected $description = 'Corrige leyenda «Reduccion FF Maquinas» en asientos compensación FF ya grabados (ERP + Anita ctamov)';
+    protected $description = 'Corrige leyenda «Reducion de Fondo fijo» en asientos compensación FF ya grabados (ERP + Anita ctamov)';
 
     public function handle(CorregirLeyendaAsientoCompensacionFfSupport $support): int
     {

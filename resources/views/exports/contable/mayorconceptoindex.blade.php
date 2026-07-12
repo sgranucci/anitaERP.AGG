@@ -71,15 +71,23 @@
                 $panelAudExcel = $auditoriaPanel ?? null;
             @endphp
             @if (! empty($panelAudExcel))
-                <tr>
-                    <td colspan="12">
-                        <strong>Auditoría:</strong>
-                        Caja/banco {{ ! empty($panelAudExcel['disponibilidad']['cuadra']) ? 'OK' : 'Δ' }}
-                        @if (! empty($panelAudExcel['contrapartidas']))
-                            · Contrapartidas {{ ! empty($panelAudExcel['contrapartidas']['cuadra']) ? 'OK' : 'Δ ('.((int) ($panelAudExcel['contrapartidas']['cuentas_descuadradas'] ?? 0)).' cuentas)' }}
-                        @endif
-                    </td>
-                </tr>
+                @php
+                    $concExcel = $panelAudExcel['conciliacion'] ?? null;
+                @endphp
+                @if (! empty($concExcel))
+                    <tr>
+                        <td colspan="12">
+                            <strong>Conciliación analítico vs concepto:</strong>
+                            {{ (int) ($concExcel['asientos_cuadrados'] ?? 0) }}/{{ (int) ($concExcel['asientos_analizados'] ?? 0) }} asientos
+                            ({{ number_format((float) ($concExcel['porcentaje_cuadrado'] ?? 0), 1, ',', '.') }}%)
+                            @if (! empty($concExcel['cuadra']))
+                                — OK
+                            @else
+                                — {{ (int) ($concExcel['asientos_descuadrados'] ?? 0) }} divergencia(s)
+                            @endif
+                        </td>
+                    </tr>
+                @endif
             @endif
             <tr>
                 <td colspan="12"><strong>Detalle de movimientos</strong></td>

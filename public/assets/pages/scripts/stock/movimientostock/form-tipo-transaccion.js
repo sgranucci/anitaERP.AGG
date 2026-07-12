@@ -24,6 +24,7 @@
                 destinoBienUso: false,
                 nombre: '',
                 abreviatura: '',
+                bajaNpu: false,
             };
         }
 
@@ -33,6 +34,8 @@
             manejaContabilidad: String($h.attr('data-maneja-contabilidad') || '') === '1',
             origenBienUso: String($h.attr('data-origen-bien-uso') || '') === '1',
             destinoBienUso: String($h.attr('data-destino-bien-uso') || '') === '1',
+            requiereAprobacion: String($h.attr('data-requiere-aprobacion') || '') === '1',
+            bajaNpu: String($h.attr('data-baja-npu') || '') === '1',
             nombre: String($('#tipotransaccion_stock_id_descripcion').val() || '').trim(),
             abreviatura: String($('#tipotransaccion_stock_id_abreviatura').val() || '').trim(),
         };
@@ -72,12 +75,17 @@
         $hidden.attr('data-maneja-contabilidad', normalizarFlag(data.maneja_contabilidad) ? '1' : '0');
         $hidden.attr('data-origen-bien-uso', normalizarFlag(data.origen_bien_uso) ? '1' : '0');
         $hidden.attr('data-destino-bien-uso', normalizarFlag(data.destino_bien_uso) ? '1' : '0');
+        $hidden.attr('data-requiere-aprobacion', normalizarFlag(data.requiere_aprobacion) ? '1' : '0');
+        $hidden.attr('data-baja-npu', normalizarFlag(data.baja_npu) ? '1' : '0');
 
         $('#tipotransaccion_stock_id_abreviatura').val(data.abreviatura || '');
         $('#tipotransaccion_stock_id_descripcion').val(data.nombre || data.descripcion || '');
 
         actualizarLinkEditarTipotransaccionStock($ctx, id);
         $hidden.trigger('change');
+        if (typeof window.msAplicarModoBajaNpuEnTabla === 'function') {
+            window.msAplicarModoBajaNpuEnTabla();
+        }
 
         return true;
     };
@@ -91,6 +99,8 @@
             maneja_contabilidad: false,
             origen_bien_uso: false,
             destino_bien_uso: false,
+            requiere_aprobacion: false,
+            baja_npu: false,
         });
     };
 
@@ -120,6 +130,10 @@
 
     window.enfocarDepositoMovimientoStock = function () {
         return enfocarCampoMovStock(selectorCodigoDepositoMovimientoStock());
+    };
+
+    window.enfocarPrimerArticuloMovimientoStock = function () {
+        return enfocarCampoMovStock('#tabla-items-movimientostock .codigoarticulo');
     };
 
     window.enfocarSiguienteCampoTrasTipoTransaccionMov = function () {

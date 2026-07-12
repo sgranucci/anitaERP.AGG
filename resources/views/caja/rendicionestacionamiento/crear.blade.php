@@ -21,6 +21,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('rendicionestacionamiento', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -40,12 +43,12 @@
                 </span>
                 @endif
                 <div class="card-tools ml-auto">
-                    <a href="{{ route('rendicionestacionamiento') }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{ route('guardar_rendicionestacionamiento') }}" id="form-rendicion-estacionamiento" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{ route('guardar_rendicionestacionamiento', $filtrosQuery ?? []) }}" id="form-rendicion-estacionamiento" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf
                 <div class="card-body">
                     @include('caja.rendicionestacionamiento.form')

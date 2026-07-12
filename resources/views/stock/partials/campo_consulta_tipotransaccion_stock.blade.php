@@ -19,6 +19,8 @@
     $manejaContabilidad = (bool) ($maneja_contabilidad ?? false);
     $origenBienUso = (bool) ($origen_bien_uso ?? false);
     $destinoBienUso = (bool) ($destino_bien_uso ?? false);
+    $requiereAprobacion = (bool) ($requiere_aprobacion ?? false);
+    $bajaNpu = (bool) ($baja_npu ?? false);
     $puedeAbrirAbm = can('editar-tipos-transaccion-stock', false) || can('listar-tipos-transaccion-stock', false);
     $editUrl = ($tipoId > 0 && $puedeAbrirAbm)
         ? route('editar_tipotransaccion_stock', ['id' => $tipoId, 'origen' => 'modal_consulta', 'vista' => 'consulta'])
@@ -36,6 +38,8 @@
                 data-maneja-contabilidad="{{ $manejaContabilidad ? '1' : '0' }}"
                 data-origen-bien-uso="{{ $origenBienUso ? '1' : '0' }}"
                 data-destino-bien-uso="{{ $destinoBienUso ? '1' : '0' }}"
+                data-requiere-aprobacion="{{ $requiereAprobacion ? '1' : '0' }}"
+                data-baja-npu="{{ $bajaNpu ? '1' : '0' }}"
                 @if ($required && ! $soloLectura) required @endif>
             @if ($soloLectura)
                 <input type="text" class="form-control abreviaturatipotransaccionstock"
@@ -44,7 +48,7 @@
                     id="{{ $inputId }}_descripcion" value="{{ $nombre }}" readonly
                     style="min-width: 0; flex: 1 1 auto;">
             @else
-                <button type="button" title="Consulta tipos de transacci&oacute;n (F2)" class="btn-accion-tabla consultatipotransaccionstock flex-shrink-0">
+                <button type="button" title="Consulta tipos de transacci&oacute;n (F1)" class="btn-accion-tabla consultatipotransaccionstock flex-shrink-0">
                     <i class="fa fa-search text-primary"></i>
                 </button>
                 @if ($mostrarEditar && $puedeAbrirAbm)
@@ -56,7 +60,7 @@
                 @endif
                 <input type="text" class="form-control abreviaturatipotransaccionstock"
                     id="{{ $inputId }}_abreviatura" value="{{ $abreviatura }}"
-                    placeholder="Abrev." autocomplete="off" style="width: 5.5rem; flex-shrink: 0;">
+                    placeholder="Abrev." title="Abreviatura; Enter valida; F1 consulta" autocomplete="off" style="width: 5.5rem; flex-shrink: 0;">
                 <input type="text" class="form-control nombretipotransaccionstock text-truncate"
                     id="{{ $inputId }}_descripcion" value="{{ $nombre }}"
                     placeholder="Descripci&oacute;n" readonly

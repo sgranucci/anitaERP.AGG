@@ -27,7 +27,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
 
     public function handle(GastronomiaConciliacionDiariaReporteService $service): int
     {
-        @ini_set('memory_limit', '1024M');
+        @ini_set('memory_limit', '2048M');
         @set_time_limit(0);
 
         $config = config('gastronomia.conciliacion_diaria_reporte', []);
@@ -325,6 +325,25 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             : '',
                         $this->fmtDiff($ctrlAsientos['diff_rendg_asientos'] ?? null),
                         $ctrlAsientos['estado'] ?? '—',
+                    ));
+                }
+
+                foreach ($service->filasControlFlashDesdeDia($dia) as $ctrlFlash) {
+                    $segmento = (string) ($ctrlFlash['segmento_flash'] ?? '');
+                    $etiqueta = match ($segmento) {
+                        'gastro' => 'CONTROL FLASH GASTRO (AyB)',
+                        'estacionamiento' => 'CONTROL FLASH ESTAC.',
+                        default => 'CONTROL FLASH (caja)',
+                    };
+                    $this->line(sprintf(
+                        '  <comment>%s</comment>: ERP $ %s | rendg $ %s | flash $ %s | Δ rendg↔flash $ %s | Δ ERP↔flash $ %s | %s',
+                        $etiqueta,
+                        $this->fmt($ctrlFlash['ventas_erp'] ?? 0),
+                        $this->fmt($ctrlFlash['rendgastro_neto'] ?? null),
+                        $this->fmt($ctrlFlash['total_flash'] ?? 0),
+                        $this->fmtDiff($ctrlFlash['diff_rendg_flash'] ?? null),
+                        $this->fmtDiff($ctrlFlash['diff_erp_flash'] ?? null),
+                        $ctrlFlash['estado'] ?? '—',
                     ));
                 }
 

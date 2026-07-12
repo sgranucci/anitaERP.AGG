@@ -19,6 +19,12 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('consultar_ordencompra', $filtrosQuery ?? []);
+    $formRouteParams = isset($data) && $data
+        ? ['id' => $data->id] + ($filtrosQuery ?? [])
+        : ($filtrosQuery ?? []);
+@endphp
 <div class="row" id="ordencompra-editar-root">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -110,7 +116,7 @@
                 </h3>
                 <div class="card-tools">
                     @if (empty($acceso_visualizacion_por_hash) && empty($ocultarVolver))
-                        <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-info btn-sm">
+                        <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
                     @endif
@@ -152,11 +158,20 @@
                                 <button type="submit" class="btn btn-warning btn-sm">Reactivar a pendiente</button>
                             </form>
                         @endif
+                        @if (!empty($oc_revertir_cierre_lineas['puede_revertir']) && can('actualizar-ordencompra', false))
+                            <form action="{{ route('ordencompra_revertir_cierre_lineas', ['id' => $data->id]) }}" method="POST" class="d-inline"
+                                onsubmit="return confirm('¿Reabrir {{ count($oc_revertir_cierre_lineas['lineas'] ?? []) }} línea(s) cerrada(s) por error?\n\nSaldo pendiente de recepción: {{ number_format((float) ($oc_revertir_cierre_lineas['cantidad_pendiente_total'] ?? 0), 2, ',', '.') }}\n\nLa OC volverá a APROBADA si corresponde según recepciones confirmadas.');">
+                                @csrf
+                                <button type="submit" class="btn btn-warning btn-sm" title="Reabre líneas cerradas por error en recepción y recalcula el saldo pendiente">
+                                    <i class="fa fa-undo"></i> Revertir cierre de líneas
+                                </button>
+                            </form>
+                        @endif
                     @endif
                 </div>
             </div>
 
-            <form action="{{ isset($data) && $data ? route('actualizar_ordencompra', ['id' => $data->id]) : route('guardar_ordencompra') }}"
+            <form action="{{ isset($data) && $data ? route('actualizar_ordencompra', $formRouteParams) : route('guardar_ordencompra', $filtrosQuery ?? []) }}"
                 method="POST" id="form-ordencompra-general" class="form-horizontal form--label-right" enctype="multipart/form-data" autocomplete="off" novalidate>
                 @csrf
                 @if (isset($data) && $data)
@@ -218,10 +233,10 @@
                 @php
                     $wizardRequisicionMetaJson = json_encode([
                         'requisicion_id' => (int) $wizardRequisicionId,
-                        'post_url' => route('requisicion_generar_multiples_oc', ['id' => (int) $wizardRequisicionId]),
+                        'post_url' => urlAppDesdeRoute('requisicion_generar_multiples_oc', ['id' => (int) $wizardRequisicionId]),
                         'csrf' => csrf_token(),
                         'puede_enviar_proveedor' => can('editar-ordencompra', false),
-                        'volver_url' => route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]),
+                        'volver_url' => urlAppDesdeRoute('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]),
                     ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
                 @endphp
                 <script type="application/json" id="wizard-requisicion-multiples-meta">{!! $wizardRequisicionMetaJson !!}</script>

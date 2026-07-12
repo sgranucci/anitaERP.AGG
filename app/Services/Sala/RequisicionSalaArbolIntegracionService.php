@@ -22,6 +22,7 @@ use App\Support\Navegacion\ModoConsultaUrlSupport;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Mail;
 
 /**
@@ -312,14 +313,23 @@ class RequisicionSalaArbolIntegracionService
             return;
         }
         $tipoarbol = $this->nombreTipoArbol();
-        Mail::to($usuario->email)->send(new MailArbolAprobacion(
-            $req,
-            $tipoarbol,
-            $linkAprobacion,
-            $linkRechazo,
-            $linkVisualizar,
-            $mailExtras
-        ));
+        try {
+            Mail::to($usuario->email)->queue(new MailArbolAprobacion(
+                $req,
+                $tipoarbol,
+                $linkAprobacion,
+                $linkRechazo,
+                $linkVisualizar,
+                $mailExtras
+            ));
+        } catch (\Throwable $e) {
+            Log::error('RequisicionSala arbol: falló encolar mail de aprobación', [
+                'requisicion_sala_id' => $req->id,
+                'usuario_id' => $uid,
+                'email' => $usuario->email,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /** @return array<string, mixed> */
@@ -363,12 +373,21 @@ class RequisicionSalaArbolIntegracionService
             'sala/requisicion-sala/'.$requisicionId.'/editar'
         );
 
-        Mail::to($solicitante->email)->send(new MailRequisicionSalaRechazoArbol(
-            $solicitante,
-            $req,
-            $rechazador,
-            trim($observacion),
-            $linkEditar
-        ));
+        try {
+            Mail::to($solicitante->email)->queue(new MailRequisicionSalaRechazoArbol(
+                $solicitante,
+                $req,
+                $rechazador,
+                trim($observacion),
+                $linkEditar
+            ));
+        } catch (\Throwable $e) {
+            Log::error('RequisicionSala arbol: falló encolar mail de rechazo al solicitante', [
+                'requisicion_sala_id' => $requisicionId,
+                'solicitante_id' => $solicitanteId,
+                'email' => $solicitante->email,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

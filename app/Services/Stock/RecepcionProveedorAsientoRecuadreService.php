@@ -4,12 +4,13 @@ namespace App\Services\Stock;
 
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Stock\RecepcionProveedorAsientoAnitaCtamovSupport;
+use App\Support\Stock\RecepcionProveedorCtamovCuadreSupport;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Recuadra asientos de recepciones ERP (Σ cant×precio de línea, sin descuento de pie de OC)
+ * Recuadra asientos de recepciones ERP (Σ cant×precio de línea; precio neto al precargar desde OC).
  * y sincroniza contab.ctamov en Anita.
  */
 class RecepcionProveedorAsientoRecuadreService
@@ -171,10 +172,17 @@ class RecepcionProveedorAsientoRecuadreService
 
         $totalesAnita = RecepcionProveedorAsientoAnitaCtamovSupport::totalesCtamovRecepcion($recepcion);
         $debeAnita = $totalesAnita !== null ? round((float) $totalesAnita['debe'], 2) : null;
+        $haberAnita = $totalesAnita !== null ? round((float) ($totalesAnita['haber'] ?? 0), 2) : null;
+        $evaluacionCtamov = RecepcionProveedorCtamovCuadreSupport::evaluarContraErp(
+            $recepcion,
+            $movimientos,
+            $debeNuevo,
+            $tol,
+        );
         $diffAnita = $debeAnita !== null ? round($debeNuevo - $debeAnita, 2) : null;
 
         $necesitaErp = ! $soloAnita && abs($diffErp) >= $tol;
-        $necesitaAnita = $debeAnita === null || abs((float) $diffAnita) >= $tol;
+        $necesitaAnita = (bool) ($evaluacionCtamov['requiere_reparacion'] ?? false);
 
         $base = [
             'recepcion_id' => (int) $recepcion->id,
@@ -183,8 +191,12 @@ class RecepcionProveedorAsientoRecuadreService
             'debe_esperado' => $debeNuevo,
             'debe_erp' => $debeErp,
             'debe_anita' => $debeAnita,
+            'haber_anita' => $haberAnita,
+            'lineas_anita' => (int) ($evaluacionCtamov['lineas_anita'] ?? 0),
+            'lineas_erp' => (int) ($evaluacionCtamov['lineas_erp'] ?? 0),
             'diff_erp' => $diffErp,
             'diff_anita' => $diffAnita,
+            'motivos_anita' => $evaluacionCtamov['motivos'] ?? [],
         ];
 
         if (! $necesitaErp && ! $necesitaAnita) {

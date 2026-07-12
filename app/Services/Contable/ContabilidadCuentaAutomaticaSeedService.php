@@ -17,6 +17,22 @@ class ContabilidadCuentaAutomaticaSeedService
         CuentaAutomaticaClaves::CAJA_CHEQUES_DIFERIDOS => '211010013',
         CuentaAutomaticaClaves::CAJA_VALORES_A_DEPOSITAR => '111040000',
         CuentaAutomaticaClaves::STOCK_TRANSFERENCIA_OTROS_ACTIVOS => '117010001',
+        CuentaAutomaticaClaves::CIERRE_ESTACIONAMIENTO_VENTAS => '415010003',
+        CuentaAutomaticaClaves::CIERRE_ESTACIONAMIENTO_DIFERENCIA_CAJA => '521280004',
+        CuentaAutomaticaClaves::CIERRE_VENDING_VENTAS => '414010001',
+        CuentaAutomaticaClaves::CIERRE_VENDING_DIFERENCIA_CAJA => '411010001',
+        CuentaAutomaticaClaves::CIERRE_BINGO_PREMIO53 => '521050001',
+        CuentaAutomaticaClaves::CIERRE_BINGO_EFECTIVO => '111010001',
+        CuentaAutomaticaClaves::CIERRE_BINGO_POZO_BINGO => '211010006',
+        CuentaAutomaticaClaves::CIERRE_BINGO_PANTALLA => '521040006',
+        CuentaAutomaticaClaves::CIERRE_BINGO_OTROS_PREMIOS => '521040001',
+        CuentaAutomaticaClaves::CIERRE_BINGO_DIFERENCIA_CAJA => '521280004',
+        CuentaAutomaticaClaves::CIERRE_BINGO_VENTAS => '411010001',
+        CuentaAutomaticaClaves::CIERRE_BINGO_POZO58 => '521030001',
+        CuentaAutomaticaClaves::CIERRE_BINGO_PAGO_HOSPITAL => '521020002',
+        CuentaAutomaticaClaves::CIERRE_BINGO_CONT_HOSPITAL => '215010003',
+        CuentaAutomaticaClaves::VENTAS_IVA_DEBITO_FISCAL => '214010009',
+        CuentaAutomaticaClaves::VENTAS_IVA_CREDITO_FISCAL => '114010011',
     ];
 
     /**

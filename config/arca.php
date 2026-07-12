@@ -160,6 +160,22 @@ return [
         'pedido_automatico' => filter_var(env('ARCA_CAEA_PEDIDO_AUTOMATICO', true), FILTER_VALIDATE_BOOLEAN),
         /** Réplica cada CAEA autorizado en Informix (tabla caea) vía bridge Anita */
         'replicar_en_anita' => filter_var(env('ARCA_CAEA_REPLICAR_ANITA', true), FILTER_VALIDATE_BOOLEAN),
+        /** Máximo de comprobantes por lote SOAP dentro del job de presentación */
+        'informe_lote_max' => (int) env('ARCA_CAEA_INFORME_LOTE_MAX', 100),
+        /** Cola Laravel para InformarArcaCaeaPeriodoJob (requiere QUEUE_CONNECTION≠sync + worker) */
+        'informe_cola' => env('ARCA_CAEA_INFORME_COLA', 'default'),
+        /** Timeout del job (segundos); debe cubrir varios lotes SOAP */
+        'informe_job_timeout' => (int) env('ARCA_CAEA_INFORME_JOB_TIMEOUT', 1800),
+        'informe_job_tries' => (int) env('ARCA_CAEA_INFORME_JOB_TRIES', 1),
+        'informe_job_backoff_segundos' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('ARCA_CAEA_INFORME_JOB_BACKOFF', '120'))
+        ), fn ($n) => $n > 0)) ?: [120],
+        /** Unicidad por arca_caea_id (evita dos presentaciones concurrentes del mismo periodo) */
+        'informe_job_unique_for' => (int) env('ARCA_CAEA_INFORME_JOB_UNIQUE_FOR', 7200),
+        /** Si true, el job repite lotes hasta vaciar pendientes/errores o bloquearse */
+        'informe_vaciar_pendientes' => filter_var(env('ARCA_CAEA_INFORME_VACIAR_PENDIENTES', true), FILTER_VALIDATE_BOOLEAN),
+        'informe_max_lotes_job' => (int) env('ARCA_CAEA_INFORME_MAX_LOTES_JOB', 50),
     ],
 
     /*

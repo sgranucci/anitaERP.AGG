@@ -138,6 +138,50 @@ final class GastronomiaDescuentoReporteExcelLayout
         $sheet->freezePane('A'.$this->filaPrimeraDatosExcel());
     }
 
+    /** Congela solo filas meta (logo + título reporte); el detalle por bloque/cliente scrollea. */
+    public function congelarDebajoMeta(Worksheet $sheet): void
+    {
+        $sheet->freezePane('A'.($this->filaFinMeta() + 1));
+    }
+
+    /**
+     * Aplica estilo thead (#85C1E9) en cada fila de cabecera de columnas del listado.
+     */
+    public function aplicarEstiloTheadsColumnas(Worksheet $sheet, string $colUltima, int $filaDesde = 0): void
+    {
+        if ($filaDesde <= 0) {
+            $filaDesde = $this->filaFinMeta() + 1;
+        }
+
+        $highest = (int) $sheet->getHighestRow();
+        for ($fila = $filaDesde; $fila <= $highest; $fila++) {
+            $colA = trim((string) $sheet->getCell('A'.$fila)->getValue());
+            $colB = trim((string) $sheet->getCell('B'.$fila)->getValue());
+            if ($colA !== 'Artículo' || $colB !== 'Descripción') {
+                continue;
+            }
+
+            $filaFinThead = $fila + $this->filasThead - 1;
+            for ($f = $fila; $f <= $filaFinThead; $f++) {
+                $sheet->getStyle('A'.$f.':'.$colUltima.$f)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '17202A'],
+                        'size' => 11,
+                        'name' => 'Arial',
+                    ],
+                    'fill' => [
+                        'fillType' => Fill::FILL_SOLID,
+                        'color' => ['rgb' => '85C1E9'],
+                    ],
+                    'alignment' => [
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                    ],
+                ]);
+            }
+        }
+    }
+
     public static function contarFilasMeta(string $subtitulo, bool $conResumenTotales, bool $conContadorBloques): int
     {
         $filas = 2;

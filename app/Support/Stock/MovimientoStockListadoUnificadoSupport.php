@@ -192,10 +192,7 @@ final class MovimientoStockListadoUnificadoSupport
         $depositoFiltro = (int) ($filtros['deposito_id'] ?? 0);
         if ($depositoFiltro > 0 && UsuarioDepositoAutorizado::depositoAutorizado($depositoFiltro)) {
             $movQuery->where('am_agg.deposito_id', $depositoFiltro);
-            $tmQuery->where(function ($q) use ($depositoFiltro) {
-                $q->where('tm.deposito_origen_id', $depositoFiltro)
-                    ->orWhere('tm.deposito_destino_id', $depositoFiltro);
-            });
+            $tmQuery->where('tm.deposito_origen_id', $depositoFiltro);
         }
 
         return $movQuery->unionAll($tmQuery);

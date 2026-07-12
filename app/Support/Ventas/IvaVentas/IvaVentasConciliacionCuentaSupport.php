@@ -25,6 +25,8 @@ final class IvaVentasConciliacionCuentaSupport
 
     public const FUENTE_FACTURACION = 'facturacion';
 
+    public const FUENTE_IVA_VENTAS = 'iva_ventas';
+
     /**
      * @return array{
      *   ventas_gravadas: list<int>,
@@ -53,6 +55,19 @@ final class IvaVentasConciliacionCuentaSupport
         self::agregarCuentaPorCodigoConfig($ivaDebito, $detalle, 'iva_debito', self::FUENTE_FACTURACION, $empresaId, trim((string) config('facturacion.CUENTACONTABLE_IVA', '')), 'IVA débito (facturación)');
         self::agregarCuentaPorCodigoConfig($percepcionIva, $detalle, 'percepcion_iva', self::FUENTE_FACTURACION, $empresaId, trim((string) config('facturacion.CUENTACONTABLE_PERCEPCION_IVA', '')), 'Percepción IVA (facturación)');
 
+        // Rango configurable del reporte IVA ventas (config/iva_ventas.php).
+        foreach (self::codigosConfigIvaVentas('cuentas_ventas_por_empresa', $empresaId) as $codigo) {
+            self::agregarCuentaPorCodigoConfig($ventasGravadas, $detalle, 'ventas_gravadas', self::FUENTE_IVA_VENTAS, $empresaId, $codigo, 'Ventas (config IVA ventas)');
+        }
+        foreach (self::codigosConfigIvaVentas('cuentas_iva_debito_por_empresa', $empresaId) as $codigo) {
+            self::agregarCuentaPorCodigoConfig($ivaDebito, $detalle, 'iva_debito', self::FUENTE_IVA_VENTAS, $empresaId, $codigo, 'IVA débito fiscal (config IVA ventas)');
+        }
+        // IVA crédito fiscal: entra al mismo bucket que el débito (debe = −) para netear el IVA.
+        foreach (self::codigosConfigIvaVentas('cuentas_iva_credito_por_empresa', $empresaId) as $codigo) {
+            self::agregarCuentaPorCodigoConfig($ivaDebito, $detalle, 'iva_credito', self::FUENTE_IVA_VENTAS, $empresaId, $codigo, 'IVA crédito fiscal (config IVA ventas)');
+        }
+
+        $ivaCredito = self::idsPorRolEnDetalle($detalle, 'iva_credito');
         $ventasGenerico = array_values(array_unique(array_merge($ventasGravadas, $ventasKiosco)));
 
         return [
@@ -60,9 +75,80 @@ final class IvaVentasConciliacionCuentaSupport
             'ventas_kiosco' => array_values(array_unique($ventasKiosco)),
             'iva_debito' => array_values(array_unique($ivaDebito)),
             'percepcion_iva' => array_values(array_unique($percepcionIva)),
+            'iva_credito' => $ivaCredito,
             'ventas_generico' => $ventasGenerico,
             'detalle' => $detalle,
         ];
+    }
+
+    /**
+     * Códigos numéricos (ctamov / cuentacontable.codigo) del rango de conciliación
+     * clasificados en ventas vs iva, para auditar contra ctamov (Anita).
+     *
+     * @return array{ventas: list<int>, iva: list<int>}
+     */
+    public static function codigosCtamovConciliacion(int $empresaId): array
+    {
+        $cuentas = self::cuentasConciliacionEmpresa($empresaId);
+        $ventas = [];
+        $iva = [];
+
+        foreach ($cuentas['detalle'] ?? [] as $item) {
+            $codigo = (int) preg_replace('/\D+/', '', (string) ($item['codigo'] ?? ''));
+            if ($codigo <= 0) {
+                continue;
+            }
+
+            $rol = (string) ($item['rol'] ?? '');
+            if (in_array($rol, ['iva_debito', 'percepcion_iva', 'iva_credito'], true)) {
+                $iva[] = $codigo;
+            } else {
+                $ventas[] = $codigo;
+            }
+        }
+
+        return [
+            'ventas' => array_values(array_unique($ventas)),
+            'iva' => array_values(array_unique($iva)),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function codigosConfigIvaVentas(string $clave, int $empresaId): array
+    {
+        $map = (array) config('iva_ventas.conciliacion.'.$clave, []);
+        $codigos = $map[$empresaId] ?? $map[(string) $empresaId] ?? [];
+
+        $out = [];
+        foreach ((array) $codigos as $codigo) {
+            $codigo = trim((string) $codigo);
+            if ($codigo !== '') {
+                $out[] = $codigo;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array{rol: string, id: int, codigo: string, nombre: string, fuente: string}>  $detalle
+     * @return list<int>
+     */
+    private static function idsPorRolEnDetalle(array $detalle, string $rol): array
+    {
+        $ids = [];
+        foreach ($detalle as $item) {
+            if (($item['rol'] ?? '') === $rol) {
+                $id = (int) ($item['id'] ?? 0);
+                if ($id > 0) {
+                    $ids[] = $id;
+                }
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
     public static function clasificarCodigoCuenta(int $codigo): ?string

@@ -14,10 +14,19 @@
         <div class="card-body">
             <p class="text-muted small mb-2">
                 Secuencia global (<code>articulo_parte_unica</code>). Sincronizado con Anita <code>stk_parte_unica</code> (base_admin).
+                Los NPUs dados de baja (rotura / no funcional) no pueden reutilizarse.
                 @if(isset($partesUnicasTotal))
                     Total registrados: <strong>{{ number_format($partesUnicasTotal, 0, ',', '.') }}</strong>
                 @endif
             </p>
+            <div class="form-inline mb-2">
+                <label for="filtro-estado-partes-unicas" class="mr-2 small text-muted">Mostrar:</label>
+                <select id="filtro-estado-partes-unicas" class="form-control form-control-sm">
+                    <option value="A">Solo activos</option>
+                    <option value="B">Solo dados de baja</option>
+                    <option value="T">Todos</option>
+                </select>
+            </div>
             <div id="partes-unicas-loading" class="text-center py-3" style="display:none;">
                 <i class="fa fa-spinner fa-spin"></i> Cargando…
             </div>
@@ -26,7 +35,9 @@
                     <thead>
                         <tr>
                             <th>Nº parte</th>
+                            <th>Estado</th>
                             <th>Fecha alta</th>
+                            <th>Fecha baja</th>
                             @if(!empty($puedeActualizarArticulo))
                             <th style="width:80px"></th>
                             @endif

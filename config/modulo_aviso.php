@@ -11,11 +11,14 @@ return [
     */
     'handlers' => [
         'sala.requisicion_sala_creacion' => App\Services\Configuracion\Handlers\SalaRequisicionSalaCreacionAvisoHandler::class,
+        'compras.requisicion_compra_cumplida' => App\Services\Configuracion\Handlers\ComprasRequisicionCumplidaAvisoDespachoHandler::class,
         'stock.prestamo_solicitud' => App\Services\Configuracion\Handlers\StockPrestamoAvisoDespachoHandler::class,
         'stock.prestamo_recordatorio' => App\Services\Configuracion\Handlers\StockPrestamoAvisoDespachoHandler::class,
         'stock.prestamo_aprobado_solicitante' => App\Services\Configuracion\Handlers\StockPrestamoAvisoDespachoHandler::class,
         'stock.prestamo_rechazado_solicitante' => App\Services\Configuracion\Handlers\StockPrestamoAvisoDespachoHandler::class,
         'stock.recepcion_proveedor_precio_diferencia' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
+        'stock.recepcion_proveedor_precio_pendiente_compras' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
+        'stock.recepcion_proveedor_precio_liberado' => App\Services\Configuracion\Handlers\StockRecepcionProveedorPrecioLiberadoAvisoHandler::class,
         'stock.recepcion_proveedor_laboratorio' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
         'stock.recepcion_proveedor_cantidad_diferencia' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
         'stock.recepcion_proveedor_articulo_extra' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,

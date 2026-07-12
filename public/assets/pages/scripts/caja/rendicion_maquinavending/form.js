@@ -7,6 +7,10 @@
         if (etiqueta) {
             etiqueta.value = '';
         }
+        const fechaCabecera = document.getElementById('fecha_jornada_cabecera');
+        if (fechaCabecera) {
+            fechaCabecera.value = '—';
+        }
         document.getElementById('panel-datos-rendicion')?.classList.add('d-none');
         document.getElementById('aviso-sin-rendicion-cargada')?.classList.remove('d-none');
         const link = document.getElementById('link-comprobante-ventas');

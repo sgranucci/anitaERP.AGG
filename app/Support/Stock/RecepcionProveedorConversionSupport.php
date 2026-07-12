@@ -43,8 +43,28 @@ class RecepcionProveedorConversionSupport
     }
 
     /**
+     * Precio unitario neto de línea OC: descuento de línea y descuento general (pie) ya aplicados.
+     * Orden: primero % de línea (penvp_dto_art), luego % de cabecera (penmp_dto).
+     */
+    public static function precioUnitarioNetoDesdeLineaOc(
+        float $precioBruto,
+        float $descuentoLinea = 0,
+        float $descuentoCabeceraOc = 0,
+    ): float {
+        $precio = $precioBruto;
+        if ($descuentoLinea > 0) {
+            $precio *= (1.0 - ($descuentoLinea / 100.0));
+        }
+        if ($descuentoCabeceraOc > 0) {
+            $precio *= self::factorDescuentoCabeceraOc($descuentoCabeceraOc);
+        }
+
+        return round(max(0.0, $precio), 6);
+    }
+
+    /**
      * Importe neto de línea sin IVA (recepción no lleva impuestos en inscriptos).
-     * No aplica descuento de pie de OC: la contabilidad usa Σ(cant × precio) de la recepción.
+     * El precio de recepción precargado desde OC ya incluye descuentos de línea y de pie.
      */
     public static function importeLinea(float $cantidad, float $precio, float $descuento = 0, float $descuentoCabeceraOc = 0): float
     {
@@ -79,5 +99,57 @@ class RecepcionProveedorConversionSupport
         }
 
         return round($monto * ($cotizacionOrigen / $cotizacionDestino), 2);
+    }
+
+    /**
+     * Importe neto de línea en moneda de referencia (p. ej. moneda del asiento COM).
+     * Usa calculaCoeficienteMoneda: si moneda línea = moneda referencia, no convierte aunque cotización ≠ 1.
+     */
+    public static function importeLineaEnMonedaReferencia(
+        int $monedaReferenciaId,
+        int $monedaLineaId,
+        float $cantidad,
+        float $precio,
+        float $descuento = 0,
+        float $descuentoCabeceraOc = 0,
+        float $cotizacionLinea = 1.0,
+    ): float {
+        $importe = self::importeLinea($cantidad, $precio, $descuento, $descuentoCabeceraOc);
+
+        $cot = $cotizacionLinea;
+        if ($cot <= 0) {
+            $cot = 1.0;
+        }
+
+        $coef = calculaCoeficienteMoneda(
+            $monedaReferenciaId,
+            $monedaLineaId ?: $monedaReferenciaId ?: 1,
+            ['cotizacionventa' => $cot],
+        );
+
+        return round($coef * $importe, 2);
+    }
+
+    /**
+     * Convierte un importe ya expresado en moneda origen hacia moneda destino.
+     */
+    public static function importeEnMonedaReferencia(
+        int $monedaReferenciaId,
+        int $monedaOrigenId,
+        float $importe,
+        float $cotizacionOrigen = 1.0,
+    ): float {
+        $cot = $cotizacionOrigen;
+        if ($cot <= 0) {
+            $cot = 1.0;
+        }
+
+        $coef = calculaCoeficienteMoneda(
+            $monedaReferenciaId,
+            $monedaOrigenId ?: $monedaReferenciaId ?: 1,
+            ['cotizacionventa' => $cot],
+        );
+
+        return round($coef * $importe, 2);
     }
 }

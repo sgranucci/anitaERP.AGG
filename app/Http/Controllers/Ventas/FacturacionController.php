@@ -28,6 +28,7 @@ use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\FacturaExport;
+use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 
 class FacturacionController extends Controller
 {
@@ -199,6 +200,10 @@ class FacturacionController extends Controller
     {
 		try
 		{
+            if ($bloqueo = $this->bloqueoClienteApocOperacion($request)) {
+                return $bloqueo;
+            }
+
             if (config('app.empresa') == 'CALZADOS FERLI')
                 $data = $this->facturacionService->generaFacturaPorItemOt($request->all());
             else
@@ -335,6 +340,10 @@ class FacturacionController extends Controller
     // Graba el comprobante
     public function grabaComprobante(Request $request)
     {
+        if ($bloqueo = $this->bloqueoClienteApocOperacion($request)) {
+            return $bloqueo;
+        }
+
         $comprobante = $this->facturacionService->generaComprobanteGeneral($request->all());
 
         if (! empty($comprobante['error'])) {
@@ -342,6 +351,30 @@ class FacturacionController extends Controller
         }
 
         return redirect()->back()->with('mensaje', 'Comprobante '.$comprobante['factura'].' generado con éxito');
+    }
+
+    /**
+     * Red de seguridad server-side: bloquea facturación admin si el cliente está en APOC.
+     * No afecta gastronomía ni estacionamiento (no pasan por este controller).
+     */
+    private function bloqueoClienteApocOperacion(Request $request)
+    {
+        $clienteId = (int) $request->input('cliente_id');
+        if ($clienteId <= 0) {
+            return null;
+        }
+
+        $cliente = $this->clienteQuery->traeClienteporId($clienteId);
+        if (! $cliente) {
+            return null;
+        }
+
+        $bloqueo = ArcaApocClienteOperacionValidacionSupport::bloqueoOperacion($cliente);
+        if ($bloqueo === null) {
+            return null;
+        }
+
+        return back()->withInput()->with('errores', [$bloqueo['error']]);
     }
 
 }

@@ -183,6 +183,9 @@ function aplicarProveedorEnPantalla(data, ctx) {
     if (typeof window.cpValidarProveedorArca === 'function') {
         window.cpValidarProveedorArca(data.id, data.condicioniva_id);
     }
+    if (typeof window.cpValidarProveedorArcaApoc === 'function') {
+        window.cpValidarProveedorArcaApoc(data.id);
+    }
 
     $('#proveedor_id').trigger('change.cpProveedorCargado');
 
@@ -301,6 +304,9 @@ function activa_eventos_consultaproveedor() {
     $(document)
         .off('click.eligeConsultaProveedor', '.eligeconsultaproveedor')
         .on('click.eligeConsultaProveedor', '.eligeconsultaproveedor', function (event) {
+            if (typeof window.wzCambiarProveedorLinea === 'number' || typeof window.wzCambiarProveedorGrupo === 'number') {
+                return;
+            }
             event.preventDefault();
             var fila = leerFilaProveedorConsulta($(this));
             if (!fila.id) {

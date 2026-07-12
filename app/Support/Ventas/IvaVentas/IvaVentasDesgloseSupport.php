@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Ventas\IvaVentas;
 
 use App\Models\Ventas\Venta;
-use App\Support\Configuracion\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 
 /**
  * Desglose monetario de una venta ERP para columnas IVA ventas.

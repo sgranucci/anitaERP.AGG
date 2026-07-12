@@ -37,6 +37,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Services\Arca\ConstanciaInscripcionService;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
+use App\Support\Compras\ProveedorFacturasApocrifasSupport;
 use Illuminate\Http\JsonResponse;
 use App\Repositories\Compras\Proveedor_ExclusionRepositoryInterface;
 use App\Repositories\Compras\Proveedor_ArchivoRepositoryInterface;
@@ -49,6 +50,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Mail\Compras\ProveedorProvisorio;
 use App\Exports\Compras\ProveedorExport;
 use App\Support\Compras\ProveedorListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Compras\ProveedorCuentacorrienteListadoExport;
 use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
 use Carbon\Carbon;
@@ -232,7 +234,7 @@ class ProveedorController extends Controller
      * @return \Illuminate\Http\Response
      */
 
-    public function crear($tipoalta = null)
+    public function crear(Request $request, $tipoalta = null)
     {
         can('crear-proveedor');
 
@@ -253,6 +255,8 @@ class ProveedorController extends Controller
         if (!isset($tipoalta))
             $tipoalta = substr(config("proveedor.tipoalta"),0,1);
 
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ProveedorListadoFiltros::class);
+
         return view('compras.proveedor.crear', compact('pais_query', 'provincia_query', 'tipoempresa_query',
 			'condicioniva_query', 'condicionIIBB_query',
             'retencionganancia_query', 'retencioniva_query', 'retencionsuss_query',
@@ -262,7 +266,7 @@ class ProveedorController extends Controller
             'centrocosto_query', 'conceptogasto_query', 'agentepercepcioniva_enum', 'agentepercepcionIIBB_enum',
             'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta', 'semaforo_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
-            'tiporetencion_enum', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum'));
+            'tiporetencion_enum', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery'));
     }
 
     /**
@@ -302,7 +306,8 @@ class ProveedorController extends Controller
             Mail::to($receivers)->send(new ProveedorProvisorio($request));
         }
 
-        return redirect('compras/proveedor')->with('mensaje', 'Proveedor creado con exito');
+        return redirect()->route('proveedor', QueryRetornoListado::desdeRequest($request, ProveedorListadoFiltros::class))
+            ->with('mensaje', 'Proveedor creado con exito');
     }
 
     /**
@@ -340,6 +345,8 @@ class ProveedorController extends Controller
         
 		$tipoalta = $data->tipoalta;
 
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ProveedorListadoFiltros::class);
+
         return view('compras.proveedor.editar', compact('data', 'pais_query', 'provincia_query', 'tipoempresa_query',
 			'condicioniva_query', 'condicionIIBB_query',
             'retencionganancia_query', 'retencioniva_query', 'retencionsuss_query',
@@ -350,7 +357,7 @@ class ProveedorController extends Controller
             'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta', 'semaforo_enum',
 		    'tiposuspensionproveedor_query', 'agentepercepcioniva_enum', 'agentepercepcionIIBB_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
-            'tiporetencion_enum', 'tipoconsulta', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum'));
+            'tiporetencion_enum', 'tipoconsulta', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery'));
     }
 
     /**
@@ -386,7 +393,8 @@ class ProveedorController extends Controller
             return redirect()->back()->withInput()->withErrors(['errores' => $e->getMessage()]);
         }
 
-        return redirect('compras/proveedor')->with('mensaje', 'Proveedor actualizado con exito');
+        return redirect()->route('proveedor', QueryRetornoListado::desdeRequest($request, ProveedorListadoFiltros::class))
+            ->with('mensaje', 'Proveedor actualizado con exito');
     }
 
     /**
@@ -606,6 +614,51 @@ class ProveedorController extends Controller
                 'suspendido' => $suspendido,
                 'estado' => $suspendido ? 'Suspendido' : (string) $proveedor->estado,
                 'soap' => $data['soap'] ?? null,
+            ], $httpOk ? 200 : 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Consulta WSAPOC (facturas apócrifas) en background desde el ABM; suspende si figura en APOC.
+     */
+    public function validarArcaApoc(Request $request, int $id): JsonResponse
+    {
+        can('editar-proveedor');
+
+        $support = app(ProveedorFacturasApocrifasSupport::class);
+        if (! $support->habilitadoParaAbm()) {
+            return response()->json([
+                'ok' => true,
+                'skipped' => true,
+                'validacion' => null,
+            ]);
+        }
+
+        $proveedor = $this->proveedorRepository->find($id);
+        if (! $proveedor) {
+            return response()->json(['ok' => false, 'message' => 'Proveedor inexistente.'], 404);
+        }
+
+        try {
+            $validacion = $support->evaluarProveedor($proveedor, suspenderSiApocrifo: true);
+            $httpOk = ! ($validacion['aplica'] ?? false) || ($validacion['ok'] ?? false);
+
+            return response()->json([
+                'ok' => $httpOk,
+                'message' => $validacion['mensaje'] ?? null,
+                'validacion' => $validacion,
+                'suspendido' => $validacion['suspendido'] ?? false,
+                'tiposuspension_id' => $validacion['tiposuspension_id'] ?? null,
+                'estado' => ($validacion['suspendido'] ?? false) ? 'Suspendido' : (string) $proveedor->estado,
+                'facturas_apocrifas' => (bool) ($validacion['es_apocrifo'] ?? false),
+                'soap' => ($validacion['ws']['soap'] ?? null),
             ], $httpOk ? 200 : 422);
         } catch (\Throwable $e) {
             report($e);

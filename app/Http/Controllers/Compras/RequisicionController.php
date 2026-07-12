@@ -13,6 +13,7 @@ use App\Models\Compras\Proveedor;
 use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Archivo;
 use App\Models\Compras\Requisicion_Estado;
+use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Oficinacompra;
 use App\Models\Stock\Articulo;
 use App\Queries\Compras\RequisicionQueryInterface;
@@ -24,12 +25,16 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
+use App\Services\Compras\OrdencompraGestionService;
+use App\Services\Compras\RequisicionArticuloCambioService;
 use App\Services\Compras\RequisicionService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Stock\StkmaeUltimaCompraAnitaService;
+use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -57,6 +62,8 @@ class RequisicionController extends Controller
 
     private $stkmaeUltimaCompraAnitaService;
 
+    private $cotizacionQuery;
+
     public function __construct(
         RequisicionRepositoryInterface $requisicionrepository,
         EmpresaRepositoryInterface $empresarepository,
@@ -69,6 +76,7 @@ class RequisicionController extends Controller
         ArbolaprobacionService $arbolaprobacionservice,
         PartidagastoRepositoryInterface $partidagastorepository,
         StkmaeUltimaCompraAnitaService $stkmaeUltimaCompraAnitaService,
+        CotizacionQueryInterface $cotizacionquery,
     ) {
         $this->requisicionRepository = $requisicionrepository;
         $this->empresaRepository = $empresarepository;
@@ -81,6 +89,7 @@ class RequisicionController extends Controller
         $this->arbolaprobacionService = $arbolaprobacionservice;
         $this->partidagastoRepository = $partidagastorepository;
         $this->stkmaeUltimaCompraAnitaService = $stkmaeUltimaCompraAnitaService;
+        $this->cotizacionQuery = $cotizacionquery;
     }
 
     public function index(Request $request)
@@ -106,7 +115,9 @@ class RequisicionController extends Controller
             'camposFiltro' => RequisicionListadoFiltros::CAMPOS,
             'estado_enum' => Requisicion_Estado::$enumEstado,
             'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
+            'estado_en_arbol_aprobacion' => Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
             'estado_aprobada_requisicion' => $estadoAprobada,
+            'estado_genero_oc_requisicion' => Requisicion_Estado::$enumEstado[array_search('O', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'],
             'estado_provisorio' => RequisicionProvisorioSupport::nombreEstadoProvisorio(),
             'tratamiento_enum' => Requisicion::$enumTratamiento,
             'contratacionDirecta_enum' => Requisicion::$enumContratacionDirecta,
@@ -153,7 +164,7 @@ class RequisicionController extends Controller
         return redirect()->route('consultar_requisicion', RequisicionListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-requisicion');
 
@@ -169,6 +180,7 @@ class RequisicionController extends Controller
         $data = null;
         $modo_provisorio = RequisicionProvisorioSupport::usuarioUsaModoProvisorio();
         $estado_provisorio = RequisicionProvisorioSupport::nombreEstadoProvisorio();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class);
 
         return view('compras.requisicion.crear', compact(
             'data',
@@ -182,7 +194,8 @@ class RequisicionController extends Controller
             'tratamiento_enum',
             'contratacionDirecta_enum',
             'modo_provisorio',
-            'estado_provisorio'
+            'estado_provisorio',
+            'filtrosQuery',
         ));
     }
 
@@ -192,11 +205,15 @@ class RequisicionController extends Controller
 
         if ($ret['mensaje'] == 'ok') {
             if (! empty($ret['modo_provisorio']) && ! empty($ret['requisicion_id'])) {
-                return redirect('compras/requisicion/'.$ret['requisicion_id'].'/editar')
-                    ->with('mensaje', 'Requisición guardada en PROVISORIO. Revise los datos y confirme.');
+                return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+                    $request,
+                    RequisicionListadoFiltros::class,
+                    (int) $ret['requisicion_id']
+                ))->with('mensaje', 'Requisición guardada en PROVISORIO. Revise los datos y confirme.');
             }
 
-            return redirect('compras/requisicion')->with('mensaje', 'Requisición creada con éxito');
+            return redirect()->route('consultar_requisicion', QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class))
+                ->with('mensaje', 'Requisición creada con éxito');
         }
 
         return redirect()->back()->withInput()->with('mensaje', $ret['errores']);
@@ -226,7 +243,27 @@ class RequisicionController extends Controller
             ->orderBy('id', 'desc')
             ->get(['id', 'numeroordencompra', 'fecha', 'estadoordencompra']);
 
-        $puedeVerOc = can('listar-ordencompra', false);
+        $filas = $this->filasOrdenesCompraVinculadasDesdeColeccion($ocs);
+
+        return response()->json([
+            'numerorequisicion' => $req->numerorequisicion,
+            'requisicion_id' => $req->id,
+            'filas' => $filas,
+            'proximamente' => [
+                'Recepciones de proveedores asociadas a la orden de compra',
+                'Facturas de compra vinculadas a esa orden',
+            ],
+        ]);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Ordencompra>  $ocs
+     * @return list<array<string, mixed>>
+     */
+    private function filasOrdenesCompraVinculadasDesdeColeccion($ocs): array
+    {
+        $puedeVerOc = can('listar-ordencompra', false) || can('editar-ordencompra', false);
+        $puedeEditarOc = can('editar-ordencompra', false);
         $puedeImprimirOc = can('listar-ordencompra', false) || can('editar-ordencompra', false);
 
         $filas = [];
@@ -240,24 +277,37 @@ class RequisicionController extends Controller
                 'estado' => (string) ($oc->estadoordencompra ?? ''),
             ];
             if ($puedeVerOc) {
-                $fila['url_ver'] = route('solo_consulta_ordencompra', ['id' => $oc->id]);
+                $fila['url_ver'] = urlAppDesdeRoute('solo_consulta_ordencompra', ['id' => $oc->id]);
+            }
+            if ($puedeEditarOc) {
+                $fila['url_editar'] = urlAppDesdeRoute('editar_ordencompra', ['id' => $oc->id]);
             }
             if ($puedeImprimirOc) {
-                $fila['url_imprimir_vertical'] = route('imprimir_pdf_ordencompra', ['id' => $oc->id]);
-                $fila['url_imprimir_apaisado'] = route('imprimir_pdf_ordencompra', ['id' => $oc->id, 'formato' => 'apaisado']);
+                $fila['url_imprimir_vertical'] = urlAppDesdeRoute('imprimir_pdf_ordencompra', ['id' => $oc->id]);
+                $fila['url_imprimir_apaisado'] = urlAppDesdeRoute('imprimir_pdf_ordencompra', ['id' => $oc->id, 'formato' => 'apaisado']);
             }
             $filas[] = $fila;
         }
 
-        return response()->json([
-            'numerorequisicion' => $req->numerorequisicion,
-            'requisicion_id' => $req->id,
-            'filas' => $filas,
-            'proximamente' => [
-                'Recepciones de proveedores asociadas a la orden de compra',
-                'Facturas de compra vinculadas a esa orden',
-            ],
-        ]);
+        return $filas;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function ordenesCompraVinculadasFilas(int $requisicionId): array
+    {
+        if ($requisicionId <= 0) {
+            return [];
+        }
+
+        $ocs = Ordencompra::query()
+            ->where('requisicion_id', $requisicionId)
+            ->orderBy('fecha', 'desc')
+            ->orderBy('id', 'desc')
+            ->get(['id', 'numeroordencompra', 'fecha', 'estadoordencompra']);
+
+        return $this->filasOrdenesCompraVinculadasDesdeColeccion($ocs);
     }
 
     public function imprimirPdf($id)
@@ -302,7 +352,7 @@ class RequisicionController extends Controller
         return $pdf->download($nombreArchivo);
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-requisicion');
 
@@ -352,19 +402,24 @@ class RequisicionController extends Controller
         $condicioncompra_query = Condicioncompra::orderBy('nombre')->get();
         $estado_enum = Requisicion_Estado::$enumEstado;
         $estado_en_compras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $estado_en_arbol_aprobacion = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $estado_aprobada_requisicion = $nombreAprobada;
         $tratamiento_enum = Requisicion::$enumTratamiento;
         $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
 
         $acceso_visualizacion_por_hash = false;
         $visualizar = false;
-        $tiene_ordencompra_asociada = $this->tieneOrdencompraAsociadaRequisicion((int) $data->id);
-        $puede_wizard_generar_multiples_oc = $this->requisicionQuery->puedeUsuarioGenerarMultiplesOcDesdeRequisicion($data);
-        $requisicion_wizard_multiples_oc_url = $puede_wizard_generar_multiples_oc
-            ? route('requisicion_wizard_multiples_oc', ['id' => $data->id])
-            : null;
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class);
+        $datosOc = $this->datosOcRequisicion($data, $filtrosQuery);
+        $tiene_ordencompra_asociada = $datosOc['tiene_ordencompra_asociada'];
+        $ordenes_compra_vinculadas = $datosOc['ordenes_compra_vinculadas'];
+        $requisicion_lineas_pendientes_oc = $datosOc['requisicion_lineas_pendientes_oc'];
+        $puede_wizard_generar_multiples_oc = $datosOc['puede_wizard_generar_multiples_oc'];
+        $requisicion_wizard_multiples_oc_url = $datosOc['requisicion_wizard_multiples_oc_url'];
         $es_provisorio = RequisicionProvisorioSupport::esEstadoProvisorio($data->estado ?? '');
         $estado_provisorio = $nombreProvisorio;
         $puede_confirmar_provisorio = $es_provisorio && can('confirmar-requisicion', false);
+        $cambios_articulo = app(RequisicionArticuloCambioService::class)->listarPorRequisicion((int) $id);
 
         return view('compras.requisicion.editar', compact(
             'data',
@@ -379,17 +434,23 @@ class RequisicionController extends Controller
             'condicioncompra_query',
             'estado_enum',
             'estado_en_compras',
+            'estado_en_arbol_aprobacion',
+            'estado_aprobada_requisicion',
             'tratamiento_enum',
             'contratacionDirecta_enum',
             'acceso_visualizacion_por_hash',
             'visualizar',
             'tiene_ordencompra_asociada',
+            'ordenes_compra_vinculadas',
+            'requisicion_lineas_pendientes_oc',
             'puede_wizard_generar_multiples_oc',
             'requisicion_wizard_multiples_oc_url',
             'es_provisorio',
             'estado_provisorio',
             'puede_confirmar_provisorio',
-            'edicionLimitadaAprobada'
+            'edicionLimitadaAprobada',
+            'filtrosQuery',
+            'cambios_articulo',
         ));
     }
 
@@ -408,32 +469,43 @@ class RequisicionController extends Controller
                 ? 'Proveedor sugerido actualizado con éxito'
                 : 'Requisición actualizada con éxito';
             if (! empty($ret['modo_provisorio']) || ! empty($ret['solo_proveedor_aprobada'])) {
-                return redirect('compras/requisicion/'.$id.'/editar')->with('mensaje', $mensaje);
+                return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+                    $request,
+                    RequisicionListadoFiltros::class,
+                    (int) $id
+                ))->with('mensaje', $mensaje);
             }
 
-            return redirect('compras/requisicion')->with('mensaje', $mensaje);
+            return redirect()->route('consultar_requisicion', QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class))
+                ->with('mensaje', $mensaje);
         } else {
             return redirect()->back()->withInput()->with('mensaje', $ret['errores'] ?? 'No se pudo actualizar la requisición.');
         }
     }
 
-    public function confirmar(int $id)
+    public function confirmar(Request $request, int $id)
     {
         can('confirmar-requisicion');
 
-        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($id)) {
             return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
         }
 
-        $ret = $this->requisicionService->confirmarRequisicion((int) $id);
+        $ret = $this->requisicionService->confirmarRequisicion($id);
 
         if ($ret['mensaje'] === 'ok') {
-            return redirect('compras/requisicion/'.$id.'/editar')
-                ->with('mensaje', 'Requisición confirmada. Árbol de aprobación y Anita actualizados.');
+            return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+                $request,
+                RequisicionListadoFiltros::class,
+                $id
+            ))->with('mensaje', 'Requisición confirmada. Árbol de aprobación y Anita actualizados.');
         }
 
-        return redirect('compras/requisicion/'.$id.'/editar')
-            ->with('mensaje', $ret['errores'] ?? 'Error al confirmar la requisición.');
+        return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+            $request,
+            RequisicionListadoFiltros::class,
+            $id
+        ))->with('mensaje', $ret['errores'] ?? 'Error al confirmar la requisición.');
     }
 
     public function eliminarProvisorio(Request $request, int $id)
@@ -465,11 +537,14 @@ class RequisicionController extends Controller
         return redirect()->back()->with('mensaje', $ret['errores'] ?? 'No se pudo eliminar el provisorio.');
     }
 
-    public function firmantesRetomeArbol($id)
+    public function firmantesRetomeArbol(Request $request, $id)
     {
         can('editar-requisicion');
 
-        $ret = $this->requisicionService->firmantesRetomeArbol((int) $id);
+        $centrocostoArbolId = (int) $request->input('centrocostodestino_arbol_id', 0);
+        $centrocostoArbolId = $centrocostoArbolId > 0 ? $centrocostoArbolId : null;
+
+        $ret = $this->requisicionService->firmantesRetomeArbol((int) $id, $centrocostoArbolId);
         if (($ret['mensaje'] ?? '') === 'ok') {
             return response()->json($ret);
         }
@@ -487,12 +562,17 @@ class RequisicionController extends Controller
         $destinatarioId = (int) $request->input('destinatario_usuario_id', 0);
         $destinatarioId = $destinatarioId > 0 ? $destinatarioId : null;
 
-        $ret = $this->requisicionService->enviarArbolAprobacionDesdeEnCompras((int) $id, $destinatarioId);
+        $centrocostoArbolId = (int) $request->input('centrocostodestino_arbol_id', 0);
+        $centrocostoArbolId = $centrocostoArbolId > 0 ? $centrocostoArbolId : null;
+
+        $ret = $this->requisicionService->enviarArbolAprobacionDesdeEnCompras((int) $id, $destinatarioId, $centrocostoArbolId);
 
         if ($ret['mensaje'] === 'ok') {
             $mensaje = 'Requisición enviada al árbol de aprobación; el circuito continúa con el siguiente nivel.';
         } elseif ($ret['mensaje'] === 'seleccionar_firmante') {
             $mensaje = 'Debe seleccionar un firmante para continuar el árbol de aprobación.';
+        } elseif ($ret['mensaje'] === 'seleccionar_centrocosto') {
+            $mensaje = 'Debe seleccionar el centro de costo de destino para continuar el árbol de aprobación.';
         } else {
             $mensaje = $ret['errores'] ?? 'No se pudo enviar al árbol de aprobación.';
         }
@@ -510,13 +590,39 @@ class RequisicionController extends Controller
                 ]);
             }
 
-            return response()->json([
+            return response()->json(array_merge([
                 'mensaje' => $ret['mensaje'],
                 'errores' => $mensaje,
-            ], 422);
+            ], array_filter([
+                'firmantes' => $ret['firmantes'] ?? null,
+                'nivel' => $ret['nivel'] ?? null,
+                'centros_costo' => $ret['centros_costo'] ?? null,
+                'centrocosto_arbol_id' => $ret['centrocosto_arbol_id'] ?? null,
+            ], static fn ($v) => $v !== null)), 422);
         }
 
         return redirect()->back()->with($flashKey, $mensaje);
+    }
+
+    public function volverCompras(Request $request, int $id)
+    {
+        can('volver-compras-requisicion');
+
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($id)) {
+            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+        }
+
+        $ret = $this->requisicionService->volverAComprasDesdeArbol($id);
+
+        if ($ret['mensaje'] === 'ok') {
+            return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+                $request,
+                RequisicionListadoFiltros::class,
+                $id
+            ))->with('mensaje', 'Requisición devuelta a compras. Las autorizaciones pendientes del árbol quedaron sin efecto; puede modificarla y volver a enviarla.');
+        }
+
+        return redirect()->back()->with('mensaje', $ret['errores'] ?? 'No se pudo devolver la requisición a compras.');
     }
 
     public function eliminar(Request $request, $id)
@@ -592,6 +698,30 @@ class RequisicionController extends Controller
         $datos = $this->stkmaeUltimaCompraAnitaService->obtenerDatosUltimaCompraPorSkus($skus);
 
         return response()->json(['datos' => $datos]);
+    }
+
+    /**
+     * Total de la requisición en moneda del primer ítem (misma lógica que listado y árbol de aprobación).
+     */
+    public function calcularTotales(Request $request)
+    {
+        if (! can('crear-requisicion', false)
+            && ! can('editar-requisicion', false)
+            && ! can('actualizar-requisicion', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        [$monto, $monedaId] = RequisicionTotalesCabecera::montoYMonedaDesdeRequest(
+            $request->all(),
+            $this->cotizacionQuery
+        );
+        $mon = Moneda::query()->find($monedaId);
+
+        return response()->json([
+            'total' => $monto,
+            'moneda_id' => $monedaId,
+            'moneda_abrev' => $mon ? (string) ($mon->abreviatura ?? '') : '',
+        ]);
     }
 
     /**
@@ -882,13 +1012,14 @@ class RequisicionController extends Controller
         return response()->download($path, $basename);
     }
 
-    public function soloConsulta($id)
+    public function soloConsulta(Request $request, $id)
     {
-        return $this->visualizar($id, null);
+        return $this->visualizar($id, null, $request);
     }
 
-    public function visualizar($id, $hash = null)
+    public function visualizar($id, $hash = null, ?Request $request = null)
     {
+        $request = $request ?? request();
         $aprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($id);
 
         if ($hash) {
@@ -917,15 +1048,20 @@ class RequisicionController extends Controller
             $proveedor_query = Proveedor::orderBy('nombre')->get();
             $estado_enum = Requisicion_Estado::$enumEstado;
             $estado_en_compras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+            $estado_en_arbol_aprobacion = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+            $estado_aprobada_requisicion = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
             $tratamiento_enum = Requisicion::$enumTratamiento;
             $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
             $visualizar = true;
             $acceso_visualizacion_por_hash = filled($hash);
-            $tiene_ordencompra_asociada = $this->tieneOrdencompraAsociadaRequisicion((int) $data->id);
-            $puede_wizard_generar_multiples_oc = $this->requisicionQuery->puedeUsuarioGenerarMultiplesOcDesdeRequisicion($data);
-            $requisicion_wizard_multiples_oc_url = $puede_wizard_generar_multiples_oc
-                ? route('requisicion_wizard_multiples_oc', ['id' => $data->id])
-                : null;
+            $filtrosQuery = QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class);
+            $datosOc = $this->datosOcRequisicion($data, $filtrosQuery);
+            $tiene_ordencompra_asociada = $datosOc['tiene_ordencompra_asociada'];
+            $ordenes_compra_vinculadas = $datosOc['ordenes_compra_vinculadas'];
+            $requisicion_lineas_pendientes_oc = $datosOc['requisicion_lineas_pendientes_oc'];
+            $puede_wizard_generar_multiples_oc = $datosOc['puede_wizard_generar_multiples_oc'];
+            $requisicion_wizard_multiples_oc_url = $datosOc['requisicion_wizard_multiples_oc_url'];
+            $cambios_articulo = app(RequisicionArticuloCambioService::class)->listarPorRequisicion((int) $id);
 
             return view('compras.requisicion.editar', compact(
                 'data',
@@ -937,13 +1073,19 @@ class RequisicionController extends Controller
                 'proveedor_query',
                 'estado_enum',
                 'estado_en_compras',
+                'estado_en_arbol_aprobacion',
+                'estado_aprobada_requisicion',
                 'tratamiento_enum',
                 'contratacionDirecta_enum',
                 'visualizar',
                 'acceso_visualizacion_por_hash',
                 'tiene_ordencompra_asociada',
+                'ordenes_compra_vinculadas',
+                'requisicion_lineas_pendientes_oc',
                 'puede_wizard_generar_multiples_oc',
-                'requisicion_wizard_multiples_oc_url'
+                'requisicion_wizard_multiples_oc_url',
+                'filtrosQuery',
+                'cambios_articulo',
             ));
         }
 
@@ -953,5 +1095,37 @@ class RequisicionController extends Controller
     private function tieneOrdencompraAsociadaRequisicion(int $requisicionId): bool
     {
         return $this->requisicionService->tieneOrdencompraAsociada($requisicionId);
+    }
+
+    /**
+     * @return array{
+     *     tiene_ordencompra_asociada: bool,
+     *     ordenes_compra_vinculadas: list<array<string, mixed>>,
+     *     requisicion_lineas_pendientes_oc: int,
+     *     puede_wizard_generar_multiples_oc: bool,
+     *     requisicion_wizard_multiples_oc_url: ?string
+     * }
+     */
+    private function datosOcRequisicion(Requisicion $data, array $retornoQuery = []): array
+    {
+        app(OrdencompraGestionService::class)->sincronizarEstadoRequisicionSegunLineasOc(
+            (int) $data->id,
+            (int) auth()->id()
+        );
+        $data->refresh();
+
+        $tiene = $this->tieneOrdencompraAsociadaRequisicion((int) $data->id);
+        $pendientes = RequisicionLineasOcSupport::cuentaPendientesOc((int) $data->id);
+        $puedeWizard = $this->requisicionQuery->puedeUsuarioGenerarMultiplesOcDesdeRequisicion($data);
+
+        return [
+            'tiene_ordencompra_asociada' => $tiene,
+            'ordenes_compra_vinculadas' => $tiene ? $this->ordenesCompraVinculadasFilas((int) $data->id) : [],
+            'requisicion_lineas_pendientes_oc' => $pendientes,
+            'puede_wizard_generar_multiples_oc' => $puedeWizard,
+            'requisicion_wizard_multiples_oc_url' => $puedeWizard
+                ? route('requisicion_wizard_multiples_oc', array_merge(['id' => $data->id], $retornoQuery))
+                : null,
+        ];
     }
 }

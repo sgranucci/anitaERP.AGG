@@ -93,6 +93,23 @@
     				<div class="col-lg-5">
     					<input type="text" name="skualternativo" id="skualternativo" class="form-control" value="{{old('skualternativo', $producto->skualternativo ?? '')}}"/>
                 	</div>
+                    @php
+                        $articuloEsCompraConInsumo = isset($producto)
+                            && \App\Support\Stock\RecepcionProveedorDepositoSupport::resolverArticuloInsumo($producto) !== null;
+                        $mostrarBtnArticulosCompraInsumo = isset($producto)
+                            && ! $articuloEsCompraConInsumo
+                            && (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false));
+                    @endphp
+                    @if ($mostrarBtnArticulosCompraInsumo)
+                    <div class="col-lg-3 d-flex align-items-center">
+                        <button type="button"
+                            id="btn-articulos-compra-insumo-articulo"
+                            class="btn btn-outline-info btn-sm tooltipsC"
+                            title="Art&iacute;culos de compra con SKU alt./insumo apuntando a este insumo">
+                            <i class="fa fa-shopping-cart"></i> Art. compra
+                        </button>
+                    </div>
+                    @endif
                 </div>
                 <div class="form-group row">
                     <div class="col-lg-4"></div>

@@ -174,7 +174,9 @@
 
 @include('includes.compras.modalconsultaproveedor')
 @include('includes.compras.arca_impuestos_validacion_modal')
+@include('includes.compras.arca_apoc_validacion_modal')
 @include('compras.comprobante_proveedor.partials.proveedor_arca_support')
+@include('compras.comprobante_proveedor.partials.proveedor_arca_apoc_support')
 @include('compras.comprobante_proveedor.template_concepto')
 @include('compras.comprobante_proveedor.partials.template_cp_archivos')
 <script type="application/json" id="cp-conceptos-cuenta-meta">@json($conceptos_cuenta_meta ?? [])</script>

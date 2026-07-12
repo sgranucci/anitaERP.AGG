@@ -12,6 +12,7 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Models\Ventas\Venta_emision;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -63,10 +64,16 @@ final class GastronomiaImportarCabeceraAnitaErpService
             .str_pad((string) $puntoventa->codigo, (int) config('facturacion.DIGITOS_SUCURSAL'), '0', STR_PAD_LEFT).'-'
             .str_pad((string) $numeroComprobante, (int) config('facturacion.DIGITOS_COMPROBANTE'), '0', STR_PAD_LEFT);
 
-        $total = round((float) ($cabecera->ven_monto ?? 0), 2);
-        $exento = round((float) ($cabecera->ven_exento ?? 0), 2);
-        $gravado = round((float) ($cabecera->ven_gravado ?? 0), 2);
-        $iva = round((float) ($cabecera->ven_impuesto1 ?? 0), 2);
+        $montosCab = GastronomiaAnitaVenGravadoSupport::montosCabeceraImportDesdeAnita(
+            (float) ($cabecera->ven_monto ?? 0),
+            (float) ($cabecera->ven_gravado ?? 0),
+            (float) ($cabecera->ven_exento ?? 0),
+            (float) ($cabecera->ven_impuesto1 ?? 0),
+        );
+        $total = $montosCab['total'];
+        $exento = $montosCab['exento'];
+        $gravado = $montosCab['gravado'];
+        $iva = $montosCab['iva'];
         $subtotalBruto = $this->resolverSubtotalBrutoCortesia($referencia, $total, $exento, $gravado, $iva);
 
         $usuarioId = $usuarioId ?: (int) (Auth::id() ?: $referencia->usuario_id ?: 1);
@@ -246,6 +253,21 @@ final class GastronomiaImportarCabeceraAnitaErpService
         float $gravado,
         float $iva,
     ): void {
+        if (GastronomiaAnitaVenGravadoSupport::esCortesiaMinima($total)) {
+            foreach (GastronomiaAnitaVenGravadoSupport::filasVentaImpuestoImportCortesiaMinima() as $fila) {
+                Venta_Impuesto::query()->create([
+                    'venta_id' => $ventaId,
+                    'concepto' => $fila['concepto'],
+                    'importe' => $fila['importe'],
+                    'baseimponible' => $fila['baseimponible'],
+                    'tasa' => $fila['tasa'],
+                    'impuesto_id' => $fila['impuesto_id'],
+                ]);
+            }
+
+            return;
+        }
+
         if ($gravado > 0. || $iva > 0.) {
             Venta_Impuesto::query()->create([
                 'venta_id' => $ventaId,

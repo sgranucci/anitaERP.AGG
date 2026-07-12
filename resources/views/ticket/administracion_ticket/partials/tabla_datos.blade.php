@@ -68,7 +68,7 @@
             @if ($mostrarAcciones)
                 <td>
                     @if ($puedeVerTicket)
-                        <a href="{{ route('edita_administracion_ticket', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                        <a href="{{ route('edita_administracion_ticket', ['id' => $data->id] + ($retornoListadoQuery ?? [])) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                             <i class="fa fa-edit"></i>
                         </a>
                     @endif

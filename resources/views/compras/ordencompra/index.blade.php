@@ -39,6 +39,9 @@ $(function () {
 <?php use App\Support\Compras\OrdencompraListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 @include('compras.ordencompra.partials.modal_enviar_proveedor')
 
 <div class="modal fade" id="modalIndexOcCambiarEstado" tabindex="-1" role="dialog" aria-hidden="true">
@@ -129,7 +132,7 @@ $(function () {
                         'toggleTarget' => '#panel-filtros-ordencompra',
                         'toggleId' => 'btn-toggle-filtros-ordencompra',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_ordencompra'),
+                        'nuevoRegistroUrl' => route('crear_ordencompra', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-ordencompra',
                         'nuevoRegistroLabel' => 'Nueva orden',
                     ])
@@ -162,7 +165,10 @@ $(function () {
                     </thead>
                     <tbody>
                         @foreach ($ordencompra as $row)
-                            <tr>
+                            @php
+                                $esSuspendidaFila = ($row->estadoordencompra ?? '') === \App\Support\Compras\OrdencompraEstados::SUSPENDIDA;
+                            @endphp
+                            <tr @if($esSuspendidaFila) class="table-secondary" @endif>
                                 <td>{{ $row->numeroordencompra }}</td>
                                 <td><small>{{ $row->nombreusuario ?? '' }}</small></td>
                                 <td>{{ date('d/m/Y', strtotime($row->fecha)) }}</td>
@@ -170,13 +176,15 @@ $(function () {
                                 <td><small>{{ $row->nombrecentrocosto }}</small></td>
                                 <td><small>{{ $row->nombreproveedor }}</small></td>
                                 <td><small>{{ $row->nombresector ?? '—' }}</small></td>
-                                <td><small>{{ $row->estadoordencompra }}</small></td>
+                                <td>
+                                    @include('compras.ordencompra.partials.estado_badge', ['estado' => $row->estadoordencompra ?? ''])
+                                </td>
                                 <td class="text-right text-nowrap">
                                     <small>{{ number_format((float) ($row->monto_lineas ?? 0), 2, ',', '.') }}</small>
                                 </td>
                                 <td>
                                     @if (can('editar-ordencompra', false))
-                                        <a href="{{ route('editar_ordencompra', ['id' => $row->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                        <a href="{{ route('editar_ordencompra', ['id' => $row->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>
                                         </a>
                                     @endif

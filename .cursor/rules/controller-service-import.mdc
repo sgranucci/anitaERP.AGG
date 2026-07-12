@@ -1,0 +1,81 @@
+---
+description: Controllers — import obligatorio de Services/Repositories (evita Target class Http\Controllers\…Service does not exist)
+globs:
+  - app/Http/Controllers/**/*.php
+alwaysApply: false
+---
+
+# Controllers: Services y Repositories no viven en Http\Controllers
+
+PHP resuelve type-hints **sin barra inicial** relativos al `namespace` del controller. Si falta el `use`, Laravel busca la clase en el mismo módulo del controller y falla al instanciar la ruta:
+
+```text
+Target class [App\Http\Controllers\Stock\MovimientoStockService] does not exist.
+```
+
+Incidente real: al agregar `MovimientoStockRevertirService` se reemplazó por error el `use` de `MovimientoStockService` en `MovimientoStockController`.
+
+Ver también `php-imports-verificacion-cierre.mdc` y `modelo-usuario-seguridad-import.mdc`.
+
+## Capas y namespace correcto
+
+| Capa | Namespace | Ejemplo |
+|---|---|---|
+| Controller | `App\Http\Controllers\{Modulo}` | `MovimientoStockController` |
+| Service | `App\Services\{Modulo}` | `MovimientoStockService` |
+| Repository | `App\Repositories\{Modulo}` | `MovimientoStockRepository` |
+| Support | `App\Support\{Modulo}` | `MovimientoStockListadoFiltros` |
+| Model | `App\Models\{Modulo}` | `MovimientoStock` |
+
+## Obligatorio al tocar un controller
+
+1. Cada **Service**, **Repository**, **Support** o **Model** de otro namespace usado en:
+   - constructor (`MovimientoStockService $x`)
+   - propiedad tipada
+   - `app(MiService::class)`
+   → **`use App\Services\…`** (o FQCN con `\`) explícito.
+2. **Agregar un import nuevo no reemplaza** los `use` existentes del mismo bloque; sumar la línea, no hacer StrReplace sobre la línea del service vecino.
+3. Tras editar imports del controller, verificar que **siguen** los `use` de dependencias ya inyectadas en `__construct`.
+
+## Prohibido
+
+```php
+// ❌ namespace App\Http\Controllers\Stock; — sin use
+public function __construct(MovimientoStockService $svc) {}
+// Laravel resuelve App\Http\Controllers\Stock\MovimientoStockService
+```
+
+## Correcto
+
+```php
+namespace App\Http\Controllers\Stock;
+
+use App\Services\Stock\MovimientoStockService;
+use App\Services\Stock\MovimientoStockRevertirService;
+
+public function __construct(
+    MovimientoStockService $movimientoStockService,
+    MovimientoStockRevertirService $revertirService,
+) {}
+```
+
+## Comprobación rápida (agente, tras cambiar controller)
+
+```bash
+# Imports de Services/Repositories en controllers del módulo tocado
+rg "function __construct" app/Http/Controllers/Stock/MovimientoStockController.php -A25
+
+# Cada type-hint *Service / *Repository debe tener use App\Services\ o App\Repositories\
+rg "^use App\\(Services|Repositories)" app/Http/Controllers/Stock/MovimientoStockController.php
+
+# Contenedor resuelve el controller (detecta Target class …Controllers\…Service)
+php -r "
+require 'vendor/autoload.php';
+\$app = require 'bootstrap/app.php';
+\$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
+app(\App\Http\Controllers\Stock\MovimientoStockController::class);
+echo \"OK\n\";
+"
+```
+
+Si el error menciona `App\Http\Controllers\{Modulo}\{Algo}Service`, corregir el **`use`** en el controller, no crear la clase bajo `Http\Controllers`.

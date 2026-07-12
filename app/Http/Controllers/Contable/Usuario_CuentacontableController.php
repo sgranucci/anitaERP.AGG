@@ -8,6 +8,7 @@ use App\Http\Requests\GuardarUsuario_CuentacontableRequest;
 use App\Http\Requests\ActualizarUsuario_CuentacontableRequest;
 use App\Models\Contable\Usuario_Cuentacontable;
 use App\Models\Seguridad\Usuario;
+use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Contable\Usuario_CuentacontableRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Http\Request;
@@ -18,12 +19,15 @@ class Usuario_CuentacontableController extends Controller
 {
 	private $usuario_cuentacontableRepository;
     private $empresaRepository;
+    private $usuarioRepository;
 
 	public function __construct(Usuario_CuentacontableRepositoryInterface $usuario_cuentacontablerepository,
-                                EmpresaRepositoryInterface $empresarepository)
+                                EmpresaRepositoryInterface $empresarepository,
+                                UsuarioRepositoryInterface $usuariorepository)
     {
 		$this->usuario_cuentacontableRepository = $usuario_cuentacontablerepository;
         $this->empresaRepository = $empresarepository;
+        $this->usuarioRepository = $usuariorepository;
     }
 
     /**
@@ -49,7 +53,7 @@ class Usuario_CuentacontableController extends Controller
     {
         can('crear-usuario-cuentacontable');
 
-        $usuario_query = Usuario::orderBy('id')->get();
+        $usuario_query = $this->usuarioRepository->listadoOperativoParaSelector();
         $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('contable.usuario_cuentacontable.crear', compact('usuario_query', 'empresa_query'));
@@ -86,7 +90,7 @@ class Usuario_CuentacontableController extends Controller
     {
         can('editar-usuario-cuentacontable');
 
-        $usuario_query = Usuario::orderBy('id')->get();
+        $usuario_query = $this->usuarioRepository->listadoOperativoParaSelector();
         $empresa_query = $this->empresaRepository->allFiltrado();
 		$usuario_cuentacontable = $this->usuario_cuentacontableRepository->leePorUsuario($usuario_id);
         return view('contable.usuario_cuentacontable.editar', compact('usuario_id', 'usuario_query', 'empresa_query', 

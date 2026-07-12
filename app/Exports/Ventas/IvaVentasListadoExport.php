@@ -63,7 +63,7 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
     public function view(): View
     {
         $resultado = $this->resultado ?? $this->reporteService->generarDesdeFiltros($this->filtros);
-        $filas = $resultado['filas'] ?? [];
+        $filas = $resultado['filas_display'] ?? $resultado['filas'] ?? [];
         $coleccionLogos = collect($filas)->map(fn (array $f) => ['nombreempresa' => $f['nombreempresa'] ?? '']);
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogos);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;

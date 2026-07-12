@@ -4,9 +4,11 @@ namespace App\Services\Contable;
 
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoAuditoriaSupport;
+use App\Support\Contable\MayorConcepto\MayorConceptoConciliacionAsientoSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
 use App\Support\Contable\MayorConcepto\MayorConceptoPeriodoProcesador;
 use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
+use App\Support\Contable\MayorConceptoListadoFiltros;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
@@ -21,6 +23,7 @@ class MayorConceptoReporteService
         private readonly MayorConceptoMonedaConverter $monedaConverter,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly MayorConceptoAuditoriaSupport $auditoriaSupport,
+        private readonly MayorConceptoConciliacionAsientoSupport $conciliacionAsientoSupport,
     ) {
     }
 
@@ -197,23 +200,32 @@ class MayorConceptoReporteService
     }
 
     /**
+     * Conciliación asiento a asiento: neto analítico + neto concepto = 0.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    public function conciliarPorAsiento(array $resultado): array
+    {
+        $empresaId = (int) ($resultado['parametros']['empresa_id'] ?? 0);
+
+        return $this->conciliacionAsientoSupport->conciliar($resultado, $empresaId);
+    }
+
+    /**
      * @param  array<string, mixed>  $resultado
      * @return array{
      *   cuadra: bool,
-     *   disponibilidad: array<string, mixed>,
-     *   contrapartidas: array<string, mixed>
+     *   conciliacion: array<string, mixed>
      * }
      */
     public function armarAuditoriaPanel(array $resultado): array
     {
-        $disponibilidad = $this->auditarContraMayorPlano($resultado);
-        $contrapartidas = $this->auditarContrapartidasDesdeDisponibilidad($resultado);
+        $conciliacion = $this->conciliarPorAsiento($resultado);
 
         return [
-            'cuadra' => (bool) ($disponibilidad['cuadra'] ?? false)
-                && (bool) ($contrapartidas['cuadra'] ?? false),
-            'disponibilidad' => $disponibilidad,
-            'contrapartidas' => $contrapartidas,
+            'cuadra' => (bool) ($conciliacion['cuadra'] ?? false),
+            'conciliacion' => $conciliacion,
         ];
     }
 
@@ -251,6 +263,19 @@ class MayorConceptoReporteService
     public function aplanarFilasConTotales(array $resultado): array
     {
         return $this->aplanarFilasInterno($resultado, true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     * @return list<array<string, mixed>>
+     */
+    public function aplanarFilasConTotalesFiltradas(array $resultado, array $filtros): array
+    {
+        return MayorConceptoListadoFiltros::aplicarFiltroDetalle(
+            $this->aplanarFilasConTotales($resultado),
+            $filtros,
+        );
     }
 
     /**

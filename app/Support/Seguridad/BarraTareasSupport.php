@@ -4,6 +4,7 @@ namespace App\Support\Seguridad;
 
 use App\Models\Admin\Menu;
 use App\Models\Seguridad\UsuarioMenuAnclado;
+use App\Support\Caja\Bingo\BingoModuloSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoModuloSupport;
 use Illuminate\Support\Facades\DB;
 
@@ -201,7 +202,9 @@ class BarraTareasSupport
         $nivelActual = 0;
         $menus = Menu::getMenu(true, $nivelActual);
 
-        return EstacionamientoModuloSupport::filtrarMenuAside($menus);
+        $menus = EstacionamientoModuloSupport::filtrarMenuAside($menus);
+
+        return BingoModuloSupport::filtrarMenuAside($menus);
     }
 
     /**

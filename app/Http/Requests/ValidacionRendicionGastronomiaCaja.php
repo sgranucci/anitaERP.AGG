@@ -49,7 +49,6 @@ class ValidacionRendicionGastronomiaCaja extends FormRequest
             'puntoventa_cae_id' => ['required', 'integer', 'exists:puntoventa,id'],
             'puntoventa_caea_id' => ['required', 'integer', 'exists:puntoventa,id'],
             'caja_id' => ['required', 'integer', 'min:1', 'exists:caja,id'],
-            'fecharendicion' => ['required', 'date'],
             'turno_operativo_gastronomia_id' => $esJornada
                 ? ['nullable', 'integer']
                 : [

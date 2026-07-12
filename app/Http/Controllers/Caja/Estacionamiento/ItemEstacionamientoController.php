@@ -10,6 +10,7 @@ use App\Repositories\Caja\Estacionamiento\ItemEstacionamientoRepositoryInterface
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\Estacionamiento\ItemEstacionamientoListadoFiltros;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 
 class ItemEstacionamientoController extends Controller
@@ -73,14 +74,15 @@ class ItemEstacionamientoController extends Controller
         return redirect()->route('estacionamiento_item', ItemEstacionamientoListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-estacionamiento-item');
         $data = new ItemEstacionamiento();
         $estado_enum = ItemEstacionamiento::$enumEstado;
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ItemEstacionamientoListadoFiltros::class);
 
-        return view('caja.estacionamiento.item.crear', compact('data', 'estado_enum', 'empresa_query'));
+        return view('caja.estacionamiento.item.crear', compact('data', 'estado_enum', 'empresa_query', 'filtrosQuery'));
     }
 
     public function guardar(ValidacionEstacionamientoItem $request)
@@ -88,18 +90,20 @@ class ItemEstacionamientoController extends Controller
         can('crear-estacionamiento-item');
         $this->repository->create($request->all());
 
-        return redirect('caja/estacionamiento/item')->with('mensaje', 'Ítem creado con éxito');
+        return redirect()->route('estacionamiento_item', QueryRetornoListado::desdeRequest($request, ItemEstacionamientoListadoFiltros::class))
+            ->with('mensaje', 'Ítem creado con éxito');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-estacionamiento-item');
         $data = $this->repository->findOrFail($id);
         $this->assertAccesoEmpresa((int) $data->empresa_id);
         $estado_enum = ItemEstacionamiento::$enumEstado;
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ItemEstacionamientoListadoFiltros::class);
 
-        return view('caja.estacionamiento.item.editar', compact('data', 'estado_enum', 'empresa_query'));
+        return view('caja.estacionamiento.item.editar', compact('data', 'estado_enum', 'empresa_query', 'filtrosQuery'));
     }
 
     public function actualizar(ValidacionEstacionamientoItem $request, $id)
@@ -109,7 +113,8 @@ class ItemEstacionamientoController extends Controller
         $this->assertAccesoEmpresa((int) $data->empresa_id);
         $this->repository->update($request->all(), $id);
 
-        return redirect('caja/estacionamiento/item')->with('mensaje', 'Ítem actualizado con éxito');
+        return redirect()->route('estacionamiento_item', QueryRetornoListado::desdeRequest($request, ItemEstacionamientoListadoFiltros::class))
+            ->with('mensaje', 'Ítem actualizado con éxito');
     }
 
     public function eliminar(Request $request, $id)

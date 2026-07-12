@@ -177,11 +177,7 @@ class PrecioActualizacionCategoriaService
       ->join('articulo', 'articulo.id', '=', 'precio.articulo_id')
       ->join('listaprecio', 'listaprecio.id', '=', 'precio.listaprecio_id')
       ->whereIn('precio.articulo_id', $articuloIds);
-    PrecioListaVigenteSupport::aplicarFiltroVigenteEnQuery($q, $fechaReferencia);
-
-    if ($listaprecioId !== null && $listaprecioId > 0) {
-      $q->where('precio.listaprecio_id', $listaprecioId);
-    }
+    PrecioListaVigenteSupport::aplicarFiltroVigenteEnQuery($q, $fechaReferencia, 'precio', $articuloIds, $listaprecioId);
 
     $rows = $q->orderBy('articulo.sku')->orderBy('listaprecio.nombre')->get();
 

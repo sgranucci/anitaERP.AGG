@@ -18,7 +18,7 @@ class Requisicion extends Model implements Auditable
     use RequisicionTrait;
 
     protected $fillable = [
-        'fecha', 'fechaentrega', 'empresa_id', 'numerorequisicion', 'centrocosto_id', 'comentario', 'detalle', 
+        'fecha', 'fechaentrega', 'empresa_id', 'numerorequisicion', 'centrocosto_id', 'centrocostodestino_arbol_id', 'comentario', 'detalle', 
         'tratamiento', 'motivotratamiento', 'contrataciondirecta', 'proveedor_id', 'formapago_id',
         'estado', 'creousuario_id', 'oficinacompra_id',
         'anita_sync_estado', 'anita_sync_error', 'anita_sync_at',

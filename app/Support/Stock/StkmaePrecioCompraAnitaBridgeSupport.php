@@ -211,6 +211,8 @@ final class StkmaePrecioCompraAnitaBridgeSupport
             'recepcion_proveedor_articulos.articulo_stock',
         ]);
 
+        $impuestoInternoPorUnidad = RecepcionProveedorImpuestoInternoSupport::impuestoInternoPorUnidad($recepcion);
+
         /** @var array<string, array{codigo_anita: string, precio_raw: float, precio_pesos: float, cantidad: float}> $acum */
         $acum = [];
 
@@ -230,6 +232,10 @@ final class StkmaePrecioCompraAnitaBridgeSupport
             }
 
             $precioRaw = (float) ($linea->precio_stock ?? $linea->precio);
+            if ($impuestoInternoPorUnidad > 0.000001
+                && RecepcionProveedorImpuestoInternoSupport::articuloEsCigarrillo($articuloMovimiento)) {
+                $precioRaw += $impuestoInternoPorUnidad;
+            }
             $monedaAnita = self::codigoMonedaAnita((int) $linea->moneda_id);
             $coef = $monedaAnita !== '1' ? (float) ($linea->cotizacion ?? 1) : 1.0;
             $precioPesos = $precioRaw * $coef;

@@ -30,7 +30,7 @@
                     </div>
                 </div>
                 <div class="form-group row mb-2">
-                    <label class="col-sm-5 col-form-label col-form-label-sm">Precio recepci&oacute;n (unit.)</label>
+                    <label class="col-sm-5 col-form-label col-form-label-sm" id="modal-linea-precio-unit-label">Precio recepci&oacute;n (unit.)</label>
                     <div class="col-sm-7">
                         <input type="number" step="0.000001" min="0" class="form-control form-control-sm text-right" id="modal-linea-precio-unit">
                     </div>

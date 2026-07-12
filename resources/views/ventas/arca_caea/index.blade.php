@@ -5,18 +5,28 @@
 
 @section('scripts')
 @include('ventas.arca_caea.partials.detalle_script')
+<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}"></script>
 @endsection
 
 @section('contenido')
 @include('ventas.arca_caea.partials.detalle_modal')
+@include('ventas.arca_caea.partials.informe_overlay')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
+        @include('ventas.arca_caea.partials.informe_resultado')
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Códigos CAEA (quincenales)</h3>
             </div>
             <div class="card-body">
+                <p class="text-muted small mb-3">
+                    <i class="fa fa-info-circle"></i>
+                    El ícono <i class="fa fa-paper-plane text-primary"></i> encola la presentación de comprobantes pendientes o con error en ARCA (segundo plano).
+                    Solo está activo cuando falta informar comprobantes de la quincena.
+                    Al terminar el proceso recibirás un mail con el resultado.
+                    Use <i class="fa fa-calculator text-secondary"></i> para refrescar contadores consultando ARCA sin enviar comprobantes.
+                </p>
                 <form method="get" action="{{ route('arca_caea') }}" class="d-flex flex-wrap align-items-end mb-3">
                     @include('includes.listado.filtro_empresa_asignada_campo', [
                         'empresas' => $empresas,
@@ -102,6 +112,7 @@
                                 <th>Vigencia</th>
                                 <th>Tope informe</th>
                                 <th>Estado</th>
+                                <th>Informe ARCA</th>
                                 <th>Origen</th>
                                 <th>Actualizado</th>
                                 <th></th>
@@ -109,6 +120,14 @@
                         </thead>
                         <tbody>
                             @forelse ($registros as $r)
+                                @php
+                                    $meta = $filasMeta[$r->id] ?? null;
+                                    $resInf = is_array($meta['resumen'] ?? null) ? $meta['resumen'] : (is_array($r->informe_resumen) ? $r->informe_resumen : []);
+                                    $badge = $meta['badge'] ?? ($r->informe_estado ?? 'pendiente');
+                                    $leyenda = $meta['leyenda'] ?? '';
+                                    $puedePresentar = (bool) ($meta['puede_presentar'] ?? false);
+                                    $tituloOverlay = $meta['titulo_overlay'] ?? 'Presentando comprobantes CAEA…';
+                                @endphp
                                 <tr>
                                     <td>{{ $r->empresa->nombre ?? '—' }}</td>
                                     <td>{{ $r->periodo }} / {{ $r->orden }}</td>
@@ -132,6 +151,32 @@
                                             <span class="badge badge-danger">Error</span>
                                         @else
                                             <span class="badge badge-secondary">{{ $r->estado }}</span>
+                                        @endif
+                                    </td>
+                                    <td class="small">
+                                        @if ($r->estaAutorizado())
+                                            @if ($badge === 'ok')
+                                                <span class="badge badge-success">
+                                                    @if ((int) ($resInf['total'] ?? 0) === 0)
+                                                        Sin comprobantes
+                                                    @else
+                                                        Informado
+                                                    @endif
+                                                </span>
+                                            @elseif ($badge === 'observacion')
+                                                <span class="badge badge-warning">Con obs.</span>
+                                            @elseif ($badge === 'parcial')
+                                                <span class="badge badge-info">Parcial</span>
+                                            @elseif ($badge === 'error')
+                                                <span class="badge badge-danger">Error</span>
+                                            @else
+                                                <span class="badge badge-secondary">Pendiente</span>
+                                            @endif
+                                            <div class="text-muted mt-1" style="font-size:0.78rem;">
+                                                {{ $leyenda !== '' ? $leyenda : '—' }}
+                                            </div>
+                                        @else
+                                            —
                                         @endif
                                     </td>
                                     <td>
@@ -163,6 +208,7 @@
                                                 class="d-inline"
                                                 onsubmit="return confirm('¿Grabar este CAEA en Anita (Informix)?');">
                                                 @csrf
+                                                @include('ventas.arca_caea.partials.filtros_index_hidden', ['filtrosQuery' => $filtrosQuery ?? []])
                                                 <button type="submit"
                                                     class="btn-accion-tabla tooltipsC"
                                                     title="Grabar en Anita">
@@ -170,11 +216,39 @@
                                                 </button>
                                             </form>
                                         @endif
+                                        @if (($puedeInformar ?? false) && $r->estaAutorizado())
+                                            <form method="post"
+                                                action="{{ route('arca_caea_actualizar_resumen', $r->id) }}"
+                                                class="d-inline">
+                                                @csrf
+                                                @include('ventas.arca_caea.partials.filtros_index_hidden', ['filtrosQuery' => $filtrosQuery ?? []])
+                                                <button type="submit"
+                                                    class="btn-accion-tabla tooltipsC"
+                                                    title="Consultar último autorizado en ARCA y actualizar contadores">
+                                                    <i class="fa fa-calculator text-secondary"></i>
+                                                </button>
+                                            </form>
+                                            <form method="post"
+                                                action="{{ route('arca_caea_informar', $r->id) }}"
+                                                class="d-inline js-arca-caea-informar-form"
+                                                data-overlay-titulo="Encolando presentación CAEA…"
+                                                data-overlay-subtitulo="El proceso corre en segundo plano. Al terminar recibirás un mail con el resultado."
+                                                onsubmit="return confirm('¿Encolar la presentación CAEA de este periodo? Al terminar recibirás un mail con el resultado.');">
+                                                @csrf
+                                                @include('ventas.arca_caea.partials.filtros_index_hidden', ['filtrosQuery' => $filtrosQuery ?? []])
+                                                <button type="submit"
+                                                    class="btn-accion-tabla tooltipsC"
+                                                    title="{{ $puedePresentar ? 'Encolar presentación CAEA (segundo plano + mail)' : 'Sin comprobantes informables ahora en esta quincena' }}"
+                                                    @disabled(! $puedePresentar)>
+                                                    <i class="fa fa-paper-plane {{ $puedePresentar ? 'text-primary' : 'text-muted' }}"></i>
+                                                </button>
+                                            </form>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="text-center text-muted">Sin registros CAEA.</td>
+                                    <td colspan="10" class="text-center text-muted">Sin registros CAEA.</td>
                                 </tr>
                             @endforelse
                         </tbody>

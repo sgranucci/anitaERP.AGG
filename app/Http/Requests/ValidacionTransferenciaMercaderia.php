@@ -6,6 +6,7 @@ use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
+use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
@@ -97,12 +98,17 @@ class ValidacionTransferenciaMercaderia extends FormRequest
                 return;
             }
 
-            if ($salidaId > 0 && ! Depmae::autorizadoParaUsuarioYEmpresa($salidaId, $empresaId)) {
+            if ($salidaId > 0 && ! TransferenciaMercaderiaIntercompanySupport::depositoSalidaAutorizado($salidaId, $empresaId)) {
                 $validator->errors()->add('deposito_salida_id', 'El depósito de salida no pertenece a la empresa seleccionada o no está autorizado para su usuario.');
             }
 
-            if (! $destinoBien && $entradaId > 0 && ! Depmae::autorizadoParaUsuarioYEmpresa($entradaId, $empresaId)) {
-                $validator->errors()->add('deposito_entrada_id', 'El depósito de entrada no pertenece a la empresa seleccionada o no está autorizado para su usuario.');
+            if (! $destinoBien && $entradaId > 0 && ! TransferenciaMercaderiaIntercompanySupport::depositoEntradaAutorizado($entradaId, $empresaId)) {
+                $validator->errors()->add(
+                    'deposito_entrada_id',
+                    TransferenciaMercaderiaIntercompanySupport::puedeUsar()
+                        ? 'El depósito de entrada no existe o no es válido.'
+                        : 'El depósito de entrada no pertenece a la empresa seleccionada.'
+                );
             }
 
             if ($tipo && TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipo)) {

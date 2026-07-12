@@ -28,19 +28,22 @@ class Recepcion_Proveedor extends Model
     protected $fillable = [
         'ordencompra_id', 'tipo', 'recepcion_referencia_id', 'empresa_id', 'proveedor_id', 'deposito_id',
         'fecha', 'numerorecepcion', 'numerofactura', 'moneda_id', 'cotizacion', 'estado',
-        'fl_precio_diferencia', 'comentario_precio', 'observacion', 'asiento_id', 'movimientostock_id',
+        'fl_precio_diferencia', 'fl_precio_pendiente_aprobacion', 'comentario_precio', 'observacion', 'asiento_id', 'movimientostock_id',
         'fl_diferencia_cantidad', 'fl_articulo_extra', 'fl_faltante_oc', 'fl_laboratorio', 'fl_linea_rechazada',
         'resumen_diferencias', 'resumen_rechazos',
+        'impuesto_interno',
         'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro', 'origen_carga', 'stkmae_precio_anita_sync_at', 'creousuario_id',
         'centrocosto_id',
     ];
 
     protected $casts = [
         'fl_precio_diferencia' => 'boolean',
+        'fl_precio_pendiente_aprobacion' => 'boolean',
         'fl_linea_rechazada' => 'boolean',
         'fecha' => 'date',
         'numerorecepcion' => 'integer',
         'stkmae_precio_anita_sync_at' => 'datetime',
+        'impuesto_interno' => 'decimal:2',
     ];
 
     public function ordencompras()

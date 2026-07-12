@@ -4,13 +4,36 @@ Generar órdenes de compra desde requisición
 @endsection
 
 @section('scripts')
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/wizard-desde-requisicion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/wizard-desde-requisicion.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/presupuesto/partidagasto/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/presupuesto/capex/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/compras/requisicion/wizard-desde-requisicion.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
+<script type="text/javascript">
+jQuery(function ($) {
+    function intentarBootWizard() {
+        if (typeof window.wzEnsureWizardHidratado === 'function') {
+            return window.wzEnsureWizardHidratado();
+        }
+        if (typeof window.wzBootOrdencompraWizard === 'function') {
+            window.wzBootOrdencompraWizard();
+            return !!window.__WZ_LINEAS_HIDRATADAS__;
+        }
+        return false;
+    }
+    if (!intentarBootWizard()) {
+        var intentos = 0;
+        var timer = window.setInterval(function () {
+            intentos += 1;
+            if (intentarBootWizard() || intentos >= 60) {
+                window.clearInterval(timer);
+            }
+        }, 150);
+    }
+});
+</script>
 @endsection
 
 @section('contenido')
@@ -22,10 +45,8 @@ Generar órdenes de compra desde requisición
         $moneda_query->map(fn ($m) => ['id' => (int) $m->id, 'abrev' => (string) ($m->abreviatura ?? '')])->values()->all(),
         $ocJsonFlags
     );
-    $proveedoresJson = json_encode(
-        $proveedor_query->map(fn ($p) => ['id' => (int) $p->id, 'codigo' => (string) ($p->codigo ?? ''), 'nombre' => (string) ($p->nombre ?? '')])->values()->all(),
-        $ocJsonFlags
-    );
+    $proveedoresJson = json_encode([], $ocJsonFlags);
+    $wizardPlantillaJson = json_encode($wizardPlantilla ?? [], $ocJsonFlags);
     $condicionesCompraJson = json_encode(
         $condicioncompra_query->map(fn ($c) => ['id' => (int) $c->id, 'nombre' => (string) ($c->nombre ?? '')])->values()->all(),
         $ocJsonFlags
@@ -56,16 +77,22 @@ Generar órdenes de compra desde requisición
         collect($tratamiento_enum)->map(fn ($t) => ['nombre' => (string) ($t['nombre'] ?? '')])->values()->all(),
         $ocJsonFlags
     );
+    $filtrosQueryRequisicion = $filtrosQueryRequisicion ?? [];
+    $paramsRequisicionConRetorno = array_merge(['id' => (int) $wizardRequisicionId], $filtrosQueryRequisicion);
+    $volverRequisicionUrl = route('solo_consulta_requisicion', $paramsRequisicionConRetorno);
+    $volverListadoRequisicionUrl = route('consultar_requisicion', $filtrosQueryRequisicion);
+    $tieneRetornoListadoRequisicion = $filtrosQueryRequisicion !== [];
     $wizardMetaJson = json_encode([
         'requisicion_id' => (int) $wizardRequisicionId,
-        'post_url' => route('requisicion_generar_multiples_oc', ['id' => (int) $wizardRequisicionId]),
-        'plantilla_url' => route('ordencompra_plantilla_requisicion'),
-        'opciones_url' => route('ordencompra_opciones_precio_linea'),
-        'cotizacion_url' => route('ordencompra_cotizacion_moneda_fecha'),
-        'sugerir_cuotas_url' => route('ordencompra_sugerir_cuotas'),
-        'calcular_totales_url' => route('ordencompra_calcular_totales'),
-        'volver_url' => route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]),
-        'index_oc_url' => route('consultar_ordencompra'),
+        'post_path' => rutaAppRelativa('requisicion_generar_multiples_oc', ['id' => (int) $wizardRequisicionId]),
+        'plantilla_path' => rutaAppRelativa('ordencompra_plantilla_requisicion'),
+        'opciones_path' => rutaAppRelativa('ordencompra_opciones_precio_linea'),
+        'cotizacion_path' => rutaAppRelativa('ordencompra_cotizacion_moneda_fecha'),
+        'sugerir_cuotas_path' => rutaAppRelativa('ordencompra_sugerir_cuotas'),
+        'calcular_totales_path' => rutaAppRelativa('ordencompra_calcular_totales'),
+        'volver_path' => rutaAppRelativa('solo_consulta_requisicion', $paramsRequisicionConRetorno),
+        'volver_listado_requisicion_path' => rutaAppRelativa('consultar_requisicion', $filtrosQueryRequisicion),
+        'index_oc_path' => rutaAppRelativa('consultar_ordencompra'),
         'csrf' => csrf_token(),
         'puede_enviar_proveedor' => can('editar-ordencompra', false),
         'moneda_peso_id' => $monedaPesoId,
@@ -74,6 +101,7 @@ Generar órdenes de compra desde requisición
 @endphp
 
 <script type="application/json" id="oc-wizard-meta">{!! $wizardMetaJson !!}</script>
+<script type="application/json" id="oc-wizard-plantilla">{!! $wizardPlantillaJson !!}</script>
 <script type="application/json" id="oc-wizard-monedas">{!! $monedasJson !!}</script>
 <script type="application/json" id="oc-wizard-proveedores">{!! $proveedoresJson !!}</script>
 <script type="application/json" id="oc-wizard-condicionescompra">{!! $condicionesCompraJson !!}</script>
@@ -149,7 +177,12 @@ Generar órdenes de compra desde requisición
                     Generar órdenes de compra desde requisición #{{ (int) $wizardRequisicionId }}
                 </h3>
                 <div class="card-tools">
-                    <a href="{{ route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]) }}" class="btn btn-outline-info btn-sm">
+                    @if ($tieneRetornoListadoRequisicion)
+                    <a href="{{ $volverListadoRequisicionUrl }}" class="btn btn-outline-light btn-sm mr-1" title="Volver al listado de requisiciones con los mismos filtros">
+                        <i class="fa fa-fw fa-list"></i> Volver al listado
+                    </a>
+                    @endif
+                    <a href="{{ $volverRequisicionUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver a la requisición
                     </a>
                     <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-light btn-sm">
@@ -160,7 +193,7 @@ Generar órdenes de compra desde requisición
 
             <div class="card-body">
                 <div class="alert alert-info">
-                    <strong>Cómo funciona:</strong> elija el <em>origen de precio</em> de cada ítem (lista del proveedor, presupuesto o precio cargado en la requisición). Si la línea ya tiene precio en la requisición, se usará automáticamente. Las listas de precio y presupuestos traen proveedor; si solo usa el precio de la requisición, al generar se le pedirá el proveedor en un paso final. Cada OC detectada aparece abajo para ajustar cabecera, comprobantes y archivos.
+                    <strong>Cómo funciona:</strong> en cada ítem use <em>Origen</em> para listas de precio o presupuestos. Si no hay precio cargado, use <em>Proveedor</em> para elegir el proveedor manualmente (puede cargar el precio en la grilla). Las líneas con precio en la requisición pueden usar ese valor automáticamente al generar. Cada OC detectada aparece abajo para ajustar cabecera, comprobantes y archivos.
                 </div>
 
                 <div class="card wizard-oc-articulos-card mb-3" id="wizard-oc-articulos">
@@ -169,7 +202,7 @@ Generar órdenes de compra desde requisición
                             <i class="fa fa-list-ul mr-1"></i> Ítems de la requisición
                             <small class="text-muted ml-2">elija el origen del precio por ítem</small>
                         </h5>
-                        <span class="badge badge-info" id="wizard-oc-articulos-resumen">— ítems</span>
+                        <span class="badge badge-info" id="wizard-oc-articulos-resumen">{{ count($wizardPlantilla['articulos'] ?? []) }} ítems</span>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
@@ -190,8 +223,8 @@ Generar órdenes de compra desde requisición
                                         <th style="width: 12%;">Origen / Proveedor</th>
                                     </tr>
                                 </thead>
-                                <tbody id="wizard-oc-tabla-articulos-body">
-                                    <tr><td colspan="12" class="text-center text-muted py-3">Cargando ítems…</td></tr>
+                                <tbody id="wizard-oc-tabla-articulos-body" data-wz-ssr="1">
+                                    @include('compras.ordencompra.partials.wizard_tabla_articulos_filas')
                                 </tbody>
                             </table>
                         </div>
@@ -247,17 +280,18 @@ Generar órdenes de compra desde requisición
                                             'empresa_query' => $empresa_query,
                                             'id' => 'wz_empresa_id',
                                             'name' => 'wz_empresa_id',
+                                            'empresa_id' => $wizardPlantilla['empresa_id'] ?? null,
                                         ])
                                     </div>
                                 </div>
                                 <div class="form-group row mb-2">
                                     <label class="col-lg-4 col-form-label requerido">Fecha doc.</label>
                                     <div class="col-lg-4">
-                                        <input type="date" id="wz_fecha" class="form-control form-control-sm" value="{{ date('Y-m-d') }}">
+                                        <input type="date" id="wz_fecha" class="form-control form-control-sm" value="{{ substr((string) ($wizardPlantilla['fecha'] ?? date('Y-m-d')), 0, 10) }}">
                                     </div>
                                     <label class="col-lg-2 col-form-label requerido">F. entrega</label>
                                     <div class="col-lg-2 pr-2">
-                                        <input type="date" id="wz_fechaentrega" class="form-control form-control-sm" value="{{ date('Y-m-d') }}">
+                                        <input type="date" id="wz_fechaentrega" class="form-control form-control-sm" value="{{ substr((string) ($wizardPlantilla['fechaentrega'] ?? date('Y-m-d')), 0, 10) }}">
                                     </div>
                                 </div>
                                 <div class="form-group row mb-2">
@@ -265,7 +299,7 @@ Generar órdenes de compra desde requisición
                                     <div class="col-lg-8">
                                         <select id="wz_centrocosto_id" class="form-control form-control-sm">
                                             @foreach ($centrocosto_query as $cc)
-                                                <option value="{{ $cc->id }}" {{ (int) $cc->id === $centrocostoDefaultDestino ? 'selected' : '' }}>
+                                                <option value="{{ $cc->id }}" {{ (int) $cc->id === (int) ($wizardPlantilla['centrocosto_id'] ?? $centrocostoDefaultDestino) ? 'selected' : '' }}>
                                                     {{ $cc->codigo }} — {{ $cc->nombre }}
                                                 </option>
                                             @endforeach
@@ -277,7 +311,7 @@ Generar órdenes de compra desde requisición
                                     <div class="col-lg-8">
                                         <select id="wz_tratamiento" class="form-control form-control-sm">
                                             @foreach ($tratamiento_enum as $t)
-                                                <option value="{{ $t['nombre'] }}" {{ ($t['nombre'] ?? '') === 'NO ANTICIPADA' ? 'selected' : '' }}>{{ $t['nombre'] }}</option>
+                                                <option value="{{ $t['nombre'] }}" {{ ($t['nombre'] ?? '') === ($wizardPlantilla['tratamiento'] ?? 'NO ANTICIPADA') ? 'selected' : '' }}>{{ $t['nombre'] }}</option>
                                             @endforeach
                                         </select>
                                     </div>
@@ -287,13 +321,13 @@ Generar órdenes de compra desde requisición
                                 <div class="form-group row mb-2">
                                     <label class="col-lg-3 col-form-label">Comentario</label>
                                     <div class="col-lg-9">
-                                        <input type="text" id="wz_comentario" class="form-control form-control-sm" maxlength="255">
+                                        <input type="text" id="wz_comentario" class="form-control form-control-sm" maxlength="255" value="{{ $wizardPlantilla['comentario'] ?? '' }}">
                                     </div>
                                 </div>
                                 <div class="form-group row mb-2">
                                     <label class="col-lg-3 col-form-label requerido">Detalle</label>
                                     <div class="col-lg-9">
-                                        <textarea id="wz_detalle" rows="3" class="form-control form-control-sm" maxlength="2000"></textarea>
+                                        <textarea id="wz_detalle" rows="3" class="form-control form-control-sm" maxlength="2000">{{ $wizardPlantilla['detalle'] ?? '' }}</textarea>
                                     </div>
                                 </div>
                                 <div class="form-group row mb-2">
@@ -467,6 +501,13 @@ Generar órdenes de compra desde requisición
                         <div id="modalOcOrigenPrecioCargando" class="text-center text-muted py-3 d-none">Cargando opciones…</div>
                         <div id="modalOcOrigenPrecioError" class="alert alert-danger d-none"></div>
                         <div id="modalOcOrigenPrecioOpciones"></div>
+                        <div id="modalOcOrigenPrecioManual" class="border-top pt-3 mt-3 d-none">
+                            <p class="small text-muted mb-2">Si no hay lista de precio ni presupuesto, puede elegir el proveedor y usar el precio de la línea (cárguelo en la grilla si está en cero).</p>
+                            <button type="button" class="btn btn-outline-secondary btn-block text-left" id="modalOcOrigenPrecioBtnProveedor">
+                                <strong><i class="fa fa-truck"></i> Elegir proveedor para esta línea</strong><br>
+                                <span class="small text-muted">Usará el precio y moneda actuales de la fila</span>
+                            </button>
+                        </div>
                     </div>
                     <div class="modal-footer py-2">
                         <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
@@ -559,8 +600,11 @@ Generar órdenes de compra desde requisición
                             data-resultados-modal="#modalWizardResultados" data-envio-ids="[]">
                             <i class="fa fa-envelope"></i> Enviar al proveedor
                         </button>
-                        <a href="{{ route('solo_consulta_requisicion', ['id' => (int) $wizardRequisicionId]) }}" class="btn btn-outline-secondary">Volver a la requisición</a>
-                        <a href="{{ route('consultar_ordencompra') }}" class="btn btn-primary"><i class="fa fa-list"></i> Ir al listado de OC</a>
+                        <a href="{{ $volverRequisicionUrl }}" class="btn btn-outline-secondary">Volver a la requisición</a>
+                        @if ($tieneRetornoListadoRequisicion)
+                        <a href="{{ $volverListadoRequisicionUrl }}" class="btn btn-primary"><i class="fa fa-list"></i> Volver al listado de requisiciones</a>
+                        @endif
+                        <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-primary"><i class="fa fa-list"></i> Ir al listado de OC</a>
                     </div>
                 </div>
             </div>

@@ -2,6 +2,7 @@
     'use strict';
 
     var MODO_CAMPO = 'campo';
+    var CAMPO_LISTA = 'listaprecio';
     var operadoresPorCampo = {};
     var LF = window.ListadoFiltros;
 
@@ -11,6 +12,10 @@
 
     function $valorPanel() {
         return $('#filtro_valor_panel');
+    }
+
+    function $selectLista() {
+        return $('#filtro_valor_listaprecio');
     }
 
     function parseOperadores() {
@@ -25,24 +30,49 @@
         }
     }
 
+    function campoActivo() {
+        if ($('#filtro_modo').val() !== MODO_CAMPO) {
+            return '';
+        }
+
+        return String($('#filtro_campo').val() || '');
+    }
+
     function tipoCampoActivo() {
         var modo = $('#filtro_modo').val();
         if (modo !== MODO_CAMPO) {
             return 'texto';
         }
         var $opt = $('#filtro_campo option:selected');
-        return $opt.data('type') || 'texto';
+
+        return String($opt.attr('data-type') || 'texto');
+    }
+
+    function esCampoListaPrecio() {
+        return campoActivo() === CAMPO_LISTA;
     }
 
     function setPlaceholderValor(texto) {
-        $valorPrincipal().attr('placeholder', texto);
-        $valorPanel().attr('placeholder', texto);
+        $valorPrincipal().attr('type', 'text').attr('placeholder', texto);
+        $valorPanel().attr('type', 'text').attr('placeholder', texto);
+    }
+
+    function sincronizarValorListaAntesDeEnviar() {
+        if (!esCampoListaPrecio()) {
+            return;
+        }
+
+        var listaId = String($selectLista().val() || '');
+        $valorPrincipal().val(listaId);
+        $valorPanel().val('');
     }
 
     function actualizarVisibilidad() {
         var modo = $('#filtro_modo').val();
         var operador = $('#filtro_operador').val();
         var tipo = tipoCampoActivo();
+        var esLista = esCampoListaPrecio();
+        var esFecha = tipo === 'fecha' && !esLista;
 
         if (modo === MODO_CAMPO) {
             $('.filtro-campo-wrap').show();
@@ -50,27 +80,41 @@
             $('.filtro-campo-wrap').hide();
         }
 
-        var esFecha = tipo === 'fecha';
         var esVacio = operador === 'vacio';
 
-        if (esVacio) {
+        if (esVacio && !esLista) {
             $valorPrincipal().val('');
             $valorPanel().val('');
+            $selectLista().val('');
             $('.filtro-valor-hasta-wrap').hide();
-        } else if (esFecha && operador === 'entre') {
-            $('.filtro-valor-hasta-wrap').show();
+        } else if (esLista) {
+            $('.filtro-listaprecio-wrap').show();
+            $('.filtro-valor-texto-wrap').hide();
+            $('.filtro-valor-hasta-wrap').hide();
+            $selectLista().prop('disabled', false);
+            $valorPanel().prop('disabled', true);
+            setPlaceholderValor('Seleccione la lista en el panel');
         } else {
-            $('.filtro-valor-hasta-wrap').hide();
-        }
+            $('.filtro-listaprecio-wrap').hide();
+            $('.filtro-valor-texto-wrap').show();
+            $selectLista().prop('disabled', true);
+            $valorPanel().prop('disabled', false);
 
-        if (esFecha) {
-            setPlaceholderValor('dd/mm/aaaa');
-        } else if (tipo === 'entero') {
-            setPlaceholderValor('Número entero');
-        } else if (tipo === 'decimal') {
-            setPlaceholderValor('Importe (ej. 1500 o 1500,50)');
-        } else {
-            setPlaceholderValor('Texto (tolera errores de tipeo)');
+            if (esFecha && operador === 'entre') {
+                $('.filtro-valor-hasta-wrap').show();
+            } else {
+                $('.filtro-valor-hasta-wrap').hide();
+            }
+
+            if (esFecha) {
+                setPlaceholderValor('dd/mm/aaaa');
+            } else if (tipo === 'entero') {
+                setPlaceholderValor('Número entero');
+            } else if (tipo === 'decimal') {
+                setPlaceholderValor('Importe (ej. 1500 o 1500,50)');
+            } else {
+                setPlaceholderValor('Texto (tolera errores de tipeo)');
+            }
         }
     }
 
@@ -101,6 +145,11 @@
         LF.sincronizarValorPrincipal('#filtro_valor', '#filtro_valor_panel');
 
         function sincronizarValorAntesDeEnviar() {
+            if (esCampoListaPrecio()) {
+                sincronizarValorListaAntesDeEnviar();
+                return;
+            }
+
             var $panel = $('#panel-filtros-precio');
             var panelAbierto = $panel.hasClass('show') || $panel.hasClass('in');
             if (panelAbierto) {
@@ -111,11 +160,17 @@
         }
 
         $('#form-filtros-precio').on('click', '[data-aplicar-filtros-panel]', function () {
-            $valorPrincipal().val($valorPanel().val());
+            sincronizarValorAntesDeEnviar();
         });
 
         $('#form-filtros-precio').on('submit.listadoFiltrosSync', function () {
             sincronizarValorAntesDeEnviar();
+        });
+
+        $selectLista().on('change', function () {
+            if (esCampoListaPrecio()) {
+                sincronizarValorListaAntesDeEnviar();
+            }
         });
 
         LF.initSubmitBusquedaRapida($('#form-filtros-precio'), {
@@ -130,6 +185,7 @@
             if ($(this).val() === 'vacio') {
                 $valorPrincipal().val('');
                 $valorPanel().val('');
+                $selectLista().val('');
             }
             actualizarVisibilidad();
         });

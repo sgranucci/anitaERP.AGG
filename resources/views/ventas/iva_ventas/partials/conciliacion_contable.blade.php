@@ -8,6 +8,8 @@
     $puedeVerPuntoventa = $puede_ver_puntoventa ?? false;
     $puedeVerCuenta = $puede_ver_cuenta ?? false;
     $queryConsulta = ['origen' => 'modal_consulta', 'vista' => 'consulta'];
+    $ctamov = $conc['ctamov'] ?? ['habilitada' => false];
+    $ctamovHabil = ! empty($ctamov['habilitada']);
 @endphp
 @if (! empty($conc['habilitada']))
     <div class="px-3 py-3 border-bottom bg-white">
@@ -83,6 +85,55 @@
                 </tfoot>
             </table>
         </div>
+
+        @if ($ctamovHabil)
+            <p class="small font-weight-bold text-muted mb-1 mt-2">Auditoría contra ctamov (Anita)</p>
+            <div class="table-responsive mb-3">
+                <table class="table table-sm table-bordered mb-0" style="font-size: 0.78rem;">
+                    <thead>
+                        <tr style="background-color: #85C1E9; color: #17202A;">
+                            <th>Concepto</th>
+                            <th class="text-right">Mayor contable (ERP)</th>
+                            <th class="text-right">ctamov (Anita)</th>
+                            <th class="text-right">Diferencia</th>
+                            <th class="text-center">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @php
+                            $ctamovLineas = [
+                                ['Ventas', (float) ($resumen['contable_ventas_total'] ?? 0), (float) ($resumen['ctamov_ventas_total'] ?? 0), (float) ($resumen['ctamov_dif_ventas'] ?? 0)],
+                                ['IVA (déb. − créd.)', (float) ($resumen['contable_iva'] ?? 0), (float) ($resumen['ctamov_iva'] ?? 0), (float) ($resumen['ctamov_dif_iva'] ?? 0)],
+                            ];
+                        @endphp
+                        @foreach ($ctamovLineas as $cl)
+                            @php $cuadraCt = abs($cl[3]) <= \App\Support\Ventas\IvaVentas\IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA; @endphp
+                            <tr @if (! $cuadraCt) class="table-warning" @endif>
+                                <td>{{ $cl[0] }}</td>
+                                <td class="text-right">{{ $formatear($cl[1]) }}</td>
+                                <td class="text-right">{{ $formatear($cl[2]) }}</td>
+                                <td class="text-right font-weight-bold">{{ $formatear($cl[3]) }}</td>
+                                <td class="text-center">
+                                    @if ($cuadraCt)
+                                        <i class="fa fa-check text-success" title="Cuadra"></i>
+                                    @else
+                                        <i class="fa fa-exclamation-triangle text-warning" title="Diferencia"></i>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                    <tfoot>
+                        <tr class="small text-muted">
+                            <td colspan="5">
+                                {{ (int) ($ctamov['lineas'] ?? 0) }} línea(s) ctamov leídas del bridge Anita
+                                · haber = ventas / IVA débito (+), debe = IVA crédito fiscal (−)
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        @endif
 
         @foreach ($conc['notas'] ?? [] as $nota)
             <p class="small text-muted mb-1"><i class="fa fa-info-circle"></i> {{ $nota }}</p>

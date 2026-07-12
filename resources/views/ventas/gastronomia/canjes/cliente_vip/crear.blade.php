@@ -8,6 +8,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('consultar_cliente_vip_gastronomia', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -16,12 +19,12 @@
             <div class="card-header">
                 <h3 class="card-title">Crear cliente VIP</h3>
                 <div class="card-tools">
-                    <a href="{{ route('consultar_cliente_vip_gastronomia') }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{ route('guardar_cliente_vip_gastronomia') }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{ route('guardar_cliente_vip_gastronomia', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf
                 <div class="card-body">
                     @include('ventas.gastronomia.canjes.cliente_vip.form')

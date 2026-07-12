@@ -10,6 +10,59 @@
             && $('#tabla-articulos-requisicion-sala').length;
     }
 
+    function esPantallaRequisicionSalaEditable() {
+        if (!esPantallaRequisicionSala()) {
+            return false;
+        }
+        var $cant = $('#tabla-articulos-requisicion-sala tbody .cantidad-linea').first();
+        return $cant.length && !$cant.prop('readonly');
+    }
+
+    function enfocarInput($inp) {
+        if (!$inp || !$inp.length || $inp.prop('readonly') || $inp.prop('disabled')) {
+            return;
+        }
+        setTimeout(function () {
+            $inp.trigger('focus');
+            if ($inp[0] && typeof $inp[0].select === 'function' && $inp.is('input[type="text"], input[type="number"]')) {
+                $inp[0].select();
+            }
+        }, 0);
+    }
+
+    function validarCantidadLinea($input, $row) {
+        if (!$input || !$input.length || !$row || !$row.length) {
+            return false;
+        }
+        if ($input.prop('readonly') || $input.prop('disabled')) {
+            return true;
+        }
+
+        var articuloId = ($row.find('.articulo_id').val() || '').trim();
+        if (!articuloId) {
+            alert('Indique un artículo válido antes de cargar la cantidad.');
+            enfocarInput($row.find('.codigoarticulo').first());
+            return false;
+        }
+
+        var raw = ($input.val() || '').toString().trim();
+        if (raw === '') {
+            alert('Indique la cantidad del ítem.');
+            enfocarInput($input);
+            return false;
+        }
+
+        var cant = parseFloat(raw.replace(',', '.'));
+        if (Number.isNaN(cant) || cant <= 0) {
+            alert('La cantidad debe ser mayor a cero.');
+            enfocarInput($input);
+            return false;
+        }
+
+        $input.val(cant);
+        return true;
+    }
+
     function esTeclaF1(e) {
         return e.key === 'F1' || e.code === 'F1' || e.keyCode === 112;
     }
@@ -131,14 +184,49 @@
                 if (e.key !== 'Enter' && e.which !== 13) {
                     return;
                 }
-                if (!e.target.classList.contains('codigoarticulo')) {
+                if (!esPantallaRequisicionSalaEditable()) {
                     return;
                 }
-                e.preventDefault();
-                e.stopPropagation();
-                validarSkuLinea(e.target);
+
+                var target = e.target;
+                if (!target) {
+                    return;
+                }
+
+                if (target.classList.contains('codigoarticulo')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    validarSkuLinea(target);
+                    return;
+                }
+
+                if (target.classList.contains('cantidad-linea')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var $target = $(target);
+                    var $row = $target.closest('tr');
+                    if (!validarCantidadLinea($target, $row)) {
+                        return;
+                    }
+                    enfocarInput($row.find('.fueradeservicio-linea').first());
+                }
             }, true);
         }
+
+        $(document)
+            .off('blur.reqSalaCantidad', '#tabla-articulos-requisicion-sala .cantidad-linea')
+            .on('blur.reqSalaCantidad', '#tabla-articulos-requisicion-sala .cantidad-linea', function () {
+                if (!esPantallaRequisicionSalaEditable()) {
+                    return;
+                }
+                var $input = $(this);
+                if (!$input.val() && !($input.closest('tr').find('.articulo_id').val() || '').trim()) {
+                    return;
+                }
+                if (!validarCantidadLinea($input, $input.closest('tr'))) {
+                    return;
+                }
+            });
     }
 
     function initConsultasRequisicionSala() {

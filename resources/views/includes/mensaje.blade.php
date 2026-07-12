@@ -7,6 +7,15 @@
         </ul>
     </div>
 @endif
+@if (session("mensaje-error") || session("mensaje_error") || session("error"))
+    <div class="alert alert-danger alert-dismissible">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+        <h4><i class="icon fa fa-times"></i> Error</h4>
+        <ul class="mb-0">
+            <li>{{ session("mensaje-error") ?? session("mensaje_error") ?? session("error") }}</li>
+        </ul>
+    </div>
+@endif
 @if (session("errores"))
     <div class="alert alert-danger">
         <ul>

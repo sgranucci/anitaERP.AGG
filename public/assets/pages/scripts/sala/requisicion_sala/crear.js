@@ -111,9 +111,11 @@
         if (esFueraDeServicio($tr)) {
             $uid.prop('required', true);
             $uid.toggleClass('is-invalid', pendiente);
+            marcarCampoInvalido($uid[0], pendiente);
         } else {
             $uid.prop('required', false);
             $uid.removeClass('is-invalid');
+            marcarCampoInvalido($uid[0], false);
         }
     }
 
@@ -142,13 +144,208 @@
         if ($pendiente) {
             actualizarControlesUid();
             var $uid = $pendiente.find('.uid-linea');
+            marcarCampoInvalido($uid[0], true);
             $uid.trigger('focus');
-            if (typeof window.alert === 'function') {
-                window.alert('Debe ingresar el UID cuando el ítem está fuera de servicio (F/S = S).');
-            }
             return false;
         }
         return true;
+    }
+
+    function marcarCampoInvalido(campo, invalido) {
+        if (!campo) {
+            return;
+        }
+        if (typeof marcarCampoObligatorio === 'function') {
+            marcarCampoObligatorio(campo, invalido);
+        }
+        $(campo).toggleClass('is-invalid', invalido);
+    }
+
+    function limpiarMarcasValidacionLineas() {
+        $('#tabla-articulos-requisicion-sala tbody tr').each(function () {
+            var $tr = $(this);
+            marcarCampoInvalido($tr.find('.codigoarticulo')[0], false);
+            marcarCampoInvalido($tr.find('.cantidad-linea')[0], false);
+            marcarCampoInvalido($tr.find('.uid-linea')[0], false);
+        });
+    }
+
+    function validarRequisicionSalaAntesDeEnviar(form) {
+        var resultado = typeof validarCamposObligatoriosFormulario === 'function'
+            ? validarCamposObligatoriosFormulario(form)
+            : { valido: true, primerInvalido: null, cantidadInvalidos: 0 };
+
+        limpiarMarcasValidacionLineas();
+
+        var depositoId = parseInt(($(form).find('.deposito_id').val() || '0'), 10);
+        if (depositoId <= 0) {
+            resultado.valido = false;
+            resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+            var depCod = form.querySelector('#deposito_id_codigo') || form.querySelector('.codigodeposito');
+            marcarCampoInvalido(depCod, true);
+            if (!resultado.primerInvalido) {
+                resultado.primerInvalido = depCod;
+            }
+        }
+
+        var filasConArticulo = 0;
+        var primeraLineaSinArticulo = null;
+        $('#tabla-articulos-requisicion-sala tbody tr').each(function () {
+            var $tr = $(this);
+            var articuloId = parseInt($tr.find('.articulo_id').val() || '0', 10);
+            var skuInp = $tr.find('.codigoarticulo')[0];
+            var skuVal = ($tr.find('.codigoarticulo').val() || '').trim();
+
+            if (articuloId <= 0) {
+                if (!primeraLineaSinArticulo && skuInp) {
+                    primeraLineaSinArticulo = skuInp;
+                }
+                if (skuVal !== '') {
+                    resultado.valido = false;
+                    resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+                    marcarCampoInvalido(skuInp, true);
+                    if (!resultado.primerInvalido) {
+                        resultado.primerInvalido = skuInp;
+                    }
+                }
+                return;
+            }
+
+            filasConArticulo++;
+            var cantInp = $tr.find('.cantidad-linea')[0];
+            var cant = parseFloat(String($tr.find('.cantidad-linea').val() || '').replace(',', '.'));
+            if (Number.isNaN(cant) || cant <= 0) {
+                resultado.valido = false;
+                resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+                marcarCampoInvalido(cantInp, true);
+                if (!resultado.primerInvalido) {
+                    resultado.primerInvalido = cantInp;
+                }
+            }
+
+            if (lineaPendienteUid($tr)) {
+                resultado.valido = false;
+                resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+                var uidInp = $tr.find('.uid-linea')[0];
+                marcarCampoInvalido(uidInp, true);
+                if (!resultado.primerInvalido) {
+                    resultado.primerInvalido = uidInp;
+                }
+            }
+        });
+
+        if (filasConArticulo === 0) {
+            resultado.valido = false;
+            resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+            var primerSku = primeraLineaSinArticulo || form.querySelector('#tabla-articulos-requisicion-sala .codigoarticulo');
+            marcarCampoInvalido(primerSku, true);
+            if (!resultado.primerInvalido) {
+                resultado.primerInvalido = primerSku;
+            }
+        }
+
+        return resultado;
+    }
+
+    function notificarErroresValidacion(resultado) {
+        if (!resultado || resultado.valido) {
+            return;
+        }
+
+        if (typeof mostrarSolapaDelPrimerCampoInvalido === 'function') {
+            mostrarSolapaDelPrimerCampoInvalido(resultado.primerInvalido);
+        }
+        if (typeof notificarCamposObligatoriosPendientes === 'function') {
+            notificarCamposObligatoriosPendientes(resultado.primerInvalido, resultado.cantidadInvalidos);
+        } else if (typeof window.alert === 'function') {
+            window.alert('Complete los campos obligatorios antes de grabar.');
+        }
+
+        var primer = resultado.primerInvalido;
+        if (primer && primer.classList && primer.classList.contains('codigoarticulo')) {
+            if (typeof enfocarCampoInvalido === 'function') {
+                enfocarCampoInvalido(primer);
+            }
+            return;
+        }
+        if (typeof enfocarCampoInvalido === 'function') {
+            enfocarCampoInvalido(primer);
+        }
+    }
+
+    function marcarCamposInvalidosDesdeValidator(val) {
+        if (!val || !val.errorList) {
+            return;
+        }
+        val.errorList.forEach(function (err) {
+            var el = err.element;
+            if (!el) {
+                return;
+            }
+            if ($(el).hasClass('deposito_id')) {
+                marcarCampoInvalido(document.getElementById('deposito_id_codigo') || document.querySelector('.codigodeposito'), true);
+                return;
+            }
+            marcarCampoInvalido(el, true);
+        });
+    }
+
+    function restaurarBotonGrabar() {
+        $('#botonform0').prop('disabled', false).html(htmlBotonGrabar);
+        if (window.RequisicionSalaGrabando && typeof window.RequisicionSalaGrabando.ocultar === 'function') {
+            window.RequisicionSalaGrabando.ocultar();
+        }
+    }
+
+    function mostrarEstadoGrabando() {
+        if (window.RequisicionSalaGrabando && typeof window.RequisicionSalaGrabando.mostrar === 'function') {
+            window.RequisicionSalaGrabando.mostrar();
+        }
+        $('#botonform0').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Grabando…');
+    }
+
+    function prepararValidacionGrabado() {
+        var $form = $('#form-general');
+        if (!$form.length || !$.fn.validate) {
+            return;
+        }
+        var validator = $form.data('validator');
+        if (!validator) {
+            return;
+        }
+
+        var invalidHandlerOriginal = validator.settings.invalidHandler;
+
+        validator.settings.submitHandler = function () {
+            mostrarEstadoGrabando();
+            return true;
+        };
+
+        validator.settings.invalidHandler = function (event, val) {
+            restaurarBotonGrabar();
+            marcarCamposInvalidosDesdeValidator(val);
+            if (typeof invalidHandlerOriginal === 'function') {
+                invalidHandlerOriginal(event, val);
+            }
+        };
+    }
+
+    function registrarValidacionAntesDeEnviar() {
+        var form = document.getElementById('form-general');
+        if (!form || !document.getElementById('tabla-articulos-requisicion-sala')) {
+            return;
+        }
+
+        form.addEventListener('submit', function (e) {
+            var resultado = validarRequisicionSalaAntesDeEnviar(form);
+            if (resultado.valido) {
+                return;
+            }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            restaurarBotonGrabar();
+            notificarErroresValidacion(resultado);
+        }, true);
     }
 
     function bindLinea($tr) {
@@ -177,7 +374,20 @@
             });
         });
         $tr.find('.articulo_id').on('change', function () {
+            marcarCampoInvalido($tr.find('.codigoarticulo')[0], false);
             actualizarAvisoLineasNuevasSinTm();
+        });
+        $tr.find('.cantidad-linea').on('input change', function () {
+            var cant = parseFloat(String($(this).val() || '').replace(',', '.'));
+            var articuloId = parseInt($tr.find('.articulo_id').val() || '0', 10);
+            if (articuloId > 0 && !Number.isNaN(cant) && cant > 0) {
+                marcarCampoInvalido(this, false);
+            }
+        });
+        $tr.find('.codigoarticulo').on('input change', function () {
+            if (parseInt($tr.find('.articulo_id').val() || '0', 10) > 0) {
+                marcarCampoInvalido(this, false);
+            }
         });
         $tr.find('.fueradeservicio-linea').on('change', function () {
             actualizarEstadoUidLinea($(this).closest('tr'));
@@ -227,39 +437,35 @@
             }, 0);
         });
 
-        $(document).on('click', '#botonform0', function (e) {
-            e.preventDefault();
-            if (!validarUidsFueraDeServicio()) {
-                return;
-            }
-            if (!confirmarGrabadoConLineasNuevasSinTm()) {
-                return;
-            }
-            var $f = $('#form-general');
-            if ($f.length) {
-                if (window.RequisicionSalaGrabando && typeof window.RequisicionSalaGrabando.mostrar === 'function') {
-                    window.RequisicionSalaGrabando.mostrar();
-                }
-                $('#botonform0').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Grabando…');
-                $f.trigger('submit');
-            }
+        prepararValidacionGrabado();
+        registrarValidacionAntesDeEnviar();
+
+        $(document).on('change input', '#form-general .codigodeposito, #form-general .deposito_id', function () {
+            var depId = parseInt($('#deposito_id').val() || '0', 10);
+            marcarCampoInvalido(document.getElementById('deposito_id_codigo') || document.querySelector('.codigodeposito'), depId <= 0);
         });
 
-        $('#form-general').on('submit', function (e) {
-            if (!validarUidsFueraDeServicio()) {
-                e.preventDefault();
-                if (window.RequisicionSalaGrabando && typeof window.RequisicionSalaGrabando.ocultar === 'function') {
-                    window.RequisicionSalaGrabando.ocultar();
-                }
-                $('#botonform0').prop('disabled', false).html(htmlBotonGrabar);
+        $(document).on('click', '#botonform0', function (e) {
+            e.preventDefault();
+            var form = document.getElementById('form-general');
+            if (!form) {
+                return;
+            }
+            var resultado = validarRequisicionSalaAntesDeEnviar(form);
+            if (!resultado.valido) {
+                restaurarBotonGrabar();
+                notificarErroresValidacion(resultado);
                 return;
             }
             if (!confirmarGrabadoConLineasNuevasSinTm()) {
-                e.preventDefault();
-                if (window.RequisicionSalaGrabando && typeof window.RequisicionSalaGrabando.ocultar === 'function') {
-                    window.RequisicionSalaGrabando.ocultar();
-                }
-                $('#botonform0').prop('disabled', false).html(htmlBotonGrabar);
+                return;
+            }
+            $('#form-general').trigger('submit');
+        });
+
+        $(window).on('pageshow', function (event) {
+            if (event.originalEvent && event.originalEvent.persisted) {
+                restaurarBotonGrabar();
             }
         });
 

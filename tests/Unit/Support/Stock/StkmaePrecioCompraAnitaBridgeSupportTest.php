@@ -59,4 +59,29 @@ class StkmaePrecioCompraAnitaBridgeSupportTest extends TestCase
         $this->assertSame('3', $resultado['stkm_cod_mon_co2']);
         $this->assertSame('1', $resultado['stkm_cod_mon_co3']);
     }
+
+    public function test_precio_con_impuesto_interno_por_unidad_se_suma_antes_de_push(): void
+    {
+        $precioRecepcion = 50.0;
+        $impPorUnidad = 10.0;
+        $precioUltimaCompra = $precioRecepcion + $impPorUnidad;
+
+        $resultado = StkmaePrecioCompraAnitaBridgeSupport::calcularPushPrecioCompra(
+            [
+                'stkm_pre_compra1' => 0,
+                'stkm_pre_compra2' => 0,
+                'stkm_pre_compra3' => 40.0,
+                'stkm_cant_compra1' => 0,
+                'stkm_cant_compra2' => 0,
+                'stkm_cant_compra3' => 1.0,
+                'stkm_ppp' => 40.0,
+            ],
+            $precioUltimaCompra,
+            10.0,
+            20260706,
+            0.0,
+        );
+
+        $this->assertSame(60.0, $resultado['stkm_pre_compra3']);
+    }
 }

@@ -53,6 +53,12 @@
     $empresaUnica = ! $esEdicion && $empresasDisponibles->count() === 1;
     $apiBase = rtrim((string) config('app.app_carpeta', ''), '/');
     $auditoriaJornada = $auditoriaJornada ?? null;
+    $fechaJornadaDisplay = '—';
+    if ($esEdicion) {
+        $fechaJornadaDisplay = $esJornada
+            ? ($data->jornada?->fecha_jornada?->format('d/m/Y') ?? '—')
+            : ($data->turnoOperativo?->jornada?->fecha_jornada?->format('d/m/Y') ?? '—');
+    }
 
     $datosInicialesJson = [
         'tipo' => $tipoSel,
@@ -66,7 +72,6 @@
         'puntoventa_cae_label' => $pvCaeLabel,
         'puntoventa_caea_label' => $pvCaeaLabel,
         'caja_id' => old('caja_id', $esEdicion ? $data->caja_id : ($caja_id ?? 0)),
-        'fecharendicion' => old('fecharendicion', $esEdicion ? $data->fecharendicion?->format('Y-m-d\TH:i') : now()->format('Y-m-d\TH:i')),
         'iniciodelfondo' => old('iniciodelfondo', $esEdicion ? $data->iniciodelfondo : 0),
         'totalfactura' => old('totalfactura', $esEdicion ? $data->totalfactura : 0),
         'totalcobrado' => old('totalcobrado', $esEdicion ? $data->totalcobrado : 0),
@@ -176,7 +181,7 @@
             @endif
             @endif
             <div class="form-row">
-                <div class="form-group col-md-4">
+                <div class="form-group col-md-3">
                     <label for="empresa_id" class="requerido">Empresa</label>
                     @if ($esEdicion)
                         <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $empresaSel }}"/>
@@ -190,13 +195,24 @@
                         ])
                     @endif
                 </div>
-                <div class="form-group col-md-4">
-                    <label for="fecharendicion" class="requerido">Fecha/hora registro en caja</label>
-                    <input type="datetime-local" name="fecharendicion" id="fecharendicion" class="form-control" required
-                           value="{{ old('fecharendicion', $esEdicion ? $data->fecharendicion?->format('Y-m-d\\TH:i') : now()->format('Y-m-d\\TH:i')) }}"/>
-                    <small class="text-muted">Momento real del registro. La fecha contable es la de jornada del cierre.</small>
+                <div class="form-group col-md-3">
+                    <label for="fecha_jornada_cabecera">Fecha jornada</label>
+                    <input type="text" id="fecha_jornada_cabecera" class="form-control" readonly
+                           value="{{ $fechaJornadaDisplay }}"/>
+                    <small class="text-muted">Del cierre seleccionado (no editable).</small>
                 </div>
-                <div class="form-group col-md-4">
+                <div class="form-group col-md-3">
+                    <label>Fecha/hora registro en caja</label>
+                    @if ($esEdicion)
+                        <input type="text" class="form-control" readonly
+                               value="{{ $data->fecharendicion?->format('d/m/Y H:i') ?? '—' }}"/>
+                    @else
+                        <input type="text" class="form-control" readonly
+                               value="Al guardar (hora del sistema)"/>
+                    @endif
+                    <small class="text-muted">Momento real del registro. No editable.</small>
+                </div>
+                <div class="form-group col-md-3">
                     <label for="codigo" id="lbl-codigo">Ticket / código</label>
                     <input type="text" name="codigo" id="codigo" class="form-control" maxlength="80" readonly
                            value="{{ $codigoInicial }}"

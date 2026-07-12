@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionMovimientoStock;
 use App\Services\Stock\MovimientoStockAsientoService;
 use App\Services\Stock\MovimientoStockPdfService;
+use App\Services\Stock\MovimientoStockRevertirService;
 use App\Services\Stock\MovimientoStockService;
 use App\Services\Stock\TransferenciaMercaderiaPdfService;
 use App\Services\Stock\TransferenciaMercaderiaService;
@@ -22,12 +23,17 @@ use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\MovimientoStockRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Repositories\Stock\LoteRepositoryInterface;
+use App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
+use App\Support\Stock\BajaNpuMovimientoStockSupport;
+use App\Support\Stock\MovimientoStockEdicionVentanaSupport;
 use App\Support\Stock\MovimientoStockFormLineasSupport;
 use App\Support\Stock\MovimientoStockFormulaConversionSupport;
+use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\MovimientoStockListadoFiltros;
 use App\Support\Stock\MovimientoStockPreferenciasUsuario;
 use App\Support\Stock\MovimientoStockVisibilidadSupport;
+use App\Support\Stock\NpuBajaConsultaSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use App\Models\Stock\Depmae;
@@ -52,6 +58,7 @@ class MovimientoStockController extends Controller
     private Articulo_Saldo_DepositoRepositoryInterface $saldoDepositoRepository;
     private MovimientoStockPdfService $pdfService;
     private TransferenciaMercaderiaPdfService $transferenciaPdfService;
+    private MovimientoStockRevertirService $revertirService;
 	
     public function __construct(
         MovimientoStockService $movimientoStockservice,
@@ -66,6 +73,7 @@ class MovimientoStockController extends Controller
         Articulo_Saldo_DepositoRepositoryInterface $saldoDepositoRepository,
         MovimientoStockPdfService $pdfService,
         TransferenciaMercaderiaPdfService $transferenciaPdfService,
+        MovimientoStockRevertirService $revertirService,
     ) {
         $this->movimientoStockService = $movimientoStockservice;
         $this->tipotransaccionStockRepository = $tipotransaccionStockRepository;
@@ -79,6 +87,7 @@ class MovimientoStockController extends Controller
         $this->saldoDepositoRepository = $saldoDepositoRepository;
         $this->pdfService = $pdfService;
         $this->transferenciaPdfService = $transferenciaPdfService;
+        $this->revertirService = $revertirService;
     }
 
     public function index(Request $request)
@@ -150,7 +159,7 @@ class MovimientoStockController extends Controller
                 $nombrePdf = 'listado_movimientostock';
 
                 $pdf = \App::make('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
+                DompdfPaperSupport::aplicar($pdf, DompdfPaperSupport::CONTEXTO_LISTADO);
                 $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
 
                 return response()->download($path.'/'.$nombrePdf.'.pdf');
@@ -277,17 +286,26 @@ class MovimientoStockController extends Controller
             })
             ->first();
 
+        $puedeModificarVentana = MovimientoStockEdicionVentanaSupport::puedeModificar($movimientostock);
+        $controlVentanaActivo = MovimientoStockEdicionVentanaSupport::controlActivo();
+
         return view('stock.movimientostock.editar', compact('movimientostock', 
 			'mventa_query', 'articulo_query', 'modulo_query', 
 			'listaprecio_query', 'articuloall_query', 'articuloxsku_query', 
 			'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query',
             'empresa_query', 'empresa_id', 'centrocosto_query', 'asientoPreview', 'mostrarSolapaAsiento',
-            'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada'));
+            'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
+            'puedeModificarVentana', 'controlVentanaActivo'));
     }
 
     public function actualizar(ValidacionMovimientoStock $request, $id)
     {
         can('actualizar-movimientos-de-stock');
+
+        $movimientostock = $this->movimientoStockService->leeMovimientoStock($id);
+        if (! MovimientoStockEdicionVentanaSupport::puedeModificar($movimientostock)) {
+            return redirect()->back()->withInput()->with('mensaje', MovimientoStockEdicionVentanaSupport::mensajeBloqueo());
+        }
 
 		try {
 			$this->movimientoStockService->guardaMovimientoStock($request->all(), 'update', $id);
@@ -305,6 +323,21 @@ class MovimientoStockController extends Controller
         can('borrar-movimientos-de-stock');
 
         if ($request->ajax()) {
+            $movimientostock = $this->movimientoStockService->leeMovimientoStock($id);
+            $movimientostock->loadMissing('tipotransaccion_stock');
+            if (BajaNpuMovimientoStockSupport::esTipoBajaNpu($movimientostock->tipotransaccion_stock)) {
+                return response()->json([
+                    'mensaje' => 'ng',
+                    'error' => 'Los movimientos de baja NPU no pueden eliminarse; use Revertir para reactivar los NPU.',
+                ], 422);
+            }
+            if (! MovimientoStockEdicionVentanaSupport::puedeModificar($movimientostock)) {
+                return response()->json([
+                    'mensaje' => 'ng',
+                    'error' => MovimientoStockEdicionVentanaSupport::mensajeBloqueo(),
+                ], 422);
+            }
+
 			if ($this->movimientoStockService->borraMovimientoStock($id))
         	{
                 return response()->json(['mensaje' => 'ok']);
@@ -314,6 +347,54 @@ class MovimientoStockController extends Controller
         } else {
             abort(404);
         }
+    }
+
+    public function revertirMovimiento(Request $request, int $id)
+    {
+        can('revertir-movimientos-de-stock');
+
+        try {
+            $resultado = $this->revertirService->revertirMovimiento(
+                $id,
+                $request->input('fecha_reversion')
+            );
+        } catch (\Throwable $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['mensaje' => $e->getMessage()], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json(['mensaje' => 'ok', 'resultado' => $resultado]);
+        }
+
+        return redirect('stock/movimientostock')->with('mensaje', $resultado['mensaje'] ?? 'Movimiento revertido.');
+    }
+
+    public function revertirTransferencia(Request $request, int $id)
+    {
+        can('revertir-movimientos-de-stock');
+
+        try {
+            $resultado = $this->revertirService->revertirTransferencia(
+                $id,
+                $request->input('fecha_reversion')
+            );
+        } catch (\Throwable $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['mensaje' => $e->getMessage()], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json(['mensaje' => 'ok', 'resultado' => $resultado]);
+        }
+
+        return redirect('stock/movimientostock')->with('mensaje', $resultado['mensaje'] ?? 'Transferencia revertida.');
     }
 
     public function previewAsientoContable(Request $request, ?int $id = null): JsonResponse
@@ -428,6 +509,113 @@ class MovimientoStockController extends Controller
                 ? 'Precio de venta (lista vigente)'
                 : 'Precio de última compra',
         ]);
+    }
+
+    public function resolverNpuBaja(Request $request): JsonResponse
+    {
+        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+            return response()->json(['ok' => false, 'mensaje' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $npu = trim((string) $request->query('npu', $request->input('npu', '')));
+        if ($npu === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique el NPU.'], 422);
+        }
+
+        try {
+            $parte = ArticuloParteUnicaDisponibilidadSupport::assertActivaParaUso($npu);
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        $articulo = $parte->articulos;
+        if ($articulo === null) {
+            $articulo = Articulo::query()->find((int) $parte->articulo_id);
+        }
+
+        $tipoId = (int) $request->input('tipotransaccion_stock_id', 0);
+        $tipo = $tipoId > 0
+            ? Tipotransaccion_Stock::query()->find($tipoId)
+            : null;
+
+        try {
+            $datoPrecio = ArticuloPrecioMovimientoStockSupport::resolverParaLinea(
+                (int) $parte->articulo_id,
+                $tipo,
+                null,
+            );
+        } catch (\Throwable) {
+            $datoPrecio = ArticuloPrecioMovimientoStockSupport::resolverParaLinea(
+                (int) $parte->articulo_id,
+                null,
+                null,
+            );
+        }
+
+        return response()->json([
+            'ok' => true,
+            'numeroparte' => (int) $parte->numeroparte,
+            'articulo_id' => (int) $parte->articulo_id,
+            'sku' => (string) ($articulo->sku ?? ''),
+            'descripcion' => (string) ($articulo->descripcion ?? ''),
+            'precio' => $datoPrecio['precio'],
+            'moneda_id' => $datoPrecio['moneda_id'],
+            'listaprecio_id' => $datoPrecio['listaprecio_id'],
+            'incluyeimpuesto' => $datoPrecio['incluyeimpuesto'],
+            'criterio' => $datoPrecio['criterio'],
+            'origen_ultima_compra' => $datoPrecio['origen_ultima_compra'],
+            'origen_ultima_compra_etiqueta' => ArticuloPrecioMovimientoStockSupport::etiquetaOrigenUltimaCompra(
+                $datoPrecio['origen_ultima_compra']
+            ),
+        ]);
+    }
+
+    public function consultaNpuBaja(Request $request)
+    {
+        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+            abort(403);
+        }
+
+        $consulta = trim((string) ($request->input('consulta') ?? ''));
+        $empresaId = (int) $request->input('empresa_id', 0);
+
+        $support = app(NpuBajaConsultaSupport::class);
+        $filas = $support->queryActivos($consulta, $empresaId)
+            ->limit(200)
+            ->get();
+
+        $puedeVerArticulo = can('editar-articulos', false) || can('listar-articulos', false);
+        $colspanVacio = 4;
+
+        $output = ['data' => ''];
+        if ($filas->isEmpty()) {
+            $output['data'] = '<tr><td colspan="'.$colspanVacio.'">Sin resultados</td></tr>';
+        } else {
+            foreach ($filas as $row) {
+                $articulo = $row->articulos;
+                $sku = (string) ($articulo->sku ?? '');
+                $descripcion = (string) ($articulo->descripcion ?? '');
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="numeroparte">'.e((string) $row->numeroparte).'</td>';
+                $output['data'] .= '<td class="sku">'.e($sku).'</td>';
+                $output['data'] .= '<td class="descripcion">'.e($descripcion).'</td>';
+                $output['data'] .= '<td class="articulo-id d-none">'.e((string) $row->articulo_id).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultanpubaja">Elegir</a>';
+                if ($puedeVerArticulo && (int) $row->articulo_id > 0) {
+                    $urlConsulta = route('editar_articulo', [
+                        'id' => (int) $row->articulo_id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlConsulta).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td>';
+                $output['data'] .= '</tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
     }
 
     public function imprimirCom(Request $request, int $id)
@@ -577,6 +765,7 @@ class MovimientoStockController extends Controller
                 'bien_uso_origen_id' => (int) $request->input('bien_uso_origen_id'),
                 'tipotransaccion_stock_id' => (int) $request->input('tipotransaccion_stock_id'),
                 'centrocosto_destino_id' => (int) $request->input('centrocosto_destino_id'),
+                'usuario_destino_id' => (int) $request->input('usuario_destino_id'),
                 'observacion' => trim((string) $request->input('leyenda', '')),
             ],
             $lineas

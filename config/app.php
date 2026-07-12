@@ -48,16 +48,6 @@ return [
     'anita_sync_maquinavending_gastronomia_index' => (bool) env('ANITA_SYNC_MAQUINAVENDING_GASTRONOMIA_INDEX', true),
 
     /*
-     * Tipos de menú vianda: import desde Anita (tipomvianda / artmvianda) al abrir index vacío.
-     */
-    'anita_sync_vianda_tipo_menu_gastronomia_index' => (bool) env('ANITA_SYNC_VIANDA_TIPO_MENU_GASTRONOMIA_INDEX', true),
-
-    /*
-     * Usuarios vianda: import desde Anita (usuvianda) al abrir index vacío.
-     */
-    'anita_sync_vianda_usuario_gastronomia_index' => (bool) env('ANITA_SYNC_VIANDA_USUARIO_GASTRONOMIA_INDEX', true),
-
-    /*
     | When true, the stock "mozos gastronomía" index shows the button to sync from Anita (ApiAnita).
     */
     'anita_sync_mozo_gastronomia_index' => (bool) env('ANITA_SYNC_MOZO_GASTRONOMIA_INDEX', true),

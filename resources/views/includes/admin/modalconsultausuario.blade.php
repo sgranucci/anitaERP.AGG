@@ -21,12 +21,14 @@
         
         <table class="table table-striped table-bordered table-hover" id="tabla-data">
           <thead>
+              <th>Empresa(s)</th>
               <th>ID</th>
               <th>Usuario</th>
               <th>Nombre</th>
               <th>Email</th>
               <th>Centro de costo</th>
               <th>Sector legajo compras</th>
+              <th></th>
           </thead>
           <tbody id="datosusuario"></tbody>
         </table>

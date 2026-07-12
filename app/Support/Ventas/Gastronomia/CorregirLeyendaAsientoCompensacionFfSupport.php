@@ -15,9 +15,11 @@ use RuntimeException;
  */
 final class CorregirLeyendaAsientoCompensacionFfSupport
 {
-    public const NUEVA_LEYENDA = 'Reduccion FF Maquinas';
+    public const NUEVA_LEYENDA = CierreJornadaProcesoAsientosGrabacionSupport::DESCRIPCION_ASIENTO_COMPENSACION_FONDO_FIJO;
 
-    private const CODIGO_ASIENTO = 'compensacion_efectivo_no_facturado';
+    private const LEYENDA_INTERMEDIA = 'Reduccion FF Maquinas';
+
+    private const CODIGO_ASIENTO = CierreJornadaProcesoAsientosGrabacionSupport::CODIGO_ASIENTO_COMPENSACION_FONDO_FIJO;
 
     private const LEYENDA_LINEA_ANTIGUA = 'Compensación fondo fijo máquinas — efectivo no facturado';
 
@@ -33,13 +35,16 @@ final class CorregirLeyendaAsientoCompensacionFfSupport
         $ids = Asiento::query()
             ->where(function ($q) {
                 $q->where('observacion', 'like', '%'.self::SUFIJO_CABECERA_ANTIGUO.'%')
-                    ->orWhere('observacion', 'like', '%'.self::TITULO_ANTIGUO.'%');
+                    ->orWhere('observacion', 'like', '%'.self::TITULO_ANTIGUO.'%')
+                    ->orWhere('observacion', 'like', '%'.self::LEYENDA_INTERMEDIA.'%')
+                    ->orWhere('observacion', self::LEYENDA_INTERMEDIA);
             })
             ->pluck('id');
 
         $idsMovimiento = Asiento_Movimiento::query()
             ->where('observacion', self::LEYENDA_LINEA_ANTIGUA)
             ->orWhere('observacion', 'like', '%Compensación fondo fijo máquinas%')
+            ->orWhere('observacion', self::LEYENDA_INTERMEDIA)
             ->pluck('asiento_id');
 
         $idsSnapshot = $this->asientoIdsDesdeSnapshots();
@@ -87,8 +92,18 @@ final class CorregirLeyendaAsientoCompensacionFfSupport
     public function corregirObservacionCabecera(string $observacion): ?string
     {
         $nueva = str_replace(
-            [' — '.self::SUFIJO_CABECERA_ANTIGUO, ' — '.self::TITULO_ANTIGUO],
-            [' — '.self::NUEVA_LEYENDA, ' — '.self::NUEVA_LEYENDA],
+            [
+                ' — '.self::SUFIJO_CABECERA_ANTIGUO,
+                ' — '.self::TITULO_ANTIGUO,
+                ' — '.self::LEYENDA_INTERMEDIA,
+                self::LEYENDA_INTERMEDIA,
+            ],
+            [
+                ' — '.self::NUEVA_LEYENDA,
+                ' — '.self::NUEVA_LEYENDA,
+                ' — '.self::NUEVA_LEYENDA,
+                self::NUEVA_LEYENDA,
+            ],
             $observacion,
         );
 
@@ -98,8 +113,16 @@ final class CorregirLeyendaAsientoCompensacionFfSupport
     public function corregirTituloSnapshot(string $titulo): ?string
     {
         $nueva = str_replace(
-            [self::SUFIJO_CABECERA_ANTIGUO, self::TITULO_ANTIGUO],
-            [self::NUEVA_LEYENDA, self::NUEVA_LEYENDA],
+            [
+                self::SUFIJO_CABECERA_ANTIGUO,
+                self::TITULO_ANTIGUO,
+                self::LEYENDA_INTERMEDIA,
+            ],
+            [
+                self::NUEVA_LEYENDA,
+                self::NUEVA_LEYENDA,
+                self::NUEVA_LEYENDA,
+            ],
             $titulo,
         );
 
@@ -111,6 +134,7 @@ final class CorregirLeyendaAsientoCompensacionFfSupport
         $obs = trim($observacion);
 
         return $obs === self::LEYENDA_LINEA_ANTIGUA
+            || $obs === self::LEYENDA_INTERMEDIA
             || str_contains($obs, 'Compensación fondo fijo máquinas')
             || str_contains($obs, 'compensación fondo fijo');
     }

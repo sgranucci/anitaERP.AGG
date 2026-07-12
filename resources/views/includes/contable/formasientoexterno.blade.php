@@ -1,6 +1,22 @@
 @php
     $asientoEdicion = ($data ?? null)?->asientos?->first();
     $lineasAsiento = $asientoEdicion?->asiento_movimientos ?? collect();
+    $totalDebeAsientoExt = 0.0;
+    $totalHaberAsientoExt = 0.0;
+    if ($lineasAsiento->isNotEmpty()) {
+        foreach ($lineasAsiento as $movimientoTotExt) {
+            $montoTotExt = (float) ($movimientoTotExt->monto ?? 0);
+            if ($montoTotExt > 0) {
+                $totalDebeAsientoExt += $montoTotExt;
+            } elseif ($montoTotExt < 0) {
+                $totalHaberAsientoExt += abs($montoTotExt);
+            }
+        }
+        $totalDebeAsientoExt = round($totalDebeAsientoExt, 2);
+        $totalHaberAsientoExt = round($totalHaberAsientoExt, 2);
+    }
+    $totalDebeAsientoExtTxt = $lineasAsiento->isNotEmpty() ? number_format($totalDebeAsientoExt, 2, ',', '.') : '';
+    $totalHaberAsientoExtTxt = $lineasAsiento->isNotEmpty() ? number_format($totalHaberAsientoExt, 2, ',', '.') : '';
 @endphp
 <div class="card formasientoexterno" style="display: none">
     <input type="hidden" name="tipoasiento_id" id="tipoasiento_id" value="{{old('tipoasiento_id', $asientoEdicion->tipoasiento_id ?? '')}}">
@@ -9,6 +25,20 @@
     <input type="hidden" name="numeroasiento" value="{{ $asientoEdicion->numeroasiento ?? '' }}" />
     <input type="hidden" name="idasiento" value="{{ $asientoEdicion->idasiento ?? '' }}" />
     <h3>Cuentas</h3>
+    <style>
+        #cuenta-asiento-table tfoot.asiento-totales-pie td {
+            background-color: #e9ecef;
+            border-top: 2px solid #ced4da;
+            vertical-align: middle;
+        }
+        #cuenta-asiento-table tfoot.asiento-totales-pie .asiento-total-celda {
+            background-color: #e9ecef !important;
+            color: #495057;
+            border: 0;
+            box-shadow: none;
+            font-weight: 700;
+        }
+    </style>
     <div class="card-body">
         <table class="table" id="cuenta-asiento-table">
             <thead>
@@ -17,9 +47,9 @@
                     <th style="width: 18%;">Descripción</th>
                     <th style="width: 15%;">Centro de costo</th>
                     <th style="width: 7%;">Moneda</th>
-                    <th style="width: 15%;">Debe</th>
-                    <th style="width: 15%;">Haber</th>
-                    <th style="width: 12%;">Cotización</th>
+                    <th style="width: 15%;" class="text-right">Debe</th>
+                    <th style="width: 15%;" class="text-right">Haber</th>
+                    <th style="width: 12%;" class="text-right">Cotizaci&oacute;n</th>
                     <th style="width: 30%;">Detalle</th>
                     <th></th>
                 </tr>
@@ -63,13 +93,22 @@
                             <input type="hidden" class="monedaasiento_id_previo" name="monedaasiento_id_previo[]" value="{{old('monedaasiento_ids', $cuenta->moneda_id ?? '')}}" >
                         </td>
                         <td>
-                            <input type="number" name="debeasientos[]" style="text-align: right;" class="form-control debeasiento" value="{{old('debeasientos[]', ($cuenta->monto > 0 ? number_format($cuenta->monto,2,'.','') : '') ?? '')}}">
+                            @php
+                                $debeAsientoValor = old('debeasientos.'.$loop->index, ($cuenta->monto ?? 0) > 0 ? number_format($cuenta->monto, 2, ',', '.') : '');
+                            @endphp
+                            <input type="text" inputmode="decimal" name="debeasientos[]" class="form-control text-right debeasiento" value="{{ $debeAsientoValor }}">
                         </td>
                         <td>
-                            <input type="number" name="haberasientos[]" style="text-align: right;" class="form-control haberasiento" value="{{old('haberasientos[]', ($cuenta->monto < 0 ? number_format(abs($cuenta->monto),2,'.','') : '') ?? '')}}">
+                            @php
+                                $haberAsientoValor = old('haberasientos.'.$loop->index, ($cuenta->monto ?? 0) < 0 ? number_format(abs($cuenta->monto), 2, ',', '.') : '');
+                            @endphp
+                            <input type="text" inputmode="decimal" name="haberasientos[]" class="form-control text-right haberasiento" value="{{ $haberAsientoValor }}">
                         </td>
                         <td>
-                            <input type="number" name="cotizacionasientos[]" style="text-align: right;" class="form-control cotizacionasiento" value="{{old('cotizacionasientos[]', $cuenta->cotizacion ?? '0')}}">
+                            @php
+                                $cotizAsientoValor = old('cotizacionasientos.'.$loop->index, isset($cuenta->cotizacion) ? number_format((float) $cuenta->cotizacion, 2, ',', '.') : '0,00');
+                            @endphp
+                            <input type="text" inputmode="decimal" name="cotizacionasientos[]" class="form-control text-right cotizacionasiento" value="{{ $cotizAsientoValor }}">
                         </td>
                         <td>
                             <input type="text" name="observacionasientos[]" style="text-align: right;" class="form-control observacionasiento" value="{{old('observacionasientos[]', $cuenta->observacion ?? '')}}">
@@ -83,22 +122,29 @@
                 @endforeach
             @endif
             </tbody>
+            <tfoot class="asiento-totales-pie">
+                <tr class="asiento-totales-fila">
+                    <td colspan="4" class="text-right font-weight-bold text-secondary">Totales</td>
+                    <td>
+                        <input type="text" id="totaldebeasiento" name="totaldebeasiento" class="form-control form-control-sm text-right asiento-total-celda" readonly value="{{ $totalDebeAsientoExtTxt }}" />
+                    </td>
+                    <td>
+                        <input type="text" id="totalhaberasiento" name="totalhaberasiento" class="form-control form-control-sm text-right asiento-total-celda" readonly value="{{ $totalHaberAsientoExtTxt }}" />
+                    </td>
+                    <td colspan="3"></td>
+                </tr>
+            </tfoot>
         </table>
         @include('includes.contable.templateasientoexterno')
-        <div class="row">
-            <div class="col-sm-6">
-                <div class="form-group row">
-                    <button id="agrega_renglon_asiento" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
-                </div>
-            </div>
-            <div class="form-group row">
-                <label for="totaldebeasientoasiento" class="col-lg-3 col-form-label">Total debe</label>
-                <input type="text" id="totaldebeasiento" name="totaldebeasiento" class="form-control col-lg-3" readonly value="" />
-                <label for="totaldebeasiento" class="col-lg-3 col-form-label">Total haber</label>
-                <input type="text" id="totalhaberasiento" name="totalhaberasiento" class="form-control col-lg-3" readonly value="" />
+        <div class="row mt-2">
+            <div class="col-sm-12">
+                <button id="agrega_renglon_asiento" type="button" class="btn btn-danger">+ Agrega rengl&oacute;n</button>
             </div>
         </div>
     </div>
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
+@once
+<script src="{{ asset('assets/pages/scripts/contable/asiento/montos_formato.js') }}" type="text/javascript"></script>
+@endonce
 

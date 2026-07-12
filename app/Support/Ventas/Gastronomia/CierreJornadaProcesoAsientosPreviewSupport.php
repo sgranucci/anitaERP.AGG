@@ -505,7 +505,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             $asiento['numero'] = $i + 1;
             $codigo = (string) ($asiento['codigo'] ?? '');
             if ($codigo === 'compensacion_efectivo_no_facturado') {
-                $asiento['titulo'] = $asiento['numero'].' — Reduccion FF Maquinas';
+                $asiento['titulo'] = $asiento['numero'].' — '.CierreJornadaProcesoAsientosGrabacionSupport::DESCRIPCION_ASIENTO_COMPENSACION_FONDO_FIJO;
                 $movsComp = self::movimientosCompensacionEfectivoNoFacturado($movimientos);
                 $asiento['comandas_alcance'] = self::COMANDAS_ALCANCE_EFECTIVO_NO_FACTURADO;
                 $asiento['cantidad_comandas'] = count($movsComp);
@@ -1201,15 +1201,16 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             return null;
         }
 
+        $descripcionCompensacion = CierreJornadaProcesoAsientosGrabacionSupport::DESCRIPCION_ASIENTO_COMPENSACION_FONDO_FIJO;
         $lineas = [
             self::lineaDebe('Efectivo Waitry no incluido en factura del proceso', $efectivoId, $total),
-            self::lineaHaber('Reduccion FF Maquinas', $fondoFijoId, $total),
+            self::lineaHaber($descripcionCompensacion, $fondoFijoId, $total),
         ];
 
         $asiento = self::armarAsientoConsolidado(
             0,
             'compensacion_efectivo_no_facturado',
-            'Reduccion FF Maquinas',
+            $descripcionCompensacion,
             $lineas,
             ['total' => $total],
             true,
@@ -1264,57 +1265,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             return null;
         }
 
-        $cuentaVentas = (int) ($configContable['cuenta_ventas_id'] ?? 0);
-        $cuentaIva = (int) ($configContable['cuenta_iva_id'] ?? 0);
-        $cuentaVentasKiosco = self::cuentaVentasKioscoId($configContable);
-
-        $lineas = [];
-        foreach ($datos['debe_por_cuenta'] as $ln) {
-            $monto = round((float) ($ln['debe'] ?? 0), 2);
-            if (abs($monto) <= 0.0001) {
-                continue;
-            }
-            $concepto = (string) ($ln['concepto'] ?? 'Medio de cobro');
-            $cuentaId = (int) ($ln['cuenta_id'] ?? 0);
-            if ($monto > 0.0001) {
-                $lineas[] = self::lineaDebe($concepto, $cuentaId, $monto);
-            } else {
-                $lineas[] = self::lineaHaber($concepto.' (NC)', $cuentaId, abs($monto));
-            }
-        }
-
-        $cuentaDifCaja = (int) ($configContable['cuenta_diferencia_caja_id'] ?? 0);
-        $debeDifCaja = round((float) ($datos['debe_diferencia_caja'] ?? 0), 2);
-        if (abs($debeDifCaja) > 0.0001) {
-            if ($cuentaDifCaja > 0) {
-                if ($debeDifCaja > 0.0001) {
-                    $lineas[] = self::lineaDebe(
-                        'Diferencia de caja — invitaciones ($0,01)',
-                        $cuentaDifCaja,
-                        $debeDifCaja,
-                    );
-                } else {
-                    $lineas[] = self::lineaHaber(
-                        'Diferencia de caja — invitaciones NC ($0,01)',
-                        $cuentaDifCaja,
-                        abs($debeDifCaja),
-                    );
-                }
-            }
-        }
-
-        $lineas = array_merge(
-            $lineas,
-            self::lineasHaberVentasConsolidado(
-                (float) ($datos['ventas_gravadas'] ?? 0),
-                (float) ($datos['ventas_kiosco'] ?? 0),
-                (float) ($datos['iva_normal'] ?? 0),
-                (float) ($datos['iva_cigarrillos'] ?? 0),
-                $cuentaVentas,
-                $cuentaVentasKiosco,
-                $cuentaIva,
-            ),
-        );
+        $lineas = self::construirLineasVentasMedioReal($configContable, $datos);
 
         $asiento = self::armarAsientoConsolidado(
             0,
@@ -1333,6 +1284,96 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         $asiento['advertencias_asiento'] = $datos['advertencias'] ?? [];
 
         return $asiento;
+    }
+
+    /**
+     * Líneas del asiento consolidado «ventas_medio_real» (DEBE medios + HABER ventas/IVA + cuadre).
+     *
+     * @param  array<string, mixed>  $configContable
+     * @param  array<string, mixed>  $datos  Salida de CierreJornadaFacturadoAnitaSupport::datosAsientoVentasJornadaExclTotem
+     * @return list<array<string, mixed>>
+     */
+    public static function construirLineasVentasMedioReal(array $configContable, array $datos): array
+    {
+        $cuentaVentas = (int) ($configContable['cuenta_ventas_id'] ?? 0);
+        $cuentaIva = (int) ($configContable['cuenta_iva_id'] ?? 0);
+        $cuentaVentasKiosco = self::cuentaVentasKioscoId($configContable);
+        $cuentaDifCaja = (int) ($configContable['cuenta_diferencia_caja_id'] ?? 0);
+
+        $lineas = [];
+        foreach ($datos['debe_por_cuenta'] ?? [] as $ln) {
+            $monto = round((float) ($ln['debe'] ?? 0), 2);
+            if (abs($monto) <= 0.0001) {
+                continue;
+            }
+            $concepto = (string) ($ln['concepto'] ?? 'Medio de cobro');
+            $cuentaId = (int) ($ln['cuenta_id'] ?? 0);
+            if ($monto > 0.0001) {
+                $lineas[] = self::lineaDebe($concepto, $cuentaId, $monto);
+            } else {
+                $lineas[] = self::lineaHaber($concepto.' (NC)', $cuentaId, abs($monto));
+            }
+        }
+
+        $debeDifCaja = round((float) ($datos['debe_diferencia_caja'] ?? 0), 2);
+        if (abs($debeDifCaja) > 0.0001 && $cuentaDifCaja > 0) {
+            if ($debeDifCaja > 0.0001) {
+                $lineas[] = self::lineaDebe(
+                    'Diferencia de caja — invitaciones ($0,01)',
+                    $cuentaDifCaja,
+                    $debeDifCaja,
+                );
+            } else {
+                $lineas[] = self::lineaHaber(
+                    'Diferencia de caja — invitaciones NC ($0,01)',
+                    $cuentaDifCaja,
+                    abs($debeDifCaja),
+                );
+            }
+        }
+
+        $lineas = array_merge(
+            $lineas,
+            self::lineasHaberVentasConsolidado(
+                (float) ($datos['ventas_gravadas'] ?? 0),
+                (float) ($datos['ventas_kiosco'] ?? 0),
+                (float) ($datos['iva_normal'] ?? 0),
+                (float) ($datos['iva_cigarrillos'] ?? 0),
+                $cuentaVentas,
+                $cuentaVentasKiosco,
+                $cuentaIva,
+            ),
+        );
+
+        if ($cuentaDifCaja > 0) {
+            $sumDebeAsiento = 0.;
+            $sumHaberAsiento = 0.;
+            foreach ($lineas as $ln) {
+                if (($ln['tipo'] ?? '') === 'info') {
+                    continue;
+                }
+                $sumDebeAsiento += (float) ($ln['debe'] ?? 0);
+                $sumHaberAsiento += (float) ($ln['haber'] ?? 0);
+            }
+            $residualCuadre = round($sumDebeAsiento - $sumHaberAsiento, 2);
+            if (abs($residualCuadre) > 0.0001) {
+                if ($residualCuadre < 0) {
+                    $lineas[] = self::lineaDebe(
+                        'Diferencia de caja — ajuste de cuadre (cobros vs facturado)',
+                        $cuentaDifCaja,
+                        abs($residualCuadre),
+                    );
+                } else {
+                    $lineas[] = self::lineaHaber(
+                        'Diferencia de caja — ajuste de cuadre (cobros vs facturado)',
+                        $cuentaDifCaja,
+                        abs($residualCuadre),
+                    );
+                }
+            }
+        }
+
+        return $lineas;
     }
 
     /**

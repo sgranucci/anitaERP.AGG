@@ -59,7 +59,7 @@ class MayorConceptoExport implements FromView, ShouldAutoSize, WithColumnFormatt
     public function view(): View
     {
         $resultado = $this->reporteService->generarDesdeFiltros($this->filtros);
-        $filas = $this->reporteService->aplanarFilasConTotales($resultado);
+        $filas = $this->reporteService->aplanarFilasConTotalesFiltradas($resultado, $this->filtros);
         $resumen = $this->reporteService->resumenSegunAgrupacion($resultado, $this->filtros);
         $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
         $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
@@ -69,6 +69,16 @@ class MayorConceptoExport implements FromView, ShouldAutoSize, WithColumnFormatt
         $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
+        $totalesReporte = [
+            'cantidad_filas' => (int) ($resultado['totales']['lineas'] ?? 0),
+            'total_debe' => (float) ($resultado['totales']['debe'] ?? 0),
+            'total_haber' => (float) ($resultado['totales']['haber'] ?? 0),
+        ];
+        if (\App\Support\Contable\MayorConceptoListadoFiltros::tieneFiltroDetalle($this->filtros)) {
+            $totalesVisibles = \App\Support\Contable\MayorConceptoListadoFiltros::totalesDesdeFilasVisibles($filas);
+            $totalesReporte = array_merge($totalesReporte, $totalesVisibles, ['filtrado' => true]);
+        }
+
         return view('exports.contable.mayorconceptoindex', [
             'filas' => $filas,
             'resumen' => $resumen,
@@ -76,11 +86,7 @@ class MayorConceptoExport implements FromView, ShouldAutoSize, WithColumnFormatt
             'agrupacionResumen' => $this->filtros['agrupacion_resumen'] ?? 'concepto_cuenta',
             'auditoriaPanel' => $auditoriaPanel,
             'filtros' => $this->filtros,
-            'totales' => [
-                'cantidad_filas' => (int) ($resultado['totales']['lineas'] ?? 0),
-                'total_debe' => (float) ($resultado['totales']['debe'] ?? 0),
-                'total_haber' => (float) ($resultado['totales']['haber'] ?? 0),
-            ],
+            'totales' => $totalesReporte,
             'titulo' => 'Mayor por concepto',
             'subtitulo' => $this->reporteService->formatearPeriodoTexto($this->filtros),
             'reservarFilaLogoExcel' => $this->hayFilaLogos,

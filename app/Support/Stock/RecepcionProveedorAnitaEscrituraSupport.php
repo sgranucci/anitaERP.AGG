@@ -2,6 +2,8 @@
 
 namespace App\Support\Stock;
 
+use App\Support\Anita\AnitaTextoSanitizer;
+
 /**
  * Arma campos/valores SQL para el bridge Anita (apiERP.php) en recepción de proveedores.
  * El bridge legacy no acepta arrays asociativos en "campos".
@@ -11,7 +13,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
 {
     public static function escSql(string $value): string
     {
-        return str_replace("'", "''", $value);
+        return str_replace("'", "''", AnitaTextoSanitizer::sanitizar($value));
     }
 
     public static function textoSql(string $value, int $maxLen = 0): string
@@ -275,6 +277,58 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'recv_tipo_iva' => self::enteroSql($tipoIvaAnita),
             'recv_partida' => self::enteroSql(0),
         ]);
+    }
+
+    /**
+     * Línea recepmov sintética del impuesto interno de cigarrillos (SKU IMPINTERNO).
+     * cantidad = 1, precio = importe redondeado: hace que la suma de montos recepmov
+     * coincida con el asiento COM (que discrimina el impuesto interno).
+     * Devuelve null si el importe no es positivo.
+     *
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @return array{campos: string, valores: string}|null
+     */
+    public static function recepmovImpuestoInternoInsert(
+        string $codigoProveedor,
+        array $clave,
+        int $ordenMax,
+        string $skuAnita13,
+        string $descripcion,
+        float $importe,
+        int $depositoId,
+        int $fechaAnita,
+        string $codigoMoneda,
+        int $centroCostoCodigo,
+        int $empresaCodigo,
+        float $cotizacion,
+        string $codigoAgrupacion,
+        int $tipoIvaAnita,
+    ): ?array {
+        $importe = round($importe, 2);
+        if ($importe <= 0.000001) {
+            return null;
+        }
+
+        return self::recepmovInsert(
+            $codigoProveedor,
+            $clave,
+            $ordenMax + 1,
+            $skuAnita13,
+            $descripcion,
+            1.0,
+            0.0,
+            '',
+            $importe,
+            0.0,
+            $depositoId,
+            $fechaAnita,
+            $codigoMoneda,
+            $centroCostoCodigo,
+            $empresaCodigo,
+            $cotizacion,
+            $codigoAgrupacion,
+            $tipoIvaAnita,
+        );
     }
 
     /**

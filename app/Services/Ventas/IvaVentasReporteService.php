@@ -9,6 +9,7 @@ use App\Models\Ventas\Venta;
 use App\Support\Ventas\IvaVentas\IvaVentasAuditoriaCorrelatividadSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasUnidadNegocioSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -42,6 +43,7 @@ final class IvaVentasReporteService
         $monedaReporteId = (int) ($filtros['moneda_id'] ?? 1);
         $soloMonedaOrigen = ! empty($filtros['solo_moneda_origen']);
         $clasificarHost = ! empty($filtros['clasificar_por_host']);
+        $vendingPvIds = IvaVentasUnidadNegocioSupport::vendingPuntoventaIds((int) ($filtros['empresa_id'] ?? 0));
         $excluidasPre = 0;
         $excluidasSubdiario = 0;
         $excluidasMoneda = 0;
@@ -66,6 +68,7 @@ final class IvaVentasReporteService
             $columnas = IvaVentasDesgloseSupport::columnasDesdeVenta($venta, $coef);
             $seccion = $this->seccionVenta($venta);
             $host = $this->hostVenta($venta);
+            $unidadNegocio = IvaVentasUnidadNegocioSupport::clasificar($venta, $vendingPvIds);
             $pv = $venta->puntoventas;
             $pvId = (int) ($venta->puntoventa_id ?? 0);
             $pvCodigo = (string) ($pv->codigo ?? '');
@@ -82,6 +85,8 @@ final class IvaVentasReporteService
                 'seccion' => $seccion,
                 'seccion_label' => $seccion === 'administracion' ? 'Facturas de administración' : 'Operación',
                 'host' => $host,
+                'unidad_negocio' => $unidadNegocio,
+                'unidad_negocio_label' => IvaVentasUnidadNegocioSupport::label($unidadNegocio),
                 'puntoventa_id' => $pvId,
                 'puntoventa_codigo' => $pvCodigo,
                 'puntoventa_nombre' => $pvNombre,
@@ -97,6 +102,7 @@ final class IvaVentasReporteService
                 'tipotransaccion_id' => (int) ($venta->tipotransaccion_id ?? 0),
                 'comprobante' => $this->formatearComprobante($venta),
                 'numerocomprobante' => (int) $venta->numerocomprobante,
+                'letra' => IvaVentasDesgloseSupport::letra($venta),
                 'columnas' => $columnas,
                 'venta_id' => (int) $venta->id,
                 'anulada' => IvaVentasDesgloseSupport::esAnulada($venta),
@@ -126,6 +132,12 @@ final class IvaVentasReporteService
         $filas = $this->ordenarFilas($filas, $filtros, $clasificarHost);
         $totalesPorPvLista = $this->ordenarTotalesPv(array_values($totalesPorPv));
 
+        // Vista del listado: opcionalmente colapsa las Facturas B en un resumen por día + PV + tipo.
+        // El detalle completo ($filas) se conserva para conciliación y auditoría de correlatividad.
+        $filasDisplay = ! empty($filtros['agrupar_b_por_dia'])
+            ? $this->agruparFacturasBPorDia($filas, $filtros, $clasificarHost)
+            : $filas;
+
         foreach ($totalesGeneral as $k => $v) {
             $totalesGeneral[$k] = round($v, 2);
         }
@@ -140,6 +152,8 @@ final class IvaVentasReporteService
             'titulo' => 'IVA VENTAS',
             'columnas' => IvaVentasColumnasSupport::COLUMNAS,
             'filas' => $filas,
+            'filas_display' => $filasDisplay,
+            'agrupado_b_por_dia' => ! empty($filtros['agrupar_b_por_dia']),
             'totales_por_puntoventa' => $totalesPorPvLista,
             'totales_general' => $totalesGeneral,
             'stats' => [
@@ -204,6 +218,7 @@ final class IvaVentasReporteService
                 'clientes',
                 'monedas',
                 'gastronomiaEmision.configuracionPuntoventa',
+                'estacionamientoEmision.configuracionPuntoventa',
             ])
             ->orderBy($campoFecha)
             ->orderBy('puntoventa_id')
@@ -252,15 +267,13 @@ final class IvaVentasReporteService
             return 'administracion';
         }
 
-        if (! $venta->relationLoaded('gastronomiaEmision')) {
-            $venta->loadMissing('gastronomiaEmision');
+        $venta->loadMissing(['gastronomiaEmision', 'estacionamientoEmision']);
+
+        if ($venta->gastronomiaEmision !== null || $venta->estacionamientoEmision !== null) {
+            return 'operacion';
         }
 
-        if ($venta->gastronomiaEmision === null) {
-            return 'administracion';
-        }
-
-        return 'operacion';
+        return 'administracion';
     }
 
     private function hostVenta(Venta $venta): string
@@ -281,6 +294,26 @@ final class IvaVentasReporteService
 
                 return $desc !== '' ? $desc : '—';
             }
+        }
+
+        $emisionEst = $venta->estacionamientoEmision;
+        if ($emisionEst !== null) {
+            $pc = trim((string) ($emisionEst->identificador_pc ?? ''));
+            if ($pc !== '') {
+                return $pc;
+            }
+            $cfg = $emisionEst->configuracionPuntoventa;
+            if ($cfg !== null) {
+                $pcCfg = trim((string) ($cfg->identificador_pc ?? ''));
+                if ($pcCfg !== '') {
+                    return $pcCfg;
+                }
+                $desc = trim((string) ($cfg->descripcion ?? ''));
+
+                return $desc !== '' ? $desc : 'Estacionamiento';
+            }
+
+            return 'Estacionamiento';
         }
 
         return 'Administración';
@@ -418,5 +451,94 @@ final class IvaVentasReporteService
         });
 
         return $totales;
+    }
+
+    /**
+     * Colapsa las Facturas B (letra B) en un resumen por día + punto de venta + tipo de comprobante.
+     * Cada grupo muestra el rango "desde comprobante a comprobante" con los totales acumulados.
+     * Las demás filas (A, C, notas de crédito de otras letras, etc.) se dejan sin agrupar.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, mixed>  $filtros
+     * @return list<array<string, mixed>>
+     */
+    private function agruparFacturasBPorDia(array $filas, array $filtros, bool $clasificarHost): array
+    {
+        $grupos = [];
+        $otras = [];
+
+        foreach ($filas as $fila) {
+            if (strtoupper(trim((string) ($fila['letra'] ?? ''))) !== 'B') {
+                $otras[] = $fila;
+
+                continue;
+            }
+
+            $clave = implode('|', [
+                (string) ($fila['seccion'] ?? ''),
+                (int) ($fila['puntoventa_id'] ?? 0),
+                (string) ($fila['fecha_orden'] ?? ''),
+                (int) ($fila['tipotransaccion_id'] ?? 0),
+                $clasificarHost ? (string) ($fila['host'] ?? '') : '',
+            ]);
+
+            if (! isset($grupos[$clave])) {
+                $grupos[$clave] = [
+                    'base' => $fila,
+                    'columnas' => IvaVentasColumnasSupport::montosVacios(),
+                    'cantidad' => 0,
+                    'nro_min' => null,
+                    'nro_max' => null,
+                    'comprobante_min' => '',
+                    'comprobante_max' => '',
+                ];
+            }
+
+            $grupo = &$grupos[$clave];
+            IvaVentasColumnasSupport::acumular($grupo['columnas'], $fila['columnas'] ?? []);
+            $grupo['cantidad']++;
+
+            $nro = (int) ($fila['numerocomprobante'] ?? 0);
+            $comprobante = (string) ($fila['comprobante'] ?? '');
+            if ($grupo['nro_min'] === null || $nro < $grupo['nro_min']) {
+                $grupo['nro_min'] = $nro;
+                $grupo['comprobante_min'] = $comprobante;
+            }
+            if ($grupo['nro_max'] === null || $nro > $grupo['nro_max']) {
+                $grupo['nro_max'] = $nro;
+                $grupo['comprobante_max'] = $comprobante;
+            }
+            unset($grupo);
+        }
+
+        $resumenes = [];
+        foreach ($grupos as $grupo) {
+            $base = $grupo['base'];
+            $columnas = $grupo['columnas'];
+            foreach ($columnas as $k => $v) {
+                $columnas[$k] = round((float) $v, 2);
+            }
+
+            $rango = (string) $grupo['comprobante_min'];
+            if ($grupo['comprobante_max'] !== '' && $grupo['comprobante_max'] !== $grupo['comprobante_min']) {
+                $rango .= ' a '.$grupo['comprobante_max'];
+            }
+
+            $resumenes[] = array_merge($base, [
+                'tipo_fila' => 'resumen_b',
+                'cliente_codigo' => '',
+                'cliente_nombre' => 'Consumidor final ('.(int) $grupo['cantidad'].' comprobantes)',
+                'cliente_id' => 0,
+                'cuit' => '',
+                'comprobante' => $rango,
+                'numerocomprobante' => (int) ($grupo['nro_min'] ?? 0),
+                'columnas' => $columnas,
+                'venta_id' => 0,
+                'anulada' => false,
+                'cantidad_comprobantes' => (int) $grupo['cantidad'],
+            ]);
+        }
+
+        return $this->ordenarFilas(array_merge($otras, $resumenes), $filtros, $clasificarHost);
     }
 }

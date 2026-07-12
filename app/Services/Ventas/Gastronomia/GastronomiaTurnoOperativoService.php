@@ -9,6 +9,8 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\CierreParcialTurnoGastronomia;
+use App\Support\Database\EloquentActualizacionPorLotesSupport;
+use App\Support\Ventas\GastronomiaAutoDescarteVaciasSupport;
 use App\Support\Ventas\GastronomiaCierreTurnoReporteSupport;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaTurnoMediosContadoCierreSupport;
@@ -304,12 +306,25 @@ final class GastronomiaTurnoOperativoService
      */
     public function autoDescartarCuentasAbiertasVaciasEnTerminal(TurnoOperativoGastronomia $turno): int
     {
-        return $this->queryCuentasNoFacturadasParaPuntoventa(
+        $query = $this->queryCuentasNoFacturadasParaPuntoventa(
             (int) $turno->empresa_id,
             (int) $turno->configuracion_puntoventa_gastronomia_id,
             (string) $turno->identificador_pc,
             [CuentaGastronomia::ESTADO_ABIERTA],
-        )->whereDoesntHave('lineas')->update(['estado' => CuentaGastronomia::ESTADO_CERRADA]);
+        )->whereDoesntHave('lineas');
+
+        return EloquentActualizacionPorLotesSupport::actualizarCandidatosEnLotes(
+            $query,
+            ['estado' => CuentaGastronomia::ESTADO_CERRADA],
+            GastronomiaAutoDescarteVaciasSupport::opcionesActualizacionPorLotes(
+                'gastronomia.auto_descarte_vacias.turno_terminal',
+                [
+                    'turno_operativo_id' => (int) $turno->id,
+                    'empresa_id' => (int) $turno->empresa_id,
+                    'identificador_pc' => (string) $turno->identificador_pc,
+                ],
+            ),
+        );
     }
 
     public function contarCuentasCerradasSinFacturarEnTerminal(TurnoOperativoGastronomia $turno): int

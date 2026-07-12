@@ -1,0 +1,168 @@
+(function ($) {
+    'use strict';
+
+    var MODO_CAMPO = 'campo';
+    var operadoresPorCampo = {};
+    var LF = window.ListadoFiltros;
+    var $desde;
+    var $hasta;
+    var hastaTocado = false;
+
+    function $valorPrincipal() {
+        return $('#filtro_valor');
+    }
+
+    function $valorPanel() {
+        return $('#filtro_valor_panel');
+    }
+
+    function parseOperadores() {
+        var $sel = $('#filtro_operador');
+        if (!$sel.length) {
+            return;
+        }
+        try {
+            operadoresPorCampo = JSON.parse($sel.attr('data-operadores') || '{}');
+        } catch (e) {
+            operadoresPorCampo = {};
+        }
+    }
+
+    function tipoCampoActivo() {
+        var modo = $('#filtro_modo').val();
+        if (modo !== MODO_CAMPO) {
+            return 'texto';
+        }
+        var $opt = $('#filtro_campo option:selected');
+        return $opt.data('type') || 'texto';
+    }
+
+    function setPlaceholderValor(texto) {
+        $valorPrincipal().attr('placeholder', texto);
+        $valorPanel().attr('placeholder', texto);
+    }
+
+    function actualizarVisibilidad() {
+        var modo = $('#filtro_modo').val();
+        var operador = $('#filtro_operador').val();
+        var tipo = tipoCampoActivo();
+
+        if (modo === MODO_CAMPO) {
+            $('.filtro-campo-wrap').show();
+        } else {
+            $('.filtro-campo-wrap').hide();
+        }
+
+        var esEntreFecha = tipo === 'fecha' || tipo === 'fecha_jornada';
+        if (operador === 'entre' && esEntreFecha) {
+            $('.filtro-valor-hasta-wrap').show();
+        } else {
+            $('.filtro-valor-hasta-wrap').hide();
+        }
+
+        if (operador === 'vacio') {
+            $valorPrincipal().val('');
+            $valorPanel().val('');
+        }
+
+        if (tipo === 'entero') {
+            setPlaceholderValor('Número entero');
+        } else if (tipo === 'fecha' || tipo === 'fecha_jornada') {
+            setPlaceholderValor('AAAA-MM-DD');
+        } else {
+            setPlaceholderValor('Texto, ID, ticket…');
+        }
+    }
+
+    function actualizarOperadores(mantenerSeleccion) {
+        var modo = $('#filtro_modo').val();
+        var valorActual = mantenerSeleccion ? $('#filtro_operador').val() : null;
+        var mapa;
+        var $op = $('#filtro_operador');
+
+        if (modo === MODO_CAMPO) {
+            var campo = $('#filtro_campo').val();
+            mapa = operadoresPorCampo[campo] || (LF ? LF.operadoresModoTodos() : {});
+        } else {
+            mapa = LF ? LF.operadoresModoTodos() : {};
+        }
+
+        if (LF && LF.rellenarSelectOperadores) {
+            LF.rellenarSelectOperadores($op, mapa, valorActual);
+        }
+        actualizarVisibilidad();
+    }
+
+    function sincronizarHastaDesdeDesde() {
+        if (!$desde || !$desde.length || !$hasta || !$hasta.length) {
+            return;
+        }
+        var desdeVal = ($desde.val() || '').trim();
+        if (desdeVal === '') {
+            return;
+        }
+        if (hastaTocado && ($hasta.val() || '').trim() !== '') {
+            return;
+        }
+        $hasta.val(desdeVal);
+    }
+
+    $(function () {
+        if (!$('#form-filtros-cierre-rend-est').length) {
+            return;
+        }
+
+        $desde = $('#fecha_jornada_desde');
+        $hasta = $('#fecha_jornada_hasta');
+        hastaTocado = ($hasta.val() || '').trim() !== '';
+
+        parseOperadores();
+
+        if (LF && LF.sincronizarValorPrincipal) {
+            LF.sincronizarValorPrincipal('#filtro_valor', '#filtro_valor_panel');
+        }
+
+        $desde.on('change input', sincronizarHastaDesdeDesde);
+        $hasta.on('change input', function () {
+            hastaTocado = ($hasta.val() || '').trim() !== '';
+        });
+
+        function sincronizarValorAntesDeEnviar() {
+            var $panel = $('#panel-filtros-cierre-rend-est');
+            var panelAbierto = $panel.hasClass('show') || $panel.hasClass('in');
+            if (panelAbierto) {
+                $valorPrincipal().val($valorPanel().val());
+            } else {
+                $valorPanel().val($valorPrincipal().val());
+            }
+        }
+
+        $('#form-filtros-cierre-rend-est').on('click', '[data-aplicar-filtros-panel]', function () {
+            $valorPrincipal().val($valorPanel().val());
+        });
+
+        $('#form-filtros-cierre-rend-est').on('submit.listadoFiltrosSync', function () {
+            sincronizarValorAntesDeEnviar();
+        });
+
+        if (LF && LF.initSubmitBusquedaRapida) {
+            LF.initSubmitBusquedaRapida($('#form-filtros-cierre-rend-est'), {
+                selectorPanel: '#panel-filtros-cierre-rend-est'
+            });
+        }
+
+        $('#filtro_modo, #filtro_campo').on('change', function () {
+            actualizarOperadores(false);
+        });
+
+        $('#filtro_operador').on('change', function () {
+            if ($(this).val() === 'vacio') {
+                $valorPrincipal().val('');
+                $valorPanel().val('');
+            }
+            actualizarVisibilidad();
+        });
+
+        actualizarOperadores(true);
+    });
+})(jQuery);

@@ -53,9 +53,12 @@ use App\Exports\Ventas\ClienteExport;
 use App\Exports\Ventas\ClienteListadoExport;
 use App\Exports\Ventas\ClienteCuentacorrienteListadoExport;
 use App\Support\Ventas\ClienteListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
 use App\Support\Ventas\ArcaPadronClienteOperacionValidacionSupport;
+use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
+use App\Support\Ventas\ClienteFacturasApocrifasSupport;
 use App\Support\Ventas\ClienteDocumentoUnicoSupport;
 use App\Services\Arca\ConstanciaInscripcionService;
 use Carbon\Carbon;
@@ -220,7 +223,7 @@ class ClienteController extends Controller
      * @return \Illuminate\Http\Response
      */
 
-    public function crear($tipoalta = null)
+    public function crear(Request $request, $tipoalta = null)
     {
         can('crear-clientes');
 
@@ -237,6 +240,8 @@ class ClienteController extends Controller
         if (!isset($tipoalta))
             $tipoalta = config('cliente.tipoalta')['DEFINITIVO'][0];
 
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ClienteListadoFiltros::class);
+
         return view('ventas.cliente.crear', compact('pais_query', 'provincia_query',
 			'condicioniva_query', 'zonavta_query', 'subzonavta_query', 'vendedor_query', 'transporte_query',
 			'condicionventa_query', 'listaprecio_query', 'retieneiva_enum', 'condicioniibb_enum', 'cuentacontable_query',
@@ -244,7 +249,7 @@ class ClienteController extends Controller
             'modofacturacion_enum', 'cajaespecial_enum', 'abasto_query', 'coeficiente_query', 'distribuidor_query',
             'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum', 'descuentoventa_query',
             'tipopercepcion_enum', 'certificadonoretencion_enum',
-            'tipodocumento_query', 'condicioniibb_query', 'tipoempresa_cliente_query'));
+            'tipodocumento_query', 'condicioniibb_query', 'tipoempresa_cliente_query', 'filtrosQuery'));
     }
 
     public function crearRemoto(Request $request, $id)
@@ -392,7 +397,7 @@ class ClienteController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-clientes');
         $data = $this->clienteRepository->findOrFail($id);
@@ -421,6 +426,8 @@ class ClienteController extends Controller
             || can('actualizar-clientes', false);
         $suitecrmPuedeSincronizarCuenta = SuitecrmPermiso::puedeSincronizarCuenta();
 
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ClienteListadoFiltros::class);
+
         return view('ventas.cliente.editar', compact('data', 'pais_query', 'provincia_query',
 			'condicioniva_query', 'zonavta_query', 'subzonavta_query', 'vendedor_query', 'transporte_query',
 			'condicionventa_query', 'listaprecio_query', 'retieneiva_enum', 'condicioniibb_enum', 'cuentacontable_query',
@@ -430,7 +437,7 @@ class ClienteController extends Controller
             'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum', 'distribuidor_query', 'descuentoventa_query',
             'tipodocumento_query', 'tipopercepcion_enum', 'certificadonoretencion_enum', 'condicioniibb_query',
             'tipoempresa_cliente_query',
-            'suitecrmHabilitado', 'suitecrmPuedeEditar', 'suitecrmPuedeSincronizarCuenta'));
+            'suitecrmHabilitado', 'suitecrmPuedeEditar', 'suitecrmPuedeSincronizarCuenta', 'filtrosQuery'));
     }
 
     /**
@@ -464,6 +471,80 @@ class ClienteController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Valida WSAPOC (facturas apócrifas) en pedido / factura administrativa.
+     */
+    public function validarApocOperacion(Request $request, $id): \Illuminate\Http\JsonResponse
+    {
+        if (! can('crear-pedidos', false) && ! can('actualizar-pedidos', false)
+            && ! can('crear-factura', false) && ! can('editar-factura', false)) {
+            can('crear-pedidos');
+        }
+
+        $support = app(ClienteFacturasApocrifasSupport::class);
+        if (! $support->habilitadoParaFactura()) {
+            return response()->json(['ok' => true, 'skipped' => true]);
+        }
+
+        $cliente = $this->clienteRepository->findOrFail($id);
+        $bloqueo = ArcaApocClienteOperacionValidacionSupport::bloqueoOperacion($cliente);
+
+        if ($bloqueo !== null) {
+            return response()->json([
+                'ok' => false,
+                'message' => $bloqueo['error'],
+                'validacion' => $bloqueo['validacion'] ?? null,
+            ], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Consulta WSAPOC al ingresar al ABM cliente. Suspende automáticamente si figura en APOC.
+     */
+    public function validarArcaApoc(Request $request, int $id): \Illuminate\Http\JsonResponse
+    {
+        can('editar-clientes');
+
+        $support = app(ClienteFacturasApocrifasSupport::class);
+        if (! $support->habilitadoParaAbm()) {
+            return response()->json([
+                'ok' => true,
+                'skipped' => true,
+                'validacion' => null,
+            ]);
+        }
+
+        $cliente = $this->clienteRepository->find($id);
+        if (! $cliente) {
+            return response()->json(['ok' => false, 'message' => 'Cliente inexistente.'], 404);
+        }
+
+        try {
+            $validacion = $support->evaluarCliente($cliente, suspenderSiApocrifo: true);
+            $httpOk = ! ($validacion['aplica'] ?? false) || ($validacion['ok'] ?? false);
+
+            return response()->json([
+                'ok' => $httpOk,
+                'message' => $validacion['mensaje'] ?? null,
+                'validacion' => $validacion,
+                'suspendido' => $validacion['suspendido'] ?? false,
+                'tiposuspension_id' => $validacion['tiposuspension_id'] ?? null,
+                'estado' => ($validacion['suspendido'] ?? false) ? Cliente::ESTADO_SUSPENDIDO : (string) $cliente->estado,
+                'facturas_apocrifas' => (bool) ($validacion['es_apocrifo'] ?? false),
+                'soap' => ($validacion['ws']['soap'] ?? null),
+            ], $httpOk ? 200 : 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -963,6 +1044,7 @@ class ClienteController extends Controller
             return redirect($urlOrigen)->with($this->flashSuitecrm($suitecrmAviso, $mensajeBase));
         }
 
-        return redirect()->route('cliente')->with($this->flashSuitecrm($suitecrmAviso, $mensajeBase));
+        return redirect()->route('cliente', QueryRetornoListado::desdeRequest($request, ClienteListadoFiltros::class))
+            ->with($this->flashSuitecrm($suitecrmAviso, $mensajeBase));
     }
 }

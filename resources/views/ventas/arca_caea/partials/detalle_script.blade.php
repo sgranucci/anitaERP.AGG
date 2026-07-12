@@ -14,8 +14,21 @@ $(function () {
         $cuerpo.html('<p class="text-muted mb-0">Cargando…</p>');
         $modal.modal('show');
 
+        var params = {};
+        var $filtroForm = $('form[action*="arca-caea"]').filter(function () {
+            return $(this).attr('method') && $(this).attr('method').toLowerCase() === 'get';
+        }).first();
+        if ($filtroForm.length) {
+            $filtroForm.serializeArray().forEach(function (field) {
+                if (field.name && field.value !== '') {
+                    params[field.name] = field.value;
+                }
+            });
+        }
+
         $.ajax({
             url: baseUrl + '/' + id,
+            data: params,
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             dataType: 'html',
         })

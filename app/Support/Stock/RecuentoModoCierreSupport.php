@@ -80,7 +80,11 @@ final class RecuentoModoCierreSupport
             );
         }
 
-        return $saldoRepository->saldo($articuloId, $depositoId);
+        return $saldoRepository->saldoAFecha(
+            $articuloId,
+            $depositoId,
+            now()->toDateString()
+        );
     }
 
     public static function fechaMovimientoCierre(Recuento $recuento, string $modoCierre): string

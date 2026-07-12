@@ -18,7 +18,9 @@ use App\Services\Stock\RecepcionProveedorOrdencompraResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorService;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
+use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Configuracion\OperacionPublicaTokenSupport;
 use Illuminate\Http\JsonResponse;
@@ -51,13 +53,14 @@ class RecepcionProveedorController extends Controller
         ));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-recepcion-proveedor');
         $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = Moneda::query()->orderBy('nombre')->get();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, RecepcionProveedorListadoFiltros::class);
 
-        return view('stock.recepcion_proveedor.crear', compact('empresa_query', 'moneda_query'));
+        return view('stock.recepcion_proveedor.crear', compact('empresa_query', 'moneda_query', 'filtrosQuery'));
     }
 
     public function guardar(ValidacionRecepcionProveedor $request)
@@ -70,27 +73,43 @@ class RecepcionProveedorController extends Controller
             return back()->withInput()->withErrors(['general' => $e->getMessage()]);
         }
 
-        return redirect('stock/recepcion-proveedor/'.$recepcion->id.'/editar')
-            ->with('mensaje', 'Recepción creada en BORRADOR. Revise los datos y confirme.');
+        return redirect()->route('editar_recepcion_proveedor', QueryRetornoListado::paramsRutaEditar(
+            $request,
+            RecepcionProveedorListadoFiltros::class,
+            (int) $recepcion->id
+        ))->with('mensaje', 'Recepción creada en BORRADOR. Revise los datos y confirme.');
     }
 
-    public function editar(int $id)
+    public function editar(Request $request, int $id)
     {
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
+
         $recepcion = $this->service->buscar($id);
 
-        if ($recepcion->estado === 'BORRADOR') {
+        if ($soloConsulta) {
+            if (! can('listar-recepcion-proveedor', false) && ! can('editar-recepcion-proveedor', false)) {
+                abort(403);
+            }
+        } elseif ($recepcion->estado === 'BORRADOR') {
             if (! can('editar-recepcion-proveedor', false) && ! can('actualizar-recepcion-proveedor', false)) {
                 can('editar-recepcion-proveedor');
             }
         } else {
             can('editar-recepcion-proveedor');
         }
+
         $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = Moneda::query()->orderBy('nombre')->get();
         $asientoPreview = $this->asientoService->previewParaVista($recepcion);
+        $ocultarVolver = $soloConsulta;
+        $puedeActualizarRecepcion = can('actualizar-recepcion-proveedor', false);
+        $filtrosQuery = $soloConsulta
+            ? []
+            : QueryRetornoListado::desdeRequest($request, RecepcionProveedorListadoFiltros::class);
 
         return view('stock.recepcion_proveedor.editar', compact(
-            'recepcion', 'empresa_query', 'moneda_query', 'asientoPreview'
+            'recepcion', 'empresa_query', 'moneda_query', 'asientoPreview',
+            'soloConsulta', 'ocultarVolver', 'puedeActualizarRecepcion', 'filtrosQuery',
         ));
     }
 
@@ -104,11 +123,14 @@ class RecepcionProveedorController extends Controller
             return back()->withInput()->withErrors(['general' => $e->getMessage()]);
         }
 
-        return redirect('stock/recepcion-proveedor/'.$id.'/editar')
-            ->with('mensaje', 'Recepción actualizada.');
+        return redirect()->route('editar_recepcion_proveedor', QueryRetornoListado::paramsRutaEditar(
+            $request,
+            RecepcionProveedorListadoFiltros::class,
+            $id
+        ))->with('mensaje', 'Recepción actualizada.');
     }
 
-    public function confirmar(int $id)
+    public function confirmar(Request $request, int $id)
     {
         can('confirmar-recepcion-proveedor');
 
@@ -118,8 +140,11 @@ class RecepcionProveedorController extends Controller
             return back()->with('mensaje', 'Error al confirmar: '.$e->getMessage());
         }
 
-        return redirect('stock/recepcion-proveedor/'.$id.'/editar')
-            ->with('mensaje', 'Recepción confirmada. Stock y contabilidad generados.');
+        return redirect()->route('editar_recepcion_proveedor', QueryRetornoListado::paramsRutaEditar(
+            $request,
+            RecepcionProveedorListadoFiltros::class,
+            $id
+        ))->with('mensaje', 'Recepción confirmada. Stock y contabilidad generados.');
     }
 
     public function apiPreviewArticuloProveedor(Request $request): JsonResponse
@@ -183,6 +208,7 @@ class RecepcionProveedorController extends Controller
             'proveedor_nombre' => optional($oc->proveedores)->nombre,
             'empresa_nombre' => optional($oc->empresas)->nombre,
             'tratamiento' => $oc->tratamiento,
+            'descuento_ordencompra' => (float) ($oc->descuento ?? 0),
             'lineas' => $data['lineas'],
         ]);
     }
@@ -304,7 +330,7 @@ class RecepcionProveedorController extends Controller
                 $path = storage_path('pdf/listados');
                 $nombre = 'listado_recepcion_proveedor';
                 $pdf = app('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
+                DompdfPaperSupport::aplicar($pdf, DompdfPaperSupport::CONTEXTO_LISTADO);
                 $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre.'.pdf');
 
                 return response()->download($path.'/'.$nombre.'.pdf');

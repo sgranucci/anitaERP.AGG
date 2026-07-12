@@ -8,6 +8,7 @@ use App\Models\Admin\Rol;
 use App\Models\Compras\SectorLegajocompra;
 use App\Models\Seguridad\Usuario;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
+use App\Support\Seguridad\UsuarioOperativoSupport;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
@@ -235,12 +236,26 @@ class UsuarioController extends Controller
 
     public function consultaUsuario(Request $request)
     {
-        return $this->usuarioRepository->consultaUsuario($request->consulta, $request->empresa_id, $request->centrocosto_id);
+        $empresaId = $request->boolean('omitir_filtro_empresa')
+            ? null
+            : UsuarioOperativoSupport::normalizarEmpresaId($request->input('empresa_id'));
+
+        return $this->usuarioRepository->consultaUsuario(
+            $request->consulta,
+            $empresaId,
+            $request->centrocosto_id
+        );
     }
 
     public function leeUnUsuario($usuario_id)
     {
-        return $this->usuarioRepository->find($usuario_id);
+        $usuario = $this->usuarioRepository->findOperativo((int) $usuario_id);
+
+        if ($usuario === null) {
+            return response()->json(null);
+        }
+
+        return $usuario;
     }
 
     /**
@@ -249,22 +264,22 @@ class UsuarioController extends Controller
     public function resolverUsuario(Request $request)
     {
         $valor = trim((string) $request->query('valor', ''));
-        $empresa_id = $request->query('empresa_id');
+        $omitirFiltroEmpresa = $request->boolean('omitir_filtro_empresa');
+        $empresaId = $omitirFiltroEmpresa
+            ? null
+            : UsuarioOperativoSupport::normalizarEmpresaId($request->query('empresa_id'));
 
         if ($valor === '') {
             return response()->json(null);
         }
 
-        $usuario = $this->usuarioRepository->findPorIdOCodigo($valor, $empresa_id ? (int) $empresa_id : null);
+        $usuario = $this->usuarioRepository->findPorIdOCodigo($valor, $empresaId);
 
         if (! $usuario) {
-            return response()->json(['ok' => false, 'mensaje' => 'Usuario no encontrado']);
+            return response()->json(['ok' => false, 'mensaje' => 'Usuario no encontrado o suspendido.']);
         }
 
-        $empresa_ok = true;
-        if ($empresa_id) {
-            $empresa_ok = $usuario->usuario_empresas->contains('id', (int) $empresa_id);
-        }
+        $empresa_ok = UsuarioOperativoSupport::validoParaEmpresa($usuario, $empresaId, $omitirFiltroEmpresa);
 
         return response()->json([
             'ok' => true,

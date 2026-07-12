@@ -59,11 +59,7 @@ class PrecioQuery implements PrecioQueryInterface
             ->join('listaprecio', 'listaprecio.id', '=', 'precio.listaprecio_id')
             ->join('moneda', 'moneda.id', '=', 'precio.moneda_id')
             ->leftJoin('usuario', 'usuario.id', '=', 'precio.usuarioultcambio_id');
-        PrecioListaVigenteSupport::aplicarFiltroVigenteEnQuery($q, $fechaReferencia);
-
-        if ($listaprecioId !== null) {
-            $q->where('precio.listaprecio_id', $listaprecioId);
-        }
+        PrecioListaVigenteSupport::aplicarFiltroVigenteEnQuery($q, $fechaReferencia, 'precio', null, $listaprecioId);
 
         $q = PrecioSoloFacturableSupport::aplicarFiltroQuery($q);
 

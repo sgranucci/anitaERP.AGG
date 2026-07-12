@@ -7,6 +7,7 @@ use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Support\Stock\RecepcionProveedorEncuestaSupport;
 use App\Support\Stock\RecepcionProveedorEnlacePublicoSupport;
+use App\Support\Stock\RecepcionProveedorPrecioPendienteSupport;
 
 class StockRecepcionProveedorAvisoHandler implements ModuloAvisoHandlerInterface
 {
@@ -32,19 +33,20 @@ class StockRecepcionProveedorAvisoHandler implements ModuloAvisoHandlerInterface
         $oc = $rec->ordencompras;
         $prov = $rec->proveedores;
 
-        $rec->loadMissing('recepcion_proveedor_partes_unicas');
+        $rec->loadMissing(['recepcion_proveedor_partes_unicas', 'creousuarios', 'recepcion_proveedor_articulos.articulos']);
 
         return [
             'numero_recepcion' => (string) ($rec->numerorecepcion ?? $entityId),
             'numero_oc' => (string) (optional($oc)->numeroordencompra ?? '—'),
             'proveedor' => (string) (optional($prov)->nombre ?? '—'),
             'comentario_precio' => (string) ($rec->comentario_precio ?? '—'),
-            'resumen_diferencias' => (string) ($rec->resumen_diferencias ?? '—'),
+            'resumen_diferencias' => (string) ($rec->resumen_diferencias ?? RecepcionProveedorPrecioPendienteSupport::resumenPreciosSolicitados($rec)),
             'fecha' => $rec->fecha ? $rec->fecha->format('d/m/Y') : '—',
             'estado' => (string) ($rec->estado ?? '—'),
             'com_anita' => RecepcionProveedorEncuestaSupport::etiquetaComAnita($rec),
             'cantidad_partes_unicas' => (string) $rec->recepcion_proveedor_partes_unicas->count(),
             'resumen_rechazos' => (string) ($rec->resumen_rechazos ?? '—'),
+            'usuario_recepcion' => (string) (optional($rec->creousuarios)->nombre ?? '—'),
         ];
     }
 

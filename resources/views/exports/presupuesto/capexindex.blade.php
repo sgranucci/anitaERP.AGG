@@ -20,7 +20,7 @@
 			<td>{{$data->id}}</td>
 			<td>{{$data->nombreempresa ?? ''}}</td>
 			<td>{{$data->nombrepresupuesto ?? ''}}</td>
-			<td>{{$data->nombrecentrocosto ?? '' }}</td>
+			<td>{{ trim(($data->codigocentrocosto ?? '').' '.($data->nombrecentrocosto ?? '')) }}</td>
 			<td>{{$data->nombre ?? ''}}</td>
 			<td>{{$data->detalle ?? ''}}</td>
 			<td>{{$data->codigoproyecto}}</td>

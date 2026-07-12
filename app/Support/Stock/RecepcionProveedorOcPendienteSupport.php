@@ -10,12 +10,12 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Órdenes de compra con saldo pendiente de recepción COM (sin COM o COM parcial confirmado).
+ * Órdenes de compra con saldo pendiente de recepción COM (neto de devoluciones DEP confirmadas).
  */
 final class RecepcionProveedorOcPendienteSupport
 {
     /**
-     * @return array<int, float> ordencompra_articulo_id => cantidad recibida confirmada
+     * @return array<int, float> ordencompra_articulo_id => cantidad neta recibida (COM − DEP)
      */
     public static function cantidadesRecibidasPorLineaOc(int $ordencompraId): array
     {
@@ -27,15 +27,28 @@ final class RecepcionProveedorOcPendienteSupport
             ->join('recepcion_proveedor as rp', 'rp.id', '=', 'rpa.recepcion_proveedor_id')
             ->where('rp.ordencompra_id', $ordencompraId)
             ->where('rp.estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
-            ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+            ->whereIn('rp.tipo', [
+                Recepcion_Proveedor::TIPO_RECEPCION,
+                Recepcion_Proveedor::TIPO_DEVOLUCION,
+            ])
             ->whereNotNull('rpa.ordencompra_articulo_id')
             ->groupBy('rpa.ordencompra_articulo_id')
-            ->selectRaw('rpa.ordencompra_articulo_id as linea_id, SUM(rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0)) as cantidad_recibida')
+            ->selectRaw(
+                'rpa.ordencompra_articulo_id as linea_id, SUM('
+                .'CASE rp.tipo '
+                .'WHEN ? THEN rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0) '
+                .'WHEN ? THEN -(rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0)) '
+                .'ELSE 0 END) as cantidad_recibida',
+                [
+                    Recepcion_Proveedor::TIPO_RECEPCION,
+                    Recepcion_Proveedor::TIPO_DEVOLUCION,
+                ]
+            )
             ->get();
 
         $out = [];
         foreach ($filas as $fila) {
-            $out[(int) $fila->linea_id] = (float) $fila->cantidad_recibida;
+            $out[(int) $fila->linea_id] = max(0.0, (float) $fila->cantidad_recibida);
         }
 
         return $out;
@@ -66,6 +79,16 @@ final class RecepcionProveedorOcPendienteSupport
         );
 
         if (RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($cantidadPedida, $cantidadRecibida, $tol)) {
+            return 0.0;
+        }
+
+        return max(0.0, $cantidadPedida - $cantidadRecibida);
+    }
+
+    /** Pendiente real pedido − recibido, sin aplicar tolerancia de cantidad. */
+    public static function saldoPendienteLineaEstricto(float $cantidadPedida, float $cantidadRecibida): float
+    {
+        if ($cantidadPedida <= 0.000001) {
             return 0.0;
         }
 
@@ -146,6 +169,56 @@ final class RecepcionProveedorOcPendienteSupport
         ];
     }
 
+    /**
+     * @return array{cantidad_pedida: float, cantidad_recibida: float, cantidad_pendiente: float}
+     */
+    public static function calcularSaldoRecepcionEstricto(int $ordencompraId): array
+    {
+        if ($ordencompraId <= 0) {
+            return [
+                'cantidad_pedida' => 0.0,
+                'cantidad_recibida' => 0.0,
+                'cantidad_pendiente' => 0.0,
+            ];
+        }
+
+        $recibidos = self::cantidadesRecibidasPorLineaOc($ordencompraId);
+
+        $lineas = DB::table('ordencompra_articulo as oa')
+            ->where('oa.ordencompra_id', $ordencompraId)
+            ->where(function ($q) {
+                $q->whereNull('oa.estado_linea_oc')
+                    ->orWhere('oa.estado_linea_oc', '!=', OrdencompraLineaEstados::CERRADA);
+            })
+            ->get(['id', 'cantidad']);
+
+        $pedida = 0.0;
+        $recibida = 0.0;
+        $pendiente = 0.0;
+        foreach ($lineas as $linea) {
+            $cantPedida = (float) $linea->cantidad;
+            $cantRecibida = (float) ($recibidos[(int) $linea->id] ?? 0);
+            $saldoLinea = self::saldoPendienteLineaEstricto($cantPedida, $cantRecibida);
+
+            $pedida += $cantPedida;
+            $recibida += $cantRecibida;
+            $pendiente += $saldoLinea;
+        }
+
+        return [
+            'cantidad_pedida' => $pedida,
+            'cantidad_recibida' => $recibida,
+            'cantidad_pendiente' => $pendiente,
+        ];
+    }
+
+    public static function tieneSaldoPendienteEstricto(int $ordencompraId): bool
+    {
+        $saldo = self::calcularSaldoRecepcionEstricto($ordencompraId);
+
+        return $saldo['cantidad_pendiente'] > 0.000001;
+    }
+
     public static function tieneSaldoPendiente(int $ordencompraId): bool
     {
         $saldo = self::calcularSaldoRecepcion($ordencompraId);
@@ -164,7 +237,7 @@ final class RecepcionProveedorOcPendienteSupport
         $estado = (string) ($oc->estadoordencompra ?? '');
 
         if ($estado === OrdencompraEstados::CUMPLIDA) {
-            if (! self::tieneSaldoPendiente((int) $oc->id)) {
+            if (! self::tieneSaldoPendienteEstricto((int) $oc->id)) {
                 throw new \RuntimeException(
                     "Orden de compra {$numero} está {$estado}. No puede cargar otra recepción."
                 );
@@ -185,7 +258,7 @@ final class RecepcionProveedorOcPendienteSupport
             );
         }
 
-        if (! self::tieneSaldoPendiente((int) $oc->id)) {
+        if (! self::tieneSaldoPendienteEstricto((int) $oc->id)) {
             $ultimaCom = DB::table('recepcion_proveedor as rp')
                 ->where('rp.ordencompra_id', $oc->id)
                 ->where('rp.estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
@@ -283,10 +356,23 @@ final class RecepcionProveedorOcPendienteSupport
         $recibidoSub = DB::table('recepcion_proveedor_articulo as rpa')
             ->join('recepcion_proveedor as rp', 'rp.id', '=', 'rpa.recepcion_proveedor_id')
             ->where('rp.estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
-            ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+            ->whereIn('rp.tipo', [
+                Recepcion_Proveedor::TIPO_RECEPCION,
+                Recepcion_Proveedor::TIPO_DEVOLUCION,
+            ])
             ->whereNotNull('rpa.ordencompra_articulo_id')
             ->groupBy('rpa.ordencompra_articulo_id')
-            ->selectRaw('rpa.ordencompra_articulo_id as linea_id, SUM(rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0)) as cantidad_recibida');
+            ->selectRaw(
+                'rpa.ordencompra_articulo_id as linea_id, SUM('
+                .'CASE rp.tipo '
+                .'WHEN ? THEN rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0) '
+                .'WHEN ? THEN -(rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0)) '
+                .'ELSE 0 END) as cantidad_recibida',
+                [
+                    Recepcion_Proveedor::TIPO_RECEPCION,
+                    Recepcion_Proveedor::TIPO_DEVOLUCION,
+                ]
+            );
 
         $query = DB::table('ordencompra as oc')
             ->join('proveedor as p', 'p.id', '=', 'oc.proveedor_id')
@@ -299,7 +385,10 @@ final class RecepcionProveedorOcPendienteSupport
             ->leftJoinSub($recibidoSub, 'rec', function ($join) {
                 $join->on('rec.linea_id', '=', 'oa.id');
             })
-            ->where('oc.estadoordencompra', OrdencompraEstados::APROBADA)
+            ->whereIn('oc.estadoordencompra', [
+                OrdencompraEstados::APROBADA,
+                OrdencompraEstados::CUMPLIDA,
+            ])
             ->when($proveedorId !== null && $proveedorId > 0, function ($q) use ($proveedorId) {
                 $q->where('oc.proveedor_id', $proveedorId);
             })

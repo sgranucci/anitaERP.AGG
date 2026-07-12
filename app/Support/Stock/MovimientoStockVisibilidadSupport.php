@@ -12,8 +12,11 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * Alcance del listado y acceso a movimientos de stock / transferencias por centro de costo
- * y depósitos autorizados del usuario.
+ * Alcance del listado y acceso a movimientos de stock / transferencias.
+ *
+ * Por defecto (sin listar-todos-movimientos-de-stock): solo registros cargados por usuarios
+ * del mismo centro de costo que el usuario logueado. Además pueden aplicar depósitos y tipos
+ * de transacción autorizados en la ficha del usuario (transferencias: solo depósito de origen).
  */
 final class MovimientoStockVisibilidadSupport
 {
@@ -196,17 +199,7 @@ final class MovimientoStockVisibilidadSupport
             return;
         }
 
-        $query->where(function ($q) use ($centrocostoId, $aliasMov) {
-            $q->where("{$aliasMov}.centrocosto_destino_id", $centrocostoId)
-                ->orWhere(function ($q2) use ($centrocostoId, $aliasMov) {
-                    $q2->whereNull("{$aliasMov}.centrocosto_destino_id")
-                        ->whereIn("{$aliasMov}.usuario_id", function ($sub) use ($centrocostoId) {
-                            $sub->from('usuario')
-                                ->where('centrocosto_id', $centrocostoId)
-                                ->select('id');
-                        });
-                });
-        });
+        $query->whereIn("{$aliasMov}.usuario_id", self::subqueryUsuarioIdsCentrocosto($centrocostoId));
     }
 
     /**
@@ -219,17 +212,19 @@ final class MovimientoStockVisibilidadSupport
             return;
         }
 
-        $query->where(function ($q) use ($centrocostoId, $aliasTm) {
-            $q->where("{$aliasTm}.centrocosto_destino_id", $centrocostoId)
-                ->orWhere(function ($q2) use ($centrocostoId, $aliasTm) {
-                    $q2->whereNull("{$aliasTm}.centrocosto_destino_id")
-                        ->whereIn("{$aliasTm}.usuario_origen_id", function ($sub) use ($centrocostoId) {
-                            $sub->from('usuario')
-                                ->where('centrocosto_id', $centrocostoId)
-                                ->select('id');
-                        });
-                });
-        });
+        $query->whereIn("{$aliasTm}.usuario_origen_id", self::subqueryUsuarioIdsCentrocosto($centrocostoId));
+    }
+
+    /**
+     * @return \Closure(\Illuminate\Database\Query\Builder): void
+     */
+    private static function subqueryUsuarioIdsCentrocosto(int $centrocostoId): \Closure
+    {
+        return function ($sub) use ($centrocostoId) {
+            $sub->from('usuario')
+                ->where('centrocosto_id', $centrocostoId)
+                ->select('id');
+        };
     }
 
     /**
@@ -246,6 +241,9 @@ final class MovimientoStockVisibilidadSupport
     }
 
     /**
+     * Transferencias visibles solo si el depósito de origen está autorizado (quien envía).
+     * No filtrar por destino: una recepción en un depósito del usuario no implica que la haya cargado.
+     *
      * @param  QueryBuilder  $query
      */
     public static function aplicarFiltroDepositosTransferenciaQuery(QueryBuilder $query, string $aliasTm = 'tm'): void
@@ -255,10 +253,7 @@ final class MovimientoStockVisibilidadSupport
             return;
         }
 
-        $query->where(function ($q) use ($depositoIds, $aliasTm) {
-            $q->whereIn("{$aliasTm}.deposito_origen_id", $depositoIds)
-                ->orWhereIn("{$aliasTm}.deposito_destino_id", $depositoIds);
-        });
+        $query->whereIn("{$aliasTm}.deposito_origen_id", $depositoIds);
     }
 
     /**
@@ -271,17 +266,7 @@ final class MovimientoStockVisibilidadSupport
             return;
         }
 
-        $query->where(function ($q) use ($centrocostoId) {
-            $q->where('movimientostock.centrocosto_destino_id', $centrocostoId)
-                ->orWhere(function ($q2) use ($centrocostoId) {
-                    $q2->whereNull('movimientostock.centrocosto_destino_id')
-                        ->whereIn('movimientostock.usuario_id', function ($sub) use ($centrocostoId) {
-                            $sub->from('usuario')
-                                ->where('centrocosto_id', $centrocostoId)
-                                ->select('id');
-                        });
-                });
-        });
+        $query->whereIn('movimientostock.usuario_id', self::subqueryUsuarioIdsCentrocosto($centrocostoId));
     }
 
     /**
@@ -294,17 +279,7 @@ final class MovimientoStockVisibilidadSupport
             return;
         }
 
-        $query->where(function ($q) use ($centrocostoId) {
-            $q->where('transferencia_mercaderia.centrocosto_destino_id', $centrocostoId)
-                ->orWhere(function ($q2) use ($centrocostoId) {
-                    $q2->whereNull('transferencia_mercaderia.centrocosto_destino_id')
-                        ->whereIn('transferencia_mercaderia.usuario_origen_id', function ($sub) use ($centrocostoId) {
-                            $sub->from('usuario')
-                                ->where('centrocosto_id', $centrocostoId)
-                                ->select('id');
-                        });
-                });
-        });
+        $query->whereIn('transferencia_mercaderia.usuario_origen_id', self::subqueryUsuarioIdsCentrocosto($centrocostoId));
     }
 
     /**
@@ -358,10 +333,7 @@ final class MovimientoStockVisibilidadSupport
             return;
         }
 
-        $query->where(function ($q) use ($depositoIds) {
-            $q->whereIn('transferencia_mercaderia.deposito_origen_id', $depositoIds)
-                ->orWhereIn('transferencia_mercaderia.deposito_destino_id', $depositoIds);
-        });
+        $query->whereIn('transferencia_mercaderia.deposito_origen_id', $depositoIds);
     }
 
     public static function movimientoAccesiblePorId(int $movimientoId): bool

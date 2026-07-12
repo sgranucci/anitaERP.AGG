@@ -162,6 +162,23 @@ class PuntoventaAnitaSyncService
         $datos['codigo'] = $codigoNorm;
         $datos['empresa_id'] = $empresaId;
 
+        $domicilioAnita = PuntoventaFieldMapper::mapDomicilio($row);
+        if ($domicilioAnita === null && $existente) {
+            unset($datos['domicilio']);
+        } elseif ($domicilioAnita !== null) {
+            $datos['domicilio'] = $domicilioAnita;
+        }
+
+        if ($payload['actividad_arca_id'] === null) {
+            $codigoActividad = PuntoventaFieldMapper::codigoActividadDesdeSucDireccion($row);
+            if ($codigoActividad !== null) {
+                Log::warning('PuntoventaAnitaSync: actividad ARCA no encontrada en ERP', [
+                    'suc_numero' => $codigoAnita,
+                    'codigo_actividad' => $codigoActividad,
+                ]);
+            }
+        }
+
         DB::beginTransaction();
         try {
             if ($existente) {

@@ -16,6 +16,77 @@ use Illuminate\Support\Facades\Log;
 class ViandaTipoMenuAnitaSyncService
 {
     /**
+     * Recorre los bridges Anita de todas las empresas configuradas (Biyemas/Kandiko/Rebisco)
+     * y agrega los resultados. Cada tipo de menú queda asociado a su empresa (empresa_id).
+     *
+     * @param  list<int>|null  $empresaIds  Empresas a recorrer; null → config('vianda_anita.empresas_sync').
+     * @return array{
+     *   en_anita:int,
+     *   importados:int,
+     *   actualizados:int,
+     *   omitidos:int,
+     *   articulos_lineas:int,
+     *   errores:list<string>,
+     *   por_empresa:array<int, array<string, mixed>>
+     * }
+     */
+    public function sincronizarEmpresas(?array $empresaIds = null): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresaIds = $empresaIds ?? (array) config('vianda_anita.empresas_sync', [1]);
+        $empresaIds = array_values(array_unique(array_filter(array_map(
+            static fn ($valor): int => (int) $valor,
+            $empresaIds
+        ), static fn (int $valor): bool => $valor > 0)));
+
+        if ($empresaIds === []) {
+            $empresaIds = [(int) config('vianda_anita.empresa_sync', 1)];
+        }
+
+        $agg = [
+            'en_anita' => 0,
+            'importados' => 0,
+            'actualizados' => 0,
+            'omitidos' => 0,
+            'articulos_lineas' => 0,
+            'errores' => [],
+            'por_empresa' => [],
+        ];
+
+        foreach ($empresaIds as $empresaId) {
+            try {
+                $ret = $this->sincronizarConAnita($empresaId);
+            } catch (\Throwable $e) {
+                Log::warning("ViandaTipoMenu sync empresa {$empresaId}: ".$e->getMessage(), ['exception' => $e]);
+                $agg['errores'][] = "Empresa {$empresaId}: ".$e->getMessage();
+                $agg['por_empresa'][$empresaId] = ['error' => $e->getMessage()];
+
+                continue;
+            }
+
+            foreach (['en_anita', 'importados', 'actualizados', 'omitidos', 'articulos_lineas'] as $clave) {
+                $agg[$clave] += $ret[$clave];
+            }
+            foreach ($ret['errores'] as $err) {
+                $agg['errores'][] = "E{$empresaId}: ".$err;
+            }
+            $agg['por_empresa'][$empresaId] = $ret;
+        }
+
+        if (count($agg['errores']) > 20) {
+            $extra = count($agg['errores']) - 20;
+            $agg['errores'] = array_merge(
+                array_slice($agg['errores'], 0, 20),
+                ["… y {$extra} avisos más."]
+            );
+        }
+
+        return $agg;
+    }
+
+    /**
      * @return array{
      *   en_anita:int,
      *   importados:int,
@@ -80,11 +151,15 @@ class ViandaTipoMenuAnitaSyncService
 
             try {
                 DB::transaction(function () use ($codigoAnita, $nombre, $articulosPorTipo, $empresaId, &$ret) {
-                    $tipoMenu = ViandaTipoMenu::query()->where('codigo_anita', $codigoAnita)->first();
+                    $tipoMenu = ViandaTipoMenu::query()
+                        ->where('empresa_id', $empresaId)
+                        ->where('codigo_anita', $codigoAnita)
+                        ->first();
                     $esNuevo = $tipoMenu === null;
 
                     if ($esNuevo) {
                         $tipoMenu = ViandaTipoMenu::create([
+                            'empresa_id' => $empresaId,
                             'codigo_anita' => $codigoAnita,
                             'nombre' => $nombre,
                             'estado' => 'A',
@@ -105,8 +180,9 @@ class ViandaTipoMenuAnitaSyncService
                     $ordenPorDia = [];
 
                     foreach ($lineasTipo as $lineaAnita) {
-                        $dia = (int) ($lineaAnita->artm_dia ?? 0);
-                        if (! ViandaDiaSemanaSupport::diaValido($dia)) {
+                        $artmDia = (int) ($lineaAnita->artm_dia ?? 0);
+                        $dia = ViandaDiaSemanaSupport::desdeAnita($artmDia, $empresaId);
+                        if ($dia === null || ! ViandaDiaSemanaSupport::diaValido($dia)) {
                             continue;
                         }
 
@@ -117,7 +193,7 @@ class ViandaTipoMenuAnitaSyncService
 
                         $articulo = $this->resolverArticuloPorSkuAnita($sku, $empresaId);
                         if ($articulo === null) {
-                            $ret['errores'][] = "Tipo {$codigoAnita} día {$dia}: SKU «{$sku}» no encontrado en ERP.";
+                            $ret['errores'][] = "Tipo {$codigoAnita} artm_dia {$artmDia}: SKU «{$sku}» no encontrado en ERP.";
 
                             continue;
                         }

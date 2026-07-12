@@ -37,6 +37,13 @@
 
         <span class="estado {{ $claseEstado }}">{{ $estado ?: '—' }}</span>
 
+        @if ($recepcion->fl_precio_pendiente_aprobacion)
+            <div class="aviso" style="background:#fff3cd;border-color:#ffeeba;color:#856404;">
+                <strong>Precio pendiente de aprobaci&oacute;n en compras.</strong>
+                Los precios solicitados deben actualizarse en la OC antes de confirmar la recepci&oacute;n.
+            </div>
+        @endif
+
         <div class="aviso">
             Consulta p&uacute;blica de la recepci&oacute;n. No requiere iniciar sesi&oacute;n en el ERP.
         </div>
@@ -63,6 +70,7 @@
                     <th>Art&iacute;culo</th>
                     <th class="num">Cantidad</th>
                     <th class="num">Precio</th>
+                    <th class="num">Precio solicitado</th>
                 </tr>
             </thead>
             <tbody>
@@ -72,10 +80,17 @@
                         <td>{{ optional($linea->articulos)->descripcion }}</td>
                         <td class="num">{{ rtrim(rtrim(number_format((float) $linea->cantidad, 6, '.', ''), '0'), '.') }}</td>
                         <td class="num">{{ number_format((float) ($linea->precio ?? 0), 4, ',', '.') }}</td>
+                        <td class="num">
+                            @if($linea->precio_solicitado !== null && abs((float)$linea->precio_solicitado - (float)($linea->precio_ordencompra ?? $linea->precio)) >= 0.0001)
+                                {{ number_format((float) $linea->precio_solicitado, 4, ',', '.') }}
+                            @else
+                                —
+                            @endif
+                        </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="4">Sin &iacute;tems registrados.</td>
+                        <td colspan="5">Sin &iacute;tems registrados.</td>
                     </tr>
                 @endforelse
             </tbody>

@@ -12,6 +12,8 @@ final class TransferenciaMercaderiaEstados
 
     public const ANULADA = 'ANULADA';
 
+    public const REVERTIDA = 'REVERTIDA';
+
     /** @return array<string, string> */
     public static function etiquetas(): array
     {
@@ -20,6 +22,7 @@ final class TransferenciaMercaderiaEstados
             self::CONFIRMADA => 'Confirmada',
             self::RECHAZADA => 'Rechazada',
             self::ANULADA => 'Anulada',
+            self::REVERTIDA => 'Revertida',
         ];
     }
 

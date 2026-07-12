@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\Models\Stock\MovimientoStock;
 use App\Repositories\Stock\MovimientoStockRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 
 class MovimientoStockPdfService
@@ -53,7 +54,7 @@ class MovimientoStockPdfService
         ))->render();
 
         $pdf = app('dompdf.wrapper');
-        $pdf->setPaper('legal', 'portrait');
+        DompdfPaperSupport::aplicar($pdf, DompdfPaperSupport::CONTEXTO_COMPROBANTE);
         $pdf->loadHTML($html, 'UTF-8');
 
         $codigo = preg_replace('/[^\w\-]+/', '_', (string) $movimiento->codigo);

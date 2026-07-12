@@ -3,6 +3,7 @@
 /**
  * Sincronización Anita (Informix) → puntoventa del ERP.
  * Tabla origen: sucursal (ver esquema en sucursal.sql: suc_numero, suc_empresa, …).
+ * suc_direccion = código actividad ARCA (561012, 524120, …) → actividad_arca_id en el ERP.
  */
 return [
     'tabla' => 'sucursal',

@@ -7,6 +7,7 @@ use App\Models\Configuracion\Impuesto;
 use App\Models\Stock\Articulo;
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Carbon\Carbon;
 use Exception;
@@ -530,8 +531,8 @@ class ArcaMtxcaFacturaElectronicaService
             'importeSubtotal' => $subtotal,
             'importeOtrosTributos' => $this->money($datos['tributo']),
             'importeTotal' => $this->money($datos['total']),
-            'codigoMoneda' => (string) $datos['moneda'],
-            'cotizacionMoneda' => $this->moneyCotiz($datos['cotizacion'] ?? 1),
+            'codigoMoneda' => LibroIvaDigitalMapeosSupport::codigoMonedaAfip((string) ($datos['moneda'] ?? 'PES')),
+            'cotizacionMoneda' => $this->moneyCotiz($this->cotizacionParaMonedaAfip($datos)),
             'cancelaEnMismaMonedaExtranjera' => 'N',
             'codigoConcepto' => $concepto,
         ];
@@ -1403,6 +1404,26 @@ class ArcaMtxcaFacturaElectronicaService
     private function moneyCotiz(mixed $v): string
     {
         return number_format((float) $v, 6, '.', '');
+    }
+
+    /**
+     * Con moneda PES la cotización AFIP debe ser 1 (equivalente WSFE [726]).
+     *
+     * @param  array<string, mixed>  $datos
+     */
+    private function cotizacionParaMonedaAfip(array $datos): float
+    {
+        $codigo = LibroIvaDigitalMapeosSupport::codigoMonedaAfip((string) ($datos['moneda'] ?? 'PES'));
+        if ($codigo === 'PES') {
+            return 1.0;
+        }
+
+        $cotizacion = (float) ($datos['cotizacion'] ?? 1);
+        if ($cotizacion <= 0) {
+            return 1.0;
+        }
+
+        return $cotizacion;
     }
 
     private function decimal(mixed $v): string

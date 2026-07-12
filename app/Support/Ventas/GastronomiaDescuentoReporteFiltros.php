@@ -11,6 +11,132 @@ class GastronomiaDescuentoReporteFiltros
 
     public const AGRUPAR_CLIENTE = 'cliente_descuento';
 
+    public const AGRUPAR_MOZO = 'mozo_descuento';
+
+    public const AGRUPAR_VIP = 'cliente_vip';
+
+    /**
+     * @return list<string>
+     */
+    public static function agrupacionesValidas(): array
+    {
+        return [self::AGRUPAR_CODIGO, self::AGRUPAR_CLIENTE, self::AGRUPAR_MOZO, self::AGRUPAR_VIP];
+    }
+
+    public static function esModoCliente(array $filtros): bool
+    {
+        return ($filtros['agrupar_por'] ?? self::AGRUPAR_CODIGO) === self::AGRUPAR_CLIENTE;
+    }
+
+    public static function esModoMozo(array $filtros): bool
+    {
+        return ($filtros['agrupar_por'] ?? self::AGRUPAR_CODIGO) === self::AGRUPAR_MOZO;
+    }
+
+    public static function esModoVip(array $filtros): bool
+    {
+        return ($filtros['agrupar_por'] ?? self::AGRUPAR_CODIGO) === self::AGRUPAR_VIP;
+    }
+
+    public static function usaFiltroCodigosDescuentoSecundario(array $filtros): bool
+    {
+        return self::esModoCliente($filtros) || self::esModoMozo($filtros) || self::esModoVip($filtros);
+    }
+
+    /**
+     * Modo mozo sin mozos elegidos ni rango: incluye todos los mozos con ventas en el período.
+     */
+    public static function mozoAlcanceImplicitoTodos(array $filtros): bool
+    {
+        if (($filtros['agrupar_por'] ?? self::AGRUPAR_CODIGO) !== self::AGRUPAR_MOZO) {
+            return false;
+        }
+
+        if (! empty($filtros['listar_todos'])) {
+            return true;
+        }
+
+        $mozoIds = $filtros['mozos_descuento_ids'] ?? [];
+        if (is_array($mozoIds) && $mozoIds !== []) {
+            return false;
+        }
+
+        return ! GastronomiaDescuentoReporteMozoSupport::tieneRangoCodigo(
+            (string) ($filtros['mozo_codigo_desde'] ?? ''),
+            (string) ($filtros['mozo_codigo_hasta'] ?? ''),
+        );
+    }
+
+    /**
+     * Rango de mozo definido pero sin IDs resueltos en maestro.
+     */
+    public static function mozoRangoSinCoincidencias(array $filtros): bool
+    {
+        if (($filtros['agrupar_por'] ?? self::AGRUPAR_CODIGO) !== self::AGRUPAR_MOZO) {
+            return false;
+        }
+
+        if (! empty($filtros['listar_todos']) || self::mozoAlcanceImplicitoTodos($filtros)) {
+            return false;
+        }
+
+        $mozoIds = $filtros['mozos_descuento_ids'] ?? [];
+
+        return ! is_array($mozoIds) || $mozoIds === [];
+    }
+
+    /**
+     * Modo cliente VIP sin VIPs elegidos ni rango: incluye todos los VIP con ventas en el período.
+     */
+    public static function vipAlcanceImplicitoTodos(array $filtros): bool
+    {
+        if (($filtros['agrupar_por'] ?? self::AGRUPAR_CODIGO) !== self::AGRUPAR_VIP) {
+            return false;
+        }
+
+        if (! empty($filtros['listar_todos'])) {
+            return true;
+        }
+
+        $vipIds = $filtros['vips_descuento_ids'] ?? [];
+        if (is_array($vipIds) && $vipIds !== []) {
+            return false;
+        }
+
+        return ! GastronomiaDescuentoReporteVipSupport::tieneRangoCodigo(
+            (string) ($filtros['vip_codigo_desde'] ?? ''),
+            (string) ($filtros['vip_codigo_hasta'] ?? ''),
+        );
+    }
+
+    /**
+     * Rango de VIP definido pero sin IDs resueltos en maestro.
+     */
+    public static function vipRangoSinCoincidencias(array $filtros): bool
+    {
+        if (($filtros['agrupar_por'] ?? self::AGRUPAR_CODIGO) !== self::AGRUPAR_VIP) {
+            return false;
+        }
+
+        if (! empty($filtros['listar_todos']) || self::vipAlcanceImplicitoTodos($filtros)) {
+            return false;
+        }
+
+        $vipIds = $filtros['vips_descuento_ids'] ?? [];
+
+        return ! is_array($vipIds) || $vipIds === [];
+    }
+
+    public static function usaOrdenTodosLosBloques(array $filtros): bool
+    {
+        if (! empty($filtros['listar_todos'])) {
+            return true;
+        }
+
+        return self::mozoAlcanceImplicitoTodos($filtros)
+            || self::vipAlcanceImplicitoTodos($filtros);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -28,10 +154,39 @@ class GastronomiaDescuentoReporteFiltros
         $codigosClienteRaw = trim((string) $request->input('codigos_descuento_cliente', ''));
         $codigosCliente = GastronomiaDescuentoReporteCodigoSupport::expandir($codigosClienteRaw);
         $clientesRaw = trim((string) $request->input('clientes_descuento_ids', ''));
-        $clienteIds = self::parsearIdsCsv($clientesRaw);
+        $clienteIdsExplicitos = self::parsearIdsCsv($clientesRaw);
+        $clienteCodigoDesde = trim((string) $request->input('cliente_codigo_desde', ''));
+        $clienteCodigoHasta = trim((string) $request->input('cliente_codigo_hasta', ''));
+        $clienteIds = GastronomiaDescuentoReporteClienteSupport::fusionarSeleccion(
+            $clienteIdsExplicitos,
+            $clienteCodigoDesde,
+            $clienteCodigoHasta,
+        );
+
+        $mozosRaw = trim((string) $request->input('mozos_descuento_ids', ''));
+        $mozoIdsExplicitos = self::parsearIdsCsv($mozosRaw);
+        $mozoCodigoDesde = trim((string) $request->input('mozo_codigo_desde', ''));
+        $mozoCodigoHasta = trim((string) $request->input('mozo_codigo_hasta', ''));
+        $mozoIds = GastronomiaDescuentoReporteMozoSupport::fusionarSeleccion(
+            $mozoIdsExplicitos,
+            $mozoCodigoDesde,
+            $mozoCodigoHasta,
+            $empresaId,
+        );
+
+        $vipsRaw = trim((string) $request->input('vips_descuento_ids', ''));
+        $vipIdsExplicitos = self::parsearIdsCsv($vipsRaw);
+        $vipCodigoDesde = trim((string) $request->input('vip_codigo_desde', ''));
+        $vipCodigoHasta = trim((string) $request->input('vip_codigo_hasta', ''));
+        $vipIds = GastronomiaDescuentoReporteVipSupport::fusionarSeleccion(
+            $vipIdsExplicitos,
+            $vipCodigoDesde,
+            $vipCodigoHasta,
+            $empresaId,
+        );
 
         $agruparPor = trim((string) $request->input('agrupar_por', self::AGRUPAR_CODIGO));
-        if (! in_array($agruparPor, [self::AGRUPAR_CODIGO, self::AGRUPAR_CLIENTE], true)) {
+        if (! in_array($agruparPor, self::agrupacionesValidas(), true)) {
             $agruparPor = self::AGRUPAR_CODIGO;
         }
 
@@ -48,6 +203,19 @@ class GastronomiaDescuentoReporteFiltros
             'codigos_descuento_cliente_resueltos' => $codigosCliente,
             'clientes_descuento_ids' => $clienteIds,
             'clientes_descuento_ids_raw' => $clientesRaw,
+            'clientes_descuento_ids_explicitos' => $clienteIdsExplicitos,
+            'cliente_codigo_desde' => $clienteCodigoDesde,
+            'cliente_codigo_hasta' => $clienteCodigoHasta,
+            'mozos_descuento_ids' => $mozoIds,
+            'mozos_descuento_ids_raw' => $mozosRaw,
+            'mozos_descuento_ids_explicitos' => $mozoIdsExplicitos,
+            'mozo_codigo_desde' => $mozoCodigoDesde,
+            'mozo_codigo_hasta' => $mozoCodigoHasta,
+            'vips_descuento_ids' => $vipIds,
+            'vips_descuento_ids_raw' => $vipsRaw,
+            'vips_descuento_ids_explicitos' => $vipIdsExplicitos,
+            'vip_codigo_desde' => $vipCodigoDesde,
+            'vip_codigo_hasta' => $vipCodigoHasta,
             'listar_todos' => $listarTodos,
             'agrupar_por' => $agruparPor,
             'presentacion_columnas' => $presentacionColumnas,
@@ -103,9 +271,27 @@ class GastronomiaDescuentoReporteFiltros
             return is_array($codigos) && $codigos !== [];
         }
 
-        $clienteIds = $filtros['clientes_descuento_ids'] ?? [];
+        if ($agruparPor === self::AGRUPAR_CLIENTE) {
+            $clienteIds = $filtros['clientes_descuento_ids'] ?? [];
+            if (is_array($clienteIds) && $clienteIds !== []) {
+                return true;
+            }
 
-        return is_array($clienteIds) && $clienteIds !== [];
+            return GastronomiaDescuentoReporteClienteSupport::tieneRangoCodigo(
+                (string) ($filtros['cliente_codigo_desde'] ?? ''),
+                (string) ($filtros['cliente_codigo_hasta'] ?? ''),
+            );
+        }
+
+        if ($agruparPor === self::AGRUPAR_MOZO) {
+            return true;
+        }
+
+        if ($agruparPor === self::AGRUPAR_VIP) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -163,6 +349,38 @@ class GastronomiaDescuentoReporteFiltros
             $params['codigos_descuento_cliente'] = (string) $filtros['codigos_descuento_cliente'];
         }
 
+        if (trim((string) ($filtros['cliente_codigo_desde'] ?? '')) !== '') {
+            $params['cliente_codigo_desde'] = (string) $filtros['cliente_codigo_desde'];
+        }
+
+        if (trim((string) ($filtros['cliente_codigo_hasta'] ?? '')) !== '') {
+            $params['cliente_codigo_hasta'] = (string) $filtros['cliente_codigo_hasta'];
+        }
+
+        if (trim((string) ($filtros['mozos_descuento_ids_raw'] ?? '')) !== '') {
+            $params['mozos_descuento_ids'] = (string) $filtros['mozos_descuento_ids_raw'];
+        }
+
+        if (trim((string) ($filtros['mozo_codigo_desde'] ?? '')) !== '') {
+            $params['mozo_codigo_desde'] = (string) $filtros['mozo_codigo_desde'];
+        }
+
+        if (trim((string) ($filtros['mozo_codigo_hasta'] ?? '')) !== '') {
+            $params['mozo_codigo_hasta'] = (string) $filtros['mozo_codigo_hasta'];
+        }
+
+        if (trim((string) ($filtros['vips_descuento_ids_raw'] ?? '')) !== '') {
+            $params['vips_descuento_ids'] = (string) $filtros['vips_descuento_ids_raw'];
+        }
+
+        if (trim((string) ($filtros['vip_codigo_desde'] ?? '')) !== '') {
+            $params['vip_codigo_desde'] = (string) $filtros['vip_codigo_desde'];
+        }
+
+        if (trim((string) ($filtros['vip_codigo_hasta'] ?? '')) !== '') {
+            $params['vip_codigo_hasta'] = (string) $filtros['vip_codigo_hasta'];
+        }
+
         return $params;
     }
 
@@ -216,9 +434,12 @@ class GastronomiaDescuentoReporteFiltros
 
     public static function etiquetaAgrupacion(array $filtros): string
     {
-        return ($filtros['agrupar_por'] ?? self::AGRUPAR_CODIGO) === self::AGRUPAR_CLIENTE
-            ? 'Cliente interno descuento'
-            : 'Código descuento';
+        return match ($filtros['agrupar_por'] ?? self::AGRUPAR_CODIGO) {
+            self::AGRUPAR_CLIENTE => 'Cliente interno descuento',
+            self::AGRUPAR_MOZO => 'Mozo',
+            self::AGRUPAR_VIP => 'Cliente VIP',
+            default => 'Código descuento',
+        };
     }
 
     /**

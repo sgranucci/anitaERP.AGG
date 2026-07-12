@@ -6,8 +6,11 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
+use App\Support\Stock\RecepcionProveedorArticuloExtraSupport;
 use App\Support\Stock\RecepcionProveedorCentrocostoLineaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
+use App\Support\Stock\RecepcionProveedorIntercompanySupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -59,6 +62,7 @@ class ValidacionRecepcionProveedor extends FormRequest
             'fecha' => 'required|date|before_or_equal:today',
             'numerofactura' => 'nullable|string|max:50',
             'observacion' => 'nullable|string|max:255',
+        'impuesto_interno' => 'nullable|numeric|min:0',
             'deposito_id' => 'nullable|integer|exists:depmae,id',
             'tipo' => 'nullable|in:RECEPCION,DEVOLUCION',
             'recepcion_referencia_id' => 'nullable|integer|exists:recepcion_proveedor,id',
@@ -70,6 +74,7 @@ class ValidacionRecepcionProveedor extends FormRequest
             'items.*.cantidad_rechazada' => 'nullable|numeric|min:0',
             'items.*.motivorechazo' => 'nullable|string|max:255',
             'items.*.precio' => 'required|numeric|min:0',
+            'items.*.precio_solicitado' => 'nullable|numeric|min:0',
             'items.*.precio_ordencompra' => 'nullable|numeric|min:0',
             'items.*.moneda_id' => 'required|integer|exists:moneda,id',
             'items.*.cotizacion' => 'nullable|numeric|min:0',
@@ -173,6 +178,14 @@ class ValidacionRecepcionProveedor extends FormRequest
                         'Línea '.($idx + 1).': indique motivo de rechazo.'
                     );
                 }
+
+                if (RecepcionProveedorArticuloExtraSupport::itemEsExtraActivo($item)
+                    && ! RecepcionProveedorArticuloExtraSupport::puedeAgregar()) {
+                    $validator->errors()->add(
+                        'items.'.$idx.'.tipo_linea',
+                        'Línea '.($idx + 1).': no tiene permiso para agregar artículos extra fuera de la orden de compra.'
+                    );
+                }
             }
 
             $empresaId = (int) $this->input('empresa_id', 0);
@@ -245,6 +258,16 @@ class ValidacionRecepcionProveedor extends FormRequest
                     $empresaId,
                     'Línea '.($idx + 1)
                 );
+            }
+
+            if ($this->input('tipo') !== 'DEVOLUCION'
+                && RecepcionProveedorImpuestoInternoSupport::itemsRequierenImpuestoInterno($items)) {
+                if ($this->input('impuesto_interno') === null || $this->input('impuesto_interno') === '') {
+                    $validator->errors()->add(
+                        'impuesto_interno',
+                        'Indique el impuesto interno de la factura (hay líneas con cigarrillos recibidos).'
+                    );
+                }
             }
         });
     }
@@ -335,14 +358,16 @@ class ValidacionRecepcionProveedor extends FormRequest
             return;
         }
 
+        $intercompany = RecepcionProveedorIntercompanySupport::puedeUsar();
+
         $empresaDeposito = (int) ($deposito->empresa_id ?? 0);
-        if ($empresaId > 0 && $empresaDeposito > 0 && $empresaDeposito !== $empresaId) {
+        if (! $intercompany && $empresaId > 0 && $empresaDeposito > 0 && $empresaDeposito !== $empresaId) {
             $validator->errors()->add($campo, "{$contexto}: depósito no pertenece a la empresa de la orden de compra.");
 
             return;
         }
 
-        if ($empresaId > 0 && ! Depmae::autorizadoParaUsuarioYEmpresa($depositoId, $empresaId)) {
+        if (! $intercompany && $empresaId > 0 && ! Depmae::autorizadoParaUsuarioYEmpresa($depositoId, $empresaId)) {
             $validator->errors()->add($campo, "{$contexto}: depósito no autorizado para su empresa.");
         }
 

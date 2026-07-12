@@ -146,7 +146,7 @@ class RendicionMaquinavendingController extends Controller
         }
 
         try {
-            $cabecera = $this->service->cabeceraDesdeRequest($request->validated());
+            $cabecera = $this->service->cabeceraDesdeRequest($request->validated(), $id);
             $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
             $resultado = $this->service->actualizar($id, $cabecera, $movimientos);
         } catch (InvalidArgumentException|\RuntimeException $e) {

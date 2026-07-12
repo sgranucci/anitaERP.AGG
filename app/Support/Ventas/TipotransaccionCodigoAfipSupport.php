@@ -2,7 +2,7 @@
 
 namespace App\Support\Ventas;
 
-use App\Support\Configuracion\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 
 /**
  * Tipo de comprobante AFIP efectivo a partir de tipotransaccion.codigo (base letra A o código ARCA final).

@@ -51,6 +51,7 @@
 
                 <div id="precarga-pdf-ia-paso-preview" class="d-none">
                     <div id="precarga-pdf-ia-advertencias" class="alert alert-warning d-none"></div>
+                    <div id="precarga-pdf-ia-constatacion" class="alert alert-info d-none"></div>
                     <div class="row mb-3">
                         <div class="col-md-4"><strong>Empresa:</strong> <span id="precarga-pdf-ia-empresa"></span></div>
                         <div class="col-md-4"><strong>Proveedor:</strong> <span id="precarga-pdf-ia-proveedor"></span></div>
@@ -64,6 +65,12 @@
                         <div class="col-md-3"><strong>Moneda:</strong> <span id="precarga-pdf-ia-moneda"></span></div>
                         <div class="col-md-3"><strong>Cotización:</strong> <span id="precarga-pdf-ia-cotizacion"></span></div>
                         <div class="col-md-3"><strong>Total:</strong> <span id="precarga-pdf-ia-total"></span></div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-3"><strong>Total ARCA:</strong> <span id="precarga-pdf-ia-total-arca"></span></div>
+                        <div class="col-md-3"><strong>CAE:</strong> <span id="precarga-pdf-ia-cae"></span></div>
+                        <div class="col-md-3"><strong>Fecha:</strong> <span id="precarga-pdf-ia-fecha"></span></div>
+                        <div class="col-md-3"><strong>Estado ARCA:</strong> <span id="precarga-pdf-ia-estado-arca"></span></div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6"><strong>Comprobante:</strong> <span id="precarga-pdf-ia-numero"></span></div>

@@ -22,6 +22,12 @@
 @include('includes.stock.kardex_deposito_scripts')
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
 @endif
+@if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-recepciones.js') }}" type="text/javascript"></script>
+@endif
+@if (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false))
+<script src="{{ asset('assets/pages/scripts/stock/articulo/articulos-compra-insumo.js') }}" type="text/javascript"></script>
+@endif
 @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
 <script>
 window.consultaFormulaArticuloConfig = {
@@ -35,6 +41,9 @@ window.consultaFormulaArticuloConfig = {
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('articulo', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -79,8 +88,18 @@ window.consultaFormulaArticuloConfig = {
                         <i class="fa fa-fw fa-list-alt"></i> Kardex
                     </button>
                     @endif
+                    @if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
+                    <button type="button"
+                        class="btn btn-secondary btn-sm btn-recepciones-articulo tooltipsC"
+                        title="Recepciones de proveedor con este art&iacute;culo"
+                        data-articulo-id="{{ $producto->id }}"
+                        data-articulo-sku="{{ $producto->sku ?? '' }}"
+                        data-articulo-descripcion="{{ $producto->descripcion ?? '' }}">
+                        <i class="fa fa-fw fa-truck"></i> Recepciones
+                    </button>
+                    @endif
                     @if (empty($ocultarVolver))
-                    <a href="{{route('articulo')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                     @endif
@@ -94,7 +113,7 @@ window.consultaFormulaArticuloConfig = {
                         @endif                    
                 </div>
             </div>
-            <form action="{{route('actualizar_articulo', ['id' => $producto->id])}}" enctype="multipart/form-data" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" @if(empty($puedeActualizarArticulo)) onsubmit="return false;" @endif>
+            <form action="{{ route('actualizar_articulo', ['id' => $producto->id] + ($filtrosQuery ?? [])) }}" enctype="multipart/form-data" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" @if(empty($puedeActualizarArticulo)) onsubmit="return false;" @endif>
                 @csrf @method("put")
                 @if (!empty($ocultarVolver))
                     <input type="hidden" name="origen" value="modal_consulta">
@@ -168,7 +187,7 @@ window.consultaFormulaArticuloConfig = {
                             @include('includes.boton-form-editar')
                         @else
                             <div class="col-lg-12 text-center">
-                                <a href="{{ route('articulo') }}" class="btn btn-secondary">Salir</a>
+                                <a href="{{ $volverListadoUrl }}" class="btn btn-secondary">Salir</a>
                             </div>
                         @endif
                     </div>
@@ -188,5 +207,12 @@ window.consultaFormulaArticuloConfig = {
 @include('includes.stock.modal_saldos_articulo')
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
 <input type="hidden" id="articulo-saldos-deposito-url" value="{{ route('articulo_saldos_deposito') }}">
+@endif
+@if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
+<input type="hidden" id="recepcion-proveedor-consulta-articulo-url" value="{{ route('recepcion_proveedor_consulta_articulo') }}">
+@endif
+@if (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false))
+@include('stock.formula_articulo.partials.modal_articulos_compra_insumo')
+<input type="hidden" id="articulos-compra-por-insumo-url" value="{{ route('articulos_compra_por_insumo_formula', ['articulo_id' => 0]) }}">
 @endif
 @endsection

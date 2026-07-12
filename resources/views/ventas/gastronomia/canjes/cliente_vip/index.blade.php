@@ -12,6 +12,9 @@
 <?php use App\Support\Ventas\ClienteVipGastronomiaListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -47,7 +50,7 @@
                         'toggleTarget' => '#panel-filtros-cliente-vip',
                         'toggleId' => 'btn-toggle-filtros-cliente-vip',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_cliente_vip_gastronomia'),
+                        'nuevoRegistroUrl' => route('crear_cliente_vip_gastronomia', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-cliente-vip-gastronomia',
                     ])
                 </div>
@@ -92,7 +95,7 @@
                             <td>{{ $data->fecha_alta_formato }}</td>
                             <td>
                                 @if (can('editar-cliente-vip-gastronomia', false))
-                                    <a href="{{ route('editar_cliente_vip_gastronomia', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                    <a href="{{ route('editar_cliente_vip_gastronomia', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
                                     </a>
                                 @endif

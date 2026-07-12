@@ -5,6 +5,8 @@
     $stats = $aud['stats'] ?? [];
     $tolerancia = (float) ($aud['tolerancia'] ?? 1);
     $diasConDif = (int) ($stats['dias_con_diferencia'] ?? 0);
+    $ctamovHabilitado = ! empty($aud['ctamov_habilitado']);
+    $colspanFoot = $ctamovHabilitado ? 11 : 9;
 @endphp
 @if (! empty($aud['habilitada']) && count($dias) > 0)
     <div class="px-3 py-3 border-bottom bg-white">
@@ -17,7 +19,7 @@
             @endif
         </div>
         <p class="small text-muted mb-2">
-            Comparación diaria de neto gravado, imp. interno e IVA entre el listado IVA ventas y el mayor contable.
+            Comparación diaria de ventas (neto gravado + imp. interno + exento) e IVA entre el listado IVA ventas y el mayor contable (cuentas 413/414).
             Tolerancia diaria: <strong>{{ $formatear($tolerancia) }}</strong> (más amplia que el cuadre global de {{ number_format(\App\Support\Ventas\IvaVentas\IvaVentasConciliacionCuentaSupport::TOLERANCIA_DEFAULT, 2, ',', '.') }}).
             Útil para ubicar el día donde se desvía la contabilización respecto a la facturación.
         </p>
@@ -28,12 +30,16 @@
                     <tr style="background-color: #85C1E9; color: #17202A;">
                         <th>Día</th>
                         <th class="text-center">Comp.</th>
-                        <th class="text-right">ERP neto</th>
-                        <th class="text-right">Ctb. neto</th>
-                        <th class="text-right">Dif. neto</th>
+                        <th class="text-right" title="Neto gravado + imp. interno + exento">ERP ventas</th>
+                        <th class="text-right" title="Cuentas 413 + 414 (haber)">Ctb. ventas</th>
+                        <th class="text-right">Dif. ventas</th>
                         <th class="text-right">ERP IVA</th>
                         <th class="text-right">Ctb. IVA</th>
                         <th class="text-right">Dif. IVA</th>
+                        @if ($ctamovHabilitado)
+                            <th class="text-right" title="ctamov Anita — ventas (haber)">Ctamov vtas</th>
+                            <th class="text-right" title="ctamov Anita — IVA (débito − crédito)">Ctamov IVA</th>
+                        @endif
                         <th class="text-center">Estado</th>
                     </tr>
                 </thead>
@@ -48,12 +54,16 @@
                             <tr @if (! $cuadra && $tieneMov) class="table-warning" @elseif (! $tieneMov) class="text-muted" @endif>
                                 <td>{{ $dia['dia_texto'] ?? '' }}</td>
                                 <td class="text-center">{{ (int) ($dia['comprobantes'] ?? 0) }}</td>
-                                <td class="text-right">{{ $formatear($dia['erp']['neto_gravado'] ?? 0) }}</td>
-                                <td class="text-right">{{ $formatear($dia['contable']['ventas_gravadas'] ?? 0) }}</td>
-                                <td class="text-right font-weight-bold">{{ $formatear($dia['diferencias']['neto_gravado'] ?? 0) }}</td>
+                                <td class="text-right">{{ $formatear($dia['erp']['ventas'] ?? (($dia['erp']['neto_gravado'] ?? 0) + ($dia['erp']['imp_interno'] ?? 0) + ($dia['erp']['exento'] ?? 0))) }}</td>
+                                <td class="text-right">{{ $formatear($dia['contable']['ventas'] ?? ($dia['contable']['ventas_total'] ?? 0)) }}</td>
+                                <td class="text-right font-weight-bold">{{ $formatear($dia['diferencias']['ventas'] ?? ($dia['diferencias']['neto_gravado'] ?? 0)) }}</td>
                                 <td class="text-right">{{ $formatear($dia['erp']['iva'] ?? 0) }}</td>
                                 <td class="text-right">{{ $formatear($dia['contable']['iva'] ?? 0) }}</td>
                                 <td class="text-right font-weight-bold">{{ $formatear($dia['diferencias']['iva'] ?? 0) }}</td>
+                                @if ($ctamovHabilitado)
+                                    <td class="text-right">{{ $formatear($dia['ctamov']['ventas'] ?? 0) }}</td>
+                                    <td class="text-right">{{ $formatear($dia['ctamov']['iva'] ?? 0) }}</td>
+                                @endif
                                 <td class="text-center">
                                     @if (! $tieneMov)
                                         <span class="text-muted" title="Sin movimiento">—</span>
@@ -69,7 +79,7 @@
                 </tbody>
                 <tfoot>
                     <tr class="small text-muted">
-                        <td colspan="9">
+                        <td colspan="{{ $colspanFoot }}">
                             {{ (int) ($stats['total_dias'] ?? 0) }} días en período
                             · {{ (int) ($stats['dias_con_movimiento'] ?? 0) }} con movimiento
                             · {{ (int) ($stats['dias_cuadran'] ?? 0) }} cuadran

@@ -20,6 +20,16 @@ Transferencia {{ $transferencia->codigo }}
                     @include('stock.movimientostock.partials.boton_imprimir_transferencia_com_pdf', [
                         'transferenciaId' => $transferencia->id,
                     ])
+                    @if (can('revertir-movimientos-de-stock', false)
+                        && $transferencia->estado === \App\Support\Stock\TransferenciaMercaderiaEstados::CONFIRMADA
+                        && ! ($transferencia->transferencia_revertido_por_id ?? null))
+                        <form action="{{ route('revertir_transferencia_movimientostock', ['id' => $transferencia->id]) }}" class="d-inline form-revertir-movstock" method="POST">
+                            @csrf
+                            <button type="submit" class="btn btn-sm btn-info">
+                                <i class="fa fa-undo"></i> Revertir transferencia
+                            </button>
+                        </form>
+                    @endif
                     @can('editar-movimientos-de-stock')
                         @if ($transferencia->movimientostock_salida_id)
                             <a href="{{ route('editar_movimientostock', ['id' => $transferencia->movimientostock_salida_id]) }}" class="btn btn-sm btn-warning">
@@ -100,4 +110,8 @@ Transferencia {{ $transferencia->codigo }}
         </div>
     </div>
 </div>
+@endsection
+
+@section('scripts')
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/revertir.js') }}" type="text/javascript"></script>
 @endsection

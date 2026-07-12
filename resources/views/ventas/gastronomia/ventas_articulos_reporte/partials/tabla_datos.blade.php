@@ -20,6 +20,7 @@
     <tr>
         <th rowspan="2" class="align-middle">Art&iacute;culo</th>
         <th rowspan="2" class="align-middle">Descripci&oacute;n</th>
+        <th rowspan="2" class="align-middle text-right">Costo unit.</th>
         <th rowspan="2" class="align-middle text-right">P.Vta.</th>
         <th rowspan="2" class="align-middle text-right">Cantidad<br>vendida tot.</th>
         <th colspan="2" class="text-center">Venta externa</th>
@@ -50,6 +51,7 @@
                 @endif
             </td>
             <td>{{ $fila['descripcion'] ?? '—' }}</td>
+            <td class="text-right">{{ $fmtImp($fila['costo_unitario'] ?? 0) }}</td>
             <td class="text-right">{{ $fmtImp($fila['precio_venta'] ?? 0) }}</td>
             <td class="text-right">{{ $fmtCant($fila['cant_total'] ?? 0) }}</td>
             <td class="text-right">{{ $fmtCant($fila['cant_externa'] ?? 0) }}</td>
@@ -62,14 +64,14 @@
         </tr>
     @empty
         <tr>
-            <td colspan="11" class="text-center text-muted py-4">Sin ventas para los filtros indicados.</td>
+            <td colspan="12" class="text-center text-muted py-4">Sin ventas para los filtros indicados.</td>
         </tr>
     @endforelse
 </tbody>
 @if (! empty($totales ?? []))
     <tfoot>
         <tr class="table-active font-weight-bold">
-            <td colspan="3" class="text-right">Totales</td>
+            <td colspan="4" class="text-right">Totales</td>
             <td class="text-right">{{ $fmtCant($totales['cant_total'] ?? 0) }}</td>
             <td class="text-right">{{ $fmtCant($totales['cant_externa'] ?? 0) }}</td>
             <td class="text-right">{{ $fmtImp($totales['importe_externa'] ?? 0) }}</td>

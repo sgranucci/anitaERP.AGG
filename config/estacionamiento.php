@@ -126,6 +126,11 @@ return [
     'impuesto_exento_id' => (int) env('ESTACIONAMIENTO_IMPUESTO_EXENTO_ID', 1),
 
     /**
+     * IVA estándar para facturas de estacionamiento (precio de lista con IVA incluido, Factura B).
+     */
+    'impuesto_gravado_id' => (int) env('ESTACIONAMIENTO_IMPUESTO_GRAVADO_ID', 3),
+
+    /**
      * Si es false, no se graba asiento contable al facturar desde estacionamiento.
      */
     'genera_contabilidad_al_facturar' => filter_var(
@@ -208,4 +213,18 @@ return [
 
     /** Lista de precios ERP (cabecera venta) si el PV no define otra. */
     'listaprecio_id' => (int) env('ESTACIONAMIENTO_LISTAPRECIO_ID', 1),
+
+    /**
+     * Cierre contable de rendiciones (módulo Contabilidad).
+     */
+    'cierre_rendicion_contable' => [
+        /** Tolerancia rendiciones vs flash_estac en conciliación diaria. */
+        'conciliacion_flash_tolerancia' => (float) env('ESTACIONAMIENTO_CIERRE_RENDICION_FLASH_TOLERANCIA', 0.02),
+    ],
+
+    /**
+     * Centro de costo (código ccosto) en líneas de ventas y diferencia de caja
+     * del asiento de cierre contable de rendiciones estacionamiento.
+     */
+    'cierre_rendicion_centrocosto_codigo' => env('ESTACIONAMIENTO_CIERRE_RENDICION_CENTROCOSTO_CODIGO', '80'),
 ];

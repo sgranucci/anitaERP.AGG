@@ -2,23 +2,25 @@
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Exports\Ventas\ViandaUsuarioListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionViandaUsuario;
 use App\Models\Contable\Centrocosto;
 use App\Models\Ventas\ViandaTipoMenu;
 use App\Models\Ventas\ViandaUsuario;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\ViandaUsuarioRepositoryInterface;
-use App\Services\Ventas\ViandaUsuarioAnitaSyncService;
+use App\Support\Ventas\Vianda\ViandaEmpresaSupport;
 use App\Support\Ventas\ViandaUsuarioListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Ventas\ViandaUsuarioTipoSupport;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class ViandaUsuarioController extends Controller
 {
     public function __construct(
         private ViandaUsuarioRepositoryInterface $repository,
-        private ViandaUsuarioAnitaSyncService $anitaSyncService,
+        private EmpresaRepositoryInterface $empresaRepository,
     ) {
     }
 
@@ -26,16 +28,7 @@ class ViandaUsuarioController extends Controller
     {
         can('listar-vianda-usuario-gastronomia');
 
-        if (config('app.anita_sync_vianda_usuario_gastronomia_index')
-            && ! $this->repository->existeRegistro()) {
-            try {
-                $this->anitaSyncService->sincronizarConAnita();
-            } catch (\Throwable $e) {
-                Log::warning('ViandaUsuario index auto-sync Anita: '.$e->getMessage(), ['exception' => $e]);
-            }
-        }
-
-        $filtros = ViandaUsuarioListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltrosListado($request);
         $datas = $this->repository->leeUsuarios($filtros, true);
         $sinRegistros = $datas->total() === 0 && ! ViandaUsuarioListadoFiltros::tieneCriteriosAplicados($filtros);
 
@@ -43,23 +36,68 @@ class ViandaUsuarioController extends Controller
             'datas' => $datas,
             'filtros' => $filtros,
             'filtrosQuery' => ViandaUsuarioListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => ViandaUsuarioListadoFiltros::CAMPOS,
             'sinRegistros' => $sinRegistros,
             'tiposUsuario' => ViandaUsuarioTipoSupport::ETIQUETAS,
+            'empresa_query' => ViandaEmpresaSupport::empresasSeleccionables(),
         ]);
     }
 
-    public function crear()
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-vianda-usuario-gastronomia');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = $this->repository->leeUsuarios($filtros, false);
+                $view = \View::make('ventas.vianda_usuario.listado', compact('datas'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    @mkdir($path, 0775, true);
+                }
+                $nombrePdf = 'listado_vianda_usuario';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+                return (new ViandaUsuarioListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('vianda_usuarios.xlsx');
+
+            case 'CSV':
+                return (new ViandaUsuarioListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('vianda_usuarios.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('consultar_vianda_usuario_gastronomia', ViandaUsuarioListadoFiltros::paraQueryString($filtros));
+    }
+
+    public function crear(Request $request)
     {
         can('crear-vianda-usuario-gastronomia');
 
-        $data = new ViandaUsuario(['estado' => 'A', 'tipo_usuario' => 'L']);
+        $data = new ViandaUsuario(['estado' => 'A', 'tipo_usuario' => 'L', 'empresa_id' => 1]);
         $centrocosto_query = Centrocosto::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']);
-        $tipo_menu_query = ViandaTipoMenu::query()->where('estado', 'A')->orderBy('nombre')->get(['id', 'nombre']);
+        $empresa_query = ViandaEmpresaSupport::empresasSeleccionables();
+        $tipo_menu_query = $this->tipoMenuParaSelect($empresa_query->pluck('id')->all());
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ViandaUsuarioListadoFiltros::class);
 
         return view('ventas.vianda_usuario.crear', compact(
             'data',
             'centrocosto_query',
             'tipo_menu_query',
+            'empresa_query',
+            'filtrosQuery',
         ));
     }
 
@@ -69,21 +107,39 @@ class ViandaUsuarioController extends Controller
 
         $this->repository->create($request->all());
 
-        return redirect('ventas/gastronomia/viandas/usuarios')->with('mensaje', 'Usuario de vianda creado con éxito');
+        return redirect()->route('consultar_vianda_usuario_gastronomia', QueryRetornoListado::desdeRequest($request, ViandaUsuarioListadoFiltros::class))
+            ->with('mensaje', 'Usuario de vianda creado con éxito');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        can('editar-vianda-usuario-gastronomia');
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            if (! can('listar-vianda-usuario-gastronomia', false)
+                && ! can('editar-vianda-usuario-gastronomia', false)) {
+                abort(403);
+            }
+        } else {
+            can('editar-vianda-usuario-gastronomia');
+        }
 
         $data = $this->repository->findOrFail($id);
         $centrocosto_query = Centrocosto::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']);
-        $tipo_menu_query = ViandaTipoMenu::query()->orderBy('nombre')->get(['id', 'nombre', 'estado']);
+        $empresa_query = ViandaEmpresaSupport::empresasSeleccionables((int) $data->empresa_id);
+        $tipo_menu_query = $this->tipoMenuParaSelect($empresa_query->pluck('id')->all(), true);
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ViandaUsuarioListadoFiltros::class);
+        $ocultarVolver = $soloConsulta;
+        $puedeActualizarUsuario = can('actualizar-vianda-usuario-gastronomia', false);
 
         return view('ventas.vianda_usuario.editar', compact(
             'data',
             'centrocosto_query',
             'tipo_menu_query',
+            'empresa_query',
+            'filtrosQuery',
+            'soloConsulta',
+            'ocultarVolver',
+            'puedeActualizarUsuario',
         ));
     }
 
@@ -93,7 +149,8 @@ class ViandaUsuarioController extends Controller
 
         $this->repository->update($request->all(), $id);
 
-        return redirect('ventas/gastronomia/viandas/usuarios')->with('mensaje', 'Usuario de vianda actualizado con éxito');
+        return redirect()->route('consultar_vianda_usuario_gastronomia', QueryRetornoListado::desdeRequest($request, ViandaUsuarioListadoFiltros::class))
+            ->with('mensaje', 'Usuario de vianda actualizado con éxito');
     }
 
     public function eliminar(Request $request, $id)
@@ -111,42 +168,46 @@ class ViandaUsuarioController extends Controller
         abort(404);
     }
 
-    public function sincronizarDesdeAnita(Request $request)
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        can('sincronizar-vianda-usuario-gastronomia-anita');
+        $filtros = ViandaUsuarioListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $filtros['empresas_asignadas'] = $this->empresaRepository->traeEmpresasAsignadas();
 
-        if (! config('app.anita_sync_vianda_usuario_gastronomia_index')) {
-            abort(403);
+        if (\App\Support\Listado\FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
+            return $filtros;
         }
 
-        if (! $request->isMethod('post')) {
-            abort(405);
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        if ($empresaId > 0 && ! ViandaEmpresaSupport::empresaPermitida($empresaId)) {
+            $filtros['empresa_id'] = 0;
         }
 
-        ini_set('memory_limit', '-1');
-        ini_set('max_execution_time', '0');
-        set_time_limit(0);
-        ignore_user_abort(true);
+        return $filtros;
+    }
 
-        try {
-            $ret = $this->anitaSyncService->sincronizarConAnita();
-
-            $msg = 'Sincronización desde Anita: '.$ret['importados'].' nuevos, '.$ret['actualizados'].' actualizados.';
-            if ($ret['omitidos'] > 0) {
-                $msg .= ' Omitidos/inactivos: '.$ret['omitidos'].'.';
-            }
-            if (! empty($ret['errores'])) {
-                $msg .= ' '.implode(' ', array_slice($ret['errores'], 0, 5));
-            }
-
-            return redirect()->route('consultar_vianda_usuario_gastronomia')->with('mensaje', $msg);
-        } catch (\Throwable $e) {
-            Log::warning('ViandaUsuario sincronizarDesdeAnita: '.$e->getMessage(), ['exception' => $e]);
-
-            return redirect()->route('consultar_vianda_usuario_gastronomia')->with('errores', [
-                'No se completó la sincronización desde Anita. Si el error fue por tiempo de espera, ejecute: '
-                .'php artisan vianda:sincronizar-usuarios-anita — Detalle: '.$e->getMessage(),
-            ]);
+    /**
+     * Tipos de menú seleccionables para el formulario de usuario, acotados a las empresas
+     * del módulo que ve el operador. Cada opción se etiqueta con su empresa para que el
+     * operador elija el menú de la empresa correcta (el alta habitual llega desde Anita).
+     *
+     * @param  list<int>  $empresaIds
+     * @return \Illuminate\Support\Collection<int, ViandaTipoMenu>
+     */
+    private function tipoMenuParaSelect(array $empresaIds, bool $incluirInactivos = false): \Illuminate\Support\Collection
+    {
+        if ($empresaIds === []) {
+            return collect();
         }
+
+        return ViandaTipoMenu::query()
+            ->with('empresa:id,nombre')
+            ->whereIn('empresa_id', $empresaIds)
+            ->when(! $incluirInactivos, fn ($q) => $q->where('estado', 'A'))
+            ->orderBy('empresa_id')
+            ->orderBy('nombre')
+            ->get(['id', 'empresa_id', 'nombre', 'estado']);
     }
 }

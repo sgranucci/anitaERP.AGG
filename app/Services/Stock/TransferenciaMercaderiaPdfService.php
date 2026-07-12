@@ -4,6 +4,7 @@ namespace App\Services\Stock;
 
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 
 class TransferenciaMercaderiaPdfService
@@ -55,7 +56,7 @@ class TransferenciaMercaderiaPdfService
         ))->render();
 
         $pdf = app('dompdf.wrapper');
-        $pdf->setPaper('legal', 'landscape');
+        DompdfPaperSupport::aplicar($pdf, DompdfPaperSupport::CONTEXTO_COMPROBANTE, null, 'landscape');
         $pdf->loadHTML($html, 'UTF-8');
 
         $codigo = preg_replace('/[^\w\-]+/', '_', (string) $transferencia->codigo);

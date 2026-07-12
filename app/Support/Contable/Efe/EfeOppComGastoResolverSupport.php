@@ -393,7 +393,7 @@ class EfeOppComGastoResolverSupport
             }
         }
 
-        $this->comSubdiarioCache = $this->bridgeReader->cargarComSubdiarioLote(array_keys($clavesCom), $errores);
+        $this->comSubdiarioCache = $this->bridgeReader->cargarComSubdiarioLote($this->empresaId, array_keys($clavesCom), $errores);
     }
 
     /**

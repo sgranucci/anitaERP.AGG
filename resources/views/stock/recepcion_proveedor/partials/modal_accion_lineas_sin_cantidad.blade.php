@@ -11,7 +11,8 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted small mb-3">
-                    Hay l&iacute;neas de la OC sin cantidad recibida ni rechazada. Indique si quedan <strong>pendientes</strong> para otra entrega o si desea <strong>cerrar</strong> la l&iacute;nea en la OC (con comentario obligatorio).
+                    Hay l&iacute;neas de la OC sin cantidad recibida ni rechazada en este remito. Indique si quedan <strong>pendientes</strong> para otra entrega o si desea <strong>cerrar</strong> la l&iacute;nea en la OC (con comentario obligatorio).
+                    Si recibe una cantidad parcial, use los botones <strong>Pendiente</strong> / <strong>Cerrar saldo</strong> debajo de la l&iacute;nea.
                 </p>
                 <div id="modal-accion-lineas-sin-cantidad-lista"></div>
             </div>

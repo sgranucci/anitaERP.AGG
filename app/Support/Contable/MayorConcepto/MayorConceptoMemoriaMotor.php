@@ -12,10 +12,18 @@ use Illuminate\Support\Facades\DB;
 class MayorConceptoMemoriaMotor
 {
     /**
-     * Límite cuenta caja/banco en mayor por concepto (Anita argv[13], ej. 112010-008).
-     * Cuentas con código mayor a este valor se imputan como contrapartida, no como ancla.
+     * Límite cuenta caja/banco por defecto (Anita argv[13], ej. 112010-008).
+     *
+     * @deprecated Usar config('contable.mayor_concepto.limite_caja_banco').
      */
     public const LIMITE_CAJA_BANCO = 112010008;
+
+    /**
+     * Tope mayor analítico de control por defecto (ej. 112010-007).
+     *
+     * @deprecated Usar config('contable.mayor_concepto.limite_cuenta_analitico_control').
+     */
+    public const LIMITE_CUENTA_ANALITICO_CONTROL = 112010007;
 
     /** Hasta dónde se construye el mayor plano / cuadre con l_mayor (incluye 113, 114). */
     public const LIMITE_DISPONIBILIDAD = 114000000;
@@ -31,7 +39,9 @@ class MayorConceptoMemoriaMotor
     /** Responsable inscripto IVA en prom_cond_iva. */
     private const COND_IVA_INSCRIPTO = '1';
 
-    /** Tipos auxpag que representan facturas / NC compras aplicadas al pago. */
+    /** Tipos auxpag que representan facturas / NC compras aplicadas al pago.
+     * @deprecated Usar MayorConceptoTCompSupport (t_comp + axp_nro_interno; excluye NC).
+     */
     public const TIPOS_FACTURA_APLICADA = [
         'FIA', 'FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH',
         'NDC', 'NDB', 'REC', 'FAC', 'FAD', 'FAE', 'FIS', 'FGA', 'FNB',
@@ -102,6 +112,7 @@ class MayorConceptoMemoriaMotor
 
     public function __construct(
         private readonly MayorConceptoAnitaBridgeReader $reader = new MayorConceptoAnitaBridgeReader(),
+        private readonly MayorConceptoTCompSupport $tcompSupport = new MayorConceptoTCompSupport(),
     ) {
     }
 
@@ -130,6 +141,7 @@ class MayorConceptoMemoriaMotor
         $datos = $this->reader->cargarParaPago($empresaId, $tipo, $letra, $sucursal, $nro, $fecha);
         $this->indexarConceptosAnita($empresaId, $datos['ctaconc'] ?? []);
         $this->indexarProveedores($datos['promae'] ?? []);
+        $this->tcompSupport->cargar($this->erroresBridge);
 
         $lineasOp = $datos['subdiario'] ?? [];
         $auxpag = $datos['auxpag'] ?? [];
@@ -387,7 +399,23 @@ class MayorConceptoMemoriaMotor
     /** Caja/banco ancla e imputación mayor por concepto (Anita in_limite_caja_banco). */
     public function esDisponibilidad(int $cuenta): bool
     {
-        return $cuenta > 0 && $cuenta <= self::LIMITE_CAJA_BANCO;
+        return $cuenta > 0 && $cuenta <= $this->limiteCajaBanco();
+    }
+
+    /** Cuenta dentro del rango del mayor analítico usado para conciliar. */
+    public function esCuentaAnaliticoControl(int $cuenta): bool
+    {
+        return $cuenta > 0 && $cuenta <= $this->limiteCuentaAnaliticoControl();
+    }
+
+    public function limiteCajaBanco(): int
+    {
+        return (int) config('contable.mayor_concepto.limite_caja_banco', self::LIMITE_CAJA_BANCO);
+    }
+
+    public function limiteCuentaAnaliticoControl(): int
+    {
+        return (int) config('contable.mayor_concepto.limite_cuenta_analitico_control', self::LIMITE_CUENTA_ANALITICO_CONTROL);
     }
 
     /** Disponibilidad ampliada para cuadre con mayor analítico plano (l_mayor). */
@@ -424,6 +452,15 @@ class MayorConceptoMemoriaMotor
         return $cuenta >= 211010000 && $cuenta < 212000000;
     }
 
+    /**
+     * Cuenta puente 150000-xxx (transferencias OPV/OPP sin proveedor 211).
+     * Mismo rol que contrapartida en ING/EGR: aporta el concepto, no es pago a proveedor.
+     */
+    public function esCuentaPuenteTransferencia(int $cuenta): bool
+    {
+        return $cuenta >= 150000000 && $cuenta < 151000000;
+    }
+
     public function formatearCodigoCuenta(int $codigo): string
     {
         $s = str_pad((string) $codigo, 9, '0', STR_PAD_LEFT);
@@ -447,14 +484,7 @@ class MayorConceptoMemoriaMotor
 
     private function esAplicacionFactura(object $fila): bool
     {
-        $tipoAp = strtoupper(trim((string) ($fila->axp_tipo_ap ?? '')));
-
-        if (in_array($tipoAp, self::TIPOS_AUXPAG_IGNORAR, true)
-            || in_array($tipoAp, self::TIPOS_MEDIO_PAGO_AUXPAG, true)) {
-            return false;
-        }
-
-        return in_array($tipoAp, self::TIPOS_FACTURA_APLICADA, true);
+        return $this->tcompSupport->esFacturaAplicada($fila);
     }
 
     private function esAplicacionRetencion(object $fila): bool

@@ -2,6 +2,7 @@
     use App\Models\Configuracion\Moneda;
     use App\Support\Stock\RecepcionProveedorAccionLineaOc;
     use App\Support\Stock\RecepcionProveedorFormItemsSupport;
+    use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
     use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 
     $moneda_query = $moneda_query ?? Moneda::query()->orderBy('nombre')->get();
@@ -127,6 +128,12 @@
             'vista' => 'consulta',
         ]);
     };
+    $puedeConsultarOc = can('editar-ordencompra', false) || can('listar-ordencompra', false);
+    $puedeModificarPrecio = can('modificar-precio-recepcion-proveedor', false);
+    $puedeAgregarArticuloExtra = \App\Support\Stock\RecepcionProveedorArticuloExtraSupport::puedeAgregar();
+    $descuentoOcCabecera = (float) ($cabeceraOld['descuento_ordencompra'] ?? optional(optional($recepcion)->ordencompras)->descuento ?? 0);
+    $tipoArticuloCigarrilloId = RecepcionProveedorImpuestoInternoSupport::tipoArticuloCigarrilloId();
+    $impuestoInternoValor = old('impuesto_interno', optional($recepcion)->impuesto_interno);
 @endphp
 
 <input type="hidden" id="empresa_id" name="empresa_id" value="{{ $empresaIdOc }}">
@@ -166,14 +173,19 @@
     </label>
     <div class="col-lg-3">
         @if($soloLectura)
-            <input type="text" class="form-control" readonly value="{{ optional($recepcion->ordencompras)->numeroordencompra ?? '' }}">
-            <input type="hidden" name="ordencompra_id" value="{{ $recepcion->ordencompra_id ?? '' }}">
-            @if($recepcion && $recepcion->ordencompra_id && (can('editar-ordencompra', false) || can('listar-ordencompra', false)))
-            <a href="{{ $urlConsultaOc((int) $recepcion->ordencompra_id) }}"
-               class="btn btn-sm btn-outline-primary mt-1" target="_blank" rel="noopener" title="Consultar orden de compra (sin menú)">
-                <i class="fa fa-external-link"></i> Ver OC
-            </a>
-            @endif
+            <div class="d-flex flex-wrap align-items-center" style="gap: 4px;">
+                <input type="text" class="form-control flex-grow-1" readonly value="{{ optional($recepcion->ordencompras)->numeroordencompra ?? '' }}">
+                <input type="hidden" name="ordencompra_id" id="ordencompra_id" value="{{ $recepcion->ordencompra_id ?? '' }}">
+                @if($puedeConsultarOc)
+                <a href="{{ $urlConsultaOc((int) ($recepcion->ordencompra_id ?? 0)) ?: '#' }}"
+                   id="btn-consultar-oc-recepcion"
+                   class="btn btn-sm btn-info flex-shrink-0 {{ ($recepcion->ordencompra_id ?? 0) ? '' : 'd-none' }}"
+                   target="_blank" rel="noopener"
+                   title="Consultar orden de compra en nueva pesta&ntilde;a (modo consulta, sin men&uacute;)">
+                    <i class="fa fa-file-text-o"></i> Consultar OC
+                </a>
+                @endif
+            </div>
         @else
             <div class="d-flex flex-wrap align-items-center" style="gap: 4px;">
                 <button type="button" id="btn-consulta-oc-recepcion-modal" class="btn btn-sm btn-outline-primary flex-shrink-0" title="Buscar OC pendientes en AnitaERP">
@@ -189,16 +201,19 @@
                        autofocus
                        title="Enter o Tab para cargar la orden de compra"
                        style="min-width: 6rem; max-width: 10rem;">
+                @if($puedeConsultarOc)
+                <a href="{{ $urlConsultaOc($ordencompraIdForm) ?: '#' }}"
+                   id="btn-consultar-oc-recepcion"
+                   class="btn btn-sm btn-info flex-shrink-0 {{ $ordencompraIdForm ? '' : 'd-none' }}"
+                   target="_blank" rel="noopener"
+                   title="Consultar orden de compra en nueva pesta&ntilde;a (modo consulta, sin men&uacute;)">
+                    <i class="fa fa-file-text-o"></i> Consultar OC
+                </a>
+                @endif
                 @if($recepcion)
                 <button type="button" id="btn-cambiar-oc-recepcion" class="btn btn-sm btn-warning flex-shrink-0" title="Buscar y cambiar la OC vinculada">
                     <i class="fa fa-exchange"></i> Cambiar OC
                 </button>
-                @endif
-                @if($recepcion && $recepcion->ordencompra_id && (can('editar-ordencompra', false) || can('listar-ordencompra', false)))
-                <a href="{{ $urlConsultaOc((int) $recepcion->ordencompra_id) }}"
-                   class="btn btn-sm btn-outline-primary flex-shrink-0" target="_blank" rel="noopener" title="Consultar orden de compra (sin menú)">
-                    <i class="fa fa-external-link"></i> Ver OC
-                </a>
                 @endif
             </div>
             <input type="hidden" name="ordencompra_id" id="ordencompra_id" value="{{ old('ordencompra_id', $recepcion->ordencompra_id ?? '') }}">
@@ -210,6 +225,8 @@
             value="{{ old('proveedor_nombre', $proveedorNombreForm ?: optional(optional($recepcion)->proveedores)->nombre ?? '') }}">
     </div>
 </div>
+
+@include('stock.recepcion_proveedor.partials.aviso_descuento_oc', ['descuentoOc' => $descuentoOcCabecera])
 
 <div class="form-group row">
     <label class="col-lg-2 col-form-label text-right">Fecha</label>
@@ -276,6 +293,44 @@
     </div>
 </div>
 
+@php
+    $puedeIntercompanyRecepcion = \App\Support\Stock\RecepcionProveedorIntercompanySupport::puedeUsar();
+    $empresaDepositoCabeceraInt = $depositoCabeceraEmpresaId ? (int) $depositoCabeceraEmpresaId : 0;
+    $empresaOcInt = ($empresaIdOc !== '' && $empresaIdOc !== null) ? (int) $empresaIdOc : 0;
+    $ingresoIntercompany = \App\Support\Stock\RecepcionProveedorIntercompanySupport::esIngresoIntercompany($empresaDepositoCabeceraInt, $empresaOcInt);
+    $empresaDepositoNombre = optional(optional(optional($recepcion)->depositos)->empresas)->nombre ?? '';
+@endphp
+
+@if($puedeIntercompanyRecepcion && !$soloLectura)
+<div class="form-group row mb-2" id="rp_panel_intercompany">
+    <div class="col-lg-2"></div>
+    <div class="col-lg-9">
+        <button type="button" id="rp_btn_intercompany" class="btn btn-outline-secondary btn-sm">
+            <i class="fa fa-building"></i> Ver dep&oacute;sitos de otras empresas
+        </button>
+        <input type="hidden" id="rp_modo_intercompany" value="0">
+        <small class="text-muted d-block mt-1">
+            Permite ingresar la mercader&iacute;a en un dep&oacute;sito de otra empresa. La recepci&oacute;n mantiene la empresa de la orden de compra.
+        </small>
+    </div>
+</div>
+@endif
+
+<div class="form-group row mb-2 {{ $ingresoIntercompany ? '' : 'd-none' }}" id="rp_aviso_intercompany">
+    <div class="col-lg-2"></div>
+    <div class="col-lg-9">
+        <div class="alert alert-warning py-2 mb-0">
+            <i class="fa fa-building"></i>
+            <strong>Ingreso intercompany:</strong>
+            <span id="rp_aviso_intercompany_texto">
+                el dep&oacute;sito de entrada pertenece a
+                <strong id="rp_aviso_intercompany_empresa">{{ $empresaDepositoNombre ?: 'otra empresa' }}</strong>,
+                distinta a la empresa de la recepci&oacute;n{{ $empresaNombreOc ? ' ('.$empresaNombreOc.')' : '' }}.
+            </span>
+        </div>
+    </div>
+</div>
+
 @if(!$soloLectura)
 <div class="form-group row">
     <label class="col-lg-2 col-form-label text-right">
@@ -312,7 +367,7 @@
 <hr class="my-3">
 <div class="d-flex justify-content-between align-items-center mb-2">
     <h5 class="mb-0">Ítems</h5>
-    @if(!$soloLectura && !($modoDevolucion ?? false))
+    @if(!$soloLectura && !($modoDevolucion ?? false) && $puedeAgregarArticuloExtra)
     <button type="button" class="btn btn-sm btn-outline-primary" id="btn-agregar-extra">
         <i class="fa fa-plus"></i> Agregar artículo extra (no pedido en OC)
     </button>
@@ -325,7 +380,7 @@
                 <th class="col-num">#</th>
                 <th class="col-art">Art.</th>
                 <th class="col-desc">Descripci&oacute;n</th>
-                <th class="col-qty text-right" title="{{ ($modoDevolucion ?? false) ? 'Cantidad recepcionada en el COM origen' : 'Cantidad pedida en la OC (cajas, packs, bultos)' }}">
+                <th class="col-qty text-right" title="{{ ($modoDevolucion ?? false) ? 'Cantidad recepcionada en el COM origen' : 'Cantidad pedida en la OC; si ya hubo recepciones confirmadas muestra ingresada y pendiente' }}">
                     {{ ($modoDevolucion ?? false) ? 'Recibida' : 'Cant. OC' }}
                 </th>
                 <th class="col-qty" title="{{ ($modoDevolucion ?? false) ? 'Cantidad a devolver (no puede superar lo recepcionado)' : 'Cantidad del remito en unidad de compra (ver columna Conversi&oacute;n)' }}">
@@ -348,7 +403,25 @@
         </tbody>
     </table>
 </div>
-<div class="d-flex justify-content-end align-items-center mt-2 mb-3" id="recepcion-total-recepcion-wrap">
+<div class="d-flex justify-content-end align-items-center mt-2 mb-3 flex-wrap" id="recepcion-total-recepcion-wrap">
+    <div id="recepcion-impuesto-interno-wrap" class="mr-4 text-right" style="display:none;">
+        <label for="recepcion-impuesto-interno" class="text-muted mb-0 d-block">
+            Impuesto interno
+            <span class="text-danger">*</span>
+        </label>
+        <span class="text-muted small d-block">(total factura cigarrillos; prorrateo en &uacute;ltima compra)</span>
+        @if($soloLectura)
+            <strong class="h5 mb-0 text-primary d-block mt-1">
+                {{ $impuestoInternoValor !== null && $impuestoInternoValor !== '' ? number_format((float) $impuestoInternoValor, 2, ',', '.') : '—' }}
+            </strong>
+        @else
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm text-right d-inline-block mt-1"
+                   style="max-width: 9rem;"
+                   name="impuesto_interno" id="recepcion-impuesto-interno"
+                   value="{{ $impuestoInternoValor !== null && $impuestoInternoValor !== '' ? number_format((float) $impuestoInternoValor, 2, '.', '') : '' }}"
+                   placeholder="0,00">
+        @endif
+    </div>
     <div class="text-right">
         <span class="text-muted mr-2">Total recepci&oacute;n</span>
         <span class="text-muted small d-block">(cantidad recibida &times; precio remito)</span>
@@ -366,8 +439,8 @@
     }
     #tabla-items-recepcion .col-num { width: 2.25rem; }
     #tabla-items-recepcion .col-art { width: 11rem; min-width: 9rem; }
-    #tabla-items-recepcion .col-desc { min-width: 8rem; }
-    #tabla-items-recepcion .col-qty { width: 5.25rem; }
+    #tabla-items-recepcion .col-desc { min-width: 6rem; max-width: 14rem; }
+    #tabla-items-recepcion .col-qty { width: 6.5rem; }
     #tabla-items-recepcion .col-conv { width: 5.75rem; min-width: 5.25rem; }
     #tabla-items-recepcion .col-precio { width: 6.25rem; min-width: 5.5rem; }
     #tabla-items-recepcion .col-importe { width: 7.75rem; min-width: 7.25rem; }
@@ -480,6 +553,16 @@
 </style>
 @include('stock.recepcion_proveedor.partials.banner_confirmando_styles')
 
+@if($recepcion && $recepcion->fl_precio_pendiente_aprobacion)
+<div class="alert alert-info">
+    <strong>Precio pendiente de aprobaci&oacute;n en compras:</strong>
+    carg&oacute; precios de factura/remito distintos a la OC. Compras debe actualizar la orden de compra antes de confirmar esta recepci&oacute;n.
+    @if($recepcion->comentario_precio)
+        <br><span class="small">{!! nl2br(e($recepcion->comentario_precio)) !!}</span>
+    @endif
+</div>
+@endif
+
 @if($recepcion && $recepcion->resumen_rechazos)
 <div class="alert alert-danger">
     <strong>Líneas rechazadas:</strong><br>{!! nl2br(e($recepcion->resumen_rechazos)) !!}
@@ -529,7 +612,15 @@
     window.recepcionProveedorEmpresaIdInicial = @json($empresaIdOc !== '' && $empresaIdOc !== null ? (int) $empresaIdOc : null);
     window.recepcionProveedorOrdencompraIdInicial = @json($ordencompraIdForm);
     window.recepcionProveedorNumeroOcInicial = @json($numeroOcBuscar !== '' && $numeroOcBuscar !== null ? (int) $numeroOcBuscar : null);
+    window.recepcionProveedorDescuentoOcInicial = @json($descuentoOcCabecera);
+    window.recepcionProveedorTipoarticuloCigarrilloId = @json($tipoArticuloCigarrilloId);
     window.recepcionProveedorMonedas = @json($moneda_query->map(static fn ($m) => ['id' => (int) $m->id, 'abreviatura' => (string) $m->abreviatura])->values());
+    window.recepcionProveedorPuedeConsultarOc = @json($puedeConsultarOc);
+    window.recepcionProveedorPuedeModificarPrecio = @json($puedeModificarPrecio);
+    window.recepcionProveedorPuedeAgregarArticuloExtra = @json($puedeAgregarArticuloExtra);
+    window.recepcionProveedorPuedeIntercompany = @json($puedeIntercompanyRecepcion);
+    window.recepcionProveedorEmpresaNombreOc = @json($empresaNombreOc);
+    window.recepcionProveedorDepositoCabeceraEmpresaNombre = @json($empresaDepositoNombre);
     window.recepcionProveedorModalCatalogoHabilitado = @json(
         config('recepcion_proveedor.modal_articulo_proveedor_habilitado') && ! $soloLectura
     );

@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Stock;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionDepositoAdministrador;
-use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Depmae;
+use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Stock\Deposito_AdministradorRepositoryInterface;
 use Illuminate\Http\Request;
 
@@ -13,6 +13,7 @@ class DepositoAdministradorController extends Controller
 {
     public function __construct(
         private readonly Deposito_AdministradorRepositoryInterface $repository,
+        private readonly UsuarioRepositoryInterface $usuarioRepository,
     ) {}
 
     public function index()
@@ -27,7 +28,7 @@ class DepositoAdministradorController extends Controller
     {
         can('crear-deposito-administrador');
         $depositos = Depmae::orderBy('nombre')->get(['id', 'nombre']);
-        $usuarios = Usuario::orderBy('nombre')->get(['id', 'nombre', 'email']);
+        $usuarios = $this->usuarioRepository->listadoOperativoParaSelector();
 
         return view('stock.deposito_administrador.crear', compact('depositos', 'usuarios'));
     }
@@ -54,7 +55,7 @@ class DepositoAdministradorController extends Controller
         can('editar-deposito-administrador');
         $data = $this->repository->find($id);
         $depositos = Depmae::orderBy('nombre')->get(['id', 'nombre']);
-        $usuarios = Usuario::orderBy('nombre')->get(['id', 'nombre', 'email']);
+        $usuarios = $this->usuarioRepository->listadoOperativoParaSelector();
 
         return view('stock.deposito_administrador.editar', compact('data', 'depositos', 'usuarios'));
     }

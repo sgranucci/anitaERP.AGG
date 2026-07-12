@@ -42,13 +42,16 @@ class Proveedor extends Model implements Auditable
                             'retencionsuss_id','condicionIIBB_id', 'agentepercepcionIIBB', 'nroIIBB', 
                             'condicionpago_id', 'condicionentrega_id', 'condicioncompra_id', 'cuentacontable_id', 
                             'cuentacontableme_id', 'cuentacontablecompra_id', 'centrocostocompra_id', 'conceptogasto_id',
-                            'estado', 'leyenda', 'tiposuspension_id', 'tipoalta', 'semaforo', 'emailoc', 'usuario_id',
+                            'estado', 'leyenda', 'tiposuspension_id', 'tipoalta', 'semaforo', 'facturas_apocrifas',
+                            'facturas_apocrifas_consulta_at', 'facturas_apocrifas_detalle', 'emailoc', 'usuario_id',
                             'regimenfacturacion', 'tiposervicio_proveedor_id'
                         ];
                                
     protected $table = 'proveedor';
 	protected $casts = [
 			'deleted_at' => 'datetime',
+            'facturas_apocrifas' => 'boolean',
+            'facturas_apocrifas_consulta_at' => 'datetime',
 	];
 
     public function proveedor_exclusiones()

@@ -13,6 +13,9 @@ Clientes
 use App\Support\Ventas\ClienteListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -29,7 +32,7 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                         'toggleTarget' => '#panel-filtros-cliente',
                         'toggleId' => 'btn-toggle-filtros-cliente',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_cliente'),
+                        'nuevoRegistroUrl' => route('crear_cliente', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-clientes',
                     ])
                 </div>
@@ -57,6 +60,7 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                             <th style="min-width: 85px;">Provincia</th>
                             <th class="width10">C&oacute;d.</th>
                             <th class="text-center" style="width: 2.25rem;" title="Estado">St.</th>
+                            <th class="width10">APOC</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -96,9 +100,17 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                                     <span class="badge badge-warning text-dark" title="Regularizado: problemas ARCA, facturaci&oacute;n permitida">R</span>
                                 @endif
                             </td>
+                            <td class="text-center">
+                                @if (!empty($data->facturas_apocrifas))
+                                    <span class="badge badge-danger" title="Facturas apócrifas ARCA">Sí</span>
+                                @elseif (!empty($data->facturas_apocrifas_consulta_at))
+                                    <span class="badge badge-success" title="Consultado {{ $data->facturas_apocrifas_consulta_at }}">No</span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
                             <td>
-                       			@if (can('editar-clientes', false))
-                                	<a href="{{route('editar_cliente', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                	<a href="{{route('editar_cliente', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif

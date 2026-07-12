@@ -12,6 +12,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('consultar_partidagasto', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -21,7 +24,7 @@
                 @if (!isset($visualizar))
                     <h3 class="card-title">Editar Partida de Gasto - Número {{$data->codigo ?? ''}} - Id {{$data->id}}</h3>
                     <div class="card-tools">
-                        <a href="{{route('consultar_partidagasto')}}" class="btn btn-outline-info btn-sm">
+                        <a href="{{$volverListadoUrl}}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
                         <button type="submit" onclick="anulaPartidagasto()" id="anulapartidagasto" class="btn btn-warning" style="display: none">
@@ -45,7 +48,7 @@
                     <h3 class="card-title">Visualizar Partida de Gasto - Número {{$data->codigo ?? ''}} - Id {{$data->id}}</h3>
                 @endif
             </div>
-            <form action="{{route('actualizar_partidagasto', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{route('actualizar_partidagasto', ['id' => $data->id] + ($filtrosQuery ?? []))}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method("put")
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">

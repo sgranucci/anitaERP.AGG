@@ -36,6 +36,8 @@ class Transferencia_Mercaderia extends Model
         'observacion',
         'motivo_rechazo',
         'centrocosto_destino_id',
+        'transferencia_origen_id',
+        'transferencia_revertido_por_id',
     ];
 
     protected $casts = [

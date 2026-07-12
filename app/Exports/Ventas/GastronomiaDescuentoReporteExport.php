@@ -100,7 +100,7 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
         $this->layout = new GastronomiaDescuentoReporteExcelLayout(
             $this->hayFilaLogos,
             $filasMeta,
-            count($bloques) > 0 ? 1 : 0,
+            0,
             1,
         );
         $this->filaSubtituloExcel = trim($this->subtitulo) !== ''
@@ -131,24 +131,7 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
 
     public function styles(Worksheet $sheet)
     {
-        if ($this->soloTotales) {
-            return [];
-        }
-
-        return [
-            $this->layout->filaCabecerasExcel() => [
-                'font' => [
-                    'bold' => true,
-                    'color' => ['rgb' => '17202A'],
-                    'size' => 11,
-                    'name' => 'Arial',
-                ],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'color' => ['rgb' => '85C1E9'],
-                ],
-            ],
-        ];
+        return [];
     }
 
     public function columnWidths(): array
@@ -180,20 +163,7 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
                 $this->layout->aplicarMetaEncabezado($sheet, self::COL_ULTIMA, $this->filaSubtituloExcel);
                 $this->layout->aplicarEstiloThead($sheet, self::COL_ULTIMA);
                 $this->layout->congelarDebajoThead($sheet);
-
-                $filaSeccion = $this->layout->filaFinMeta() + 1;
-                if (($this->resultado['bloques'] ?? []) !== []) {
-                    $sheet->mergeCells('A'.$filaSeccion.':'.self::COL_ULTIMA.$filaSeccion);
-                    $sheet->getRowDimension($filaSeccion)->setRowHeight(22);
-                    $sheet->getStyle('A'.$filaSeccion.':'.self::COL_ULTIMA.$filaSeccion)->applyFromArray([
-                        'font' => [
-                            'bold' => true,
-                            'size' => 11,
-                            'name' => 'Arial',
-                            'color' => ['rgb' => '17202A'],
-                        ],
-                    ]);
-                }
+                $this->aplicarEstiloTitulosSeccionCliente($sheet);
 
                 $sheet->getStyle('B'.$this->layout->filaPrimeraDatosExcel().':B'.$sheet->getHighestRow())
                     ->getAlignment()
@@ -222,6 +192,39 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
         $nombre = trim($nombre);
 
         return mb_substr($nombre !== '' ? $nombre : 'Hoja', 0, 31);
+    }
+
+    private function aplicarEstiloTitulosSeccionCliente(Worksheet $sheet): void
+    {
+        if (($this->resultado['bloques'] ?? []) === []) {
+            return;
+        }
+
+        $filaDesde = $this->layout->filaPrimeraDatosExcel();
+        $highest = (int) $sheet->getHighestRow();
+
+        for ($fila = $filaDesde; $fila <= $highest; $fila++) {
+            $colA = trim((string) $sheet->getCell('A'.$fila)->getValue());
+            if ($colA === '' || $colA === 'Total final') {
+                continue;
+            }
+
+            $colB = trim((string) $sheet->getCell('B'.$fila)->getValue());
+            if ($colB !== '') {
+                continue;
+            }
+
+            $sheet->mergeCells('A'.$fila.':'.self::COL_ULTIMA.$fila);
+            $sheet->getRowDimension($fila)->setRowHeight(22);
+            $sheet->getStyle('A'.$fila.':'.self::COL_ULTIMA.$fila)->applyFromArray([
+                'font' => [
+                    'bold' => true,
+                    'size' => 11,
+                    'name' => 'Arial',
+                    'color' => ['rgb' => '17202A'],
+                ],
+            ]);
+        }
     }
 
     private function aplicarEstilosTotales(Worksheet $sheet): void

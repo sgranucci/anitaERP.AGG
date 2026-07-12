@@ -1,7 +1,9 @@
 @php
+    use App\Models\Seguridad\Usuario;
     use App\Models\Stock\Depmae;
     use App\Support\Stock\MovimientoStockFormLineasSupport;
     use App\Support\Stock\TransferenciaBienUsoSupport;
+    use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 
     $lineasFormulario = MovimientoStockFormLineasSupport::lineasParaFormulario($movimientostock);
     $tipoTransaccionSeleccionada = (int) old(
@@ -23,6 +25,7 @@
     $tipoActualId = $tipoTransaccionSeleccionada;
     $tipoActual = $tipotransaccion_query->firstWhere('id', $tipoActualId);
     $tipoActualManejaCont = (bool) ($tipoActual?->maneja_contabilidad ?? false);
+    $tipoRequiereAprobacionMs = TransferenciaMercaderiaAprobacionSupport::requiereAprobacion($tipoActual);
     $esTransferenciaActual = ($tipoActual?->operacion ?? '') === 'T';
     $movimientoStockModoFerli = $movimientoStockModoFerli ?? \App\Support\Stock\MovimientoStockFerliSupport::esCalzadosFerli();
     $bienesUsoActivos = $bienesUsoActivos ?? collect();
@@ -47,6 +50,12 @@
     $bienUsoOrigenId = (int) old('bien_uso_origen_id', $transferenciaVinculada?->bien_uso_origen_id ?? 0);
     $bienUsoDestinoId = (int) old('bien_uso_destino_id', $transferenciaVinculada?->bien_uso_destino_id ?? 0);
     $mostrarPanelTransferencia = $esTransferenciaActual && ! $transferenciaVinculada;
+    $mostrarPanelDestinatarioMs = $tipoRequiereAprobacionMs && $mostrarPanelTransferencia;
+    $usuarioDestinoIdMs = (int) old('usuario_destino_id', 0);
+    $usuarioDestinoNombreMs = '';
+    if ($usuarioDestinoIdMs > 0) {
+        $usuarioDestinoNombreMs = (string) (Usuario::query()->whereKey($usuarioDestinoIdMs)->value('nombre') ?? '');
+    }
     $mostrarDepositoSimple = ! $mostrarPanelTransferencia;
 @endphp
 
@@ -79,6 +88,8 @@
                     'maneja_contabilidad' => (bool) ($tipoActual?->maneja_contabilidad ?? false),
                     'origen_bien_uso' => (bool) ($tipoActual?->origen_bien_uso ?? false),
                     'destino_bien_uso' => (bool) ($tipoActual?->destino_bien_uso ?? false),
+                    'requiere_aprobacion' => (bool) ($tipoActual?->requiere_aprobacion ?? false),
+                    'baja_npu' => (bool) ($tipoActual?->baja_npu ?? false),
                     'col_label' => 'col-lg-4 col-form-label',
                     'col_input' => 'col-lg-8',
                 ])
@@ -188,6 +199,20 @@
                             </select>
                         </div>
                     </div>
+                    @if (\App\Support\Stock\TransferenciaMercaderiaIntercompanySupport::puedeUsar())
+                    <div class="form-group row mb-2" id="ms_panel_intercompany">
+                        <div class="col-lg-4 col-form-label"></div>
+                        <div class="col-lg-8">
+                            <button type="button" id="ms_btn_intercompany" class="btn btn-outline-secondary btn-sm">
+                                <i class="fa fa-building"></i> Ver dep&oacute;sitos de otras empresas
+                            </button>
+                            <input type="hidden" id="ms_modo_intercompany" value="0">
+                            <small class="text-muted d-block mt-1">
+                                Permite elegir dep&oacute;sito de otra empresa. La transferencia queda con la empresa del dep&oacute;sito de entrada; si no tiene, la del dep&oacute;sito de salida.
+                            </small>
+                        </div>
+                    </div>
+                    @endif
                 </div>
                 <div class="form-group row mb-2" id="ms_panel_centrocosto" style="{{ $tipoActualManejaCont ? '' : 'display:none;' }}">
                     <label for="centrocosto_destino_id" class="col-lg-4 col-form-label requerido">Centro costo destino</label>
@@ -214,6 +239,54 @@
                                 </option>
                             @endforeach
                         </select>
+                    </div>
+                </div>
+                <div class="form-group row mb-2 align-items-center tm-usuario-destino-campo" id="ms_panel_destinatario"
+                    @if (! $mostrarPanelDestinatarioMs)
+                        style="display:none;"
+                    @endif
+                >
+                    <label for="usuario_destino_id" class="col-lg-4 control-label text-right pr-2 mb-0" title="Usuario del ERP que aprueba la recepci&oacute;n en el dep&oacute;sito destino">Usuario destino</label>
+                    <div class="col-lg-8">
+                        <div class="d-flex flex-nowrap align-items-center tm-usuario-destino-campo-inputs w-100" style="gap: 4px;">
+                            <input type="text"
+                                name="usuario_destino_id"
+                                id="usuario_destino_id"
+                                class="usuario_id form-control flex-shrink-0"
+                                style="width: 4.5rem;"
+                                value="{{ $usuarioDestinoIdMs > 0 ? $usuarioDestinoIdMs : '' }}"
+                                placeholder="ID"
+                                title="ID num&eacute;rico del usuario; Enter valida; F1 consulta"
+                                autocomplete="off"
+                                inputmode="numeric"/>
+                            <button type="button"
+                                title="Consulta usuarios (F1, todas las empresas)"
+                                class="btn-accion-tabla consultausuario tooltipsC flex-shrink-0"
+                                data-ptrusuario_id="#usuario_destino_id"
+                                data-ptrnombre="#ms_usuario_destino_nombre"
+                                data-omitir-filtro-empresa="1">
+                                <i class="fa fa-search text-primary"></i>
+                            </button>
+                            <input type="text"
+                                class="nombreusuario form-control text-truncate"
+                                id="ms_usuario_destino_nombre"
+                                style="min-width: 0; flex: 1 1 auto;"
+                                value="{{ $usuarioDestinoNombreMs }}"
+                                placeholder="Autom&aacute;tico o buscar..."
+                                readonly/>
+                            <button type="button"
+                                id="ms_btn_limpiar_destinatario"
+                                class="btn btn-outline-secondary btn-sm py-0 px-1 flex-shrink-0"
+                                title="Usar administrador principal del dep&oacute;sito">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </div>
+                        <select id="usuario_destino_sugeridos" class="form-control form-control-sm mt-1" style="display:none;">
+                            <option value="">— Sugeridos del dep&oacute;sito —</option>
+                        </select>
+                        <small class="text-muted d-block mt-1" id="ms_destinatario_ayuda">
+                            Vac&iacute;o = admin. principal. Use la lupa para buscar otro usuario del ERP.
+                        </small>
                     </div>
                 </div>
                 @if($movimientoStockModoFerli)
@@ -245,6 +318,10 @@
                 <i class="fa fa-plus"></i> Agregar art&iacute;culo
             </button>
         </div>
+        <div id="ms-ayuda-baja-npu" class="alert alert-info py-2 small mb-2" style="display:none;">
+            <strong>Baja de NPU:</strong> ingrese un NPU por l&iacute;nea (escanee o tipee + Enter).
+            El sistema completa el art&iacute;culo y fija cantidad 1. Puede agregar varias l&iacute;neas para dar de baja varios NPU en el mismo comprobante.
+        </div>
         <div class="table-responsive">
     	<table class="table table-sm table-bordered table-hover table-ms-items-compact" id="tabla-items-movimientostock">
     		<thead class="thead-light">
@@ -252,6 +329,7 @@
     				<th class="col-num">#</th>
     				<th class="col-art">Art.</th>
     				<th class="col-desc">Descripci&oacute;n</th>
+    				<th class="col-npu ms-col-npu-baja text-center" style="display:none;" title="N&uacute;mero de parte &uacute;nica">NPU</th>
     				<th class="col-saldo-orig text-right" title="Saldo en dep&oacute;sito origen">Saldo orig.</th>
                     @if($movimientoStockModoFerli)
     				<th class="col-comb">Combinaci&oacute;n</th>
@@ -302,6 +380,9 @@
                 			<td class="align-middle col-desc-celda">
                 				<input type="text" class="descripcionarticulo form-control form-control-sm" value="{{ old('descripcion.' . $loop->index, optional($pedidoitem->articulos)->descripcion ?? '') }}" readonly title="{{ old('descripcion.' . $loop->index, optional($pedidoitem->articulos)->descripcion ?? '') }}">
                 			</td>
+                            @include('stock.movimientostock.partials.fila_celda_npu_baja', [
+                                'numeroparte' => old('numeropartes.'.$loop->index, $pedidoitem->numeroparte ?? ''),
+                            ])
                             @include('stock.movimientostock.partials.fila_saldo_origen')
                             @if($movimientoStockModoFerli)
                 			@include('stock.movimientostock.partials.fila_item_ferli', [
@@ -371,9 +452,12 @@
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 <input type="hidden" id="tipotransacciondefault_id" class="form-control" value="{{$tipotransacciondefault_id}}" />
 <input type="hidden" id="ms-saldo-origen-url" value="{{ route('movimientostock_saldo_articulo') }}">
+<input type="hidden" id="ms-resolver-npu-url" value="{{ route('movimientostock_resolver_npu_baja') }}">
+<input type="hidden" id="ms-consulta-npu-url" value="{{ route('movimientostock_consulta_npu_baja') }}">
 
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultadeposito')
+@include('includes.stock.modalconsultanpubaja')
 @include('includes.stock.modalconsultatipotransaccionstock')
 @if(\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.modal_saldos_articulo')
@@ -391,9 +475,13 @@
         margin-left: 0;
         margin-right: 0;
     }
-    .ms-form-cabecera .col-form-label {
+    .ms-form-cabecera .col-form-label,
+    .ms-form-cabecera .control-label {
         padding-top: calc(0.375rem + 1px);
         font-size: 0.875rem;
+    }
+    #ms_panel_destinatario .control-label {
+        white-space: nowrap;
     }
     .ms-form-cabecera .form-control,
     .ms-form-cabecera select.form-control {
@@ -406,6 +494,7 @@
     #tabla-items-movimientostock.table-ms-items-compact {
         font-size: 0.8125rem;
     }
+    #tabla-items-movimientostock .col-npu { width: 6rem; min-width: 5rem; }
     #tabla-items-movimientostock .col-num { width: 2.5rem; }
     #tabla-items-movimientostock .col-art { width: 10rem; min-width: 9rem; }
     #tabla-items-movimientostock .col-desc { width: 8rem; min-width: 6rem; max-width: 8rem; }

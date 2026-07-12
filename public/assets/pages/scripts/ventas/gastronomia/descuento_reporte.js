@@ -4,7 +4,12 @@
     var cfg = window.DESCUENTO_REPORTE || {};
     var descuentosSel = {};
     var clientesSel = {};
+    var mozosSel = {};
+    var vipsSel = {};
     var modalDestinoDescuento = 'seleccion';
+    var modalDestinoCliente = 'seleccion';
+    var modalDestinoMozo = 'seleccion';
+    var modalDestinoVip = 'seleccion';
 
     function normalizarCodigo(c) {
         return String(c || '').trim();
@@ -20,13 +25,34 @@
     }
 
     function modoSeleccionActual() {
-        return $('input[name="agrupar_por"]:checked').val() === 'cliente_descuento'
-            ? 'cliente_descuento'
-            : 'codigo_descuento';
+        var val = $('input[name="agrupar_por"]:checked').val();
+        if (val === 'cliente_descuento') {
+            return 'cliente_descuento';
+        }
+        if (val === 'mozo_descuento') {
+            return 'mozo_descuento';
+        }
+        if (val === 'cliente_vip') {
+            return 'cliente_vip';
+        }
+        return 'codigo_descuento';
     }
 
     function esModoCliente() {
         return modoSeleccionActual() === 'cliente_descuento';
+    }
+
+    function esModoMozo() {
+        return modoSeleccionActual() === 'mozo_descuento';
+    }
+
+    function esModoVip() {
+        return modoSeleccionActual() === 'cliente_vip';
+    }
+
+    function empresaIdFormulario() {
+        var val = parseInt($('#empresa_id').val(), 10);
+        return isNaN(val) || val <= 0 ? 0 : val;
     }
 
     function sincronizarHiddenDescuentos() {
@@ -52,6 +78,28 @@
         $('#clientes_descuento_ids').val(ids.join(','));
     }
 
+    function sincronizarHiddenMozos() {
+        var ids = Object.keys(mozosSel).map(function (k) {
+            return parseInt(k, 10);
+        }).filter(function (n) {
+            return n > 0;
+        }).sort(function (a, b) {
+            return a - b;
+        });
+        $('#mozos_descuento_ids').val(ids.join(','));
+    }
+
+    function sincronizarHiddenVips() {
+        var ids = Object.keys(vipsSel).map(function (k) {
+            return parseInt(k, 10);
+        }).filter(function (n) {
+            return n > 0;
+        }).sort(function (a, b) {
+            return a - b;
+        });
+        $('#vips_descuento_ids').val(ids.join(','));
+    }
+
     function pintarTablaDescuentos() {
         var $tbody = $('#tbody-descuentos-seleccionados-reporte');
         $tbody.empty();
@@ -68,6 +116,404 @@
             );
         });
         $('#aviso-sin-descuentos-reporte').toggle(codigos.length === 0);
+    }
+
+    function tieneRangoClienteDefinido() {
+        return normalizarCodigo($('#cliente_codigo_desde').val()) !== ''
+            || normalizarCodigo($('#cliente_codigo_hasta').val()) !== '';
+    }
+
+    function expandirRangoCodigoCliente(desde, hasta) {
+        desde = normalizarCodigo(desde);
+        hasta = normalizarCodigo(hasta);
+        if (!desde && !hasta) {
+            return [];
+        }
+        if (desde && !hasta) {
+            hasta = desde;
+        } else if (hasta && !desde) {
+            desde = hasta;
+        }
+
+        var numDesde = parseInt(desde, 10);
+        var numHasta = parseInt(hasta, 10);
+        if (!isNaN(numDesde) && !isNaN(numHasta) && String(numDesde) === desde && String(numHasta) === hasta) {
+            if (numDesde > numHasta) {
+                var tmp = numDesde;
+                numDesde = numHasta;
+                numHasta = tmp;
+            }
+            var codigos = [];
+            for (var n = numDesde; n <= numHasta; n++) {
+                codigos.push(String(n));
+            }
+            return codigos;
+        }
+
+        if (desde === hasta) {
+            return [desde];
+        }
+
+        return [desde, hasta];
+    }
+
+    function actualizarAvisoClientesVacios() {
+        var sinTabla = Object.keys(clientesSel).length === 0;
+        var sinRango = !tieneRangoClienteDefinido();
+        $('#aviso-sin-clientes-reporte').toggle(sinTabla && sinRango);
+    }
+
+    function resolverNombreClienteEnCampo(codigo, $nombre) {
+        var cod = normalizarCodigo(codigo);
+        if (!cod) {
+            $nombre.val('');
+            return;
+        }
+        leerClientePorCodigo(cod, function (data) {
+            $nombre.val(data ? (data.nombre || '') : '');
+        });
+    }
+
+    function aplicarClienteEnDestinoModal(data) {
+        if (!data || !data.id) {
+            return;
+        }
+
+        if (modalDestinoCliente === 'rango_desde') {
+            $('#cliente_codigo_desde').val((data.codigo || '').trim());
+            $('#nombrecliente_rango_desde').val((data.nombre || '').trim());
+            $('#consultaclienteModal').modal('hide');
+            return;
+        }
+
+        if (modalDestinoCliente === 'rango_hasta') {
+            $('#cliente_codigo_hasta').val((data.codigo || '').trim());
+            $('#nombrecliente_rango_hasta').val((data.nombre || '').trim());
+            $('#consultaclienteModal').modal('hide');
+            return;
+        }
+
+        agregarCliente(data);
+        limpiarCampoCliente();
+        $('#consultaclienteModal').modal('hide');
+    }
+
+    function agregarRangoClientesDesdeCampos() {
+        var codigos = expandirRangoCodigoCliente(
+            $('#cliente_codigo_desde').val(),
+            $('#cliente_codigo_hasta').val(),
+        );
+        if (!codigos.length) {
+            alert('Indique al menos un c\u00f3digo de cliente en el rango.');
+            return;
+        }
+
+        var pendientes = codigos.length;
+        var agregados = 0;
+        var noEncontrados = [];
+
+        codigos.forEach(function (codigo) {
+            leerClientePorCodigo(codigo, function (data) {
+                pendientes -= 1;
+                if (data && data.id) {
+                    if (agregarCliente(data)) {
+                        agregados += 1;
+                    }
+                } else {
+                    noEncontrados.push(codigo);
+                }
+
+                if (pendientes === 0) {
+                    actualizarAvisoClientesVacios();
+                    if (noEncontrados.length) {
+                        alert('C\u00f3digos de cliente no registrados en el rango: ' + noEncontrados.join(', '));
+                    } else if (agregados === 0) {
+                        alert('Los clientes del rango ya estaban en la lista.');
+                    }
+                }
+            });
+        });
+    }
+
+    function initNombresRangoCliente() {
+        resolverNombreClienteEnCampo($('#cliente_codigo_desde').val(), $('#nombrecliente_rango_desde'));
+        resolverNombreClienteEnCampo($('#cliente_codigo_hasta').val(), $('#nombrecliente_rango_hasta'));
+    }
+
+    function resolverNombreMozoEnCampo(codigo, $nombre) {
+        var cod = normalizarCodigo(codigo);
+        if (!cod) {
+            $nombre.val('');
+            return;
+        }
+        leerMozoPorCodigo(cod, function (data) {
+            $nombre.val(data ? (data.nombre || '') : '');
+        });
+    }
+
+    function initNombresRangoMozo() {
+        resolverNombreMozoEnCampo($('#mozo_codigo_desde').val(), $('#nombremozo_rango_desde'));
+        resolverNombreMozoEnCampo($('#mozo_codigo_hasta').val(), $('#nombremozo_rango_hasta'));
+    }
+
+    function tieneRangoMozoDefinido() {
+        return normalizarCodigo($('#mozo_codigo_desde').val()) !== ''
+            || normalizarCodigo($('#mozo_codigo_hasta').val()) !== '';
+    }
+
+    function actualizarAvisoMozosVacios() {
+        var sinTabla = Object.keys(mozosSel).length === 0;
+        var sinRango = !tieneRangoMozoDefinido();
+        $('#aviso-sin-mozos-reporte').toggle(sinTabla && sinRango);
+    }
+
+    function pintarTablaMozos() {
+        var $tbody = $('#tbody-mozos-seleccionados-reporte');
+        $tbody.empty();
+        var ids = Object.keys(mozosSel).sort(function (a, b) {
+            return parseInt(a, 10) - parseInt(b, 10);
+        });
+        ids.forEach(function (id) {
+            var item = mozosSel[id];
+            $tbody.append(
+                '<tr data-id="' + $('<div>').text(id).html() + '">' +
+                '<td>' + $('<div>').text(item.codigo || '').html() + '</td>' +
+                '<td>' + $('<div>').text(item.nombre || '').html() + '</td>' +
+                '<td class="text-center">' +
+                '<button type="button" class="btn btn-outline-danger btn-xs btn-quitar-mozo-reporte" title="Quitar">' +
+                '<i class="fa fa-times"></i></button></td></tr>'
+            );
+        });
+        actualizarAvisoMozosVacios();
+    }
+
+    function agregarMozo(data) {
+        var id = normalizarId(data && data.id);
+        if (!id || mozosSel[id]) {
+            return false;
+        }
+        mozosSel[id] = {
+            id: id,
+            codigo: (data.codigo || '').trim(),
+            nombre: (data.nombre || '').trim(),
+        };
+        sincronizarHiddenMozos();
+        pintarTablaMozos();
+        return true;
+    }
+
+    function quitarMozo(id) {
+        id = normalizarId(id);
+        if (!id || !mozosSel[id]) {
+            return;
+        }
+        delete mozosSel[id];
+        sincronizarHiddenMozos();
+        pintarTablaMozos();
+    }
+
+    function limpiarCampoMozo() {
+        $('#codigomozo_reporte').val('');
+        $('#nombremozo_reporte').val('');
+    }
+
+    function aplicarMozoEnDestinoModal(data) {
+        if (!data || !data.id) {
+            return;
+        }
+
+        if (modalDestinoMozo === 'rango_desde') {
+            $('#mozo_codigo_desde').val((data.codigo || '').trim());
+            $('#nombremozo_rango_desde').val((data.nombre || '').trim());
+            $('#consultamozoModal').modal('hide');
+            return;
+        }
+
+        if (modalDestinoMozo === 'rango_hasta') {
+            $('#mozo_codigo_hasta').val((data.codigo || '').trim());
+            $('#nombremozo_rango_hasta').val((data.nombre || '').trim());
+            $('#consultamozoModal').modal('hide');
+            return;
+        }
+
+        agregarMozo(data);
+        limpiarCampoMozo();
+        $('#consultamozoModal').modal('hide');
+    }
+
+    function agregarRangoMozosDesdeCampos() {
+        var codigos = expandirRangoCodigoCliente(
+            $('#mozo_codigo_desde').val(),
+            $('#mozo_codigo_hasta').val(),
+        );
+        if (!codigos.length) {
+            alert('Indique al menos un c\u00f3digo de mozo en el rango.');
+            return;
+        }
+
+        var pendientes = codigos.length;
+        var agregados = 0;
+        var noEncontrados = [];
+
+        codigos.forEach(function (codigo) {
+            leerMozoPorCodigo(codigo, function (data) {
+                pendientes -= 1;
+                if (data && data.id) {
+                    if (agregarMozo(data)) {
+                        agregados += 1;
+                    }
+                } else {
+                    noEncontrados.push(codigo);
+                }
+
+                if (pendientes === 0) {
+                    actualizarAvisoMozosVacios();
+                    if (noEncontrados.length) {
+                        alert('C\u00f3digos de mozo no registrados en el rango: ' + noEncontrados.join(', '));
+                    } else if (agregados === 0) {
+                        alert('Los mozos del rango ya estaban en la lista.');
+                    }
+                }
+            });
+        });
+    }
+
+    function resolverNombreVipEnCampo(codigo, $nombre) {
+        var cod = normalizarCodigo(codigo);
+        if (!cod) {
+            $nombre.val('');
+            return;
+        }
+        leerVipPorCodigo(cod, function (data) {
+            $nombre.val(data ? (data.nombre || '') : '');
+        });
+    }
+
+    function initNombresRangoVip() {
+        resolverNombreVipEnCampo($('#vip_codigo_desde').val(), $('#nombrevip_rango_desde'));
+        resolverNombreVipEnCampo($('#vip_codigo_hasta').val(), $('#nombrevip_rango_hasta'));
+    }
+
+    function tieneRangoVipDefinido() {
+        return normalizarCodigo($('#vip_codigo_desde').val()) !== ''
+            || normalizarCodigo($('#vip_codigo_hasta').val()) !== '';
+    }
+
+    function actualizarAvisoVipsVacios() {
+        var sinTabla = Object.keys(vipsSel).length === 0;
+        var sinRango = !tieneRangoVipDefinido();
+        $('#aviso-sin-vips-reporte').toggle(sinTabla && sinRango);
+    }
+
+    function pintarTablaVips() {
+        var $tbody = $('#tbody-vips-seleccionados-reporte');
+        $tbody.empty();
+        var ids = Object.keys(vipsSel).sort(function (a, b) {
+            return parseInt(a, 10) - parseInt(b, 10);
+        });
+        ids.forEach(function (id) {
+            var item = vipsSel[id];
+            $tbody.append(
+                '<tr data-id="' + $('<div>').text(id).html() + '">' +
+                '<td>' + $('<div>').text(item.codigo || '').html() + '</td>' +
+                '<td>' + $('<div>').text(item.nombre || '').html() + '</td>' +
+                '<td class="text-center">' +
+                '<button type="button" class="btn btn-outline-danger btn-xs btn-quitar-vip-reporte" title="Quitar">' +
+                '<i class="fa fa-times"></i></button></td></tr>'
+            );
+        });
+        actualizarAvisoVipsVacios();
+    }
+
+    function agregarVip(data) {
+        var id = normalizarId(data && data.id);
+        if (!id || vipsSel[id]) {
+            return false;
+        }
+        vipsSel[id] = {
+            id: id,
+            codigo: (data.codigo || '').trim(),
+            nombre: (data.nombre || '').trim(),
+        };
+        sincronizarHiddenVips();
+        pintarTablaVips();
+        return true;
+    }
+
+    function quitarVip(id) {
+        id = normalizarId(id);
+        if (!id || !vipsSel[id]) {
+            return;
+        }
+        delete vipsSel[id];
+        sincronizarHiddenVips();
+        pintarTablaVips();
+    }
+
+    function limpiarCampoVip() {
+        $('#codigovip_reporte').val('');
+        $('#nombrevip_reporte').val('');
+    }
+
+    function aplicarVipEnDestinoModal(data) {
+        if (!data || !data.id) {
+            return;
+        }
+
+        if (modalDestinoVip === 'rango_desde') {
+            $('#vip_codigo_desde').val((data.codigo || '').trim());
+            $('#nombrevip_rango_desde').val((data.nombre || '').trim());
+            $('#consultaclientevipModal').modal('hide');
+            return;
+        }
+
+        if (modalDestinoVip === 'rango_hasta') {
+            $('#vip_codigo_hasta').val((data.codigo || '').trim());
+            $('#nombrevip_rango_hasta').val((data.nombre || '').trim());
+            $('#consultaclientevipModal').modal('hide');
+            return;
+        }
+
+        agregarVip(data);
+        limpiarCampoVip();
+        $('#consultaclientevipModal').modal('hide');
+    }
+
+    function agregarRangoVipsDesdeCampos() {
+        var codigos = expandirRangoCodigoCliente(
+            $('#vip_codigo_desde').val(),
+            $('#vip_codigo_hasta').val(),
+        );
+        if (!codigos.length) {
+            alert('Indique al menos un c\u00f3digo de cliente VIP en el rango.');
+            return;
+        }
+
+        var pendientes = codigos.length;
+        var agregados = 0;
+        var noEncontrados = [];
+
+        codigos.forEach(function (codigo) {
+            leerVipPorCodigo(codigo, function (data) {
+                pendientes -= 1;
+                if (data && data.id) {
+                    if (agregarVip(data)) {
+                        agregados += 1;
+                    }
+                } else {
+                    noEncontrados.push(codigo);
+                }
+
+                if (pendientes === 0) {
+                    actualizarAvisoVipsVacios();
+                    if (noEncontrados.length) {
+                        alert('C\u00f3digos de cliente VIP no registrados en el rango: ' + noEncontrados.join(', '));
+                    } else if (agregados === 0) {
+                        alert('Los clientes VIP del rango ya estaban en la lista.');
+                    }
+                }
+            });
+        });
     }
 
     function pintarTablaClientes() {
@@ -87,7 +533,7 @@
                 '<i class="fa fa-times"></i></button></td></tr>'
             );
         });
-        $('#aviso-sin-clientes-reporte').toggle(ids.length === 0);
+        actualizarAvisoClientesVacios();
     }
 
     function agregarDescuento(data) {
@@ -220,6 +666,113 @@
             .fail(function () { if (callback) { callback(null); } });
     }
 
+    function leerMozoPorCodigo(codigo, callback) {
+        var cod = normalizarCodigo(codigo);
+        if (!cod) {
+            if (callback) { callback(null); }
+            return;
+        }
+        var empresaId = empresaIdFormulario();
+        if (empresaId <= 0) {
+            if (callback) { callback(null); }
+            return;
+        }
+        var url = (cfg.leerMozoUrlBase || (baseUrl() + '/ventas/gastronomia/descuento-reporte/leer-mozo'))
+            + '/' + encodeURIComponent(cod)
+            + '?empresa_id=' + encodeURIComponent(String(empresaId));
+        $.get(url)
+            .done(function (data) { if (callback) { callback(data && data.id ? data : null); } })
+            .fail(function () { if (callback) { callback(null); } });
+    }
+
+    function buscarDatosMozo(consulta) {
+        var empresaId = empresaIdFormulario();
+        $.ajax({
+            url: cfg.consultaMozoUrl || (baseUrl() + '/ventas/gastronomia/descuento-reporte/consulta-mozo'),
+            type: 'POST',
+            dataType: 'HTML',
+            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+            data: {
+                consulta: consulta || '',
+                empresa_id: empresaId,
+            },
+        }).done(function (respuesta) {
+            var html = '';
+            if (typeof respuesta === 'string') {
+                try {
+                    html = JSON.parse(respuesta).data || '';
+                } catch (e) {
+                    html = respuesta.replace(/\\/g, '');
+                }
+            }
+            $('#datosmozo').html(html);
+        }).fail(function () {
+            $('#datosmozo').html('<tr><td colspan="4">Error al consultar mozos.</td></tr>');
+        });
+    }
+
+    function leerVipPorCodigo(codigo, callback) {
+        var cod = normalizarCodigo(codigo);
+        if (!cod) {
+            if (callback) { callback(null); }
+            return;
+        }
+        var empresaId = empresaIdFormulario();
+        if (empresaId <= 0) {
+            if (callback) { callback(null); }
+            return;
+        }
+        var url = (cfg.leerVipUrlBase || (baseUrl() + '/ventas/gastronomia/descuento-reporte/leer-clientevip'))
+            + '/' + encodeURIComponent(cod)
+            + '?empresa_id=' + encodeURIComponent(String(empresaId));
+        $.get(url)
+            .done(function (data) { if (callback) { callback(data && data.id ? data : null); } })
+            .fail(function () { if (callback) { callback(null); } });
+    }
+
+    function buscarDatosVip(consulta) {
+        var empresaId = empresaIdFormulario();
+        $.ajax({
+            url: cfg.consultaVipUrl || (baseUrl() + '/ventas/gastronomia/descuento-reporte/consulta-clientevip'),
+            type: 'POST',
+            dataType: 'HTML',
+            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+            data: {
+                consulta: consulta || '',
+                empresa_id: empresaId,
+            },
+        }).done(function (respuesta) {
+            var html = '';
+            if (typeof respuesta === 'string') {
+                try {
+                    html = JSON.parse(respuesta).data || '';
+                } catch (e) {
+                    html = respuesta.replace(/\\/g, '');
+                }
+            }
+            $('#datosclientevip').html(html);
+        }).fail(function () {
+            $('#datosclientevip').html('<tr><td colspan="8">Error al consultar clientes VIP.</td></tr>');
+        });
+    }
+
+    function agregarVipDesdeCampo() {
+        var codigo = normalizarCodigo($('#codigovip_reporte').val());
+        if (!codigo) { return; }
+        if (empresaIdFormulario() <= 0) {
+            alert('Seleccione la empresa antes de consultar clientes VIP.');
+            return;
+        }
+        leerVipPorCodigo(codigo, function (data) {
+            if (!data) {
+                alert('Cliente VIP no encontrado: ' + codigo);
+                return;
+            }
+            agregarVip(data);
+            limpiarCampoVip();
+        });
+    }
+
     function agregarDescuentoDesdeCampo() {
         var codigo = normalizarCodigo($('#codigodescuento_reporte').val());
         if (!codigo) { return; }
@@ -243,6 +796,23 @@
             }
             agregarCliente(data);
             limpiarCampoCliente();
+        });
+    }
+
+    function agregarMozoDesdeCampo() {
+        var codigo = normalizarCodigo($('#codigomozo_reporte').val());
+        if (!codigo) { return; }
+        if (empresaIdFormulario() <= 0) {
+            alert('Seleccione la empresa antes de consultar mozos.');
+            return;
+        }
+        leerMozoPorCodigo(codigo, function (data) {
+            if (!data) {
+                alert('Mozo no encontrado: ' + codigo);
+                return;
+            }
+            agregarMozo(data);
+            limpiarCampoMozo();
         });
     }
 
@@ -271,10 +841,38 @@
             }
         });
 
+        mozosSel = {};
+        (cfg.mozosIniciales || []).forEach(function (item) {
+            var id = normalizarId(item.id);
+            if (id) {
+                mozosSel[id] = {
+                    id: id,
+                    codigo: (item.codigo || '').trim(),
+                    nombre: (item.nombre || '').trim(),
+                };
+            }
+        });
+
+        vipsSel = {};
+        (cfg.vipsIniciales || []).forEach(function (item) {
+            var id = normalizarId(item.id);
+            if (id) {
+                vipsSel[id] = {
+                    id: id,
+                    codigo: (item.codigo || '').trim(),
+                    nombre: (item.nombre || '').trim(),
+                };
+            }
+        });
+
         sincronizarHiddenDescuentos();
         sincronizarHiddenClientes();
+        sincronizarHiddenMozos();
+        sincronizarHiddenVips();
         pintarTablaDescuentos();
         pintarTablaClientes();
+        pintarTablaMozos();
+        pintarTablaVips();
     }
 
     function agregarCodigoAlFiltroCliente(codigo) {
@@ -302,7 +900,11 @@
             return;
         }
 
-        var $campo = esModoCliente() ? $('#codigocliente_reporte') : $('#codigodescuento_reporte');
+        var $campo = esModoCliente()
+            ? $('#codigocliente_reporte')
+            : (esModoMozo()
+                ? $('#codigomozo_reporte')
+                : (esModoVip() ? $('#codigovip_reporte') : $('#codigodescuento_reporte')));
         if (!$campo.length || !$campo.is(':visible')) {
             return;
         }
@@ -315,17 +917,27 @@
     function actualizarAyudaTipoSeleccion() {
         var listarTodos = listarTodosActivo();
         var modoCliente = esModoCliente();
+        var modoMozo = esModoMozo();
+        var modoVip = esModoVip();
         var $ayuda = $('#ayuda-tipo-seleccion');
         if (!$ayuda.length) {
             return;
         }
         if (listarTodos) {
             $ayuda.text(
-                'Define cómo se arman las secciones del reporte para todos los códigos/clientes con ventas en el período.',
+                'Define cómo se arman las secciones del reporte para todos los códigos/clientes/mozos/VIP con ventas en el período.',
+            );
+        } else if (modoVip) {
+            $ayuda.text(
+                'Elija clientes VIP puntuales y/o un rango de c\u00f3digos; si no ingresa nada se listan todos los clientes VIP con ventas en el per\u00edodo (canjes de marketing).',
+            );
+        } else if (modoMozo) {
+            $ayuda.text(
+                'Elija mozos puntuales y/o un rango de c\u00f3digos; si no ingresa nada se listan todos los mozos con ventas en el per\u00edodo.',
             );
         } else if (modoCliente) {
             $ayuda.text(
-                'Elija clientes internos y el reporte mostrará un bloque por cada uno '
+                'Elija clientes internos puntuales y/o un rango de c\u00f3digos; el reporte mostrar\u00e1 un bloque por cada uno '
                 + '(ventas con descuento asignadas a ese cliente en la cuenta).',
             );
         } else {
@@ -339,27 +951,35 @@
     function actualizarVisibilidadSeleccion(aplicarFoco) {
         var listarTodos = listarTodosActivo();
         var modoCliente = esModoCliente();
+        var modoMozo = esModoMozo();
+        var modoVip = esModoVip();
 
         $('#label-tipo-seleccion').text(listarTodos ? 'Agrupar por' : 'Filtrar por');
         actualizarAyudaTipoSeleccion();
 
-        if (modoCliente) {
+        if (modoCliente || modoMozo || modoVip) {
             $('#wrap-filtro-descuento-cliente').show();
         } else {
             $('#wrap-filtro-descuento-cliente').hide();
         }
 
         if (listarTodos) {
-            $('#wrap-seleccion-descuento, #wrap-seleccion-cliente').hide();
+            $('#wrap-seleccion-descuento, #wrap-seleccion-cliente, #wrap-seleccion-mozo, #wrap-seleccion-vip').hide();
             return;
         }
 
         if (modoCliente) {
-            $('#wrap-seleccion-descuento').hide();
+            $('#wrap-seleccion-descuento, #wrap-seleccion-mozo, #wrap-seleccion-vip').hide();
             $('#wrap-seleccion-cliente').show();
+        } else if (modoMozo) {
+            $('#wrap-seleccion-descuento, #wrap-seleccion-cliente, #wrap-seleccion-vip').hide();
+            $('#wrap-seleccion-mozo').show();
+        } else if (modoVip) {
+            $('#wrap-seleccion-descuento, #wrap-seleccion-cliente, #wrap-seleccion-mozo').hide();
+            $('#wrap-seleccion-vip').show();
         } else {
             $('#wrap-seleccion-descuento').show();
-            $('#wrap-seleccion-cliente').hide();
+            $('#wrap-seleccion-cliente, #wrap-seleccion-mozo, #wrap-seleccion-vip').hide();
         }
 
         if (aplicarFoco) {
@@ -432,6 +1052,7 @@
 
     function activarEventosConsultaCliente() {
         $('.consultacliente-reporte').off('click.cr').on('click.cr', function () {
+            modalDestinoCliente = $(this).data('destino') || 'seleccion';
             $('#consultaclienteModal').modal('show');
         });
 
@@ -447,13 +1068,11 @@
         $(document).off('click.crElige', '#consultaclienteModal .eligeconsultacliente').on('click.crElige', '#consultaclienteModal .eligeconsultacliente', function (e) {
             e.preventDefault();
             var $tr = $(this).closest('tr');
-            agregarCliente({
+            aplicarClienteEnDestinoModal({
                 id: ($tr.find('td.id').first().text() || '').trim(),
                 codigo: ($tr.find('td.codigo').first().text() || '').trim(),
                 nombre: ($tr.find('td.nombre').first().text() || '').trim(),
             });
-            limpiarCampoCliente();
-            $('#consultaclienteModal').modal('hide');
         });
 
         $('#aceptaconsultaclienteModal').off('click.cr').on('click.cr', function () {
@@ -461,10 +1080,83 @@
         });
     }
 
+    function activarEventosConsultaMozo() {
+        $('.consultamozo-reporte').off('click.mr').on('click.mr', function () {
+            if (empresaIdFormulario() <= 0) {
+                alert('Seleccione la empresa antes de consultar mozos.');
+                return;
+            }
+            modalDestinoMozo = $(this).data('destino') || 'seleccion';
+            $('#consultamozoModal').modal('show');
+        });
+
+        $('#consultamozoModal').off('shown.bs.modal.mr').on('shown.bs.modal.mr', function () {
+            $(this).find('#consultamozo').val('').focus();
+            buscarDatosMozo('');
+        });
+
+        $(document).off('keyup.mrConsulta', '#consultamozo').on('keyup.mrConsulta', '#consultamozo', function () {
+            buscarDatosMozo($(this).val());
+        });
+
+        $(document).off('click.mrElige', '#consultamozoModal .eligeconsultamozo').on('click.mrElige', '#consultamozoModal .eligeconsultamozo', function (e) {
+            e.preventDefault();
+            var $tr = $(this).closest('tr');
+            aplicarMozoEnDestinoModal({
+                id: ($tr.find('td.id, .id').first().text() || '').trim(),
+                codigo: ($tr.find('td.codigo, .codigo').first().text() || '').trim(),
+                nombre: ($tr.find('td.nombre, .nombre').first().text() || '').trim(),
+            });
+        });
+
+        $('#aceptaconsultamozoModal').off('click.mr').on('click.mr', function () {
+            $('#consultamozoModal').modal('hide');
+        });
+    }
+
+    function activarEventosConsultaVip() {
+        $('.consultavip-reporte').off('click.vr').on('click.vr', function () {
+            if (empresaIdFormulario() <= 0) {
+                alert('Seleccione la empresa antes de consultar clientes VIP.');
+                return;
+            }
+            modalDestinoVip = $(this).data('destino') || 'seleccion';
+            $('#consultaclientevipModal').modal('show');
+        });
+
+        $('#consultaclientevipModal').off('shown.bs.modal.vr').on('shown.bs.modal.vr', function () {
+            $(this).find('#consultaclientevip').val('').focus();
+            buscarDatosVip('');
+        });
+
+        $(document).off('keyup.vrConsulta', '#consultaclientevip').on('keyup.vrConsulta', '#consultaclientevip', function () {
+            buscarDatosVip($(this).val());
+        });
+
+        $(document).off('click.vrElige', '#consultaclientevipModal .eligeconsultaclientevip').on('click.vrElige', '#consultaclientevipModal .eligeconsultaclientevip', function (e) {
+            e.preventDefault();
+            var $tr = $(this).closest('tr');
+            aplicarVipEnDestinoModal({
+                id: ($tr.find('td.id, .id').first().text() || '').trim(),
+                codigo: ($tr.find('td.codigo, .codigo').first().text() || '').trim(),
+                nombre: ($tr.find('td.nombre, .nombre').first().text() || '').trim(),
+            });
+        });
+
+        $('#aceptaconsultaclientevipModal').off('click.vr').on('click.vr', function () {
+            $('#consultaclientevipModal').modal('hide');
+        });
+    }
+
     $(function () {
         initSeleccionados();
+        initNombresRangoCliente();
+        initNombresRangoMozo();
+        initNombresRangoVip();
         activarEventosConsultaDescuento();
         activarEventosConsultaCliente();
+        activarEventosConsultaMozo();
+        activarEventosConsultaVip();
         actualizarVisibilidadSeleccion();
         actualizarOpcionesPresentacion();
         sincronizarPresentacionColumnasHidden();
@@ -472,6 +1164,38 @@
 
         $('#btn-agregar-descuento-reporte').on('click', agregarDescuentoDesdeCampo);
         $('#btn-agregar-cliente-reporte').on('click', agregarClienteDesdeCampo);
+        $('#btn-agregar-mozo-reporte').on('click', agregarMozoDesdeCampo);
+        $('#btn-agregar-vip-reporte').on('click', agregarVipDesdeCampo);
+        $('#btn-agregar-rango-cliente-reporte').on('click', agregarRangoClientesDesdeCampos);
+        $('#btn-agregar-rango-mozo-reporte').on('click', agregarRangoMozosDesdeCampos);
+        $('#btn-agregar-rango-vip-reporte').on('click', agregarRangoVipsDesdeCampos);
+
+        $('#cliente_codigo_desde').on('change blur', function () {
+            resolverNombreClienteEnCampo($(this).val(), $('#nombrecliente_rango_desde'));
+            actualizarAvisoClientesVacios();
+        });
+        $('#cliente_codigo_hasta').on('change blur', function () {
+            resolverNombreClienteEnCampo($(this).val(), $('#nombrecliente_rango_hasta'));
+            actualizarAvisoClientesVacios();
+        });
+
+        $('#mozo_codigo_desde').on('change blur', function () {
+            resolverNombreMozoEnCampo($(this).val(), $('#nombremozo_rango_desde'));
+            actualizarAvisoMozosVacios();
+        });
+        $('#mozo_codigo_hasta').on('change blur', function () {
+            resolverNombreMozoEnCampo($(this).val(), $('#nombremozo_rango_hasta'));
+            actualizarAvisoMozosVacios();
+        });
+
+        $('#vip_codigo_desde').on('change blur', function () {
+            resolverNombreVipEnCampo($(this).val(), $('#nombrevip_rango_desde'));
+            actualizarAvisoVipsVacios();
+        });
+        $('#vip_codigo_hasta').on('change blur', function () {
+            resolverNombreVipEnCampo($(this).val(), $('#nombrevip_rango_hasta'));
+            actualizarAvisoVipsVacios();
+        });
 
         $('#codigodescuento_reporte').on('keydown', function (e) {
             if (e.which === 13) { e.preventDefault(); agregarDescuentoDesdeCampo(); }
@@ -493,12 +1217,45 @@
             });
         });
 
+        $('#codigomozo_reporte').on('keydown', function (e) {
+            if (e.which === 13) { e.preventDefault(); agregarMozoDesdeCampo(); }
+        }).on('change', function () {
+            var codigo = normalizarCodigo($(this).val());
+            if (!codigo) { $('#nombremozo_reporte').val(''); return; }
+            if (empresaIdFormulario() <= 0) { return; }
+            leerMozoPorCodigo(codigo, function (data) {
+                $('#nombremozo_reporte').val(data ? (data.nombre || '') : '');
+            });
+        });
+
+        $('#codigovip_reporte').on('keydown', function (e) {
+            if (e.which === 13) { e.preventDefault(); agregarVipDesdeCampo(); }
+        }).on('change', function () {
+            var codigo = normalizarCodigo($(this).val());
+            if (!codigo) { $('#nombrevip_reporte').val(''); return; }
+            if (empresaIdFormulario() <= 0) { return; }
+            leerVipPorCodigo(codigo, function (data) {
+                $('#nombrevip_reporte').val(data ? (data.nombre || '') : '');
+            });
+        });
+
         $(document).on('click', '.btn-quitar-descuento-reporte', function () {
             quitarDescuento($(this).closest('tr').data('codigo'));
         });
 
         $(document).on('click', '.btn-quitar-cliente-reporte', function () {
             quitarCliente($(this).closest('tr').data('id'));
+            actualizarAvisoClientesVacios();
+        });
+
+        $(document).on('click', '.btn-quitar-mozo-reporte', function () {
+            quitarMozo($(this).closest('tr').data('id'));
+            actualizarAvisoMozosVacios();
+        });
+
+        $(document).on('click', '.btn-quitar-vip-reporte', function () {
+            quitarVip($(this).closest('tr').data('id'));
+            actualizarAvisoVipsVacios();
         });
 
         $('#listar_todos').on('change', function () {
@@ -521,6 +1278,8 @@
             sincronizarPresentacionColumnasHidden();
             sincronizarHiddenDescuentos();
             sincronizarHiddenClientes();
+            sincronizarHiddenMozos();
+            sincronizarHiddenVips();
             $('#refrescar_cache_descuento_reporte').val('1');
             $('#aviso-reconsultar-descuento-reporte').hide();
             $('#btn-consultar-descuento-reporte').removeClass('btn-warning').addClass('btn-primary');
@@ -529,19 +1288,40 @@
             if (listarTodosActivo()) {
                 $('#codigos_descuento').val('');
                 $('#clientes_descuento_ids').val('');
+                $('#mozos_descuento_ids').val('');
+                $('#vips_descuento_ids').val('');
+                $('#cliente_codigo_desde, #cliente_codigo_hasta, #mozo_codigo_desde, #mozo_codigo_hasta, #vip_codigo_desde, #vip_codigo_hasta').prop('disabled', false);
                 return true;
             }
 
             if (esModoCliente()) {
                 $('#codigos_descuento').val('');
-                if (normalizarCodigo($('#clientes_descuento_ids').val()) === '') {
+                $('#mozos_descuento_ids').val('');
+                $('#vips_descuento_ids').val('');
+                $('#mozo_codigo_desde, #mozo_codigo_hasta, #vip_codigo_desde, #vip_codigo_hasta').val('');
+                var sinClientesPuntuales = normalizarCodigo($('#clientes_descuento_ids').val()) === '';
+                var sinRango = !tieneRangoClienteDefinido();
+                if (sinClientesPuntuales && sinRango) {
                     e.preventDefault();
                     ocultarOverlayExportacion();
-                    alert('Seleccione al menos un cliente interno de descuento, o marque Listar todos.');
+                    alert('Seleccione al menos un cliente interno, defina un rango de c\u00f3digos, o marque Listar todos.');
                     return false;
                 }
+            } else if (esModoMozo()) {
+                $('#codigos_descuento').val('');
+                $('#clientes_descuento_ids').val('');
+                $('#vips_descuento_ids').val('');
+                $('#cliente_codigo_desde, #cliente_codigo_hasta, #vip_codigo_desde, #vip_codigo_hasta').val('');
+            } else if (esModoVip()) {
+                $('#codigos_descuento').val('');
+                $('#clientes_descuento_ids').val('');
+                $('#mozos_descuento_ids').val('');
+                $('#cliente_codigo_desde, #cliente_codigo_hasta, #mozo_codigo_desde, #mozo_codigo_hasta').val('');
             } else {
                 $('#clientes_descuento_ids').val('');
+                $('#mozos_descuento_ids').val('');
+                $('#vips_descuento_ids').val('');
+                $('#cliente_codigo_desde, #cliente_codigo_hasta, #mozo_codigo_desde, #mozo_codigo_hasta, #vip_codigo_desde, #vip_codigo_hasta').val('');
                 $('#codigos_descuento_cliente').val('');
                 if (normalizarCodigo($('#codigos_descuento').val()) === '') {
                     e.preventDefault();

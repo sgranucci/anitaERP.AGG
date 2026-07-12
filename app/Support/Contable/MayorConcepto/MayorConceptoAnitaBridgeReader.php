@@ -11,6 +11,7 @@ class MayorConceptoAnitaBridgeReader
 {
     public function __construct(
         private readonly ApiAnita $api = new ApiAnita(),
+        private readonly MayorConceptoTCompSupport $tcompSupport = new MayorConceptoTCompSupport(),
     ) {
     }
 
@@ -116,6 +117,28 @@ class MayorConceptoAnitaBridgeReader
             'auxpag-pago'
         );
 
+        if ($auxpag === []) {
+            $proveedor = '';
+            foreach ($subdiario as $linea) {
+                $prov = trim((string) ($linea->subd_emisor ?? ''));
+                if ($prov !== '') {
+                    $proveedor = $prov;
+                    break;
+                }
+            }
+            $auxpag = $this->cargarAuxpagHistorico(
+                $empresaId,
+                $tipo,
+                $nro,
+                $fecha,
+                $proveedor,
+                $sucursal,
+                $errores,
+            );
+        }
+
+        $this->tcompSupport->cargar($errores);
+
         $proveedores = [];
         foreach ($auxpag as $fila) {
             $prov = trim((string) ($fila->axp_pro ?? ''));
@@ -129,13 +152,7 @@ class MayorConceptoAnitaBridgeReader
         $comSubdiario = [];
 
         foreach ($auxpag as $fila) {
-            $tipoAp = strtoupper(trim((string) ($fila->axp_tipo_ap ?? '')));
-            if (! in_array($tipoAp, MayorConceptoMemoriaMotor::TIPOS_FACTURA_APLICADA, true)) {
-                continue;
-            }
-
-            if (in_array($tipoAp, MayorConceptoMemoriaMotor::TIPOS_AUXPAG_IGNORAR, true)
-                || in_array($tipoAp, MayorConceptoMemoriaMotor::TIPOS_MEDIO_PAGO_AUXPAG, true)) {
+            if (! $this->tcompSupport->esFacturaAplicada($fila)) {
                 continue;
             }
 
@@ -158,12 +175,15 @@ class MayorConceptoAnitaBridgeReader
                 'aplicped'
             );
 
+            $comDeEstaFactura = false;
+
             foreach ($aplicaciones as $apl) {
                 $aplicped[] = $apl;
                 if (trim((string) ($apl->aplp_ref_tipo ?? '')) !== 'COM') {
                     continue;
                 }
 
+                $comDeEstaFactura = true;
                 $comTipo = trim((string) $apl->aplp_ref_tipo);
                 $comLetra = trim((string) ($apl->aplp_ref_letra ?? ' '));
                 $comSuc = (int) ($apl->aplp_ref_sucursal ?? 0);
@@ -171,17 +191,7 @@ class MayorConceptoAnitaBridgeReader
 
                 $comSubdiario = array_merge(
                     $comSubdiario,
-                    $this->listar(
-                        'contab',
-                        'subdiario',
-                        'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe,subd_desc_mov,subd_nro_operacion',
-                        ' WHERE subd_tipo="'.$comTipo.'"'
-                        .' AND subd_letra='.$this->sqlChar($comLetra)
-                        .' AND subd_sucursal='.$comSuc
-                        .' AND subd_nro='.$comNro,
-                        $errores,
-                        'subdiario-com'
-                    )
+                    $this->cargarComSubdiario($empresaId, $comTipo, $comLetra, $comSuc, $comNro, $errores),
                 );
 
                 $recepmov = array_merge(
@@ -198,6 +208,22 @@ class MayorConceptoAnitaBridgeReader
                         $errores,
                         'recepmov'
                     )
+                );
+            }
+
+            if (strtoupper($tipoAp) === 'FIS' && ! $comDeEstaFactura) {
+                $comSubdiario = array_merge(
+                    $comSubdiario,
+                    $this->cargarSubdiarioFacturaCompras(
+                        $empresaId,
+                        $tipoAp,
+                        $letraAp,
+                        $sucAp,
+                        $nroAp,
+                        (int) ($fila->axp_nro_interno ?? 0),
+                        $prov,
+                        $errores,
+                    ),
                 );
             }
         }
@@ -266,19 +292,372 @@ class MayorConceptoAnitaBridgeReader
         return ApiAnita::decodificarListaFilas($raw);
     }
 
-    public function cargarComSubdiario(string $tipo, string $letra, int $sucursal, int $nro, array &$errores): array
+    /**
+     * Fallback de aplicaciones de pago para OPs anuladas: al anular un OP, sus
+     * aplicaciones (facturas, retenciones, cheques) se mueven de `auxpag` a
+     * `axphist`. Se consulta por tipo+rec (+fecha, proveedor, sucursal OP) y
+     * se valida empresa vía subdiario del comprobante aplicado.
+     *
+     * `axphist` no tiene columna de empresa: se acota con proveedor/sucursal del
+     * OP y, para facturas, verificando que el subdiario del comprobante pertenezca
+     * a la empresa del reporte.
+     *
+     * @return list<object>
+     */
+    public function cargarAuxpagHistorico(
+        int $empresaId,
+        string $tipo,
+        int $rec,
+        int $fecha,
+        string $proveedor,
+        int $sucursalOp,
+        array &$errores,
+    ): array {
+        $tipo = trim($tipo);
+        $proveedor = trim($proveedor);
+        if ($tipo === '' || $rec <= 0 || $empresaId <= 0) {
+            return [];
+        }
+
+        $filas = $this->consultarAuxpagHistoricoFilas($tipo, $rec, $fecha, $proveedor, $sucursalOp, $errores);
+
+        if ($filas === [] && $fecha > 0) {
+            $filas = $this->consultarAuxpagHistoricoFilas($tipo, $rec, 0, $proveedor, $sucursalOp, $errores);
+        }
+
+        $remapeadas = [];
+        foreach ($filas as $fila) {
+            if (! $this->auxpagHistoricoPerteneceEmpresa($empresaId, $fila, $errores)) {
+                continue;
+            }
+
+            $remapeadas[] = (object) [
+                'axp_pro' => $fila->axph_pro ?? '',
+                'axp_fecha' => $fila->axph_fecha ?? 0,
+                'axp_rec' => $fila->axph_rec ?? 0,
+                'axp_tipo' => $fila->axph_tipo ?? '',
+                'axp_nro' => $fila->axph_nro ?? 0,
+                'axp_tipo_ap' => $fila->axph_tipo_apli ?? '',
+                'axp_monto_ap' => $fila->axph_monto_ap ?? 0,
+                'axp_cod_mon_co' => $fila->axph_cod_mon_co ?? '',
+                'axp_sucursal' => $fila->axph_sucursal_comp ?? 0,
+                'axp_empresa' => $empresaId,
+                'axp_letra_comp' => $fila->axph_letra_comp ?? ' ',
+                'axp_nro_interno' => $fila->axph_nro_interno ?? 0,
+                'axp_banco' => $fila->axph_banco ?? '',
+                'axp_concepto' => null,
+                'axp_origen_historico' => true,
+            ];
+        }
+
+        return $remapeadas;
+    }
+
+    /**
+     * @return list<object>
+     */
+    private function consultarAuxpagHistoricoFilas(
+        string $tipo,
+        int $rec,
+        int $fecha,
+        string $proveedor,
+        int $sucursalOp,
+        array &$errores,
+    ): array {
+        $where = ' WHERE axph_tipo="'.addslashes($tipo).'" AND axph_rec='.$rec;
+        if ($fecha > 0) {
+            $where .= ' AND axph_fecha='.$fecha;
+        }
+        if ($proveedor !== '') {
+            $where .= ' AND axph_pro="'.addslashes($proveedor).'"';
+        }
+        if ($sucursalOp > 0) {
+            $where .= ' AND axph_sucursal='.$sucursalOp;
+        }
+
+        return $this->listar(
+            'che_ban',
+            'axphist',
+            'axph_pro,axph_fecha,axph_rec,axph_tipo,axph_nro,axph_tipo_apli,axph_monto_ap,axph_cod_mon_co,axph_banco,axph_letra_comp,axph_sucursal_comp,axph_letra,axph_sucursal,axph_nro_interno',
+            $where,
+            $errores,
+            'axphist',
+        );
+    }
+
+    private function auxpagHistoricoPerteneceEmpresa(int $empresaId, object $fila, array &$errores): bool
     {
+        $nroInterno = (int) ($fila->axph_nro_interno ?? 0);
+        if ($nroInterno <= 0) {
+            return true;
+        }
+
+        $tipoAp = trim((string) ($fila->axph_tipo_apli ?? ''));
+        if ($tipoAp === '') {
+            return false;
+        }
+
+        $letra = trim((string) ($fila->axph_letra_comp ?? ' '));
+        $suc = (int) ($fila->axph_sucursal_comp ?? 0);
+        $candidatosNro = array_values(array_unique(array_filter([
+            (int) ($fila->axph_nro ?? 0),
+            $nroInterno,
+        ], fn ($n) => $n > 0)));
+
+        foreach ($candidatosNro as $nro) {
+            $sub = $this->listar(
+                'contab',
+                'subdiario',
+                'subd_empresa',
+                ' WHERE subd_empresa='.$empresaId
+                .' AND subd_tipo="'.addslashes($tipoAp).'"'
+                .' AND subd_letra='.$this->sqlChar($letra)
+                .' AND subd_sucursal='.$suc
+                .' AND subd_nro='.$nro
+                .' LIMIT 1',
+                $errores,
+                'axphist-empresa',
+            );
+
+            if ($sub !== []) {
+                return true;
+            }
+
+            $subInterno = $this->listar(
+                'contab',
+                'subdiario',
+                'subd_empresa',
+                ' WHERE subd_empresa='.$empresaId
+                .' AND subd_tipo="'.addslashes($tipoAp).'"'
+                .' AND subd_nro_interno='.$nroInterno
+                .' LIMIT 1',
+                $errores,
+                'axphist-empresa-interno',
+            );
+
+            if ($subInterno !== []) {
+                return true;
+            }
+        }
+
+        // Sin subdiario verificable en bridge: no descartar; el OP ya viene
+        // acotado por empresa (subdiario del período) y proveedor/sucursal.
+        return true;
+    }
+
+    public function cargarComSubdiario(int $empresaId, string $tipo, string $letra, int $sucursal, int $nro, array &$errores): array
+    {
+        $where = ' WHERE subd_tipo="'.$tipo.'"'
+            .' AND subd_letra='.$this->sqlChar($letra)
+            .' AND subd_sucursal='.$sucursal
+            .' AND subd_nro='.$nro;
+        if ($empresaId > 0) {
+            $where .= ' AND subd_empresa='.$empresaId;
+        }
+
         return $this->listar(
             'contab',
             'subdiario',
-            'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe,subd_desc_mov,subd_nro_operacion,subd_cod_mon,subd_cotizacion',
-            ' WHERE subd_tipo="'.$tipo.'"'
-            .' AND subd_letra='.$this->sqlChar($letra)
-            .' AND subd_sucursal='.$sucursal
-            .' AND subd_nro='.$nro,
+            $this->camposSubdiarioFacturaCompras(),
+            $where,
             $errores,
             'subdiario-com'
         );
+    }
+
+    /**
+     * Subdiario del comprobante de compra (FIS, FGA, FDT…) sin acotar por mes.
+     * El FIS puede registrarse en un mes distinto al del pago (ej. factura abril, OP junio).
+     * Si hay nro_interno, desambigua reutilizaciones del mismo nro visible.
+     *
+     * @return list<object>
+     */
+    public function cargarSubdiarioFacturaCompras(
+        int $empresaId,
+        string $tipo,
+        string $letra,
+        int $sucursal,
+        int $nro,
+        int $nroInterno,
+        string $proveedor,
+        array &$errores,
+    ): array {
+        $tipo = trim($tipo);
+        if ($tipo === '' || $empresaId <= 0) {
+            return [];
+        }
+
+        $campos = $this->camposSubdiarioFacturaCompras();
+        $proveedor = trim($proveedor);
+
+        if ($nroInterno > 0) {
+            $filas = $this->listar(
+                'contab',
+                'subdiario',
+                $campos,
+                ' WHERE subd_empresa='.$empresaId
+                .' AND subd_tipo="'.addslashes($tipo).'"'
+                .' AND subd_nro_interno='.$nroInterno,
+                $errores,
+                'subdiario-factura-interno',
+            );
+
+            if ($filas !== []) {
+                return $this->ampliarSubdiarioConAsientoCompleto($empresaId, $filas, $campos, $errores);
+            }
+        }
+
+        if ($nro > 0) {
+            $where = ' WHERE subd_empresa='.$empresaId
+                .' AND subd_tipo="'.addslashes($tipo).'"'
+                .' AND subd_letra='.$this->sqlChar($letra)
+                .' AND subd_sucursal='.$sucursal
+                .' AND subd_nro='.$nro;
+            if ($proveedor !== '') {
+                $where .= ' AND subd_emisor="'.addslashes($proveedor).'"';
+            }
+
+            $filas = $this->listar(
+                'contab',
+                'subdiario',
+                $campos,
+                $where,
+                $errores,
+                'subdiario-factura',
+            );
+
+            if ($nroInterno > 0) {
+                $filas = array_values(array_filter(
+                    $filas,
+                    fn ($fila) => (int) ($fila->subd_nro_interno ?? 0) === $nroInterno,
+                ));
+            }
+
+            if ($filas !== []) {
+                return $this->ampliarSubdiarioConAsientoCompleto($empresaId, $filas, $campos, $errores);
+            }
+        }
+
+        if ($nroInterno > 0) {
+            $filas = $this->listar(
+                'contab',
+                'subdiario',
+                $campos,
+                ' WHERE subd_empresa='.$empresaId
+                .' AND subd_tipo="'.addslashes($tipo).'"'
+                .' AND subd_nro='.$nroInterno,
+                $errores,
+                'subdiario-factura-nro-interno',
+            );
+
+            if ($filas !== []) {
+                return $this->ampliarSubdiarioConAsientoCompleto($empresaId, $filas, $campos, $errores);
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Ctamov del asiento contable del comprobante (sin filtro de mes).
+     *
+     * @return list<object>
+     */
+    public function cargarCtamovPorAsiento(int $empresaId, int $nroAsiento, array &$errores): array
+    {
+        if ($empresaId <= 0 || $nroAsiento <= 0) {
+            return [];
+        }
+
+        return $this->listar(
+            'contab',
+            'ctamov',
+            'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_desc_mov,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_o_compra',
+            ' WHERE ctav_empresa='.$empresaId
+            .' AND ctav_nro_asiento='.$nroAsiento,
+            $errores,
+            'ctamov-asiento',
+        );
+    }
+
+    private function camposSubdiarioFacturaCompras(): string
+    {
+        return 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe,subd_desc_mov,subd_nro_operacion,subd_nro_interno,subd_cod_mon,subd_cotizacion';
+    }
+
+    /**
+     * Trae todas las piernas del asiento del comprobante (p. ej. FIS con 521xxx en el mismo nro_operacion).
+     *
+     * @param  list<object>  $semillas
+     * @return list<object>
+     */
+    private function ampliarSubdiarioConAsientoCompleto(
+        int $empresaId,
+        array $semillas,
+        string $campos,
+        array &$errores,
+    ): array {
+        $porClave = [];
+
+        foreach ($semillas as $fila) {
+            $clave = $this->claveLineaSubdiario($fila);
+            if ($clave !== '') {
+                $porClave[$clave] = $fila;
+            }
+        }
+
+        $asientos = [];
+        foreach ($semillas as $fila) {
+            $asi = (int) ($fila->subd_nro_operacion ?? 0);
+            if ($asi > 0) {
+                $asientos[$asi] = true;
+            }
+        }
+
+        foreach (array_keys($asientos) as $nroAsiento) {
+            foreach ($this->cargarSubdiarioPorAsiento($empresaId, $nroAsiento, $campos, $errores) as $linea) {
+                $clave = $this->claveLineaSubdiario($linea);
+                if ($clave !== '') {
+                    $porClave[$clave] = $linea;
+                }
+            }
+        }
+
+        return array_values($porClave);
+    }
+
+    /**
+     * @return list<object>
+     */
+    private function cargarSubdiarioPorAsiento(int $empresaId, int $nroAsiento, string $campos, array &$errores): array
+    {
+        if ($empresaId <= 0 || $nroAsiento <= 0) {
+            return [];
+        }
+
+        return $this->listar(
+            'contab',
+            'subdiario',
+            $campos,
+            ' WHERE subd_empresa='.$empresaId
+            .' AND subd_nro_operacion='.$nroAsiento,
+            $errores,
+            'subdiario-asiento',
+        );
+    }
+
+    private function claveLineaSubdiario(object $fila): string
+    {
+        return implode('|', [
+            (int) ($fila->subd_nro_operacion ?? 0),
+            trim((string) ($fila->subd_tipo ?? '')),
+            trim((string) ($fila->subd_letra ?? ' ')),
+            (int) ($fila->subd_sucursal ?? 0),
+            (int) ($fila->subd_nro ?? 0),
+            (int) ($fila->subd_cuenta ?? 0),
+            strtoupper(trim((string) ($fila->subd_tipo_mov ?? ''))),
+            number_format((float) ($fila->subd_importe ?? 0), 4, '.', ''),
+        ]);
     }
 
     public function cargarAplicpedFactura(
@@ -527,7 +906,7 @@ class MayorConceptoAnitaBridgeReader
      * @param  list<string>  $clavesCom  ej. COM| |1|12345
      * @return array<string, list<object>>
      */
-    public function cargarComSubdiarioLote(array $clavesCom, array &$errores): array
+    public function cargarComSubdiarioLote(int $empresaId, array $clavesCom, array &$errores): array
     {
         $clavesCom = array_values(array_unique(array_filter($clavesCom, fn ($c) => trim($c) !== '')));
         if ($clavesCom === []) {
@@ -553,16 +932,24 @@ class MayorConceptoAnitaBridgeReader
                 continue;
             }
 
+            $where = ' WHERE ('.implode(' OR ', $condiciones).')';
+            if ($empresaId > 0) {
+                $where .= ' AND subd_empresa='.$empresaId;
+            }
+
             $filas = $this->listar(
                 'contab',
                 'subdiario',
                 $campos,
-                ' WHERE '.implode(' OR ', $condiciones),
+                $where,
                 $errores,
                 'subdiario-com-bulk',
             );
 
             foreach ($filas as $fila) {
+                if ($empresaId > 0 && (int) ($fila->subd_empresa ?? 0) !== $empresaId) {
+                    continue;
+                }
                 $clave = $this->claveComDesdeSubdiario($fila);
                 if ($clave === '') {
                     continue;

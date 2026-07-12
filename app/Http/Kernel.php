@@ -65,6 +65,7 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'modo.consulta' => \App\Http\Middleware\PreservarModoConsulta::class,
         'estacionamiento.habilitado' => \App\Http\Middleware\EstacionamientoHabilitado::class,
+        'bingo.habilitado' => \App\Http\Middleware\BingoHabilitado::class,
     ];
 
     /**

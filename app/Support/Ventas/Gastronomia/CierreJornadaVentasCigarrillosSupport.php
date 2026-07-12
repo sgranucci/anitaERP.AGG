@@ -116,14 +116,17 @@ final class CierreJornadaVentasCigarrillosSupport
     {
         $impuestoInterno = self::sumarImpuestoInternoCabecera($venta);
         if (abs($impuestoInterno) > 0.0001) {
-            return $impuestoInterno;
+            return self::firmarImpuestoInternoSegunComprobante($venta, $impuestoInterno);
         }
 
         if (abs($importeCigarrillos) <= 0.0001) {
             return 0.0;
         }
 
-        return self::inferirImpuestoInternoDesdeInsumos($venta, $empresaId, $importeCigarrillos);
+        return self::firmarImpuestoInternoSegunComprobante(
+            $venta,
+            self::inferirImpuestoInternoDesdeInsumos($venta, $empresaId, $importeCigarrillos),
+        );
     }
 
     /**
@@ -253,6 +256,22 @@ final class CierreJornadaVentasCigarrillosSupport
         }
 
         return round($total, 2);
+    }
+
+    /**
+     * venta_impuestos persiste imp. interno en valor absoluto; alinear signo con NC (tipotransaccion Resta).
+     */
+    private static function firmarImpuestoInternoSegunComprobante(Venta $venta, float $impuestoInterno): float
+    {
+        if (abs($impuestoInterno) <= 0.0001) {
+            return 0.0;
+        }
+
+        $venta->loadMissing('tipotransacciones');
+        $signo = $venta->tipotransacciones->signo ?? null;
+        $abs = abs($impuestoInterno);
+
+        return GastronomiaVentaComprobanteSignoSupport::esNotaCreditoSigno($signo) ? -$abs : $abs;
     }
 
     private static function inferirImpuestoInternoDesdeInsumos(Venta $venta, int $empresaId, float $importeCigarrillos): float

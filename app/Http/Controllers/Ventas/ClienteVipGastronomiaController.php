@@ -10,6 +10,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\ClienteVipGastronomiaRepositoryInterface;
 use App\Services\Ventas\ClienteVipGastronomiaAnitaSyncService;
 use App\Support\Ventas\ClienteVipGastronomiaListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -83,29 +84,32 @@ class ClienteVipGastronomiaController extends Controller
         return redirect()->route('consultar_cliente_vip_gastronomia', ClienteVipGastronomiaListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-cliente-vip-gastronomia');
         $data = new ClienteVipGastronomia();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ClienteVipGastronomiaListadoFiltros::class);
 
-        return view('ventas.gastronomia.canjes.cliente_vip.crear', compact('data', 'empresa_query'));
+        return view('ventas.gastronomia.canjes.cliente_vip.crear', compact('data', 'empresa_query', 'filtrosQuery'));
     }
 
     public function guardar(ValidacionClienteVipGastronomia $request)
     {
         $this->repository->create($request->all());
 
-        return redirect('ventas/gastronomia/canjes/cliente-vip')->with('mensaje', 'Cliente VIP creado con éxito');
+        return redirect()->route('consultar_cliente_vip_gastronomia', QueryRetornoListado::desdeRequest($request, ClienteVipGastronomiaListadoFiltros::class))
+            ->with('mensaje', 'Cliente VIP creado con éxito');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-cliente-vip-gastronomia');
         $data = $this->repository->findOrFail($id);
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ClienteVipGastronomiaListadoFiltros::class);
 
-        return view('ventas.gastronomia.canjes.cliente_vip.editar', compact('data', 'empresa_query'));
+        return view('ventas.gastronomia.canjes.cliente_vip.editar', compact('data', 'empresa_query', 'filtrosQuery'));
     }
 
     public function actualizar(ValidacionClienteVipGastronomia $request, $id)
@@ -113,7 +117,8 @@ class ClienteVipGastronomiaController extends Controller
         can('actualizar-cliente-vip-gastronomia');
         $this->repository->update($request->all(), $id);
 
-        return redirect('ventas/gastronomia/canjes/cliente-vip')->with('mensaje', 'Cliente VIP actualizado con éxito');
+        return redirect()->route('consultar_cliente_vip_gastronomia', QueryRetornoListado::desdeRequest($request, ClienteVipGastronomiaListadoFiltros::class))
+            ->with('mensaje', 'Cliente VIP actualizado con éxito');
     }
 
     public function eliminar(Request $request, $id)

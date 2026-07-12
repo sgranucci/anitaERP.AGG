@@ -20,19 +20,33 @@
         return parseInt($('#bien_uso_origen_id').val(), 10) || 0;
     }
 
+    function selectedTipoAttr(attr) {
+        var sel = document.getElementById('tipotransaccion_stock_id');
+        if (!sel || sel.selectedIndex < 0) {
+            return '0';
+        }
+        var opt = sel.options[sel.selectedIndex];
+        if (!opt || !opt.value) {
+            return '0';
+        }
+
+        return opt.getAttribute('data-' + attr) || '0';
+    }
+
+    function selectedTipoFlag(attr) {
+        return parseInt(selectedTipoAttr(attr), 10) === 1;
+    }
+
     function tipoDestinoBienUso() {
-        var $opt = $('#tipotransaccion_stock_id option:selected');
-        return $opt.data('destino-bien-uso') === 1 || $opt.data('destinoBienUso') === 1;
+        return selectedTipoFlag('destino-bien-uso');
     }
 
     function tipoOrigenBienUso() {
-        var $opt = $('#tipotransaccion_stock_id option:selected');
-        return $opt.data('origen-bien-uso') === 1 || $opt.data('origenBienUso') === 1;
+        return selectedTipoFlag('origen-bien-uso');
     }
 
     function tipoManejaContabilidad() {
-        var $opt = $('#tipotransaccion_stock_id option:selected');
-        return $opt.data('maneja-contabilidad') === 1 || $opt.data('manejaContabilidad') === 1;
+        return selectedTipoFlag('maneja-contabilidad');
     }
 
     function actualizarPanelCentrocosto() {
@@ -102,6 +116,58 @@
     function empresaId() {
         return parseInt($('#empresa_id').val(), 10) || 0;
     }
+
+    function modoIntercompanyActivo() {
+        return $('#tm_modo_intercompany').val() === '1';
+    }
+
+    function actualizarUiModoIntercompany() {
+        var activo = modoIntercompanyActivo();
+        var $btn = $('#tm_btn_intercompany');
+        if (!$btn.length) {
+            return;
+        }
+        $btn.toggleClass('btn-outline-secondary', !activo);
+        $btn.toggleClass('btn-warning', activo);
+        $btn.html(
+            activo
+                ? '<i class="fa fa-building"></i> Mostrando dep&oacute;sitos de todas las empresas'
+                : '<i class="fa fa-building"></i> Ver dep&oacute;sitos de otras empresas'
+        );
+    }
+
+    /**
+     * Destino de TRA: cualquier depósito de la empresa (o intercompany).
+     * Origen: sigue filtrando por usuario_deposito.
+     */
+    window.payloadExtraConsultaDeposito = function ($ctx) {
+        if (modoIntercompanyActivo()) {
+            return { intercompany: 1, omitir_filtro_usuario: 1 };
+        }
+
+        if ($ctx && $ctx.length && $ctx.is('#tm_deposito_entrada')) {
+            return { omitir_filtro_usuario: 1 };
+        }
+
+        return {};
+    };
+
+    window.onDepositoAplicadoEnFormulario = function (data, $ctx) {
+        if (!$ctx || !$ctx.length || !$ctx.is('#tm_deposito_salida')) {
+            return;
+        }
+        var empId = parseInt(data.empresa_id, 10) || 0;
+        if (empId <= 0) {
+            return;
+        }
+        var $emp = $('#empresa_id');
+        if (!$emp.length) {
+            return;
+        }
+        window._omitirLimpiarDepositoAlCambiarEmpresa = true;
+        $emp.val(String(empId)).trigger('change');
+        window._omitirLimpiarDepositoAlCambiarEmpresa = false;
+    };
 
     function validarLineaContableAsync(articuloId) {
         if (!tipoManejaContabilidad() || !window.TM_URLS.validarLineaContable) {
@@ -185,25 +251,40 @@
     }
 
     function tipoRequiereAprobacion() {
-        var $opt = $('#tipotransaccion_stock_id option:selected');
-        return $opt.data('requiere-aprobacion') === 1 || $opt.data('requiereAprobacion') === 1;
+        return selectedTipoFlag('requiere-aprobacion');
+    }
+
+    function mostrarPanel($panel, visible) {
+        if (!$panel || !$panel.length) {
+            return;
+        }
+        if (visible) {
+            $panel.css('display', 'block');
+        } else {
+            $panel.css('display', 'none');
+        }
     }
 
     function actualizarPanelDestinatario() {
-        var show = false;
-        if (tipoRequiereAprobacion()) {
-            show = tipoDestinoBienUso() || depositoEntradaId() > 0;
-        }
-        $('#tm_panel_destinatario').toggle(show);
+        var show = tipoRequiereAprobacion();
+        var puedeCargarOpciones = tipoDestinoBienUso() || depositoEntradaId() > 0;
+
+        mostrarPanel($('#tm_panel_destinatario'), show);
         if (tipoDestinoBienUso()) {
-            $('#tm_destinatario_ayuda').text('Indique el usuario que debe confirmar la recepción en el bien de uso.');
+            $('#tm_destinatario_ayuda').text('Indique el usuario del ERP que confirmará la recepción en el bien de uso.');
         } else if (tipoOrigenBienUso()) {
-            $('#tm_destinatario_ayuda').text('Indique el usuario que debe aprobar el ingreso en el depósito destino.');
+            $('#tm_destinatario_ayuda').text('Indique el usuario del ERP que aprobará el ingreso en el depósito destino.');
+        } else if (!puedeCargarOpciones) {
+            $('#tm_destinatario_ayuda').text(
+                'Seleccione depósito de entrada para listar usuarios. Vacío = administrador principal del depósito.'
+            );
         } else {
-            $('#tm_destinatario_ayuda').text('Por defecto se usa el administrador principal del depósito de entrada.');
+            $('#tm_destinatario_ayuda').text('Usuario del ERP que recibirá el aviso (activo y con email). Vacío = administrador principal del depósito.');
         }
-        if (show) {
+        if (show && puedeCargarOpciones) {
             cargarDestinatarios();
+        } else if (show) {
+            $('#usuario_destino_id').find('option:not(:first)').remove();
         }
     }
 
@@ -686,9 +767,10 @@
         $('#tm_filtro_desc').on('input', aplicarFiltro);
         $(document).on('input change', '.tm-cant', actualizarBotonTransferir);
 
-        $('#tipotransaccion_stock_id').on('change', function () {
+        $('#tipotransaccion_stock_id').on('change input', function () {
             guardarPreferencias();
             actualizarPanelesDestino();
+            actualizarPanelDestinatario();
             if (filas.length) {
                 filtrarFilasContables(filas.slice(), function (validas, omitidas) {
                     if (tipoManejaContabilidad() && omitidas > 0) {
@@ -718,17 +800,19 @@
             notificarCambioOrigen();
         });
 
-        $('#deposito_salida_id').on('change', function () {
+        $(document).on('change', '#deposito_salida_id', function () {
             notificarCambioDeposito();
         });
 
-        $('#deposito_entrada_id').on('change', function () {
+        $(document).on('change', '#tm_deposito_entrada .deposito_id, #deposito_entrada_id', function () {
             guardarPreferencias();
-            cargarDestinatarios();
             actualizarPanelDestinatario();
         });
 
         $('#empresa_id').on('change', function () {
+            if (window._omitirLimpiarDepositoAlCambiarEmpresa) {
+                return;
+            }
             $('.tm-deposito-campo').each(function () {
                 $(this).find('.deposito_id').val('').trigger('change');
                 $(this).find('.codigodeposito').val('');
@@ -771,6 +855,16 @@
         if (typeof activa_eventos_consultadeposito === 'function') {
             activa_eventos_consultadeposito();
         }
+
+        $('#tm_btn_intercompany').on('click', function () {
+            var activo = modoIntercompanyActivo();
+            $('#tm_modo_intercompany').val(activo ? '0' : '1');
+            actualizarUiModoIntercompany();
+            if ($('#consultadepositoModal').hasClass('show') && typeof buscar_datos_deposito === 'function') {
+                buscar_datos_deposito($('#consultadeposito').val());
+            }
+        });
+        actualizarUiModoIntercompany();
 
         actualizarPanelesDestino();
 

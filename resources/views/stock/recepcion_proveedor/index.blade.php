@@ -14,6 +14,9 @@ Recepciones de proveedores
 <?php use App\Support\Stock\RecepcionProveedorListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -31,7 +34,7 @@ Recepciones de proveedores
                         'toggleTarget' => '#panel-filtros-recepcion',
                         'toggleId' => 'btn-toggle-filtros-recepcion',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_recepcion_proveedor'),
+                        'nuevoRegistroUrl' => route('crear_recepcion_proveedor', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-recepcion-proveedor',
                     ])
                 </div>
@@ -62,8 +65,9 @@ Recepciones de proveedores
                         @php
                             $tieneDiff = $row->fl_precio_diferencia || $row->fl_diferencia_cantidad || $row->fl_articulo_extra || $row->fl_faltante_oc;
                             $esBorrador = ($row->estado ?? '') === 'BORRADOR';
+                            $precioPendiente = ! empty($row->fl_precio_pendiente_aprobacion);
                         @endphp
-                        <tr class="@if($esBorrador) table-secondary @elseif($tieneDiff) table-warning @endif">
+                        <tr class="@if($precioPendiente) table-info @elseif($esBorrador) table-secondary @elseif($tieneDiff) table-warning @endif">
                             <td>
                                 @if($esBorrador)
                                     <strong>{{ $row->numerorecepcion }}</strong>
@@ -84,11 +88,18 @@ Recepciones de proveedores
                                 @endif
                             </td>
                             <td>{{ $row->nombreproveedor }}</td>
-                            <td>{{ $row->nombreempresa }}</td>
+                            <td>
+                                {{ $row->nombreempresa }}
+                                @if(!empty($row->es_intercompany))
+                                <i class="fa fa-building text-muted small ml-1 tooltipsC"
+                                   title="Ingreso intercompany: mercadería en depósito de otra empresa"></i>
+                                @endif
+                            </td>
                             <td>
                                 @include('stock.recepcion_proveedor.partials.estado_badge', ['estado' => $row->estado ?? ''])
                             </td>
                             <td class="text-nowrap">
+                                @if($precioPendiente)<span class="badge badge-info" title="Precio pendiente aprobación OC">$ OC</span>@endif
                                 @if($row->fl_precio_diferencia)<span class="badge badge-warning" title="Precio">P</span>@endif
                                 @if($row->fl_diferencia_cantidad)<span class="badge badge-warning" title="Cantidad">C</span>@endif
                                 @if($row->fl_articulo_extra)<span class="badge badge-info" title="Extra/sustituto">A</span>@endif
@@ -102,17 +113,17 @@ Recepciones de proveedores
                                     'modo' => 'tabla',
                                 ])
                                 @if (can('editar-recepcion-proveedor', false) || can('actualizar-recepcion-proveedor', false))
-                                <a href="{{ url('stock/recepcion-proveedor/'.$row->id.'/editar') }}" class="btn-accion-tabla tooltipsC" title="{{ $row->estado === 'BORRADOR' ? 'Editar borrador' : 'Ver recepción' }}">
+                                <a href="{{ route('editar_recepcion_proveedor', array_merge(['id' => $row->id], $retornoListadoQuery)) }}" class="btn-accion-tabla tooltipsC" title="{{ $row->estado === 'BORRADOR' ? 'Editar borrador' : 'Ver recepción' }}">
                                     <i class="fa fa-edit"></i>
                                 </a>
                                 @endif
                                 @if($row->estado === 'BORRADOR' && can('actualizar-recepcion-proveedor', false))
-                                <a href="{{ route('editar_recepcion_proveedor', ['id' => $row->id, 'enfocar_oc' => 1]) }}"
+                                <a href="{{ route('editar_recepcion_proveedor', array_merge(['id' => $row->id, 'enfocar_oc' => 1], $retornoListadoQuery)) }}"
                                    class="btn-accion-tabla tooltipsC" title="Cambiar orden de compra">
                                     <i class="fa fa-exchange text-warning"></i>
                                 </a>
                                 @endif
-                                @if($row->estado === 'BORRADOR' && can('confirmar-recepcion-proveedor', false))
+                                @if($row->estado === 'BORRADOR' && can('confirmar-recepcion-proveedor', false) && ! $precioPendiente)
                                 <form action="{{ route('confirmar_recepcion_proveedor', $row->id) }}" class="d-inline form-confirmar-recepcion" method="POST"
                                       data-confirm-msg="¿Confirmar recepción {{ $row->numerorecepcion }}? Generará movimiento de stock y asiento contable.">
                                     @csrf

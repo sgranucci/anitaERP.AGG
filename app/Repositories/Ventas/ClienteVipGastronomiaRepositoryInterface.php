@@ -31,4 +31,6 @@ interface ClienteVipGastronomiaRepositoryInterface
     public function findPorNumeroid(int $empresaId, int $numeroid): ?ClienteVipGastronomia;
 
     public function consultaClienteVipPos(string $consulta, int $empresaId): string;
+
+    public function consultaClienteVipReporte(string $consulta, int $empresaId): string;
 }

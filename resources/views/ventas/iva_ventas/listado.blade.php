@@ -3,7 +3,7 @@
     use App\Support\Ventas\IvaVentasListadoFiltros;
     $coleccionLogos = collect($filas ?? [])->map(fn ($f) => ['nombreempresa' => $f['nombreempresa'] ?? '']);
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($coleccionLogos);
-    $totalFilas = is_countable($filas) ? count($filas) : 0;
+    $totalFilas = (int) ($resultado['stats']['ventas'] ?? (is_countable($filas) ? count($filas) : 0));
     $tituloReporte = 'IVA VENTAS';
     $subtitulo = 'Período: '.IvaVentasListadoFiltros::formatearPeriodoTexto($filtros)
         .' · Orden: '.IvaVentasListadoFiltros::formatearOrdenTexto($filtros)
@@ -31,6 +31,7 @@
             font-size: 7px;
         }
         table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
+        table.data tbody tr.iva-ventas-resumen-b { background-color: #fef9e7; font-weight: bold; }
         table.data thead tr { background-color: #85C1E9; }
         table.data th { font-size: 7px; font-weight: bold; color: #17202A; }
         .text-right { text-align: right; white-space: nowrap; }
@@ -82,6 +83,44 @@
                         <td class="text-right">{{ number_format((float) ($linea['diferencia'] ?? 0), 2, ',', '.') }}</td>
                     </tr>
                 @endforeach
+            </tbody>
+        </table>
+    @endif
+
+    @php $un = $resultado['conciliacion_contable']['por_unidad_negocio'] ?? ['habilitada' => false]; @endphp
+    @if (! empty($un['habilitada']) && count($un['unidades'] ?? []) > 0)
+        <h3 class="seccion">Conciliación por unidad de negocio</h3>
+        <table class="data" style="margin-bottom: 10px;">
+            <thead>
+                <tr>
+                    <th>Unidad de negocio</th>
+                    <th class="text-right">Comp.</th>
+                    <th class="text-right">Neto gravado</th>
+                    <th class="text-right">Imp. interno / kiosco</th>
+                    <th class="text-right">IVA</th>
+                    <th class="text-right">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($un['unidades'] as $unidad)
+                    <tr>
+                        <td>{{ $unidad['label'] ?? '' }}</td>
+                        <td class="text-right">{{ (int) ($unidad['cantidad'] ?? 0) }}</td>
+                        <td class="text-right">{{ number_format((float) ($unidad['neto_gravado'] ?? 0), 2, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format((float) ($unidad['imp_interno'] ?? 0), 2, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format((float) ($unidad['iva'] ?? 0), 2, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format((float) ($unidad['total'] ?? 0), 2, ',', '.') }}</td>
+                    </tr>
+                @endforeach
+                @php $te = $un['total_erp'] ?? []; @endphp
+                <tr style="font-weight: bold; background-color: #eef3f8;">
+                    <td>TOTAL</td>
+                    <td></td>
+                    <td class="text-right">{{ number_format((float) ($te['neto_gravado'] ?? 0), 2, ',', '.') }}</td>
+                    <td class="text-right">{{ number_format((float) ($te['imp_interno'] ?? 0), 2, ',', '.') }}</td>
+                    <td class="text-right">{{ number_format((float) ($te['iva'] ?? 0), 2, ',', '.') }}</td>
+                    <td class="text-right">{{ number_format((float) ($te['total'] ?? 0), 2, ',', '.') }}</td>
+                </tr>
             </tbody>
         </table>
     @endif

@@ -3,6 +3,7 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\ViandaUsuario;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Ventas\ViandaUsuarioListadoFiltros;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -11,6 +12,7 @@ class ViandaUsuarioRepository implements ViandaUsuarioRepositoryInterface
 {
     public function __construct(
         private ViandaUsuario $model,
+        private EmpresaRepositoryInterface $empresaRepository,
     ) {
     }
 
@@ -21,18 +23,35 @@ class ViandaUsuarioRepository implements ViandaUsuarioRepositoryInterface
     public function leeUsuarios($filtros, bool $paginar)
     {
         if (is_string($filtros)) {
-            $filtros = ['busqueda' => $filtros !== '' ? $filtros : null];
+            $texto = trim($filtros);
+            $filtros = ViandaUsuarioListadoFiltros::filtrosVacios();
+            $filtros['valor'] = $texto;
+            $filtros['busqueda'] = $texto;
+        } elseif (! is_array($filtros)) {
+            $filtros = ViandaUsuarioListadoFiltros::filtrosVacios();
         }
 
-        $query = $this->model->with(['centrocosto', 'tipoMenu'])
-            ->orderBy('nombre')
-            ->orderBy('codigo_usuario');
-
-        if (is_array($filtros) && ViandaUsuarioListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            ViandaUsuarioListadoFiltros::aplicar($query, $filtros);
+        if (! isset($filtros['empresas_asignadas']) || $filtros['empresas_asignadas'] === []) {
+            $filtros['empresas_asignadas'] = $this->empresaRepository->traeEmpresasAsignadas();
         }
 
-        return $paginar ? $query->paginate(25) : $query->get();
+        $query = $this->model->newQuery()
+            ->select('vianda_usuario.*')
+            ->leftJoin('empresa', 'empresa.id', '=', 'vianda_usuario.empresa_id')
+            ->leftJoin('centrocosto', 'centrocosto.id', '=', 'vianda_usuario.centrocosto_id')
+            ->leftJoin('vianda_tipo_menu', 'vianda_tipo_menu.id', '=', 'vianda_usuario.vianda_tipo_menu_id')
+            ->with(['empresa', 'centrocosto', 'tipoMenu']);
+
+        ViandaUsuarioListadoFiltros::aplicarScopeEmpresasAsignadas($query, $filtros);
+        ViandaUsuarioListadoFiltros::aplicarFiltrosDirectos($query, $filtros);
+        ViandaUsuarioListadoFiltros::aplicar($query, $filtros);
+
+        $query->orderBy('vianda_usuario.nombre')
+            ->orderBy('vianda_usuario.codigo_usuario');
+
+        return $paginar
+            ? $query->paginate(10)->appends(ViandaUsuarioListadoFiltros::paraQueryString($filtros))
+            : $query->get();
     }
 
     public function existeRegistro(): bool
@@ -43,7 +62,7 @@ class ViandaUsuarioRepository implements ViandaUsuarioRepositoryInterface
     public function create(array $data)
     {
         return $this->model->create($this->filtrarCabecera($data))
-            ->load(['centrocosto', 'tipoMenu']);
+            ->load(['empresa', 'centrocosto', 'tipoMenu']);
     }
 
     public function update(array $data, $id)
@@ -51,7 +70,7 @@ class ViandaUsuarioRepository implements ViandaUsuarioRepositoryInterface
         $registro = $this->model->findOrFail($id);
         $registro->update($this->filtrarCabecera($data));
 
-        return $registro->fresh(['centrocosto', 'tipoMenu']);
+        return $registro->fresh(['empresa', 'centrocosto', 'tipoMenu']);
     }
 
     public function delete($id)
@@ -61,18 +80,19 @@ class ViandaUsuarioRepository implements ViandaUsuarioRepositoryInterface
 
     public function find($id)
     {
-        return $this->model->with(['centrocosto', 'tipoMenu'])->find($id);
+        return $this->model->with(['empresa', 'centrocosto', 'tipoMenu'])->find($id);
     }
 
     public function findOrFail($id)
     {
-        return $this->model->with(['centrocosto', 'tipoMenu'])->findOrFail($id);
+        return $this->model->with(['empresa', 'centrocosto', 'tipoMenu'])->findOrFail($id);
     }
 
     private function filtrarCabecera(array $data): array
     {
         return collect($data)->only([
             'codigo_usuario',
+            'empresa_id',
             'nombre',
             'password',
             'centrocosto_id',

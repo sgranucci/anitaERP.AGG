@@ -9,6 +9,7 @@ use App\Models\Configuracion\UsoSalidaImpresora;
 use App\Repositories\Configuracion\UsoSalidaImpresoraRepositoryInterface;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Configuracion\UsoSalidaImpresoraListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 
 class UsoSalidaImpresoraController extends Controller
@@ -68,13 +69,14 @@ class UsoSalidaImpresoraController extends Controller
         return redirect()->route('uso_salida_impresora', UsoSalidaImpresoraListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-uso-salida-impresora');
         $data = new UsoSalidaImpresora();
         $programasSeteoOpciones = SeteoSalidaProgramaSupport::opcionesParaFormulario();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, UsoSalidaImpresoraListadoFiltros::class);
 
-        return view('configuracion.uso_salida_impresora.crear', compact('data', 'programasSeteoOpciones'));
+        return view('configuracion.uso_salida_impresora.crear', compact('data', 'programasSeteoOpciones', 'filtrosQuery'));
     }
 
     public function guardar(ValidacionUsoSalidaImpresora $request)
@@ -82,16 +84,18 @@ class UsoSalidaImpresoraController extends Controller
         can('crear-uso-salida-impresora');
         $this->repository->create($request->all());
 
-        return redirect('configuracion/uso-salida-impresora')->with('mensaje', 'Uso de salida de impresión creado con éxito');
+        return redirect()->route('uso_salida_impresora', QueryRetornoListado::desdeRequest($request, UsoSalidaImpresoraListadoFiltros::class))
+            ->with('mensaje', 'Uso de salida de impresión creado con éxito');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-uso-salida-impresora');
         $data = $this->repository->findOrFail($id);
         $programasSeteoOpciones = SeteoSalidaProgramaSupport::opcionesParaFormulario();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, UsoSalidaImpresoraListadoFiltros::class);
 
-        return view('configuracion.uso_salida_impresora.editar', compact('data', 'programasSeteoOpciones'));
+        return view('configuracion.uso_salida_impresora.editar', compact('data', 'programasSeteoOpciones', 'filtrosQuery'));
     }
 
     public function actualizar(ValidacionUsoSalidaImpresora $request, $id)
@@ -99,7 +103,8 @@ class UsoSalidaImpresoraController extends Controller
         can('actualizar-uso-salida-impresora');
         $this->repository->update($request->all(), $id);
 
-        return redirect('configuracion/uso-salida-impresora')->with('mensaje', 'Uso de salida de impresión actualizado con éxito');
+        return redirect()->route('uso_salida_impresora', QueryRetornoListado::desdeRequest($request, UsoSalidaImpresoraListadoFiltros::class))
+            ->with('mensaje', 'Uso de salida de impresión actualizado con éxito');
     }
 
     public function eliminar(Request $request, $id)

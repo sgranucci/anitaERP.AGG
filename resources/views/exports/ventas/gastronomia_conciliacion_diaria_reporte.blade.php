@@ -1,5 +1,5 @@
 @php
-    $colspan = 32;
+    $colspan = 38;
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
@@ -62,6 +62,12 @@
             <th>Asiento post-cierre</th>
             <th>Asientos total</th>
             <th>Δ rendg-asientos</th>
+            <th>Flash AyB</th>
+            <th>Flash estac.</th>
+            <th>Flash total</th>
+            <th>Δ ERP-flash</th>
+            <th>Δ Anita-flash</th>
+            <th>Δ rendg-flash</th>
         </tr>
     </thead>
     <tbody>
@@ -99,6 +105,12 @@
                 <td>{{ is_numeric($fila['asiento_post_cierre'] ?? null) ? (float) $fila['asiento_post_cierre'] : '' }}</td>
                 <td>{{ is_numeric($fila['asientos_total'] ?? null) ? (float) $fila['asientos_total'] : '' }}</td>
                 <td>{{ is_numeric($fila['diff_rendg_asientos'] ?? null) ? (float) $fila['diff_rendg_asientos'] : '' }}</td>
+                <td>{{ is_numeric($fila['flash_ayb'] ?? null) ? (float) $fila['flash_ayb'] : '' }}</td>
+                <td>{{ is_numeric($fila['flash_estac'] ?? null) ? (float) $fila['flash_estac'] : '' }}</td>
+                <td>{{ is_numeric($fila['total_flash'] ?? null) ? (float) $fila['total_flash'] : '' }}</td>
+                <td>{{ is_numeric($fila['diff_erp_flash'] ?? null) ? (float) $fila['diff_erp_flash'] : '' }}</td>
+                <td>{{ is_numeric($fila['diff_anita_flash'] ?? null) ? (float) $fila['diff_anita_flash'] : '' }}</td>
+                <td>{{ is_numeric($fila['diff_rendg_flash'] ?? null) ? (float) $fila['diff_rendg_flash'] : '' }}</td>
             </tr>
         @endforeach
     </tbody>

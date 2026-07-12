@@ -8,6 +8,7 @@ use App\Http\Requests\ValidacionUbicacionImpresora;
 use App\Models\Configuracion\UbicacionImpresora;
 use App\Repositories\Configuracion\UbicacionImpresoraRepositoryInterface;
 use App\Support\Configuracion\UbicacionImpresoraListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 
 class UbicacionImpresoraController extends Controller
@@ -67,12 +68,13 @@ class UbicacionImpresoraController extends Controller
         return redirect()->route('ubicacion_impresora', UbicacionImpresoraListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-ubicacion-impresora');
         $data = new UbicacionImpresora();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, UbicacionImpresoraListadoFiltros::class);
 
-        return view('configuracion.ubicacion_impresora.crear', compact('data'));
+        return view('configuracion.ubicacion_impresora.crear', compact('data', 'filtrosQuery'));
     }
 
     public function guardar(ValidacionUbicacionImpresora $request)
@@ -80,15 +82,17 @@ class UbicacionImpresoraController extends Controller
         can('crear-ubicacion-impresora');
         $this->repository->create($request->all());
 
-        return redirect('configuracion/ubicacion-impresora')->with('mensaje', 'Ubicación de impresora creada con éxito');
+        return redirect()->route('ubicacion_impresora', QueryRetornoListado::desdeRequest($request, UbicacionImpresoraListadoFiltros::class))
+            ->with('mensaje', 'Ubicación de impresora creada con éxito');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-ubicacion-impresora');
         $data = $this->repository->findOrFail($id);
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, UbicacionImpresoraListadoFiltros::class);
 
-        return view('configuracion.ubicacion_impresora.editar', compact('data'));
+        return view('configuracion.ubicacion_impresora.editar', compact('data', 'filtrosQuery'));
     }
 
     public function actualizar(ValidacionUbicacionImpresora $request, $id)
@@ -96,7 +100,8 @@ class UbicacionImpresoraController extends Controller
         can('actualizar-ubicacion-impresora');
         $this->repository->update($request->all(), $id);
 
-        return redirect('configuracion/ubicacion-impresora')->with('mensaje', 'Ubicación de impresora actualizada con éxito');
+        return redirect()->route('ubicacion_impresora', QueryRetornoListado::desdeRequest($request, UbicacionImpresoraListadoFiltros::class))
+            ->with('mensaje', 'Ubicación de impresora actualizada con éxito');
     }
 
     public function eliminar(Request $request, $id)

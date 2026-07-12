@@ -16,6 +16,7 @@ use App\Repositories\Stock\Recuento_ArchivoRepositoryInterface;
 use App\Repositories\Stock\Recuento_ItemRepositoryInterface;
 use App\Repositories\Stock\RecuentoRepositoryInterface;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
+use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\RecuentoModoCierreSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
@@ -215,8 +216,11 @@ class RecuentoService
                 $conteos[(int) $item->articulo_id] = (float) $item->cantidad_contada;
             }
 
-            $saldosDeposito = $this->saldoRepository->saldosDeposito((int) $recuento->deposito_id);
-            $articuloIds = collect($saldosDeposito)->pluck('articulo_id')->merge(array_keys($conteos))->unique()->all();
+            $articuloIds = collect($this->articuloIdsConStockEnDeposito((int) $recuento->deposito_id))
+                ->merge(array_keys($conteos))
+                ->unique()
+                ->values()
+                ->all();
 
             $ajustes = [];
             foreach ($articuloIds as $articuloId) {
@@ -593,7 +597,8 @@ class RecuentoService
                 $cantidad = $delta;
             } else {
                 $tipo = $delta > 0 ? $tipoPositivo : $tipoNegativo;
-                $cantidad = abs($delta) * ((int) $tipo->signo === -1 ? -1 : 1);
+                $signoDb = (int) ($tipo->getAttributes()['signo'] ?? 0);
+                $cantidad = ArticuloMovimientoCantidadSignoSupport::cantidadFirmadaSignoStock(abs($delta), $signoDb);
             }
 
             $articuloId = (int) $ajuste['articulo_id'];
@@ -630,5 +635,34 @@ class RecuentoService
         }
 
         return $texto;
+    }
+
+    /**
+     * Artículos con existencia en el depósito: tabla de saldos y suma de movimientos
+     * (por si articulo_saldo_deposito quedó desincronizado).
+     *
+     * @return list<int>
+     */
+    private function articuloIdsConStockEnDeposito(int $depositoId): array
+    {
+        $desdeTabla = DB::table('articulo_saldo_deposito')
+            ->where('deposito_id', $depositoId)
+            ->whereRaw('ABS(cantidad) > ?', [1e-9])
+            ->pluck('articulo_id');
+
+        $desdeMovimientos = DB::table('articulo_movimiento')
+            ->where('deposito_id', $depositoId)
+            ->whereNull('deleted_at')
+            ->groupBy('articulo_id')
+            ->havingRaw('ABS(SUM(cantidad)) > ?', [1e-9])
+            ->pluck('articulo_id');
+
+        return $desdeTabla
+            ->merge($desdeMovimientos)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 }

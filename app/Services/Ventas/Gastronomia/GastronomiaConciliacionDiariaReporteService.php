@@ -11,10 +11,12 @@ use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaMesCacheSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionEstacionamientoSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionFlashSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPostCierreCaeaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionGastroTotalDiaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionRendgAsientosDiaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaControlFlashSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionVendingRendgSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use Carbon\Carbon;
@@ -37,6 +39,7 @@ final class GastronomiaConciliacionDiariaReporteService
         private readonly GastronomiaConciliacionEstacionamientoSupport $estacionamientoSupport,
         private readonly GastronomiaConciliacionVendingRendgSupport $vendingRendgSupport,
         private readonly GastronomiaAuditoriaHuecosNumeracionService $huecosNumeracionService,
+        private readonly GastronomiaConciliacionFlashSupport $flashSupport,
     ) {
     }
 
@@ -118,6 +121,8 @@ final class GastronomiaConciliacionDiariaReporteService
             }
 
             $empresa = Empresa::query()->find($empresaId);
+            $empresaCodigo = (int) ($empresa->codigo ?? $empresaId);
+            $flashDesglosePorJornada = $this->cargarFlashDesgloseEmpresa($empresaCodigo, $desde, $hasta);
             $indiceAnitaBulk = null;
             $cacheManifest = null;
 
@@ -138,7 +143,7 @@ final class GastronomiaConciliacionDiariaReporteService
                 if ($this->esJornadaPreMigracion($empresaId, $fechaJornada)) {
                     continue;
                 }
-                $dias[] = $this->armarDia($empresaId, $fechaJornada, $tolerancia, $indiceAnitaBulk);
+                $dias[] = $this->armarDia($empresaId, $fechaJornada, $tolerancia, $indiceAnitaBulk, $flashDesglosePorJornada);
             }
 
             $empresas[] = [
@@ -186,6 +191,9 @@ final class GastronomiaConciliacionDiariaReporteService
                 if (! empty($dia['control_rendg_asientos'])) {
                     $filas[] = $this->filaCsvDesdeReporte($empresa, $dia, $dia['control_rendg_asientos']);
                 }
+                foreach ($this->filasControlFlash($dia) as $filaFlash) {
+                    $filas[] = $this->filaCsvDesdeReporte($empresa, $dia, $filaFlash);
+                }
             }
         }
 
@@ -211,6 +219,7 @@ final class GastronomiaConciliacionDiariaReporteService
             'diff_erp_anita', 'diff_erp_rendg', 'estado', 'cant_facturas',
             'nc_erp', 'nc_rendg', 'rendg_neto', 'rendg_legacy_z', 'fc_caea_duplicado',
             'asiento_factura_dia', 'asiento_post_cierre', 'asientos_total', 'diff_rendg_asientos',
+            'flash_ayb', 'flash_estac', 'total_flash', 'diff_erp_flash', 'diff_anita_flash', 'diff_rendg_flash',
         ], ';');
         foreach ($filasCsv as $fila) {
             fputcsv($handle, $fila, ';');
@@ -262,6 +271,11 @@ final class GastronomiaConciliacionDiariaReporteService
                 $ctrlAsientos = $dia['control_rendg_asientos'] ?? null;
                 if (is_array($ctrlAsientos) && ($ctrlAsientos['estado'] ?? '') === 'DIF') {
                     return true;
+                }
+                foreach ($this->filasControlFlash($dia) as $ctrlFlash) {
+                    if (($ctrlFlash['estado'] ?? '') === 'DIF') {
+                        return true;
+                    }
                 }
                 $huecos = $dia['huecos_numeracion'] ?? null;
                 if (is_array($huecos) && (int) ($huecos['huecos_corr_erp'] ?? 0) > 0) {
@@ -356,6 +370,7 @@ final class GastronomiaConciliacionDiariaReporteService
         string $fechaJornada,
         float $tolerancia,
         ?array $indiceAnitaBulk = null,
+        array $flashDesglosePorJornada = [],
     ): array {
         $jornadaAbierta = $this->jornadaAbierta($empresaId, $fechaJornada);
         $conciliacion = $this->conciliacionPorPcSupport->conciliacionDiaCompleta(
@@ -461,6 +476,15 @@ final class GastronomiaConciliacionDiariaReporteService
             (float) ($controlGastro['notas_credito_rendg'] ?? 0),
         );
 
+        $controlFlash = $this->flashSupport->armarControl(
+            $empresaId,
+            $fechaJornada,
+            $filas,
+            $jornadaAbierta,
+            $tolerancia,
+            $flashDesglosePorJornada[$fechaJornada] ?? null,
+        );
+
         return [
             'fecha_jornada' => $fechaJornada,
             'jornada_abierta' => $jornadaAbierta,
@@ -472,8 +496,49 @@ final class GastronomiaConciliacionDiariaReporteService
             'vending' => $vending,
             'control_gastro_total' => $controlGastro,
             'control_rendg_asientos' => $controlRendgAsientos,
+            'control_flash' => $controlFlash,
             'huecos_numeracion' => $this->huecosNumeracionService->resumenJornadaEmpresa($empresaId, $fechaJornada),
         ];
+    }
+
+    /**
+     * @return array<string, array{flash_ayb: float, flash_estac: float, total_flash: float}>
+     */
+    private function cargarFlashDesgloseEmpresa(int $empresaCodigo, string $desde, string $hasta): array
+    {
+        if (! (bool) config('gastronomia.conciliacion_diaria_reporte.control_flash_habilitado', true)) {
+            return [];
+        }
+
+        try {
+            $desglose = app(GastronomiaControlFlashSupport::class)->desglosePorEmpresaJornada(
+                $desde,
+                $hasta,
+                [$empresaCodigo],
+            )[$empresaCodigo] ?? [];
+        } catch (\Throwable $e) {
+            Log::warning('gastronomia.conciliacion_diaria_reporte.flash_fallo', [
+                'empresa_codigo' => $empresaCodigo,
+                'fecha_desde' => $desde,
+                'fecha_hasta' => $hasta,
+                'msg' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+
+        $map = [];
+        foreach ($desglose as $fecha => $partes) {
+            $ayb = round((float) ($partes['flash_ayb'] ?? 0), 2);
+            $estac = round((float) ($partes['flash_estac'] ?? 0), 2);
+            $map[(string) $fecha] = [
+                'flash_ayb' => $ayb,
+                'flash_estac' => $estac,
+                'total_flash' => round($ayb + $estac, 2),
+            ];
+        }
+
+        return $map;
     }
 
     /**
@@ -614,6 +679,8 @@ final class GastronomiaConciliacionDiariaReporteService
             $tipo = 'control_gastro_total';
         } elseif (! empty($fila['es_control_rendg_asientos'])) {
             $tipo = 'control_rendg_asientos';
+        } elseif (! empty($fila['es_control_flash'])) {
+            $tipo = 'control_flash';
         } elseif ($tipo === 'vending_rendg') {
             $tipo = 'vending_pv';
         }
@@ -622,6 +689,12 @@ final class GastronomiaConciliacionDiariaReporteService
         $asientoPostCierre = '';
         $asientosTotal = '';
         $diffRendgAsientos = '';
+        $flashAyb = $fila['flash_ayb'] ?? '';
+        $flashEstac = $fila['flash_estac'] ?? '';
+        $totalFlash = $fila['total_flash'] ?? '';
+        $diffErpFlash = $fila['diff_erp_flash'] ?? '';
+        $diffAnitaFlash = $fila['diff_anita_flash'] ?? '';
+        $diffRendgFlash = $fila['diff_rendg_flash'] ?? '';
         $rendgZPortadora = $fila['rendgastro_z_cae'] ?? '';
         $rendgCaea = $fila['rendgastro_caea'] ?? '';
         $rendgTotal = $fila['rendgastro_z'] ?? '';
@@ -670,7 +743,40 @@ final class GastronomiaConciliacionDiariaReporteService
             $asientoPostCierre,
             $asientosTotal,
             $diffRendgAsientos,
+            $flashAyb,
+            $flashEstac,
+            $totalFlash,
+            $diffErpFlash,
+            $diffAnitaFlash,
+            $diffRendgFlash,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $dia
+     * @return list<array<string, mixed>>
+     */
+    public function filasControlFlashDesdeDia(array $dia): array
+    {
+        return $this->filasControlFlash($dia);
+    }
+
+    /**
+     * @param  array<string, mixed>  $dia
+     * @return list<array<string, mixed>>
+     */
+    private function filasControlFlash(array $dia): array
+    {
+        $control = $dia['control_flash'] ?? null;
+        if (! is_array($control) || $control === []) {
+            return [];
+        }
+
+        if (array_is_list($control)) {
+            return array_values(array_filter($control, static fn ($fila): bool => is_array($fila)));
+        }
+
+        return [$control];
     }
 
     private function esJornadaPreMigracion(int $empresaId, string $fechaJornada): bool

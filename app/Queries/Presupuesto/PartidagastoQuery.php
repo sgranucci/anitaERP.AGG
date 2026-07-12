@@ -65,12 +65,18 @@ class PartidagastoQuery implements PartidagastoQueryInterface
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
 
         $select = [ 'partidagasto.id as id',
+                    'partidagasto.empresa_id as empresa_id',
                     'partidagasto.presupuesto_id as presupuesto_id',
                     'partidagasto.presupuesto_escenario_id as escenario_id',
+                    'partidagasto.centrocosto_id as centrocosto_id',
+                    'partidagasto.articulo_id as articulo_id',
+                    'partidagasto.proveedor_id as proveedor_id',
+                    'partidagasto.cuentacontable_id as cuentacontable_id',
                     'partidagasto.codigo as codigopartida',
                     'empresa.nombre as nombreempresa',
                     'presupuesto.nombre as nombrepresupuesto',
                     'presupuesto_escenario.nombre as nombreescenario',
+                    'centrocosto.codigo as codigocentrocosto',
                     'centrocosto.nombre as nombrecentrocosto',
                     'articulo.descripcion as descripcionarticulo',
                     'proveedor.nombre as nombreproveedor',

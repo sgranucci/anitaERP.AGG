@@ -2,6 +2,7 @@
 
 namespace App\Queries\Ventas;
 
+use App\Support\Stock\ArticuloUsoDescartableSupport;
 use App\Support\Stock\ArticuloUsoInsumoSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteFiltros;
 use App\Support\Ventas\GastronomiaVentaComprobanteSignoSupport;
@@ -22,19 +23,7 @@ final class GastronomiaDescuentoReporteQuery
 
     /**
      * @param  array<string, mixed>  $filtros
-     * @return list<object{
-     *   descuento_id:int,
-     *   descuento_codigo:string,
-     *   descuento_nombre:string,
-     *   cliente_interno_id:int,
-     *   cliente_codigo:string,
-     *   cliente_nombre:string,
-     *   articulo_id:int,
-     *   sku:string,
-     *   descripcion:string,
-     *   unidades:float,
-     *   total_venta:float
-     * }>
+     * @return list<object>
      */
     public function filasAgregadas(array $filtros): array
     {
@@ -43,13 +32,23 @@ final class GastronomiaDescuentoReporteQuery
         $codigos = $agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO
             ? ($filtros['codigos_descuento_resueltos'] ?? [])
             : [];
-        $codigosFiltroCliente = $agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE
+        $codigosFiltroSecundario = GastronomiaDescuentoReporteFiltros::usaFiltroCodigosDescuentoSecundario($filtros)
             ? ($filtros['codigos_descuento_cliente_resueltos'] ?? [])
             : [];
         $clienteIds = $filtros['clientes_descuento_ids'] ?? [];
+        $mozoIds = $filtros['mozos_descuento_ids'] ?? [];
+        $vipIds = $filtros['vips_descuento_ids'] ?? [];
 
         if (! $listarTodos) {
             if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE && $clienteIds === []) {
+                return [];
+            }
+            if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO
+                && GastronomiaDescuentoReporteFiltros::mozoRangoSinCoincidencias($filtros)) {
+                return [];
+            }
+            if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP
+                && GastronomiaDescuentoReporteFiltros::vipRangoSinCoincidencias($filtros)) {
                 return [];
             }
             if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO && $codigos === []) {
@@ -58,37 +57,29 @@ final class GastronomiaDescuentoReporteQuery
         }
 
         $query = $this->queryBaseLineas($filtros);
-        $this->aplicarFiltrosSeleccion($query, $listarTodos, $agruparPor, $codigos, $codigosFiltroCliente, $clienteIds);
+        $this->aplicarFiltrosSeleccion(
+            $query,
+            $filtros,
+            $listarTodos,
+            $agruparPor,
+            $codigos,
+            $codigosFiltroSecundario,
+            $clienteIds,
+            $mozoIds,
+            $vipIds,
+        );
 
-        $rows = $query
-            ->select([
-                'dg.id as descuento_id',
-                'dg.codigo as descuento_codigo',
-                'dg.nombre as descuento_nombre',
-                'cg.cliente_interno_descuento_id as cliente_interno_id',
-                'cli.codigo as cliente_codigo',
-                'cli.nombre as cliente_nombre',
-                've.articulo_id',
-                'a.sku',
-                'a.descripcion',
-            ])
-            ->selectRaw('SUM('.self::cantidadExpr().') as unidades')
-            ->selectRaw('SUM('.self::importeExpr().') as total_venta')
-            ->groupBy(
-                'dg.id',
-                'dg.codigo',
-                'dg.nombre',
-                'cg.cliente_interno_descuento_id',
-                'cli.codigo',
-                'cli.nombre',
-                've.articulo_id',
-                'a.sku',
-                'a.descripcion',
-            )
-            ->orderBy('dg.codigo')
-            ->orderBy('cli.codigo')
-            ->orderBy('a.sku')
-            ->get();
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
+            $query->leftJoin('mozo_gastronomia as mg', 'mg.id', '=', 'cg.mozo_gastronomia_id');
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
+            $query->leftJoin('cliente_vip_gastronomia as cvg', 'cvg.id', '=', 'cg.cliente_vip_gastronomia_id');
+        }
+
+        $this->aplicarSelectGroupByOrden($query, $agruparPor);
+
+        $rows = $query->get();
 
         $out = [];
         foreach ($rows as $row) {
@@ -97,29 +88,13 @@ final class GastronomiaDescuentoReporteQuery
                 continue;
             }
 
-            $clienteId = (int) ($row->cliente_interno_id ?? 0);
-
-            $out[] = (object) [
-                'descuento_id' => (int) $row->descuento_id,
-                'descuento_codigo' => trim((string) $row->descuento_codigo),
-                'descuento_nombre' => trim((string) $row->descuento_nombre),
-                'cliente_interno_id' => $clienteId,
-                'cliente_codigo' => $clienteId > 0 ? trim((string) ($row->cliente_codigo ?? '')) : '',
-                'cliente_nombre' => $clienteId > 0 ? trim((string) ($row->cliente_nombre ?? '')) : 'Sin cliente interno',
-                'articulo_id' => (int) $row->articulo_id,
-                'sku' => trim((string) $row->sku),
-                'descripcion' => trim((string) $row->descripcion),
-                'unidades' => $unidades,
-                'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
-            ];
+            $out[] = $this->mapearFilaAgregada($row, $agruparPor);
         }
 
         return $out;
     }
 
     /**
-     * Facturas (ventas) que componen un bloque/total del reporte.
-     *
      * @param  array<string, mixed>  $filtros
      * @return list<object{
      *   venta_id:int,
@@ -140,11 +115,10 @@ final class GastronomiaDescuentoReporteQuery
         $query = $this->queryBaseLineas($filtros);
         $this->aplicarFiltroClaveEnQuery($query, $clave);
 
-        $agruparPor = (string) ($filtros['agrupar_por'] ?? GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO);
-        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
-            $codigosFiltroCliente = $filtros['codigos_descuento_cliente_resueltos'] ?? [];
-            if (is_array($codigosFiltroCliente) && $codigosFiltroCliente !== []) {
-                $query->whereIn('dg.codigo', $codigosFiltroCliente);
+        if (GastronomiaDescuentoReporteFiltros::usaFiltroCodigosDescuentoSecundario($filtros)) {
+            $codigosFiltroSecundario = $filtros['codigos_descuento_cliente_resueltos'] ?? [];
+            if (is_array($codigosFiltroSecundario) && $codigosFiltroSecundario !== []) {
+                $query->whereIn('dg.codigo', $codigosFiltroSecundario);
             }
         }
 
@@ -200,7 +174,7 @@ final class GastronomiaDescuentoReporteQuery
             ->whereNull('vge.venta_factura_origen_id')
             ->whereNotNull('cg.descuento_gastronomia_id');
 
-        $this->aplicarExclusionInsumos($query);
+        $this->aplicarExclusionInsumosYDescartables($query);
         $this->aplicarExclusionOpcionalesFormula($query);
         $this->aplicarFiltrosEstructurales($query, $filtros);
 
@@ -208,12 +182,183 @@ final class GastronomiaDescuentoReporteQuery
             $query->where('cg.cliente_interno_descuento_id', '>', 0);
         }
 
+        if (($filtros['agrupar_por'] ?? '') === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
+            $query->where('cg.mozo_gastronomia_id', '>', 0);
+        }
+
+        if (($filtros['agrupar_por'] ?? '') === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
+            $query->where('cg.cliente_vip_gastronomia_id', '>', 0);
+        }
+
         return $query;
     }
 
+    private function aplicarSelectGroupByOrden(Builder $query, string $agruparPor): void
+    {
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
+            $query
+                ->select([
+                    'cg.cliente_vip_gastronomia_id as vip_id',
+                    'cvg.numeroid as vip_codigo',
+                    'cvg.apellido as vip_apellido',
+                    'cvg.nombre as vip_nombre',
+                    've.articulo_id',
+                    'a.sku',
+                    'a.descripcion',
+                ])
+                ->selectRaw('SUM('.self::cantidadExpr().') as unidades')
+                ->selectRaw('SUM('.self::importeExpr().') as total_venta')
+                ->groupBy(
+                    'cg.cliente_vip_gastronomia_id',
+                    'cvg.numeroid',
+                    'cvg.apellido',
+                    'cvg.nombre',
+                    've.articulo_id',
+                    'a.sku',
+                    'a.descripcion',
+                )
+                ->orderBy('cvg.numeroid')
+                ->orderBy('a.sku');
+
+            return;
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
+            $query
+                ->select([
+                    'cg.mozo_gastronomia_id as mozo_id',
+                    'mg.codigo as mozo_codigo',
+                    'mg.nombre as mozo_nombre',
+                    've.articulo_id',
+                    'a.sku',
+                    'a.descripcion',
+                ])
+                ->selectRaw('SUM('.self::cantidadExpr().') as unidades')
+                ->selectRaw('SUM('.self::importeExpr().') as total_venta')
+                ->groupBy(
+                    'cg.mozo_gastronomia_id',
+                    'mg.codigo',
+                    'mg.nombre',
+                    've.articulo_id',
+                    'a.sku',
+                    'a.descripcion',
+                )
+                ->orderBy('mg.codigo')
+                ->orderBy('a.sku');
+
+            return;
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
+            $query
+                ->select([
+                    'cg.cliente_interno_descuento_id as cliente_interno_id',
+                    'cli.codigo as cliente_codigo',
+                    'cli.nombre as cliente_nombre',
+                    've.articulo_id',
+                    'a.sku',
+                    'a.descripcion',
+                ])
+                ->selectRaw('SUM('.self::cantidadExpr().') as unidades')
+                ->selectRaw('SUM('.self::importeExpr().') as total_venta')
+                ->groupBy(
+                    'cg.cliente_interno_descuento_id',
+                    'cli.codigo',
+                    'cli.nombre',
+                    've.articulo_id',
+                    'a.sku',
+                    'a.descripcion',
+                )
+                ->orderBy('cli.codigo')
+                ->orderBy('a.sku');
+
+            return;
+        }
+
+        $query
+            ->select([
+                'dg.id as descuento_id',
+                'dg.codigo as descuento_codigo',
+                'dg.nombre as descuento_nombre',
+                've.articulo_id',
+                'a.sku',
+                'a.descripcion',
+            ])
+            ->selectRaw('SUM('.self::cantidadExpr().') as unidades')
+            ->selectRaw('SUM('.self::importeExpr().') as total_venta')
+            ->groupBy(
+                'dg.id',
+                'dg.codigo',
+                'dg.nombre',
+                've.articulo_id',
+                'a.sku',
+                'a.descripcion',
+            )
+            ->orderBy('dg.codigo')
+            ->orderBy('a.sku');
+    }
+
+    private function mapearFilaAgregada(object $row, string $agruparPor): object
+    {
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
+            $vipId = (int) ($row->vip_id ?? 0);
+            $nombreVip = trim(trim((string) ($row->vip_apellido ?? '')).' '.trim((string) ($row->vip_nombre ?? '')));
+
+            return (object) [
+                'vip_id' => $vipId,
+                'vip_codigo' => $vipId > 0 ? trim((string) ($row->vip_codigo ?? '')) : '',
+                'vip_nombre' => $vipId > 0 ? ($nombreVip !== '' ? $nombreVip : 'Cliente VIP '.$vipId) : 'Sin cliente VIP',
+                'articulo_id' => (int) $row->articulo_id,
+                'sku' => trim((string) $row->sku),
+                'descripcion' => trim((string) $row->descripcion),
+                'unidades' => round(abs((float) ($row->unidades ?? 0)), 4),
+                'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
+            ];
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
+            $mozoId = (int) ($row->mozo_id ?? 0);
+
+            return (object) [
+                'mozo_id' => $mozoId,
+                'mozo_codigo' => $mozoId > 0 ? trim((string) ($row->mozo_codigo ?? '')) : '',
+                'mozo_nombre' => $mozoId > 0 ? trim((string) ($row->mozo_nombre ?? '')) : 'Sin mozo',
+                'articulo_id' => (int) $row->articulo_id,
+                'sku' => trim((string) $row->sku),
+                'descripcion' => trim((string) $row->descripcion),
+                'unidades' => round(abs((float) ($row->unidades ?? 0)), 4),
+                'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
+            ];
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
+            $clienteId = (int) ($row->cliente_interno_id ?? 0);
+
+            return (object) [
+                'cliente_interno_id' => $clienteId,
+                'cliente_codigo' => $clienteId > 0 ? trim((string) ($row->cliente_codigo ?? '')) : '',
+                'cliente_nombre' => $clienteId > 0 ? trim((string) ($row->cliente_nombre ?? '')) : 'Sin cliente interno',
+                'articulo_id' => (int) $row->articulo_id,
+                'sku' => trim((string) $row->sku),
+                'descripcion' => trim((string) $row->descripcion),
+                'unidades' => round(abs((float) ($row->unidades ?? 0)), 4),
+                'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
+            ];
+        }
+
+        return (object) [
+            'descuento_id' => (int) $row->descuento_id,
+            'descuento_codigo' => trim((string) $row->descuento_codigo),
+            'descuento_nombre' => trim((string) $row->descuento_nombre),
+            'articulo_id' => (int) $row->articulo_id,
+            'sku' => trim((string) $row->sku),
+            'descripcion' => trim((string) $row->descripcion),
+            'unidades' => round(abs((float) ($row->unidades ?? 0)), 4),
+            'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
+        ];
+    }
+
     /**
-     * Valida clave y aplica filtros de alcance coherentes con el bloque.
-     *
      * @param  array<string, mixed>  $filtros
      */
     private function aplicarFiltroClaveBloque(string $clave, array $filtros): bool
@@ -223,11 +368,8 @@ final class GastronomiaDescuentoReporteQuery
             if ($codigo === '') {
                 return false;
             }
-            if (($filtros['agrupar_por'] ?? '') !== GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO) {
-                return false;
-            }
 
-            return true;
+            return ($filtros['agrupar_por'] ?? '') === GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO;
         }
 
         if (str_starts_with($clave, 'c_')) {
@@ -235,11 +377,26 @@ final class GastronomiaDescuentoReporteQuery
             if ($clienteId <= 0) {
                 return false;
             }
-            if (($filtros['agrupar_por'] ?? '') !== GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
+
+            return ($filtros['agrupar_por'] ?? '') === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE;
+        }
+
+        if (str_starts_with($clave, 'm_')) {
+            $mozoId = (int) substr($clave, 2);
+            if ($mozoId <= 0) {
                 return false;
             }
 
-            return true;
+            return ($filtros['agrupar_por'] ?? '') === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO;
+        }
+
+        if (str_starts_with($clave, 'v_')) {
+            $vipId = (int) substr($clave, 2);
+            if ($vipId <= 0) {
+                return false;
+            }
+
+            return ($filtros['agrupar_por'] ?? '') === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP;
         }
 
         return false;
@@ -255,28 +412,72 @@ final class GastronomiaDescuentoReporteQuery
 
         if (str_starts_with($clave, 'c_')) {
             $query->where('cg.cliente_interno_descuento_id', (int) substr($clave, 2));
+
+            return;
+        }
+
+        if (str_starts_with($clave, 'm_')) {
+            $query->where('cg.mozo_gastronomia_id', (int) substr($clave, 2));
+
+            return;
+        }
+
+        if (str_starts_with($clave, 'v_')) {
+            $query->where('cg.cliente_vip_gastronomia_id', (int) substr($clave, 2));
         }
     }
 
     /**
+     * @param  array<string, mixed>  $filtros
      * @param  list<string>  $codigos
-     * @param  list<string>  $codigosFiltroCliente
+     * @param  list<string>  $codigosFiltroSecundario
      * @param  list<int>  $clienteIds
+     * @param  list<int>  $mozoIds
+     * @param  list<int>  $vipIds
      */
     private function aplicarFiltrosSeleccion(
         Builder $query,
+        array $filtros,
         bool $listarTodos,
         string $agruparPor,
         array $codigos,
-        array $codigosFiltroCliente,
+        array $codigosFiltroSecundario,
         array $clienteIds,
+        array $mozoIds,
+        array $vipIds = [],
     ): void {
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
+            if (! $listarTodos
+                && ! GastronomiaDescuentoReporteFiltros::vipAlcanceImplicitoTodos($filtros)
+                && $vipIds !== []) {
+                $query->whereIn('cg.cliente_vip_gastronomia_id', $vipIds);
+            }
+            if ($codigosFiltroSecundario !== []) {
+                $query->whereIn('dg.codigo', $codigosFiltroSecundario);
+            }
+
+            return;
+        }
+
         if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
             if (! $listarTodos && $clienteIds !== []) {
                 $query->whereIn('cg.cliente_interno_descuento_id', $clienteIds);
             }
-            if ($codigosFiltroCliente !== []) {
-                $query->whereIn('dg.codigo', $codigosFiltroCliente);
+            if ($codigosFiltroSecundario !== []) {
+                $query->whereIn('dg.codigo', $codigosFiltroSecundario);
+            }
+
+            return;
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
+            if (! $listarTodos
+                && ! GastronomiaDescuentoReporteFiltros::mozoAlcanceImplicitoTodos($filtros)
+                && $mozoIds !== []) {
+                $query->whereIn('cg.mozo_gastronomia_id', $mozoIds);
+            }
+            if ($codigosFiltroSecundario !== []) {
+                $query->whereIn('dg.codigo', $codigosFiltroSecundario);
             }
 
             return;
@@ -287,23 +488,22 @@ final class GastronomiaDescuentoReporteQuery
         }
     }
 
-    private function aplicarExclusionInsumos(Builder $query): void
+    private function aplicarExclusionInsumosYDescartables(Builder $query): void
     {
         $query->whereNotExists(function ($sub) {
             $sub->select(DB::raw(1))
-                ->from('usoarticulo as ua_ins')
-                ->whereColumn('ua_ins.id', 'a.usoarticulo_id')
+                ->from('usoarticulo as ua_excl')
+                ->whereColumn('ua_excl.id', 'a.usoarticulo_id')
                 ->whereRaw(
-                    'UPPER(TRIM(ua_ins.nombre)) = ?',
-                    [ArticuloUsoInsumoSupport::NOMBRE_USO_INSUMO],
+                    'UPPER(TRIM(ua_excl.nombre)) IN (?, ?)',
+                    [
+                        ArticuloUsoInsumoSupport::NOMBRE_USO_INSUMO,
+                        ArticuloUsoDescartableSupport::NOMBRE_USO_DESCARTABLES,
+                    ],
                 );
         });
     }
 
-    /**
-     * Excluye renglones $0 de opcionales de fórmula agregados al emitir (no están en la cuenta).
-     * Import Anita no graba cuenta_gastronomia_linea: en ese caso se incluyen todas las venta_emision.
-     */
     private function aplicarExclusionOpcionalesFormula(Builder $query): void
     {
         $query->where(function (Builder $outer): void {

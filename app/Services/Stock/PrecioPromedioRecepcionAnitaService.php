@@ -87,7 +87,7 @@ class PrecioPromedioRecepcionAnitaService
             'sistema' => RecepcionProveedorAnitaImportSupport::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_linea', 'recepmov'),
             'campos' => 'recv_articulo,recv_precio,recv_cod_mon,recv_cotizacion,recv_fecha,recv_nro',
-            'orderBy' => 'recv_fecha DESC, recv_nro DESC, recv_orden DESC',
+            'orderBy' => 'recv_fecha desc, recv_nro desc',
             'whereArmado' => " WHERE recv_articulo = '".$codigoSql."' ",
             'limit' => 'FIRST '.self::ULTIMAS_COMPRAS,
         ];

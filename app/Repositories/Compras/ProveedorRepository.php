@@ -1676,7 +1676,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 										'proveedor.codigo as codigo',
                                         'localidad.nombre as nombrelocalidad',
 										'provincia.nombre as nombreprovincia',
-										'proveedor.estado as estado')
+										'proveedor.estado as estado',
+                                        'proveedor.facturas_apocrifas as facturas_apocrifas',
+                                        'proveedor.facturas_apocrifas_consulta_at as facturas_apocrifas_consulta_at')
                                 ->leftjoin('localidad', 'localidad.id', 'proveedor.localidad_id')
 								->leftjoin('provincia', 'provincia.id', 'proveedor.provincia_id');
 

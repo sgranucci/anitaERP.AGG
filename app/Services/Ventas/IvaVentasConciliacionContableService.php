@@ -7,11 +7,18 @@ namespace App\Services\Ventas;
 use App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasConciliacionCuentaSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasConciliacionModoSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasConciliacionUnidadCuentaSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasUnidadNegocioSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
 use Illuminate\Support\Facades\DB;
 
 final class IvaVentasConciliacionContableService
 {
+    public function __construct(
+        private readonly IvaVentasCtamovAuditoriaService $ctamovAuditoriaService,
+    ) {
+    }
+
     /**
      * @param  array<string, mixed>  $filtros
      * @param  array<string, mixed>  $resultadoIva
@@ -34,6 +41,10 @@ final class IvaVentasConciliacionContableService
             $filas,
         ))));
 
+        $ctamov = ! empty($filtros['auditar_ctamov'])
+            ? $this->ctamovAuditoriaService->auditar($empresaId, $filtros)
+            : ['habilitada' => false];
+
         $statsAsiento = $this->statsAsientoPorVenta($ventaIds);
         $contableEmpresa = $this->totalesContablesEmpresa($empresaId, $filtros, $cuentas);
         $contableVinculadoPv = $this->totalesContablesVinculadosPorPv($empresaId, $cuentas, $ventaIds, $filtros);
@@ -45,18 +56,28 @@ final class IvaVentasConciliacionContableService
             $filas,
         );
 
-        $resumenEmpresa = $this->armarResumenEmpresa($totalesErp, $contableEmpresa, $statsAsiento, count($filas));
+        $resumenEmpresa = $this->armarResumenEmpresa($totalesErp, $contableEmpresa, $statsAsiento, count($filas), $ctamov);
         $porFactura = $this->conciliarPorFacturaVinculada($empresaId, $filtros, $filas, $cuentas, $statsAsiento);
-        $auditoriaDiaria = $this->auditoriaDiaria($empresaId, $filtros, $filas, $cuentas);
+        $auditoriaDiaria = $this->auditoriaDiaria($empresaId, $filtros, $filas, $cuentas, $ctamov);
+        $conciliarPorUnidad = ! empty($filtros['conciliar_por_unidad']);
+        $porUnidadNegocio = $conciliarPorUnidad
+            ? $this->armarPorUnidadNegocio($filas, $contableEmpresa, $ctamov)
+            : ['habilitada' => false];
+        $auditoriaDiariaUnidad = $conciliarPorUnidad
+            ? $this->auditoriaDiariaPorUnidadNegocio($empresaId, $filtros, $filas)
+            : ['habilitada' => false];
 
         return [
             'habilitada' => true,
             'cuentas' => $cuentas,
             'resumen_empresa' => $resumenEmpresa,
             'por_puntoventa' => $porPuntoventa,
+            'por_unidad_negocio' => $porUnidadNegocio,
             'por_factura_vinculada' => $porFactura,
             'auditoria_diaria' => $auditoriaDiaria,
-            'notas' => $this->notasConciliacion($statsAsiento, count($filas), $porFactura),
+            'auditoria_diaria_unidad' => $auditoriaDiariaUnidad,
+            'ctamov' => $ctamov,
+            'notas' => $this->notasConciliacion($statsAsiento, count($filas), $porFactura, $ctamov),
         ];
     }
 
@@ -72,6 +93,9 @@ final class IvaVentasConciliacionContableService
             'por_puntoventa' => [],
             'por_factura_vinculada' => ['habilitada' => false, 'facturas' => [], 'stats' => []],
             'auditoria_diaria' => ['habilitada' => false, 'dias' => [], 'stats' => []],
+            'auditoria_diaria_unidad' => ['habilitada' => false, 'unidades' => []],
+            'por_unidad_negocio' => ['habilitada' => false],
+            'ctamov' => ['habilitada' => false],
             'notas' => [],
         ];
     }
@@ -82,15 +106,19 @@ final class IvaVentasConciliacionContableService
      *
      * @param  list<array<string, mixed>>  $filas
      * @param  array<string, mixed>  $cuentas
+     * @param  array<string, mixed>  $ctamov
      * @return array<string, mixed>
      */
-    private function auditoriaDiaria(int $empresaId, array $filtros, array $filas, array $cuentas): array
+    private function auditoriaDiaria(int $empresaId, array $filtros, array $filas, array $cuentas, array $ctamov = ['habilitada' => false]): array
     {
         $desde = (string) ($filtros['fecha_desde'] ?? '');
         $hasta = (string) ($filtros['fecha_hasta'] ?? '');
         if ($desde === '' || $hasta === '') {
             return ['habilitada' => false, 'dias' => [], 'stats' => []];
         }
+
+        $ctamovHabilitado = ! empty($ctamov['habilitada']);
+        $ctamovPorDia = $ctamov['por_dia'] ?? [];
 
         $erpPorDia = [];
         foreach ($filas as $fila) {
@@ -104,6 +132,7 @@ final class IvaVentasConciliacionContableService
                     'comprobantes' => 0,
                     'neto_gravado' => 0.0,
                     'imp_interno' => 0.0,
+                    'exento' => 0.0,
                     'iva' => 0.0,
                     'total' => 0.0,
                 ];
@@ -113,6 +142,7 @@ final class IvaVentasConciliacionContableService
             $erpPorDia[$dia]['comprobantes']++;
             $erpPorDia[$dia]['neto_gravado'] = round($erpPorDia[$dia]['neto_gravado'] + (float) ($col['neto_gravado'] ?? 0), 2);
             $erpPorDia[$dia]['imp_interno'] = round($erpPorDia[$dia]['imp_interno'] + (float) ($col['imp_interno'] ?? 0), 2);
+            $erpPorDia[$dia]['exento'] = round($erpPorDia[$dia]['exento'] + (float) ($col['exento'] ?? 0), 2);
             $erpPorDia[$dia]['iva'] = round($erpPorDia[$dia]['iva'] + (float) ($col['iva'] ?? 0), 2);
             $erpPorDia[$dia]['total'] = round($erpPorDia[$dia]['total'] + (float) ($col['total'] ?? 0), 2);
         }
@@ -135,6 +165,7 @@ final class IvaVentasConciliacionContableService
                 'comprobantes' => 0,
                 'neto_gravado' => 0.0,
                 'imp_interno' => 0.0,
+                'exento' => 0.0,
                 'iva' => 0.0,
                 'total' => 0.0,
             ];
@@ -145,13 +176,17 @@ final class IvaVentasConciliacionContableService
                 'ventas_total' => 0.0,
             ];
 
-            $difNeto = round((float) $erp['neto_gravado'] - (float) ($ctb['ventas_gravadas'] ?? 0), 2);
-            $difImp = round((float) $erp['imp_interno'] - (float) ($ctb['ventas_kiosco'] ?? 0), 2);
+            $erpVentas = round(
+                (float) $erp['neto_gravado'] + (float) $erp['imp_interno'] + (float) ($erp['exento'] ?? 0),
+                2,
+            );
+            $ctbVentas = round((float) ($ctb['ventas_total'] ?? 0), 2);
+            $difVentas = round($erpVentas - $ctbVentas, 2);
             $difIva = round((float) $erp['iva'] - (float) ($ctb['iva'] ?? 0), 2);
 
-            $cuadra = IvaVentasConciliacionCuentaSupport::cuadra((float) $erp['neto_gravado'], (float) ($ctb['ventas_gravadas'] ?? 0), IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA)
-                && IvaVentasConciliacionCuentaSupport::cuadra((float) $erp['imp_interno'], (float) ($ctb['ventas_kiosco'] ?? 0), IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA)
-                && IvaVentasConciliacionCuentaSupport::cuadra((float) $erp['iva'], (float) ($ctb['iva'] ?? 0), IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA);
+            $tol = IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA;
+            $cuadra = IvaVentasConciliacionCuentaSupport::cuadra($erpVentas, $ctbVentas, $tol)
+                && IvaVentasConciliacionCuentaSupport::cuadra((float) $erp['iva'], (float) ($ctb['iva'] ?? 0), $tol);
 
             $tieneMovimiento = (int) $erp['comprobantes'] > 0
                 || abs((float) ($ctb['ventas_total'] ?? 0)) > IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA
@@ -167,25 +202,40 @@ final class IvaVentasConciliacionContableService
                 $stats['dias_con_diferencia']++;
             }
 
+            $ctm = $ctamovPorDia[$dia] ?? ['ventas' => 0.0, 'iva' => 0.0];
+            $ctamovVentas = round((float) ($ctm['ventas'] ?? 0), 2);
+            $ctamovIva = round((float) ($ctm['iva'] ?? 0), 2);
+            $difCtamovVentas = round((float) ($ctb['ventas_total'] ?? 0) - $ctamovVentas, 2);
+            $difCtamovIva = round((float) ($ctb['iva'] ?? 0) - $ctamovIva, 2);
+
             $dias[] = [
                 'dia' => $dia,
                 'dia_texto' => date('d/m/Y', strtotime($dia)),
                 'comprobantes' => (int) $erp['comprobantes'],
                 'erp' => [
+                    'ventas' => $erpVentas,
                     'neto_gravado' => (float) $erp['neto_gravado'],
                     'imp_interno' => (float) $erp['imp_interno'],
+                    'exento' => (float) ($erp['exento'] ?? 0),
                     'iva' => (float) $erp['iva'],
                     'total' => (float) $erp['total'],
                 ],
                 'contable' => [
+                    'ventas' => $ctbVentas,
                     'ventas_gravadas' => (float) ($ctb['ventas_gravadas'] ?? 0),
                     'ventas_kiosco' => (float) ($ctb['ventas_kiosco'] ?? 0),
                     'iva' => (float) ($ctb['iva'] ?? 0),
                     'ventas_total' => (float) ($ctb['ventas_total'] ?? 0),
                 ],
+                'ctamov' => [
+                    'habilitado' => $ctamovHabilitado,
+                    'ventas' => $ctamovVentas,
+                    'iva' => $ctamovIva,
+                    'dif_ventas' => $difCtamovVentas,
+                    'dif_iva' => $difCtamovIva,
+                ],
                 'diferencias' => [
-                    'neto_gravado' => $difNeto,
-                    'imp_interno' => $difImp,
+                    'ventas' => $difVentas,
                     'iva' => $difIva,
                 ],
                 'cuadra' => $cuadra,
@@ -198,9 +248,280 @@ final class IvaVentasConciliacionContableService
         return [
             'habilitada' => true,
             'tolerancia' => IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA,
+            'ctamov_habilitado' => $ctamovHabilitado,
             'dias' => $dias,
             'stats' => $stats,
         ];
+    }
+
+    /**
+     * Cuadre día por día por unidad de negocio (ERP vs cuentas de imputación de cada proceso).
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return array<string, mixed>
+     */
+    private function auditoriaDiariaPorUnidadNegocio(int $empresaId, array $filtros, array $filas): array
+    {
+        $desde = (string) ($filtros['fecha_desde'] ?? '');
+        $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+        if ($desde === '' || $hasta === '') {
+            return ['habilitada' => false, 'unidades' => []];
+        }
+
+        $mapaUnidades = IvaVentasConciliacionUnidadCuentaSupport::mapaUnidades($empresaId);
+        $vendingPvIds = array_keys(IvaVentasUnidadNegocioSupport::vendingPuntoventaIds($empresaId));
+        $contablePorDiaUnidad = $this->totalesContablesPorDiaUnidad($empresaId, $filtros, $mapaUnidades, $vendingPvIds);
+
+        $erpPorDiaUnidad = [];
+        foreach ($filas as $fila) {
+            $dia = (string) ($fila['fecha_orden'] ?? '');
+            $unidad = (string) ($fila['unidad_negocio'] ?? IvaVentasUnidadNegocioSupport::OTROS);
+            if ($dia === '') {
+                continue;
+            }
+
+            if (! isset($erpPorDiaUnidad[$unidad][$dia])) {
+                $erpPorDiaUnidad[$unidad][$dia] = [
+                    'comprobantes' => 0,
+                    'neto_gravado' => 0.0,
+                    'imp_interno' => 0.0,
+                    'exento' => 0.0,
+                    'iva' => 0.0,
+                    'total' => 0.0,
+                ];
+            }
+
+            $col = $fila['columnas'] ?? [];
+            $erpPorDiaUnidad[$unidad][$dia]['comprobantes']++;
+            $erpPorDiaUnidad[$unidad][$dia]['neto_gravado'] = round(
+                $erpPorDiaUnidad[$unidad][$dia]['neto_gravado'] + (float) ($col['neto_gravado'] ?? 0),
+                2,
+            );
+            $erpPorDiaUnidad[$unidad][$dia]['imp_interno'] = round(
+                $erpPorDiaUnidad[$unidad][$dia]['imp_interno'] + (float) ($col['imp_interno'] ?? 0),
+                2,
+            );
+            $erpPorDiaUnidad[$unidad][$dia]['exento'] = round(
+                $erpPorDiaUnidad[$unidad][$dia]['exento'] + (float) ($col['exento'] ?? 0),
+                2,
+            );
+            $erpPorDiaUnidad[$unidad][$dia]['iva'] = round(
+                $erpPorDiaUnidad[$unidad][$dia]['iva'] + (float) ($col['iva'] ?? 0),
+                2,
+            );
+            $erpPorDiaUnidad[$unidad][$dia]['total'] = round(
+                $erpPorDiaUnidad[$unidad][$dia]['total'] + (float) ($col['total'] ?? 0),
+                2,
+            );
+        }
+
+        $salidaUnidades = [];
+        foreach (IvaVentasUnidadNegocioSupport::orden() as $orden) {
+            if (! isset($mapaUnidades[$orden])) {
+                continue;
+            }
+            $cfg = $mapaUnidades[$orden];
+            $dias = [];
+            $stats = [
+                'total_dias' => 0,
+                'dias_con_movimiento' => 0,
+                'dias_cuadran' => 0,
+                'dias_con_diferencia' => 0,
+            ];
+
+            $cursor = strtotime($desde);
+            $fin = strtotime($hasta);
+            while ($cursor !== false && $cursor <= $fin) {
+                $dia = date('Y-m-d', $cursor);
+                $erp = $erpPorDiaUnidad[$orden][$dia] ?? [
+                    'comprobantes' => 0,
+                    'neto_gravado' => 0.0,
+                    'imp_interno' => 0.0,
+                    'exento' => 0.0,
+                    'iva' => 0.0,
+                    'total' => 0.0,
+                ];
+                $ctb = $contablePorDiaUnidad[$orden][$dia] ?? [
+                    'ventas_gravadas' => 0.0,
+                    'ventas_kiosco' => 0.0,
+                    'iva' => 0.0,
+                    'ventas_total' => 0.0,
+                ];
+
+                $erpVentas = round(
+                    (float) $erp['neto_gravado'] + (float) $erp['imp_interno'] + (float) ($erp['exento'] ?? 0),
+                    2,
+                );
+                $ctbVentas = round((float) ($ctb['ventas_total'] ?? 0), 2);
+                $difVentas = round($erpVentas - $ctbVentas, 2);
+                $difIva = round((float) $erp['iva'] - (float) ($ctb['iva'] ?? 0), 2);
+                $ctbTotal = round($ctbVentas + (float) ($ctb['iva'] ?? 0), 2);
+                $difTotal = round((float) $erp['total'] - $ctbTotal, 2);
+
+                $tol = IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA;
+                $cuadra = IvaVentasConciliacionCuentaSupport::cuadra($erpVentas, $ctbVentas, $tol)
+                    && IvaVentasConciliacionCuentaSupport::cuadra((float) $erp['iva'], (float) ($ctb['iva'] ?? 0), $tol)
+                    && IvaVentasConciliacionCuentaSupport::cuadra((float) $erp['total'], $ctbTotal, $tol);
+
+                $tieneMovimiento = (int) $erp['comprobantes'] > 0
+                    || abs($ctbVentas) > $tol
+                    || abs((float) ($ctb['iva'] ?? 0)) > $tol;
+
+                $stats['total_dias']++;
+                if ($tieneMovimiento) {
+                    $stats['dias_con_movimiento']++;
+                }
+                if ($cuadra) {
+                    $stats['dias_cuadran']++;
+                } elseif ($tieneMovimiento) {
+                    $stats['dias_con_diferencia']++;
+                }
+
+                $dias[] = [
+                    'dia' => $dia,
+                    'dia_texto' => date('d/m/Y', strtotime($dia)),
+                    'comprobantes' => (int) $erp['comprobantes'],
+                    'erp' => [
+                        'ventas' => $erpVentas,
+                        'neto_gravado' => (float) $erp['neto_gravado'],
+                        'imp_interno' => (float) $erp['imp_interno'],
+                        'exento' => (float) ($erp['exento'] ?? 0),
+                        'iva' => (float) $erp['iva'],
+                        'total' => (float) $erp['total'],
+                    ],
+                    'contable' => [
+                        'ventas' => $ctbVentas,
+                        'ventas_gravadas' => (float) ($ctb['ventas_gravadas'] ?? 0),
+                        'ventas_kiosco' => (float) ($ctb['ventas_kiosco'] ?? 0),
+                        'iva' => (float) ($ctb['iva'] ?? 0),
+                        'total' => $ctbTotal,
+                    ],
+                    'diferencias' => [
+                        'ventas' => $difVentas,
+                        'iva' => $difIva,
+                        'total' => $difTotal,
+                    ],
+                    'cuadra' => $cuadra,
+                    'tiene_movimiento' => $tieneMovimiento,
+                ];
+
+                $cursor = strtotime('+1 day', $cursor);
+            }
+
+            if ((int) ($stats['dias_con_movimiento'] ?? 0) === 0) {
+                continue;
+            }
+
+            $salidaUnidades[] = [
+                'key' => $orden,
+                'label' => (string) ($cfg['label'] ?? IvaVentasUnidadNegocioSupport::label($orden)),
+                'cuentas_detalle' => $cfg['cuentas_detalle'] ?? [],
+                'dias' => $dias,
+                'stats' => $stats,
+            ];
+        }
+
+        return [
+            'habilitada' => count($salidaUnidades) > 0,
+            'tolerancia' => IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA,
+            'unidades' => $salidaUnidades,
+        ];
+    }
+
+    /**
+     * @param  array<string, array{
+     *   ventas_gravadas: list<int>,
+     *   ventas_kiosco: list<int>,
+     *   iva: list<int>
+     * }>  $mapaUnidades
+     * @param  list<int>  $vendingPvIds
+     * @return array<string, array<string, array<string, float>>>
+     */
+    private function totalesContablesPorDiaUnidad(int $empresaId, array $filtros, array $mapaUnidades, array $vendingPvIds): array
+    {
+        $ordenFecha = (string) ($filtros['orden_fecha'] ?? IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA);
+
+        $idsTodos = [];
+        foreach ($mapaUnidades as $cfg) {
+            $idsTodos = array_merge(
+                $idsTodos,
+                $cfg['ventas_gravadas'] ?? [],
+                $cfg['ventas_kiosco'] ?? [],
+                $cfg['iva'] ?? [],
+            );
+        }
+        $idsTodos = array_values(array_unique($idsTodos));
+        if ($idsTodos === []) {
+            return [];
+        }
+
+        $diaExpr = IvaVentasConciliacionUnidadCuentaSupport::sqlDiaContableExpr($ordenFecha);
+
+        $unidadExpr = IvaVentasConciliacionUnidadCuentaSupport::sqlClasificarUnidadAsiento($vendingPvIds);
+
+        $query = DB::table('asiento as a')
+            ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
+            ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
+            ->leftJoin('venta as v', function ($join) {
+                $join->on('v.id', '=', 'a.venta_id')->whereNull('v.deleted_at');
+            })
+            ->leftJoin('venta_estacionamiento_emision as vee', 'vee.venta_id', '=', 'a.venta_id')
+            ->leftJoin('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'a.venta_id')
+            ->where('a.empresa_id', $empresaId)
+            ->whereIn('cc.id', $idsTodos);
+
+        IvaVentasConciliacionUnidadCuentaSupport::aplicarFiltroPeriodoConciliacion($query, $filtros);
+
+        $cuentasGlobal = IvaVentasConciliacionCuentaSupport::cuentasConciliacionEmpresa($empresaId);
+        $idsIvaGlobal = array_values(array_unique(array_merge(
+            $cuentasGlobal['iva_debito'] ?? [],
+            $cuentasGlobal['percepcion_iva'] ?? [],
+            $cuentasGlobal['iva_credito'] ?? [],
+        )));
+        $idsKioscoGlobal = $cuentasGlobal['ventas_kiosco'] ?? [];
+        $idsGravadasGlobal = $cuentasGlobal['ventas_gravadas'] ?? [];
+
+        $rows = $query
+            ->selectRaw($diaExpr.' as dia, ('.$unidadExpr.') as unidad, cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')
+            ->groupByRaw($diaExpr.', ('.$unidadExpr.'), cc.id')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $dia = (string) ($row->dia ?? '');
+            $unidadSql = (string) ($row->unidad ?? IvaVentasUnidadNegocioSupport::OTROS);
+            $cuentaId = (int) ($row->cuenta_id ?? 0);
+            $unidad = IvaVentasConciliacionUnidadCuentaSupport::resolverUnidadMovimiento($unidadSql, $cuentaId, $mapaUnidades);
+            if ($dia === '' || ! isset($mapaUnidades[$unidad])) {
+                continue;
+            }
+
+            $importe = round((float) ($row->importe ?? 0), 2);
+
+            if (! isset($out[$unidad][$dia])) {
+                $out[$unidad][$dia] = [
+                    'ventas_gravadas' => 0.0,
+                    'ventas_kiosco' => 0.0,
+                    'iva' => 0.0,
+                    'ventas_total' => 0.0,
+                ];
+            }
+
+            if (in_array($cuentaId, $idsIvaGlobal, true)) {
+                $out[$unidad][$dia]['iva'] = round($out[$unidad][$dia]['iva'] + $importe, 2);
+            } elseif (in_array($cuentaId, $idsKioscoGlobal, true)) {
+                $out[$unidad][$dia]['ventas_kiosco'] = round($out[$unidad][$dia]['ventas_kiosco'] + $importe, 2);
+            } elseif (in_array($cuentaId, $idsGravadasGlobal, true)) {
+                $out[$unidad][$dia]['ventas_gravadas'] = round($out[$unidad][$dia]['ventas_gravadas'] + $importe, 2);
+            }
+
+            $out[$unidad][$dia]['ventas_total'] = round(
+                $out[$unidad][$dia]['ventas_gravadas'] + $out[$unidad][$dia]['ventas_kiosco'],
+                2,
+            );
+        }
+
+        return $out;
     }
 
     /**
@@ -585,9 +906,10 @@ final class IvaVentasConciliacionContableService
      * @param  array<string, float>  $totalesErp
      * @param  array<string, float>  $contableEmpresa
      * @param  array<string, mixed>  $statsAsiento
+     * @param  array<string, mixed>  $ctamov
      * @return array<string, mixed>
      */
-    private function armarResumenEmpresa(array $totalesErp, array $contableEmpresa, array $statsAsiento, int $cantidadComprobantes): array
+    private function armarResumenEmpresa(array $totalesErp, array $contableEmpresa, array $statsAsiento, int $cantidadComprobantes, array $ctamov = ['habilitada' => false]): array
     {
         $lineas = [
             [
@@ -613,15 +935,120 @@ final class IvaVentasConciliacionContableService
         }
         unset($linea);
 
+        $ctamovHabilitado = ! empty($ctamov['habilitada']);
+        $ctamovVentas = round((float) ($ctamov['total']['ventas'] ?? 0), 2);
+        $ctamovIva = round((float) ($ctamov['total']['iva'] ?? 0), 2);
+
         return [
             'lineas' => $lineas,
             'erp_total' => (float) ($totalesErp['total'] ?? 0),
             'contable_ventas_total' => (float) ($contableEmpresa['ventas_total'] ?? 0),
             'contable_iva' => (float) ($contableEmpresa['iva'] ?? 0),
+            'ctamov_habilitado' => $ctamovHabilitado,
+            'ctamov_ventas_total' => $ctamovVentas,
+            'ctamov_iva' => $ctamovIva,
+            'ctamov_dif_ventas' => round((float) ($contableEmpresa['ventas_total'] ?? 0) - $ctamovVentas, 2),
+            'ctamov_dif_iva' => round((float) ($contableEmpresa['iva'] ?? 0) - $ctamovIva, 2),
+            'ctamov_cuadra' => $ctamovHabilitado
+                && IvaVentasConciliacionCuentaSupport::cuadra((float) ($contableEmpresa['ventas_total'] ?? 0), $ctamovVentas, IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA)
+                && IvaVentasConciliacionCuentaSupport::cuadra((float) ($contableEmpresa['iva'] ?? 0), $ctamovIva, IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA),
             'comprobantes' => $cantidadComprobantes,
             'con_asiento' => (int) ($statsAsiento['con_asiento'] ?? 0),
             'sin_asiento' => (int) ($statsAsiento['sin_asiento'] ?? 0),
             'cuadra_global' => collect($lineas)->every(static fn (array $l) => ! empty($l['cuadra'])),
+        ];
+    }
+
+    /**
+     * Desglose de ventas del ERP por unidad de negocio (según PC/PV del comprobante)
+     * y cuadre del total contra la cuenta de ventas contable (y ctamov si está activo).
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, float>  $contableEmpresa
+     * @param  array<string, mixed>  $ctamov
+     * @return array<string, mixed>
+     */
+    private function armarPorUnidadNegocio(array $filas, array $contableEmpresa, array $ctamov): array
+    {
+        $buckets = [];
+        foreach ($filas as $fila) {
+            $key = (string) ($fila['unidad_negocio'] ?? IvaVentasUnidadNegocioSupport::OTROS);
+            if (! isset($buckets[$key])) {
+                $buckets[$key] = [
+                    'key' => $key,
+                    'label' => (string) ($fila['unidad_negocio_label'] ?? IvaVentasUnidadNegocioSupport::label($key)),
+                    'neto_gravado' => 0.0,
+                    'imp_interno' => 0.0,
+                    'iva' => 0.0,
+                    'total' => 0.0,
+                    'cantidad' => 0,
+                ];
+            }
+
+            $columnas = $fila['columnas'] ?? [];
+            $buckets[$key]['neto_gravado'] = round($buckets[$key]['neto_gravado'] + (float) ($columnas['neto_gravado'] ?? 0), 2);
+            $buckets[$key]['imp_interno'] = round($buckets[$key]['imp_interno'] + (float) ($columnas['imp_interno'] ?? 0), 2);
+            $buckets[$key]['iva'] = round($buckets[$key]['iva'] + (float) ($columnas['iva'] ?? 0), 2);
+            $buckets[$key]['total'] = round($buckets[$key]['total'] + (float) ($columnas['total'] ?? 0), 2);
+            $buckets[$key]['cantidad'] += (int) ($fila['cantidad_comprobantes'] ?? 1);
+        }
+
+        $unidades = [];
+        foreach (IvaVentasUnidadNegocioSupport::orden() as $orden) {
+            if (isset($buckets[$orden])) {
+                $unidades[] = $buckets[$orden];
+                unset($buckets[$orden]);
+            }
+        }
+        foreach ($buckets as $bucket) {
+            $unidades[] = $bucket;
+        }
+
+        $totNeto = round(array_sum(array_column($unidades, 'neto_gravado')), 2);
+        $totImp = round(array_sum(array_column($unidades, 'imp_interno')), 2);
+        $totIva = round(array_sum(array_column($unidades, 'iva')), 2);
+        $totTotal = round(array_sum(array_column($unidades, 'total')), 2);
+        $erpVentas = round($totNeto + $totImp, 2);
+
+        $contVentas = round((float) ($contableEmpresa['ventas_total'] ?? 0), 2);
+        $contIva = round((float) ($contableEmpresa['iva'] ?? 0), 2);
+
+        $ctamovHabilitado = ! empty($ctamov['habilitada']);
+        $ctamovVentas = round((float) ($ctamov['total']['ventas'] ?? 0), 2);
+        $ctamovIva = round((float) ($ctamov['total']['iva'] ?? 0), 2);
+
+        $cuadre = [
+            'ventas' => [
+                'concepto' => 'Ventas (neto + kiosco)',
+                'erp' => $erpVentas,
+                'contable' => $contVentas,
+                'dif_contable' => round($erpVentas - $contVentas, 2),
+                'ctamov' => $ctamovVentas,
+                'dif_ctamov' => round($erpVentas - $ctamovVentas, 2),
+                'cuadra' => IvaVentasConciliacionCuentaSupport::cuadra($erpVentas, $contVentas),
+            ],
+            'iva' => [
+                'concepto' => 'IVA débito fiscal',
+                'erp' => $totIva,
+                'contable' => $contIva,
+                'dif_contable' => round($totIva - $contIva, 2),
+                'ctamov' => $ctamovIva,
+                'dif_ctamov' => round($totIva - $ctamovIva, 2),
+                'cuadra' => IvaVentasConciliacionCuentaSupport::cuadra($totIva, $contIva),
+            ],
+        ];
+
+        return [
+            'habilitada' => true,
+            'unidades' => $unidades,
+            'total_erp' => [
+                'neto_gravado' => $totNeto,
+                'imp_interno' => $totImp,
+                'iva' => $totIva,
+                'total' => $totTotal,
+            ],
+            'cuadre' => $cuadre,
+            'ctamov_habilitado' => $ctamovHabilitado,
         ];
     }
 
@@ -800,16 +1227,25 @@ final class IvaVentasConciliacionContableService
     /**
      * @param  array<string, mixed>  $statsAsiento
      * @param  array<string, mixed>  $porFactura
+     * @param  array<string, mixed>  $ctamov
      * @return list<string>
      */
-    private function notasConciliacion(array $statsAsiento, int $totalComprobantes, array $porFactura): array
+    private function notasConciliacion(array $statsAsiento, int $totalComprobantes, array $porFactura, array $ctamov = ['habilitada' => false]): array
     {
         $notas = [
             'Cuadre general: mayor contable del período (incluye cierres de jornada agrupados y facturas con asiento).',
             'Cuadre por factura: solo comprobantes con asiento vinculado (venta_id). Gastronomía / estacionamiento sin asiento individual se validan contra el cuadre general.',
             'Cuentas facturación: config/facturacion.php (CUENTACONTABLE_VENTA, CUENTACONTABLE_IVA, CUENTACONTABLE_PERCEPCION_IVA).',
             'Cuentas cierre jornada: tabla gastronomia_cierre_jornada_config (Caja → cierre jornada Waitry / proceso).',
+            'Cuentas configurables del reporte: config/iva_ventas.php (ventas + IVA débito/crédito por empresa).',
         ];
+
+        if (! empty($ctamov['habilitada'])) {
+            $notas[] = 'ctamov (Anita): '.(int) ($ctamov['lineas'] ?? 0).' línea(s) leídas del bridge para las cuentas configuradas (ventas por haber, IVA crédito netea).';
+            foreach ($ctamov['errores'] ?? [] as $error) {
+                $notas[] = 'ctamov: '.$error;
+            }
+        }
 
         $sinAsiento = (int) ($statsAsiento['sin_asiento'] ?? 0);
         if ($totalComprobantes > 0 && $sinAsiento >= $totalComprobantes) {

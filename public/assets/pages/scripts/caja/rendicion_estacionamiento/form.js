@@ -344,6 +344,7 @@
         setText('lbl-pc', d.identificador_pc || '—');
         setText('lbl-turno', d.turno_nombre || '—');
         setText('lbl-jornada', d.fecha_jornada || '—');
+        setVal('fecha_jornada_cabecera', d.fecha_jornada || '—');
         setText('lbl-fondo', '$' + fmt(d.iniciodelfondo != null ? d.iniciodelfondo : d.monto_habilitacion));
         setText('lbl-monto-habilitacion', '$' + fmt(d.monto_habilitacion != null ? d.monto_habilitacion : d.iniciodelfondo));
         setText('lbl-habilitacion-en', d.habilitacion_en || '—');
@@ -904,6 +905,7 @@
         setText('lbl-pc', 'Todas las terminales');
         setText('lbl-turno', 'Cierre de jornada');
         setText('lbl-jornada', d.fecha_jornada || '—');
+        setVal('fecha_jornada_cabecera', d.fecha_jornada || '—');
         setText('lbl-fondo', '$' + fmt(0));
         setText('lbl-monto-habilitacion', '—');
         setText('lbl-habilitacion-en', d.apertura_en || '—');

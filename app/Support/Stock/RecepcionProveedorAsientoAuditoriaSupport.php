@@ -17,9 +17,11 @@ final class RecepcionProveedorAsientoAuditoriaSupport
     public static function lineasCtamovPorCom(Recepcion_Proveedor $recepcion): array
     {
         $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        $empresaCodigo = RecepcionProveedorAnitaClaveSupport::codigoEmpresaContabAnita($recepcion);
 
         return self::consultarCtamov(
-            " WHERE ctav_tipo='".self::esc($clave['tipo'])."'"
+            " WHERE ctav_empresa='".self::esc((string) $empresaCodigo)."'"
+            ." AND ctav_tipo='".self::esc($clave['tipo'])."'"
             ." AND ctav_letra='".self::esc($clave['letra'])."'"
             .' AND ctav_sucursal='.(int) $clave['sucursal']
             .' AND ctav_nro='.(int) $clave['nro']

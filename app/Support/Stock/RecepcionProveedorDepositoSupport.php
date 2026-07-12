@@ -87,7 +87,20 @@ class RecepcionProveedorDepositoSupport
     }
 
     /**
+     * En AGG el maestro de artículos no segmenta por empresa_id; insumo ↔ compra es global.
+     */
+    private static function articuloMaestroIgnoraEmpresa(): bool
+    {
+        return config('app.empresa') === 'AGG';
+    }
+
+    /**
      * Resuelve el artículo insumo/granel vinculado por skualternativo del artículo de compra.
+     *
+     * El vínculo SKU alternativo → insumo es intrínseco al artículo de compra y no debe
+     * bloquearse porque la operación corra en otra empresa (ej. transferencia intercompany):
+     * se prioriza la empresa de la operación, luego la del propio artículo de compra y por
+     * último el insumo multiempresa (empresa_id nulo/0). En AGG no se filtra por empresa_id.
      */
     public static function resolverArticuloInsumo(Articulo $articuloCompra, ?int $empresaId = null): ?Articulo
     {
@@ -95,7 +108,10 @@ class RecepcionProveedorDepositoSupport
             self::reiniciarCache();
         }
 
-        $cacheKey = (int) $articuloCompra->id;
+        $empresaOperacion = ($empresaId !== null && $empresaId > 0) ? (int) $empresaId : 0;
+        $empresaCompra = (int) ($articuloCompra->empresa_id ?? 0);
+
+        $cacheKey = (int) $articuloCompra->id.':'.$empresaOperacion;
         if (self::$cacheInsumoPorArticuloCompra->has($cacheKey)) {
             return self::$cacheInsumoPorArticuloCompra->get($cacheKey);
         }
@@ -107,12 +123,18 @@ class RecepcionProveedorDepositoSupport
             return null;
         }
 
+        $empresasPermitidas = array_values(array_unique(array_filter(
+            [$empresaOperacion, $empresaCompra],
+            static fn (int $empresa): bool => $empresa > 0
+        )));
+
         $query = Articulo::query()->whereIn('sku', $candidatos);
-        if ($empresaId !== null && $empresaId > 0) {
-            $query->where(function ($q) use ($empresaId): void {
-                $q->where('empresa_id', $empresaId)
-                    ->orWhereNull('empresa_id')
-                    ->orWhere('empresa_id', 0);
+        if (! self::articuloMaestroIgnoraEmpresa()) {
+            $query->where(function ($q) use ($empresasPermitidas): void {
+                $q->whereNull('empresa_id')->orWhere('empresa_id', 0);
+                if ($empresasPermitidas !== []) {
+                    $q->orWhereIn('empresa_id', $empresasPermitidas);
+                }
             });
         }
 
@@ -121,15 +143,16 @@ class RecepcionProveedorDepositoSupport
         $filas = $query->get(['id', 'sku', 'empresa_id']);
         $insumo = null;
         foreach ($candidatos as $sku) {
-            if ($empresaId !== null && $empresaId > 0) {
-                $insumo = $filas->first(static function (Articulo $row) use ($sku, $empresaId): bool {
-                    return (string) $row->sku === $sku && (int) ($row->empresa_id ?? 0) === $empresaId;
-                });
-                if ($insumo !== null) {
-                    break;
-                }
+            $coincidencias = $filas->filter(static fn (Articulo $row): bool => (string) $row->sku === $sku);
+            if ($coincidencias->isEmpty()) {
+                continue;
             }
-            $insumo = $filas->firstWhere('sku', $sku);
+
+            if (self::articuloMaestroIgnoraEmpresa()) {
+                $insumo = $coincidencias->sortBy('id')->first();
+            } else {
+                $insumo = self::elegirInsumoPorEmpresa($coincidencias, $empresaOperacion, $empresaCompra);
+            }
             if ($insumo !== null) {
                 break;
             }
@@ -138,6 +161,30 @@ class RecepcionProveedorDepositoSupport
         self::$cacheInsumoPorArticuloCompra->put($cacheKey, $insumo);
 
         return $insumo;
+    }
+
+    /**
+     * Elige el insumo priorizando empresa de la operación, luego la del artículo de compra
+     * y por último el insumo multiempresa (empresa_id nulo/0). Orden determinista por id.
+     *
+     * @param  Collection<int, Articulo>  $coincidencias
+     */
+    private static function elegirInsumoPorEmpresa(Collection $coincidencias, int $empresaOperacion, int $empresaCompra): ?Articulo
+    {
+        $ordenadas = $coincidencias->sortBy('id')->values();
+
+        foreach ([$empresaOperacion, $empresaCompra] as $empresa) {
+            if ($empresa <= 0) {
+                continue;
+            }
+            $match = $ordenadas->first(static fn (Articulo $row): bool => (int) ($row->empresa_id ?? 0) === $empresa);
+            if ($match !== null) {
+                return $match;
+            }
+        }
+
+        return $ordenadas->first(static fn (Articulo $row): bool => (int) ($row->empresa_id ?? 0) === 0)
+            ?? $ordenadas->first();
     }
 
     /**
@@ -157,10 +204,19 @@ class RecepcionProveedorDepositoSupport
             return collect();
         }
 
-        $query = Articulo::query()->whereIn('skualternativo', $candidatosAlt);
+        $empresaInsumo = (int) ($insumo->empresa_id ?? 0);
+        $empresasPermitidas = array_values(array_unique(array_filter(
+            [($empresaId !== null && $empresaId > 0) ? (int) $empresaId : 0, $empresaInsumo],
+            static fn (int $empresa): bool => $empresa > 0
+        )));
 
-        if ($empresaId !== null && $empresaId > 0) {
-            $query->where('empresa_id', $empresaId);
+        $query = Articulo::query()->whereIn('skualternativo', $candidatosAlt);
+        if (! self::articuloMaestroIgnoraEmpresa() && $empresasPermitidas !== []) {
+            $query->where(function ($q) use ($empresasPermitidas): void {
+                $q->whereNull('empresa_id')
+                    ->orWhere('empresa_id', 0)
+                    ->orWhereIn('empresa_id', $empresasPermitidas);
+            });
         }
 
         return $query->get()->filter(function (Articulo $compra) use ($insumo, $empresaId): bool {

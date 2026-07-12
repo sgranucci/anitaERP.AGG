@@ -332,11 +332,40 @@
             @endforeach
         </tbody>
     </table>
-    @if(!$lineasSoloLectura)
-    <div class="d-flex flex-wrap align-items-center justify-content-start mt-2">
-        <button type="button" class="btn btn-danger" id="agrega_renglon_requisicion_articulo">+ Agrega rengl&oacute;n</button>
+    @php
+        $reqTotMonto = 0.0;
+        $reqTotMonAbrev = '—';
+        if (isset($data) && $data) {
+            $totReq = \App\Support\Compras\RequisicionTotalesCabecera::desdeModelo(
+                $data,
+                app(\App\Queries\Configuracion\CotizacionQueryInterface::class)
+            );
+            $reqTotMonto = (float) ($totReq['monto'] ?? 0);
+            $abReqTot = trim((string) ($totReq['monedacabecera_abreviatura'] ?? ''));
+            $reqTotMonAbrev = $abReqTot !== '' ? $abReqTot : '—';
+        }
+        $fmtReqTot = static fn ($v) => number_format((float) $v, 2, ',', '.');
+    @endphp
+    <div class="d-flex flex-wrap align-items-center justify-content-between mt-2 mb-3">
+        @if(!$lineasSoloLectura)
+        <button type="button" class="btn btn-danger mb-2 mb-md-0" id="agrega_renglon_requisicion_articulo">+ Agrega rengl&oacute;n</button>
+        @else
+        <div></div>
+        @endif
+        <div class="card border-secondary mb-0" id="req-panel-totales">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center">
+                    <span class="text-muted small mb-1 mb-sm-0 mr-3">Total requisici&oacute;n</span>
+                    <strong class="text-nowrap" style="font-size: 1.1rem;">
+                        <span id="req-tot-moneda" class="text-muted mr-1">{{ $reqTotMonAbrev }}</span><span id="req-tot-importe">{{ $fmtReqTot($reqTotMonto) }}</span>
+                    </strong>
+                </div>
+                <div class="text-muted small mt-1">
+                    Importes en moneda del primer &iacute;tem (cotizaci&oacute;n del d&iacute;a).
+                </div>
+            </div>
+        </div>
     </div>
-    @endif
 </div>
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.presupuesto.modalconsultapartidagasto', ['centrocosto_query' => $centrocosto_query ?? null])

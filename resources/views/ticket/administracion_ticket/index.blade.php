@@ -34,6 +34,9 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
 ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -98,6 +101,7 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                         'ticket' => $ticket,
                         'mostrar_acciones' => true,
                         'puede_ver_ticket' => can('editar-ticket', false),
+                        'retornoListadoQuery' => $retornoListadoQuery,
                     ])
                 </table>
             </div>

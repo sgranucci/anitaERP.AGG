@@ -13,6 +13,9 @@
 use App\Models\Contable\BienUso; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -29,7 +32,7 @@ use App\Models\Contable\BienUso; ?>
                         'toggleTarget' => '#panel-filtros-bien-uso',
                         'toggleId' => 'btn-toggle-filtros-bien-uso',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_bien_uso'),
+                        'nuevoRegistroUrl' => route('crear_bien_uso', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-bien-uso',
                     ])
                 </div>
@@ -97,7 +100,7 @@ use App\Models\Contable\BienUso; ?>
                             <td>{{ BienUso::labelTipoBien($data->tipo_bien) }}</td>
                             <td>
                                 @if (can('editar-bien-uso', false))
-                                    <a href="{{ route('editar_bien_uso', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                    <a href="{{ route('editar_bien_uso', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
                                     </a>
                                 @endif

@@ -1,4 +1,17 @@
 <div class="form-group row">
+    <label for="empresa_id" class="col-lg-3 col-form-label requerido">Empresa</label>
+    <div class="col-lg-8">
+        <select name="empresa_id" id="empresa_id" class="form-control" required>
+            @foreach (($empresa_query ?? []) as $emp)
+                <option value="{{ $emp->id }}" {{ (int) old('empresa_id', $data->empresa_id ?? 1) === (int) $emp->id ? 'selected' : '' }}>
+                    {{ $emp->nombre }}
+                </option>
+            @endforeach
+        </select>
+        <small class="form-text text-muted">Empresa due&ntilde;a del tipo de men&uacute; (1=Biyemas, 2=Kandiko, 3=Rebisco).</small>
+    </div>
+</div>
+<div class="form-group row">
     <label for="nombre" class="col-lg-3 col-form-label requerido">Nombre</label>
     <div class="col-lg-8">
         <input type="text" name="nombre" id="nombre" class="form-control" maxlength="255" required
@@ -26,7 +39,7 @@
 
 <hr>
 <h5 class="mb-3">Art&iacute;culos ofrecidos por d&iacute;a</h5>
-<p class="text-muted small">Indique los art&iacute;culos disponibles para cada d&iacute;a de la semana (1 = lunes &hellip; 7 = domingo, seg&uacute;n Anita <code>artm_dia</code>).</p>
+<p class="text-muted small">Indique los art&iacute;culos disponibles para cada d&iacute;a de la semana (1 = lunes &hellip; 7 = domingo, calendario ISO del ERP). Al importar desde Anita se convierte el <code>artm_dia</code> de cada empresa al d&iacute;a correcto.</p>
 
 <div class="table-responsive">
     <table class="table table-bordered" id="tabla-vianda-semana">

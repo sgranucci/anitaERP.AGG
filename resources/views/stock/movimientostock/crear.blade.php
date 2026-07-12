@@ -9,7 +9,14 @@
     window.movimientoStockPreviewConversionFormulaUrl = @json(route('preview_conversion_formula_movimientostock'));
     window.movimientoStockSaldoOrigenUrl = @json(route('movimientostock_saldo_articulo'));
     window.movimientoStockPrecioLineaUrl = @json(route('movimientostock_precio_linea'));
+    window.movimientoStockResolverNpuUrl = @json(route('movimientostock_resolver_npu_baja'));
+    window.movimientoStockConsultaNpuUrl = @json(route('movimientostock_consulta_npu_baja'));
+    window.MS_TRANSFERENCIA_URLS = {
+        destinatarios: @json(route('transferencia_mercaderia_destinatarios')),
+        validarDestinatario: @json(route('transferencia_mercaderia_validar_destinatario')),
+    };
 </script>
+<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/movimientostock/crear.js")}}" type="text/javascript"></script>
@@ -17,12 +24,14 @@
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-asiento.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-tipo-transaccion.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/tipotransaccion_stock/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-transferencia.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-transferencia.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/movimientostock/form-transferencia.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/atajos-consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-formula-conversion.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-saldo-origen.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-baja-npu.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/consulta-npu-baja.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-grabando.js') }}" type="text/javascript"></script>
 @if(\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
@@ -70,4 +79,5 @@
     </div>
 </div>
 @include('includes.proceso-overlay-pedido')
+@include('includes.admin.modalconsultausuario')
 @endsection

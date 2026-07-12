@@ -16,12 +16,15 @@ use App\Queries\Stock\PrecioQueryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Services\Stock\PrecioActualizacionCategoriaService;
+use App\Services\Stock\PrecioImportPreviewService;
 use App\Services\Stock\PrecioService;
+use App\Support\Stock\PrecioImportColumnasSupport;
 use App\Support\Stock\PrecioListadoFiltros;
 use App\Models\Stock\Categoria;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Excel as ExcelFormat;
 use Maatwebsite\Excel\Facades\Excel;
@@ -41,6 +44,7 @@ class PrecioController extends Controller
         ClienteRepositoryInterface $clienterepository,
         private PrecioQueryInterface $precioQuery,
         private PrecioActualizacionCategoriaService $precioActualizacionCategoriaService,
+        private PrecioImportPreviewService $precioImportPreviewService,
     ) {
         $this->precioService = $precioservice;
         $this->articuloRepository = $articulorepository;
@@ -86,7 +90,15 @@ class PrecioController extends Controller
             case 'PDF':
                 $precios = $this->precioQuery->leePrecios($filtros, false);
                 $fechaReferencia = $filtros['fecha_vigencia'];
-                $view = \View::make('stock.precio.listado', compact('precios', 'fechaReferencia'))->render();
+                $listasPrecio = $this->listasPrecioParaFiltro();
+                $subtituloFiltros = PrecioListadoFiltros::subtituloExport($filtros, $listasPrecio);
+                $view = \View::make('stock.precio.listado', compact(
+                    'precios',
+                    'fechaReferencia',
+                    'filtros',
+                    'listasPrecio',
+                    'subtituloFiltros'
+                ))->render();
                 $path = storage_path('pdf/listados');
                 if (! is_dir($path)) {
                     mkdir($path, 0775, true);
@@ -100,12 +112,12 @@ class PrecioController extends Controller
 
             case 'EXCEL':
                 return (new PrecioExport($this->precioQuery))
-                    ->parametros($filtros)
+                    ->parametros($filtros, $this->listasPrecioParaFiltro())
                     ->download('precios.xlsx');
 
             case 'CSV':
                 return (new PrecioExport($this->precioQuery))
-                    ->parametros($filtros)
+                    ->parametros($filtros, $this->listasPrecioParaFiltro())
                     ->download('precios.csv', ExcelFormat::CSV);
         }
 
@@ -419,32 +431,131 @@ class PrecioController extends Controller
         return view('stock.precio.crearimportacion', compact('listaprecio_query', 'moneda_query'));
     }
 
+    public function previewImportacion(Request $request)
+    {
+        can('crear-precios');
+
+        $formato = (string) $request->input('formato', PrecioImportColumnasSupport::FORMATO_SIMPLE);
+
+        $request->validate([
+            'file' => 'required|file|mimetypes:application/vnd.ms-office,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel',
+            'formato' => 'required|in:'.PrecioImportColumnasSupport::FORMATO_SIMPLE.','.PrecioImportColumnasSupport::FORMATO_LISTAS,
+            'listaprecio_id' => 'nullable|integer|exists:listaprecio,id',
+            'col_sku' => 'nullable|string|max:100',
+            'col_descripcion' => 'nullable|string|max:100',
+            'col_precio' => 'nullable|string|max:100',
+            'fila_encabezado' => 'nullable|integer|min:1|max:50',
+            'hoja_indice' => 'nullable|integer|min:1|max:50',
+        ]);
+
+        $preview = $this->precioImportPreviewService->previsualizar(
+            $request->file('file'),
+            $formato,
+            $formato === PrecioImportColumnasSupport::FORMATO_SIMPLE ? (int) $request->input('listaprecio_id', 0) : null,
+            $request->input('col_sku'),
+            $request->input('col_descripcion'),
+            $request->input('col_precio'),
+            $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
+            $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null
+        );
+
+        return response()->json($preview);
+    }
+
     public function importar(Request $request)
     {
-        $this->validate(request(), [
-            'file' => 'required|mimetypes::'.
+        $formato = (string) $request->input('formato', PrecioImportColumnasSupport::FORMATO_SIMPLE);
+
+        $this->validate($request, [
+            'file' => 'required|mimetypes:'.
                 'application/vnd.ms-office,'.
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,'.
                 'application/vnd.ms-excel',
+            'fechavigencia' => 'required|string',
+            'moneda_id' => 'required|integer|exists:moneda,id',
+            'formato' => 'required|in:'.PrecioImportColumnasSupport::FORMATO_SIMPLE.','.PrecioImportColumnasSupport::FORMATO_LISTAS,
+            'listaprecio_id' => 'required_if:formato,'.PrecioImportColumnasSupport::FORMATO_SIMPLE.'|nullable|integer|exists:listaprecio,id',
+            'col_sku' => 'required_if:formato,'.PrecioImportColumnasSupport::FORMATO_SIMPLE.'|nullable|string|max:100',
+            'col_descripcion' => 'nullable|string|max:100',
+            'col_precio' => 'required_if:formato,'.PrecioImportColumnasSupport::FORMATO_SIMPLE.'|nullable|string|max:100',
+            'fila_encabezado' => 'nullable|integer|min:1|max:50',
+            'hoja_indice' => 'nullable|integer|min:1|max:50',
         ]);
 
-        $rowEncabezado = 1;
-        $headings = (new HeadingRowImport($rowEncabezado))->toArray(request('file'));
+        $nombresHojas = PrecioImportColumnasSupport::listarNombresHojas($request->file('file'));
+        $hojaIndice0 = PrecioImportColumnasSupport::indiceHojaDesdeRequest(
+            $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null,
+            count($nombresHojas)
+        );
+
+        $filaEncabezado = PrecioImportColumnasSupport::detectarFilaEncabezado(
+            $request->file('file'),
+            $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
+            $hojaIndice0
+        );
+
+        $headings = null;
+        if ($formato === PrecioImportColumnasSupport::FORMATO_LISTAS) {
+            $headingsPorHoja = (new HeadingRowImport($filaEncabezado))->toArray($request->file('file'));
+            $headings = $headingsPorHoja[$hojaIndice0] ?? null;
+        }
 
         try {
             set_time_limit(0);
 
             DB::beginTransaction();
-            Excel::import(new PrecioImport(request('fechavigencia'), request('moneda_id'), $headings), request('file'));
+
+            $import = new PrecioImport(
+                (string) $request->input('fechavigencia'),
+                (int) $request->input('moneda_id'),
+                $headings,
+                $formato,
+                $formato === PrecioImportColumnasSupport::FORMATO_SIMPLE ? (int) $request->input('listaprecio_id') : null,
+                $request->input('col_sku'),
+                $request->input('col_descripcion'),
+                $request->input('col_precio'),
+                $filaEncabezado,
+                $hojaIndice0,
+            );
+
+            Excel::import($import, $request->file('file'));
             DB::commit();
 
+            $listaprecioNombre = null;
+            $listaprecioId = $formato === PrecioImportColumnasSupport::FORMATO_SIMPLE
+                ? (int) $request->input('listaprecio_id')
+                : null;
+            if ($listaprecioId > 0) {
+                $listaprecioNombre = Listaprecio::query()->whereKey($listaprecioId)->value('nombre');
+            }
+
+            $fechavigencia = (string) $request->input('fechavigencia');
+            try {
+                $fechavigenciaFmt = preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechavigencia)
+                    ? Carbon::createFromFormat('Y-m-d', $fechavigencia)->format('d/m/Y')
+                    : Carbon::createFromFormat('d-m-Y', $fechavigencia)->format('d/m/Y');
+            } catch (\Throwable $e) {
+                $fechavigenciaFmt = $fechavigencia;
+            }
+
+            $resultado = array_merge($import->resumen(), [
+                'fila_encabezado' => $import->filaEncabezadoUsada(),
+                'hoja_indice' => $hojaIndice0 + 1,
+                'hoja_nombre' => $nombresHojas[$hojaIndice0] ?? null,
+                'fechavigencia' => $fechavigenciaFmt,
+                'listaprecio_id' => $listaprecioId,
+                'listaprecio_nombre' => $listaprecioNombre,
+            ]);
+
             return back()
-                ->with('mensaje', 'Precios importados correctamente');
+                ->withInput()
+                ->with('precio_import_resultado', $resultado);
         } catch (\Exception $exception) {
             DB::rollBack();
 
             return back()
-                ->with('mensaje', $exception->getMessage());
+                ->withInput()
+                ->with('mensaje-error', $exception->getMessage());
         }
     }
 

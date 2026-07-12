@@ -54,13 +54,14 @@ class IvaVentasReporteController extends Controller
             $resultado = $this->reporteService->generarDesdeFiltros($filtros);
             $resultado = $this->ampliarSubdiarioSiExcluyeTodo($filtros, $resultado, $subdiarioAjustado);
 
+            $filasVistaFuente = $resultado['filas_display'] ?? $resultado['filas'];
             $perPage = max(10, min(500, (int) $request->input('per_page', 50)));
-            $totalFilas = count($resultado['filas']);
+            $totalFilas = count($filasVistaFuente);
             $maxPage = max(1, (int) ceil($totalFilas / $perPage));
             $page = max(1, min($maxPage, (int) $request->input('page', 1)));
 
             $filas = $this->reporteService->paginarFilas(
-                $resultado['filas'],
+                $filasVistaFuente,
                 $perPage,
                 $page,
             );
@@ -119,7 +120,7 @@ class IvaVentasReporteController extends Controller
         $subdiarioAjustado = false;
         $resultado = $this->reporteService->generarDesdeFiltros($filtros);
         $resultado = $this->ampliarSubdiarioSiExcluyeTodo($filtros, $resultado, $subdiarioAjustado);
-        $filas = $resultado['filas'];
+        $filas = $resultado['filas_display'] ?? $resultado['filas'];
 
         switch (strtoupper($formato)) {
             case 'PDF':

@@ -16,17 +16,21 @@ class ValidacionViandaUsuario extends FormRequest
     public function rules()
     {
         $id = (int) $this->route('id');
+        $empresaId = (int) $this->input('empresa_id');
 
         return [
+            'empresa_id' => 'required|integer|exists:empresa,id',
             'codigo_usuario' => [
                 'required',
                 'integer',
                 'min:1',
-                Rule::unique('vianda_usuario', 'codigo_usuario')->ignore($id > 0 ? $id : null),
+                Rule::unique('vianda_usuario', 'codigo_usuario')
+                    ->where(fn ($query) => $query->where('empresa_id', $empresaId))
+                    ->ignore($id > 0 ? $id : null),
             ],
             'nombre' => 'required|string|max:255',
             'password' => 'required|string|max:15',
-            'centrocosto_id' => 'nullable|integer|exists:centrocosto,id',
+            'centrocosto_id' => 'required|integer|exists:centrocosto,id',
             'tipo_usuario' => ['required', Rule::in(ViandaUsuarioTipoSupport::tiposValidos())],
             'vianda_tipo_menu_id' => 'nullable|integer|exists:vianda_tipo_menu,id',
             'estado' => 'required|in:A,I',
@@ -36,7 +40,11 @@ class ValidacionViandaUsuario extends FormRequest
     public function messages()
     {
         return [
-            'codigo_usuario.unique' => 'Ya existe un usuario de vianda con ese código.',
+            'empresa_id.required' => 'Debe seleccionar la empresa del usuario de vianda.',
+            'empresa_id.exists' => 'La empresa seleccionada no existe.',
+            'codigo_usuario.unique' => 'Ya existe un usuario de vianda con ese código en esa empresa.',
+            'centrocosto_id.required' => 'Debe seleccionar el centro de costo del usuario de vianda.',
+            'centrocosto_id.exists' => 'El centro de costo seleccionado no existe.',
             'tipo_usuario.in' => 'El tipo de usuario no es válido.',
         ];
     }

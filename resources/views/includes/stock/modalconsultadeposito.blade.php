@@ -1,6 +1,6 @@
 @once('anita-modal-consulta-deposito')
 @php
-    $mostrarEmpresaConsultaDeposito = \App\Support\Stock\MovimientosArticuloDepositoSupport::mostrarEmpresaEnListados();
+    $mostrarEmpresaConsultaDeposito = \App\Support\Stock\MovimientosArticuloDepositoSupport::mostrarEmpresaConsultaDeposito();
 @endphp
 <input type="hidden" id="consultadeposito-mostrar-empresa" value="{{ $mostrarEmpresaConsultaDeposito ? '1' : '0' }}">
 <div class="modal fade" id="consultadepositoModal" role="dialog" aria-labelledby="consultadepositoModalLabel" aria-hidden="true">

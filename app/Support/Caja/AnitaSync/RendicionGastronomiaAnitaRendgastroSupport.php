@@ -848,6 +848,77 @@ final class RendicionGastronomiaAnitaRendgastroSupport
     }
 
     /**
+     * Rendg neto del día (Informix rendgastro) desglosado por unidad de negocio para cuadre flash.
+     * Gastro: salón (hosts PC) + post-cierre Waitry + agregados CAEA; excluye estacionamiento y vending.
+     * Estacionamiento: cabeceras clasificadas por {@see esCabeceraEstacionamiento()}.
+     *
+     * @return array{gastro: float, estacionamiento: float}
+     */
+    public function totalesNetoRendgPorUnidadNegocio(int $empresaId, int $fechaEntera): array
+    {
+        if ($empresaId <= 0 || $fechaEntera <= 0) {
+            return ['gastro' => 0.0, 'estacionamiento' => 0.0];
+        }
+
+        $cabeceras = $this->listarCabecerasEmpresaFechaDetalle($empresaId, $fechaEntera);
+        $vendingSupport = app(GastronomiaConciliacionVendingRendgSupport::class);
+
+        /** @var array<string, list<object>> $gruposGastro */
+        $gruposGastro = [];
+        /** @var array<string, list<object>> $gruposEstacionamiento */
+        $gruposEstacionamiento = [];
+
+        foreach ($cabeceras as $fila) {
+            if ($this->esCabeceraEstacionamiento($fila)) {
+                $gruposEstacionamiento[$this->claveGrupoRendgHost($fila)][] = $fila;
+
+                continue;
+            }
+
+            if ($vendingSupport->esCabeceraVendingCuadreJornada($fila, $empresaId)) {
+                continue;
+            }
+
+            if ($this->esCabeceraPostCierreWaitry($fila) || $this->esCabeceraAgregadosCaea($fila)) {
+                $gruposGastro['__sueltas__'.(int) ($fila->rendg_nro_oper ?? 0)][] = $fila;
+
+                continue;
+            }
+
+            $host = trim((string) ($fila->rendg_host ?? ''));
+            if ($host === '') {
+                continue;
+            }
+
+            $gruposGastro[$this->claveGrupoRendgHost($fila)][] = $fila;
+        }
+
+        $gastro = 0.0;
+        foreach ($gruposGastro as $grupo) {
+            $gastro += $this->netoGrupoHost($grupo);
+        }
+
+        $estacionamiento = 0.0;
+        foreach ($gruposEstacionamiento as $grupo) {
+            $estacionamiento += $this->netoGrupoHost($grupo);
+        }
+
+        return [
+            'gastro' => round($gastro, 2),
+            'estacionamiento' => round($estacionamiento, 2),
+        ];
+    }
+
+    private function claveGrupoRendgHost(object $fila): string
+    {
+        $host = trim((string) ($fila->rendg_host ?? ''));
+
+        return $host !== ''
+            ? 'host:'.$host
+            : 'suc:'.(int) ($fila->rendg_sucursal ?? 0);
+    }
+
+    /**
      * Σ rendg_tot_nc (+ CAEA) de cabeceras del host (excl. estacionamiento).
      *
      * @param  list<object>  $cabeceras

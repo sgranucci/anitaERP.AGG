@@ -4,10 +4,14 @@ namespace App\Http\Controllers\Sala;
 
 use App\Http\Controllers\Controller;
 use App\Models\Sala\RequisicionSala;
+use App\Models\Stock\Depmae;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Sala\CumplimientoRequisicionSalaRepositoryInterface;
 use App\Repositories\Sala\TecnicoLaboratorioRepositoryInterface;
+use App\Services\Sala\CumplimientoRequisicionSalaRevertirService;
 use App\Services\Sala\CumplirRequisicionSalaPdfService;
 use App\Services\Sala\CumplirRequisicionSalaService;
+use App\Support\Sala\CumplimientoRequisicionSalaListadoFiltros;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoParcialTrait;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoTrait;
 use Illuminate\Http\Request;
@@ -19,12 +23,33 @@ class CumplirRequisicionSalaController extends Controller
     public function __construct(
         private CumplirRequisicionSalaService $service,
         private CumplirRequisicionSalaPdfService $pdfService,
+        private CumplimientoRequisicionSalaRepositoryInterface $cumplimientoRepository,
+        private CumplimientoRequisicionSalaRevertirService $revertirService,
         private TecnicoLaboratorioRepositoryInterface $tecnicoRepository,
         private EmpresaRepositoryInterface $empresaRepository,
     ) {
     }
 
     public function index(Request $request)
+    {
+        can('cumplir-requisicion-sala');
+
+        $filtros = CumplimientoRequisicionSalaListadoFiltros::resolverDesdeRequest($request);
+        $filtrosQuery = CumplimientoRequisicionSalaListadoFiltros::paraQueryString($filtros);
+        $coleccion = $this->cumplimientoRepository->leeCumplimientos($filtros, true);
+        $camposFiltro = CumplimientoRequisicionSalaListadoFiltros::CAMPOS;
+        $requisicionSalaId = (int) ($filtros['requisicion_sala_id'] ?? 0);
+
+        return view('sala.cumplir_requisicion_sala.index', compact(
+            'coleccion',
+            'filtros',
+            'filtrosQuery',
+            'camposFiltro',
+            'requisicionSalaId',
+        ));
+    }
+
+    public function crear(Request $request)
     {
         can('cumplir-requisicion-sala');
 
@@ -47,13 +72,13 @@ class CumplirRequisicionSalaController extends Controller
 
         $depositoLabId = $this->service->resolverDepositoLaboratorioId();
         $depositoLab = $depositoLabId > 0
-            ? \App\Models\Stock\Depmae::query()->find($depositoLabId)
+            ? Depmae::query()->find($depositoLabId)
             : null;
         $tecnicos = $requisicion
             ? $this->tecnicoRepository->allActivos((int) $requisicion->empresa_id)
             : collect();
 
-        return view('sala.cumplir_requisicion_sala.index', [
+        return view('sala.cumplir_requisicion_sala.crear', [
             'requisicion' => $requisicion,
             'lineas' => $lineas,
             'errorCarga' => $errorCarga,
@@ -65,6 +90,30 @@ class CumplirRequisicionSalaController extends Controller
             'estado_linea_enum' => RequisicionSalaArticuloEstadoTrait::$enumEstado,
             'estado_parcial_enum' => self::$enumEstadoParcial,
             'estados_cumplir' => CumplirRequisicionSalaService::estadosPermitidosParaCumplir(),
+        ]);
+    }
+
+    public function consultar(int $id)
+    {
+        can('cumplir-requisicion-sala');
+
+        $cumplimiento = $this->cumplimientoRepository->findConDetalle($id);
+        if (! $cumplimiento) {
+            return redirect()->route('cumplir_requisicion_sala')
+                ->with('mensaje-error', 'Cumplimiento no encontrado.');
+        }
+
+        $requisiciones = [];
+        foreach ($cumplimiento->articulos as $linea) {
+            $req = $linea->requisicionSala;
+            if ($req) {
+                $requisiciones[(int) $req->id] = $req;
+            }
+        }
+
+        return view('sala.cumplir_requisicion_sala.consultar', [
+            'cumplimiento' => $cumplimiento,
+            'requisiciones' => array_values($requisiciones),
         ]);
     }
 
@@ -104,7 +153,7 @@ class CumplirRequisicionSalaController extends Controller
                 'fecha' => optional($row->fecha)->format('d/m/Y'),
                 'estado' => $row->estado,
                 'empresa' => $row->empresas?->nombre,
-                'deposito' => $row->depositos?->nombre,
+                'deposito' => self::etiquetaDeposito($row->depositos),
                 'centrocosto' => trim(($row->centrocostos?->codigo ?? '').' '.$row->centrocostos?->nombre),
             ];
         });
@@ -125,7 +174,7 @@ class CumplirRequisicionSalaController extends Controller
         $req = $resultado['requisicion'];
         $linea = $resultado['linea'];
         $depositoLabId = $this->service->resolverDepositoLaboratorioId();
-        $depositoLab = $depositoLabId > 0 ? \App\Models\Stock\Depmae::query()->find($depositoLabId) : null;
+        $depositoLab = $depositoLabId > 0 ? Depmae::query()->find($depositoLabId) : null;
         $tecnicos = $this->tecnicoRepository->allActivos((int) $req->empresa_id);
         $pendiente = (float) $linea->cantidad - (float) ($linea->cantidadentregada ?? 0);
 
@@ -140,19 +189,21 @@ class CumplirRequisicionSalaController extends Controller
                 'empresa' => $req->empresas?->nombre,
                 'empresa_id' => $req->empresa_id,
                 'deposito_id' => $req->deposito_id,
-                'deposito' => $req->depositos?->nombre,
+                'deposito' => self::etiquetaDeposito($req->depositos),
                 'centrocosto' => trim(($req->centrocostos?->codigo ?? '').' '.($req->centrocostos?->nombre)),
             ],
             'linea' => [
                 'id' => $linea->id,
                 'articulo_id' => $linea->articulo_id,
                 'sku' => $linea->articulos?->sku,
-                'descripcion' => $linea->articulos?->nombre ?? $linea->detalle,
+                'descripcion' => $linea->descripcionArticulo(),
                 'cantidad' => (float) $linea->cantidad,
                 'cantidadentregada' => (float) ($linea->cantidadentregada ?? 0),
                 'pendiente' => $pendiente,
                 'uid' => $linea->uid,
                 'numeroparte' => $linea->numeroparte,
+                'destino' => (string) ($linea->destino ?? 'S'),
+                'requiere_tecnico' => (string) ($linea->destino ?? '') === 'R',
                 'deposito_origen_id' => $depositoLabId,
                 'deposito_origen_codigo' => $depositoLab?->codigo,
                 'deposito_origen_nombre' => $depositoLab?->nombre,
@@ -173,7 +224,7 @@ class CumplirRequisicionSalaController extends Controller
         /** @var RequisicionSala $req */
         $req = $carga['requisicion'];
         $depositoLabId = $this->service->resolverDepositoLaboratorioId();
-        $depositoLab = $depositoLabId > 0 ? \App\Models\Stock\Depmae::query()->find($depositoLabId) : null;
+        $depositoLab = $depositoLabId > 0 ? Depmae::query()->find($depositoLabId) : null;
         $tecnicos = $this->tecnicoRepository->allActivos((int) $req->empresa_id);
 
         $lineas = $carga['lineas']->map(function ($linea) use ($depositoLabId, $depositoLab) {
@@ -183,12 +234,14 @@ class CumplirRequisicionSalaController extends Controller
                 'id' => $linea->id,
                 'articulo_id' => $linea->articulo_id,
                 'sku' => $linea->articulos?->sku,
-                'descripcion' => $linea->articulos?->nombre ?? $linea->detalle,
+                'descripcion' => $linea->descripcionArticulo(),
                 'cantidad' => (float) $linea->cantidad,
                 'cantidadentregada' => (float) ($linea->cantidadentregada ?? 0),
                 'pendiente' => $pendiente,
                 'uid' => $linea->uid,
                 'numeroparte' => $linea->numeroparte,
+                'destino' => (string) ($linea->destino ?? 'S'),
+                'requiere_tecnico' => (string) ($linea->destino ?? '') === 'R',
                 'deposito_origen_id' => $depositoLabId,
                 'deposito_origen_codigo' => $depositoLab?->codigo,
                 'deposito_origen_nombre' => $depositoLab?->nombre,
@@ -205,7 +258,7 @@ class CumplirRequisicionSalaController extends Controller
                 'estado' => $req->estado,
                 'empresa' => $req->empresas?->nombre,
                 'deposito_id' => $req->deposito_id,
-                'deposito' => $req->depositos?->nombre,
+                'deposito' => self::etiquetaDeposito($req->depositos),
                 'empresa_id' => $req->empresa_id,
                 'centrocosto' => trim(($req->centrocostos?->codigo ?? '').' '.$req->centrocostos?->nombre),
                 'comentario' => $req->comentario,
@@ -222,7 +275,7 @@ class CumplirRequisicionSalaController extends Controller
 
         $lineas = $request->input('lineas', []);
         if (! is_array($lineas) || $lineas === []) {
-            return redirect()->route('cumplir_requisicion_sala')
+            return redirect()->route('crear_cumplir_requisicion_sala')
                 ->with('mensaje-error', 'Debe cargar al menos una l&iacute;nea para cumplir.');
         }
 
@@ -231,7 +284,7 @@ class CumplirRequisicionSalaController extends Controller
             $requisicionId = (int) $request->input('requisicion_sala_id', 0);
             $params = $requisicionId > 0 ? ['requisicion_sala_id' => $requisicionId] : ['modo' => 'npu'];
 
-            return redirect()->route('cumplir_requisicion_sala', $params)
+            return redirect()->route('crear_cumplir_requisicion_sala', $params)
                 ->withInput()
                 ->with('mensaje-error', $result['errores'] ?? 'Error al grabar cumplimiento.');
         }
@@ -241,12 +294,31 @@ class CumplirRequisicionSalaController extends Controller
             $pdfToken = $this->pdfService->guardarEnSesion($result['impresion']);
         }
 
-        $msg = 'Cumplimiento registrado con &eacute;xito.';
-        if (! empty($result['transferencias'])) {
+        $msg = 'Cumplimiento N&ordm; '.($result['cumplimiento_numero'] ?? '').' registrado con &eacute;xito.';
+        $detalleTm = $result['transferencias_detalle'] ?? [];
+        if ($detalleTm !== []) {
+            $etiquetas = array_map(static function (array $tm): string {
+                $codigo = trim((string) ($tm['codigo'] ?? ''));
+                $id = (int) ($tm['id'] ?? 0);
+
+                return $codigo !== '' ? $codigo : '#'.$id;
+            }, $detalleTm);
+            $msg .= ' Transferencias: '.implode(', ', $etiquetas).'.';
+        } elseif (! empty($result['transferencias'])) {
             $msg .= ' Transferencias: '.implode(', ', $result['transferencias']).'.';
         }
 
-        return redirect()->route('cumplir_requisicion_sala')
+        $redirectParams = [];
+        $requisicionId = (int) $request->input('requisicion_sala_id', 0);
+        if ($requisicionId > 0) {
+            $req = RequisicionSala::query()->find($requisicionId);
+            if ($req && $this->service->puedeCumplir($req)) {
+                $redirectParams['requisicion_sala_id'] = $requisicionId;
+                $msg .= ' La requisici&oacute;n sigue con &iacute;tems pendientes; puede continuar el cumplimiento.';
+            }
+        }
+
+        return redirect()->route('crear_cumplir_requisicion_sala', $redirectParams)
             ->with('mensaje', $msg)
             ->with('cumple_pdf_token', $pdfToken);
     }
@@ -267,5 +339,63 @@ class CumplirRequisicionSalaController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="'.$bytes['nombre'].'"',
         ]);
+    }
+
+    public function imprimirCumplimientoPdf(int $id)
+    {
+        can('cumplir-requisicion-sala');
+
+        try {
+            $bytes = $this->pdfService->generarBytesDesdeCumplimientoId($id);
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('mensaje-error', 'No se pudo generar el PDF: '.$e->getMessage());
+        }
+
+        return response($bytes['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$bytes['nombre'].'"',
+        ]);
+    }
+
+    public function actualizar(Request $request, int $id)
+    {
+        can('cumplir-requisicion-sala');
+
+        $result = $this->revertirService->actualizarLeyenda($id, $request->input('leyenda'));
+        if (($result['mensaje'] ?? '') !== 'ok') {
+            return redirect()->back()
+                ->withInput()
+                ->with('mensaje-error', $result['errores'] ?? 'Error al actualizar.');
+        }
+
+        return redirect()->route('consultar_cumplir_requisicion_sala', ['id' => $id])
+            ->with('mensaje', 'Cumplimiento actualizado.');
+    }
+
+    public function revertir(Request $request, int $id)
+    {
+        can('cumplir-requisicion-sala');
+
+        $obs = trim((string) $request->input('observacion_reversion', ''));
+        $result = $this->revertirService->revertir($id, $obs);
+        if (($result['mensaje'] ?? '') !== 'ok') {
+            return redirect()->back()->with('mensaje-error', $result['errores'] ?? 'Error al revertir.');
+        }
+
+        return redirect()->route('consultar_cumplir_requisicion_sala', ['id' => $id])
+            ->with('mensaje', 'Cumplimiento revertido. Se revirtieron las transferencias asociadas y el estado de las l&iacute;neas de requisici&oacute;n.');
+    }
+
+    private static function etiquetaDeposito(?Depmae $deposito): string
+    {
+        if (! $deposito) {
+            return '';
+        }
+
+        return Depmae::etiquetaDesdePartes(
+            (string) ($deposito->codigo ?? ''),
+            (string) ($deposito->nombre ?? ''),
+            (int) $deposito->id
+        );
     }
 }

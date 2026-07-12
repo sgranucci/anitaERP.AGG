@@ -78,8 +78,14 @@
                 @if (old('origen_bien_uso', $data->origen_bien_uso ?? false)) checked @endif>
             <label class="form-check-label" for="origen_bien_uso">Origen es bien de uso (no dep&oacute;sito de salida)</label>
         </div>
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="baja_npu" id="baja_npu" value="1"
+                @if (old('baja_npu', $data->baja_npu ?? false)) checked @endif>
+            <label class="form-check-label" for="baja_npu">Baja de NPU al confirmar (rotura / no funcional)</label>
+        </div>
         <small class="form-text text-muted">
-            Origen y destino en bien de uso son excluyentes. La aprobaci&oacute;n aplica si <code>STOCK_TRANSFERENCIA_MODO_APROBACION=tipo_transaccion</code> en .env.
+            Origen y destino en bien de uso son excluyentes. La baja de NPU exige operaci&oacute;n Salida y signo Resta.
+            La aprobaci&oacute;n aplica si <code>STOCK_TRANSFERENCIA_MODO_APROBACION=tipo_transaccion</code> en .env.
         </small>
     </div>
 </div>

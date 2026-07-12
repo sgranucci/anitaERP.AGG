@@ -2248,8 +2248,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 										'vendedor.nombre as nombrevendedor',
 										'cliente.numerodocumento as numerodocumento',
                                         'cliente.domicilio as domicilio',
-										'cliente.codigo as codigo',
+                                        'cliente.codigo as codigo',
                                         'cliente.estado as estado',
+                                        'cliente.facturas_apocrifas as facturas_apocrifas',
+                                        'cliente.facturas_apocrifas_consulta_at as facturas_apocrifas_consulta_at',
                                         'localidad.nombre as nombrelocalidad',
 										'provincia.nombre as nombreprovincia')
                                 ->leftjoin('localidad', 'localidad.id', 'cliente.localidad_id')

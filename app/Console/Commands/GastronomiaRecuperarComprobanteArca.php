@@ -82,6 +82,21 @@ class GastronomiaRecuperarComprobanteArca extends Command
         $this->info('Recuperado: '.($resultado['codigo'] ?? '').' venta_id='.($resultado['venta_id'] ?? ''));
         $this->line('CAE: '.($resultado['cae'] ?? ''));
         $this->line('Total: $'.number_format((float) ($resultado['total'] ?? 0), 2, '.', ''));
+        if (! empty($resultado['cobranza_id'])) {
+            $this->line('Cobranza efectivo id: '.(int) $resultado['cobranza_id']);
+        }
+        $asientoCierre = $resultado['asiento_cierre'] ?? null;
+        if (is_array($asientoCierre)) {
+            $this->line(sprintf(
+                'Asiento cierre actualizado: #%s (id %s) debe=%s haber=%s',
+                $asientoCierre['numeroasiento'] ?? '?',
+                $asientoCierre['asiento_id'] ?? '?',
+                number_format((float) ($asientoCierre['resumen_debe'] ?? 0), 2, '.', ''),
+                number_format((float) ($asientoCierre['resumen_haber'] ?? 0), 2, '.', ''),
+            ));
+        } elseif ($asientoCierre === null) {
+            $this->line('Asiento cierre: no había asiento grabado para esa jornada (sin cambios).');
+        }
 
         return self::SUCCESS;
     }

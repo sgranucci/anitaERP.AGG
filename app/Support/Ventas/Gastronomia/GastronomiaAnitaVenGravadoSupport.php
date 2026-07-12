@@ -36,6 +36,52 @@ final class GastronomiaAnitaVenGravadoSupport
     }
 
     /**
+     * Normaliza cabecera Anita al importar: cortesía $0,01 → exento (sin gravado/IVA).
+     *
+     * @return array{total: float, gravado: float, exento: float, iva: float}
+     */
+    public static function montosCabeceraImportDesdeAnita(
+        float $venMonto,
+        float $venGravado,
+        float $venExento,
+        float $venIva,
+    ): array {
+        $total = round(abs($venMonto), 2);
+        if (! self::esCortesiaMinima($total)) {
+            return [
+                'total' => $total,
+                'gravado' => round($venGravado, 2),
+                'exento' => round($venExento, 2),
+                'iva' => round($venIva, 2),
+            ];
+        }
+
+        $montos = self::montosCabeceraCortesiaMinima();
+
+        return [
+            'total' => $montos['monto'],
+            'gravado' => $montos['gravado'],
+            'exento' => $montos['exento'],
+            'iva' => $montos['iva'],
+        ];
+    }
+
+    /**
+     * Impuestos ERP para importación de invitación/cortesía $0,01 (sin Gravado → obs ARCA 1427).
+     *
+     * @return list<array{concepto: string, baseimponible: float, tasa: float, importe: float, impuesto_id: int|null}>
+     */
+    public static function filasVentaImpuestoImportCortesiaMinima(): array
+    {
+        $monto = self::IMPORTE_CORTESIA_MINIMA;
+
+        return [
+            ['concepto' => 'Exento', 'baseimponible' => 0., 'tasa' => 0., 'importe' => $monto, 'impuesto_id' => 1],
+            ['concepto' => 'Total', 'baseimponible' => 0., 'tasa' => 0., 'importe' => $monto, 'impuesto_id' => null],
+        ];
+    }
+
+    /**
      * Alinea venta + data_cae antes de grabar en Anita (factura cortesía $0,01).
      *
      * @param  array<string, mixed>  $venta

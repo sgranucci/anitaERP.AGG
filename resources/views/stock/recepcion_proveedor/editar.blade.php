@@ -8,13 +8,16 @@ Recepción {{ $recepcion->numerorecepcion }}
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/confirmar.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/form.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/consulta_oc.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @if (config('recepcion_proveedor.modal_articulo_proveedor_habilitado'))
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/modal_articulo_proveedor.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/modal_articulo_proveedor.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('recepcion_proveedor', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -33,7 +36,9 @@ Recepción {{ $recepcion->numerorecepcion }}
                     @else
                         <span class="badge badge-info ml-2">{{ $recepcion->estado }}</span>
                     @endif
-                    @if($recepcion->fl_precio_diferencia)
+                    @if($recepcion->fl_precio_pendiente_aprobacion)
+                        <span class="badge badge-info ml-2">Precio pendiente OC</span>
+                    @elseif($recepcion->fl_precio_diferencia)
                         <span class="badge badge-warning ml-2">Precio distinto a OC</span>
                     @endif
                 </h3>
@@ -42,39 +47,51 @@ Recepción {{ $recepcion->numerorecepcion }}
                         'recepcionId' => $recepcion->id,
                         'clase' => 'btn btn-danger btn-sm mr-2',
                     ])
-                    @if($recepcion->estado === 'BORRADOR' && can('confirmar-recepcion-proveedor', false))
+                    @if($recepcion->estado === 'BORRADOR' && empty($soloConsulta) && can('confirmar-recepcion-proveedor', false) && ! $recepcion->fl_precio_pendiente_aprobacion)
                     <button type="submit" class="btn btn-success btn-sm mr-2" form="form-recepcion-confirmar"
                             id="btn-confirmar-recepcion-proveedor">
                         <i class="fa fa-check"></i> Confirmar
                     </button>
                     @endif
-                    <a href="{{ route('recepcion_proveedor') }}" class="btn btn-outline-info btn-sm">
+                    @if (empty($ocultarVolver))
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
+                    @else
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="window.close()">
+                        <i class="fa fa-fw fa-times"></i> Cerrar solapa
+                    </button>
+                    @endif
                 </div>
             </div>
             @if($recepcion->estado === 'BORRADOR')
-            <form action="{{ route('actualizar_recepcion_proveedor', $recepcion->id) }}" id="form-recepcion-proveedor" method="POST" enctype="multipart/form-data">
+            <form action="{{ route('actualizar_recepcion_proveedor', ['id' => $recepcion->id] + ($filtrosQuery ?? [])) }}" id="form-recepcion-proveedor" method="POST" enctype="multipart/form-data"
+                  @if(!empty($soloConsulta) && empty($puedeActualizarRecepcion)) onsubmit="return false;" @endif>
                 @csrf
                 @method('PUT')
-                <div class="card-body">
+                @if (! empty($soloConsulta))
+                    <input type="hidden" name="origen" value="modal_consulta">
+                @endif
+                <div class="card-body @if(!empty($soloConsulta) && empty($puedeActualizarRecepcion)) pe-none @endif" @if(!empty($soloConsulta) && empty($puedeActualizarRecepcion)) style="opacity:.92" @endif>
                     @include('stock.recepcion_proveedor.form', [
-                        'modoEdicion' => true,
+                        'modoEdicion' => ! empty($soloConsulta) ? ! empty($puedeActualizarRecepcion) : true,
                         'recepcion' => $recepcion,
                         'asientoPreview' => $asientoPreview ?? ['activo' => false],
                     ])
                 </div>
             </form>
-            <form action="{{ route('confirmar_recepcion_proveedor', $recepcion->id) }}" id="form-recepcion-confirmar" method="POST" class="d-none" aria-hidden="true">
+            <form action="{{ route('confirmar_recepcion_proveedor', ['id' => $recepcion->id] + ($filtrosQuery ?? [])) }}" id="form-recepcion-confirmar" method="POST" class="d-none" aria-hidden="true">
                 @csrf
             </form>
             <form action="{{ route('eliminar_recepcion_proveedor', ['id' => $recepcion->id]) }}" id="form-recepcion-eliminar" method="POST" class="d-none" aria-hidden="true">
                 @csrf
                 @method('DELETE')
             </form>
+            @if (empty($soloConsulta) || ! empty($puedeActualizarRecepcion))
             <div class="card-footer">
                 @include('stock.recepcion_proveedor.partials.acciones_borrador')
             </div>
+            @endif
             @else
             <div class="card-body">
                 @include('stock.recepcion_proveedor.form', [
@@ -88,6 +105,7 @@ Recepción {{ $recepcion->numerorecepcion }}
                     'recepcionId' => $recepcion->id,
                     'clase' => 'btn btn-danger mr-2 mb-2',
                 ])
+                @if (empty($soloConsulta))
                 @if($recepcion->estado === 'CONFIRMADA' && $recepcion->tipo === 'RECEPCION' && can('devolver-recepcion-proveedor', false))
                 <a href="{{ route('crear_devolucion_recepcion_proveedor', $recepcion->id) }}" class="btn btn-warning">
                     <i class="fa fa-undo"></i> Devolución a proveedor
@@ -101,6 +119,7 @@ Recepción {{ $recepcion->numerorecepcion }}
                         <i class="fa fa-ban"></i> Anular recepción
                     </button>
                 </form>
+                @endif
                 @endif
             </div>
             @endif

@@ -16,6 +16,7 @@ use App\Repositories\Stock\Deposito_AdministradorRepositoryInterface;
 use App\Repositories\Stock\PrestamoRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Configuracion\PrestamoAvisoPlantillaSupport;
+use App\Support\Seguridad\UsuarioOperativoSupport;
 use App\Support\Stock\PrestamoEnlacePublicoSupport;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -93,7 +94,7 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
         foreach ($admins as $admin) {
             /** @var Usuario|null $usuario */
             $usuario = $admin->usuarios;
-            if (! $usuario || empty($usuario->email)) {
+            if (! UsuarioOperativoSupport::esOperativo($usuario) || empty($usuario->email)) {
                 continue;
             }
 

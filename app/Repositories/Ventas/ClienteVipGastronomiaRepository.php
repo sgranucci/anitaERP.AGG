@@ -224,4 +224,59 @@ class ClienteVipGastronomiaRepository implements ClienteVipGastronomiaRepository
 
         return json_encode($output);
     }
+
+    /**
+     * Consulta para el reporte de descuentos: filas con clases id/codigo/nombre
+     * compatibles con el JS del reporte (numeroid = código Anita).
+     */
+    public function consultaClienteVipReporte(string $consulta, int $empresaId): string
+    {
+        $consulta = trim($consulta);
+        $query = $this->model->newQuery()
+            ->select('cliente_vip_gastronomia.*')
+            ->with('empresa')
+            ->where('cliente_vip_gastronomia.empresa_id', $empresaId);
+
+        if ($consulta !== '') {
+            $term = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $consulta).'%';
+            $query->where(function ($q) use ($term, $consulta) {
+                $q->where('cliente_vip_gastronomia.apellido', 'LIKE', $term)
+                    ->orWhere('cliente_vip_gastronomia.nombre', 'LIKE', $term)
+                    ->orWhere('cliente_vip_gastronomia.nrodocumento', 'LIKE', $term)
+                    ->orWhere('cliente_vip_gastronomia.nickname', 'LIKE', $term);
+                if (ctype_digit($consulta)) {
+                    $q->orWhere('cliente_vip_gastronomia.numeroid', (int) $consulta);
+                }
+            });
+        }
+
+        $data = $query
+            ->orderBy('cliente_vip_gastronomia.numeroid')
+            ->limit(200)
+            ->get();
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="8" class="text-center text-muted">Sin resultados</td></tr>';
+
+            return json_encode($output, JSON_UNESCAPED_UNICODE);
+        }
+
+        foreach ($data as $row) {
+            $nombreCompleto = trim($row->apellido.' '.$row->nombre);
+            $empresaNombre = e($row->empresa->nombre ?? '');
+            $output['data'] .= '<tr>';
+            $output['data'] .= '<td class="id">'.(int) $row->id.'</td>';
+            $output['data'] .= '<td class="codigo">'.(int) $row->numeroid.'</td>';
+            $output['data'] .= '<td>'.e((string) $row->nrodocumento).'</td>';
+            $output['data'] .= '<td class="nombre">'.e($nombreCompleto).'</td>';
+            $output['data'] .= '<td>'.e((string) ($row->nickname ?? '')).'</td>';
+            $output['data'] .= '<td>'.e((string) ($row->localidad ?? '')).'</td>';
+            $output['data'] .= '<td>'.$empresaNombre.'</td>';
+            $output['data'] .= '<td class="text-nowrap"><a class="btn btn-warning btn-sm eligeconsultaclientevip">Elegir</a></td>';
+            $output['data'] .= '</tr>';
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
 }

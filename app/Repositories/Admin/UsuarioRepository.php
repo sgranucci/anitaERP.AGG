@@ -3,9 +3,10 @@
 namespace App\Repositories\Admin;
 
 use App\Models\Seguridad\Usuario;
+use App\Support\Seguridad\UsuarioOperativoSupport;
 use Auth;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Str;
+use Illuminate\Support\Collection;
 
 class UsuarioRepository implements UsuarioRepositoryInterface
 {
@@ -77,6 +78,11 @@ class UsuarioRepository implements UsuarioRepositoryInterface
         return $usuario;
     }
 
+    public function findOperativo(int $id): ?Usuario
+    {
+        return UsuarioOperativoSupport::find($id);
+    }
+
     public function leePorUsuarioId($id)
     {
         if (null == $usuario = $this->model->with('usuario_empresas')->find($id)) {
@@ -97,72 +103,70 @@ class UsuarioRepository implements UsuarioRepositoryInterface
 
     public function findPorIdOCodigo(string $valor, $empresa_id = null)
     {
-        $valor = trim($valor);
-        if ($valor === '') {
-            return null;
-        }
+        return UsuarioOperativoSupport::findPorIdOCodigo(
+            $valor,
+            UsuarioOperativoSupport::normalizarEmpresaId($empresa_id)
+        );
+    }
 
-        $q = $this->model->with('usuario_empresas');
+    /**
+     * @param  list<int>  $usuarioIds
+     * @return list<int>
+     */
+    public function filtrarIdsOperativos(array $usuarioIds): array
+    {
+        return UsuarioOperativoSupport::filtrarIdsActivos($usuarioIds);
+    }
 
-        if (preg_match('/^\d+$/', $valor)) {
-            $q->where('usuario.id', (int) $valor);
-        } else {
-            $q->whereRaw('UPPER(TRIM(usuario.usuario)) = ?', [Str::upper($valor)]);
-        }
+    /**
+     * @param  list<int>  $usuarioIds
+     * @return list<int>
+     */
+    public function filtrarIdsOperativosPorEmpresa(array $usuarioIds, int $empresaId): array
+    {
+        return UsuarioOperativoSupport::filtrarIdsOperativosPorEmpresa($usuarioIds, $empresaId);
+    }
 
-        if ($empresa_id) {
-            $q->whereHas('usuario_empresas', function ($query) use ($empresa_id) {
-                $query->where('empresa_id', (int) $empresa_id);
-            });
-        }
-
-        return $q->first();
+    public function listadoOperativoParaSelector(
+        ?int $empresaId = null,
+        ?int $centrocostoId = null,
+        array $columnas = ['id', 'nombre', 'email', 'usuario'],
+        bool $soloConEmail = false,
+        array $with = [],
+    ): Collection {
+        return UsuarioOperativoSupport::listadoParaSelector(
+            $empresaId,
+            $centrocostoId,
+            $columnas,
+            $soloConEmail,
+            $with
+        );
     }
 
     public function consultaUsuario($consulta, $empresa_id = null, $centrocosto_id = null)
     {
-        $columns = ['usuario.id', 'usuario.usuario', 'usuario.nombre', 'usuario.email', 'centrocosto.nombre', 'sector_legajocompra.nombre'];
         $columnsOut = ['id', 'usuariologin', 'nombre', 'email', 'nombrecentrocosto', 'nombresectorlegajocompra'];
 
-        $consulta = strtoupper($consulta);
+        $data = UsuarioOperativoSupport::queryConsulta(
+            UsuarioOperativoSupport::normalizarEmpresaId($empresa_id),
+            UsuarioOperativoSupport::normalizarEmpresaId($centrocosto_id)
+        );
 
-        $count = count($columns);
-        $data = $this->model->select('usuario.id as id',
-            'usuario.usuario as usuariologin',
-            'usuario.nombre as nombre',
-            'usuario.email as email',
-            'usuario.centrocosto_id as idcentrocosto',
-            'centrocosto.nombre as nombrecentrocosto',
-            'sector_legajocompra.nombre as nombresectorlegajocompra')
-            ->leftjoin('centrocosto', 'centrocosto.id', '=', 'usuario.centrocosto_id')
-            ->leftjoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'usuario.sector_legajocompra_id')
-            ->with('usuario_empresas');
+        UsuarioOperativoSupport::aplicarFiltroTextoConsulta($data, (string) ($consulta ?? ''));
 
-        if (isset($empresa_id)) {
-            $data->whereHas('usuario_empresas', function ($query) use ($empresa_id) {
-                $query->where('empresa_id', $empresa_id);
-            });
-        }
-
-        if (isset($centrocosto_id)) {
-            $data->where('usuario.centrocosto_id', $centrocosto_id);
-        }
-
-        $data = $data->Where(function ($query) use ($count, $consulta, $columns) {
-            for ($i = 0; $i < $count; $i++) {
-                $query->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
-            }
-        })
-            ->get();
+        $data = $data->orderBy('usuario.nombre')->get();
 
         $output = [];
         $output['data'] = '';
         $flSinDatos = true;
         $countCols = count($columnsOut);
+        $columnasTabla = $countCols + 2;
         if (count($data) > 0) {
             foreach ($data as $row) {
                 $flSinDatos = false;
+                $empresasTexto = UsuarioOperativoSupport::etiquetaEmpresasUsuario($row);
                 $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="empresas">'.e($empresasTexto).'</td>';
                 for ($i = 0; $i < $countCols; $i++) {
                     $output['data'] .= '<td class="'.$columnsOut[$i].'">'.e($row->{$columnsOut[$i]} ?? '').'</td>';
                 }
@@ -173,7 +177,7 @@ class UsuarioRepository implements UsuarioRepositoryInterface
 
         if ($flSinDatos) {
             $output['data'] .= '<tr>';
-            $output['data'] .= '<td>Sin resultados</td>';
+            $output['data'] .= '<td colspan="'.$columnasTabla.'">Sin resultados</td>';
             $output['data'] .= '</tr>';
         }
 

@@ -8,6 +8,7 @@ use App\Models\Compras\Ordencompra_Historia;
 use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
+use App\Models\Contable\Centrocosto;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Configuracion\Arbolaprobacion_Nivel;
@@ -34,6 +35,7 @@ use Carbon\Carbon;
 use DB;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Mail;
 
@@ -651,10 +653,6 @@ class ArbolaprobacionService
      */
     private function filtrarProximoNivelUsuariosPorEmpresa(array $proximoNivel, int $empresaId): array
     {
-        if ($empresaId <= 0) {
-            return $proximoNivel;
-        }
-
         $uids = $proximoNivel['proximousuarios'] ?? [];
         if (! is_array($uids) || count($uids) === 0) {
             $uid = (int) ($proximoNivel['proximousuario'] ?? 0);
@@ -662,10 +660,15 @@ class ArbolaprobacionService
         }
 
         $antes = count($uids);
-        $filtrados = $this->filtrarUsuariosArbolPorEmpresa($uids, $empresaId);
+        $filtrados = $empresaId > 0
+            ? $this->usuarioRepository->filtrarIdsOperativosPorEmpresa($uids, $empresaId)
+            : $this->usuarioRepository->filtrarIdsOperativos($uids);
+
         if ($antes > 0 && count($filtrados) === 0) {
             throw new \RuntimeException(
-                'El árbol de aprobación no tiene un firmante aplicable para la empresa de la requisición en el nivel correspondiente.'
+                $empresaId > 0
+                    ? 'El árbol de aprobación no tiene un firmante aplicable para la empresa de la requisición en el nivel correspondiente.'
+                    : 'El árbol de aprobación no tiene un firmante operativo en el nivel correspondiente.'
             );
         }
 
@@ -675,52 +678,23 @@ class ArbolaprobacionService
         return $proximoNivel;
     }
 
-    /**
-     * @param  list<int>  $usuarioIds
-     * @return list<int>
-     */
-    private function filtrarUsuariosArbolPorEmpresa(array $usuarioIds, int $empresaId): array
-    {
-        $usuarioIds = array_values(array_unique(array_filter(
-            array_map('intval', $usuarioIds),
-            fn (int $id) => $id > 0
-        )));
-        if ($empresaId <= 0 || $usuarioIds === []) {
-            return $usuarioIds;
-        }
-
-        $asignaciones = DB::table('usuario_empresa')
-            ->whereIn('usuario_id', $usuarioIds)
-            ->get(['usuario_id', 'empresa_id'])
-            ->groupBy('usuario_id');
-
-        $filtrados = [];
-        foreach ($usuarioIds as $uid) {
-            if (! isset($asignaciones[$uid]) || $asignaciones[$uid]->isEmpty()) {
-                $filtrados[] = $uid;
-
-                continue;
-            }
-            foreach ($asignaciones[$uid] as $row) {
-                if ((int) $row->empresa_id === $empresaId) {
-                    $filtrados[] = $uid;
-                    break;
-                }
-            }
-        }
-
-        return array_values(array_unique($filtrados));
-    }
-
     public function enviaCorreo($usuario_id, $tipoarbol, $ptrcomprobante, $linkaprobacion, $linkrechazo, $linkvisualizar, $mailExtras = null)
     {
-        // Lee el usuario
-        $usuario = $this->usuarioRepository->find($usuario_id);
+        $usuario = $this->usuarioRepository->findOperativo((int) $usuario_id);
 
         if ($usuario) {
             $receivers = $usuario->email;
 
             Mail::to($receivers)->send(new MailArbolAprobacion($ptrcomprobante, $tipoarbol, $linkaprobacion, $linkrechazo, $linkvisualizar, $mailExtras));
+
+            $this->logArbolAprobacion('correo_enviado', [
+                'tipo_arbol' => $tipoarbol,
+                'comprobante' => $this->contextoComprobanteArbol($ptrcomprobante),
+                'destinatario_usuario_id' => (int) $usuario_id,
+                'destinatario_login' => (string) ($usuario->usuario ?? ''),
+                'email' => (string) $receivers,
+                'estado_tras_aprobar' => is_array($mailExtras) ? ($mailExtras['estado_tras_aprobar'] ?? null) : null,
+            ]);
         } else {
             throw new ModelNotFoundException('Usuario en arbol de aprobación no encontrado');
         }
@@ -744,6 +718,13 @@ class ArbolaprobacionService
 
     public function aprobar($tipocomprobante, $comprobante_id, $aprobacion_id, $usuario_id, ?string $observacion = null): array
     {
+        $this->logArbolAprobacion('aprobacion_intento', [
+            'tipocomprobante' => $tipocomprobante,
+            'comprobante_id' => (int) $comprobante_id,
+            'movimiento_id' => (int) $aprobacion_id,
+            'usuario_id' => (int) $usuario_id,
+        ]);
+
         DB::beginTransaction();
         try {
             $movimientoPre = Arbolaprobacion_Movimiento::findOrFail($aprobacion_id);
@@ -763,6 +744,14 @@ class ArbolaprobacionService
                     'observacion' => $obsAprobacion,
                 ]);
             if ($rows === 0) {
+                $this->logArbolAprobacion('aprobacion_sin_efecto', [
+                    'tipocomprobante' => $tipocomprobante,
+                    'comprobante_id' => (int) $comprobante_id,
+                    'movimiento_id' => (int) $aprobacion_id,
+                    'usuario_id' => (int) $usuario_id,
+                    'motivo' => 'movimiento ya no estaba pendiente',
+                ]);
+
                 return $this->commitAprobacion($tipocomprobante);
             }
 
@@ -882,6 +871,16 @@ class ArbolaprobacionService
                 $reqActual = $this->requisicionRepository->find($comprobante_id);
                 $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
                 if ($reqActual && $reqActual->estado === $nombreEnCompras) {
+                    $this->logArbolAprobacion('aprobacion_ok', [
+                        'tipocomprobante' => $tipocomprobante,
+                        'comprobante_id' => (int) $comprobante_id,
+                        'movimiento_id' => (int) $aprobacion_id,
+                        'nivel' => (int) $movimientoPre->nivel,
+                        'usuario_id' => (int) $usuario_id,
+                        'estado_documento' => $reqActual->estado,
+                        'detiene_arbol' => 'requisicion_en_compras',
+                    ]);
+
                     return $this->commitAprobacion($tipocomprobante);
                 }
             }
@@ -903,12 +902,29 @@ class ArbolaprobacionService
             }
             $this->procesaArbolaprobacion($tipocomprobante, $comprobante_id, 'self', $opcionesProceso);
 
+            $this->logArbolAprobacion('aprobacion_ok', [
+                'tipocomprobante' => $tipocomprobante,
+                'comprobante_id' => (int) $comprobante_id,
+                'movimiento_id' => (int) $aprobacion_id,
+                'nivel' => (int) $movimientoPre->nivel,
+                'usuario_id' => (int) $usuario_id,
+                'estado_documento' => $this->estadoDocumentoTrasAprobacion($tipocomprobante, (int) $comprobante_id),
+            ]);
+
             return $this->commitAprobacion($tipocomprobante);
         } catch (\Exception $e) {
             DB::rollback();
             if ($tipocomprobante === 'RS') {
                 RequisicionSalaTransferenciaLaboratorioDeferred::descartarPendientes();
             }
+
+            $this->logArbolAprobacion('aprobacion_error', [
+                'tipocomprobante' => $tipocomprobante,
+                'comprobante_id' => (int) $comprobante_id,
+                'movimiento_id' => (int) $aprobacion_id,
+                'usuario_id' => (int) $usuario_id,
+                'error' => $e->getMessage(),
+            ], 'error');
 
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
@@ -925,6 +941,58 @@ class ArbolaprobacionService
             'mensaje' => 'ok',
             'transferencias_sala' => RequisicionSalaTransferenciaLaboratorioDeferred::procesarPendientes(),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function logArbolAprobacion(string $evento, array $context, string $nivel = 'info'): void
+    {
+        Log::log($nivel, 'ArbolAprobacion: '.$evento, $context);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function contextoComprobanteArbol($ptrcomprobante): array
+    {
+        if ($ptrcomprobante instanceof Requisicion) {
+            return [
+                'tipo' => 'RE',
+                'id' => (int) $ptrcomprobante->id,
+                'numero' => (int) ($ptrcomprobante->numerorequisicion ?? 0),
+                'estado' => (string) ($ptrcomprobante->estado ?? ''),
+            ];
+        }
+
+        if ($ptrcomprobante instanceof Ordencompra) {
+            return [
+                'tipo' => 'OC',
+                'id' => (int) $ptrcomprobante->id,
+                'numero' => (int) ($ptrcomprobante->numeroordencompra ?? 0),
+                'estado' => (string) ($ptrcomprobante->estadoordencompra ?? ''),
+            ];
+        }
+
+        return ['tipo' => 'desconocido', 'id' => (int) ($ptrcomprobante->id ?? 0)];
+    }
+
+    private function estadoDocumentoTrasAprobacion(string $tipocomprobante, int $comprobanteId): ?string
+    {
+        if ($tipocomprobante === 'RE') {
+            return $this->requisicionRepository->find($comprobanteId)?->estado;
+        }
+        if ($tipocomprobante === 'OC') {
+            return $this->ordencompraRepository->find($comprobanteId)?->estadoordencompra;
+        }
+        if ($tipocomprobante === 'RS') {
+            return app(\App\Repositories\Sala\RequisicionSalaRepositoryInterface::class)->find($comprobanteId)?->estado;
+        }
+        if ($tipocomprobante === 'OV') {
+            return $this->ordenventaRepository->find($comprobanteId)?->estado;
+        }
+
+        return null;
     }
 
     private function grabaMovimientoArbolAutomatico(
@@ -1431,16 +1499,32 @@ class ArbolaprobacionService
     /**
      * Firmantes del siguiente nivel al retomar el árbol desde EN COMPRAS (botón «Envía al árbol»).
      *
-     * @return array{nivel: int, requiere_seleccion: bool, firmantes: list<array{id: int, nombre: string, usuario: string, email: string}>}
+     * @return array{
+     *     nivel?: int,
+     *     requiere_seleccion?: bool,
+     *     firmantes?: list<array{id: int, nombre: string, usuario: string, email: string}>,
+     *     requiere_seleccion_centrocosto?: bool,
+     *     centros_costo?: list<array{id: int, codigo: string, nombre: string, etiqueta: string}>
+     * }
      */
-    public function firmantesRetomeArbolRequisicion(Requisicion $requisicion): array
+    public function firmantesRetomeArbolRequisicion(Requisicion $requisicion, ?int $centrocostoArbolSeleccionado = null): array
     {
         $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
         if ($requisicion->estado !== $nombreEnCompras) {
             throw new \RuntimeException('Solo se puede consultar firmantes cuando la requisición está en estado EN COMPRAS.');
         }
 
-        $this->validaRequisicionModeloContraArbol($requisicion);
+        $idsDistintos = $this->centrosCostoDestinoDistintosIdsDesdeModelo($requisicion);
+        $centrocostoArbol = $this->resolverCentroCostoArbolRequisicion($requisicion, $centrocostoArbolSeleccionado, $idsDistintos);
+
+        if ($centrocostoArbol === null) {
+            return [
+                'requiere_seleccion_centrocosto' => true,
+                'centros_costo' => $this->armarListadoCentrosCostoDestinoArbol($idsDistintos),
+            ];
+        }
+
+        $this->validaRequisicionModeloContraArbolConCentrocosto($requisicion, $centrocostoArbol);
 
         $tipoarbol = $this->nombreTipoArbolRequisiciones();
         $trees = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($tipoarbol, (int) $requisicion->empresa_id);
@@ -1449,7 +1533,6 @@ class ArbolaprobacionService
         }
 
         $arbol = $trees->first();
-        $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeModelo($requisicion);
         $estadoAprobacionActual = $this->leeAprobacionComprobante($tipoarbol, (int) $requisicion->id);
         $totalesReq = RequisicionTotalesCabecera::desdeModelo($requisicion, $this->cotizacionQuery);
         $proximoNivel = $this->buscaProximoNivel(
@@ -1474,7 +1557,7 @@ class ArbolaprobacionService
 
         $firmantes = [];
         foreach ($uids as $uid) {
-            $usuario = $this->usuarioRepository->find($uid);
+            $usuario = $this->usuarioRepository->findOperativo($uid);
             if (! $usuario) {
                 continue;
             }
@@ -1491,15 +1574,16 @@ class ArbolaprobacionService
             'nivel' => (int) $proximoNivel['proximonivel'],
             'requiere_seleccion' => count($firmantes) > 1,
             'firmantes' => $firmantes,
+            'centrocosto_arbol_id' => $centrocostoArbol,
         ];
     }
 
     /**
-     * Centro de costo usado para niveles del árbol: CC destino de los ítems (debe ser único); si no hay ítems válidos, cabecera.
+     * IDs de centros de costo de destino distintos en renglones válidos de la requisición.
      *
-     * @throws \RuntimeException
+     * @return list<int>
      */
-    public function centroCostoParaArbolAprobacionDesdeModelo(Requisicion $requisicion): int
+    public function centrosCostoDestinoDistintosIdsDesdeModelo(Requisicion $requisicion): array
     {
         $requisicion->loadMissing('requisicion_articulos');
         $ids = [];
@@ -1512,12 +1596,88 @@ class ArbolaprobacionService
                 $ids[] = (int) $cid;
             }
         }
-        $unique = array_unique($ids);
-        if (count($unique) > 1) {
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * Resuelve el centro de costo del circuito de aprobación. Null si hay varios y falta selección.
+     *
+     * @param  list<int>  $idsDistintos
+     *
+     * @throws \RuntimeException
+     */
+    public function resolverCentroCostoArbolRequisicion(Requisicion $requisicion, ?int $seleccionUsuario, array $idsDistintos): ?int
+    {
+        if ($seleccionUsuario !== null && $seleccionUsuario > 0) {
+            if (! in_array($seleccionUsuario, $idsDistintos, true)) {
+                throw new \RuntimeException('El centro de costo de destino seleccionado no corresponde a los renglones de la requisición.');
+            }
+
+            return $seleccionUsuario;
+        }
+
+        $persistido = (int) ($requisicion->centrocostodestino_arbol_id ?? 0);
+        if ($persistido > 0 && in_array($persistido, $idsDistintos, true)) {
+            return $persistido;
+        }
+
+        if (count($idsDistintos) === 0) {
+            return (int) $requisicion->centrocosto_id;
+        }
+        if (count($idsDistintos) === 1) {
+            return (int) reset($idsDistintos);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<int>  $idsDistintos
+     * @return list<array{id: int, codigo: string, nombre: string, etiqueta: string}>
+     */
+    private function armarListadoCentrosCostoDestinoArbol(array $idsDistintos): array
+    {
+        if ($idsDistintos === []) {
+            return [];
+        }
+
+        $centrocostos = Centrocosto::query()
+            ->whereIn('id', $idsDistintos)
+            ->orderBy('codigo')
+            ->get(['id', 'codigo', 'nombre']);
+
+        $listado = [];
+        foreach ($centrocostos as $cc) {
+            $listado[] = [
+                'id' => (int) $cc->id,
+                'codigo' => (string) $cc->codigo,
+                'nombre' => (string) $cc->nombre,
+                'etiqueta' => trim((string) $cc->codigo.' '.(string) $cc->nombre),
+            ];
+        }
+
+        return $listado;
+    }
+
+    /**
+     * Centro de costo usado para niveles del árbol: CC destino de los ítems (debe ser único); si no hay ítems válidos, cabecera.
+     *
+     * @throws \RuntimeException
+     */
+    public function centroCostoParaArbolAprobacionDesdeModelo(Requisicion $requisicion): int
+    {
+        $persistido = (int) ($requisicion->centrocostodestino_arbol_id ?? 0);
+        if ($persistido > 0) {
+            return $persistido;
+        }
+
+        $idsDistintos = $this->centrosCostoDestinoDistintosIdsDesdeModelo($requisicion);
+        if (count($idsDistintos) > 1) {
             throw new \RuntimeException('Todos los renglones deben tener el mismo centro de costo de destino para el árbol de aprobación.');
         }
-        if (count($unique) === 1) {
-            return (int) reset($unique);
+        if (count($idsDistintos) === 1) {
+            return (int) reset($idsDistintos);
         }
 
         return (int) $requisicion->centrocosto_id;
@@ -1558,6 +1718,15 @@ class ArbolaprobacionService
      */
     public function validaRequisicionModeloContraArbol(Requisicion $req): void
     {
+        $cc = $this->centroCostoParaArbolAprobacionDesdeModelo($req);
+        $this->validaRequisicionModeloContraArbolConCentrocosto($req, $cc);
+    }
+
+    /**
+     * @throws \RuntimeException
+     */
+    private function validaRequisicionModeloContraArbolConCentrocosto(Requisicion $req, int $cc): void
+    {
         $nombreTipo = $this->nombreTipoArbolRequisiciones();
         $trees = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($nombreTipo, (int) $req->empresa_id);
         if ($trees->isEmpty()) {
@@ -1566,7 +1735,6 @@ class ArbolaprobacionService
         if ($trees->count() > 1) {
             throw new \RuntimeException('Hay más de un árbol de aprobación activo de requisiciones para esa empresa; debe quedar uno solo.');
         }
-        $cc = $this->centroCostoParaArbolAprobacionDesdeModelo($req);
         $nivelActual = $this->leeAprobacionComprobante($nombreTipo, $req->id)['nivelactual'];
         $arbol = $trees->first();
         $totalesReq = RequisicionTotalesCabecera::desdeModelo($req, $this->cotizacionQuery);

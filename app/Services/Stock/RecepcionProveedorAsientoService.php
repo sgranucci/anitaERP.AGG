@@ -17,6 +17,7 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
+use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
@@ -212,7 +213,7 @@ class RecepcionProveedorAsientoService
     }
 
     /**
-     * Preview contable (cantidad × precio de línea; sin descuento de pie de OC).
+     * Preview contable (Σ cantidad × precio de línea; precio ya neto de descuentos OC al precargar).
      *
      * @return array{
      *   total_recepcion: float,
@@ -467,6 +468,7 @@ class RecepcionProveedorAsientoService
         $cotizacionRecepcion = (float) ($recepcion->cotizacion ?: 1);
 
         $lineasDebe = $this->armarLineasDebeArticulos($recepcion, $cotizacionRecepcion);
+        $lineasDebe = $this->agregarLineaDebeImpuestoInterno($recepcion, $lineasDebe, $cotizacionRecepcion, $empresaId);
         $totalDebe = round(array_sum(array_column($lineasDebe, 'importe')), 2);
         $totalRecepcion = $this->totalRecepcionContable($recepcion, $cotizacionRecepcion);
 
@@ -619,18 +621,76 @@ class RecepcionProveedorAsientoService
         float $cotizacionRecepcion,
     ): float {
         $total = 0.0;
+        $monedaRecepcionId = (int) ($recepcion->moneda_id ?: 1);
 
         foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
-            $cotLinea = (float) ($linea->cotizacion ?: 1);
-            $importe = RecepcionProveedorConversionSupport::importeLinea(
+            $total += RecepcionProveedorConversionSupport::importeLineaEnMonedaReferencia(
+                $monedaRecepcionId,
+                (int) ($linea->moneda_id ?: $monedaRecepcionId),
                 (float) $linea->cantidad,
                 (float) $linea->precio,
                 (float) ($linea->descuento ?? 0),
+                0,
+                (float) ($linea->cotizacion ?: 1),
             );
-            $total += RecepcionProveedorConversionSupport::convertirMoneda($importe, $cotLinea, $cotizacionRecepcion);
         }
 
+        $total += RecepcionProveedorImpuestoInternoSupport::importeImpuestoInternoContable(
+            $recepcion,
+            $cotizacionRecepcion
+        );
+
         return round($total, 2);
+    }
+
+    /**
+     * @param  list<array{cuentacontable_id:int, importe:float, centrocosto_id?:int, observacion?:string}>  $lineasDebe
+     * @return list<array{cuentacontable_id:int, importe:float, centrocosto_id?:int, observacion?:string}>
+     */
+    private function agregarLineaDebeImpuestoInterno(
+        Recepcion_Proveedor $recepcion,
+        array $lineasDebe,
+        float $cotizacionRecepcion,
+        int $empresaId,
+    ): array {
+        $importe = RecepcionProveedorImpuestoInternoSupport::importeImpuestoInternoContable(
+            $recepcion,
+            $cotizacionRecepcion
+        );
+        if ($importe <= 0.000001) {
+            return $lineasDebe;
+        }
+
+        $cuentaId = RecepcionProveedorImpuestoInternoSupport::resolverCuentaCompraImpuestoInterno($empresaId);
+        $ccDefault = (int) ($recepcion->centrocosto_id ?? 0);
+        if ($ccDefault <= 0) {
+            $ccDefault = (int) ($recepcion->recepcion_proveedor_articulos->first()->centrocosto_id ?? 0);
+        }
+
+        $observacion = 'Impuesto interno cigarrillos ('.RecepcionProveedorImpuestoInternoSupport::skuArticuloImpuestoInterno().')';
+
+        $encontrado = false;
+        foreach ($lineasDebe as &$row) {
+            $rowCc = (int) ($row['centrocosto_id'] ?? 0);
+            if ((int) $row['cuentacontable_id'] === $cuentaId && $rowCc === $ccDefault) {
+                $row['importe'] = round((float) $row['importe'] + $importe, 2);
+                $row['observacion'] = $observacion;
+                $encontrado = true;
+                break;
+            }
+        }
+        unset($row);
+
+        if (! $encontrado) {
+            $lineasDebe[] = [
+                'cuentacontable_id' => $cuentaId,
+                'centrocosto_id' => $ccDefault,
+                'importe' => round($importe, 2),
+                'observacion' => $observacion,
+            ];
+        }
+
+        return $lineasDebe;
     }
 
     /** @return list<array{cuentacontable_id:int, importe:float, centrocosto_id?:int, observacion?:string}> */
@@ -641,6 +701,7 @@ class RecepcionProveedorAsientoService
         $agrupado = [];
 
         $empresaId = (int) $recepcion->empresa_id;
+        $monedaRecepcionId = (int) ($recepcion->moneda_id ?: 1);
 
         foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
             $articulo = $linea->articulos;
@@ -649,13 +710,15 @@ class RecepcionProveedorAsientoService
                 throw new \RuntimeException('Artículo '.($articulo->sku ?? $linea->articulo_id).' sin cuenta contable de compra.');
             }
 
-            $cotLinea = (float) ($linea->cotizacion ?: 1);
-            $importe = RecepcionProveedorConversionSupport::importeLinea(
+            $importe = RecepcionProveedorConversionSupport::importeLineaEnMonedaReferencia(
+                $monedaRecepcionId,
+                (int) ($linea->moneda_id ?: $monedaRecepcionId),
                 (float) $linea->cantidad,
                 (float) $linea->precio,
                 (float) ($linea->descuento ?? 0),
+                0,
+                (float) ($linea->cotizacion ?: 1),
             );
-            $importe = RecepcionProveedorConversionSupport::convertirMoneda($importe, $cotLinea, $cotizacionRecepcion);
 
             $clave = $ctaId.'|'.((int) ($linea->centrocosto_id ?? 0));
             if (! isset($agrupado[$clave])) {

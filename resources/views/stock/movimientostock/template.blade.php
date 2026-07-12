@@ -37,6 +37,7 @@
         <td class="align-middle col-desc-celda">
         	<input type="text" class="descripcionarticulo form-control form-control-sm" value="" readonly>
         </td>
+        @include('stock.movimientostock.partials.fila_celda_npu_baja')
         @include('stock.movimientostock.partials.fila_saldo_origen')
         @include('stock.movimientostock.partials.fila_item_ferli')
         <td class="align-middle text-center">
@@ -84,6 +85,7 @@
         <td class="align-middle col-desc-celda">
         	<input type="text" class="descripcionarticulo form-control form-control-sm" value="" readonly>
         </td>
+        @include('stock.movimientostock.partials.fila_celda_npu_baja')
         @include('stock.movimientostock.partials.fila_saldo_origen')
         @include('stock.movimientostock.partials.fila_item_estandar')
         <td class="align-middle text-center">

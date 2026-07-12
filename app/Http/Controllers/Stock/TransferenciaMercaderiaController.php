@@ -7,6 +7,7 @@ use App\Http\Requests\ValidacionTransferenciaMercaderia;
 use App\Models\Contable\BienUso;
 use App\Models\Contable\Centrocosto;
 use App\Models\Stock\Articulo;
+use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Transferencia_Mercaderia_Token;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -18,6 +19,7 @@ use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
 use App\Support\Stock\TransferenciaBienUsoSupport;
+use App\Support\Seguridad\UsuarioOperativoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -56,6 +58,13 @@ class TransferenciaMercaderiaController extends Controller
             ->orderBy('codigo')
             ->get(['id', 'codigo', 'nombre']);
 
+        $tipoDefault = $tipotransacciones->firstWhere('id', (int) ($defaults['tipotransaccion_stock_id'] ?? 0));
+        $mostrarPanelDestinatario = TransferenciaMercaderiaAprobacionSupport::requiereAprobacion($tipoDefault);
+        $opcionesDestinatario = [];
+        if ($mostrarPanelDestinatario && (int) optional($depEntrada)->id > 0) {
+            $opcionesDestinatario = TransferenciaMercaderiaDestinatarioSupport::opcionesSelector((int) $depEntrada->id);
+        }
+
         return view('stock.transferencia_mercaderia.index', compact(
             'tipotransacciones',
             'defaults',
@@ -68,6 +77,8 @@ class TransferenciaMercaderiaController extends Controller
             'empresa_id',
             'pendientesCount',
             'centrocosto_query',
+            'mostrarPanelDestinatario',
+            'opcionesDestinatario',
         ));
     }
 
@@ -85,7 +96,7 @@ class TransferenciaMercaderiaController extends Controller
 
     public function destinatarios(Request $request): JsonResponse
     {
-        can('crear-transferencia-mercaderia');
+        $this->autorizarConsultaDestinatarios();
 
         if ($request->boolean('destino_bien_uso')) {
             return response()->json([
@@ -103,6 +114,66 @@ class TransferenciaMercaderiaController extends Controller
             'ok' => true,
             'opciones' => TransferenciaMercaderiaDestinatarioSupport::opcionesSelector($depositoId),
         ]);
+    }
+
+    public function validarDestinatario(Request $request): JsonResponse
+    {
+        $this->autorizarConsultaDestinatarios();
+
+        $usuarioId = (int) $request->input('usuario_id', 0);
+        if ($usuarioId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique un usuario.']);
+        }
+
+        $usuario = UsuarioOperativoSupport::find($usuarioId);
+        if ($usuario === null) {
+            return response()->json(['ok' => false, 'mensaje' => 'Usuario no encontrado o suspendido.']);
+        }
+
+        if ($request->boolean('destino_bien_uso')) {
+            if (TransferenciaMercaderiaDestinatarioSupport::resolverUsuarioDestinoBienUso($usuarioId) === null) {
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => 'El usuario no tiene email configurado o no puede aprobar transferencias a bien de uso.',
+                ]);
+            }
+
+            return response()->json([
+                'ok' => true,
+                'nombre' => (string) $usuario->nombre,
+                'email' => (string) $usuario->email,
+            ]);
+        }
+
+        $depositoId = (int) $request->input('deposito_entrada_id', 0);
+        if ($depositoId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Seleccione el depósito destino.']);
+        }
+
+        if (! TransferenciaMercaderiaDestinatarioSupport::usuarioValidoDestinatarioExplicito($usuario)) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'El usuario no está activo o no tiene email configurado.',
+            ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'nombre' => (string) $usuario->nombre,
+            'email' => (string) $usuario->email,
+        ]);
+    }
+
+    private function autorizarConsultaDestinatarios(): void
+    {
+        if (can('crear-transferencia-mercaderia', false)
+            || can('crear-movimientos-de-stock', false)
+            || can('editar-movimientos-de-stock', false)
+            || can('actualizar-movimientos-de-stock', false)) {
+            return;
+        }
+
+        abort(403);
     }
 
     private function resolverDepositoDefault($id, $empresaId = null): ?Depmae

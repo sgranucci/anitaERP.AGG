@@ -25,6 +25,39 @@ final class CuentaAutomaticaClaves
 
     public const CIERRE_WAITRY_DIFERENCIA_CAJA = 'cierre_waitry.diferencia_caja';
 
+    public const CIERRE_ESTACIONAMIENTO_VENTAS = 'cierre_estacionamiento.ventas';
+
+    public const CIERRE_ESTACIONAMIENTO_DIFERENCIA_CAJA = 'cierre_estacionamiento.diferencia_caja';
+
+    public const CIERRE_VENDING_VENTAS = 'cierre_vending.ventas';
+
+    public const CIERRE_VENDING_DIFERENCIA_CAJA = 'cierre_vending.diferencia_caja';
+
+    public const CIERRE_BINGO_PREMIO53 = 'cierre_bingo.premio53';
+
+    public const CIERRE_BINGO_EFECTIVO = 'cierre_bingo.efectivo';
+
+    public const CIERRE_BINGO_POZO_BINGO = 'cierre_bingo.pozo_bingo';
+
+    public const CIERRE_BINGO_PANTALLA = 'cierre_bingo.pantalla';
+
+    public const CIERRE_BINGO_OTROS_PREMIOS = 'cierre_bingo.otros_premios';
+
+    public const CIERRE_BINGO_DIFERENCIA_CAJA = 'cierre_bingo.diferencia_caja';
+
+    public const CIERRE_BINGO_VENTAS = 'cierre_bingo.ventas';
+
+    public const CIERRE_BINGO_POZO58 = 'cierre_bingo.pozo58';
+
+    public const CIERRE_BINGO_PAGO_HOSPITAL = 'cierre_bingo.pago_hospital';
+
+    public const CIERRE_BINGO_CONT_HOSPITAL = 'cierre_bingo.cont_hospital';
+
+    /** IVA fiscal general (todas las ventas / cierres que lo consumen). */
+    public const VENTAS_IVA_DEBITO_FISCAL = 'ventas.iva_debito_fiscal';
+
+    public const VENTAS_IVA_CREDITO_FISCAL = 'ventas.iva_credito_fiscal';
+
     /** Cheques propios posdatados (haber al emitir; reclasifica agente diario). */
     public const CAJA_CHEQUES_DIFERIDOS = 'caja.cheques_diferidos';
 
@@ -108,6 +141,118 @@ final class CuentaAutomaticaClaves
                 'modulo_tabla' => 'gastronomia_cierre_jornada_config',
                 'modulo_columna' => 'cuenta_diferencia_caja_id',
                 'env_config' => 'gastronomia.cierre_jornada_cuenta_diferencia_caja_id',
+            ],
+            self::CIERRE_ESTACIONAMIENTO_VENTAS => [
+                'grupo' => 'Cierre rendiciones estacionamiento',
+                'descripcion' => 'Ventas estacionamiento (haber asiento cierre rendición)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_ESTACIONAMIENTO_DIFERENCIA_CAJA => [
+                'grupo' => 'Cierre rendiciones estacionamiento',
+                'descripcion' => 'Diferencia de caja / redondeos / sobrantes y faltantes',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_VENDING_VENTAS => [
+                'grupo' => 'Cierre rendiciones vending',
+                'descripcion' => 'Ventas vending (haber asiento cierre rendición)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_VENDING_DIFERENCIA_CAJA => [
+                'grupo' => 'Cierre rendiciones vending',
+                'descripcion' => 'Diferencia de caja / redondeos / sobrantes y faltantes',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_PREMIO53 => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Premio 53% (impcont 451 → 521050001)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_EFECTIVO => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Efectivo / caja (impcont 452 → 111010001)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_POZO_BINGO => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Pozo bingo a pagar (impcont 453 → 211010006)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_PANTALLA => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Premio pantalla (impcont 454 → 521040006)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_OTROS_PREMIOS => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Otros premios / dif. última bola (impcont 455 → 521040001)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_DIFERENCIA_CAJA => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Diferencia de caja / refuerzo (impcont 456 → 521280004)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_VENTAS => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Deudores por venta bingo (impcont 457 → 411010001)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_POZO58 => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Pozo bingo 58% / devengamiento (impcont 458 → 521030001)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_PAGO_HOSPITAL => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Cuenta pago hospital (impcont 459 → 521020002)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_BINGO_CONT_HOSPITAL => [
+                'grupo' => 'Cierre rendiciones bingo',
+                'descripcion' => 'Contribución hospital (impcont 460 → 215010003)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::VENTAS_IVA_DEBITO_FISCAL => [
+                'grupo' => 'Ventas — IVA fiscal',
+                'descripcion' => 'IVA débito fiscal (haber en ventas gravadas)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => 'iva_ventas.conciliacion.cuentas_iva_debito_por_empresa',
+            ],
+            self::VENTAS_IVA_CREDITO_FISCAL => [
+                'grupo' => 'Ventas — IVA fiscal',
+                'descripcion' => 'IVA crédito fiscal (debe en NC, ej. 114010011)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => 'iva_ventas.conciliacion.cuentas_iva_credito_por_empresa',
             ],
             self::CAJA_CHEQUES_DIFERIDOS => [
                 'grupo' => 'Caja — cheques',

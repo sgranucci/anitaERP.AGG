@@ -21,6 +21,9 @@ Art&iacute;culos
 @include('includes.stock.kardex_deposito_scripts')
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
 @endif
+@if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-recepciones.js') }}" type="text/javascript"></script>
+@endif
 
 <script>
 window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::STOCK_ARTICULO);
@@ -37,6 +40,9 @@ function checkState(index){
 use App\Support\Stock\ArticuloListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <meta name="csrf-token" content="{{ csrf_token() }}" />
 <div class="row">
     <div class="col-lg-12">
@@ -56,7 +62,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                         'toggleTarget' => '#panel-filtros-articulo',
                         'toggleId' => 'btn-toggle-filtros-articulo',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_articulo'),
+                        'nuevoRegistroUrl' => route('crear_articulo', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-articulos',
                     ])
     				<a href="#" onclick="configurarSalida()" class="btn btn-outline-secondary btn-sm ml-1">
@@ -135,7 +141,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 <td>{{ $articulo->estado }}</td>
                             <td>
                        			@if (can('editar-articulos', false))
-                                	<a href="{{route('editar_articulo', ['id' => $articulo->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                	<a href="{{route('editar_articulo', ['id' => $articulo->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
@@ -190,6 +196,16 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                         <i class="fa fa-list-alt text-info"></i>
                                 	</button>
 								@endif
+                       			@if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-recepciones-articulo tooltipsC"
+                                	    title="Recepciones de proveedor"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}">
+                                        <i class="fa fa-truck text-primary"></i>
+                                	</button>
+								@endif
                        			@if (can('borrar-articulos', false))
                                 <form action="{{route('eliminar_articulo', ['id' => $articulo->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
@@ -225,5 +241,8 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 @include('includes.stock.modal_saldos_articulo')
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
 <input type="hidden" id="articulo-saldos-deposito-url" value="{{ route('articulo_saldos_deposito') }}">
+@endif
+@if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
+<input type="hidden" id="recepcion-proveedor-consulta-articulo-url" value="{{ route('recepcion_proveedor_consulta_articulo') }}">
 @endif
 @endsection

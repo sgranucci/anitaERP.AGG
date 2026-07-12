@@ -45,6 +45,41 @@ final class WigosSqlServerProcess
     }
 
     /**
+     * @return array<string, float|int>
+     */
+    public static function ejecutarCalcDatosFlashTurno(string $fechaYmd, string $turno, int $empresaId = 0): array
+    {
+        $alias = WigosConfigResolver::currWigos($empresaId);
+        try {
+            $decoded = self::ejecutar($alias, [
+                'action' => 'calcDatosFlashTurno',
+                'fecha' => $fechaYmd,
+                'turno' => strtoupper($turno),
+            ], $empresaId);
+        } catch (RuntimeException $e) {
+            if (! self::debeIntentarServidorWigosSecundario($e)) {
+                throw $e;
+            }
+            $secundario = $alias === 'A' ? 'B' : 'A';
+            if (! WigosConfigResolver::conexionConfigurada($secundario, $empresaId)) {
+                throw $e;
+            }
+            $decoded = self::ejecutar($secundario, [
+                'action' => 'calcDatosFlashTurno',
+                'fecha' => $fechaYmd,
+                'turno' => strtoupper($turno),
+            ], $empresaId);
+        }
+
+        $datos = $decoded['datos'] ?? [];
+        if (! is_array($datos)) {
+            return [];
+        }
+
+        return $datos;
+    }
+
+    /**
      * @param  array<string, mixed>  $extra
      * @return array<string, mixed>
      */
@@ -131,9 +166,6 @@ final class WigosSqlServerProcess
         return $decoded;
     }
 
-    /**
-     * PHP_BINARY no existe o viene vacío bajo php-fpm; el subproceso Wigos requiere ruta explícita.
-     */
     private static function resolverBinarioPhp(): string
     {
         $configurado = trim((string) config('wigos.php_binary', ''));
@@ -168,5 +200,21 @@ final class WigosSqlServerProcess
             'No se encontró el ejecutable PHP para el subproceso Wigos. '
             .'Configure WIGOS_PHP_BINARY=/usr/bin/php8.3 en .env'
         );
+    }
+
+    /**
+     * Fallback A↔B solo ante fallo de conexión al SQL Server primario (no errores de SP/datos).
+     */
+    private static function debeIntentarServidorWigosSecundario(RuntimeException $e): bool
+    {
+        $mensaje = mb_strtolower($e->getMessage());
+
+        return str_contains($mensaje, 'no responde')
+            || str_contains($mensaje, 'login timeout')
+            || str_contains($mensaje, 'tcp provider')
+            || str_contains($mensaje, 'could not connect')
+            || str_contains($mensaje, 'connection refused')
+            || str_contains($mensaje, 'host vacío')
+            || str_contains($mensaje, 'conexión no configurada');
     }
 }

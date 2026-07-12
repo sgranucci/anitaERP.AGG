@@ -79,7 +79,16 @@ var codigoxcodigo;
 		});
 
 		// Muestra sumatoria de montos del asiento
+		if (window.AsientoMontosFormato) {
+			AsientoMontosFormato.initEnContenedor('#tbody-cuenta-table');
+		}
 		sumaMonto();
+
+		$(document).on('asiento:monto-actualizado', function () {
+			if ($('#tbody-cuenta-table').length) {
+				sumaMonto();
+			}
+		});
     });
 
 	function activa_eventos(flInicio)
@@ -89,8 +98,9 @@ var codigoxcodigo;
 		{
 			$('.consultacuenta').off('click');
 			$('.codigo').off('change');
-			$('.debe').off('change');
-			$('.haber').off('change');
+			$('.debe').off('change input');
+			$('.haber').off('change input');
+			$('.cotizacion').off('change input');
 			$('.moneda').off('change');
 		}
 		
@@ -163,12 +173,17 @@ var codigoxcodigo;
 			leeCentroCosto(codigoxcodigo);
 		});
 
-		$('.debe').on('change', function (event) {
+		$('.debe').on('change input', function (event) {
 			event.preventDefault();
 			sumaMonto();
 		});
 
-		$('.haber').on('change', function (event) {
+		$('.haber').on('change input', function (event) {
+			event.preventDefault();
+			sumaMonto();
+		});
+
+		$('.cotizacion').on('change input', function (event) {
 			event.preventDefault();
 			sumaMonto();
 		});
@@ -196,6 +211,10 @@ var codigoxcodigo;
 		leeCotizacion(ptrUltimoRenglon);
 
 		activa_eventos(false);
+
+		if (window.AsientoMontosFormato) {
+			AsientoMontosFormato.initEnContenedor($("#tbody-cuenta-table tr.item-cuenta").last());
+		}
     }
 
     function borraRenglonCuenta(event) {
@@ -356,44 +375,69 @@ var codigoxcodigo;
 		let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 	
 		$.get(url_cot, function(data){
-			$(ptr).parents("tr").find('.cotizacion').val(data.cotizacionventa);
+			var $cot = $(ptr).parents("tr").find('.cotizacion');
+			$cot.val(data.cotizacionventa);
+			if (window.AsientoMontosFormato) {
+				AsientoMontosFormato.formatearInput($cot[0]);
+			}
 			sumaMonto();
 		});
+	}
+
+	function parseMontoAr(valor) {
+		if (valor == null || valor === '') {
+			return 0;
+		}
+		var t = String(valor).trim().replace(/\s/g, '');
+		if (t.indexOf(',') >= 0) {
+			t = t.replace(/\./g, '').replace(',', '.');
+		} else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+			t = t.replace(/\./g, '');
+		}
+		var n = parseFloat(t);
+		return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+	}
+
+	function parseMonto(valor) {
+		if (window.AsientoMontosFormato && window.AsientoMontosFormato.parseDecimal) {
+			return AsientoMontosFormato.parseDecimal(valor);
+		}
+		return parseMontoAr(valor);
+	}
+
+	function formateaMontoTotal(n) {
+		if (window.AsientoMontosFormato) {
+			return AsientoMontosFormato.fmt(n);
+		}
+		return Number(n || 0).toFixed(2);
 	}
 
 	function sumaMonto()
 	{
 		let totDebe = 0;
 		let totHaber = 0;
-		let monedaDefault = $("#tbody-cuenta-table").children(':first').find('.moneda').val();
 
 		$("#tbody-cuenta-table .debe").each(function() {
-            let valor = parseFloat($(this).val());
-			let moneda = $(this).parents("tr").find('.moneda').val();
-			let cotizacion = $(this).parents("tr").find('.cotizacion').val();
+            let valor = parseMonto($(this).val());
 
-            if (valor >= 0)
-			{
-				let coef = calculaCoeficienteMoneda(monedaDefault, moneda, cotizacion);
-
-                totDebe += valor * coef;
+            if (valor > 0.000001) {
+                totDebe += valor;
 			}
         });
 
         $("#tbody-cuenta-table .haber").each(function() {
-            let valor = parseFloat($(this).val());
-			let moneda = $(this).parents("tr").find('.moneda').val();
-			let cotizacion = $(this).parents("tr").find('.cotizacion').val();
+            let valor = parseMonto($(this).val());
 
-			if (valor >= 0)
-			{
-				let coef = calculaCoeficienteMoneda(monedaDefault, moneda, cotizacion);
-
-				totHaber += valor * coef;
+			if (valor > 0.000001) {
+				totHaber += valor;
 			}
     	});
-		$("#totaldebe").val(totDebe.toFixed(2));
-		$("#totalhaber").val(totHaber.toFixed(2));
+
+		totDebe = Math.round(totDebe * 100) / 100;
+		totHaber = Math.round(totHaber * 100) / 100;
+
+		$("#totaldebe").val(formateaMontoTotal(totDebe));
+		$("#totalhaber").val(formateaMontoTotal(totHaber));
 	}
 
 	$("#form-general").submit(function (e) {
@@ -402,6 +446,10 @@ var codigoxcodigo;
 	});
 
 	function enviarFormularioAsiento(confirmarPendiente) {
+		if (window.AsientoMontosFormato) {
+			AsientoMontosFormato.normalizarAntesDeEnviar('#form-general');
+		}
+
 		let token = $("meta[name='csrf-token']").attr("content");
 		let id = $("#id").val();
 		var url;

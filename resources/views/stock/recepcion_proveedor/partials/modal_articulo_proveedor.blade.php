@@ -13,8 +13,8 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted small mb-3">
-                    Revise los datos que se grabar&aacute;n o completar&aacute;n en el cat&aacute;logo del proveedor.
-                    Corrija lecturas OCR o complete manualmente lo que falte antes de guardar la recepci&oacute;n.
+                    Revise los datos que se grabar&aacute;n o completar&aacute;n en el cat&aacute;logo del proveedor si los tiene disponibles.
+                    Todos los campos son <strong>opcionales</strong>: puede guardar la recepci&oacute;n sin completarlos y actualizar el cat&aacute;logo m&aacute;s adelante desde el art&iacute;culo.
                 </p>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered mb-0" id="tabla-modal-articulo-proveedor">

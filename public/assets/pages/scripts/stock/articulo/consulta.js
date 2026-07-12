@@ -290,6 +290,9 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
     if ($(this).closest('#tabla-articulos-requisicion').length) {
         return;
     }
+    if ($(this).closest('#tabla-articulos-requisicion-sala').length) {
+        return;
+    }
 	if ($(this).closest('.tm-deposito-campo').length && $(this).hasClass('codigodeposito')) {
 		return;
 	}

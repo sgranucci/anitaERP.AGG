@@ -4,12 +4,17 @@ namespace App\Services\Ventas;
 
 use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\Cliente;
+use App\Models\Ventas\ClienteVipGastronomia;
 use App\Models\Ventas\DescuentoGastronomia;
 use App\Queries\Ventas\GastronomiaDescuentoReporteQuery;
 use App\Services\Stock\PrecioService;
 use App\Support\Ventas\Gastronomia\GastronomiaInformeGerenteCostoListaSupport;
+use App\Models\Ventas\MozoGastronomia;
+use App\Support\Ventas\GastronomiaDescuentoReporteClienteSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteCodigoSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteFiltros;
+use App\Support\Ventas\GastronomiaDescuentoReporteMozoSupport;
+use App\Support\Ventas\GastronomiaDescuentoReporteVipSupport;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
 
@@ -30,6 +35,8 @@ final class GastronomiaDescuentoReporteService
      *   listas_costo:array<string,mixed>,
      *   codigos_sin_datos:list<string>,
      *   clientes_sin_datos:list<int>,
+     *   mozos_sin_datos:list<int>,
+     *   vips_sin_datos:list<int>,
      *   vista_columnas:array<string,mixed>|null,
      *   periodo_texto:string,
      *   mes_etiqueta:string,
@@ -161,6 +168,8 @@ final class GastronomiaDescuentoReporteService
 
         $codigosSinDatos = [];
         $clientesSinDatos = [];
+        $mozosSinDatos = [];
+        $vipsSinDatos = [];
         if (empty($filtros['listar_todos'])) {
             $codigosSolicitados = $filtros['codigos_descuento_resueltos'] ?? [];
             if ($codigosSolicitados !== [] && $agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO) {
@@ -178,6 +187,28 @@ final class GastronomiaDescuentoReporteService
                 }
                 $clientesSinDatos = array_values(array_diff($clientesSolicitados, $clientesConDatos));
             }
+
+            $mozosSolicitados = $filtros['mozos_descuento_ids'] ?? [];
+            if ($mozosSolicitados !== [] && $agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
+                $mozosConDatos = [];
+                foreach ($bloques as $bloque) {
+                    if (preg_match('/^m_(\d+)$/', (string) $bloque['clave'], $m)) {
+                        $mozosConDatos[] = (int) $m[1];
+                    }
+                }
+                $mozosSinDatos = array_values(array_diff($mozosSolicitados, $mozosConDatos));
+            }
+
+            $vipsSolicitados = $filtros['vips_descuento_ids'] ?? [];
+            if ($vipsSolicitados !== [] && $agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
+                $vipsConDatos = [];
+                foreach ($bloques as $bloque) {
+                    if (preg_match('/^v_(\d+)$/', (string) $bloque['clave'], $m)) {
+                        $vipsConDatos[] = (int) $m[1];
+                    }
+                }
+                $vipsSinDatos = array_values(array_diff($vipsSolicitados, $vipsConDatos));
+            }
         }
 
         return $this->armarResultado(
@@ -191,6 +222,8 @@ final class GastronomiaDescuentoReporteService
             $listas,
             $codigosSinDatos,
             $clientesSinDatos,
+            $mozosSinDatos,
+            $vipsSinDatos,
         );
     }
 
@@ -231,6 +264,8 @@ final class GastronomiaDescuentoReporteService
      * @param  array<string, mixed>  $listas
      * @param  list<string>  $codigosSinDatos
      * @param  list<int>  $clientesSinDatos
+     * @param  list<int>  $mozosSinDatos
+     * @param  list<int>  $vipsSinDatos
      * @return array<string, mixed>
      */
     private function armarResultado(
@@ -244,6 +279,8 @@ final class GastronomiaDescuentoReporteService
         array $listas,
         array $codigosSinDatos,
         array $clientesSinDatos,
+        array $mozosSinDatos,
+        array $vipsSinDatos,
     ): array {
         $resultado = [
             'bloques' => $bloques,
@@ -254,6 +291,8 @@ final class GastronomiaDescuentoReporteService
             'listas_costo' => $listas,
             'codigos_sin_datos' => $codigosSinDatos,
             'clientes_sin_datos' => $clientesSinDatos,
+            'mozos_sin_datos' => $mozosSinDatos,
+            'vips_sin_datos' => $vipsSinDatos,
             'vista_columnas' => null,
             'periodo_texto' => GastronomiaDescuentoReporteFiltros::formatearPeriodoTexto($filtros),
             'mes_etiqueta' => GastronomiaDescuentoReporteFiltros::etiquetaMes($filtros),
@@ -272,7 +311,7 @@ final class GastronomiaDescuentoReporteService
         $avisos = [];
         $agruparPor = (string) ($filtros['agrupar_por'] ?? GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO);
 
-        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
+        if (GastronomiaDescuentoReporteFiltros::usaFiltroCodigosDescuentoSecundario($filtros)) {
             $codigosFiltro = $filtros['codigos_descuento_cliente_resueltos'] ?? [];
             if ($codigosFiltro !== []) {
                 $existentes = GastronomiaDescuentoReporteCodigoSupport::resolverExistentes($codigosFiltro);
@@ -287,14 +326,37 @@ final class GastronomiaDescuentoReporteService
             return $avisos;
         }
 
+        $agruparPor = (string) ($filtros['agrupar_por'] ?? GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO);
         $codigos = $filtros['codigos_descuento_resueltos'] ?? [];
         $clienteIds = $filtros['clientes_descuento_ids'] ?? [];
+        $mozoIds = $filtros['mozos_descuento_ids'] ?? [];
+        $vipIds = $filtros['vips_descuento_ids'] ?? [];
 
-        if ($codigos === [] && $clienteIds === []) {
-            return array_merge($avisos, ['Seleccione al menos un descuento, un cliente interno de descuento, o marque Listar todos.']);
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO
+            && $codigos === []) {
+            return array_merge($avisos, ['Seleccione al menos un código de descuento o marque Listar todos.']);
         }
 
-        if ($codigos !== []) {
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE
+            && $clienteIds === []
+            && ! GastronomiaDescuentoReporteClienteSupport::tieneRangoCodigo(
+                (string) ($filtros['cliente_codigo_desde'] ?? ''),
+                (string) ($filtros['cliente_codigo_hasta'] ?? ''),
+            )) {
+            return array_merge($avisos, ['Seleccione al menos un cliente interno, defina un rango de códigos, o marque Listar todos.']);
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO
+            && GastronomiaDescuentoReporteFiltros::mozoRangoSinCoincidencias($filtros)) {
+            return array_merge($avisos, ['El rango de mozos no coincide con ningún mozo registrado.']);
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP
+            && GastronomiaDescuentoReporteFiltros::vipRangoSinCoincidencias($filtros)) {
+            return array_merge($avisos, ['El rango de clientes VIP no coincide con ningún cliente VIP registrado.']);
+        }
+
+        if ($codigos !== [] && $agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CODIGO) {
             $existentes = GastronomiaDescuentoReporteCodigoSupport::resolverExistentes($codigos);
             $faltantes = array_values(array_diff($codigos, $existentes));
             if ($faltantes !== []) {
@@ -302,7 +364,7 @@ final class GastronomiaDescuentoReporteService
             }
         }
 
-        if ($clienteIds !== []) {
+        if ($clienteIds !== [] && $agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
             $existentesIds = Cliente::query()->whereIn('id', $clienteIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
             $faltantesIds = array_values(array_diff($clienteIds, $existentesIds));
             if ($faltantesIds !== []) {
@@ -310,7 +372,101 @@ final class GastronomiaDescuentoReporteService
             }
         }
 
+        if ($mozoIds !== [] && $agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
+            $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+            $query = MozoGastronomia::query()->whereIn('id', $mozoIds);
+            if ($empresaId > 0) {
+                $query->where('empresa_id', $empresaId);
+            }
+            $existentesIds = $query->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $faltantesIds = array_values(array_diff($mozoIds, $existentesIds));
+            if ($faltantesIds !== []) {
+                $avisos[] = 'Mozos no registrados: ID '.implode(', ', $faltantesIds).'.';
+            }
+        }
+
+        if ($vipIds !== [] && $agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
+            $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+            $query = ClienteVipGastronomia::query()->whereIn('id', $vipIds);
+            if ($empresaId > 0) {
+                $query->where('empresa_id', $empresaId);
+            }
+            $existentesIds = $query->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $faltantesIds = array_values(array_diff($vipIds, $existentesIds));
+            if ($faltantesIds !== []) {
+                $avisos[] = 'Clientes VIP no registrados: ID '.implode(', ', $faltantesIds).'.';
+            }
+        }
+
         return $avisos;
+    }
+
+    /**
+     * Códigos del rango cliente interno que no existen en maestro (huecos esperables en rangos amplios).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return list<string>
+     */
+    public function codigosClienteRangoSinRegistro(array $filtros): array
+    {
+        $codigoDesde = (string) ($filtros['cliente_codigo_desde'] ?? '');
+        $codigoHasta = (string) ($filtros['cliente_codigo_hasta'] ?? '');
+        if (! GastronomiaDescuentoReporteClienteSupport::tieneRangoCodigo($codigoDesde, $codigoHasta)) {
+            return [];
+        }
+
+        $tokenRango = trim($codigoDesde) !== '' && trim($codigoHasta) !== ''
+            ? trim($codigoDesde).'/'.trim($codigoHasta)
+            : (trim($codigoDesde) !== '' ? trim($codigoDesde) : trim($codigoHasta));
+        $codigosRango = GastronomiaDescuentoReporteCodigoSupport::expandir($tokenRango);
+
+        return GastronomiaDescuentoReporteClienteSupport::codigosSinClienteRegistrado($codigosRango);
+    }
+
+    /**
+     * Códigos del rango mozo que no existen en maestro (huecos esperables en rangos amplios).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return list<string>
+     */
+    public function codigosMozoRangoSinRegistro(array $filtros): array
+    {
+        $codigoDesde = (string) ($filtros['mozo_codigo_desde'] ?? '');
+        $codigoHasta = (string) ($filtros['mozo_codigo_hasta'] ?? '');
+        if (! GastronomiaDescuentoReporteMozoSupport::tieneRangoCodigo($codigoDesde, $codigoHasta)) {
+            return [];
+        }
+
+        $tokenRango = trim($codigoDesde) !== '' && trim($codigoHasta) !== ''
+            ? trim($codigoDesde).'/'.trim($codigoHasta)
+            : (trim($codigoDesde) !== '' ? trim($codigoDesde) : trim($codigoHasta));
+        $codigosRango = GastronomiaDescuentoReporteCodigoSupport::expandir($tokenRango);
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+
+        return GastronomiaDescuentoReporteMozoSupport::codigosSinMozoRegistrado($codigosRango, $empresaId);
+    }
+
+    /**
+     * Códigos del rango VIP que no existen en maestro (huecos esperables en rangos amplios).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return list<string>
+     */
+    public function codigosVipRangoSinRegistro(array $filtros): array
+    {
+        $codigoDesde = (string) ($filtros['vip_codigo_desde'] ?? '');
+        $codigoHasta = (string) ($filtros['vip_codigo_hasta'] ?? '');
+        if (! GastronomiaDescuentoReporteVipSupport::tieneRangoCodigo($codigoDesde, $codigoHasta)) {
+            return [];
+        }
+
+        $tokenRango = trim($codigoDesde) !== '' && trim($codigoHasta) !== ''
+            ? trim($codigoDesde).'/'.trim($codigoHasta)
+            : (trim($codigoDesde) !== '' ? trim($codigoDesde) : trim($codigoHasta));
+        $codigosRango = GastronomiaDescuentoReporteCodigoSupport::expandir($tokenRango);
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+
+        return GastronomiaDescuentoReporteVipSupport::codigosSinVipRegistrado($codigosRango, $empresaId);
     }
 
     /**
@@ -319,6 +475,28 @@ final class GastronomiaDescuentoReporteService
      */
     private function metaAgrupacion(object $fila, string $agruparPor): array
     {
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
+            $vipId = (int) ($fila->vip_id ?? 0);
+
+            return [
+                'clave' => 'v_'.$vipId,
+                'tipo_agrupacion' => GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP,
+                'codigo' => $vipId > 0 ? ($fila->vip_codigo ?: (string) $vipId) : '—',
+                'nombre' => $vipId > 0 ? $fila->vip_nombre : 'Sin cliente VIP',
+            ];
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
+            $mozoId = (int) ($fila->mozo_id ?? 0);
+
+            return [
+                'clave' => 'm_'.$mozoId,
+                'tipo_agrupacion' => GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO,
+                'codigo' => $mozoId > 0 ? ($fila->mozo_codigo ?: (string) $mozoId) : '—',
+                'nombre' => $mozoId > 0 ? $fila->mozo_nombre : 'Sin mozo',
+            ];
+        }
+
         if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
             $clienteId = (int) ($fila->cliente_interno_id ?? 0);
 
@@ -347,7 +525,9 @@ final class GastronomiaDescuentoReporteService
      */
     private function ordenClavesSolicitadas(array $filtros, array $porClave, string $agruparPor): array
     {
-        if (! empty($filtros['listar_todos'])) {
+        if (! empty($filtros['listar_todos'])
+            || GastronomiaDescuentoReporteFiltros::mozoAlcanceImplicitoTodos($filtros)
+            || GastronomiaDescuentoReporteFiltros::vipAlcanceImplicitoTodos($filtros)) {
             $claves = array_keys($porClave);
             usort($claves, function (string $a, string $b) use ($porClave) {
                 $ca = (string) ($porClave[$a]['codigo'] ?? '');
@@ -370,6 +550,28 @@ final class GastronomiaDescuentoReporteService
         if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
             foreach ($filtros['clientes_descuento_ids'] ?? [] as $clienteId) {
                 $clave = 'c_'.(int) $clienteId;
+                if (isset($porClave[$clave])) {
+                    $orden[] = $clave;
+                }
+            }
+
+            return $orden;
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
+            foreach ($filtros['mozos_descuento_ids'] ?? [] as $mozoId) {
+                $clave = 'm_'.(int) $mozoId;
+                if (isset($porClave[$clave])) {
+                    $orden[] = $clave;
+                }
+            }
+
+            return $orden;
+        }
+
+        if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
+            foreach ($filtros['vips_descuento_ids'] ?? [] as $vipId) {
+                $clave = 'v_'.(int) $vipId;
                 if (isset($porClave[$clave])) {
                     $orden[] = $clave;
                 }

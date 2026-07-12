@@ -14,6 +14,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('consulta_administracion_ticket', $filtrosQuery ?? []);
+@endphp
 <div class="row" id="crear">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -22,12 +25,12 @@
             <div class="card-header">
                 <h3 class="card-title">Crear Ticket</h3>
                 <div class="card-tools">
-                    <a href="{{route('consulta_administracion_ticket')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('guarda_administracion_ticket')}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{ route('guarda_administracion_ticket', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">

@@ -20,18 +20,19 @@
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
-        <tr><td colspan="11" style="height: 52px;"></td></tr>
+        <tr><td colspan="12" style="height: 52px;"></td></tr>
     @endif
     <tr>
-        <td colspan="11"><strong style="font-size: 16px;">{{ $titulo ?? 'Ventas de artículos' }}</strong></td>
+        <td colspan="12"><strong style="font-size: 16px;">{{ $titulo ?? 'Ventas de artículos' }}</strong></td>
     </tr>
     @if (! empty($subtitulo))
-        <tr><td colspan="11">{{ $subtitulo }}</td></tr>
+        <tr><td colspan="12">{{ $subtitulo }}</td></tr>
     @endif
-    <tr><td colspan="11">Generado {{ date('d/m/Y H:i') }}</td></tr>
+    <tr><td colspan="12">Generado {{ date('d/m/Y H:i') }}</td></tr>
     <tr>
         <th>Artículo</th>
         <th>Descripción</th>
+        <th style="text-align: right;">Costo unit.</th>
         <th style="text-align: right;">P.Vta.</th>
         <th style="text-align: right;">Cantidad vendida tot.</th>
         <th style="text-align: right;">Cantidad vta. externa</th>
@@ -46,6 +47,7 @@
         <tr>
             <td>{{ $fila['sku'] ?? '' }}</td>
             <td>{{ $fila['descripcion'] ?? '' }}</td>
+            <td style="text-align: right;">{{ $fmtImp($fila['costo_unitario'] ?? 0) }}</td>
             <td style="text-align: right;">{{ $fmtImp($fila['precio_venta'] ?? 0) }}</td>
             <td style="text-align: right;">{{ $fmtCant($fila['cant_total'] ?? 0) }}</td>
             <td style="text-align: right;">{{ $fmtCant($fila['cant_externa'] ?? 0) }}</td>
@@ -59,7 +61,7 @@
     @endforeach
     @if ($totales !== [])
         <tr>
-            <td colspan="3" style="text-align: right;"><strong>Totales</strong></td>
+            <td colspan="4" style="text-align: right;"><strong>Totales</strong></td>
             <td style="text-align: right;">{{ $fmtCant($totales['cant_total'] ?? 0) }}</td>
             <td style="text-align: right;">{{ $fmtCant($totales['cant_externa'] ?? 0) }}</td>
             <td style="text-align: right;">{{ $fmtImp($totales['importe_externa'] ?? 0) }}</td>

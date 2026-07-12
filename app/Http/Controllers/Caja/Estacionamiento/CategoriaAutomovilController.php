@@ -8,6 +8,7 @@ use App\Http\Requests\ValidacionEstacionamientoCategoriaAutomovil;
 use App\Models\Caja\Estacionamiento\CategoriaAutomovil;
 use App\Repositories\Caja\Estacionamiento\CategoriaAutomovilRepositoryInterface;
 use App\Support\Caja\Estacionamiento\CategoriaAutomovilListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 
 class CategoriaAutomovilController extends Controller
@@ -67,12 +68,13 @@ class CategoriaAutomovilController extends Controller
         return redirect()->route('estacionamiento_categoria_automovil', CategoriaAutomovilListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-estacionamiento-categoria-automovil');
         $data = new CategoriaAutomovil();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, CategoriaAutomovilListadoFiltros::class);
 
-        return view('caja.estacionamiento.categoria_automovil.crear', compact('data'));
+        return view('caja.estacionamiento.categoria_automovil.crear', compact('data', 'filtrosQuery'));
     }
 
     public function guardar(ValidacionEstacionamientoCategoriaAutomovil $request)
@@ -80,15 +82,17 @@ class CategoriaAutomovilController extends Controller
         can('crear-estacionamiento-categoria-automovil');
         $this->repository->create($request->all());
 
-        return redirect('caja/estacionamiento/categoria-automovil')->with('mensaje', 'Categoría de automóvil creada con éxito');
+        return redirect()->route('estacionamiento_categoria_automovil', QueryRetornoListado::desdeRequest($request, CategoriaAutomovilListadoFiltros::class))
+            ->with('mensaje', 'Categoría de automóvil creada con éxito');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-estacionamiento-categoria-automovil');
         $data = $this->repository->findOrFail($id);
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, CategoriaAutomovilListadoFiltros::class);
 
-        return view('caja.estacionamiento.categoria_automovil.editar', compact('data'));
+        return view('caja.estacionamiento.categoria_automovil.editar', compact('data', 'filtrosQuery'));
     }
 
     public function actualizar(ValidacionEstacionamientoCategoriaAutomovil $request, $id)
@@ -96,7 +100,8 @@ class CategoriaAutomovilController extends Controller
         can('actualizar-estacionamiento-categoria-automovil');
         $this->repository->update($request->all(), $id);
 
-        return redirect('caja/estacionamiento/categoria-automovil')->with('mensaje', 'Categoría de automóvil actualizada con éxito');
+        return redirect()->route('estacionamiento_categoria_automovil', QueryRetornoListado::desdeRequest($request, CategoriaAutomovilListadoFiltros::class))
+            ->with('mensaje', 'Categoría de automóvil actualizada con éxito');
     }
 
     public function eliminar(Request $request, $id)

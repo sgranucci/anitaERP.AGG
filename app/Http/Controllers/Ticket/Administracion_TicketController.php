@@ -18,6 +18,7 @@ use App\Models\Ticket\Ticket_Tarea_Novedad;
 use App\Queries\Ticket\TicketQueryInterface;
 use App\Exports\Ticket\AdministracionTicketListadoExport;
 use App\Support\Ticket\AdministracionTicketListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -136,7 +137,7 @@ class Administracion_TicketController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-ticket');
 
@@ -147,10 +148,11 @@ class Administracion_TicketController extends Controller
         $estado_novedad_enum = Ticket_Tarea_Novedad::$enumEstado;
         $estado_novedad_json = json_encode(Ticket_Tarea_Novedad::$enumEstado);
         $estado_enum = Ticket_Estado::$enumEstado;
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class);
 
         return view('ticket.administracion_ticket.crear', compact('areadestino_query', 'sector_query', 'sala_query',
                                                                 'turno_query', 'estado_novedad_enum',
-                                                                'estado_novedad_json', 'estado_enum'));
+                                                                'estado_novedad_json', 'estado_enum', 'filtrosQuery'));
     }
 
     /**
@@ -163,7 +165,8 @@ class Administracion_TicketController extends Controller
     {
         $this->ticketService->guardaTicket($request, 'administracion');
 
-        return redirect('ticket/administracion_ticket')->with('mensaje', 'Ticket creado con éxito');
+        return redirect()->route('consulta_administracion_ticket', QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class))
+            ->with('mensaje', 'Ticket creado con éxito');
 	}
 
     /**
@@ -172,7 +175,7 @@ class Administracion_TicketController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-ticket');
 
@@ -184,10 +187,11 @@ class Administracion_TicketController extends Controller
         $estado_novedad_enum = Ticket_Tarea_Novedad::$enumEstado;
         $estado_novedad_json = json_encode(Ticket_Tarea_Novedad::$enumEstado);
         $estado_enum = Ticket_Estado::$enumEstado;
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class);
 
         return view('ticket.administracion_ticket.editar', compact('data', 'areadestino_query', 'sector_query', 
                                                                     'sala_query', 'turno_query', 'estado_novedad_enum',
-                                                                    'estado_novedad_json', 'estado_enum'));
+                                                                    'estado_novedad_json', 'estado_enum', 'filtrosQuery'));
     }
 
     /**
@@ -203,7 +207,8 @@ class Administracion_TicketController extends Controller
 
         $this->ticketService->actualizaTicket($request, $id, 'administracion');
 
-        return redirect('ticket/administracion_ticket')->with('mensaje', 'Ticket actualizado con éxito');
+        return redirect()->route('consulta_administracion_ticket', QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class))
+            ->with('mensaje', 'Ticket actualizado con éxito');
     }
 
     /**

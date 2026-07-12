@@ -9,6 +9,7 @@ use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
+use App\Support\Caja\Estacionamiento\EstacionamientoFacturaPayloadSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoIdentificadorPc;
 use App\Support\Caja\Estacionamiento\EstacionamientoVentaDetalleSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
@@ -275,7 +276,7 @@ final class EstacionamientoNotaCreditoService
             $impuestoId = (int) ($em->impuesto_id ?? 0);
             $impuestoIds[] = $impuestoId > 0
                 ? $impuestoId
-                : (int) config('estacionamiento.impuesto_exento_id', 1);
+                : EstacionamientoFacturaPayloadSupport::impuestoGravadoId();
             $incl = (string) ($em->incluyeimpuesto ?? '1');
             $incluyeImpuestos[] = in_array($incl, ['S', '1', 'Y'], true) ? '1' : 'N';
         }

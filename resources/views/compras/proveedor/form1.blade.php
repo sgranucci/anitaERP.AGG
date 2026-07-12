@@ -294,6 +294,13 @@
 					@if ($tasacaba != '')
     					<label for="Tasacaba" style="padding: 0px;" class="col-form-label">Tasa CABA: {{$tasacaba}} %</label>
 					@endif
+                    @if (!empty($data->facturas_apocrifas))
+                        <span id="proveedor-apoc-estado-badge" class="badge badge-danger ml-1">Facturas ap&oacute;crifas (ARCA)</span>
+                    @elseif (!empty($data->facturas_apocrifas_consulta_at))
+                        <span id="proveedor-apoc-estado-badge" class="badge badge-success ml-1">Sin registro APOC ({{ $data->facturas_apocrifas_consulta_at->format('d/m/Y H:i') }})</span>
+                    @else
+                        <span id="proveedor-apoc-estado-badge" class="badge badge-secondary ml-1" style="display: none;"></span>
+                    @endif
     				</div>
 					<div class="col-lg-2">
 						<label for="Tiposuspension" id="nombretiposuspension" style="padding: 0px;" class="col-form-label text-danger"></label>

@@ -208,12 +208,12 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
                 $formIdx,
                 $articulo,
                 'sin_codigo',
-                'Falta código',
+                'Opcional',
                 true,
                 $datos,
                 $meta,
                 null,
-                'Indique el código del proveedor leído en el remito.'
+                'Sin código de proveedor detectado. Complete solo si dispone del dato; puede guardar sin completar.'
             );
         }
 

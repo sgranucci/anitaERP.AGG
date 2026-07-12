@@ -10,6 +10,8 @@
     }
     $tieneCriteriosInteligentes = PrecioListadoFiltros::tieneCriteriosInteligentesAplicados($f);
     $limpiarUrlPanel = $limpiarUrl ?? route('precio');
+    $listasPrecioFiltro = $listasPrecio ?? [];
+    $valorListaFiltro = ($campoActivo === 'listaprecio') ? (string) ($f['valor'] ?? '') : '';
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-precio" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
@@ -51,14 +53,25 @@
                     @endforeach
                 </select>
             </div>
-            <div class="form-group col-md-3 col-sm-6 mb-2">
+            <div class="form-group col-md-3 col-sm-6 mb-2 filtro-valor-texto-wrap">
                 <label class="small mb-1" for="filtro_valor_panel">Valor</label>
                 <input type="text"
                        id="filtro_valor_panel"
                        class="form-control form-control-sm"
-                       value="{{ $f['valor'] ?? '' }}"
-                       placeholder="Texto, número o fecha"
+                       value="{{ $campoActivo === 'listaprecio' ? '' : ($f['valor'] ?? '') }}"
+                       placeholder="Texto, n&uacute;mero o fecha"
                        autocomplete="off">
+            </div>
+            <div class="form-group col-md-3 col-sm-6 mb-2 filtro-listaprecio-wrap" style="display:none">
+                <label class="small mb-1" for="filtro_valor_listaprecio">Lista de precios</label>
+                <select id="filtro_valor_listaprecio" class="form-control form-control-sm" disabled>
+                    <option value="">— Seleccione —</option>
+                    @foreach($listasPrecioFiltro as $lista)
+                        <option value="{{ $lista->id }}" {{ $valorListaFiltro !== '' && (int) $valorListaFiltro === (int) $lista->id ? 'selected' : '' }}>
+                            {{ $lista->codigo }} — {{ $lista->nombre }}
+                        </option>
+                    @endforeach
+                </select>
             </div>
             <div class="form-group col-md-2 col-sm-4 mb-2 filtro-valor-hasta-wrap" style="display:none">
                 <label class="small mb-1" for="filtro_valor_hasta">Hasta</label>

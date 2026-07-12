@@ -23,6 +23,7 @@ class Venta extends Model implements Auditable
     
 	protected $casts = [
 			'deleted_at' => 'datetime',
+            'caea_informado_at' => 'datetime',
 	];
     protected $fillable = [
             'fecha', 'fechajornada', 'tipotransaccion_id',
@@ -31,7 +32,9 @@ class Venta extends Model implements Auditable
             'usuario_id', 'leyenda', 'descuento', 'descuentointegrado', 'lugarentrega',
             'cliente_entrega_id', 'codigo', 'nombre', 'domicilio', 'localidad_id', 'provincia_id',
             'pais_id', 'codigopostal', 'email', 'telefono', 'nroinscripcion', 
-            'condicioniva_id', 'cae', 'fechavencimientocae', 'puntoventaremito_id',
+            'condicioniva_id', 'cae', 'fechavencimientocae',
+            'caea_informado_estado', 'caea_informado_at', 'caea_informado_codigo_error', 'caea_informado_mensaje',
+            'puntoventaremito_id',
             'numeroremito', 'cantidadbulto', 'ordenventa_id', 'pedido_id'
     ];
 
@@ -154,6 +157,11 @@ class Venta extends Model implements Auditable
     public function monedas()
     {
         return $this->hasOne(Moneda::class, 'id', 'moneda_id');
+    }
+
+    public function condicionivas()
+    {
+        return $this->hasOne(\App\Models\Configuracion\Condicioniva::class, 'id', 'condicioniva_id');
     }
 
     // Borra en cadena por soft deletes

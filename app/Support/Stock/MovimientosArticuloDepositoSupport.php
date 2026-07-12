@@ -26,6 +26,19 @@ final class MovimientosArticuloDepositoSupport
         return $asignadas !== 1;
     }
 
+    /**
+     * Columna Empresa en el modal de consulta de depósitos. Además del criterio de
+     * multiempresa, se muestra siempre para usuarios con permiso intercompany (transferencia
+     * o recepción), así el listado documenta a qué empresa pertenece cada depósito y la
+     * cabecera del modal queda alineada con las filas cuando se activa el modo intercompany.
+     */
+    public static function mostrarEmpresaConsultaDeposito(): bool
+    {
+        return self::mostrarEmpresaEnListados()
+            || TransferenciaMercaderiaIntercompanySupport::puedeUsar()
+            || RecepcionProveedorIntercompanySupport::puedeUsar();
+    }
+
     public static function puedeConsultar(): bool
     {
         return can('listar-articulos', false)

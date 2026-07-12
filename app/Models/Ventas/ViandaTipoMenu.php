@@ -2,6 +2,7 @@
 
 namespace App\Models\Ventas;
 
+use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -12,10 +13,16 @@ class ViandaTipoMenu extends Model implements Auditable
     protected $table = 'vianda_tipo_menu';
 
     protected $fillable = [
+        'empresa_id',
         'codigo_anita',
         'nombre',
         'estado',
     ];
+
+    public function empresa()
+    {
+        return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
 
     public function articulos()
     {

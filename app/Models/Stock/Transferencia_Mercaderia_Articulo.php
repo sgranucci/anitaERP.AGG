@@ -13,6 +13,7 @@ class Transferencia_Mercaderia_Articulo extends Model
         'item',
         'articulo_origen_id',
         'articulo_destino_id',
+        'numeroparte',
         'cantidad_origen',
         'cantidad_destino',
         'precio_costo_origen',

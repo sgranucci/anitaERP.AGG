@@ -2,11 +2,13 @@
 
 namespace App\Support\Compras\AnitaSync\Requisicion;
 
+use App\Support\Anita\AnitaTextoSanitizer;
+
 final class AnitaSqlLiteral
 {
     public static function string(?string $value, int $maxLen): string
     {
-        $trim = trim((string) $value);
+        $trim = AnitaTextoSanitizer::sanitizar($value);
         if ($maxLen > 0 && mb_strlen($trim) > $maxLen) {
             $trim = mb_substr($trim, 0, $maxLen);
         }

@@ -84,11 +84,22 @@
 			}
 		});
 
-		if (!flError
-			&& typeof window.msOperacionTipoTransaccion === 'function'
-			&& window.msOperacionTipoTransaccion() === 'S'
-			&& (typeof window.msDepositoOrigenRequiereControlStock !== 'function'
-				|| window.msDepositoOrigenRequiereControlStock())) {
+		function movimientoRestaStockEnDepositoOrigen() {
+			if (typeof window.msDepositoOrigenRequiereControlStock === 'function'
+				&& !window.msDepositoOrigenRequiereControlStock()) {
+				return false;
+			}
+			if (typeof window.msOperacionTipoTransaccion !== 'function') {
+				return false;
+			}
+			var op = window.msOperacionTipoTransaccion();
+			if (op === 'S') {
+				return true;
+			}
+			return op === 'T' && $('#tm_deposito_salida').is(':visible');
+		}
+
+		if (!flError && movimientoRestaStockEnDepositoOrigen()) {
 			$("#tbody-tabla tr.item-pedido").each(function () {
 				var $tr = $(this);
 				var cant = parseFloat($tr.find(".cantidad-stock").val() || $tr.find(".cantidad").val() || 0);

@@ -54,6 +54,18 @@ class ReportePreferenciasUsuario
         return (bool) $valor;
     }
 
+    public static function leerPeriodo(string $reporte, string $default = ''): string
+    {
+        $valor = cache()->get(generaKey(self::clave($reporte, 'periodo')));
+        if (! is_string($valor)) {
+            return $default;
+        }
+
+        $periodo = trim($valor);
+
+        return preg_match('/^\d{4}-\d{2}$/', $periodo) === 1 ? $periodo : $default;
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -78,6 +90,13 @@ class ReportePreferenciasUsuario
                 generaKey(self::clave($reporte, 'consolidar_empresas')),
                 (bool) $data['consolidar_empresas'],
             );
+        }
+
+        if (isset($data['periodo']) && is_string($data['periodo'])) {
+            $periodo = trim($data['periodo']);
+            if (preg_match('/^\d{4}-\d{2}$/', $periodo) === 1) {
+                Cache::forever(generaKey(self::clave($reporte, 'periodo')), $periodo);
+            }
         }
     }
 

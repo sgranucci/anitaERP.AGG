@@ -32,14 +32,18 @@ use App\Services\Compras\OrdencompraPdfService;
 use App\Services\Compras\OrdencompraArticuloPrecioHistoriaService;
 use App\Services\Compras\OrdencompraRecepcionesListadoService;
 use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
+use App\Services\Compras\OrdencompraRevertirCierreLineaService;
+use App\Services\Stock\RecepcionProveedorPrecioPendienteService;
 use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\OrdencompraPdfContextoRequisicion;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\OrdencompraTotalesResumen;
+use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Models\Stock\Recepcion_Proveedor;
 use Auth;
@@ -65,6 +69,8 @@ class OrdencompraController extends Controller
         private OrdencompraRecepcionesListadoService $ordencompraRecepcionesListadoService,
         private OrdencompraRecepcionPrecioSyncService $ordencompraRecepcionPrecioSyncService,
         private OrdencompraArticuloPrecioHistoriaService $ordencompraArticuloPrecioHistoriaService,
+        private RecepcionProveedorPrecioPendienteService $recepcionPrecioPendienteService,
+        private OrdencompraRevertirCierreLineaService $ordencompraRevertirCierreLineaService,
     ) {}
 
     public function index(Request $request)
@@ -99,11 +105,11 @@ class OrdencompraController extends Controller
         ]);
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-ordencompra');
 
-        return $this->formularioOrdencompra(null, false, null);
+        return $this->formularioOrdencompra(null, false, null, $request);
     }
 
     public function guardar(Request $request)
@@ -113,8 +119,11 @@ class OrdencompraController extends Controller
         $ret = $this->ordencompraGestionService->guardar($request, false);
 
         if (($ret['mensaje'] ?? '') === 'ok') {
-            $redirect = redirect()->route('editar_ordencompra', ['id' => $ret['id']])
-                ->with('mensaje', 'Orden de compra creada con éxito');
+            $redirect = redirect()->route('editar_ordencompra', QueryRetornoListado::paramsRutaEditar(
+                $request,
+                OrdencompraListadoFiltros::class,
+                (int) $ret['id']
+            ))->with('mensaje', 'Orden de compra creada con éxito');
             if ($this->ordencompraEnvioProveedorService->datosEnvio((int) $ret['id'])['puede_enviar'] ?? false) {
                 $redirect->with('sugerir_envio_oc', (int) $ret['id']);
             }
@@ -122,12 +131,13 @@ class OrdencompraController extends Controller
             return $redirect;
         }
 
-        return redirect()->route('crear_ordencompra')->withInput()->with('mensaje', $ret['errores'] ?? 'Error al guardar');
+        return redirect()->route('crear_ordencompra', QueryRetornoListado::desdeRequest($request, OrdencompraListadoFiltros::class))
+            ->withInput()->with('mensaje', $ret['errores'] ?? 'Error al guardar');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
         if ($soloConsulta) {
             if (! can('listar-ordencompra', false) && ! can('editar-ordencompra', false)) {
                 can('listar-ordencompra');
@@ -139,7 +149,7 @@ class OrdencompraController extends Controller
         $puedeActualizar = can('actualizar-ordencompra', false);
         $soloLectura = $soloConsulta && ! $puedeActualizar;
 
-        return $this->formularioOrdencompra((int) $id, $soloLectura, null);
+        return $this->formularioOrdencompra((int) $id, $soloLectura, null, $request);
     }
 
     public function actualizar(Request $request, $id)
@@ -149,7 +159,7 @@ class OrdencompraController extends Controller
         $ret = $this->ordencompraGestionService->actualizar($request, (int) $id);
 
         if (($ret['mensaje'] ?? '') === 'ok') {
-            if ($request->input('origen') === 'modal_consulta') {
+            if (QueryRetornoListado::esModalConsulta($request)) {
                 return redirect()
                     ->route('editar_ordencompra', [
                         'id' => $id,
@@ -159,14 +169,11 @@ class OrdencompraController extends Controller
                     ->with('mensaje', 'Orden de compra actualizada con éxito');
             }
 
-            return redirect()->route('consultar_ordencompra')->with('mensaje', 'Orden de compra actualizada con éxito');
+            return redirect()->route('consultar_ordencompra', QueryRetornoListado::desdeRequest($request, OrdencompraListadoFiltros::class))
+                ->with('mensaje', 'Orden de compra actualizada con éxito');
         }
 
-        $params = ['id' => $id];
-        if ($request->input('origen') === 'modal_consulta') {
-            $params['origen'] = 'modal_consulta';
-            $params['vista'] = 'consulta';
-        }
+        $params = QueryRetornoListado::paramsRutaEditar($request, OrdencompraListadoFiltros::class, (int) $id);
 
         return redirect()->route('editar_ordencompra', $params)->withInput()->with('mensaje', $ret['errores'] ?? 'Error');
     }
@@ -258,6 +265,12 @@ class OrdencompraController extends Controller
             return response()->json(['message' => 'Sin permisos'], 403);
         }
         $id = (int) $request->query('requisicion_id', 0);
+        if ($id <= 0) {
+            return response()->json(['message' => 'Requisición inválida.'], 422);
+        }
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($id)) {
+            return response()->json(['message' => 'Requisición no encontrada o sin acceso.'], 404);
+        }
         try {
             $data = $this->ordencompraGestionService->plantillaDesdeRequisicion($id);
         } catch (\InvalidArgumentException $e) {
@@ -435,6 +448,7 @@ class OrdencompraController extends Controller
                 soloPendientes: true,
                 origen: OrdencompraArticuloPrecioHistoriaOrigen::APLICACION_MANUAL,
             );
+            $this->recepcionPrecioPendienteService->liberarRecepcionesPendientesPorOc((int) $ordencompra_id);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         }
@@ -445,6 +459,31 @@ class OrdencompraController extends Controller
             'mensaje' => $actualizadas > 0
                 ? "Se actualizaron {$actualizadas} precio(s) en la OC y Anita."
                 : 'No había precios pendientes de aplicar.',
+        ]);
+    }
+
+    public function aplicarPreciosSolicitadosRecepcionBorrador($ordencompra_id, $recepcion_id)
+    {
+        can('modificar-precio-ordencompra');
+
+        $recepcion = Recepcion_Proveedor::query()
+            ->where('id', (int) $recepcion_id)
+            ->where('ordencompra_id', (int) $ordencompra_id)
+            ->firstOrFail();
+
+        try {
+            $resultado = $this->recepcionPrecioPendienteService->aplicarPreciosSolicitadosDesdeBorrador((int) $recepcion->id);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'actualizadas' => $resultado['actualizadas'],
+            'liberada' => $resultado['liberada'],
+            'mensaje' => $resultado['actualizadas'] > 0
+                ? "Se actualizaron {$resultado['actualizadas']} precio(s) en la OC. La recepción ya puede confirmarse; se avisó al usuario por correo."
+                : 'No había precios solicitados para aplicar.',
         ]);
     }
 
@@ -519,6 +558,33 @@ class OrdencompraController extends Controller
         $ret = $this->ordencompraGestionService->reactivarDesdeSuspendida((int) $id);
 
         return redirect()->back()->with('mensaje', ($ret['mensaje'] ?? '') === 'ok' ? 'Orden reactivada a PENDIENTE' : ($ret['errores'] ?? 'Error'));
+    }
+
+    public function revertirCierreLineas(Request $request, $id)
+    {
+        can('actualizar-ordencompra');
+        $request->validate([
+            'observacion' => 'nullable|string|max:2000',
+        ]);
+
+        $ret = $this->ordencompraRevertirCierreLineaService->revertir(
+            (int) $id,
+            (int) (Auth::id() ?? 0),
+            (string) ($request->input('observacion') ?? '')
+        );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json($ret, ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422);
+        }
+
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            $pend = number_format((float) ($ret['cantidad_pendiente'] ?? 0), 2, ',', '.');
+            $msg = "Se reabrieron {$ret['lineas_reabiertas']} línea(s). Saldo pendiente de recepción: {$pend}. Estado: ".($ret['estado_nuevo'] ?? '');
+
+            return redirect()->back()->with('mensaje', $msg);
+        }
+
+        return redirect()->back()->with('mensaje', $ret['errores'] ?? 'No se pudo revertir el cierre de líneas.');
     }
 
     public function cambiarSector(Request $request, $id)
@@ -601,9 +667,12 @@ class OrdencompraController extends Controller
         return response()->download($pdf['ruta'], $pdf['nombre'])->deleteFileAfterSend(true);
     }
 
-    public function wizardMultiplesDesdeRequisicion(int $requisicion_id)
+    public function wizardMultiplesDesdeRequisicion(Request $request, int $requisicion_id)
     {
         can('crear-ordencompra');
+        $filtrosQueryRequisicion = QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class);
+        $paramsRetornoRequisicion = array_merge(['id' => $requisicion_id], $filtrosQueryRequisicion);
+
         if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($requisicion_id)) {
             abort(404);
         }
@@ -611,10 +680,26 @@ class OrdencompraController extends Controller
         if (! $req) {
             abort(404);
         }
-        $aprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
-        if ($req->estado !== $aprobada) {
-            return redirect()->route('solo_consulta_requisicion', ['id' => $requisicion_id])
-                ->with('mensaje', 'Solo se pueden generar órdenes de compra desde una requisición en estado APROBADA.');
+        if (! $this->requisicionQuery->puedeUsuarioGenerarMultiplesOcDesdeRequisicion($req)) {
+            $mensaje = \App\Support\Compras\RequisicionLineasOcSupport::cuentaPendientesOc($requisicion_id) <= 0
+                ? 'No quedan ítems pendientes de orden de compra en esta requisición.'
+                : 'No se pueden generar órdenes de compra desde esta requisición en su estado actual.';
+
+            return redirect()->route('solo_consulta_requisicion', $paramsRetornoRequisicion)
+                ->with('mensaje', $mensaje);
+        }
+
+        $this->ordencompraGestionService->sincronizarEstadoRequisicionSegunLineasOc(
+            $requisicion_id,
+            (int) auth()->id()
+        );
+        $req->refresh();
+
+        try {
+            $wizardPlantilla = $this->ordencompraGestionService->plantillaDesdeRequisicion($requisicion_id);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->route('solo_consulta_requisicion', $paramsRetornoRequisicion)
+                ->with('mensaje', $e->getMessage());
         }
 
         $empresa_query = $this->empresaRepository->allFiltrado();
@@ -646,7 +731,9 @@ class OrdencompraController extends Controller
             'transporte_query',
             'tratamiento_enum',
             'tipos_comprobante',
-            'wizardRequisicionId'
+            'wizardRequisicionId',
+            'wizardPlantilla',
+            'filtrosQueryRequisicion',
         ));
     }
 
@@ -758,8 +845,9 @@ class OrdencompraController extends Controller
         ]);
     }
 
-    private function formularioOrdencompra(?int $id, bool $soloLectura, ?int $wizardRequisicionId = null)
+    private function formularioOrdencompra(?int $id, bool $soloLectura, ?int $wizardRequisicionId = null, ?Request $request = null)
     {
+        $request = $request ?? request();
         $data = null;
         if ($id !== null) {
             $data = $this->ordencompraRepository->find($id);
@@ -785,9 +873,12 @@ class OrdencompraController extends Controller
         ];
         $visualizar = $soloLectura;
         $acceso_visualizacion_por_hash = $soloLectura;
-        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
         $ocultarVolver = $soloConsulta;
         $puedeActualizarOrdencompra = can('actualizar-ordencompra', false);
+        $filtrosQuery = ($soloConsulta || $wizardRequisicionId)
+            ? []
+            : QueryRetornoListado::desdeRequest($request, OrdencompraListadoFiltros::class);
         $proximoNumeroordencompra = $id === null
             ? $this->ordencompraRepository->proximoNumeroOrdencompra()
             : null;
@@ -804,6 +895,10 @@ class OrdencompraController extends Controller
         }
 
         $sugerir_envio_oc = session('sugerir_envio_oc');
+        $oc_revertir_cierre_lineas = null;
+        if ($id !== null && $data && $puedeActualizarOrdencompra) {
+            $oc_revertir_cierre_lineas = $this->ordencompraRevertirCierreLineaService->resumen($id);
+        }
 
         return view('compras.ordencompra.editar', compact(
             'data',
@@ -830,6 +925,8 @@ class OrdencompraController extends Controller
             'puedeActualizarOrdencompra',
             'oc_datos_envio_proveedor',
             'sugerir_envio_oc',
+            'filtrosQuery',
+            'oc_revertir_cierre_lineas',
         ));
     }
 }

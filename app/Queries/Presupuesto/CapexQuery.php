@@ -72,6 +72,7 @@ class CapexQuery implements CapexQueryInterface
                     'capex.presupuesto_id as presupuesto_id',
                     'presupuesto.nombre as nombrepresupuesto',
                     'empresa.nombre as nombreempresa',
+                    'centrocosto.codigo as codigocentrocosto',
                     'centrocosto.nombre as nombrecentrocosto',
                     'capex.nombre as nombre',
                     'capex.detalle as detalle',

@@ -145,15 +145,26 @@ function aplicarEmpresaDesdeDeposito(empresaId) {
     window._omitirLimpiarDepositoAlCambiarEmpresa = false;
 }
 
+function contextoCampoConsultaDeposito($fallback) {
+    if ($fallback && $fallback.length) {
+        return $fallback;
+    }
+    if (ptrDeposito_id && ptrDeposito_id.length) {
+        return ptrDeposito_id.closest('.tm-deposito-campo, .depmae-campo-consulta, tr');
+    }
+
+    return $();
+}
+
 function buscar_datos_deposito(consulta) {
     var payload = {
         consulta: consulta || '',
     };
     if (typeof window.payloadExtraConsultaDeposito === 'function') {
-        $.extend(payload, window.payloadExtraConsultaDeposito());
+        $.extend(payload, window.payloadExtraConsultaDeposito(contextoCampoConsultaDeposito()) || {});
     }
     var empresaId = empresaIdParaConsultaDeposito();
-    if (empresaId && !payload.empresa_ids) {
+    if (empresaId && !payload.empresa_ids && !payload.intercompany) {
         payload.empresa_id = empresaId;
     }
 
@@ -359,6 +370,7 @@ function activa_eventos_consultadeposito() {
                 descripcion: descripcion,
                 tipodeposito: tipodeposito,
                 empresa_id: parseInt(empresaIdDep, 10) || 0,
+                empresa_nombre: empresaNombreDep,
             };
             $('#consultadepositoModal').one('hidden.bs.modal.depAplicadoRecuento', function () {
                 notificarDepositoAplicado($ctxDep, payloadDep);
@@ -403,17 +415,20 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
 
     var leerUrl = carpetaBase + '/stock/depmae/leer/' + encodeURIComponent(cod);
     var extraPayload = typeof window.payloadExtraConsultaDeposito === 'function'
-        ? window.payloadExtraConsultaDeposito()
+        ? (window.payloadExtraConsultaDeposito(contextoCampoConsultaDeposito($ctx)) || {})
         : {};
     var empresaId = empresaIdParaConsultaDeposito();
     if (extraPayload.empresa_ids && extraPayload.empresa_ids.length) {
         extraPayload.empresa_ids.forEach(function (id, idx) {
             leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'empresa_ids[' + idx + ']=' + encodeURIComponent(id);
         });
-        if (extraPayload.omitir_filtro_usuario) {
-            leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'omitir_filtro_usuario=1';
-        }
-    } else if (empresaId) {
+    }
+    if (extraPayload.omitir_filtro_usuario) {
+        leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'omitir_filtro_usuario=1';
+    }
+    if (extraPayload.intercompany) {
+        leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'intercompany=1';
+    } else if (empresaId && !(extraPayload.empresa_ids && extraPayload.empresa_ids.length)) {
         leerUrl += (leerUrl.indexOf('?') >= 0 ? '&' : '?') + 'empresa_id=' + encodeURIComponent(empresaId);
     }
 

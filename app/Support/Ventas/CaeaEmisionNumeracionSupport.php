@@ -9,7 +9,8 @@ use InvalidArgumentException;
 /**
  * Numeración CAEA (PV mod A) exclusivamente en anitaERP (tabla venta).
  *
- * No incrementa compemis/numerador Anita: la réplica Informix conserva el número ya asignado en ERP.
+ * Reserva bajo lock de PV; gastronomía/estacionamiento mantienen ese lock hasta
+ * completar la emisión para evitar duplicados entre módulos en el mismo PV.
  */
 final class CaeaEmisionNumeracionSupport
 {

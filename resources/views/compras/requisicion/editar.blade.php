@@ -12,12 +12,14 @@ Requisiciones
 <script>
 window.requisicionLineasConfig = window.requisicionLineasConfig || {};
 window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_precio_ultima_compra_articulo'));
+window.requisicionLineasConfig.urlCalcularTotales = @json(route('requisicion_calcular_totales'));
 </script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/lineas.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/consulta-listasprecio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/presupuestos.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/enviar-arbol.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/volver-compras.js') }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.banner_enviando_arbol_styles')
 @if(!empty($es_provisorio))
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
@@ -27,8 +29,12 @@ window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('consultar_requisicion', $filtrosQuery ?? []);
+@endphp
 @include('compras.requisicion.partials.comprobantes_asociados_modal')
 @include('compras.requisicion.partials.modal_firmante_retome_arbol')
+@include('compras.requisicion.partials.modal_centrocosto_retome_arbol')
 <div class="row" id="editar">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -49,16 +55,29 @@ window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_
                         </a>
                         @endif
                         @if (!empty($tiene_ordencompra_asociada) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
-                        <button type="button" class="btn btn-outline-warning btn-sm ml-1 js-requisicion-comprobantes" title="Ver comprobantes asociados (órdenes de compra)" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
-                            <i class="fas fa-link"></i> Ver comprobantes
+                        <button type="button" class="btn btn-outline-warning btn-sm ml-1 js-requisicion-comprobantes" title="Ver órdenes de compra y comprobantes vinculados" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
+                            <i class="fas fa-shopping-cart"></i> Ver órdenes de compra
                         </button>
                         @endif
                         @if (!empty($requisicion_wizard_multiples_oc_url))
-                        <a href="{{ $requisicion_wizard_multiples_oc_url }}" class="btn btn-success btn-sm ml-1" title="Generar una o más órdenes de compra desde esta requisición (misma lógica que el alta de OC)">
-                            <i class="fa fa-shopping-cart"></i> Generar órdenes de compra
+                        <a href="{{ $requisicion_wizard_multiples_oc_url }}" class="btn btn-success btn-sm ml-1" title="{{ !empty($tiene_ordencompra_asociada) ? 'Generar más órdenes de compra para ítems pendientes' : 'Generar órdenes de compra desde esta requisición' }}">
+                            <i class="fa fa-shopping-cart"></i>
+                            {{ !empty($tiene_ordencompra_asociada) ? 'Generar más órdenes de compra' : 'Generar órdenes de compra' }}
+                            @if (!empty($requisicion_lineas_pendientes_oc))
+                            <span class="badge badge-light text-dark ml-1">{{ $requisicion_lineas_pendientes_oc }}</span>
+                            @endif
                         </a>
                         @endif
-                        <a href="{{ route('consultar_requisicion') }}" class="btn btn-outline-info btn-sm">
+                        @if (can('cumplir-requisicion-compra', false) && ($data->estado ?? '') === ($estado_aprobada_requisicion ?? 'APROBADA'))
+                        <a href="{{ route('crear_cumplir_requisicion_compra', ['requisicion_id' => $data->id]) }}" class="btn btn-info btn-sm ml-1" title="Cumplir requisición (genera transferencia de mercadería)">
+                            <i class="fa fa-truck-loading"></i> Cumplir requisición
+                        </a>
+                        @endif
+                        @include('compras.requisicion.partials.boton_volver_compras', [
+                            'data' => $data,
+                            'filtrosQuery' => $filtrosQuery ?? [],
+                        ])
+                        <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
                     @endif
@@ -76,7 +95,7 @@ window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_
                     @endif
                 </div>
             </div>
-            <form action="{{ route('actualizar_requisicion', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{ route('actualizar_requisicion', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method('put')
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">Datos principales</button>
@@ -97,6 +116,8 @@ window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_
                         <strong>Aviso:</strong> <span class="texto"></span>
                     </div>
                     @endif
+                    @include('compras.requisicion.partials.ordenes_compra_vinculadas_texto')
+                    @include('compras.requisicion.partials.cambios_articulo_historia', ['cambios_articulo' => $cambios_articulo ?? collect()])
                     @include('compras.requisicion.form')
                     <div class="form3" style="display:none;">
                         <h5>Historia de estados</h5>
@@ -154,7 +175,7 @@ window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_
                 </div>
             </form>
             @if(!empty($es_provisorio) && empty($visualizar))
-            <form action="{{ route('confirmar_requisicion', $data->id) }}" id="form-requisicion-confirmar" method="POST" class="d-none" aria-hidden="true">
+            <form action="{{ route('confirmar_requisicion', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-requisicion-confirmar" method="POST" class="d-none" aria-hidden="true">
                 @csrf
             </form>
             @if(empty($tiene_ordencompra_asociada))

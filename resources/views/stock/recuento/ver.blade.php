@@ -63,25 +63,42 @@ Recuento {{ $recuento->codigo }}
                     </div>
                 @endif
 
-                <h4>Líneas de conteo</h4>
+                <h4>L&iacute;neas de conteo</h4>
                 <table class="table table-bordered table-striped">
                     <thead>
                         <tr>
                             <th>SKU</th>
-                            <th>Descripción</th>
+                            <th>Descripci&oacute;n</th>
                             <th>UM</th>
                             <th class="text-right">Saldo sistema</th>
                             <th class="text-right">Contado</th>
                             <th class="text-right">Diferencia a ajustar</th>
+                            @if ($puede_ver_kardex ?? false)
+                            <th class="text-center" style="width:3rem;">Kardex</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($recuento->items as $item)
-                            @php $dif = $item->diferencia(); @endphp
+                            @php
+                                $dif = $item->diferencia();
+                                $articuloId = (int) ($item->articulo_id ?? 0);
+                                $depositoId = (int) ($recuento->deposito_id ?? 0);
+                                $urlKardex = null;
+                                if (($puede_ver_kardex ?? false) && $articuloId > 0 && $depositoId > 0) {
+                                    $urlKardex = route('recuento_movimientos_articulo', array_filter([
+                                        'articulo_id' => $articuloId,
+                                        'deposito_id' => $depositoId,
+                                        'empresa_id' => (int) ($recuento->empresa_id ?? 0) ?: null,
+                                        'vista' => 'consulta',
+                                        'volver' => request()->getRequestUri(),
+                                    ]));
+                                }
+                            @endphp
                             <tr>
                                 <td>
                                     @if (can('editar-articulos', false))
-                                    <a href="{{ route('editar_articulo', ['id' => $item->articulo_id]) }}" target="_blank">{{ optional($item->articulos)->sku }}</a>
+                                    <a href="{{ route('editar_articulo', ['id' => $item->articulo_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="text-primary" target="_blank" rel="noopener">{{ optional($item->articulos)->sku }}</a>
                                     @else
                                     {{ optional($item->articulos)->sku }}
                                     @endif
@@ -93,6 +110,19 @@ Recuento {{ $recuento->codigo }}
                                 <td class="text-right @if (abs($dif) > 1e-9) text-danger font-weight-bold @endif">
                                     {{ rtrim(rtrim(number_format($dif, 6, '.', ''), '0'), '.') }}
                                 </td>
+                                @if ($puede_ver_kardex ?? false)
+                                <td class="text-center text-nowrap">
+                                    @if ($urlKardex)
+                                    <a href="{{ $urlKardex }}"
+                                        class="btn-accion-tabla tooltipsC"
+                                        title="Kardex de stock en el dep&oacute;sito del recuento"
+                                        target="_blank"
+                                        rel="noopener">
+                                        <i class="fa fa-list-alt text-info"></i>
+                                    </a>
+                                    @endif
+                                </td>
+                                @endif
                             </tr>
                         @endforeach
                     </tbody>

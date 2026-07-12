@@ -79,7 +79,7 @@ final class GastronomiaDescuentoClienteInternoSupport
     }
 
     /**
-     * Canje premio Wigos en POS: platino (levelCode Wigos, ej. 3) → cliente 1500; resto → 500.
+     * Canje premio / fidelidad Wigos en POS: platino (levelCode Wigos, ej. 3) → cliente 1500; resto → 500.
      */
     public static function resolverClienteInternoCanjePremio(?int $levelCodeWigos): ?int
     {

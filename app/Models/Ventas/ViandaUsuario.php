@@ -2,6 +2,7 @@
 
 namespace App\Models\Ventas;
 
+use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Centrocosto;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
@@ -14,6 +15,7 @@ class ViandaUsuario extends Model implements Auditable
 
     protected $fillable = [
         'codigo_usuario',
+        'empresa_id',
         'nombre',
         'password',
         'centrocosto_id',
@@ -21,6 +23,11 @@ class ViandaUsuario extends Model implements Auditable
         'vianda_tipo_menu_id',
         'estado',
     ];
+
+    public function empresa()
+    {
+        return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
 
     public function centrocosto()
     {

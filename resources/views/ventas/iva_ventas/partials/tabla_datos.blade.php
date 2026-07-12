@@ -12,6 +12,17 @@
     $colSpan = 7 + count($columnas) + ($clasificarHost ? 1 : 0);
     $seccionAnterior = null;
     $hostAnterior = null;
+    $claseFila = static function (array $fila): string {
+        $clases = [];
+        if ($fila['anulada'] ?? false) {
+            $clases[] = 'text-muted';
+        }
+        if (($fila['tipo_fila'] ?? '') === 'resumen_b') {
+            $clases[] = 'iva-ventas-resumen-b';
+        }
+
+        return implode(' ', $clases);
+    };
 @endphp
 <thead>
     <tr>
@@ -51,7 +62,7 @@
             </tr>
             @php $hostAnterior = $host; @endphp
         @endif
-        <tr @if ($fila['anulada'] ?? false) class="text-muted" @endif>
+        <tr class="{{ $claseFila($fila) }}">
             <td>
                 @if (! $paraPdf && $puedeVerCliente && $clienteId > 0)
                     <a href="{{ route('editar_cliente', array_merge(['id' => $clienteId], $queryConsulta)) }}"

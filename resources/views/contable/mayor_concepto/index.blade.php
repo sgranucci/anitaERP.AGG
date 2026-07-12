@@ -6,6 +6,65 @@
 @section('scripts')
 <script>
 (function () {
+    var OVERLAY_ID = 'mayor-concepto-procesando-overlay';
+    var TITULO_ID = 'mayor-concepto-procesando-titulo';
+    var SUBTITULO_ID = 'mayor-concepto-procesando-subtitulo';
+    var TITULO_CONSULTA = 'Procesando mayor por concepto…';
+    var SUBTITULO_CONSULTA = 'Puede tardar varios minutos según el período. No cierre ni recargue la página.';
+    var TITULO_EXPORT = 'Generando exportación…';
+    var SUBTITULO_EXPORT = 'Por favor espere. El PDF o Excel puede tardar según el volumen.';
+
+    function mostrarProcesoOverlay(titulo, subtitulo) {
+        var overlay = document.getElementById(OVERLAY_ID);
+        if (! overlay) {
+            return;
+        }
+
+        var tituloEl = document.getElementById(TITULO_ID);
+        var subtituloEl = document.getElementById(SUBTITULO_ID);
+        if (tituloEl) {
+            tituloEl.textContent = titulo || TITULO_CONSULTA;
+        }
+        if (subtituloEl) {
+            subtituloEl.textContent = subtitulo || SUBTITULO_CONSULTA;
+        }
+
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function ocultarProcesoOverlay() {
+        var overlay = document.getElementById(OVERLAY_ID);
+        if (! overlay) {
+            return;
+        }
+
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    }
+
+    function esUrlProcesoMayorConcepto(href) {
+        if (! href || href === '#' || href.indexOf('javascript:') === 0) {
+            return false;
+        }
+
+        try {
+            var url = new URL(href, window.location.origin);
+            var path = url.pathname.toLowerCase();
+
+            return path.indexOf('listar-mayor-concepto') !== -1
+                || (path.indexOf('mayor-concepto') !== -1 && url.searchParams.get('consultar') === '1');
+        } catch (e) {
+            var lower = String(href).toLowerCase();
+            return lower.indexOf('listar-mayor-concepto') !== -1
+                || (lower.indexOf('mayor-concepto') !== -1 && lower.indexOf('consultar=1') !== -1);
+        }
+    }
+
     function togglePeriodo() {
         var mes = document.getElementById('modo_mes').checked;
         document.getElementById('panel-mes').style.display = mes ? '' : 'none';
@@ -24,8 +83,32 @@
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando… (puede tardar varios minutos)';
             }
+            mostrarProcesoOverlay(TITULO_CONSULTA, SUBTITULO_CONSULTA);
         });
     }
+
+    document.addEventListener('click', function (event) {
+        var enlace = event.target && event.target.closest
+            ? event.target.closest('a[href]')
+            : null;
+
+        if (! enlace || enlace.target === '_blank' || enlace.hasAttribute('download')) {
+            return;
+        }
+
+        var href = enlace.getAttribute('href') || enlace.href || '';
+        if (! esUrlProcesoMayorConcepto(href)) {
+            return;
+        }
+
+        if (href.toLowerCase().indexOf('listar-mayor-concepto') !== -1) {
+            mostrarProcesoOverlay(TITULO_EXPORT, SUBTITULO_EXPORT);
+        }
+    }, true);
+
+    window.addEventListener('pageshow', function () {
+        ocultarProcesoOverlay();
+    });
 
     function actualizarQueryParamEnlace(enlace, modo) {
         if (! enlace || ! enlace.href) {
@@ -69,6 +152,11 @@
         document.querySelectorAll('#mayor-concepto-exportar a, .pagination a').forEach(function (enlace) {
             actualizarQueryParamEnlace(enlace, modo);
         });
+
+        var inputDetalle = document.getElementById('agrupacion_resumen_detalle');
+        if (inputDetalle) {
+            inputDetalle.value = modo;
+        }
 
         try {
             var urlActual = new URL(window.location.href);
@@ -248,10 +336,22 @@
                             ])
                         </div>
                         <div class="small mb-1 mb-md-0 text-md-right">
-                            <span class="text-muted">Totales filtro:</span>
-                            <strong>{{ (int) ($tot['cantidad_filas'] ?? 0) }}</strong> líneas
-                            · Debe <strong>{{ number_format((float) ($tot['total_debe'] ?? 0), 2, ',', '.') }}</strong>
-                            · Haber <strong>{{ number_format((float) ($tot['total_haber'] ?? 0), 2, ',', '.') }}</strong>
+                            @php
+                                $totVis = $totales_visibles ?? null;
+                                $tot = $totales ?? [];
+                            @endphp
+                            @if (! empty($filtro_detalle_activo) && ! empty($totVis))
+                                <span class="text-muted">Detalle filtrado:</span>
+                                <strong>{{ (int) ($totVis['cantidad_filas'] ?? 0) }}</strong> líneas
+                                · Debe <strong>{{ number_format((float) ($totVis['total_debe'] ?? 0), 2, ',', '.') }}</strong>
+                                · Haber <strong>{{ number_format((float) ($totVis['total_haber'] ?? 0), 2, ',', '.') }}</strong>
+                                <span class="text-muted">(de {{ (int) ($tot['cantidad_filas'] ?? 0) }} del período)</span>
+                            @else
+                                <span class="text-muted">Totales filtro:</span>
+                                <strong>{{ (int) ($tot['cantidad_filas'] ?? 0) }}</strong> líneas
+                                · Debe <strong>{{ number_format((float) ($tot['total_debe'] ?? 0), 2, ',', '.') }}</strong>
+                                · Haber <strong>{{ number_format((float) ($tot['total_haber'] ?? 0), 2, ',', '.') }}</strong>
+                            @endif
                         </div>
                     </div>
 
@@ -278,19 +378,29 @@
                         'puede_ver_concepto' => $puede_ver_concepto ?? false,
                     ])
 
-                    @include('contable.mayor_concepto.partials.auditoria_panel', [
+                    @include('contable.mayor_concepto.partials.conciliacion_asientos_panel', [
                         'auditoria_panel' => $auditoria_panel ?? null,
-                        'auditoria' => $auditoria ?? null,
+                        'puede_ver_asiento' => $puede_ver_asiento ?? false,
+                    ])
+
+                    @include('contable.mayor_concepto.partials.filtros_detalle', [
+                        'filtros' => $filtros ?? [],
+                        'filtrosQuery' => $filtrosQuery ?? [],
+                        'filtrosQueryBase' => $filtrosQueryBase ?? [],
+                        'filtro_detalle_activo' => $filtro_detalle_activo ?? false,
+                        'filtros_detalle_texto' => $filtros_detalle_texto ?? [],
                     ])
 
                     <div class="px-3 pt-2 pb-1">
                         <h6 class="mb-0 font-weight-bold">Detalle de movimientos</h6>
-                        <small class="text-muted">Listado paginado de cada imputación</small>
+                        <small class="text-muted">Imputaciones con subtotal por cuenta y total por concepto (como mayor Anita)</small>
                     </div>
 
                     <style>
                         #tabla-mayor-concepto thead tr { background-color: #85C1E9; color: #17202A; }
                         #tabla-mayor-concepto thead th { font-weight: 600; border-color: #7fb3d5; }
+                        #tabla-mayor-concepto tbody tr.fila-total-cuenta { background-color: #e9ecef !important; }
+                        #tabla-mayor-concepto tbody tr.fila-total-concepto { background-color: #ced4da !important; }
                     </style>
                     <div class="table-responsive">
                         <table id="tabla-mayor-concepto" class="table table-striped table-bordered table-hover table-sm mb-0" style="font-size: 0.8rem;">
@@ -308,6 +418,11 @@
                             <span class="small text-muted mb-2 mb-md-0">
                                 @if ($filas->total() > 0)
                                     Mostrando {{ $filas->firstItem() }}–{{ $filas->lastItem() }} de {{ $filas->total() }} registros
+                                @elseif (! empty($filtro_detalle_activo))
+                                    Sin coincidencias para el filtro de detalle.
+                                    @if (trim((string) ($filtros['filtro_nro_asiento'] ?? '')) !== '')
+                                        Revise el N. asiento (ej. 5263579, no 52603579) y que la empresa del consulta sea la correcta.
+                                    @endif
                                 @else
                                     Sin registros
                                 @endif
@@ -320,4 +435,12 @@
         </div>
     </div>
 </div>
+
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'mayor-concepto-procesando-overlay',
+    'tituloId' => 'mayor-concepto-procesando-titulo',
+    'subtituloId' => 'mayor-concepto-procesando-subtitulo',
+    'titulo' => 'Procesando mayor por concepto…',
+    'subtitulo' => 'Puede tardar varios minutos según el período. No cierre ni recargue la página.',
+])
 @endsection

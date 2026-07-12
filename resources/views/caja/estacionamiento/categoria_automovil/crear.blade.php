@@ -8,6 +8,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('estacionamiento_categoria_automovil', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -16,12 +19,12 @@
             <div class="card-header">
                 <h3 class="card-title">Crear categor&iacute;a de autom&oacute;vil</h3>
                 <div class="card-tools">
-                    <a href="{{ route('estacionamiento_categoria_automovil') }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{ route('guardar_estacionamiento_categoria_automovil') }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{ route('guardar_estacionamiento_categoria_automovil', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf
                 <div class="card-body">
                     @include('caja.estacionamiento.categoria_automovil.form')

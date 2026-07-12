@@ -16,6 +16,13 @@
 				<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
 				<span class="input-group-text">#</span>
 				<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" value="{{ old('numerodocumento', $data->numerodocumento ?? '') }}">
+				@if (!empty($data->facturas_apocrifas))
+					<span id="cliente-apoc-estado-badge" class="badge badge-danger ml-1 align-self-center">Facturas ap&oacute;crifas (ARCA)</span>
+				@elseif (!empty($data->facturas_apocrifas_consulta_at))
+					<span id="cliente-apoc-estado-badge" class="badge badge-success ml-1 align-self-center">Sin registro APOC ({{ $data->facturas_apocrifas_consulta_at->format('d/m/Y H:i') }})</span>
+				@else
+					<span id="cliente-apoc-estado-badge" class="badge badge-secondary ml-1 align-self-center" style="display: none;"></span>
+				@endif
 				<span class="d-inline-block position-relative pl-1 align-middle">
 					<button type="button" id="btn-consulta-arca-cliente" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1;" onclick="return window.consultaArcaCliente?.(event)">
 						<i class="fa fa-search text-primary"></i>

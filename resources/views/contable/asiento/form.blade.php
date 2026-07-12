@@ -40,6 +40,39 @@
     <input type="hidden" id="id" name="id" value="{{ $data->id ?? '' }}" />
     <h2 id="loading"style="display:none">Guardando asiento ...</h2>
     <h3>Cuentas</h3>
+    @php
+        $totalDebeAsientoForm = 0.0;
+        $totalHaberAsientoForm = 0.0;
+        $tieneLineasAsientoForm = isset($data->asiento_movimientos) && $data->asiento_movimientos->count() > 0;
+        if ($tieneLineasAsientoForm) {
+            foreach ($data->asiento_movimientos as $movimientoTot) {
+                $montoTot = (float) ($movimientoTot->monto ?? 0);
+                if ($montoTot > 0) {
+                    $totalDebeAsientoForm += $montoTot;
+                } elseif ($montoTot < 0) {
+                    $totalHaberAsientoForm += abs($montoTot);
+                }
+            }
+            $totalDebeAsientoForm = round($totalDebeAsientoForm, 2);
+            $totalHaberAsientoForm = round($totalHaberAsientoForm, 2);
+        }
+        $totalDebeAsientoFormTxt = $tieneLineasAsientoForm ? number_format($totalDebeAsientoForm, 2, ',', '.') : '';
+        $totalHaberAsientoFormTxt = $tieneLineasAsientoForm ? number_format($totalHaberAsientoForm, 2, ',', '.') : '';
+    @endphp
+    <style>
+        #cuenta-table tfoot.asiento-totales-pie td {
+            background-color: #e9ecef;
+            border-top: 2px solid #ced4da;
+            vertical-align: middle;
+        }
+        #cuenta-table tfoot.asiento-totales-pie .asiento-total-celda {
+            background-color: #e9ecef !important;
+            color: #495057;
+            border: 0;
+            box-shadow: none;
+            font-weight: 700;
+        }
+    </style>
     <div class="card-body">
         <table class="table" id="cuenta-table">
             <thead>
@@ -48,9 +81,9 @@
                     <th style="width: 18%;">Descripción</th>
                     <th style="width: 15%;">Centro de costo</th>
                     <th style="width: 7%;">Moneda</th>
-                    <th style="width: 15%;">Debe</th>
-                    <th style="width: 15%;">Haber</th>
-                    <th style="width: 12%;">Cotización</th>
+                    <th style="width: 15%;" class="text-right">Debe</th>
+                    <th style="width: 15%;" class="text-right">Haber</th>
+                    <th style="width: 12%;" class="text-right">Cotizaci&oacute;n</th>
                     <th style="width: 30%;">Detalle</th>
                     <th></th>
                 </tr>
@@ -92,13 +125,22 @@
                             </select>
                         </td>
                         <td>
-                            <input type="number" name="debes[]" class="form-control debe" value="{{old('debes[]', ($cuenta->monto > 0 ? $cuenta->monto : '') ?? '')}}">
+                            @php
+                                $debeValor = old('debes.'.$loop->index, ($cuenta->monto ?? 0) > 0 ? number_format($cuenta->monto, 2, ',', '.') : '');
+                            @endphp
+                            <input type="text" inputmode="decimal" name="debes[]" class="form-control text-right debe" value="{{ $debeValor }}">
                         </td>
                         <td>
-                            <input type="number" name="haberes[]" class="form-control haber" value="{{old('haberes[]', ($cuenta->monto < 0 ? abs($cuenta->monto) : '') ?? '')}}">
+                            @php
+                                $haberValor = old('haberes.'.$loop->index, ($cuenta->monto ?? 0) < 0 ? number_format(abs($cuenta->monto), 2, ',', '.') : '');
+                            @endphp
+                            <input type="text" inputmode="decimal" name="haberes[]" class="form-control text-right haber" value="{{ $haberValor }}">
                         </td>
                         <td>
-                            <input type="number" name="cotizaciones[]" class="form-control cotizacion" value="{{old('cotizaciones[]', $cuenta->cotizacion ?? '0')}}">
+                            @php
+                                $cotizValor = old('cotizaciones.'.$loop->index, isset($cuenta->cotizacion) ? number_format((float) $cuenta->cotizacion, 2, ',', '.') : '0,00');
+                            @endphp
+                            <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="{{ $cotizValor }}">
                         </td>
                         <td>
                             <input type="text" name="observaciones[]" class="form-control observacion" value="{{old('observaciones[]', $cuenta->observacion ?? '')}}">
@@ -112,19 +154,23 @@
                 @endforeach
             @endif
             </tbody>
+            <tfoot class="asiento-totales-pie">
+                <tr class="asiento-totales-fila">
+                    <td colspan="4" class="text-right font-weight-bold text-secondary">Totales</td>
+                    <td>
+                        <input type="text" id="totaldebe" name="totaldebe" class="form-control form-control-sm text-right asiento-total-celda" readonly value="{{ old('totaldebe', $totalDebeAsientoFormTxt) }}" />
+                    </td>
+                    <td>
+                        <input type="text" id="totalhaber" name="totalhaber" class="form-control form-control-sm text-right asiento-total-celda" readonly value="{{ old('totalhaber', $totalHaberAsientoFormTxt) }}" />
+                    </td>
+                    <td colspan="3"></td>
+                </tr>
+            </tfoot>
         </table>
         @include('contable.asiento.template')
-        <div class="row">
-            <div class="col-sm-6">
-                <div class="form-group row">
-                    <button id="agrega_renglon_cuenta" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
-                </div>
-            </div>
-            <div class="form-group row">
-                <label for="totaldebe" class="col-lg-3 col-form-label">Total debe</label>
-                <input type="text" id="totaldebe" name="totaldebe" class="form-control col-lg-3" readonly value="" />
-                <label for="totaldebe" class="col-lg-3 col-form-label">Total haber</label>
-                <input type="text" id="totalhaber" name="totalhaber" class="form-control col-lg-3" readonly value="" />
+        <div class="row mt-2">
+            <div class="col-sm-12">
+                <button id="agrega_renglon_cuenta" type="button" class="btn btn-danger">+ Agrega rengl&oacute;n</button>
             </div>
         </div>
     </div>

@@ -3,8 +3,10 @@
 namespace App\Queries\Compras;
 
 use App\Models\Compras\Requisicion;
+use App\Models\Compras\Requisicion_Estado;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Compras\RequisicionVisibilidadSupport;
@@ -48,9 +50,17 @@ class RequisicionQuery implements RequisicionQueryInterface
         if (! $this->requisicionAccesiblePorUsuario((int) $r->id)) {
             return false;
         }
-        $aprobada = \App\Models\Compras\Requisicion_Estado::$enumEstado[array_search('A', array_column(\App\Models\Compras\Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+        $aprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+        $generoOc = Requisicion_Estado::$enumEstado[array_search('O', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+        $estado = (string) ($r->estado ?? '');
+        $estadoPermitido = $estado === $aprobada
+            || $estado === $generoOc
+            || $estado === 'GENERO OC';
+        if (! $estadoPermitido) {
+            return false;
+        }
 
-        return ($r->estado ?? '') === $aprobada;
+        return RequisicionLineasOcSupport::cuentaPendientesOc((int) $r->id) > 0;
     }
 
     public function leeRequisicion($filtros, $flPaginando = null, $withArticulos = false)

@@ -326,9 +326,9 @@ class RequisicionService
      * (el circuito se detuvo hasta esta acción explícita).
      */
     /**
-     * @return array{mensaje: string, errores?: string, nivel?: int, firmantes?: list<array<string, mixed>>}
+     * @return array{mensaje: string, errores?: string, nivel?: int, firmantes?: list<array<string, mixed>>, requiere_seleccion_centrocosto?: bool, centros_costo?: list<array<string, mixed>>, centrocosto_arbol_id?: int}
      */
-    public function firmantesRetomeArbol(int $id): array
+    public function firmantesRetomeArbol(int $id, ?int $centrocostoArbolId = null): array
     {
         $req = $this->requisicionRepository->find($id);
         if (! $req) {
@@ -339,7 +339,7 @@ class RequisicionService
         }
 
         try {
-            $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req);
+            $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req, $centrocostoArbolId);
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
@@ -347,7 +347,7 @@ class RequisicionService
         return array_merge(['mensaje' => 'ok'], $preview);
     }
 
-    public function enviarArbolAprobacionDesdeEnCompras(int $id, ?int $destinatarioUsuarioId = null): array
+    public function enviarArbolAprobacionDesdeEnCompras(int $id, ?int $destinatarioUsuarioId = null, ?int $centrocostoArbolId = null): array
     {
         $req = $this->requisicionRepository->find($id);
         if (! $req) {
@@ -362,9 +362,16 @@ class RequisicionService
         }
 
         try {
-            $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req);
+            $preview = $this->arbolaprobacionService->firmantesRetomeArbolRequisicion($req, $centrocostoArbolId);
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        if (! empty($preview['requiere_seleccion_centrocosto'])) {
+            return [
+                'mensaje' => 'seleccionar_centrocosto',
+                'centros_costo' => $preview['centros_costo'] ?? [],
+            ];
         }
 
         if ($preview['requiere_seleccion']) {
@@ -373,11 +380,21 @@ class RequisicionService
                     'mensaje' => 'seleccionar_firmante',
                     'nivel' => $preview['nivel'],
                     'firmantes' => $preview['firmantes'],
+                    'centrocosto_arbol_id' => $preview['centrocosto_arbol_id'] ?? null,
                 ];
             }
             $idsValidos = array_column($preview['firmantes'], 'id');
             if (! in_array($destinatarioUsuarioId, $idsValidos, true)) {
                 return ['mensaje' => 'error', 'errores' => 'El firmante seleccionado no es válido para este nivel del árbol.'];
+            }
+        }
+
+        $centrocostoParaPersistir = (int) ($preview['centrocosto_arbol_id'] ?? 0);
+        if ($centrocostoParaPersistir <= 0) {
+            try {
+                $centrocostoParaPersistir = $this->arbolaprobacionService->centroCostoParaArbolAprobacionDesdeModelo($req);
+            } catch (\RuntimeException $e) {
+                return ['mensaje' => 'error', 'errores' => $e->getMessage()];
             }
         }
 
@@ -388,6 +405,10 @@ class RequisicionService
 
         DB::beginTransaction();
         try {
+            if ($centrocostoParaPersistir > 0) {
+                $this->requisicionRepository->update(['centrocostodestino_arbol_id' => $centrocostoParaPersistir], $id);
+            }
+
             $nombreEnArbol = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
             $this->requisicion_estadoRepository->creaEstado(
                 $id,
@@ -399,6 +420,61 @@ class RequisicionService
             $this->requisicionRepository->update(['estado' => $nombreEnArbol], $id);
 
             $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'resume', $opcionesArbol);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return ['mensaje' => 'ok'];
+    }
+
+    /**
+     * Devuelve una requisición enviada al árbol por error a EN COMPRAS y anula autorizaciones pendientes.
+     *
+     * @return array{mensaje: string, errores?: string}
+     */
+    public function volverAComprasDesdeArbol(int $id): array
+    {
+        $req = $this->requisicionRepository->find($id);
+        if (! $req) {
+            return ['mensaje' => 'error', 'errores' => 'Requisición no encontrada.'];
+        }
+
+        $nombreEnArbol = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        if ($req->estado !== $nombreEnArbol) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'Solo se puede volver a compras cuando la requisición está en estado EN ARBOL APROBACION.',
+            ];
+        }
+
+        if (! $this->usuarioPuedeEditarRequisicionEnCompras($req)) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'No puede actuar sobre esta requisición en compras: su oficina de compra no coincide con la de la requisición.',
+            ];
+        }
+
+        $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+
+        DB::beginTransaction();
+        try {
+            $this->arbolaprobacionService->anulaMovimientosArbolPendientesAbiertosRequisicion(
+                $id,
+                'Sin efecto (requisición devuelta a compras antes de completar autorización)'
+            );
+
+            $this->requisicion_estadoRepository->creaEstado(
+                $id,
+                Carbon::now()->toDateTimeString(),
+                $nombreEnCompras,
+                Auth::user()->id,
+                'Devuelta a compras (anulado envío al árbol de aprobación)'
+            );
+            $this->requisicionRepository->update(['estado' => $nombreEnCompras], $id);
 
             DB::commit();
         } catch (\Exception $e) {

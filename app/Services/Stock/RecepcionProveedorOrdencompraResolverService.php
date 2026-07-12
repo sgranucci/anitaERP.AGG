@@ -135,6 +135,8 @@ class RecepcionProveedorOrdencompraResolverService
                 ->keyBy('articulo_id')
             : collect();
 
+        $descuentoCabeceraOc = (float) ($oc->descuento ?? 0);
+
         foreach ($articulosOc as $ocArt) {
             if ((string) ($ocArt->estado_linea_oc ?? \App\Support\Compras\OrdencompraLineaEstados::ACTIVA)
                 === \App\Support\Compras\OrdencompraLineaEstados::CERRADA) {
@@ -180,13 +182,9 @@ class RecepcionProveedorOrdencompraResolverService
 
             $cantidadOc = (float) $ocArt->cantidad;
             $recibido = (float) ($recibidosPorLinea[$ocArt->id] ?? 0);
-            $ccLinea = (int) ($ocArt->centrocostodestino_id ?? 0);
-            $cc = $ccLinea > 0 ? $ccLinea : $ccOc;
-            $cantidadPendiente = RecepcionProveedorOcPendienteSupport::saldoPendienteLinea(
+            $cantidadPendiente = RecepcionProveedorOcPendienteSupport::saldoPendienteLineaEstricto(
                 $cantidadOc,
-                $recibido,
-                $empresaId,
-                $cc
+                $recibido
             );
 
             if ($cantidadPendiente <= 0.000001) {
@@ -196,6 +194,12 @@ class RecepcionProveedorOrdencompraResolverService
             $penvpOrden = (int) ($ocArt->penvp_orden ?? 0);
             $penvpNroInterno = (int) ($ocArt->penvp_nro_interno ?? 0);
 
+            $precioNetoOc = RecepcionProveedorConversionSupport::precioUnitarioNetoDesdeLineaOc(
+                (float) $ocArt->precio,
+                (float) ($ocArt->descuento ?? 0),
+                $descuentoCabeceraOc,
+            );
+
             $lineas[] = [
                 '_empresa_id' => $empresaId,
                 'orden' => $orden++,
@@ -204,6 +208,7 @@ class RecepcionProveedorOrdencompraResolverService
                 'tipo_linea' => RecepcionProveedorDiferenciaSupport::TIPO_OC,
                 'ordencompra_articulo_id' => $ocArt->id,
                 'articulo_id' => $ocArt->articulo_id,
+                'tipoarticulo_id' => (int) ($articulo->tipoarticulo_id ?? 0) ?: null,
                 'sku' => $articulo->sku ?? '',
                 'descripcion' => $articulo->descripcion ?? ($ocArt->detalle ?? ''),
                 'cantidad_oc' => $cantidadOc,
@@ -227,13 +232,13 @@ class RecepcionProveedorOrdencompraResolverService
                 'articulo_stock_id' => $insumo?->id,
                 'articulo_stock_sku' => $insumo?->sku,
                 'skualternativo' => $articulo->skualternativo ?? '',
-                'precio' => (float) $ocArt->precio,
-                'precio_ordencompra' => (float) $ocArt->precio,
+                'precio' => $precioNetoOc,
+                'precio_ordencompra' => $precioNetoOc,
                 'precio_lista_proveedor' => $precioLista,
                 'codigo_proveedor' => trim((string) ($precioLista['codigo_articulo_proveedor'] ?? $articulo->skuproveedor ?? '')),
                 'moneda_id' => (int) ($ocArt->moneda_id ?: 1),
                 'cotizacion' => (float) ($ocArt->cotizacion ?: 1),
-                'descuento' => (float) ($ocArt->descuento ?? 0),
+                'descuento' => 0,
                 'centrocosto_id' => $ocArt->centrocostodestino_id ?? $oc->centrocosto_id,
                 'detalle' => $ocArt->detalle,
                 'maneja_parte_unica' => RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($articulo),

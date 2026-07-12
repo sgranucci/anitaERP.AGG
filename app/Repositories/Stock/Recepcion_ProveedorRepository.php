@@ -7,6 +7,7 @@ use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaNumeracionSupport;
 use App\Support\Stock\AnitaStkmovClaveErpSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
+use App\Support\Stock\RecepcionProveedorIntercompanySupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -72,6 +73,7 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
                 'proveedor.nombre as nombreproveedor',
                 'ordencompra.numeroordencompra',
             ])
+            ->selectRaw(RecepcionProveedorIntercompanySupport::selectEsIntercompanySql().' as es_intercompany')
             ->join('empresa', 'empresa.id', '=', 'recepcion_proveedor.empresa_id')
             ->join('proveedor', 'proveedor.id', '=', 'recepcion_proveedor.proveedor_id')
             ->join('ordencompra', 'ordencompra.id', '=', 'recepcion_proveedor.ordencompra_id')

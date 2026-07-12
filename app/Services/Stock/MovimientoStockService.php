@@ -15,6 +15,7 @@ use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
+use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use Auth;
 use DB;
@@ -107,6 +108,9 @@ class MovimientoStockService
 			if (!$tipotransaccion)
 				throw new \Exception('No puede leer tipo de transacción de stock');
 
+			BajaNpuMovimientoStockSupport::validarAntesDeGrabar($data, $tipotransaccion);
+			BajaNpuMovimientoStockSupport::normalizarLineasParaGrabar($data, $tipotransaccion);
+
 			$existente = null;
 			if ($funcion === 'update' && $id) {
 				$existente = $this->leeMovimientoStock($id);
@@ -182,9 +186,13 @@ class MovimientoStockService
 				$descuentos = $this->normalizarArrayLineasFormulario($data['descuentos'] ?? []);
 				$loteids = $this->normalizarArrayLineasFormulario($data['loteids'] ?? []);
 				$medidas = $this->normalizarArrayLineasFormulario($data['medidas'] ?? []);
+				$numeropartes = $this->normalizarArrayLineasFormulario($data['numeropartes'] ?? []);
 				$fechaPrecio = ! empty($data['fecha']) ? \Carbon\Carbon::parse($data['fecha']) : \Carbon\Carbon::today();
 
-				if (($tipotransaccion->operacion ?? '') === 'S') {
+				if (
+					empty($data['omitir_validacion_saldo'])
+					&& MovimientoStockSalidaSaldoSupport::esSignoRestaStock($signoCantidadMovimiento)
+				) {
 					MovimientoStockSalidaSaldoSupport::validarDesdeLineasFormulario(
 						(int) ($data['deposito_id'] ?? 0),
 						$articulos,
@@ -219,7 +227,8 @@ class MovimientoStockService
 						$modulo = $modulos[$i];
 
 					$precioLinea = (float) str_replace(',', '', (string) ($precios[$i] ?? 0));
-					if ($precioLinea <= 0 && (int) $articulos[$i] > 0) {
+					$forzarUltimaCompra = (bool) ($tipotransaccion->baja_npu ?? false);
+					if (($precioLinea <= 0 || $forzarUltimaCompra) && (int) $articulos[$i] > 0) {
 						$datoPrecio = ArticuloPrecioMovimientoStockSupport::resolverParaLinea(
 							(int) $articulos[$i],
 							$tipotransaccion,
@@ -250,6 +259,7 @@ class MovimientoStockService
 						'ordentrabajo_id' => null,
 						'lote' => $data['lote'],
 						'articulo_id' => $articulos[$i],
+						'numeroparte' => ($np = trim((string) ($numeropartes[$i] ?? ''))) !== '' ? $np : null,
 						'sku' => $sku,
 						'combinacion_id' => $combinacion,
 						'modulo_id' => $modulo,
@@ -335,6 +345,14 @@ class MovimientoStockService
 				$ctamovNuevo = $resultadoAsiento['ctamov_nuevo'] ?? null;
 				$ctamovSincronizadoEnEdicion = (bool) ($resultadoAsiento['ctamov_sincronizado_edicion'] ?? false);
 				$movimientoIdCtamovResync = $ctamovSincronizadoEnEdicion ? $movimientostock_id : null;
+
+				if ($funcion === 'create' && $movimientostock_id > 0) {
+					BajaNpuMovimientoStockSupport::procesarDespuesDeGrabar(
+						(int) $movimientostock_id,
+						$data,
+						$tipotransaccion,
+					);
+				}
 			}
 
 			DB::commit();

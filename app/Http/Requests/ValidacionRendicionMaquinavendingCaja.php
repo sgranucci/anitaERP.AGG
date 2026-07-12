@@ -36,7 +36,6 @@ class ValidacionRendicionMaquinavendingCaja extends FormRequest
             'puntoventa_cae_id' => ['required', 'integer', 'exists:puntoventa,id'],
             'puntoventa_caea_id' => ['required', 'integer', 'exists:puntoventa,id'],
             'caja_id' => ['required', 'integer', 'min:1', 'exists:caja,id'],
-            'fecharendicion' => ['required', 'date'],
             'iniciodelfondo' => ['required', 'numeric'],
             'totalfactura' => ['required', 'numeric'],
             'totalcobrado' => ['required', 'numeric'],

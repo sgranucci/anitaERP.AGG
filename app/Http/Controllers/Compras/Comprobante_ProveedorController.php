@@ -29,6 +29,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Services\Arca\ConstanciaInscripcionService;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
+use App\Support\Compras\ProveedorFacturasApocrifasSupport;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -432,6 +433,55 @@ class Comprobante_ProveedorController extends Controller
             return response()->json([
                 'ok' => false,
                 'message' => 'Error al consultar padrón ARCA: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function validarProveedorArcaApoc(Request $request): JsonResponse
+    {
+        can('editar-comprobante-proveedor');
+
+        $support = app(ProveedorFacturasApocrifasSupport::class);
+        if (! $support->habilitadoParaComprobante()) {
+            return response()->json([
+                'ok' => true,
+                'skipped' => true,
+                'validacion' => null,
+            ]);
+        }
+
+        $proveedorId = (int) $request->input('proveedor_id', 0);
+        if ($proveedorId <= 0) {
+            return response()->json(['ok' => false, 'message' => 'Proveedor no indicado.'], 422);
+        }
+
+        $proveedor = Proveedor::query()->find($proveedorId);
+        if (! $proveedor) {
+            return response()->json(['ok' => false, 'message' => 'Proveedor inexistente.'], 404);
+        }
+
+        try {
+            $validacion = $support->evaluarProveedor($proveedor, suspenderSiApocrifo: true);
+            $httpOk = ! ($validacion['aplica'] ?? false) || ($validacion['ok'] ?? false);
+
+            return response()->json([
+                'ok' => $httpOk,
+                'message' => $validacion['mensaje'] ?? null,
+                'validacion' => $validacion,
+                'suspendido' => $validacion['suspendido'] ?? false,
+                'facturas_apocrifas' => (bool) ($validacion['es_apocrifo'] ?? false),
+                'proveedor' => [
+                    'id' => $proveedor->id,
+                    'codigo' => $proveedor->codigo,
+                    'nombre' => $proveedor->nombre,
+                ],
+            ], $httpOk ? 200 : 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Error al consultar facturas apócrifas en ARCA: '.$e->getMessage(),
             ], 500);
         }
     }

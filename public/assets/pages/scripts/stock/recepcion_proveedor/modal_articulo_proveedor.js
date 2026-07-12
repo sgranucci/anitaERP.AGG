@@ -91,8 +91,8 @@
             html += '<span>' + escHtml(linea.unidadmedida_compra_label || '—') + '</span>';
         }
         html += '</td>';
-        html += '<td class="align-middle text-right"><input type="number" step="0.000001" min="0.000001" class="form-control form-control-sm modal-ap-coef text-right" value="'
-            + coef + '" title="Cantidad en UM compra por cada 1 ' + escHtml(linea.unidadmedida_stock_label || 'UM stock') + '" '
+        html += '<td class="align-middle text-right"><input type="number" step="0.000001" min="0" class="form-control form-control-sm modal-ap-coef text-right" value="'
+            + coef + '" title="Cantidad en UM compra por cada 1 ' + escHtml(linea.unidadmedida_stock_label || 'UM stock') + ' (opcional)" '
             + (editable ? '' : 'readonly') + '></td>';
         html += '<td class="align-middle text-muted"><span class="modal-ap-um-stock font-weight-bold">'
             + escHtml(linea.unidadmedida_stock_label || '—') + '</span></td>';
@@ -110,19 +110,6 @@
             $tbody.append($row);
         });
         $('#modalRecepcionArticuloProveedor').modal('show');
-    }
-
-    function validarModal() {
-        var ok = true;
-        $('#tbody-modal-articulo-proveedor tr.modal-ap-linea[data-editable="1"]').each(function () {
-            var $tr = $(this);
-            var codigo = ($tr.find('.modal-ap-codigo').val() || '').trim();
-            $tr.find('.modal-ap-codigo').toggleClass('is-invalid', codigo === '');
-            if (codigo === '') {
-                ok = false;
-            }
-        });
-        return ok;
     }
 
     function aplicarModalAlFormulario() {
@@ -284,11 +271,6 @@
         });
 
         $('#btn-modal-articulo-proveedor-confirmar').on('click', function () {
-            if (!validarModal()) {
-                alert('Indique el código de proveedor en las líneas marcadas.');
-                return;
-            }
-
             var $btnConfirmar = $(this);
             aplicarModalAlFormulario();
 

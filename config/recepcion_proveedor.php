@@ -68,6 +68,9 @@ return [
 
     'sku_prefijo_laboratorio' => env('RECEPCION_PROVEEDOR_SKU_PREFIJO_LAB', 'LAB'),
 
+    /** Artículo contable del impuesto interno en recepciones de cigarrillos (cuenta COMPRAS del maestro). */
+    'sku_articulo_impuesto_interno' => env('RECEPCION_PROVEEDOR_SKU_ARTICULO_IMPUESTO_INTERNO', 'IMPINTERNO'),
+
     'usoarticulo_laboratorio_ids' => array_map('intval', array_filter(explode(',', env('RECEPCION_PROVEEDOR_USOARTICULO_LAB_IDS', '3')))),
 
     'encuesta_habilitada' => filter_var(env('RECEPCION_PROVEEDOR_ENCUESTA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
@@ -104,6 +107,18 @@ return [
         'incluir_importadas_anita' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_INCLUIR_IMPORTADAS', false), FILTER_VALIDATE_BOOLEAN),
         // Días calendario inclusive hasta hoy que audita el cron diario (--desde / --hasta).
         'ventana_dias' => max(1, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_VENTANA_DIAS', 7)),
+    ],
+
+    /*
+    | Tras confirmar COM en ERP: job en cola verifica recepmae + ctamov Anita y repara.
+    */
+    'anita_tras_confirmacion' => [
+        'habilitada' => filter_var(env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION', true), FILTER_VALIDATE_BOOLEAN),
+        'usuario_id' => (int) env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION_USUARIO_ID', 1),
+        'cola' => env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION_COLA', 'default'),
+        'job_tries' => max(1, (int) env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION_JOB_TRIES', 3)),
+        'job_backoff_segundos' => array_map('intval', explode(',', env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION_JOB_BACKOFF', '30,120,600'))),
+        'job_timeout' => max(60, (int) env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION_JOB_TIMEOUT', 300)),
     ],
 
 ];

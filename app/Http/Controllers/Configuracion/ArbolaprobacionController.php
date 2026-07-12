@@ -23,6 +23,7 @@ use DB;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class ArbolaprobacionController extends Controller
@@ -340,6 +341,14 @@ class ArbolaprobacionController extends Controller
             || (int) $datos['movimiento']->id !== (int) $request->aprobacion_id
             || (int) $datos['movimiento']->destinatariousuario_id !== (int) $request->usuario_id
         ) {
+            Log::warning('ArbolAprobacion: confirmacion_rechazada', [
+                'tipocomprobante' => 'RE',
+                'comprobante_id' => (int) $request->comprobante_id,
+                'movimiento_id' => (int) $request->aprobacion_id,
+                'usuario_id' => (int) $request->usuario_id,
+                'motivo' => 'enlace invalido o ya procesado',
+            ]);
+
             return $this->portalFinRequisicion(false, 'No se pudo confirmar la aprobación: enlace inválido o ya fue procesada por otro usuario.');
         }
 

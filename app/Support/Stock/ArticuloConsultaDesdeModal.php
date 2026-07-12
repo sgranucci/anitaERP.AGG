@@ -47,9 +47,8 @@ class ArticuloConsultaDesdeModal
             || can('editar-prestamo', false)
             || can('actualizar-prestamo', false)
             || can('listar-prestamo', false)
-            || can('crear-maquinavending-gastronomia', false)
-            || can('editar-maquinavending-gastronomia', false)
-            || can('actualizar-maquinavending-gastronomia', false);
+            || can('cumplir-requisicion-compra', false)
+            || can('cambiar-articulo-cumplir-requisicion-compra', false);
     }
 
     public static function urlEditar(int $id): string

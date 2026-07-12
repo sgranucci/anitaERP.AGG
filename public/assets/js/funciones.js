@@ -258,6 +258,27 @@ function mostrarSolapaDelPrimerCampoInvalido(campo) {
     }
 }
 
+function etiquetaCampoObligatorio(campo) {
+    if (!campo) {
+        return '';
+    }
+    var id = campo.id || '';
+    if (id) {
+        var $label = $('label[for="' + String(id).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]');
+        if ($label.length) {
+            return $label.text().replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+        }
+    }
+    var $grp = $(campo).closest('.form-group');
+    if ($grp.length) {
+        var $lbl = $grp.find('label.control-label, label.col-form-label, label.requerido').first();
+        if ($lbl.length) {
+            return $lbl.text().replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+        }
+    }
+    return (campo.name || '').replace(/\[\]/g, '');
+}
+
 function notificarCamposObligatoriosPendientes(primerInvalido, cantidad) {
     var mensaje = 'Complete los campos obligatorios';
     if (cantidad > 1) {
@@ -266,6 +287,10 @@ function notificarCamposObligatoriosPendientes(primerInvalido, cantidad) {
     var numeroSolapa = numeroSolapaDesdeElemento(primerInvalido);
     if (numeroSolapa) {
         mensaje += ' en: ' + tituloSolapaFormulario(numeroSolapa);
+    }
+    var etiquetaCampo = etiquetaCampoObligatorio(primerInvalido);
+    if (etiquetaCampo) {
+        mensaje += '. Falta: ' + etiquetaCampo;
     }
     mensaje += '.';
 

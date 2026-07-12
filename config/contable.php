@@ -17,6 +17,10 @@ return [
     'mayor_concepto' => [
         'memory_limit' => env('MAYOR_CONCEPTO_MEMORY_LIMIT', '1024M'),
         'max_execution_time' => (int) env('MAYOR_CONCEPTO_MAX_EXECUTION_TIME', 900),
+        // Límite Anita in_limite_caja_banco (argv[13]). Acepta 112010-008 o 112010008.
+        'limite_caja_banco' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CAJA_BANCO', '112010008')),
+        // Tope mayor analítico de control / conciliación (export l_mayor; ej. 112010-008).
+        'limite_cuenta_analitico_control' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CUENTA_ANALITICO_CONTROL', '112010008')),
     ],
 
     /*

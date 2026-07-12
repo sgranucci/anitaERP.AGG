@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services\Ventas\Gastronomia;
 
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Services\Ventas\Gastronomia\GastronomiaReceptorFacturacionService;
 use Tests\TestCase;
@@ -66,6 +67,23 @@ class GastronomiaReceptorFacturacionServiceTest extends TestCase
         $svc = app(GastronomiaReceptorFacturacionService::class);
         $this->assertNull($svc->normalizarClienteIdFacturacion(188, 188));
         $this->assertSame(42, $svc->normalizarClienteIdFacturacion(42, 188));
+    }
+
+    public function test_cliente_vip_plantilla_no_es_cliente_facturacion(): void
+    {
+        $clienteVip = Cliente::query()->where('codigo', 'A65VIP')->first();
+        if ($clienteVip === null) {
+            $this->markTestSkipped('Cliente A65VIP no existe en BD de prueba.');
+        }
+
+        $svc = app(GastronomiaReceptorFacturacionService::class);
+        $this->assertTrue($svc->esClientePlantillaInternaGastronomia((int) $clienteVip->id));
+        $this->assertNull($svc->normalizarClienteIdFacturacion((int) $clienteVip->id, 0));
+
+        $cuenta = new CuentaGastronomia(['cliente_id' => (int) $clienteVip->id]);
+        $this->assertTrue($svc->facturaComoConsumidorFinal($cuenta));
+        $rec = $svc->resolverParaFacturar($cuenta, 7600.);
+        $this->assertSame(GastronomiaReceptorFacturacionService::MODO_CONSUMIDOR_FINAL, $rec['modo']);
     }
 
     public function test_maestro_sin_documento_usa_arca_consumidor_final(): void

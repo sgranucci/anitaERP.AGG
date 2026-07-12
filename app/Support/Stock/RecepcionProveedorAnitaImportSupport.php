@@ -3,9 +3,14 @@
 namespace App\Support\Stock;
 
 use App\ApiAnita;
+use Illuminate\Support\Facades\DB;
 
 class RecepcionProveedorAnitaImportSupport
 {
+    /** @var array<string, int> */
+    private static array $monedaIdPorCodigoAnita = [];
+
+    private static bool $monedaIdPorCodigoAnitaCargado = false;
     public static function sistemaCompras(): string
     {
         return (string) config('recepcion_proveedor.anita.sistema_compras', 'compras');
@@ -89,10 +94,28 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha',
+            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac',
             'whereArmado' => $where,
             'limit' => 'FIRST 1',
         ]));
+    }
+
+    /**
+     * Número OC Anita desde recepmae: recm_com_nro o recm_nro_fac (PEP/FIB en recm_tipo_fac).
+     */
+    public static function numeroOrdencompraDesdeCabecera(object $cabecera): int
+    {
+        $nroCom = (int) ($cabecera->recm_com_nro ?? 0);
+        if ($nroCom > 0) {
+            return $nroCom;
+        }
+
+        $tipoFac = strtoupper(trim((string) ($cabecera->recm_tipo_fac ?? '')));
+        if (in_array($tipoFac, ['PEP', 'OC', 'ORD'], true)) {
+            return (int) ($cabecera->recm_nro_fac ?? 0);
+        }
+
+        return 0;
     }
 
     /**
@@ -173,5 +196,33 @@ class RecepcionProveedorAnitaImportSupport
         }
 
         return $grupos;
+    }
+
+    public static function monedaIdDesdeCodigoAnita(mixed $codMon): int
+    {
+        self::cargarMapaMonedaIdPorCodigoAnita();
+
+        $cod = trim((string) $codMon);
+        if ($cod === '') {
+            return 1;
+        }
+
+        return self::$monedaIdPorCodigoAnita[$cod] ?? 1;
+    }
+
+    private static function cargarMapaMonedaIdPorCodigoAnita(): void
+    {
+        if (self::$monedaIdPorCodigoAnitaCargado) {
+            return;
+        }
+
+        self::$monedaIdPorCodigoAnitaCargado = true;
+        foreach (DB::table('moneda')->get(['id', 'codigo']) as $moneda) {
+            $codigo = trim((string) $moneda->codigo);
+            if ($codigo === '') {
+                continue;
+            }
+            self::$monedaIdPorCodigoAnita[$codigo] = (int) $moneda->id;
+        }
     }
 }

@@ -8,6 +8,11 @@ use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 
 final class MovimientoStockSalidaSaldoSupport
 {
+    public static function esSignoRestaStock(?string $signoCantidad): bool
+    {
+        return strtoupper(trim((string) ($signoCantidad ?? ''))) === 'R';
+    }
+
     /**
      * @param  list<int|string|null>  $articulosId
      * @param  list<int|float|string|null>  $cantidades

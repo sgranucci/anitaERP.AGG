@@ -86,8 +86,13 @@ Requisiciones de sala
                             </td>
                             <td class="text-nowrap">
                                 @if (can('listar-requisicion-sala', false) || can('editar-requisicion-sala', false))
-                                <a href="{{ route('imprimir_pdf_requisicion_sala', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="PDF emisión" target="_blank" rel="noopener noreferrer">
+                                <a href="{{ route('imprimir_pdf_requisicion_sala', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="PDF emisi&oacute;n" target="_blank" rel="noopener noreferrer">
                                     <i class="fa fa-file-pdf-o text-danger"></i>
+                                </a>
+                                @endif
+                                @if (can('cumplir-requisicion-sala', false))
+                                <a href="{{ route('cumplir_requisicion_sala', ['requisicion_sala_id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Cumplimientos de sala">
+                                    <i class="fa fa-clipboard-check text-success"></i>
                                 </a>
                                 @endif
                                 @if (can('editar-requisicion-sala', false) || can('actualizar-requisicion-sala', false))

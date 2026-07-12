@@ -48,4 +48,10 @@
         mostrar: mostrarBannerGrabandoRequisicionSala,
         ocultar: ocultarBannerGrabandoRequisicionSala,
     };
+
+    $(window).on('pageshow', function (event) {
+        if (event.originalEvent && event.originalEvent.persisted) {
+            ocultarBannerGrabandoRequisicionSala();
+        }
+    });
 }(jQuery));

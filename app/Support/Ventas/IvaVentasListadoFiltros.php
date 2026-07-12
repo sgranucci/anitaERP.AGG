@@ -54,8 +54,13 @@ final class IvaVentasListadoFiltros
             'orden_fecha' => $orden,
             'subdiario' => $subdiario,
             'clasificar_por_host' => $request->boolean('clasificar_por_host'),
+            'agrupar_b_por_dia' => $request->boolean('agrupar_b_por_dia'),
+            'auditar_ctamov' => $request->boolean('auditar_ctamov'),
             'conciliar_contable' => $request->boolean('consultar')
                 ? $request->boolean('conciliar_contable', true)
+                : true,
+            'conciliar_por_unidad' => $request->boolean('consultar')
+                ? $request->boolean('conciliar_por_unidad', true)
                 : true,
             'solo_moneda_origen' => $request->boolean('consultar')
                 ? $request->boolean('solo_moneda_origen')
@@ -89,7 +94,16 @@ final class IvaVentasListadoFiltros
             $out['clasificar_por_host'] = 1;
         }
 
+        if (! empty($filtros['agrupar_b_por_dia'])) {
+            $out['agrupar_b_por_dia'] = 1;
+        }
+
+        if (! empty($filtros['auditar_ctamov'])) {
+            $out['auditar_ctamov'] = 1;
+        }
+
         $out['conciliar_contable'] = empty($filtros['conciliar_contable']) ? 0 : 1;
+        $out['conciliar_por_unidad'] = empty($filtros['conciliar_por_unidad']) ? 0 : 1;
         $out['solo_moneda_origen'] = empty($filtros['solo_moneda_origen']) ? 0 : 1;
 
         return $out;

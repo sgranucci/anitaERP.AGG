@@ -47,7 +47,7 @@
 						<td>{{$data->nombreempresa ?? ''}}</td>
 						<td>{{$data->nombrepresupuesto ?? ''}}</td>
 						<td>{{$data->nombreescenario ?? ''}}</td>
-						<td>{{$data->nombrecentrocosto ?? '' }}</td>
+						<td>{{ trim(($data->codigocentrocosto ?? '').' '.($data->nombrecentrocosto ?? '')) }}</td>
 						<td>{{$data->codigopartida ?? ''}}</td>
 						<td>{{$data->detalle ?? ''}}</td>
 						<td>{{$data->descripcionarticulo ?? ''}}</td>

@@ -96,7 +96,9 @@ use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
+use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
 use Exception;
+use Illuminate\Database\QueryException;
 use PDF;
 
 class FacturacionService 
@@ -1706,6 +1708,10 @@ class FacturacionService
 		if ($condicioniva)
 			$letra = $condicioniva->letra;
 
+		if (strtoupper((string) $letra) === 'B') {
+			$data['omitir_percepciones'] = true;
+		}
+
 		// Lee punto de venta
 		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
 
@@ -2960,7 +2966,45 @@ class FacturacionService
 			];	
 
 			// Graba venta
-			$vta = $this->ventaRepository->create($venta);
+			$intentoCreateVenta = 0;
+			while (true) {
+				try {
+					$vta = $this->ventaRepository->create($venta);
+					break;
+				} catch (QueryException $e) {
+					if (
+						$intentoCreateVenta > 0
+						|| ($puntoventa->modofacturacion ?? '') !== 'A'
+						|| ! VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e)
+					) {
+						throw $e;
+					}
+
+					$numero = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+						(int) $puntoventa->id,
+						$tipotransaccion->codigo,
+						$letra,
+						(int) ($puntoventa->empresa_id ?? 0) ?: null,
+						$cliente->modoFacturacion ?? null,
+						abs((float) $totalComprobante),
+					) + 1;
+
+					$venta['numerocomprobante'] = $numero;
+					$venta['codigo'] = $tipoAnita.' '.$letra.'-'
+						.str_pad($puntoventa->codigo, config('facturacion.DIGITOS_SUCURSAL'), '0', STR_PAD_LEFT).'-'
+						.str_pad((string) $numero, config('facturacion.DIGITOS_COMPROBANTE'), '0', STR_PAD_LEFT);
+
+					if (is_array($dataCAE)) {
+						$dataCAE['numerocomprobante'] = $numero;
+					}
+
+					$intentoCreateVenta++;
+					Log::warning('facturacion.grabaFacturaERP.numeracion_duplicada_reintento', [
+						'puntoventa_id' => $puntoventa->id,
+						'numerocomprobante' => $numero,
+					]);
+				}
+			}
 
 			// Graba venta de exportacion si existen parametros
 			if ($this->formapago_id >= 1)
@@ -6348,6 +6392,7 @@ class FacturacionService
 		$data['cantidadmodificada'] = $totalKilo;
 		$data['usuarioalta'] = $this->nombreUsuarioAnita();
 		$data['omitir_stkmov_anita'] = true;
+		$data['omitir_validacion_saldo'] = true;
 
 		$this->movimientoStockService->guardaMovimientoStock($data, 'create');
 

@@ -1151,10 +1151,25 @@ class RendicionGastronomiaCajaService
     }
 
     /**
+     * Fecha/hora de presentación en caja: se fija al crear (now) y no se modifica en edición.
+     */
+    public function resolverFecharendicionInmutable(?int $rendicionId = null): string
+    {
+        if ($rendicionId !== null && $rendicionId > 0) {
+            $existente = RendicionGastronomiaCaja::query()->find($rendicionId);
+            if ($existente?->fecharendicion !== null) {
+                return $existente->fecharendicion->format('Y-m-d H:i:s');
+            }
+        }
+
+        return now()->format('Y-m-d H:i:s');
+    }
+
+    /**
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    public function cabeceraDesdeRequest(array $validated): array
+    public function cabeceraDesdeRequest(array $validated, ?int $rendicionId = null): array
     {
         $tipo = (string) ($validated['tipo'] ?? RendicionGastronomiaCaja::TIPO_TURNO);
 
@@ -1165,7 +1180,7 @@ class RendicionGastronomiaCajaService
             'puntoventa_cae_id' => (int) $validated['puntoventa_cae_id'],
             'puntoventa_caea_id' => (int) $validated['puntoventa_caea_id'],
             'caja_id' => (int) $validated['caja_id'],
-            'fecharendicion' => Carbon::parse($validated['fecharendicion'])->format('Y-m-d H:i:s'),
+            'fecharendicion' => $this->resolverFecharendicionInmutable($rendicionId),
             'iniciodelfondo' => round((float) $validated['iniciodelfondo'], 2),
             'totalfactura' => round((float) $validated['totalfactura'], 2),
             'totalcobrado' => round((float) $validated['totalcobrado'], 2),

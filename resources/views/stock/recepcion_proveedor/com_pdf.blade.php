@@ -1,5 +1,6 @@
 @php
     $clave = \App\Support\Stock\RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+    $intercompanyPdf = \App\Support\Stock\RecepcionProveedorIntercompanySupport::detalleIntercompanyPdf($recepcion);
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -65,6 +66,14 @@
     @if($recepcion->fl_faltante_oc) [Faltante OC] @endif
     @if($recepcion->fl_laboratorio) [Laboratorio] @endif
     @if($recepcion->resumen_diferencias)<br>{!! nl2br(e($recepcion->resumen_diferencias)) !!}@endif
+</div>
+@endif
+
+@if(!empty($intercompanyPdf['es_intercompany']))
+<div class="obs warn">
+    <strong>Ingreso intercompany:</strong>
+    la recepción es de <strong>{{ optional($recepcion->empresas)->nombre }}</strong>
+    y la mercadería ingresó en depósito(s) de {{ implode('; ', $intercompanyPdf['empresas_deposito']) }}.
 </div>
 @endif
 

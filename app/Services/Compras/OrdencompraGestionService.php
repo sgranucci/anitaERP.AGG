@@ -21,6 +21,7 @@ use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraEstados;
+use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use Auth;
 use Carbon\Carbon;
@@ -88,7 +89,7 @@ class OrdencompraGestionService
      */
     public function plantillaDesdeRequisicion(int $requisicionId): array
     {
-        $aprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $aprobada = self::nombreEstadoRequisicionAprobada();
         $req = Requisicion::with([
             'proveedores',
             'requisicion_articulos.articulos',
@@ -97,12 +98,25 @@ class OrdencompraGestionService
             'requisicion_articulos.partidagastos.articulos',
             'requisicion_articulos.capexs',
         ])->find($requisicionId);
-        if (! $req || $req->estado !== $aprobada) {
-            throw new \InvalidArgumentException('La requisición no existe o no está aprobada.');
+        if (! $req) {
+            throw new \InvalidArgumentException('La requisición no existe.');
+        }
+        $estadoPermitido = ($req->estado === $aprobada)
+            || $this->estadoRequisicionEquivaleAGeneroOc($req->estado);
+        if (! $estadoPermitido) {
+            throw new \InvalidArgumentException('La requisición no está en un estado que permita generar órdenes de compra.');
+        }
+
+        $pendientesIds = array_flip(RequisicionLineasOcSupport::idsPendientesOc($requisicionId));
+        if ($pendientesIds === []) {
+            throw new \InvalidArgumentException('No quedan ítems pendientes de orden de compra en esta requisición.');
         }
 
         $articulos = [];
         foreach ($req->requisicion_articulos as $i => $lin) {
+            if (! isset($pendientesIds[(int) $lin->id])) {
+                continue;
+            }
             $pg = $lin->partidagastos;
             $cpx = $lin->capexs;
             $art = $lin->articulos;
@@ -272,7 +286,7 @@ class OrdencompraGestionService
         }
 
         if ($lineasSinOrdenRequisicionArticuloIds !== []) {
-            $etiqueta = 'Línea cerrada sin orden de compra: no se seleccionó origen de precio al generar desde la requisición.';
+            $etiqueta = RequisicionLineasOcSupport::etiquetaLineaCerradaSinOc();
             Requisicion_Articulo::query()
                 ->where('requisicion_id', $requisicionId)
                 ->whereIn('id', $lineasSinOrdenRequisicionArticuloIds)
@@ -280,7 +294,7 @@ class OrdencompraGestionService
             $advertencias[] = count($lineasSinOrdenRequisicionArticuloIds).' ítem(es) quedaron sin OC (línea cerrada en la requisición).';
         }
 
-        $this->marcarRequisicionGeneroOc($requisicionId, Auth::user()->id, 'Generación de órdenes de compra desde requisición');
+        $this->sincronizarEstadoRequisicionSegunLineasOc($requisicionId, Auth::user()->id);
 
         return [
             'mensaje' => 'ok',
@@ -381,7 +395,7 @@ class OrdencompraGestionService
             $this->ocArbolTriggerDispatcher->dispararPorAlta((int) $oc->id);
 
             if (! $omitirMarcarRequisicionGeneroOc && ! empty($cab['requisicion_id'])) {
-                $this->marcarRequisicionGeneroOc((int) $cab['requisicion_id'], $uid, 'Alta de orden de compra');
+                $this->sincronizarEstadoRequisicionSegunLineasOc((int) $cab['requisicion_id'], $uid);
             }
 
             $this->ordencompraAnitaBridge->sincronizarAlta($this->ordencompraRepository->find($oc->id));
@@ -465,10 +479,10 @@ class OrdencompraGestionService
             if ($oldReqId !== $newReqId) {
                 $uidAct = Auth::user()->id;
                 if ($oldReqId) {
-                    $this->marcarRequisicionAprobadaSiGeneroOc($oldReqId, $uidAct, 'Actualización de orden de compra: se desasoció la requisición');
+                    $this->sincronizarEstadoRequisicionSegunLineasOc($oldReqId, $uidAct);
                 }
                 if ($newReqId) {
-                    $this->marcarRequisicionGeneroOc($newReqId, $uidAct, 'Actualización de orden de compra: requisición asociada');
+                    $this->sincronizarEstadoRequisicionSegunLineasOc($newReqId, $uidAct);
                 }
             }
 
@@ -496,7 +510,7 @@ class OrdencompraGestionService
         DB::beginTransaction();
         try {
             if ($oc->requisicion_id) {
-                $this->marcarRequisicionAprobadaSiGeneroOc((int) $oc->requisicion_id, Auth::user()->id, 'Eliminación de orden de compra');
+                $this->sincronizarEstadoRequisicionSegunLineasOc((int) $oc->requisicion_id, Auth::user()->id);
             }
             $this->ordencompraAnitaBridge->sincronizarBaja($oc);
             $this->ordencompraRepository->delete($id);
@@ -653,6 +667,34 @@ class OrdencompraGestionService
             $usuarioId,
             $observacion
         );
+    }
+
+    public function sincronizarEstadoRequisicionSegunLineasOc(int $requisicionId, int $usuarioId): void
+    {
+        if ($requisicionId <= 0) {
+            return;
+        }
+
+        $req = Requisicion::query()->select('id', 'estado')->find($requisicionId);
+        if (! $req) {
+            return;
+        }
+
+        if (RequisicionLineasOcSupport::todasLineasResueltas($requisicionId)) {
+            if ($req->estado === self::nombreEstadoRequisicionAprobada()) {
+                $this->marcarRequisicionGeneroOc($requisicionId, $usuarioId, 'Todos los ítems de la requisición fueron procesados (OC o cierre sin OC)');
+            }
+
+            return;
+        }
+
+        if ($this->estadoRequisicionEquivaleAGeneroOc($req->estado)) {
+            $this->marcarRequisicionAprobadaSiGeneroOc(
+                $requisicionId,
+                $usuarioId,
+                'Quedan ítems pendientes de orden de compra'
+            );
+        }
     }
 
     private function marcarRequisicionGeneroOc(int $requisicionId, int $usuarioId, string $observacion): void

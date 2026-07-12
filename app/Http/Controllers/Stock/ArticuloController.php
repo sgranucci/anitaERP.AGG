@@ -52,6 +52,7 @@ use App\Support\Stock\ArticuloEtiquetaNpuRangoSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuSupport;
 use App\Support\Stock\ArticuloEtiquetaZplSupport;
 use App\Support\Stock\ArticuloListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\ArticuloProveedorMatchSupport;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\ArticuloProveedorLineasSupport;
@@ -691,7 +692,7 @@ class ArticuloController extends Controller
         return ArticuloEtiquetaZplSupport::normalizarCodigoFinal($etiqueta);
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-articulos');
 
@@ -736,13 +737,14 @@ class ArticuloController extends Controller
 
         $producto = ArticuloUltimoCreatePrefill::cargarProductoPrefill();
         $articulo_proveedor_lineas = ArticuloProveedorLineasSupport::lineasParaFormulario($producto);
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloListadoFiltros::class);
 
         return view('stock.articulo.crear', compact('producto', 'categoria', 'subcategoria', 'linea', 'marca', 'tipoimputacion_enum',
             'unidadmedida', 'usosArticulos', 'oficinacompra_query', 'referer', 'codimp',
             'periodicidadcompra_query', 'condicionentrega_query', 'empresa_query', 'estado_enum',
             'tiposArticulos', 'deposito_query', 'numeroparte_enum', 'nofactura_enum',
             'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query',
-            'divide_enum', 'enviaalarma_enum', 'articulo_proveedor_lineas'));
+            'divide_enum', 'enviaalarma_enum', 'articulo_proveedor_lineas', 'filtrosQuery'));
     }
 
     public function guardar(ValidacionArticulo $request)
@@ -817,12 +819,13 @@ class ArticuloController extends Controller
             }
         }
 
-        return redirect('stock/articulo')->with('status', 'Producto creado');
+        return redirect()->route('articulo', QueryRetornoListado::desdeRequest($request, ArticuloListadoFiltros::class))
+            ->with('status', 'Producto creado');
     }
 
-    public function editar($id, $type = null, $filtros = null)
+    public function editar(Request $request, $id, $type = null, $filtros = null)
     {
-        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
         if ($soloConsulta) {
             if (! ArticuloConsultaDesdeModal::puedeConsultar()) {
                 abort(403);
@@ -849,8 +852,9 @@ class ArticuloController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
         $tipoimputacion_enum = Articulo_Cuentacontable::$enumTipoImputacion;
 
-        $referer = request()->headers->get('referer');
+        $referer = $request->headers->get('referer');
         $ocultarVolver = $soloConsulta;
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloListadoFiltros::class);
 
         $nofactura_enum = Articulo_Estado::$enumNoFactura;
         $estado_enum = Articulo_Estado::$enumEstado;
@@ -888,7 +892,7 @@ class ArticuloController extends Controller
             'divide_enum', 'enviaalarma_enum',
             'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query',
             'puedeActualizarArticulo', 'ocultarVolver', 'soloConsulta',
-            'articulo_proveedor_lineas', 'partesUnicasTotal'));
+            'articulo_proveedor_lineas', 'partesUnicasTotal', 'filtrosQuery'));
     }
 
     public function actualizar(ValidacionArticulo $request, $id)
@@ -956,7 +960,8 @@ class ArticuloController extends Controller
                 ->with('status', 'Artículo actualizado con éxito');
         }
 
-        return redirect('stock/articulo')->with('status', 'Artículo actualizado con éxito');
+        return redirect()->route('articulo', QueryRetornoListado::desdeRequest($request, ArticuloListadoFiltros::class))
+            ->with('status', 'Artículo actualizado con éxito');
     }
 
     public function eliminar(Request $request, $id)

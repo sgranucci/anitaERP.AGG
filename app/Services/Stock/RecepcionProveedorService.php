@@ -2,6 +2,7 @@
 
 namespace App\Services\Stock;
 
+use App\Jobs\Stock\RecepcionProveedorAnitaTrasConfirmacionJob;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Stock\Articulo;
@@ -17,10 +18,13 @@ use App\Support\Compras\OrdencompraLineaEstados;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
+use App\Support\Stock\RecepcionProveedorIntercompanySupport;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
+use App\Support\Stock\RecepcionProveedorArticuloExtraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaNumeracionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorArchivoSupport;
@@ -29,6 +33,7 @@ use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use App\Support\Stock\RecepcionProveedorLineaEstados;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
+use App\Support\Stock\RecepcionProveedorPrecioPendienteSupport;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Compras\OrdencompraRecepcionCumplimientoService;
 use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
@@ -49,6 +54,7 @@ class RecepcionProveedorService
         private readonly MovimientoStockService $movimientoStockService,
         private readonly OrdencompraRecepcionPrecioSyncService $ordencompraRecepcionPrecioSyncService,
         private readonly OrdencompraRecepcionCumplimientoService $ordencompraRecepcionCumplimientoService,
+        private readonly RecepcionProveedorPrecioPendienteService $precioPendienteService,
     ) {
     }
 
@@ -72,26 +78,33 @@ class RecepcionProveedorService
     public function guardar(array $data): Recepcion_Proveedor
     {
         return DB::transaction(function () use ($data) {
-            $ocData = $this->ocResolver->resolverPorId((int) $data['ordencompra_id']);
+            $tipo = $data['tipo'] ?? Recepcion_Proveedor::TIPO_RECEPCION;
+            $ocData = $this->ocResolver->resolverPorId(
+                (int) $data['ordencompra_id'],
+                $tipo === Recepcion_Proveedor::TIPO_RECEPCION
+            );
             $this->assertPeriodoContableRecepcion((int) $ocData['cabecera']->empresa_id, (string) ($data['fecha'] ?? ''));
             $oc = $ocData['cabecera'];
-            $tipo = $data['tipo'] ?? Recepcion_Proveedor::TIPO_RECEPCION;
-
-            if ($tipo === Recepcion_Proveedor::TIPO_RECEPCION) {
-                RecepcionProveedorOcPendienteSupport::assertPermiteNuevaRecepcion($oc);
-            }
 
             $items = $data['items'] ?? [];
+
+            $items = RecepcionProveedorPrecioPendienteSupport::normalizarItemsSegunPermiso(
+                $items,
+                RecepcionProveedorPrecioPendienteSupport::puedeModificarPrecioEnRecepcion()
+            );
+            RecepcionProveedorArticuloExtraSupport::assertItemsPermitidos($items);
 
             $analisis = $this->procesarItems(
                 $oc,
                 $items,
                 $tipo === Recepcion_Proveedor::TIPO_DEVOLUCION,
-                $this->resolverDepositoCabecera($data['deposito_id'] ?? null)
+                $this->resolverDepositoCabecera($data['deposito_id'] ?? null),
+                $tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
             );
             $items = $analisis['items'];
 
             $primerItem = $items[0] ?? null;
+            $requiereImpuestoInterno = RecepcionProveedorImpuestoInternoSupport::itemsRequierenImpuestoInterno($items);
 
             $recepcion = $this->repository->create([
                 'ordencompra_id' => $oc->id,
@@ -115,6 +128,10 @@ class RecepcionProveedorService
                 'resumen_diferencias' => $analisis['resumen_diferencias'] ?: null,
                 'resumen_rechazos' => $analisis['resumen_rechazos'] ?: null,
                 'observacion' => $data['observacion'] ?? null,
+                'impuesto_interno' => RecepcionProveedorImpuestoInternoSupport::normalizarImpuestoInternoGuardado(
+                    isset($data['impuesto_interno']) ? (float) $data['impuesto_interno'] : null,
+                    $requiereImpuestoInterno
+                ),
                 'origen_carga' => $data['origen_carga'] ?? 'MANUAL',
                 'creousuario_id' => Auth::id(),
                 'centrocosto_id' => RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga(),
@@ -125,7 +142,7 @@ class RecepcionProveedorService
             $recepcion = $recepcion->fresh(['recepcion_proveedor_articulos.articulos']);
             RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion($recepcion, $items);
 
-            return $recepcion;
+            return $this->precioPendienteService->evaluarTrasGuardarBorrador($recepcion, true);
         });
     }
 
@@ -148,14 +165,21 @@ class RecepcionProveedorService
             $ocData = $this->ocResolver->resolverPorId((int) $data['ordencompra_id']);
             $oc = $ocData['cabecera'];
             $items = $data['items'] ?? [];
+            $items = RecepcionProveedorPrecioPendienteSupport::normalizarItemsSegunPermiso(
+                $items,
+                RecepcionProveedorPrecioPendienteSupport::puedeModificarPrecioEnRecepcion()
+            );
+            RecepcionProveedorArticuloExtraSupport::assertItemsPermitidos($items);
             $analisis = $this->procesarItems(
                 $oc,
                 $items,
                 $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION,
-                $this->resolverDepositoCabecera($data['deposito_id'] ?? null)
+                $this->resolverDepositoCabecera($data['deposito_id'] ?? null),
+                $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
             );
             $items = $analisis['items'];
             $primerItem = $items[0] ?? null;
+            $requiereImpuestoInterno = RecepcionProveedorImpuestoInternoSupport::itemsRequierenImpuestoInterno($items);
 
             $recepcion->update([
                 'fecha' => $data['fecha'],
@@ -173,6 +197,10 @@ class RecepcionProveedorService
                 'resumen_diferencias' => $analisis['resumen_diferencias'] ?: null,
                 'resumen_rechazos' => $analisis['resumen_rechazos'] ?: null,
                 'observacion' => $data['observacion'] ?? null,
+                'impuesto_interno' => RecepcionProveedorImpuestoInternoSupport::normalizarImpuestoInternoGuardado(
+                    isset($data['impuesto_interno']) ? (float) $data['impuesto_interno'] : null,
+                    $requiereImpuestoInterno
+                ),
             ]);
 
             $this->reemplazarItems($recepcion, $items);
@@ -184,13 +212,15 @@ class RecepcionProveedorService
                 RecepcionProveedorArchivoSupport::sincronizarAdjuntosDesdeRequest((int) $recepcion->id, $request);
             }
 
-            return $recepcion->fresh();
+            return $this->precioPendienteService->evaluarTrasGuardarBorrador($recepcion->fresh(), true);
         });
     }
 
     public function confirmar(int $id): Recepcion_Proveedor
     {
         $pre = $this->repository->find($id);
+        $this->precioPendienteService->assertPuedeConfirmar($pre);
+        RecepcionProveedorImpuestoInternoSupport::assertImpuestoInternoCumplido($pre);
         if ($pre->recepcion_proveedor_articulos->isEmpty()) {
             throw new \RuntimeException('La recepción no tiene ítems.');
         }
@@ -343,9 +373,31 @@ class RecepcionProveedorService
             }
         });
 
+        $this->encolarVerificacionAnitaTrasConfirmacion((int) $recepcion->id);
         $this->enviarAvisosConfirmacion($recepcion);
 
         return $recepcion;
+    }
+
+    /**
+     * Tras commit MySQL: verifica recepmae + ctamov Anita y repara discrepancias en cola.
+     */
+    private function encolarVerificacionAnitaTrasConfirmacion(int $recepcionId): void
+    {
+        if ($recepcionId <= 0) {
+            return;
+        }
+
+        if (! filter_var(
+            config('recepcion_proveedor.anita_tras_confirmacion.habilitada', true),
+            FILTER_VALIDATE_BOOLEAN
+        )) {
+            return;
+        }
+
+        DB::afterCommit(function () use ($recepcionId): void {
+            RecepcionProveedorAnitaTrasConfirmacionJob::dispatch($recepcionId);
+        });
     }
 
     /**
@@ -551,7 +603,8 @@ class RecepcionProveedorService
         Ordencompra $oc,
         array $items,
         bool $omitirFaltantes = false,
-        ?int $depositoCabeceraId = null
+        ?int $depositoCabeceraId = null,
+        bool $esDevolucion = false
     ): array {
         if ($items === []) {
             throw new \RuntimeException('Debe cargar al menos un ítem.');
@@ -680,7 +733,7 @@ class RecepcionProveedorService
 
         $oc->loadMissing('ordencompra_articulos.articulos');
 
-        return RecepcionProveedorDiferenciaSupport::analizar($oc, $items, $omitirFaltantes);
+        return RecepcionProveedorDiferenciaSupport::analizar($oc, $items, $omitirFaltantes, $esDevolucion);
     }
 
     private function resolverDepositoCabecera(mixed $depositoId): ?int
@@ -692,7 +745,8 @@ class RecepcionProveedorService
 
     private function validarDepositoAutorizado(int $depositoId, int $empresaId, string $contexto): void
     {
-        if (! Depmae::existeParaEmpresa($depositoId, $empresaId)) {
+        if (! RecepcionProveedorIntercompanySupport::puedeUsar()
+            && ! Depmae::existeParaEmpresa($depositoId, $empresaId)) {
             throw new \RuntimeException("{$contexto}: depósito no autorizado para la empresa de la orden de compra.");
         }
 
@@ -783,6 +837,7 @@ class RecepcionProveedorService
                 'coeficienteconversion' => $item['coeficienteconversion'] ?? 1,
                 'precio' => $item['precio'],
                 'precio_ordencompra' => $item['precio_ordencompra'] ?? $item['precio'],
+                'precio_solicitado' => $item['precio_solicitado'] ?? null,
                 'precio_stock' => $item['precio_stock'] ?? $item['precio'],
                 'fl_precio_diferencia' => ! empty($item['fl_precio_diferencia']),
                 'fl_cantidad_diferencia' => ! empty($item['fl_cantidad_diferencia']),

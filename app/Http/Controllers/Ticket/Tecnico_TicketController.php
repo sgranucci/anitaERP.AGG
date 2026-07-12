@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionTecnico_Ticket;
+use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Ticket\Tecnico_TicketRepositoryInterface;
 use App\Repositories\Ticket\AreadestinoRepositoryInterface;
 
@@ -14,12 +15,15 @@ class Tecnico_TicketController extends Controller
 {
 	private $repository;
     private $areadestinoRepository;
+    private $usuarioRepository;
 
     public function __construct(Tecnico_TicketRepositoryInterface $repository,
-                                AreadestinoRepositoryInterface $areadestinorepository)
+                                AreadestinoRepositoryInterface $areadestinorepository,
+                                UsuarioRepositoryInterface $usuariorepository)
     {
         $this->repository = $repository;
         $this->areadestinoRepository = $areadestinorepository;
+        $this->usuarioRepository = $usuariorepository;
     }
 
     /**
@@ -45,7 +49,9 @@ class Tecnico_TicketController extends Controller
         can('crear-tecnico-ticket');
 
         $areadestino_query = $this->areadestinoRepository->all();
-        $usuario_query = Usuario::with('roles:id,nombre')->orderBy('id')->get();
+        $usuario_query = $this->usuarioRepository->listadoOperativoParaSelector(
+            with: ['roles:id,nombre']
+        );
 
         return view('ticket.tecnico_ticket.crear', compact('areadestino_query', 'usuario_query'));
     }
@@ -75,7 +81,9 @@ class Tecnico_TicketController extends Controller
         can('editar-tecnico-ticket');
         $data = $this->repository->findOrFail($id);
         $areadestino_query = $this->areadestinoRepository->all();
-        $usuario_query = Usuario::with('roles:id,nombre')->orderBy('id')->get();
+        $usuario_query = $this->usuarioRepository->listadoOperativoParaSelector(
+            with: ['roles:id,nombre']
+        );
 
         return view('ticket.tecnico_ticket.editar', compact('data', 'areadestino_query', 'usuario_query'));
     }

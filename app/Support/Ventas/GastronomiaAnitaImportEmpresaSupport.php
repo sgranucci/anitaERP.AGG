@@ -32,7 +32,8 @@ final class GastronomiaAnitaImportEmpresaSupport
         }
 
         // stkv_empresa no está poblado en bridge Kandiko (kancadmin); sucursal+nro alcanzan.
-        if ($prefijo === 'stkv') {
+        // venc_empresa tampoco está poblado en vencae (CAEA); filtrar por empresa deja cae vacío al importar.
+        if ($prefijo === 'stkv' || $prefijo === 'venc') {
             return '';
         }
 

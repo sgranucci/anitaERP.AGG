@@ -9,8 +9,14 @@
     window.DESCUENTO_REPORTE = {
         descuentosIniciales: @json($descuentos_iniciales ?? []),
         clientesIniciales: @json($clientes_iniciales ?? []),
+        mozosIniciales: @json($mozos_iniciales ?? []),
+        vipsIniciales: @json($vips_iniciales ?? []),
         consultado: @json(! empty($consultado)),
         consultaFacturasUrl: @json(route('gastronomia_descuento_reporte_consulta_facturas')),
+        consultaMozoUrl: @json(route('gastronomia_descuento_reporte_consulta_mozo')),
+        leerMozoUrlBase: @json(url('ventas/gastronomia/descuento-reporte/leer-mozo')),
+        consultaVipUrl: @json(route('gastronomia_descuento_reporte_consulta_clientevip')),
+        leerVipUrlBase: @json(url('ventas/gastronomia/descuento-reporte/leer-clientevip')),
         filtrosConsulta: @json($filtrosQuery ?? []),
         puedeVerFactura: @json(! empty($puede_ver_factura)),
         urlVerFacturaBase: @json(url('ventas/gastronomia/facturas-dia')),
@@ -68,7 +74,7 @@
                                 <input type="checkbox" class="custom-control-input" name="listar_todos" id="listar_todos" value="1"
                                     @checked(! empty($filtros['listar_todos']))>
                                 <label class="custom-control-label" for="listar_todos">
-                                    Listar todos con ventas en el período (sin seleccionar códigos ni clientes)
+                                    Listar todos con ventas en el per&iacute;odo (sin seleccionar c&oacute;digos, clientes ni mozos)
                                 </label>
                             </div>
                         </div>
@@ -76,6 +82,9 @@
 
                     @php
                         $modoClienteFiltro = ($filtros['agrupar_por'] ?? 'codigo_descuento') === 'cliente_descuento';
+                        $modoMozoFiltro = ($filtros['agrupar_por'] ?? 'codigo_descuento') === 'mozo_descuento';
+                        $modoVipFiltro = ($filtros['agrupar_por'] ?? 'codigo_descuento') === 'cliente_vip';
+                        $modoCodigoFiltro = ! $modoClienteFiltro && ! $modoMozoFiltro && ! $modoVipFiltro;
                         $listarTodosFiltro = ! empty($filtros['listar_todos']);
                     @endphp
                     <div id="bloque-tipo-seleccion">
@@ -85,8 +94,8 @@
                                 <div class="custom-control custom-radio custom-control-inline">
                                     <input type="radio" class="custom-control-input" name="agrupar_por" id="agrupar_codigo"
                                         value="codigo_descuento"
-                                        @checked(! $modoClienteFiltro)>
-                                    <label class="custom-control-label" for="agrupar_codigo">Código de descuento</label>
+                                        @checked($modoCodigoFiltro)>
+                                    <label class="custom-control-label" for="agrupar_codigo">C&oacute;digo de descuento</label>
                                 </div>
                                 <div class="custom-control custom-radio custom-control-inline">
                                     <input type="radio" class="custom-control-input" name="agrupar_por" id="agrupar_cliente"
@@ -94,19 +103,35 @@
                                         @checked($modoClienteFiltro)>
                                     <label class="custom-control-label" for="agrupar_cliente">Cliente interno de descuento</label>
                                 </div>
+                                <div class="custom-control custom-radio custom-control-inline">
+                                    <input type="radio" class="custom-control-input" name="agrupar_por" id="agrupar_mozo"
+                                        value="mozo_descuento"
+                                        @checked($modoMozoFiltro)>
+                                    <label class="custom-control-label" for="agrupar_mozo">Mozo</label>
+                                </div>
+                                <div class="custom-control custom-radio custom-control-inline">
+                                    <input type="radio" class="custom-control-input" name="agrupar_por" id="agrupar_vip"
+                                        value="cliente_vip"
+                                        @checked($modoVipFiltro)>
+                                    <label class="custom-control-label" for="agrupar_vip">Cliente VIP</label>
+                                </div>
                                 <p class="text-muted small mb-0 mt-2" id="ayuda-tipo-seleccion">
                                     @if ($listarTodosFiltro)
-                                        Define cómo se arman las secciones del reporte para todos los códigos/clientes con ventas en el período.
+                                        Define c&oacute;mo se arman las secciones del reporte para todos los c&oacute;digos/clientes/mozos/VIP con ventas en el per&iacute;odo.
+                                    @elseif ($modoVipFiltro)
+                                        Elija clientes VIP puntuales y/o un rango de c&oacute;digos; si no ingresa nada se listan todos los clientes VIP con ventas en el per&iacute;odo (canjes de marketing).
+                                    @elseif ($modoMozoFiltro)
+                                        Elija mozos puntuales y/o un rango de c&oacute;digos; si no ingresa nada se listan todos los mozos con ventas en el per&iacute;odo.
                                     @elseif ($modoClienteFiltro)
-                                        Elija clientes internos y el reporte mostrará un bloque por cada uno (ventas con descuento asignados a ese cliente en la cuenta).
+                                        Elija clientes internos y el reporte mostrar&aacute; un bloque por cada uno (ventas con descuento asignados a ese cliente en la cuenta).
                                     @else
-                                        Elija códigos de descuento de cabecera y el reporte mostrará un bloque por cada código (artículos vendidos con ese descuento).
+                                        Elija c&oacute;digos de descuento de cabecera y el reporte mostrar&aacute; un bloque por cada c&oacute;digo (art&iacute;culos vendidos con ese descuento).
                                     @endif
                                 </p>
                             </div>
                         </div>
 
-                        <div id="wrap-seleccion-descuento" @if($listarTodosFiltro || $modoClienteFiltro) style="display: none;" @endif>
+                        <div id="wrap-seleccion-descuento" @if($listarTodosFiltro || ! $modoCodigoFiltro) style="display: none;" @endif>
                             @include('ventas.gastronomia.descuento_reporte.partials.campo_consulta_descuentos', [
                                 'descuentos_iniciales' => $descuentos_iniciales ?? [],
                             ])
@@ -115,6 +140,21 @@
                         <div id="wrap-seleccion-cliente" @if($listarTodosFiltro || ! $modoClienteFiltro) style="display: none;" @endif>
                             @include('ventas.gastronomia.descuento_reporte.partials.campo_consulta_clientes', [
                                 'clientes_iniciales' => $clientes_iniciales ?? [],
+                                'filtros' => $filtros ?? [],
+                            ])
+                        </div>
+
+                        <div id="wrap-seleccion-mozo" @if($listarTodosFiltro || ! $modoMozoFiltro) style="display: none;" @endif>
+                            @include('ventas.gastronomia.descuento_reporte.partials.campo_consulta_mozos', [
+                                'mozos_iniciales' => $mozos_iniciales ?? [],
+                                'filtros' => $filtros ?? [],
+                            ])
+                        </div>
+
+                        <div id="wrap-seleccion-vip" @if($listarTodosFiltro || ! $modoVipFiltro) style="display: none;" @endif>
+                            @include('ventas.gastronomia.descuento_reporte.partials.campo_consulta_vips', [
+                                'vips_iniciales' => $vips_iniciales ?? [],
+                                'filtros' => $filtros ?? [],
                             ])
                         </div>
 
@@ -138,7 +178,7 @@
                                     @else
                                         selección
                                     @endif
-                                    (cliente o código según agrupación; también con Listar todos)
+                                    (cliente, mozo o c&oacute;digo seg&uacute;n agrupaci&oacute;n; tambi&eacute;n con Listar todos)
                                 </label>
                             </div>
                             <div class="custom-control custom-checkbox">
@@ -146,8 +186,8 @@
                                     @checked(! empty($filtros['excel_solapas']) && empty($filtros['listar_todos']))
                                     @disabled(! empty($filtros['presentacion_columnas']) || ! empty($filtros['listar_todos']))>
                                 <label class="custom-control-label" for="excel_solapas">
-                                    Exportar Excel con una solapa por selección + totales
-                                    (solo con descuentos o clientes elegidos, no con Listar todos)
+                                    Exportar Excel con una solapa por selecci&oacute;n + totales
+                                    (solo con descuentos, clientes o mozos elegidos, no con Listar todos)
                                 </label>
                             </div>
                         </div>
@@ -174,6 +214,15 @@
                     @foreach ($advertencias ?? [] as $aviso)
                         <div class="alert alert-warning py-2 mb-2">{{ $aviso }}</div>
                     @endforeach
+                    @include('ventas.gastronomia.descuento_reporte.partials.aviso_rango_clientes_faltantes', [
+                        'clientes_rango_codigos_faltantes' => $clientes_rango_codigos_faltantes ?? [],
+                    ])
+                    @include('ventas.gastronomia.descuento_reporte.partials.aviso_rango_mozos_faltantes', [
+                        'mozos_rango_codigos_faltantes' => $mozos_rango_codigos_faltantes ?? [],
+                    ])
+                    @include('ventas.gastronomia.descuento_reporte.partials.aviso_rango_vips_faltantes', [
+                        'vips_rango_codigos_faltantes' => $vips_rango_codigos_faltantes ?? [],
+                    ])
                     @if (! empty($resultado['codigos_sin_datos'] ?? []))
                         <div class="alert alert-info py-2 mb-2">
                             Sin ventas en el per&iacute;odo para c&oacute;digos: {{ implode(', ', $resultado['codigos_sin_datos']) }}.
@@ -184,12 +233,49 @@
                             Sin ventas en el per&iacute;odo para clientes ID: {{ implode(', ', $resultado['clientes_sin_datos']) }}.
                         </div>
                     @endif
+                    @if (! empty($resultado['mozos_sin_datos'] ?? []))
+                        <div class="alert alert-info py-2 mb-2">
+                            Sin ventas en el per&iacute;odo para mozos ID: {{ implode(', ', $resultado['mozos_sin_datos']) }}.
+                        </div>
+                    @endif
+                    @if (! empty($resultado['vips_sin_datos'] ?? []))
+                        <div class="alert alert-info py-2 mb-2">
+                            Sin ventas en el per&iacute;odo para clientes VIP ID: {{ implode(', ', $resultado['vips_sin_datos']) }}.
+                        </div>
+                    @endif
                     <p class="mb-0 small">
                         <strong>Empresa:</strong> {{ $empresa_texto ?? '' }}
                         · <strong>Per&iacute;odo:</strong> {{ $periodo_texto ?? '' }}
                         · <strong>Agrupaci&oacute;n:</strong> {{ \App\Support\Ventas\GastronomiaDescuentoReporteFiltros::etiquetaAgrupacion($filtros ?? []) }}
                         @if (! empty($filtros['codigos_descuento_cliente_resueltos'] ?? []))
                             · <strong>Filtro desc.:</strong> {{ implode(', ', $filtros['codigos_descuento_cliente_resueltos']) }}
+                        @endif
+                        @php
+                            $etiquetaRangoCliente = \App\Support\Ventas\GastronomiaDescuentoReporteClienteSupport::etiquetaRangoCodigo(
+                                (string) ($filtros['cliente_codigo_desde'] ?? ''),
+                                (string) ($filtros['cliente_codigo_hasta'] ?? ''),
+                            );
+                        @endphp
+                        @if ($etiquetaRangoCliente !== '')
+                            · <strong>Rango clientes:</strong> {{ $etiquetaRangoCliente }}
+                        @endif
+                        @php
+                            $etiquetaRangoMozo = \App\Support\Ventas\GastronomiaDescuentoReporteMozoSupport::etiquetaRangoCodigo(
+                                (string) ($filtros['mozo_codigo_desde'] ?? ''),
+                                (string) ($filtros['mozo_codigo_hasta'] ?? ''),
+                            );
+                        @endphp
+                        @if ($etiquetaRangoMozo !== '')
+                            · <strong>Rango mozos:</strong> {{ $etiquetaRangoMozo }}
+                        @endif
+                        @php
+                            $etiquetaRangoVip = \App\Support\Ventas\GastronomiaDescuentoReporteVipSupport::etiquetaRangoCodigo(
+                                (string) ($filtros['vip_codigo_desde'] ?? ''),
+                                (string) ($filtros['vip_codigo_hasta'] ?? ''),
+                            );
+                        @endphp
+                        @if ($etiquetaRangoVip !== '')
+                            · <strong>Rango VIP:</strong> {{ $etiquetaRangoVip }}
                         @endif
                         · <strong>Lista costo:</strong> {{ $resultado['listas_costo']['lista_actual'] ?? '' }}
                         ({{ $resultado['listas_costo']['mes_actual_label'] ?? '' }})
@@ -363,7 +449,15 @@
                         @elseif ($bloques_pag ?? null)
                             <div class="px-3 py-2 border-bottom bg-white d-flex flex-wrap align-items-center justify-content-between">
                                 <span class="small text-muted">
-                                    {{ ($filtros['agrupar_por'] ?? '') === 'cliente_descuento' ? 'Clientes' : 'Descuentos' }}
+                                    @php
+                                        $etiquetaPagBloques = match ($filtros['agrupar_por'] ?? 'codigo_descuento') {
+                                            'cliente_descuento' => 'Clientes',
+                                            'mozo_descuento' => 'Mozos',
+                                            'cliente_vip' => 'Clientes VIP',
+                                            default => 'Descuentos',
+                                        };
+                                    @endphp
+                                    {{ $etiquetaPagBloques }}
                                     {{ $bloques_pag->firstItem() }}–{{ $bloques_pag->lastItem() }}
                                     de {{ $bloques_pag->total() }}
                                 </span>
@@ -397,4 +491,6 @@
 @include('ventas.gastronomia.descuento_reporte.partials.modal_facturas_bloque')
 @include('includes.stock.modalconsultadescuento')
 @include('includes.ventas.modalconsultacliente')
+@include('includes.stock.modalconsultamozo')
+@include('includes.ventas.modalconsultaclientevip')
 @endsection

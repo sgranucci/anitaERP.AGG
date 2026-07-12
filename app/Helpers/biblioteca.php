@@ -54,6 +54,7 @@ if (!function_exists('urlsMenuFrontResueltas')) {
         $nivelActual = 0;
         $menus = \App\Models\Admin\Menu::getMenu(true, $nivelActual);
         $menus = \App\Support\Caja\Estacionamiento\EstacionamientoModuloSupport::filtrarMenuAside($menus);
+        $menus = \App\Support\Caja\Bingo\BingoModuloSupport::filtrarMenuAside($menus);
         $cacheUrls = array_values(array_unique(aplanarUrlsMenu($menus)));
 
         return $cacheUrls;
@@ -539,6 +540,39 @@ if (! function_exists('urlAppCarpeta')) {
         $path = ltrim($path, '/');
 
         return $path === '' ? $base : $base.'/'.$path;
+    }
+}
+
+if (! function_exists('rutaAppRelativa')) {
+    /**
+     * Ruta relativa sin APP_CARPETA (para AJAX: carpetaBase + '/' + rutaAppRelativa(...)).
+     */
+    function rutaAppRelativa(string $routeName, array $params = []): string
+    {
+        $path = ltrim(parse_url(route($routeName, $params), PHP_URL_PATH) ?: '', '/');
+        $carpeta = ltrim(rtrim((string) config('app.app_carpeta', ''), '/'), '/');
+        if ($carpeta !== '' && ($path === $carpeta || str_starts_with($path, $carpeta.'/'))) {
+            $path = ltrim(substr($path, strlen($carpeta)), '/');
+        }
+
+        return $path;
+    }
+}
+
+if (! function_exists('urlAppDesdeRoute')) {
+    /**
+     * Path bajo APP_CARPETA a partir de una ruta nombrada (AJAX / navegación interna).
+     * En petición HTTP, route() puede devolver el path ya prefijado con APP_CARPETA.
+     */
+    function urlAppDesdeRoute(string $routeName, array $params = []): string
+    {
+        $path = parse_url(route($routeName, $params), PHP_URL_PATH) ?: '';
+        $carpeta = rtrim((string) config('app.app_carpeta', ''), '/');
+        if ($carpeta !== '' && ($path === $carpeta || str_starts_with($path, $carpeta.'/'))) {
+            return $path;
+        }
+
+        return urlAppCarpeta(ltrim($path, '/'));
     }
 }
 

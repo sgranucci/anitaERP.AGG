@@ -47,9 +47,9 @@ class MayorConceptoController extends Controller
 
         $consultado = false;
         $filas = null;
+        $resultado = null;
         $resumen = [];
         $resumenPorCuenta = [];
-        $auditoria = null;
         $auditoriaPanel = null;
         $totales = null;
         $erroresBridge = [];
@@ -61,10 +61,13 @@ class MayorConceptoController extends Controller
             $resumen = $this->reporteService->resumenAgrupado($resultado);
             $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
             $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
-            $auditoria = $auditoriaPanel['disponibilidad'] ?? null;
             $erroresBridge = $resultado['errores_bridge'] ?? [];
             $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
-            $filas = $this->paginarFilas($this->reporteService->aplanarFilas($resultado), $perPage, $request);
+            $filas = $this->paginarFilas(
+                $this->reporteService->aplanarFilasConTotalesFiltradas($resultado, $filtros),
+                $perPage,
+                $request,
+            );
         } elseif (MayorConceptoListadoFiltros::tieneCriteriosAplicados($filtros)) {
             $resultado = $this->leerCache($filtros);
             if ($resultado !== null) {
@@ -73,14 +76,28 @@ class MayorConceptoController extends Controller
                 $resumen = $this->reporteService->resumenAgrupado($resultado);
                 $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
                 $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
-                $auditoria = $auditoriaPanel['disponibilidad'] ?? null;
                 $erroresBridge = $resultado['errores_bridge'] ?? [];
                 $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
-                $filas = $this->paginarFilas($this->reporteService->aplanarFilas($resultado), $perPage, $request);
+                $filas = $this->paginarFilas(
+                    $this->reporteService->aplanarFilasConTotalesFiltradas($resultado, $filtros),
+                    $perPage,
+                    $request,
+                );
             }
         }
 
+        $totalesVisibles = null;
+        if ($consultado && $resultado !== null && MayorConceptoListadoFiltros::tieneFiltroDetalle($filtros)) {
+            $filasFiltradas = $this->reporteService->aplanarFilasConTotalesFiltradas($resultado, $filtros);
+            $totalesVisibles = MayorConceptoListadoFiltros::totalesDesdeFilasVisibles($filasFiltradas);
+        }
+
         $filtrosQuery = MayorConceptoListadoFiltros::paraQueryString($filtros);
+        $filtrosQueryBase = MayorConceptoListadoFiltros::paraQueryStringBase($filtros);
+        if ($consultado) {
+            $filtrosQuery['consultar'] = 1;
+            $filtrosQueryBase['consultar'] = 1;
+        }
         if ($request->has('per_page')) {
             $filtrosQuery['per_page'] = max(10, min(200, (int) $request->input('per_page', 50)));
         }
@@ -98,14 +115,17 @@ class MayorConceptoController extends Controller
             'moneda_query' => $monedaQuery,
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
+            'filtrosQueryBase' => $filtrosQueryBase,
             'consultado' => $consultado,
             'filas' => $filas,
             'resumen' => $resumen,
             'resumen_por_cuenta' => $resumenPorCuenta,
-            'auditoria' => $auditoria,
             'auditoria_panel' => $auditoriaPanel,
             'agrupacion_resumen' => $filtros['agrupacion_resumen'] ?? 'concepto_cuenta',
             'totales' => $totales,
+            'totales_visibles' => $totalesVisibles,
+            'filtro_detalle_activo' => MayorConceptoListadoFiltros::tieneFiltroDetalle($filtros),
+            'filtros_detalle_texto' => MayorConceptoListadoFiltros::descripcionFiltrosDetalleActivos($filtros),
             'errores_bridge' => $erroresBridge,
             'empresa' => $empresa,
             'moneda' => $moneda,
@@ -132,13 +152,11 @@ class MayorConceptoController extends Controller
         }
 
         $resultado = $this->reporteService->generarDesdeFiltros($filtros);
-        $filas = $this->reporteService->aplanarFilasConTotales($resultado);
+        $filas = $this->reporteService->aplanarFilasConTotalesFiltradas($resultado, $filtros);
         $resumen = $this->reporteService->resumenSegunAgrupacion($resultado, $filtros);
         $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
         $totales = $this->armarTotalesDesdeResultado($resultado);
         $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
-        $auditoria = $auditoriaPanel['disponibilidad'] ?? null;
-        $auditoriaContrapartidas = $auditoriaPanel['contrapartidas'] ?? null;
         $agrupacionResumen = $filtros['agrupacion_resumen'] ?? 'concepto_cuenta';
         $titulo = 'Mayor por concepto';
         $subtitulo = $this->armarSubtituloExport($filtros);
@@ -153,9 +171,7 @@ class MayorConceptoController extends Controller
                     'totales',
                     'titulo',
                     'subtitulo',
-                    'auditoria',
                     'auditoriaPanel',
-                    'auditoriaContrapartidas',
                     'agrupacionResumen',
                 ))->render();
 
@@ -273,6 +289,11 @@ class MayorConceptoController extends Controller
 
         if (! empty($filtros['solo_moneda_origen'])) {
             $partes[] = 'Solo moneda origen';
+        }
+
+        $filtrosDetalle = MayorConceptoListadoFiltros::descripcionFiltrosDetalleActivos($filtros);
+        if ($filtrosDetalle !== []) {
+            $partes[] = 'Filtro detalle: '.implode(' · ', $filtrosDetalle);
         }
 
         return implode(' · ', $partes);

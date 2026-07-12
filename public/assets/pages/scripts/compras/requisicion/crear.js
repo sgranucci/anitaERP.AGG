@@ -135,6 +135,9 @@ $(function () {
 		setTimeout(function () {
 			$tbody.find('tr.item-requisicion-articulo').last().find('.codigoarticulo').trigger('focus');
 		}, 0);
+		if (typeof window.reqLineasScheduleTotales === 'function') {
+			window.reqLineasScheduleTotales();
+		}
 	});
 
 	$(document).on('click', '.eliminar_requisicion_articulo', function (event) {
@@ -151,6 +154,9 @@ $(function () {
 					$(this).val('');
 				}
 			});
+		}
+		if (typeof window.reqLineasScheduleTotales === 'function') {
+			window.reqLineasScheduleTotales();
 		}
 	});
 

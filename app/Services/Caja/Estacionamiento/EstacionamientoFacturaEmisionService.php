@@ -15,6 +15,8 @@ use App\Support\Caja\Estacionamiento\EstacionamientoIdentificadorPc;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\GastronomiaPuntoventaEmisionLock;
+use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -175,34 +177,9 @@ final class EstacionamientoFacturaEmisionService
 
         $puntoventa = Puntoventa::query()->find($puntoventaId);
         $emisionCaea = $puntoventa !== null && ($puntoventa->modofacturacion ?? '') === 'A';
-        if ($emisionCaea && empty($payload['numerocomprobante_forzado'])) {
-            $tipo = Tipotransaccion::query()->find((int) ($payload['tipotransaccion_id'] ?? 0));
-            if ($tipo === null) {
-                return ['error' => 'Tipo de transacción de factura inexistente.'];
-            }
-            $letra = 'B';
-            $clienteId = (int) ($payload['cliente_id'] ?? 0);
-            if ($clienteId > 0) {
-                $cliente = \App\Models\Ventas\Cliente::query()->find($clienteId);
-                if ($cliente !== null && $cliente->condicioniva_id) {
-                    $letra = (string) (\App\Models\Configuracion\Condicioniva::query()
-                        ->whereKey($cliente->condicioniva_id)
-                        ->value('letra') ?? 'B');
-                }
-            }
-            $errorReserva = CaeaEmisionNumeracionSupport::aplicarReservaNumeracionAlPayload(
-                $payload,
-                $puntoventa,
-                $tipo,
-                trim($letra) !== '' ? $letra : 'B',
-            );
-            if ($errorReserva !== null) {
-                return ['error' => $errorReserva];
-            }
-        }
 
         $lockPv = null;
-        $mantenerLockEmisionCompleta = ! $emisionCaea && ! $bloqueoPvYaAdquirido;
+        $mantenerLockEmisionCompleta = ! $bloqueoPvYaAdquirido;
 
         if ($mantenerLockEmisionCompleta) {
             try {
@@ -212,25 +189,98 @@ final class EstacionamientoFacturaEmisionService
             }
         }
 
+        $tipoFactura = null;
+        $letraComprobante = 'B';
+        if ($emisionCaea && empty($payload['numerocomprobante_forzado'])) {
+            $tipoFactura = Tipotransaccion::query()->find((int) ($payload['tipotransaccion_id'] ?? 0));
+            if ($tipoFactura === null) {
+                if ($mantenerLockEmisionCompleta) {
+                    GastronomiaPuntoventaEmisionLock::liberar($lockPv);
+                }
+
+                return ['error' => 'Tipo de transacción de factura inexistente.'];
+            }
+            $letraComprobante = 'B';
+            $clienteId = (int) ($payload['cliente_id'] ?? 0);
+            if ($clienteId > 0) {
+                $cliente = \App\Models\Ventas\Cliente::query()->find($clienteId);
+                if ($cliente !== null && $cliente->condicioniva_id) {
+                    $letraComprobante = (string) (\App\Models\Configuracion\Condicioniva::query()
+                        ->whereKey($cliente->condicioniva_id)
+                        ->value('letra') ?? 'B');
+                }
+            }
+            $letraComprobante = trim($letraComprobante) !== '' ? trim($letraComprobante) : 'B';
+            $errorReserva = CaeaEmisionNumeracionSupport::aplicarReservaNumeracionAlPayload(
+                $payload,
+                $puntoventa,
+                $tipoFactura,
+                $letraComprobante,
+                $mantenerLockEmisionCompleta,
+            );
+            if ($errorReserva !== null) {
+                if ($mantenerLockEmisionCompleta) {
+                    GastronomiaPuntoventaEmisionLock::liberar($lockPv);
+                }
+
+                return ['error' => $errorReserva];
+            }
+        }
+
         try {
             try {
-                $resultado = DB::transaction(function () use (
-                    $cuenta,
-                    $cfg,
-                    $payload,
-                    $mediosPago,
-                    $monedaId,
-                    $puntoventaId,
-                ) {
-                    return $this->ejecutarEmisionEnTransaccion(
-                        $cuenta,
-                        $cfg,
-                        $payload,
-                        $mediosPago,
-                        $monedaId,
-                        $puntoventaId,
-                    );
-                });
+                $reintentosNumeracion = 0;
+                do {
+                    try {
+                        $resultado = DB::transaction(function () use (
+                            $cuenta,
+                            $cfg,
+                            $payload,
+                            $mediosPago,
+                            $monedaId,
+                            $puntoventaId,
+                        ) {
+                            return $this->ejecutarEmisionEnTransaccion(
+                                $cuenta,
+                                $cfg,
+                                $payload,
+                                $mediosPago,
+                                $monedaId,
+                                $puntoventaId,
+                            );
+                        });
+                        break;
+                    } catch (QueryException $e) {
+                        if (
+                            ! $emisionCaea
+                            || $puntoventa === null
+                            || $tipoFactura === null
+                            || $reintentosNumeracion >= 1
+                            || ! VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e)
+                        ) {
+                            throw $e;
+                        }
+
+                        $errorRenumeracion = VentaNumerocomprobanteUnicidadSupport::renumerarPayloadCaeaTrasColision(
+                            $payload,
+                            $puntoventa,
+                            $tipoFactura,
+                            $letraComprobante,
+                            $mantenerLockEmisionCompleta,
+                        );
+                        if ($errorRenumeracion !== null) {
+                            throw new InvalidArgumentException($errorRenumeracion, 0, $e);
+                        }
+
+                        $reintentosNumeracion++;
+                        Log::warning('estacionamiento.emitir_factura.numeracion_duplicada_reintento', [
+                            'cuenta_id' => $cuenta->id,
+                            'puntoventa_id' => $puntoventaId,
+                            'numerocomprobante' => (int) ($payload['numerocomprobante_forzado'] ?? 0),
+                            'intento' => $reintentosNumeracion,
+                        ]);
+                    }
+                } while (true);
 
                 $resultado = $this->facturacionService->completarAnitaPendienteTrasEmision($resultado);
 
@@ -420,6 +470,8 @@ final class EstacionamientoFacturaEmisionService
             return ['error' => $e->getMessage()];
         }
 
+        $actividadArcaIdResuelta = $this->resolverActividadArcaId($actividadArcaId, $puntoventaId);
+
         try {
             $receptor = $this->receptorFacturacionService->resolverParaFacturar($cuenta);
         } catch (InvalidArgumentException $e) {
@@ -434,7 +486,7 @@ final class EstacionamientoFacturaEmisionService
             'puntoventa_id' => $puntoventaId,
             'fechafactura' => now()->format('Y-m-d'),
             'leyendafactura' => $this->leyendaCuenta($cuenta),
-            'actividad_arca_id' => $actividadArcaId ?? (int) (Actividad_Arca::query()->orderBy('id')->value('id') ?? 1),
+            'actividad_arca_id' => $actividadArcaIdResuelta,
             'cliente_id' => $receptor['cliente_id'],
             'moneda_id' => $monedaId,
             'listaprecio_id' => (int) config('estacionamiento.listaprecio_id', 1),
@@ -444,7 +496,7 @@ final class EstacionamientoFacturaEmisionService
             'precios' => $precios,
             'descripcionarticulos' => $descripciones,
             'impuesto_ids' => EstacionamientoFacturaPayloadSupport::impuestoIdsParaLineas($nLineas),
-            'incluyeimpuestos' => array_fill(0, $nLineas, 'N'),
+            'incluyeimpuestos' => EstacionamientoFacturaPayloadSupport::incluyeImpuestosParaLineas($nLineas),
             // Sin artículos de stock: nunca stkmov en Anita aunque se reactive la sincronización.
             'omitir_stkmov_anita_por_item' => array_fill(0, $nLineas, true),
         ];
@@ -509,5 +561,19 @@ final class EstacionamientoFacturaEmisionService
         }
 
         return $resultado;
+    }
+
+    private function resolverActividadArcaId(?int $actividadArcaId, int $puntoventaId): int
+    {
+        if ($actividadArcaId !== null && $actividadArcaId > 0) {
+            return $actividadArcaId;
+        }
+
+        $desdePuntoventa = (int) (Puntoventa::query()->whereKey($puntoventaId)->value('actividad_arca_id') ?? 0);
+        if ($desdePuntoventa > 0) {
+            return $desdePuntoventa;
+        }
+
+        return (int) (Actividad_Arca::query()->orderBy('id')->value('id') ?? 1);
     }
 }

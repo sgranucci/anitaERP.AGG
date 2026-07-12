@@ -13,8 +13,18 @@ class CorregirLeyendaAsientoCompensacionFfSupportTest extends TestCase
         $vieja = 'Cierre Waitry jornada 2026-06-03 — 3 — Compensación efectivo no facturado (Waitry) vs fondo fijo máquinas';
 
         $this->assertSame(
-            'Cierre Waitry jornada 2026-06-03 — 3 — Reduccion FF Maquinas',
+            'Cierre Waitry jornada 2026-06-03 — 3 — Reducion de Fondo fijo',
             $support->corregirObservacionCabecera($vieja),
+        );
+    }
+
+    public function test_corregir_observacion_cabecera_reemplaza_leyenda_intermedia(): void
+    {
+        $support = new CorregirLeyendaAsientoCompensacionFfSupport;
+
+        $this->assertSame(
+            'Cierre Waitry jornada 2026-06-23 — 3 — Reducion de Fondo fijo',
+            $support->corregirObservacionCabecera('Cierre Waitry jornada 2026-06-23 — 3 — Reduccion FF Maquinas'),
         );
     }
 
@@ -23,8 +33,12 @@ class CorregirLeyendaAsientoCompensacionFfSupportTest extends TestCase
         $support = new CorregirLeyendaAsientoCompensacionFfSupport;
 
         $this->assertSame(
-            '3 — Reduccion FF Maquinas',
+            '3 — Reducion de Fondo fijo',
             $support->corregirTituloSnapshot('3 — Compensación efectivo no facturado (Waitry) vs fondo fijo máquinas'),
+        );
+        $this->assertSame(
+            '3 — Reducion de Fondo fijo',
+            $support->corregirTituloSnapshot('3 — Reduccion FF Maquinas'),
         );
     }
 
@@ -32,6 +46,9 @@ class CorregirLeyendaAsientoCompensacionFfSupportTest extends TestCase
     {
         $support = new CorregirLeyendaAsientoCompensacionFfSupport;
 
-        $this->assertSame('Reduccion FF Maquinas', $support->sanitizarDescMovAnita('Reduccion FF Maquinas'));
+        $this->assertSame(
+            'Reducion de Fondo fijo',
+            $support->sanitizarDescMovAnita('Reducion de Fondo fijo'),
+        );
     }
 }

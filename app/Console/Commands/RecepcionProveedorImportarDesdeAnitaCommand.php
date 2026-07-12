@@ -11,12 +11,56 @@ class RecepcionProveedorImportarDesdeAnitaCommand extends Command
     protected $signature = 'recepcion-proveedor:importar-desde-anita
                             {--desde=2025-01-01 : Fecha ISO desde (inclusive)}
                             {--hasta= : Fecha ISO hasta (inclusive, default hoy)}
+                            {--nro= : Importar solo una COM por recm_nro}
+                            {--sucursal=1 : Sucursal Anita (recm_sucursal) para --nro}
+                            {--impactar : Confirma en ERP (stock + asiento + sync Anita); default histórico sin impacto}
                             {--dry-run : Solo contadores, sin grabar}';
 
-    protected $description = 'Importa recepmae/recepmov COM desde Anita hacia recepcion_proveedor (histórico, sin asiento ni stock)';
+    protected $description = 'Importa recepmae/recepmov COM desde Anita hacia recepcion_proveedor';
 
     public function handle(RecepcionProveedorImportarDesdeAnitaService $service): int
     {
+        $dryRun = (bool) $this->option('dry-run');
+        $nro = $this->option('nro');
+        $impactar = (bool) $this->option('impactar');
+
+        if ($nro !== null && $nro !== '') {
+            $sucursal = (int) $this->option('sucursal');
+            if ($sucursal <= 0) {
+                $this->error('--sucursal inválida.');
+
+                return self::FAILURE;
+            }
+
+            if ($impactar && ! \Auth::check()) {
+                $usuarioId = (int) config('recepcion_proveedor.auditoria_asientos_com_diaria.usuario_id', 1);
+                if ($usuarioId <= 0 || ! \Auth::loginUsingId($usuarioId)) {
+                    $this->error('No se pudo autenticar usuario de sistema para confirmar COM.');
+
+                    return self::FAILURE;
+                }
+            }
+
+            $resultado = $service->importarCom($sucursal, (int) $nro, $impactar, $dryRun);
+
+            $this->table(['Campo', 'Valor'], [
+                ['Estado', $resultado['estado']],
+                ['Recepción ERP id', $resultado['recepcion_id'] ?? '—'],
+                ['Movimiento stock id', $resultado['movimientostock_id'] ?? '—'],
+                ['Asiento id', $resultado['asiento_id'] ?? '—'],
+                ['Líneas Anita', $resultado['lineas']],
+                ['Mensaje', $resultado['mensaje'] ?? '—'],
+            ]);
+
+            if ($dryRun) {
+                $this->comment('Dry-run: no se grabó nada.');
+            }
+
+            return in_array($resultado['estado'], ['importada', 'importada_con_impacto', 'omitida', 'dry_run'], true)
+                ? self::SUCCESS
+                : self::FAILURE;
+        }
+
         $desdeIso = (string) $this->option('desde');
         $hastaIso = $this->option('hasta') ? (string) $this->option('hasta') : date('Y-m-d');
         $dryRun = (bool) $this->option('dry-run');

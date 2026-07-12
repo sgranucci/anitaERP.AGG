@@ -13,6 +13,9 @@ Proveedores
 use App\Support\Compras\ProveedorListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -30,7 +33,7 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
                         'toggleTarget' => '#panel-filtros-proveedor',
                         'toggleId' => 'btn-toggle-filtros-proveedor',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_proveedor'),
+                        'nuevoRegistroUrl' => route('crear_proveedor', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-proveedor',
                     ])
                 </div>
@@ -57,6 +60,7 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
                             <th>Provincia</th>
                             <th class="width10">C&oacute;d.</th>
                             <th>Estado</th>
+                            <th class="width10">APOC</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -76,9 +80,18 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
                             <td><small>{{$data->nombreprovincia ?? ''}}</small></td>
                             <td><small>{{$data->codigo}}</small></td>
                             <td><small>{{$data->estado}}</small></td>
+                            <td class="text-center">
+                                @if (!empty($data->facturas_apocrifas))
+                                    <span class="badge badge-danger" title="Figura en base ARCA de facturas ap&oacute;crifas">S&iacute;</span>
+                                @elseif (!empty($data->facturas_apocrifas_consulta_at))
+                                    <span class="badge badge-success" title="Consultado {{ $data->facturas_apocrifas_consulta_at }}">No</span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
                             <td>
                        			@if (can('editar-proveedor', false))
-                                	<a href="{{route('editar_proveedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                	<a href="{{route('editar_proveedor', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif

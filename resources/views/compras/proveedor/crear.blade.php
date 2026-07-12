@@ -8,11 +8,16 @@
 <script src="{{asset("assets/pages/scripts/admin/domicilio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/arca-padron.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/arca-validacion-abm.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/arca-apoc-validacion-abm.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/crear.js")}}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('proveedor', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -21,12 +26,12 @@
             <div class="card-header">
                 <h3 class="card-title">Crear Proveedor @if ($tipoalta == 'P') Provisorio @endif</h3>
                 <div class="card-tools">
-                    <a href="{{route('proveedor')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{$volverListadoUrl}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_proveedor')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('guardar_proveedor', $filtrosQuery ?? [])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf
                 <div class="col-lg-8" align="right" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">
@@ -75,6 +80,7 @@
             </form>
             @include('compras.proveedor.arca-cuit-entry-modal')
             @include('includes.compras.arca_impuestos_validacion_modal')
+            @include('includes.compras.arca_apoc_validacion_modal')
         </div>
     </div>
 </div>

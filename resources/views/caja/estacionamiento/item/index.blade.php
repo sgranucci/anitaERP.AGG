@@ -14,6 +14,9 @@
 @endphp
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -30,7 +33,7 @@
                         'toggleTarget' => '#panel-filtros-estacionamiento-item',
                         'toggleId' => 'btn-toggle-filtros-estacionamiento-item',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_estacionamiento_item'),
+                        'nuevoRegistroUrl' => route('crear_estacionamiento_item', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-estacionamiento-item',
                     ])
                 </div>
@@ -64,7 +67,7 @@
                             <td>{{ $data->estado_label }}</td>
                             <td>
                                 @if (can('editar-estacionamiento-item', false))
-                                    <a href="{{ route('editar_estacionamiento_item', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                    <a href="{{ route('editar_estacionamiento_item', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
                                     </a>
                                 @endif

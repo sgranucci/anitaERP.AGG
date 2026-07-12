@@ -253,23 +253,29 @@ Route::get('configuracion/retencion_cobranza/{id}/editar', 'Configuracion\Retenc
 Route::put('configuracion/retencion_cobranza/{id}', 'Configuracion\Retencion_CobranzaController@actualizar')->name('actualizar_retencion_cobranza');
 Route::delete('configuracion/retencion_cobranza/{id}', 'Configuracion\Retencion_CobranzaController@eliminar')->name('eliminar_retencion_cobranza');
 
+Route::get('contable/sicore-config', 'Contable\SicoreConfigController@index')->name('sicore_config');
+Route::get('contable/sicore-config/crear', 'Contable\SicoreConfigController@crear')->name('crear_sicore_config');
+Route::post('contable/sicore-config', 'Contable\SicoreConfigController@guardar')->name('guardar_sicore_config');
+Route::get('contable/sicore-config/{id}/editar', 'Contable\SicoreConfigController@editar')->name('editar_sicore_config');
+Route::put('contable/sicore-config/{id}', 'Contable\SicoreConfigController@actualizar')->name('actualizar_sicore_config');
+Route::delete('contable/sicore-config/{id}', 'Contable\SicoreConfigController@eliminar')->name('eliminar_sicore_config');
+
 /*
  * Control de Retenciones impositivas ARCA
  */
 
-Route::get('configuracion/retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@index')->name('retencion_impositiva_arca');
-Route::get('configuracion/retencion_impositiva_arca/crear', 'Configuracion\Retencionimpositiva_ArcaController@crear')->name('crear_retencion_impositiva_arca');
-Route::post('configuracion/retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@guardar')->name('guardar_retencion_impositiva_arca');
-Route::get('configuracion/retencion_impositiva_arca/{id}/editar', 'Configuracion\Retencionimpositiva_ArcaController@editar')->name('editar_retencion_impositiva_arca');
-Route::put('configuracion/retencion_impositiva_arca/{id}', 'Configuracion\Retencionimpositiva_ArcaController@actualizar')->name('actualizar_retencion_impositiva_arca');
-Route::delete('configuracion/retencion_impositiva_arca/{id}', 'Configuracion\Retencionimpositiva_ArcaController@eliminar')->name('eliminar_retencion_impositiva_arca');
+Route::get('contable/control-retencion', 'Contable\ControlRetencionController@index')->name('retencion_impositiva_arca');
+Route::get('contable/control-retencion/crear', 'Contable\ControlRetencionController@crear')->name('crear_retencion_impositiva_arca');
+Route::post('contable/control-retencion', 'Contable\ControlRetencionController@guardar')->name('guardar_retencion_impositiva_arca');
+Route::get('contable/control-retencion/importacion/crear', 'Contable\ControlRetencionController@crearImportacionRetencionimpositiva_Arca')->name('crear_importacion_retencion_impositiva_arca');
+Route::post('contable/control-retencion/importacion', 'Contable\ControlRetencionController@importarRetencionimpositiva_Arca')->name('importar_retencion_impositiva_arca');
+Route::get('contable/control-retencion/conciliar', 'Contable\ControlRetencionController@conciliarRetencionimpositiva_Arca')->name('conciliar_retencion_impositiva_arca');
+Route::post('contable/control-retencion/conciliar', 'Contable\ControlRetencionController@procesarConciliacionRetencionimpositiva_Arca')->name('procesar_conciliacion_retencion_impositiva_arca');
+Route::get('contable/control-retencion/{id}/editar', 'Contable\ControlRetencionController@editar')->name('editar_retencion_impositiva_arca');
+Route::put('contable/control-retencion/{id}', 'Contable\ControlRetencionController@actualizar')->name('actualizar_retencion_impositiva_arca');
+Route::delete('contable/control-retencion/{id}', 'Contable\ControlRetencionController@eliminar')->name('eliminar_retencion_impositiva_arca');
 
-Route::get('configuracion/listaretencion_impositiva_arca/{formato?}/{busqueda?}', 'Configuracion\Retencionimpositiva_ArcaController@listar')->name('lista_retencion_impositiva_arca');
-
-Route::get('configuracion/crea_importacion_retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@crearImportacionRetencionimpositiva_Arca')->name('crear_importacion_retencion_impositiva_arca');
-Route::post('configuracion/importa_retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@importarRetencionimpositiva_Arca')->name('importar_retencion_impositiva_arca');
-Route::get('configuracion/conciliar_retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@conciliarRetencionimpositiva_Arca')->name('conciliar_retencion_impositiva_arca');
-Route::post('configuracion/procesar_conciliacion_retencion_impositiva_arca', 'Configuracion\Retencionimpositiva_ArcaController@procesarConciliacionRetencionimpositiva_Arca')->name('procesar_conciliacion_retencion_impositiva_arca');
+Route::get('contable/listar-control-retencion/{formato?}/{busqueda?}', 'Contable\ControlRetencionController@listar')->name('lista_retencion_impositiva_arca');
 
 /*
  * Padron Mipyme
@@ -614,6 +620,7 @@ Route::get('stock/asignaprecio/{id}/{talle?}', 'Stock\PrecioController@asignaPre
 Route::get('stock/asignapreciocliente/{articulo_id}/{cliente_id}', 'Stock\PrecioController@asignaPrecioPorCliente')->name('asigna_precio_cliente');
 Route::get('stock/precio/crearimportacionprecio', 'Stock\PrecioController@crearImportacion')->name('crear_importacion_precio');
 Route::post('stock/importarprecio', 'Stock\PrecioController@importar')->name('importar_precio');
+Route::post('stock/precio/importar-precio/preview', 'Stock\PrecioController@previewImportacion')->name('precio_import_preview');
 Route::post('stock/precio/limpiafiltro', 'Stock\PrecioController@limpiafiltro')->name('precio.limpiafiltro');
 Route::get('stock/precio/actualizar-por-categoria', 'Stock\PrecioController@actualizarPorCategoria')->name('precio_actualizar_categoria');
 Route::post('stock/precio/actualizar-por-categoria/preview', 'Stock\PrecioController@previewActualizacionCategoria')->name('precio_actualizar_categoria_preview');
@@ -736,8 +743,9 @@ Route::get('configuracion/impuesto/{id}/editar', 'Configuracion\ImpuestoControll
 Route::put('configuracion/impuesto/{id}', 'Configuracion\ImpuestoController@actualizar')->name('actualizar_impuesto');
 Route::delete('configuracion/impuesto/{id}', 'Configuracion\ImpuestoController@eliminar')->name('eliminar_impuesto');
 
-Route::get('configuracion/libro-iva-digital', 'Configuracion\LibroIvaDigitalController@index')->name('libro_iva_digital');
-Route::get('configuracion/libro-iva-digital/exportar', 'Configuracion\LibroIvaDigitalController@exportar')->name('exportar_libro_iva_digital');
+Route::get('contable/libro-iva-digital', 'Contable\LibroIvaDigitalController@index')->name('libro_iva_digital');
+Route::get('contable/libro-iva-digital/exportar', 'Contable\LibroIvaDigitalController@exportar')->name('exportar_libro_iva_digital');
+Route::get('contable/libro-iva-digital/exportar-iva-simple', 'Contable\LibroIvaDigitalController@exportarIvaSimple')->name('exportar_iva_simple_libro_iva_digital');
 
 /*
  * Empresas
@@ -854,6 +862,9 @@ Route::post('contable/revertir_asiento', 'Contable\AsientoController@revertirAsi
 Route::get('contable/mayor-concepto', 'Contable\MayorConceptoController@index')->name('mayor_concepto');
 Route::get('contable/listar-mayor-concepto/{formato}', 'Contable\MayorConceptoController@exportar')->name('listar_mayor_concepto');
 
+Route::get('contable/sicore', 'Contable\SicoreReporteController@index')->name('sicore');
+Route::get('contable/exportar-sicore', 'Contable\SicoreReporteController@exportar')->name('exportar_sicore');
+
 Route::get('contable/efe-mensual', 'Contable\EfeMensualController@index')->name('efe_mensual');
 Route::get('contable/listar-efe-mensual/{formato}', 'Contable\EfeMensualController@exportar')->name('listar_efe_mensual');
 
@@ -867,6 +878,31 @@ Route::get('contable/conciliacion-bancaria', 'Contable\ConciliacionBancariaContr
 Route::get('contable/conciliacion-bancaria/api/enganche-cuentacaja', 'Contable\ConciliacionBancariaController@apiEngancheCuentacaja')->name('conciliacion_bancaria_api_enganche');
 Route::get('contable/conciliacion-bancaria/api/cuentacaja-por-codigo/{codigo}', 'Contable\ConciliacionBancariaController@apiCuentacajaPorCodigo')->name('conciliacion_bancaria_api_cuentacaja_por_codigo');
 Route::get('contable/exportar-conciliacion-bancaria/{formato}', 'Contable\ConciliacionBancariaController@exportar')->name('exportar_conciliacion_bancaria');
+
+Route::get('contable/cierre-rendiciones-estacionamiento', 'Contable\CierreRendicionEstacionamientoController@index')->name('cierre_rendicion_estacionamiento_contable');
+Route::get('contable/cierre-rendiciones-estacionamiento/conciliacion-flash', 'Contable\CierreRendicionEstacionamientoController@conciliacionFlash')->name('cierre_rendicion_estacionamiento_conciliacion_flash');
+Route::get('contable/listar-cierre-rendiciones-estacionamiento/{formato?}/{busqueda?}', 'Contable\CierreRendicionEstacionamientoController@listar')->name('listar_cierre_rendicion_estacionamiento_contable');
+Route::post('contable/cierre-rendiciones-estacionamiento/api/preview-asiento', 'Contable\CierreRendicionEstacionamientoController@apiPreviewAsiento')->name('api_cierre_rendicion_estacionamiento_preview');
+Route::post('contable/cierre-rendiciones-estacionamiento/api/preview-cierre-rango', 'Contable\CierreRendicionEstacionamientoController@apiPreviewCierreRango')->name('api_cierre_rendicion_estacionamiento_preview_rango');
+Route::post('contable/cierre-rendiciones-estacionamiento/api/ejecutar-cierre', 'Contable\CierreRendicionEstacionamientoController@apiEjecutarCierre')->name('api_cierre_rendicion_estacionamiento_ejecutar');
+Route::post('contable/cierre-rendiciones-estacionamiento/api/ejecutar-cierre-rango', 'Contable\CierreRendicionEstacionamientoController@apiEjecutarCierreRango')->name('api_cierre_rendicion_estacionamiento_ejecutar_rango');
+Route::post('contable/cierre-rendiciones-estacionamiento/api/ejecutar-cierre-jornada', 'Contable\CierreRendicionEstacionamientoController@apiEjecutarCierreJornada')->name('api_cierre_rendicion_estacionamiento_ejecutar_jornada');
+Route::post('contable/cierre-rendiciones-estacionamiento/api/anular-cierre', 'Contable\CierreRendicionEstacionamientoController@apiAnularCierre')->name('api_cierre_rendicion_estacionamiento_anular');
+
+Route::get('contable/cierre-rendiciones-bingo', 'Contable\CierreRendicionBingoController@index')->name('cierre_rendicion_bingo_contable');
+Route::get('contable/listar-cierre-rendiciones-bingo/{formato?}/{busqueda?}', 'Contable\CierreRendicionBingoController@listar')->name('listar_cierre_rendicion_bingo_contable');
+Route::post('contable/cierre-rendiciones-bingo/api/preview-asiento', 'Contable\CierreRendicionBingoController@apiPreviewAsiento')->name('api_cierre_rendicion_bingo_preview');
+Route::post('contable/cierre-rendiciones-bingo/api/ejecutar-cierre', 'Contable\CierreRendicionBingoController@apiEjecutarCierre')->name('api_cierre_rendicion_bingo_ejecutar');
+Route::post('contable/cierre-rendiciones-bingo/api/anular-cierre', 'Contable\CierreRendicionBingoController@apiAnularCierre')->name('api_cierre_rendicion_bingo_anular');
+
+Route::get('contable/cierre-rendiciones-maquinavending', 'Contable\CierreRendicionMaquinavendingController@index')->name('cierre_rendicion_maquinavending_contable');
+Route::get('contable/listar-cierre-rendiciones-maquinavending/{formato?}/{busqueda?}', 'Contable\CierreRendicionMaquinavendingController@listar')->name('listar_cierre_rendicion_maquinavending_contable');
+Route::post('contable/cierre-rendiciones-maquinavending/api/preview-asiento', 'Contable\CierreRendicionMaquinavendingController@apiPreviewAsiento')->name('api_cierre_rendicion_maquinavending_preview');
+Route::post('contable/cierre-rendiciones-maquinavending/api/preview-cierre-rango', 'Contable\CierreRendicionMaquinavendingController@apiPreviewCierreRango')->name('api_cierre_rendicion_maquinavending_preview_rango');
+Route::post('contable/cierre-rendiciones-maquinavending/api/ejecutar-cierre', 'Contable\CierreRendicionMaquinavendingController@apiEjecutarCierre')->name('api_cierre_rendicion_maquinavending_ejecutar');
+Route::post('contable/cierre-rendiciones-maquinavending/api/ejecutar-cierre-rango', 'Contable\CierreRendicionMaquinavendingController@apiEjecutarCierreRango')->name('api_cierre_rendicion_maquinavending_ejecutar_rango');
+Route::post('contable/cierre-rendiciones-maquinavending/api/ejecutar-cierre-jornada', 'Contable\CierreRendicionMaquinavendingController@apiEjecutarCierreJornada')->name('api_cierre_rendicion_maquinavending_ejecutar_jornada');
+Route::post('contable/cierre-rendiciones-maquinavending/api/anular-cierre', 'Contable\CierreRendicionMaquinavendingController@apiAnularCierre')->name('api_cierre_rendicion_maquinavending_anular');
 
 Route::get('contable/cierre-periodo', 'Contable\PeriodoCierreContableController@index')->name('cierre_periodo_contable');
 Route::post('contable/cierre-periodo/cerrar', 'Contable\PeriodoCierreContableController@cerrar')->name('ejecutar_cierre_periodo_contable');
@@ -1006,9 +1042,13 @@ Route::match(['get', 'post'], 'stock/movimientostock/preview-asiento', 'Stock\Mo
 Route::match(['get', 'post'], 'stock/movimientostock/preview-conversion-formula', 'Stock\MovimientoStockController@previewConversionFormula')->name('preview_conversion_formula_movimientostock');
 Route::get('stock/movimientostock/api/saldo-articulo', 'Stock\MovimientoStockController@saldoArticuloDeposito')->name('movimientostock_saldo_articulo');
 Route::get('stock/movimientostock/api/precio-linea', 'Stock\MovimientoStockController@precioLineaArticulo')->name('movimientostock_precio_linea');
+Route::get('stock/movimientostock/api/resolver-npu-baja', 'Stock\MovimientoStockController@resolverNpuBaja')->name('movimientostock_resolver_npu_baja');
+Route::post('stock/movimientostock/consulta-npu-baja', 'Stock\MovimientoStockController@consultaNpuBaja')->name('movimientostock_consulta_npu_baja');
 Route::match(['get', 'post'], 'stock/movimientostock/{id}/preview-asiento', 'Stock\MovimientoStockController@previewAsientoContable')->name('preview_asiento_movimientostock');
 Route::put('stock/movimientostock/{id}', 'Stock\MovimientoStockController@actualizar')->name('actualizar_movimientostock');
 Route::delete('stock/movimientostock/{id}', 'Stock\MovimientoStockController@eliminar')->name('eliminar_movimientostock');
+Route::post('stock/movimientostock/{id}/revertir', 'Stock\MovimientoStockController@revertirMovimiento')->name('revertir_movimientostock');
+Route::post('stock/movimientostock/transferencia/{id}/revertir', 'Stock\MovimientoStockController@revertirTransferencia')->name('revertir_transferencia_movimientostock');
 Route::get('stock/listamovimientostock/{formato?}/{busqueda?}', 'Stock\MovimientoStockController@listar')->name('lista_movimientostock');
 Route::get('stock/listarmovimientostock/{id}', 'Stock\MovimientoStockController@listarMovimientoStock')->name('listar_movimientostock');
 
@@ -1031,6 +1071,7 @@ Route::get('stock/tipotransaccion_stock/leer/{abreviatura}', 'Stock\Tipotransacc
 Route::get('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@index')->name('transferencia_mercaderia');
 Route::get('stock/transferencia-mercaderia/pendientes', 'Stock\TransferenciaMercaderiaController@pendientes')->name('transferencia_mercaderia_pendientes');
 Route::get('stock/transferencia-mercaderia/destinatarios', 'Stock\TransferenciaMercaderiaController@destinatarios')->name('transferencia_mercaderia_destinatarios');
+Route::get('stock/transferencia-mercaderia/validar-destinatario', 'Stock\TransferenciaMercaderiaController@validarDestinatario')->name('transferencia_mercaderia_validar_destinatario');
 Route::post('stock/transferencia-mercaderia/preferencias', 'Stock\TransferenciaMercaderiaController@preferencias')->name('transferencia_mercaderia_preferencias');
 Route::get('stock/transferencia-mercaderia/inventario', 'Stock\TransferenciaMercaderiaController@inventario')->name('transferencia_mercaderia_inventario');
 Route::get('stock/transferencia-mercaderia/saldo-articulo', 'Stock\TransferenciaMercaderiaController@saldoArticulo')->name('transferencia_mercaderia_saldo_articulo');
@@ -1043,6 +1084,8 @@ Route::match(['get', 'post'], 'stock/transferencia-mercaderia/publico/{token}/re
 Route::get('stock/transferencia-mercaderia/publico/{token}/ver', 'Stock\TransferenciaMercaderiaController@verPublico')->name('transferencia_mercaderia_ver_publico');
 Route::get('stock/reporte-movimientos-bien-uso', 'Stock\BienUsoMovimientoReporteController@index')->name('reporte_movimientos_bien_uso');
 Route::get('stock/listar-reporte-movimientos-bien-uso/{formato?}', 'Stock\BienUsoMovimientoReporteController@exportar')->name('listar_reporte_movimientos_bien_uso');
+Route::get('stock/reporte-baja-npu', 'Stock\ParteUnicaBajaReporteController@index')->name('reporte_baja_npu');
+Route::get('stock/listar-reporte-baja-npu/{formato?}', 'Stock\ParteUnicaBajaReporteController@exportar')->name('listar_reporte_baja_npu');
 Route::get('stock/reporte-transferencias-pendientes', 'Stock\TransferenciaPendienteReporteController@index')->name('reporte_transferencias_pendientes');
 Route::get('stock/listar-reporte-transferencias-pendientes/{formato?}', 'Stock\TransferenciaPendienteReporteController@exportar')->name('listar_reporte_transferencias_pendientes');
 Route::get('stock/informes-de-stock/existencias-por-deposito', 'Stock\ExistenciasDepositoReporteController@index')->name('reporte_existencias_deposito');
@@ -1072,7 +1115,9 @@ Route::get('stock/prestamo/api/saldo-articulo', 'Stock\PrestamoController@saldoA
 Route::get('stock/recepcion-proveedor', 'Stock\RecepcionProveedorController@index')->name('recepcion_proveedor');
 Route::get('stock/recepcion-proveedor/crear', 'Stock\RecepcionProveedorController@crear')->name('crear_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor', 'Stock\RecepcionProveedorController@guardar')->name('guardar_recepcion_proveedor');
-Route::get('stock/recepcion-proveedor/{id}/editar', 'Stock\RecepcionProveedorController@editar')->name('editar_recepcion_proveedor');
+Route::get('stock/recepcion-proveedor/consulta-por-articulo', 'Stock\RecepcionProveedorArticuloConsultaController@index')->name('recepcion_proveedor_consulta_articulo')->middleware('modo.consulta');
+Route::get('stock/listar-recepcion-proveedor-articulo/{formato?}', 'Stock\RecepcionProveedorArticuloConsultaController@listar')->name('lista_recepcion_proveedor_articulo')->middleware('modo.consulta');
+Route::get('stock/recepcion-proveedor/{id}/editar', 'Stock\RecepcionProveedorController@editar')->name('editar_recepcion_proveedor')->middleware('modo.consulta');
 Route::put('stock/recepcion-proveedor/{id}', 'Stock\RecepcionProveedorController@actualizar')->name('actualizar_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/{id}/confirmar', 'Stock\RecepcionProveedorController@confirmar')->name('confirmar_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/api/preview-articulo-proveedor', 'Stock\RecepcionProveedorController@apiPreviewArticuloProveedor')->name('recepcion_proveedor_preview_articulo_proveedor');
@@ -1401,18 +1446,40 @@ Route::delete('ventas/gastronomia/maquinas-vending/{id}', 'Ventas\Maquinavending
 Route::get('ventas/gastronomia/viandas/tipos-menu', 'Ventas\ViandaTipoMenuController@index')->name('consultar_vianda_tipo_menu_gastronomia');
 Route::get('ventas/gastronomia/viandas/tipos-menu/crear', 'Ventas\ViandaTipoMenuController@crear')->name('crear_vianda_tipo_menu_gastronomia');
 Route::post('ventas/gastronomia/viandas/tipos-menu', 'Ventas\ViandaTipoMenuController@guardar')->name('guardar_vianda_tipo_menu_gastronomia');
-Route::post('ventas/gastronomia/viandas/tipos-menu/sincronizar-anita', 'Ventas\ViandaTipoMenuController@sincronizarDesdeAnita')->name('sincronizar_vianda_tipo_menu_gastronomia_anita');
 Route::get('ventas/gastronomia/viandas/tipos-menu/{id}/editar', 'Ventas\ViandaTipoMenuController@editar')->name('editar_vianda_tipo_menu_gastronomia');
 Route::put('ventas/gastronomia/viandas/tipos-menu/{id}', 'Ventas\ViandaTipoMenuController@actualizar')->name('actualizar_vianda_tipo_menu_gastronomia');
 Route::delete('ventas/gastronomia/viandas/tipos-menu/{id}', 'Ventas\ViandaTipoMenuController@eliminar')->name('eliminar_vianda_tipo_menu_gastronomia');
 
 Route::get('ventas/gastronomia/viandas/usuarios', 'Ventas\ViandaUsuarioController@index')->name('consultar_vianda_usuario_gastronomia');
+Route::get('ventas/gastronomia/viandas/usuarios-listado/{formato?}/{busqueda?}', 'Ventas\ViandaUsuarioController@listar')->name('lista_vianda_usuario');
 Route::get('ventas/gastronomia/viandas/usuarios/crear', 'Ventas\ViandaUsuarioController@crear')->name('crear_vianda_usuario_gastronomia');
 Route::post('ventas/gastronomia/viandas/usuarios', 'Ventas\ViandaUsuarioController@guardar')->name('guardar_vianda_usuario_gastronomia');
-Route::post('ventas/gastronomia/viandas/usuarios/sincronizar-anita', 'Ventas\ViandaUsuarioController@sincronizarDesdeAnita')->name('sincronizar_vianda_usuario_gastronomia_anita');
-Route::get('ventas/gastronomia/viandas/usuarios/{id}/editar', 'Ventas\ViandaUsuarioController@editar')->name('editar_vianda_usuario_gastronomia');
-Route::put('ventas/gastronomia/viandas/usuarios/{id}', 'Ventas\ViandaUsuarioController@actualizar')->name('actualizar_vianda_usuario_gastronomia');
+Route::get('ventas/gastronomia/viandas/usuarios/{id}/editar', 'Ventas\ViandaUsuarioController@editar')->name('editar_vianda_usuario_gastronomia')->middleware('modo.consulta');
+Route::put('ventas/gastronomia/viandas/usuarios/{id}', 'Ventas\ViandaUsuarioController@actualizar')->name('actualizar_vianda_usuario_gastronomia')->middleware('modo.consulta');
 Route::delete('ventas/gastronomia/viandas/usuarios/{id}', 'Ventas\ViandaUsuarioController@eliminar')->name('eliminar_vianda_usuario_gastronomia');
+
+Route::get('ventas/gastronomia/viandas/configuracion-terminal', 'Ventas\ConfiguracionTerminalViandaController@index')->name('consultar_configuracion_terminal_vianda');
+Route::get('ventas/gastronomia/viandas/configuracion-terminal/crear', 'Ventas\ConfiguracionTerminalViandaController@crear')->name('crear_configuracion_terminal_vianda');
+Route::post('ventas/gastronomia/viandas/configuracion-terminal', 'Ventas\ConfiguracionTerminalViandaController@guardar')->name('guardar_configuracion_terminal_vianda');
+Route::get('ventas/gastronomia/viandas/configuracion-terminal/api/depositos/{empresaId}', 'Ventas\ConfiguracionTerminalViandaController@apiDepositosPorEmpresa')->name('configuracion_terminal_vianda_api_depositos');
+Route::get('ventas/gastronomia/viandas/configuracion-terminal/{id}/editar', 'Ventas\ConfiguracionTerminalViandaController@editar')->name('editar_configuracion_terminal_vianda');
+Route::put('ventas/gastronomia/viandas/configuracion-terminal/{id}', 'Ventas\ConfiguracionTerminalViandaController@actualizar')->name('actualizar_configuracion_terminal_vianda');
+Route::delete('ventas/gastronomia/viandas/configuracion-terminal/{id}', 'Ventas\ConfiguracionTerminalViandaController@eliminar')->name('eliminar_configuracion_terminal_vianda');
+
+Route::get('ventas/gastronomia/viandas/proceso', 'Ventas\ViandaProcesoController@index')->name('proceso_vianda_gastronomia');
+Route::get('ventas/gastronomia/viandas/proceso/api/estado', 'Ventas\ViandaProcesoController@apiEstado')->name('proceso_vianda_api_estado');
+Route::post('ventas/gastronomia/viandas/proceso/api/login', 'Ventas\ViandaProcesoController@apiLogin')->name('proceso_vianda_api_login');
+Route::post('ventas/gastronomia/viandas/proceso/api/marchar', 'Ventas\ViandaProcesoController@apiMarchar')->name('proceso_vianda_api_marchar');
+Route::post('ventas/gastronomia/viandas/proceso/api/reimprimir', 'Ventas\ViandaProcesoController@apiReimprimir')->name('proceso_vianda_api_reimprimir');
+Route::post('ventas/gastronomia/viandas/proceso/api/logout', 'Ventas\ViandaProcesoController@apiLogout')->name('proceso_vianda_api_logout');
+
+Route::get('ventas/gastronomia/viandas/reporte', 'Ventas\ViandaReporteController@index')->name('consultar_reporte_vianda_gastronomia');
+Route::get('ventas/gastronomia/viandas/listar-reporte/{formato}', 'Ventas\ViandaReporteController@exportar')->name('listar_reporte_vianda_gastronomia');
+
+Route::get('ventas/gastronomia/viandas/dia', 'Ventas\ViandaDiaController@index')->name('viandas_dia_gastronomia')->middleware('modo.consulta');
+Route::get('ventas/gastronomia/viandas/dia/{consumoId}/ver', 'Ventas\ViandaDiaController@ver')->name('viandas_dia_ver')->whereNumber('consumoId')->middleware('modo.consulta');
+Route::post('ventas/gastronomia/viandas/dia/{consumoId}/reimprimir', 'Ventas\ViandaDiaController@reimprimir')->name('viandas_dia_reimprimir')->whereNumber('consumoId');
+Route::post('ventas/gastronomia/viandas/dia/{consumoId}/borrar', 'Ventas\ViandaDiaController@borrar')->name('viandas_dia_borrar')->whereNumber('consumoId');
 
 Route::get('ventas/gastronomia/maquinas-vending/rendiciones', 'Ventas\MaquinavendingRendicionController@index')->name('consultar_maquinavending_rendicion_gastronomia');
 Route::get('ventas/listar-maquinavending-rendicion/{formato?}/{busqueda?}', 'Ventas\MaquinavendingRendicionController@listar')->name('lista_maquinavending_rendicion');
@@ -1605,6 +1672,10 @@ Route::get('ventas/gastronomia/insumos-tipoarticulo-reporte', 'Ventas\Gastronomi
 Route::get('ventas/listar-gastronomia-insumos-tipoarticulo/{formato}', 'Ventas\GastronomiaInsumosTipoarticuloReporteController@exportar')->name('listar_gastronomia_insumos_tipoarticulo');
 Route::get('ventas/gastronomia/descuento-reporte', 'Ventas\GastronomiaDescuentoReporteController@index')->name('gastronomia_descuento_reporte')->middleware('modo.consulta');
 Route::post('ventas/gastronomia/descuento-reporte/consulta-facturas', 'Ventas\GastronomiaDescuentoReporteController@consultaFacturasBloque')->name('gastronomia_descuento_reporte_consulta_facturas');
+Route::post('ventas/gastronomia/descuento-reporte/consulta-mozo', 'Ventas\GastronomiaDescuentoReporteController@consultaMozo')->name('gastronomia_descuento_reporte_consulta_mozo');
+Route::get('ventas/gastronomia/descuento-reporte/leer-mozo/{codigo}', 'Ventas\GastronomiaDescuentoReporteController@leerMozoPorCodigo')->name('gastronomia_descuento_reporte_leer_mozo');
+Route::post('ventas/gastronomia/descuento-reporte/consulta-clientevip', 'Ventas\GastronomiaDescuentoReporteController@consultaClienteVip')->name('gastronomia_descuento_reporte_consulta_clientevip');
+Route::get('ventas/gastronomia/descuento-reporte/leer-clientevip/{codigo}', 'Ventas\GastronomiaDescuentoReporteController@leerClienteVipPorCodigo')->name('gastronomia_descuento_reporte_leer_clientevip');
 Route::get('ventas/listar-gastronomia-descuento-reporte/{formato}', 'Ventas\GastronomiaDescuentoReporteController@exportar')->name('listar_gastronomia_descuento_reporte');
 Route::get('ventas/gastronomia/ventas-articulos-reporte', 'Ventas\GastronomiaVentasArticulosReporteController@index')->name('gastronomia_ventas_articulos_reporte')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-ventas-articulos-reporte/{formato}', 'Ventas\GastronomiaVentasArticulosReporteController@exportar')->name('listar_gastronomia_ventas_articulos_reporte');
@@ -1616,6 +1687,8 @@ Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_ca
 Route::get('ventas/arca-caea/{id}', 'Ventas\ArcaCaeaController@show')->name('arca_caea_ver');
 Route::post('ventas/arca-caea/solicitar', 'Ventas\ArcaCaeaController@solicitar')->name('arca_caea_solicitar');
 Route::post('ventas/arca-caea/{id}/reintentar', 'Ventas\ArcaCaeaController@reintentar')->name('arca_caea_reintentar');
+Route::post('ventas/arca-caea/{id}/informar', 'Ventas\ArcaCaeaController@informar')->name('arca_caea_informar');
+Route::post('ventas/arca-caea/{id}/actualizar-resumen', 'Ventas\ArcaCaeaController@actualizarResumen')->name('arca_caea_actualizar_resumen');
 Route::post('ventas/arca-caea/{id}/grabar-anita', 'Ventas\ArcaCaeaController@grabarAnita')->name('arca_caea_grabar_anita');
 
 Route::get('ventas/puntoventa', 'Ventas\PuntoventaController@index')->name('puntoventa');
@@ -1642,7 +1715,9 @@ Route::post('ventas/clienteprovisorio', 'Ventas\ClienteController@guardarCliente
 Route::get('ventas/cliente/{id}/editar', 'Ventas\ClienteController@editar')->name('editar_cliente');
 Route::post('ventas/cliente/verificar-documento', 'Ventas\ClienteController@verificarDocumentoAlta')->name('verificar_cliente_documento_alta');
 Route::post('ventas/cliente/{id}/validar-arca-padron', 'Ventas\ClienteController@validarArcaPadron')->name('validar_cliente_arca_padron');
+Route::post('ventas/cliente/{id}/validar-arca-apoc', 'Ventas\ClienteController@validarArcaApoc')->name('validar_cliente_arca_apoc');
 Route::post('ventas/cliente/{id}/validar-padron-operacion', 'Ventas\ClienteController@validarPadronOperacion')->name('validar_cliente_padron_operacion');
+Route::post('ventas/cliente/{id}/validar-apoc-operacion', 'Ventas\ClienteController@validarApocOperacion')->name('validar_cliente_apoc_operacion');
 Route::get('ventas/cliente/{cliente_id}/suitecrm-cuenta', 'Ventas\ClienteSuitecrmCuentaController@show')->name('cliente_suitecrm_cuenta');
 Route::post('ventas/cliente/{cliente_id}/suitecrm-cuenta/sincronizar', 'Ventas\ClienteSuitecrmCuentaController@sincronizar')->name('sincronizar_cliente_suitecrm_cuenta');
 Route::get('ventas/cliente/{cliente_id}/suitecrm-notas', 'Ventas\ClienteSuitecrmNotaController@index')->name('cliente_suitecrm_notas');
@@ -2085,6 +2160,75 @@ Route::middleware('estacionamiento.habilitado')->group(function () {
 });
 
 /*
+ * Bingo — cartones, conceptos de rendición (módulo Caja)
+ */
+Route::middleware('bingo.habilitado')->group(function () {
+    Route::get('caja/bingo/carton', 'Caja\Bingo\BingoCartonController@index')->name('bingo_carton');
+    Route::get('caja/lista-bingo-carton/{formato?}/{busqueda?}', 'Caja\Bingo\BingoCartonController@listar')->name('lista_bingo_carton');
+    Route::get('caja/bingo/carton/crear', 'Caja\Bingo\BingoCartonController@crear')->name('crear_bingo_carton');
+    Route::post('caja/bingo/carton', 'Caja\Bingo\BingoCartonController@guardar')->name('guardar_bingo_carton');
+    Route::get('caja/bingo/carton/{id}/editar', 'Caja\Bingo\BingoCartonController@editar')->name('editar_bingo_carton');
+    Route::put('caja/bingo/carton/{id}', 'Caja\Bingo\BingoCartonController@actualizar')->name('actualizar_bingo_carton');
+    Route::delete('caja/bingo/carton/{id}', 'Caja\Bingo\BingoCartonController@eliminar')->name('eliminar_bingo_carton');
+
+    Route::get('caja/flash', 'Caja\Flash\FlashCajaController@index')->name('flash_caja');
+    Route::get('caja/lista-flash-caja/{formato?}/{busqueda?}', 'Caja\Flash\FlashCajaController@listar')->name('lista_flash_caja');
+    Route::get('caja/flash/reporte-historico', 'Caja\Flash\FlashCajaController@reporteHistorico')->name('flash_caja_reporte_historico');
+    Route::get('caja/flash/listar-reporte-historico/{formato?}', 'Caja\Flash\FlashCajaController@exportarReporteHistorico')->name('listar_flash_caja_reporte_historico');
+    Route::get('caja/flash/crear', 'Caja\Flash\FlashCajaController@crear')->name('crear_flash_caja');
+    Route::post('caja/flash', 'Caja\Flash\FlashCajaController@guardar')->name('guardar_flash_caja');
+    Route::post('caja/flash/api/calcular', 'Caja\Flash\FlashCajaController@apiCalcular')->name('flash_caja_api_calcular');
+    Route::get('caja/flash/{id}/editar', 'Caja\Flash\FlashCajaController@editar')->name('editar_flash_caja');
+    Route::put('caja/flash/{id}', 'Caja\Flash\FlashCajaController@actualizar')->name('actualizar_flash_caja');
+    Route::delete('caja/flash/{id}', 'Caja\Flash\FlashCajaController@eliminar')->name('eliminar_flash_caja');
+    Route::get('caja/flash/{id}/reporte/{formato?}', 'Caja\Flash\FlashCajaController@reporte')->name('flash_caja_reporte');
+
+    Route::get('caja/bingo/concepto-rendicion', 'Caja\Bingo\BingoConceptoRendicionController@index')->name('bingo_concepto_rendicion');
+    Route::get('caja/lista-bingo-concepto-rendicion/{formato?}/{busqueda?}', 'Caja\Bingo\BingoConceptoRendicionController@listar')->name('lista_bingo_concepto_rendicion');
+    Route::get('caja/bingo/concepto-rendicion/crear', 'Caja\Bingo\BingoConceptoRendicionController@crear')->name('crear_bingo_concepto_rendicion');
+    Route::post('caja/bingo/concepto-rendicion', 'Caja\Bingo\BingoConceptoRendicionController@guardar')->name('guardar_bingo_concepto_rendicion');
+    Route::get('caja/bingo/concepto-rendicion/{id}/editar', 'Caja\Bingo\BingoConceptoRendicionController@editar')->name('editar_bingo_concepto_rendicion');
+    Route::put('caja/bingo/concepto-rendicion/{id}', 'Caja\Bingo\BingoConceptoRendicionController@actualizar')->name('actualizar_bingo_concepto_rendicion');
+    Route::delete('caja/bingo/concepto-rendicion/{id}', 'Caja\Bingo\BingoConceptoRendicionController@eliminar')->name('eliminar_bingo_concepto_rendicion');
+
+    Route::get('caja/bingo/jornada', 'Caja\Bingo\JornadaBingoController@index')->name('bingo_jornada');
+    Route::get('caja/bingo/jornada/api/estado/{empresaId}', 'Caja\Bingo\JornadaBingoController@apiEstado')->name('bingo_jornada_api_estado');
+    Route::post('caja/bingo/jornada/api/abrir', 'Caja\Bingo\JornadaBingoController@apiAbrir')->name('bingo_jornada_api_abrir');
+    Route::post('caja/bingo/jornada/api/cerrar', 'Caja\Bingo\JornadaBingoController@apiCerrar')->name('bingo_jornada_api_cerrar');
+    Route::post('caja/bingo/jornada/api/eliminar', 'Caja\Bingo\JornadaBingoController@apiEliminar')->name('bingo_jornada_api_eliminar');
+    Route::post('caja/bingo/jornada/api/anular-cierre', 'Caja\Bingo\JornadaBingoController@apiAnularCierre')->name('bingo_jornada_api_anular_cierre');
+
+    Route::get('caja/bingo/turno', 'Caja\Bingo\TurnoBingoController@index')->name('bingo_turno');
+    Route::get('caja/bingo/turno/crear', 'Caja\Bingo\TurnoBingoController@crear')->name('crear_bingo_turno');
+    Route::post('caja/bingo/turno', 'Caja\Bingo\TurnoBingoController@guardar')->name('guardar_bingo_turno');
+    Route::get('caja/bingo/turno/{id}/editar', 'Caja\Bingo\TurnoBingoController@editar')->name('editar_bingo_turno');
+    Route::put('caja/bingo/turno/{id}', 'Caja\Bingo\TurnoBingoController@actualizar')->name('actualizar_bingo_turno');
+    Route::delete('caja/bingo/turno/{id}', 'Caja\Bingo\TurnoBingoController@eliminar')->name('eliminar_bingo_turno');
+
+    Route::get('caja/bingo/configuracion-puntoventa', 'Caja\Bingo\ConfiguracionPuntoventaBingoController@index')->name('bingo_configuracion_puntoventa');
+    Route::get('caja/bingo/configuracion-puntoventa/crear', 'Caja\Bingo\ConfiguracionPuntoventaBingoController@crear')->name('crear_bingo_configuracion_puntoventa');
+    Route::post('caja/bingo/configuracion-puntoventa', 'Caja\Bingo\ConfiguracionPuntoventaBingoController@guardar')->name('guardar_bingo_configuracion_puntoventa');
+    Route::get('caja/bingo/configuracion-puntoventa/{id}/editar', 'Caja\Bingo\ConfiguracionPuntoventaBingoController@editar')->name('editar_bingo_configuracion_puntoventa');
+    Route::put('caja/bingo/configuracion-puntoventa/{id}', 'Caja\Bingo\ConfiguracionPuntoventaBingoController@actualizar')->name('actualizar_bingo_configuracion_puntoventa');
+    Route::delete('caja/bingo/configuracion-puntoventa/{id}', 'Caja\Bingo\ConfiguracionPuntoventaBingoController@eliminar')->name('eliminar_bingo_configuracion_puntoventa');
+
+    Route::get('caja/bingo/habilitacion-turno', 'Caja\Bingo\HabilitacionTurnoBingoController@index')->name('bingo_habilitacion_turno');
+    Route::get('caja/bingo/habilitacion-turno/api/estado', 'Caja\Bingo\HabilitacionTurnoBingoController@apiEstado')->name('bingo_habilitacion_turno_api_estado');
+    Route::post('caja/bingo/habilitacion-turno/api/habilitar', 'Caja\Bingo\HabilitacionTurnoBingoController@apiHabilitar')->name('bingo_habilitacion_turno_api_habilitar');
+    Route::post('caja/bingo/habilitacion-turno/api/cierre-parcial', 'Caja\Bingo\HabilitacionTurnoBingoController@apiCierreParcial')->name('bingo_habilitacion_turno_api_cierre_parcial');
+    Route::post('caja/bingo/habilitacion-turno/api/cerrar', 'Caja\Bingo\HabilitacionTurnoBingoController@apiCerrar')->name('bingo_habilitacion_turno_api_cerrar');
+
+    Route::get('caja/bingo/rendicion/cargar', 'Caja\Bingo\RendicionBingoTerminalController@cargar')->name('bingo_rendicion_cargar');
+    Route::get('caja/bingo/rendicion/editar/{turno}', 'Caja\Bingo\RendicionBingoTerminalController@editar')->name('bingo_rendicion_editar');
+    Route::post('caja/bingo/rendicion/api/calcular', 'Caja\Bingo\RendicionBingoTerminalController@apiCalcular')->name('bingo_rendicion_api_calcular');
+    Route::post('caja/bingo/rendicion/api/guardar', 'Caja\Bingo\RendicionBingoTerminalController@apiGuardar')->name('bingo_rendicion_api_guardar');
+
+    Route::get('caja/bingo/cierres-turno', 'Caja\Bingo\CierreTurnoBingoController@index')->name('bingo_cierres_turno')->middleware('modo.consulta');
+    Route::get('caja/bingo/cierres-turno/cierre/{id}/comprobante', 'Caja\Bingo\CierreTurnoBingoController@comprobanteCierre')->name('bingo_cierre_turno_comprobante_cierre');
+    Route::get('caja/bingo/cierres-turno/parcial/{id}/comprobante', 'Caja\Bingo\CierreTurnoBingoController@comprobanteParcial')->name('bingo_cierre_turno_comprobante_parcial');
+});
+
+/*
  * Voucher
  */
 
@@ -2137,6 +2281,15 @@ Route::put('caja/rendicionmaquinavending/{id}', 'Caja\RendicionMaquinavendingCon
 Route::delete('caja/rendicionmaquinavending/{id}', 'Caja\RendicionMaquinavendingController@eliminar')->name('eliminar_rendicionmaquinavending');
 Route::post('caja/rendicionmaquinavending/api/consulta-rendicion', 'Caja\RendicionMaquinavendingController@apiConsultaRendicionVentas')->name('api_rendicion_maquinavending_consulta_rendicion');
 Route::post('caja/rendicionmaquinavending/api/datos-rendicion', 'Caja\RendicionMaquinavendingController@apiDatosRendicionVentas')->name('api_rendicion_maquinavending_datos_rendicion');
+Route::get('caja/rendicionbingo', 'Caja\RendicionBingoController@index')->name('rendicionbingo');
+Route::get('caja/listarendicionbingo/{formato?}/{busqueda?}', 'Caja\RendicionBingoController@listar')->name('listar_rendicionbingo');
+Route::get('caja/rendicionbingo/crear/{caja?}', 'Caja\RendicionBingoController@crear')->name('crear_rendicionbingo');
+Route::post('caja/rendicionbingo', 'Caja\RendicionBingoController@guardar')->name('guardar_rendicionbingo');
+Route::get('caja/rendicionbingo/{id}/imprimir', 'Caja\RendicionBingoController@imprimir')->name('imprimir_rendicion_bingo');
+Route::delete('caja/rendicionbingo/{id}', 'Caja\RendicionBingoController@eliminar')->name('eliminar_rendicionbingo');
+Route::post('caja/rendicionbingo/api/consulta-cierre', 'Caja\RendicionBingoController@apiConsultaCierre')->name('api_rendicion_bingo_consulta_cierre');
+Route::post('caja/rendicionbingo/api/datos-turno', 'Caja\RendicionBingoController@apiDatosTurno')->name('api_rendicion_bingo_datos_turno');
+Route::redirect('caja/bingo/rendicion', '/caja/rendicionbingo', 301);
 Route::get('caja/rendicionestacionamiento', 'Caja\RendicionEstacionamientoController@index')->name('rendicionestacionamiento');
 Route::get('caja/listarendicionestacionamiento/{formato?}/{busqueda?}', 'Caja\RendicionEstacionamientoController@listar')->name('listar_rendicionestacionamiento');
 Route::get('caja/rendicionestacionamiento/crear/{caja?}', 'Caja\RendicionEstacionamientoController@crear')->name('crear_rendicionestacionamiento');
@@ -2428,6 +2581,7 @@ Route::post('compras/proveedor', 'Compras\ProveedorController@guardar')->name('g
 Route::post('compras/proveedorprovisorio', 'Compras\ProveedorController@guardarClienteProvisorio')->name('guardar_proveedor_provisorio');
 Route::get('compras/proveedor/{id}/editar', 'Compras\ProveedorController@editar')->name('editar_proveedor');
 Route::post('compras/proveedor/{id}/validar-arca-padron', 'Compras\ProveedorController@validarArcaPadron')->name('validar_proveedor_arca_padron');
+Route::post('compras/proveedor/{id}/validar-arca-apoc', 'Compras\ProveedorController@validarArcaApoc')->name('validar_proveedor_arca_apoc');
 Route::put('compras/proveedor/{id}', 'Compras\ProveedorController@actualizar')->name('actualizar_proveedor');
 Route::delete('compras/proveedor/{id}', 'Compras\ProveedorController@eliminar')->name('eliminar_proveedor');
 
@@ -2482,6 +2636,7 @@ Route::match(['get', 'post'], 'compras/comprobante-proveedor/preview-asiento', '
 Route::match(['get', 'post'], 'compras/comprobante-proveedor/{id}/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/contabilizar', 'Compras\Comprobante_ProveedorController@contabilizar')->name('contabilizar_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/validar-proveedor-arca', 'Compras\Comprobante_ProveedorController@validarProveedorArcaPadron')->name('comprobante_proveedor_validar_proveedor_arca');
+Route::post('compras/comprobante-proveedor/validar-proveedor-arca-apoc', 'Compras\Comprobante_ProveedorController@validarProveedorArcaApoc')->name('comprobante_proveedor_validar_proveedor_arca_apoc');
 Route::get('compras/comprobante-proveedor/{id}/factura-pdf', 'Compras\Comprobante_ProveedorController@verFacturaPdf')->name('comprobante_proveedor_factura_pdf');
 Route::get('compras/comprobante-proveedor/{id}/archivo/{archivo}', 'Compras\Comprobante_ProveedorController@descargarArchivo')->name('comprobante_proveedor_archivo');
 
@@ -2521,6 +2676,7 @@ Route::delete('compras/requisicion/{requisicion}/presupuestos/{presupuesto}', 'C
 Route::get('compras/requisicion/{requisicion}/presupuestos', 'Compras\RequisicionPresupuestoController@index')->name('requisicion_presupuestos_index');
 Route::get('compras/requisicion/{id}/firmantes-retome-arbol', 'Compras\RequisicionController@firmantesRetomeArbol')->name('firmantes_retome_arbol_requisicion');
 Route::post('compras/requisicion/{id}/enviar-arbol-aprobacion', 'Compras\RequisicionController@enviarArbolAprobacion')->name('enviar_arbol_requisicion');
+Route::post('compras/requisicion/{id}/volver-compras', 'Compras\RequisicionController@volverCompras')->name('volver_compras_requisicion');
 Route::put('compras/requisicion/{id}', 'Compras\RequisicionController@actualizar')->name('actualizar_requisicion');
 Route::delete('compras/requisicion/{id}', 'Compras\RequisicionController@eliminar')->name('eliminar_requisicion');
 Route::get('compras/listarequisicion/{formato?}/{busqueda?}', 'Compras\RequisicionController@listar')->name('listar_requisicion');
@@ -2528,12 +2684,29 @@ Route::get('compras/leer_historia_requisicion/{requisicion_id}', 'Compras\Requis
 Route::get('compras/requisicion/aviso-arbol-grabacion', 'Compras\RequisicionController@avisoArbolGrabacion')->name('requisicion_aviso_arbol_grabacion');
 Route::get('compras/requisicion/consulta-listas-precio-articulo', 'Compras\RequisicionController@consultaListasPrecioArticulo')->name('requisicion_consulta_listas_precio_articulo');
 Route::get('compras/requisicion/precio-ultima-compra-articulo', 'Compras\RequisicionController@precioUltimaCompraArticulo')->name('requisicion_precio_ultima_compra_articulo');
+Route::post('compras/requisicion/calcular-totales', 'Compras\RequisicionController@calcularTotales')->name('requisicion_calcular_totales');
 Route::post('compras/requisicion/consulta_partidagasto', 'Compras\RequisicionController@consultaPartidagastoRequisicion')->name('consulta_partidagasto_requisicion');
 Route::get('compras/requisicion/leer_partidagasto/{partidagasto_id}', 'Compras\RequisicionController@leerPartidagastoRequisicionPorId')->name('leer_partidagasto_requisicion');
 Route::get('compras/requisicion/visualizar/{id}/{hash}', 'Compras\RequisicionController@visualizar')->name('visualizar_requisicion');
 Route::get('compras/requisicion/soloconsulta/{id}', 'Compras\RequisicionController@soloConsulta')->name('solo_consulta_requisicion');
 Route::get('compras/requisicion/{id}/wizard-multiples-oc', 'Compras\OrdencompraController@wizardMultiplesDesdeRequisicion')->name('requisicion_wizard_multiples_oc');
 Route::post('compras/requisicion/{id}/generar-multiples-oc', 'Compras\OrdencompraController@generarMultiplesOcDesdeRequisicion')->name('requisicion_generar_multiples_oc');
+
+/*
+ * Cumplimiento de requisiciones de compra (genera transferencia de mercadería)
+ */
+Route::get('compras/cumplir-requisicion-compra', 'Compras\CumplirRequisicionCompraController@index')->name('cumplir_requisicion_compra');
+Route::get('compras/cumplir-requisicion-compra/crear', 'Compras\CumplirRequisicionCompraController@crear')->name('crear_cumplir_requisicion_compra');
+Route::get('compras/cumplir-requisicion-compra/consulta', 'Compras\CumplirRequisicionCompraController@consultaRequisicion')->name('consulta_requisicion_compra_cumple');
+Route::get('compras/cumplir-requisicion-compra/datos/{id}', 'Compras\CumplirRequisicionCompraController@datosRequisicion')->name('datos_requisicion_compra_cumple');
+Route::get('compras/cumplir-requisicion-compra/saldo-articulo', 'Compras\CumplirRequisicionCompraController@saldoArticuloDeposito')->name('cumplir_requisicion_compra_saldo_articulo');
+Route::get('compras/cumplir-requisicion-compra/pdf/{token?}', 'Compras\CumplirRequisicionCompraController@imprimirPdf')->name('pdf_cumplir_requisicion_compra');
+Route::get('compras/lista-cumplir-requisicion-compra/{formato?}', 'Compras\CumplirRequisicionCompraController@listar')->name('lista_cumplir_requisicion_compra');
+Route::post('compras/cumplir-requisicion-compra', 'Compras\CumplirRequisicionCompraController@grabar')->name('grabar_cumplir_requisicion_compra');
+Route::get('compras/cumplir-requisicion-compra/{id}/imprimir-pdf', 'Compras\CumplirRequisicionCompraController@imprimirCumplimientoPdf')->name('imprimir_pdf_cumplir_requisicion_compra');
+Route::put('compras/cumplir-requisicion-compra/{id}', 'Compras\CumplirRequisicionCompraController@actualizar')->name('actualizar_cumplir_requisicion_compra');
+Route::post('compras/cumplir-requisicion-compra/{id}/revertir', 'Compras\CumplirRequisicionCompraController@revertir')->name('revertir_cumplir_requisicion_compra');
+Route::get('compras/cumplir-requisicion-compra/{id}', 'Compras\CumplirRequisicionCompraController@consultar')->name('consultar_cumplir_requisicion_compra');
 
 /*
  * Listas de precio proveedor
@@ -2575,9 +2748,11 @@ Route::get('compras/ordencompra/{id}/historia-estados', 'Compras\OrdencompraCont
 Route::get('compras/ordencompra/{id}/historia-precios', 'Compras\OrdencompraController@leerHistoriaPrecios')->name('ordencompra_historia_precios');
 Route::get('compras/ordencompra/{id}/recepciones', 'Compras\OrdencompraController@leerRecepciones')->name('ordencompra_recepciones');
 Route::post('compras/ordencompra/{id}/aplicar-precios-recepcion/{recepcion_id}', 'Compras\OrdencompraController@aplicarPreciosRecepcion')->name('ordencompra_aplicar_precios_recepcion');
+Route::post('compras/ordencompra/{id}/aplicar-precios-solicitados-recepcion/{recepcion_id}', 'Compras\OrdencompraController@aplicarPreciosSolicitadosRecepcionBorrador')->name('ordencompra_aplicar_precios_solicitados_recepcion');
 Route::get('compras/ordencompra/{id}/movimiento-aprobacion', 'Compras\OrdencompraController@leerMovimientoAprobacion')->name('ordencompra_movimiento_aprobacion');
 Route::post('compras/ordencompra/{id}/cambiar-estado', 'Compras\OrdencompraController@cambiarEstado')->name('ordencompra_cambiar_estado');
 Route::post('compras/ordencompra/{id}/reactivar', 'Compras\OrdencompraController@reactivarSuspendida')->name('ordencompra_reactivar');
+Route::post('compras/ordencompra/{id}/revertir-cierre-lineas', 'Compras\OrdencompraController@revertirCierreLineas')->name('ordencompra_revertir_cierre_lineas');
 Route::post('compras/ordencompra/{id}/cambiar-sector', 'Compras\OrdencompraController@cambiarSector')->name('ordencompra_cambiar_sector');
 Route::get('compras/ordencompra/soloconsulta/{id}', 'Compras\OrdencompraController@soloConsulta')->name('solo_consulta_ordencompra');
 Route::get('compras/ordencompra/visualizar/{id}/{hash}', 'Compras\OrdencompraController@visualizar')->name('visualizar_ordencompra');
@@ -2871,11 +3046,16 @@ Route::put('sala/tecnico-laboratorio/{id}', 'Sala\TecnicoLaboratorioController@a
 Route::delete('sala/tecnico-laboratorio/{id}', 'Sala\TecnicoLaboratorioController@eliminar')->name('eliminar_tecnico_laboratorio');
 
 Route::get('sala/cumplir-requisicion-sala', 'Sala\CumplirRequisicionSalaController@index')->name('cumplir_requisicion_sala');
+Route::get('sala/cumplir-requisicion-sala/crear', 'Sala\CumplirRequisicionSalaController@crear')->name('crear_cumplir_requisicion_sala');
 Route::get('sala/cumplir-requisicion-sala/consulta', 'Sala\CumplirRequisicionSalaController@consultaRequisicion')->name('consulta_requisicion_sala_cumple');
 Route::get('sala/cumplir-requisicion-sala/datos/{id}', 'Sala\CumplirRequisicionSalaController@datosRequisicion')->name('datos_requisicion_sala_cumple');
 Route::get('sala/cumplir-requisicion-sala/consulta-npu', 'Sala\CumplirRequisicionSalaController@consultaNpu')->name('consulta_npu_cumple_requisicion_sala');
 Route::get('sala/cumplir-requisicion-sala/pdf/{token?}', 'Sala\CumplirRequisicionSalaController@imprimirPdf')->name('pdf_cumplir_requisicion_sala');
 Route::post('sala/cumplir-requisicion-sala', 'Sala\CumplirRequisicionSalaController@grabar')->name('grabar_cumplir_requisicion_sala');
+Route::get('sala/cumplir-requisicion-sala/{id}/imprimir-pdf', 'Sala\CumplirRequisicionSalaController@imprimirCumplimientoPdf')->name('imprimir_pdf_cumplir_requisicion_sala');
+Route::put('sala/cumplir-requisicion-sala/{id}', 'Sala\CumplirRequisicionSalaController@actualizar')->name('actualizar_cumplir_requisicion_sala');
+Route::post('sala/cumplir-requisicion-sala/{id}/revertir', 'Sala\CumplirRequisicionSalaController@revertir')->name('revertir_cumplir_requisicion_sala');
+Route::get('sala/cumplir-requisicion-sala/{id}', 'Sala\CumplirRequisicionSalaController@consultar')->name('consultar_cumplir_requisicion_sala');
 
 Route::get('sala/requisicion-sala', 'Sala\RequisicionSalaController@index')->name('consultar_requisicion_sala');
 Route::get('sala/listarequisicionsala/{formato?}/{busqueda?}', 'Sala\RequisicionSalaController@listar')->name('listar_requisicion_sala');

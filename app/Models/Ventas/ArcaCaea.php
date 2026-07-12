@@ -24,6 +24,16 @@ class ArcaCaea extends Model
 
     public const ORIGEN_ANITA = 'import_anita';
 
+    public const INFORME_ESTADO_PENDIENTE = 'pendiente';
+
+    public const INFORME_ESTADO_PARCIAL = 'parcial';
+
+    public const INFORME_ESTADO_OK = 'ok';
+
+    public const INFORME_ESTADO_OBSERVACION = 'observacion';
+
+    public const INFORME_ESTADO_ERROR = 'error';
+
     protected $table = 'arca_caea';
 
     protected $fillable = [
@@ -42,6 +52,10 @@ class ArcaCaea extends Model
         'codigo_error',
         'mensaje_error',
         'observaciones',
+        'informe_estado',
+        'informe_resumen',
+        'informe_procesado_at',
+        'informe_usuario_id',
     ];
 
     protected $casts = [
@@ -52,6 +66,8 @@ class ArcaCaea extends Model
         'fecha_tope_informe' => 'date',
         'fecha_proceso' => 'datetime',
         'observaciones' => 'array',
+        'informe_resumen' => 'array',
+        'informe_procesado_at' => 'datetime',
     ];
 
     public function empresa(): BelongsTo
@@ -62,6 +78,11 @@ class ArcaCaea extends Model
     public function solicitadoPor(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'solicitado_por_usuario_id');
+    }
+
+    public function informadoPor(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'informe_usuario_id');
     }
 
     public function getEtiquetaQuincenaAttribute(): string

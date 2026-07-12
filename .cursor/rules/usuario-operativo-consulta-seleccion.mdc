@@ -1,0 +1,90 @@
+---
+description: Usuarios operativos — consulta, selects y filtros (UsuarioOperativoSupport)
+alwaysApply: true
+---
+
+# Usuario operativo: un solo lugar para elegir/consultar usuarios
+
+En procesos operativos (modales, selects, árbol de aprobación, transferencias, préstamos, avisos, destinatarios) **no** armar queries sueltas sobre `Usuario`. Toda la lógica vive en:
+
+| Capa | Uso |
+|------|-----|
+| **`App\Support\Seguridad\UsuarioOperativoSupport`** | Implementación única (activos, empresa, texto consulta, IDs) |
+| **`App\Repositories\Admin\UsuarioRepository`** | IoC en controllers/services; modal HTML en `consultaUsuario()` |
+
+Ver también `modelo-usuario-seguridad-import.mdc` (import Eloquent `App\Models\Seguridad\Usuario`).
+
+## Reglas de negocio (solo en Support)
+
+- **Suspendidos**: nunca listar, resolver ni elegir (`scopeSoloActivos` vía `UsuarioOperativoSupport::query()`).
+- **Empresa**: si hay `empresa_id`, el usuario debe tenerla entre sus asignaciones (`usuario_empresa`). Sin filas en `usuario_empresa` = aplica a **todas** las empresas.
+- **Consulta modal** (`/configuracion/consultausuario`, `/configuracion/resolverusuario`, `/configuracion/leerunusuario`): texto busca también en **nombre de empresas asignadas**. Flag `omitir_filtro_empresa=1` solo cuando el negocio lo exija (ej. destinatario transferencia intercompany).
+
+## Correcto
+
+```php
+use App\Support\Seguridad\UsuarioOperativoSupport;
+
+// Modal / blur / Enter en campo usuario
+$usuario = $this->usuarioRepository->findPorIdOCodigo($valor, $empresaId);
+$usuario = $this->usuarioRepository->findOperativo($id);
+
+// Selects y ABM que eligen usuario
+$usuarios = $this->usuarioRepository->listadoOperativoParaSelector(
+    $empresaId,
+    $centrocostoId,
+    ['id', 'nombre', 'email', 'usuario'],
+    soloConEmail: true,
+    with: ['roles:id,nombre'],
+);
+
+// Listas de IDs (árbol, niveles, destinatarios)
+$ids = $this->usuarioRepository->filtrarIdsOperativosPorEmpresa($usuarioIds, $empresaId);
+$ids = $this->usuarioRepository->filtrarIdsOperativos($usuarioIds);
+
+// Relación depósito admin / avisos préstamo
+->whereHas('usuarios', fn ($q) => $q->soloActivos())
+// o: UsuarioOperativoSupport::esOperativo($usuario)
+```
+
+Frontend modal: `public/assets/pages/scripts/admin/usuario/consulta.js` + `@include('includes.admin.modalconsultausuario')`. No duplicar POST a consulta en JS del módulo salvo patrón documentado (reportes RC/RS).
+
+## Prohibido
+
+```php
+// ❌ Query directa en módulo de negocio
+Usuario::query()->where('suspendido', false)->...
+Usuario::orderBy('nombre')->get(); // en selects operativos
+
+// ❌ Duplicar filtro empresa / suspendido en Arbol, Transferencia, Prestamo, etc.
+DB::table('usuario_empresa')->whereIn(...) // fuera de UsuarioOperativoSupport
+
+// ❌ Resolver usuario suspendido en inputs
+$this->usuarioRepository->find($id); // ABM admin OK; no para elegir en proceso
+```
+
+## Excepciones válidas
+
+- **ABM Usuario** (`Admin\UsuarioController`): ver/editar suspendidos a propósito.
+- **Listados administrativos** que muestran todos los registros (ej. index usuario-cuentacontable) sin ser un input de elección.
+- **Histórico / auditoría**: leer nombre de usuario ya grabado en documento aunque esté suspendido hoy.
+
+## Al agregar pantalla o módulo con usuario destino/firmante/admin
+
+1. ¿Es **elección** en formulario/modal/select? → Repository/Support operativo.
+2. ¿Filtra por empresa del comprobante? → `filtrarIdsOperativosPorEmpresa` o `aplicarFiltroEmpresa`.
+3. ¿JS usa modal compartido? → no reimplementar; usar `consultausuario` + `resolverusuario`.
+
+## Comprobación rápida (agente)
+
+```bash
+# No debe quedar lógica operativa duplicada fuera del support/repository
+rg "Usuario::query\(\)->soloActivos|Usuario::orderBy\('nombre'\)->get" app --glob '*.php'
+rg "filtrarUsuariosArbolPorEmpresa|usuario_empresa.*whereIn" app --glob '*.php'
+
+# Punto único
+rg "class UsuarioOperativoSupport" app/Support/Seguridad/UsuarioOperativoSupport.php
+php -l app/Support/Seguridad/UsuarioOperativoSupport.php
+```
+
+Si aparece un caso nuevo, **extender `UsuarioOperativoSupport`** (y el repository si hace falta), no copiar filtros al módulo.

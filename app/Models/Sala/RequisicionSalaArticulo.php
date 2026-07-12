@@ -47,4 +47,19 @@ class RequisicionSalaArticulo extends Model implements Auditable
     {
         return $this->belongsTo(Depmae::class, 'deposito_origen_id');
     }
+
+    public function descripcionArticulo(): string
+    {
+        $art = $this->articulos;
+        $texto = trim((string) ($art?->descripcion ?? ''));
+        if ($texto !== '') {
+            return $texto;
+        }
+        $detalleLinea = trim((string) ($this->detalle ?? ''));
+        if ($detalleLinea !== '') {
+            return $detalleLinea;
+        }
+
+        return trim((string) ($art?->detalle ?? ''));
+    }
 }

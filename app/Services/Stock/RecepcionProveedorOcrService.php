@@ -227,6 +227,7 @@ class RecepcionProveedorOcrService
             'proveedor_id' => (int) $oc->proveedor_id,
             'proveedor_nombre' => optional($oc->proveedores)->nombre,
             'empresa_id' => $oc->empresa_id,
+            'descuento_ordencompra' => (float) ($oc->descuento ?? 0),
             '_ocr_texto' => $texto,
             '_lineas_ocr' => $lineasOcr,
             '_numero_oc_info' => $numeroOcInfo,

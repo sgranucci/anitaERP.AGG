@@ -6,6 +6,7 @@ use App\Models\Caja\Estacionamiento\CuentaEstacionamiento;
 use App\Models\Caja\Estacionamiento\DescuentoEstacionamiento;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
+use App\Support\Caja\Estacionamiento\EstacionamientoFacturaPayloadSupport;
 use App\Services\Ventas\FacturacionService;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -319,7 +320,7 @@ final class EstacionamientoFacturacionService
      */
     private function aplicarReglasCortesiaEnPayload(array $payload): array
     {
-        $impuestoExentoId = (int) config('estacionamiento.impuesto_exento_id', 1);
+        $impuestoExentoId = EstacionamientoFacturaPayloadSupport::impuestoExentoId();
         $n = count($payload['cantidades'] ?? []);
 
         if ($n > 0) {

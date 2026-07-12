@@ -26,7 +26,8 @@ class Deposito_AdministradorRepository implements Deposito_AdministradorReposito
         return Deposito_Administrador::query()
             ->where('deposito_id', $depositoId)
             ->where('recibe_avisos', true)
-            ->with('usuarios:id,nombre,email')
+            ->whereHas('usuarios', fn ($q) => $q->soloActivos())
+            ->with('usuarios:id,nombre,email,suspendido')
             ->get();
     }
 

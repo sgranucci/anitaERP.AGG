@@ -33,16 +33,30 @@ class MayorConceptoPeriodoProcesador
     /** @var array<string, int> proveedor Anita → cuenta 521060 prepaga (OSDE, Galeno…) */
     private array $cuentaPrepagaPorProveedor = [];
 
+    /** @var array<string, list<object>> auxpag de OPs anuladas (fallback a axphist) */
+    private array $auxpagHistoricoCache = [];
+
     private int $empresaActiva = 0;
 
     private readonly MayorConceptoMediopagoSupport $mediopagoSupport;
+
+    private readonly MayorConceptoTCompSupport $tcompSupport;
+
+    private readonly MayorConceptoComRecepcionErpSupport $comRecepcionErpSupport;
+
+    /** @var int COM resueltos vía recepción ERP (subdiario Anita vacío) */
+    private int $comSubdiarioErpFallback = 0;
 
     public function __construct(
         private readonly MayorConceptoMemoriaMotor $motor,
         private readonly MayorConceptoAnitaBridgeReader $reader,
         ?MayorConceptoMediopagoSupport $mediopagoSupport = null,
+        ?MayorConceptoTCompSupport $tcompSupport = null,
+        ?MayorConceptoComRecepcionErpSupport $comRecepcionErpSupport = null,
     ) {
         $this->mediopagoSupport = $mediopagoSupport ?? new MayorConceptoMediopagoSupport();
+        $this->tcompSupport = $tcompSupport ?? new MayorConceptoTCompSupport();
+        $this->comRecepcionErpSupport = $comRecepcionErpSupport ?? new MayorConceptoComRecepcionErpSupport();
     }
 
     /**
@@ -60,6 +74,7 @@ class MayorConceptoPeriodoProcesador
         $this->empresaActiva = $empresaId;
 
         $datos = $this->reader->cargarPeriodo($empresaId, $fechaDesde, $fechaHasta);
+        $this->tcompSupport->cargar($this->erroresBridge);
         $this->motor->prepararEmpresa($empresaId, $datos['ctaconc'] ?? []);
         $this->erroresBridge = array_merge($this->erroresBridge, $datos['errores'] ?? []);
 
@@ -70,11 +85,33 @@ class MayorConceptoPeriodoProcesador
         $auxpagPorOp = [];
         foreach ($auxpagLista as $axp) {
             $clave = $this->claveOperacionPago(
+                $empresaId,
                 trim((string) ($axp->axp_tipo ?? '')),
                 (int) ($axp->axp_rec ?? 0),
                 (int) ($axp->axp_fecha ?? 0),
             );
             $auxpagPorOp[$clave][] = $axp;
+        }
+
+        // Piernas de anulación (AOP, banco al Debe) indexadas por la referencia
+        // del OP anulado (empresa+tipo+nro), para espejar la imputación de la emisión.
+        $anulacionesPorOp = [];
+        foreach ($subdiario as $lineaAnul) {
+            if (strtoupper(trim((string) ($lineaAnul->subd_tipo ?? ''))) !== 'AOP') {
+                continue;
+            }
+            if (strtoupper(trim((string) ($lineaAnul->subd_tipo_mov ?? ''))) !== 'D') {
+                continue;
+            }
+            if (! $this->motor->esDisponibilidad((int) ($lineaAnul->subd_cuenta ?? 0))) {
+                continue;
+            }
+            $claveAnul = $this->claveOperacionPagoRef(
+                (int) ($lineaAnul->subd_empresa ?? $empresaId),
+                trim((string) ($lineaAnul->subd_ref_tipo ?? '')),
+                (int) ($lineaAnul->subd_ref_nro ?? 0),
+            );
+            $anulacionesPorOp[$claveAnul][] = $lineaAnul;
         }
 
         $statsPreload = $this->precargarCachesCompras($auxpagLista);
@@ -85,6 +122,7 @@ class MayorConceptoPeriodoProcesador
 
         $lineasReporte = [];
         $opsProcesadas = [];
+        $opsEmisionProcesadaEnPeriodo = [];
 
         foreach ($subdiario as $linea) {
             if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
@@ -96,6 +134,14 @@ class MayorConceptoPeriodoProcesador
                 continue;
             }
 
+            // La pierna de anulación (AOP) comparte claveOp con la emisión (letra
+            // en blanco vs letra del OP). No debe disparar el procesamiento: se
+            // resuelve por espejo sobre la emisión (espejarAnulacionOp). Dejar que
+            // la AOP gane la clave perdería la imputación de gasto de la emisión.
+            if (strtoupper(trim((string) ($linea->subd_tipo ?? ''))) === 'AOP') {
+                continue;
+            }
+
             $cuenta = (int) ($linea->subd_cuenta ?? 0);
             $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
             if (! $this->motor->esDisponibilidad($cuenta) && ! $this->motor->esDisponibilidad($contrapartida)) {
@@ -103,14 +149,11 @@ class MayorConceptoPeriodoProcesador
             }
 
             $claveOp = $this->claveOperacionPago(
+                $empresaId,
                 $refTipo,
                 (int) ($linea->subd_ref_nro ?? 0),
                 (int) ($linea->subd_fecha ?? 0),
             );
-
-            if (isset($opsProcesadas[$claveOp])) {
-                continue;
-            }
 
             $lineasOp = $this->filtrarSubdiarioPorRef($subdiario, $linea);
             $nroAsiento = (int) ($linea->subd_nro_operacion ?? 0);
@@ -121,13 +164,35 @@ class MayorConceptoPeriodoProcesador
                     [],
                     $ctamovPorAsiento[$this->claveAsientoIndex($nroAsiento, $fechaAsiento)] ?? [],
                 );
+                $lineasOp = $this->filtrarLineasOpPorAsiento($lineasOp, $nroAsiento);
             }
 
+            $claveProcesamientoPago = $this->claveProcesamientoPagoOp($claveOp, $nroAsiento);
+            if (isset($opsProcesadas[$claveProcesamientoPago])) {
+                continue;
+            }
+
+            $auxpagOp = $this->auxpagOperacionConFallback(
+                $empresaId,
+                $refTipo,
+                (int) ($linea->subd_ref_nro ?? 0),
+                $fechaAsiento,
+                $auxpagPorOp,
+                $claveOp,
+                $lineasOp,
+            );
+
             if ($this->debeProcesarComoPagoProveedor($refTipo, $lineasOp, $auxpagPorOp, $claveOp)) {
-                $lineasReporte = array_merge(
-                    $lineasReporte,
-                    $this->procesarPago($empresaId, $lineasOp, $auxpagPorOp[$claveOp] ?? [], $monedaConverter, $monedaReporteId),
+                $claveRefOp = $this->claveOperacionPagoRef(
+                    $empresaId,
+                    $refTipo,
+                    (int) ($linea->subd_ref_nro ?? 0),
                 );
+                $opsEmisionProcesadaEnPeriodo[$claveRefOp] = true;
+
+                $opLineas = $this->procesarPago($empresaId, $lineasOp, $auxpagOp, $monedaConverter, $monedaReporteId);
+                $opLineas = $this->espejarAnulacionOp($anulacionesPorOp[$claveRefOp] ?? [], $opLineas);
+                $lineasReporte = array_merge($lineasReporte, $opLineas);
             } else {
                 $lineasReporte = array_merge(
                     $lineasReporte,
@@ -135,6 +200,7 @@ class MayorConceptoPeriodoProcesador
                 );
             }
 
+            $opsProcesadas[$claveProcesamientoPago] = true;
             $opsProcesadas[$claveOp] = true;
             if ($nroAsiento > 0) {
                 $opsProcesadas[$this->claveAsientoContable($nroAsiento, $fechaAsiento)] = true;
@@ -158,6 +224,22 @@ class MayorConceptoPeriodoProcesador
             );
         }
 
+        // AOP del período cuya emisión quedó en otro mes: axphist (sin fecha) +
+        // procesarPago + espejo solo en el asiento de anulación.
+        $lineasReporte = array_merge(
+            $lineasReporte,
+            $this->procesarAnulacionesOpDesdeAxphist(
+                $empresaId,
+                $subdiario,
+                $anulacionesPorOp,
+                $opsEmisionProcesadaEnPeriodo,
+                $ctamovPorAsiento,
+                $monedaConverter,
+                $monedaReporteId,
+                $opsProcesadas,
+            ),
+        );
+
         $mayorPlano = $this->construirMayorPlanoDisponibilidad(
             $subdiario,
             $ctamovLista,
@@ -167,6 +249,14 @@ class MayorConceptoPeriodoProcesador
         );
 
         $mayorPlanoAnalitico = $this->construirMayorPlanoAnalitico(
+            $subdiario,
+            $ctamovLista,
+            $monedaConverter,
+            $monedaReporteId,
+            $soloMonedaOrigen,
+        );
+
+        $analiticoPorAsiento = $this->construirAnaliticoPorAsientoControl(
             $subdiario,
             $ctamovLista,
             $monedaConverter,
@@ -213,6 +303,7 @@ class MayorConceptoPeriodoProcesador
             ], $statsPreload),
             'mayor_plano_disponibilidad' => $mayorPlano,
             'mayor_plano_analitico' => $mayorPlanoAnalitico,
+            'analitico_por_asiento' => $analiticoPorAsiento,
             'mayor_plano_contrapartidas_disponibilidad' => $this->finalizarPlanoContrapartidasDesdeDisp(),
         ];
     }
@@ -228,6 +319,115 @@ class MayorConceptoPeriodoProcesador
         $this->consultasBridgeIndividuales = 0;
         $this->conceptoPorOcCache = [];
         $this->cuentaPrepagaPorProveedor = [];
+        $this->auxpagHistoricoCache = [];
+        $this->comSubdiarioErpFallback = 0;
+    }
+
+    /**
+     * Aplicaciones de pago del OP: usa `auxpag` vigente y, si no hay ninguna
+     * (OP anulado), cae a `axphist`. Solo se aplica a tipos de pago a proveedor
+     * (OPP/OPA/OPV); el resultado se cachea por clave de operación.
+     *
+     * @param  array<string, list<object>>  $auxpagPorOp
+     * @return list<object>
+     */
+    private function auxpagOperacionConFallback(
+        int $empresaId,
+        string $refTipo,
+        int $refNro,
+        int $fecha,
+        array $auxpagPorOp,
+        string $claveOp,
+        array $lineasOp = [],
+    ): array {
+        $vigente = $auxpagPorOp[$claveOp] ?? [];
+        if ($vigente !== []) {
+            return $vigente;
+        }
+
+        if (! in_array($refTipo, ['OPP', 'OPA', 'OPV'], true) || $refNro <= 0) {
+            return [];
+        }
+
+        $contexto = $this->contextoOpDesdeLineas($lineasOp);
+        $cacheKey = $claveOp.'|'.$contexto['proveedor'].'|'.$contexto['sucursal'];
+
+        if (! array_key_exists($cacheKey, $this->auxpagHistoricoCache)) {
+            $this->consultasBridgeIndividuales++;
+            $this->auxpagHistoricoCache[$cacheKey] = $this->reader->cargarAuxpagHistorico(
+                $empresaId,
+                $refTipo,
+                $refNro,
+                $fecha,
+                $contexto['proveedor'],
+                $contexto['sucursal'],
+                $this->erroresBridge,
+            );
+        }
+
+        return $this->auxpagHistoricoCache[$cacheKey];
+    }
+
+    /**
+     * axphist del OP anulado sin acotar por fecha (emisión en otro mes/período).
+     *
+     * @param  list<object>  $lineasOp
+     * @return list<object>
+     */
+    private function auxpagHistoricoOperacion(
+        int $empresaId,
+        string $refTipo,
+        int $refNro,
+        array $lineasOp,
+    ): array {
+        if (! in_array($refTipo, ['OPP', 'OPA', 'OPV'], true) || $refNro <= 0) {
+            return [];
+        }
+
+        $contexto = $this->contextoOpDesdeLineas($lineasOp);
+        $cacheKey = 'HIST|'.$empresaId.'|'.$refTipo.'|'.$refNro
+            .'|'.$contexto['proveedor'].'|'.$contexto['sucursal'];
+
+        if (! array_key_exists($cacheKey, $this->auxpagHistoricoCache)) {
+            $this->consultasBridgeIndividuales++;
+            $this->auxpagHistoricoCache[$cacheKey] = $this->reader->cargarAuxpagHistorico(
+                $empresaId,
+                $refTipo,
+                $refNro,
+                0,
+                $contexto['proveedor'],
+                $contexto['sucursal'],
+                $this->erroresBridge,
+            );
+        }
+
+        return $this->auxpagHistoricoCache[$cacheKey];
+    }
+
+    /**
+     * Proveedor y sucursal del OP desde el subdiario del asiento (para acotar axphist).
+     *
+     * @param  list<object>  $lineasOp
+     * @return array{proveedor: string, sucursal: int}
+     */
+    private function contextoOpDesdeLineas(array $lineasOp): array
+    {
+        $proveedor = '';
+        $sucursal = 0;
+
+        foreach ($lineasOp as $linea) {
+            $prov = trim((string) ($linea->subd_emisor ?? ''));
+            if ($prov !== '') {
+                $proveedor = $prov;
+            }
+
+            $suc = (int) ($linea->subd_ref_sucursal ?? $linea->subd_sucursal ?? 0);
+            if ($suc > 0) {
+                $sucursal = $suc;
+            }
+        }
+
+        return ['proveedor' => $proveedor, 'sucursal' => $sucursal];
     }
 
     private int $consultasBridgeIndividuales = 0;
@@ -253,13 +453,14 @@ class MayorConceptoPeriodoProcesador
             $letraAp = trim((string) ($axp->axp_letra_comp ?? ' '));
             $sucAp = (int) ($axp->axp_sucursal ?? 0);
             $nroAp = (int) ($axp->axp_nro ?? 0);
+            $nroInterno = (int) ($axp->axp_nro_interno ?? 0);
 
-            if ($prov === '' || $tipoAp === '' || $nroAp <= 0) {
+            if ($prov === '' || $tipoAp === '' || ($nroAp <= 0 && $nroInterno <= 0)) {
                 continue;
             }
 
-            $clave = $prov.'|'.$tipoAp.'|'.$letraAp.'|'.$sucAp.'|'.$nroAp;
-            $seeds[$clave] = [$prov, $tipoAp, $letraAp, $sucAp, $nroAp];
+            $clave = $prov.'|'.$tipoAp.'|'.$letraAp.'|'.$sucAp.'|'.$nroAp.'|'.$nroInterno;
+            $seeds[$clave] = [$prov, $tipoAp, $letraAp, $sucAp, $nroAp, $nroInterno];
             $proveedores[$prov] = true;
         }
 
@@ -315,7 +516,7 @@ class MayorConceptoPeriodoProcesador
                 $refSuc = (int) ($apl->aplp_ref_sucursal ?? 0);
                 $claveRef = $prov.'|'.$refTipo.'|'.$refLetra.'|'.$refSuc.'|'.$refNro;
                 if (! isset($visitados[$claveRef])) {
-                    $pendientes[] = [$prov, $refTipo, $refLetra, $refSuc, $refNro];
+                    $pendientes[] = [$prov, $refTipo, $refLetra, $refSuc, $refNro, 0];
                 }
             }
         }
@@ -348,15 +549,65 @@ class MayorConceptoPeriodoProcesador
         ));
 
         if ($faltantes !== []) {
-            foreach ($this->reader->cargarComSubdiarioLote($faltantes, $this->erroresBridge) as $clave => $lineas) {
+            foreach ($this->reader->cargarComSubdiarioLote($this->empresaActiva, $faltantes, $this->erroresBridge) as $clave => $lineas) {
                 $this->comSubdiarioCache[$clave] = $lineas;
             }
+        }
+
+        $this->completarComSubdiarioDesdeRecepcionErp(array_values($clavesCom));
+
+        foreach ($auxpagLista as $axp) {
+            if (! $this->esFactura($axp)) {
+                continue;
+            }
+
+            $tipoAp = trim((string) ($axp->axp_tipo_ap ?? ''));
+            if (strtoupper($tipoAp) !== 'FIS') {
+                continue;
+            }
+
+            $prov = trim((string) ($axp->axp_pro ?? ''));
+            $letraAp = trim((string) ($axp->axp_letra_comp ?? ' '));
+            $sucAp = (int) ($axp->axp_sucursal ?? 0);
+            $nroAp = (int) ($axp->axp_nro ?? 0);
+            $nroInterno = (int) ($axp->axp_nro_interno ?? 0);
+
+            $claveFac = $this->claveDocumentoCompras($prov, $tipoAp, $letraAp, $sucAp, $nroAp);
+            $tieneCom = false;
+            foreach ($this->aplicpedCache[$claveFac] ?? [] as $apl) {
+                if (trim((string) ($apl->aplp_ref_tipo ?? '')) === 'COM') {
+                    $tieneCom = true;
+                    break;
+                }
+            }
+
+            if ($tieneCom) {
+                continue;
+            }
+
+            $cacheKey = $this->claveCacheSubdiarioFactura($tipoAp, $letraAp, $sucAp, $nroAp, $nroInterno);
+            if (isset($this->comSubdiarioCache[$cacheKey])) {
+                continue;
+            }
+
+            $this->consultasBridgeIndividuales++;
+            $this->comSubdiarioCache[$cacheKey] = $this->reader->cargarSubdiarioFacturaCompras(
+                $this->empresaActiva,
+                $tipoAp,
+                $letraAp,
+                $sucAp,
+                $nroAp,
+                $nroInterno,
+                $prov,
+                $this->erroresBridge,
+            );
         }
 
         return [
             'aplicped_precargadas' => array_sum(array_map('count', $this->aplicpedCache)),
             'promae_precargados' => count($this->promaeCache),
             'com_subdiario_precargados' => count($this->comSubdiarioCache),
+            'com_subdiario_erp_fallback' => $this->comSubdiarioErpFallback,
             'bridge_consultas_individuales' => $this->consultasBridgeIndividuales,
         ];
     }
@@ -398,7 +649,22 @@ class MayorConceptoPeriodoProcesador
         $totalCheques = array_sum(array_map(fn ($f) => (float) ($f->axp_monto_ap ?? 0), $cheques));
 
         if ($totalFacturas <= 0 && $totalCheques <= 0) {
-            return $this->procesarDirectoAsiento($empresaId, $lineasOp, $monedaConverter, $monedaReporteId, false);
+            $lineas = $this->procesarDirectoAsiento($empresaId, $lineasOp, $monedaConverter, $monedaReporteId, false);
+
+            if ($this->asientoTieneProveedor($lineasOp)) {
+                return array_merge(
+                    $lineas,
+                    $this->imputarTraspasosDisponibilidadOp(
+                        $empresaId,
+                        $lineasOp,
+                        $lineas,
+                        $monedaConverter,
+                        $monedaReporteId,
+                    ),
+                );
+            }
+
+            return $lineas;
         }
 
         $cuentaBanco = $this->resolverCuentaDisponibilidad($lineaBanco ?? $lineaRef);
@@ -431,6 +697,18 @@ class MayorConceptoPeriodoProcesador
             }
         } elseif ($facturas !== []) {
             $imputoGastoDesdeFacturas = true;
+            $totalBancoOp = $this->totalBancoEfectivoOp($auxpag, $lineasOp);
+            $indicePrimeraLineaFactura = count($lineas);
+
+            $pesosDocumentales = [];
+            $totalPesoDocumental = 0.0;
+            foreach ($facturas as $aplicacion) {
+                $prov = trim((string) ($aplicacion->axp_pro ?? ''));
+                $peso = $this->pesoDocumentalFactura($aplicacion, $this->proveedorInscripto($prov));
+                $clavePeso = $this->claveAplicacionPago($aplicacion);
+                $pesosDocumentales[$clavePeso] = $peso;
+                $totalPesoDocumental += $peso;
+            }
 
             foreach ($facturas as $aplicacion) {
                 $gastoAgrupadoFactura = [];
@@ -441,27 +719,70 @@ class MayorConceptoPeriodoProcesador
 
                 $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
                 $inscripto = $this->proveedorInscripto(trim((string) ($aplicacion->axp_pro ?? '')));
-                $montoBanco = $totalBancoHaber > 0
-                    ? $totalBancoHaber * ($montoFactura / max($totalFacturas, 1.0))
-                    : $montoFactura;
+                $pesoDoc = $pesosDocumentales[$this->claveAplicacionPago($aplicacion)] ?? 0.0;
+                $montoBanco = $totalBancoHaber > 0 && $totalPesoDocumental > 0
+                    ? $totalBancoHaber * ($pesoDoc / $totalPesoDocumental)
+                    : ($totalBancoHaber > 0 ? $totalBancoHaber / max(count($facturas), 1) : $montoFactura);
 
                 $lineasGasto = $this->cargarGastoDesdeAplicacion($aplicacion);
+                $tieneComGasto = $this->aplicacionTieneComGasto($aplicacion);
                 $anticipo114040 = $this->subTieneAnticipo114040($lineasGasto);
                 if ($anticipo114040) {
                     $lineasGasto = $this->filtrarLineasAnticipoProveedor($lineasGasto);
                 }
 
-                $totalNeto = array_sum(array_map(fn ($l) => (float) ($l->subd_importe ?? 0), $lineasGasto));
+                $totalNeto = $anticipo114040
+                    ? array_sum(array_map(
+                        fn ($l) => (float) ($l->subd_importe ?? 0),
+                        array_values(array_filter(
+                            $lineasGasto,
+                            fn ($l) => ($c = (int) ($l->subd_cuenta ?? 0)) >= 114040000 && $c < 114050000,
+                        )),
+                    ))
+                    : array_sum(array_map(fn ($l) => (float) ($l->subd_importe ?? 0), $lineasGasto));
                 if ($totalNeto <= 0) {
                     continue;
                 }
 
                 $nroOc = $this->ordenComDesdeAplicacion($aplicacion);
-                $fisAdelantado = $tipoAp === 'FIS' && ! $this->aplicacionTieneComGasto($aplicacion);
-                $gastoAdelantado = ! $this->aplicacionTieneComGasto($aplicacion);
+                $fisAdelantado = $tipoAp === 'FIS' && ! $tieneComGasto;
+                $gastoAdelantado = ! $tieneComGasto;
                 $fisServicios = $fisAdelantado && ! $anticipo114040;
-                $parteIva = max(0.0, $montoFactura - $totalNeto);
-                $percepcionesFactura = $this->percepcionesRetencionDesdeAplicacion($aplicacion, $montoBanco, $montoFactura);
+                $percepcionesRaw = $tieneComGasto
+                    ? $this->percepcionesRawDesdeLineasSubdiario($this->cargarComDesdeFactura($aplicacion))
+                    : $this->percepcionesRawDesdeAplicacion($aplicacion);
+                $totalPercepcionesRaw = array_sum($percepcionesRaw);
+                $ivaCreditoRaw = $inscripto
+                    ? ($tieneComGasto
+                        ? $this->ivaCreditoRawDesdeLineasSubdiario($this->cargarComDesdeFactura($aplicacion))
+                        : $this->ivaCreditoRawDesdeAplicacion($aplicacion))
+                    : [];
+                $totalIvaCreditoRaw = array_sum($ivaCreditoRaw);
+                // Base documental del comprobante (COM + percepciones + IVA): prorratea el
+                // pago efectivo (cheque/banco), no el importe aplicado en auxpag.
+                $baseComprobante = max($totalNeto + $totalPercepcionesRaw + $totalIvaCreditoRaw, 1.0);
+                $montoImputable = $montoBanco;
+                if ($pesoDoc > 0 && $totalBancoOp < $pesoDoc * 0.995) {
+                    $coeficientePago = $this->coeficientePagoSobreFactura(
+                        $aplicacion,
+                        $pesoDoc,
+                        $montoBanco,
+                        $totalBancoOp,
+                    );
+                    $montoImputable = min($montoBanco, round($pesoDoc * $coeficientePago, 2));
+                }
+                $percepcionesFactura = [];
+                if ($montoImputable > 0 && $baseComprobante > 0) {
+                    foreach ($percepcionesRaw as $cuentaPercepcion => $importeRawPercepcion) {
+                        if ($importeRawPercepcion <= 0) {
+                            continue;
+                        }
+                        $percepcionesFactura[] = [
+                            'cuenta' => (int) $cuentaPercepcion,
+                            'importe' => round($montoImputable * ($importeRawPercepcion / $baseComprobante), 2),
+                        ];
+                    }
+                }
                 $totalPercepciones = array_sum(array_map(fn ($p) => (float) ($p['importe'] ?? 0), $percepcionesFactura));
 
                 if ($this->comGastoEsSolo117010($lineasGasto)) {
@@ -470,7 +791,7 @@ class MayorConceptoPeriodoProcesador
                     $gastoAgrupadoFactura[$claveAgrup] = [
                         'cuenta' => $cuentaCheque,
                         'concepto' => $this->motor->conceptoDeCuenta($empresaId, $cuentaCheque),
-                        'importe' => round($montoBanco, 2),
+                        'importe' => round($montoImputable, 2),
                         'origen_log' => 'COM cheque 117010',
                         'aplicacion' => $aplicacion,
                         'linea_gasto' => null,
@@ -479,6 +800,11 @@ class MayorConceptoPeriodoProcesador
                     foreach ($lineasGasto as $lineaGasto) {
                         $netoLinea = (float) ($lineaGasto->subd_importe ?? 0);
                         if ($netoLinea <= 0) {
+                            continue;
+                        }
+
+                        $cuentaOrigenGasto = (int) ($lineaGasto->subd_cuenta ?? 0);
+                        if ($anticipo114040 && $cuentaOrigenGasto >= 114010000 && $cuentaOrigenGasto < 114020000) {
                             continue;
                         }
 
@@ -497,42 +823,44 @@ class MayorConceptoPeriodoProcesador
 
                         if ($anticipo114040) {
                             $netoImp = $totalNeto > 0
-                                ? round($montoBanco * ($netoLinea / $totalNeto), 2)
-                                : $montoBanco;
+                                ? round($montoImputable * ($netoLinea / $totalNeto), 2)
+                                : $montoImputable;
                             $ivaImp = 0.0;
                             if ($tipoAp === 'FNB' && $cuentaGasto >= 114040000 && $cuentaGasto < 114050000) {
-                                $netoImp = round(max(0.0, $montoBanco - $totalPercepciones), 2);
+                                $netoImp = round(max(0.0, $montoImputable - $totalPercepciones), 2);
                             }
                         } elseif ($tipoAp === 'FNB' && $cuentaGasto >= 114040000 && $cuentaGasto < 114050000) {
-                            $netoImp = $montoBanco;
+                            $netoImp = $montoImputable;
                             $ivaImp = 0.0;
                         } elseif ($fisServicios) {
-                            $netoImp = $netoLinea;
+                            $netoImp = $baseComprobante > 0
+                                ? round($montoImputable * ($netoLinea / $baseComprobante), 2)
+                                : $montoImputable;
                             $ivaImp = 0.0;
                         } elseif ($gastoAdelantado) {
-                            $netoImp = $totalNeto > 0
-                                ? round($montoBanco * ($netoLinea / $totalNeto), 2)
-                                : $montoBanco;
+                            $netoImp = $baseComprobante > 0
+                                ? round($montoImputable * ($netoLinea / $baseComprobante), 2)
+                                : $montoImputable;
                             $ivaImp = 0.0;
                         } elseif ($tipoAp === 'FIS') {
                             $netoImp = $fisAdelantado
-                                ? $netoLinea
+                                ? ($baseComprobante > 0
+                                    ? round($montoImputable * ($netoLinea / $baseComprobante), 2)
+                                    : $netoLinea)
                                 : ($totalNeto > 0
-                                    ? round($montoBanco * ($netoLinea / $totalNeto), 2)
-                                    : $montoBanco);
+                                    ? round($montoImputable * ($netoLinea / $totalNeto), 2)
+                                    : $montoImputable);
                             $ivaImp = 0.0;
                         } elseif ($tipoAp === 'FGA') {
-                            $netoImp = $totalNeto > 0
-                                ? round($montoBanco * ($netoLinea / $totalNeto), 2)
-                                : $montoBanco;
+                            $netoImp = $baseComprobante > 0
+                                ? round($montoImputable * ($netoLinea / $baseComprobante), 2)
+                                : $montoImputable;
                             $ivaImp = 0.0;
                         } else {
-                            $peso = $netoLinea / $totalNeto;
-                            $netoImp = $montoBanco * ($netoLinea / $montoFactura);
+                            $netoImp = $baseComprobante > 0
+                                ? round($montoImputable * ($netoLinea / $baseComprobante), 2)
+                                : $montoImputable;
                             $ivaImp = 0.0;
-                            if ($inscripto) {
-                                $ivaImp = $montoBanco * ($parteIva / $montoFactura) * $peso;
-                            }
                         }
 
                         $origenGasto = match (true) {
@@ -540,7 +868,8 @@ class MayorConceptoPeriodoProcesador
                             $tipoAp === 'FGA' => 'FGA COM neto',
                             $fisServicios => 'FIS gasto adelantado',
                             $gastoAdelantado => 'Factura adelantada',
-                            $tipoAp === 'FIS' => 'COM neto',
+                            $tipoAp === 'FIS' && $tieneComGasto => 'FIS COM neto',
+                            $tipoAp === 'FIS' => 'FIS directa',
                             $inscripto => 'COM+IVA',
                             default => 'COM neto',
                         };
@@ -595,6 +924,48 @@ class MayorConceptoPeriodoProcesador
 
                         $gastoAgrupadoFactura[$claveRet]['importe'] += $importeRet;
                     }
+
+                    // Anticipo 114040: el desglose mayor concepto imputa solo neto anticipo al banco
+                    // (l-mayorconc); el IVA ya está en la base documental del coeficiente pero no
+                    // genera líneas separadas en 114040.
+                    if ($inscripto && ! $anticipo114040) {
+                        foreach ($ivaCreditoRaw as $cuentaIva => $importeIvaRaw) {
+                            if ($importeIvaRaw <= 0) {
+                                continue;
+                            }
+                            $cuentaIvaVisible = $this->cuentaVisibleDesdeDocumentoGasto(
+                                (object) ['subd_cuenta' => $cuentaIva],
+                                $tipoAp,
+                                $anticipo114040,
+                            );
+                            if ($cuentaIvaVisible <= 0) {
+                                continue;
+                            }
+                            $importeIva = round($montoImputable * ($importeIvaRaw / $baseComprobante), 2);
+                            if ($importeIva <= 0) {
+                                continue;
+                            }
+                            $conceptoIva = $this->conceptoImputacionGasto(
+                                $empresaId,
+                                $cuentaIvaVisible,
+                                $tipoAp,
+                                $nroOc,
+                                trim((string) ($aplicacion->axp_pro ?? '')),
+                            );
+                            $claveIva = $cuentaIvaVisible.'|'.$conceptoIva.'|iva';
+                            if (! isset($gastoAgrupadoFactura[$claveIva])) {
+                                $gastoAgrupadoFactura[$claveIva] = [
+                                    'cuenta' => $cuentaIvaVisible,
+                                    'concepto' => $conceptoIva,
+                                    'importe' => 0.0,
+                                    'origen_log' => 'IVA crédito fiscal',
+                                    'aplicacion' => $aplicacion,
+                                    'linea_gasto' => null,
+                                ];
+                            }
+                            $gastoAgrupadoFactura[$claveIva]['importe'] += $importeIva;
+                        }
+                    }
                 }
 
                 foreach ($gastoAgrupadoFactura as $gasto) {
@@ -627,8 +998,14 @@ class MayorConceptoPeriodoProcesador
                     );
                 }
             }
+
+            $lineas = $this->ajustarPercepcionesFacturaOp($lineas, $indicePrimeraLineaFactura, $totalBancoHaber);
         }
 
+        // Retenciones (RTP/RGP/…) no se suman al desglose del cheque: el mayor por
+        // concepto reparte solo el pago de banco (TMB/CHP) contra COM/gasto. Las
+        // retenciones van al Haber del subdiario pero no imputan en este reporte
+        // cuando el OP ya se prorrateó por facturas.
         if (! $imputoGastoDesdeFacturas) {
             foreach ($retenciones as $retencion) {
                 $monto = (float) ($retencion->axp_monto_ap ?? 0);
@@ -670,7 +1047,284 @@ class MayorConceptoPeriodoProcesador
             );
         }
 
+        return array_merge(
+            $lineas,
+            $this->imputarTraspasosDisponibilidadOp(
+                $empresaId,
+                $lineasOp,
+                $lineas,
+                $monedaConverter,
+                $monedaReporteId,
+            ),
+        );
+    }
+
+    /**
+     * OPP/OPA/OPV con varias piernas de banco: traspaso disp↔disp (ej. 111050→112040 FCI).
+     *
+     * @param  list<object>  $lineasOp
+     * @param  list<array<string, mixed>>  $lineasExistentes
+     * @return list<array<string, mixed>>
+     */
+    private function imputarTraspasosDisponibilidadOp(
+        int $empresaId,
+        array $lineasOp,
+        array $lineasExistentes,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+    ): array {
+        $refTipo = trim((string) ($lineasOp[0]->subd_ref_tipo ?? $lineasOp[0]->subd_tipo ?? ''));
+        if (! in_array($refTipo, ['OPP', 'OPA', 'OPV'], true)) {
+            return [];
+        }
+
+        $yaImputado = [];
+        foreach ($lineasExistentes as $lineaReporte) {
+            $clave = (int) ($lineaReporte['cuenta_disponibilidad'] ?? 0).'|'
+                .($lineaReporte['origen'] ?? '').'|'
+                .number_format((float) ($lineaReporte['disp_debe'] ?? 0) + (float) ($lineaReporte['disp_haber'] ?? 0), 2, '.', '');
+            $yaImputado[$clave] = true;
+        }
+
+        $extra = [];
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
+            if (! $this->debeTraspasoDoblePierna($cuenta, $contrapartida, $refTipo)) {
+                continue;
+            }
+
+            foreach ($this->itemsTraspasoDoblePierna($linea, $refTipo) as $item) {
+                $cuentaDisp = (int) ($item['cuenta_disponibilidad'] ?? 0);
+                $importe = (float) ($item['importe'] ?? 0);
+                if ($cuentaDisp <= 0 || $importe <= 0) {
+                    continue;
+                }
+
+                $dhDisp = (string) ($item['dh_imputacion'] ?? 'D');
+                $clave = $cuentaDisp.'|'.($item['origen'] ?? '').'|'.number_format($importe, 2, '.', '');
+                if (isset($yaImputado[$clave])) {
+                    continue;
+                }
+
+                $extra[] = $this->lineaReporte(
+                    $item['linea'],
+                    (int) ($item['cuenta_contra'] ?? 0),
+                    0,
+                    $importe,
+                    $dhDisp,
+                    $monedaConverter,
+                    $monedaReporteId,
+                    (string) ($item['origen'] ?? $refTipo.' traspaso'),
+                    ['cuenta_disponibilidad' => $cuentaDisp],
+                );
+                $yaImputado[$clave] = true;
+            }
+        }
+
+        return $extra;
+    }
+
+    /**
+     * Un OP anulado aparece en el subdiario como dos asientos con la misma
+     * referencia OPP pero letra distinta: la emisión (banco al Haber, tipo OPP,
+     * letra del OP) y la anulación (banco al Debe, tipo AOP, letra en blanco).
+     * `filtrarSubdiarioPorRef` los separa (distinta letra) y `claveOperacionPago`
+     * los colisiona (ignora la letra), por lo que solo se procesa la emisión.
+     *
+     * Esta rutina genera la imputación inversa (Debe↔Haber) de la emisión,
+     * tagueada en el asiento de la anulación, de modo que:
+     *  - cada asiento (emisión y anulación) concilie contra el mayor analítico, y
+     *  - el neto del OP anulado por concepto sea cero (no infla el gasto).
+     *
+     * @param  list<object>  $lineasAnulacion  piernas de banco AOP (mov D) del OP
+     * @param  list<array<string, mixed>>  $lineas  imputaciones de la emisión
+     * @return list<array<string, mixed>>
+     */
+    private function espejarAnulacionOp(array $lineasAnulacion, array $lineas): array
+    {
+        $espejo = $this->construirEspejoAnulacionOp($lineasAnulacion, $lineas);
+        if ($espejo === []) {
+            return $lineas;
+        }
+
+        return array_merge($lineas, $espejo);
+    }
+
+    /**
+     * Imputación inversa (solo piernas espejo) para el asiento AOP.
+     *
+     * @param  list<object>  $lineasAnulacion
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function construirEspejoAnulacionOp(array $lineasAnulacion, array $lineas): array
+    {
+        if ($lineas === [] || $lineasAnulacion === []) {
+            return [];
+        }
+
+        $lineaAnulacion = $lineasAnulacion[0];
+        $totalAnulacionDebe = array_sum(array_map(
+            fn ($l) => (float) ($l->subd_importe ?? 0),
+            $lineasAnulacion,
+        ));
+
+        $totalEmisionNeto = 0.0;
+        foreach ($lineas as $ln) {
+            $totalEmisionNeto += (float) ($ln['debe'] ?? 0) - (float) ($ln['haber'] ?? 0);
+        }
+
+        if ($totalAnulacionDebe <= 0 || abs($totalEmisionNeto) <= 0.005) {
+            return [];
+        }
+
+        $factor = $totalAnulacionDebe / $totalEmisionNeto;
+        $nroAnulacion = (int) ($lineaAnulacion->subd_nro_operacion ?? 0);
+        $fechaAnulacion = (int) ($lineaAnulacion->subd_fecha ?? 0);
+        $descAnulacion = trim((string) ($lineaAnulacion->subd_desc_mov ?? ''));
+
+        $espejo = [];
+        foreach ($lineas as $linea) {
+            $debe = (float) ($linea['debe'] ?? 0);
+            $haber = (float) ($linea['haber'] ?? 0);
+            if ($debe <= 0 && $haber <= 0) {
+                continue;
+            }
+
+            $clon = $linea;
+            $clon['nro_asiento'] = $nroAnulacion;
+            $clon['fecha'] = $fechaAnulacion;
+            $clon['fecha_fmt'] = $this->fmtFecha($fechaAnulacion);
+            $clon['descripcion'] = $descAnulacion;
+            $nuevoDebe = round($haber * $factor, 2);
+            $nuevoHaber = round($debe * $factor, 2);
+            $clon['debe'] = $nuevoDebe;
+            $clon['haber'] = $nuevoHaber;
+            $clon['disp_debe'] = round(((float) ($linea['disp_haber'] ?? 0)) * $factor, 2);
+            $clon['disp_haber'] = round(((float) ($linea['disp_debe'] ?? 0)) * $factor, 2);
+            $clon['origen'] = trim((string) ($linea['origen'] ?? '')).' (anulación)';
+
+            if (($clon['desde_operacion_disponibilidad'] ?? false) === true) {
+                $this->acumularPlanoContrapartidaDesdeDisp((int) ($clon['cuenta'] ?? 0), $nuevoDebe, $nuevoHaber);
+            }
+
+            $espejo[] = $clon;
+        }
+
+        return $espejo;
+    }
+
+    /**
+     * AOP en el período sin emisión en el mismo rango: axphist + pago + espejo en AOP.
+     *
+     * @param  array<string, list<object>>  $anulacionesPorOp
+     * @param  array<string, true>  $opsEmisionProcesadaEnPeriodo
+     * @param  array<string, list<object>>  $ctamovPorAsiento
+     * @param  array<string, true>  $opsProcesadas
+     * @return list<array<string, mixed>>
+     */
+    private function procesarAnulacionesOpDesdeAxphist(
+        int $empresaId,
+        array $subdiario,
+        array $anulacionesPorOp,
+        array $opsEmisionProcesadaEnPeriodo,
+        array $ctamovPorAsiento,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+        array &$opsProcesadas,
+    ): array {
+        $lineas = [];
+
+        foreach ($anulacionesPorOp as $claveRef => $piernasAnulBanco) {
+            if (($opsEmisionProcesadaEnPeriodo[$claveRef] ?? false) === true) {
+                continue;
+            }
+
+            $porAsiento = [];
+            foreach ($piernasAnulBanco as $pierna) {
+                $nroAsiento = (int) ($pierna->subd_nro_operacion ?? 0);
+                if ($nroAsiento <= 0) {
+                    continue;
+                }
+                $porAsiento[$nroAsiento][] = $pierna;
+            }
+
+            foreach ($porAsiento as $nroAsiento => $piernasBanco) {
+                $fechaAsiento = (int) ($piernasBanco[0]->subd_fecha ?? 0);
+                $claveAsi = $this->claveAsientoContable($nroAsiento, $fechaAsiento);
+                if (isset($opsProcesadas[$claveAsi])) {
+                    continue;
+                }
+
+                $lineasOp = array_values(array_filter(
+                    $subdiario,
+                    fn ($l) => (int) ($l->subd_nro_operacion ?? 0) === $nroAsiento,
+                ));
+                if ($lineasOp === []) {
+                    continue;
+                }
+
+                $refTipo = trim((string) ($lineasOp[0]->subd_ref_tipo ?? ''));
+                $refNro = (int) ($lineasOp[0]->subd_ref_nro ?? 0);
+                if ($refTipo === '' || $refNro <= 0 || ! in_array($refTipo, ['OPP', 'OPA', 'OPV'], true)) {
+                    continue;
+                }
+
+                $lineasOp = $this->mergeLineasOpSubdiarioCtamov(
+                    $lineasOp,
+                    [],
+                    $ctamovPorAsiento[$this->claveAsientoIndex($nroAsiento, $fechaAsiento)] ?? [],
+                );
+
+                $auxpag = $this->auxpagHistoricoOperacion($empresaId, $refTipo, $refNro, $lineasOp);
+                if ($auxpag === []) {
+                    continue;
+                }
+
+                $plantilla = $this->procesarPago(
+                    $empresaId,
+                    $this->lineasOpConBancoComoHaber($lineasOp),
+                    $auxpag,
+                    $monedaConverter,
+                    $monedaReporteId,
+                );
+
+                $espejo = $this->construirEspejoAnulacionOp($piernasBanco, $plantilla);
+                if ($espejo === []) {
+                    continue;
+                }
+
+                $lineas = array_merge($lineas, $espejo);
+                $opsProcesadas[$claveAsi] = true;
+            }
+        }
+
         return $lineas;
+    }
+
+    /**
+     * Para procesar un AOP como emisión: el banco al Debe se trata como Haber.
+     *
+     * @param  list<object>  $lineasOp
+     * @return list<object>
+     */
+    private function lineasOpConBancoComoHaber(array $lineasOp): array
+    {
+        $adaptadas = [];
+
+        foreach ($lineasOp as $linea) {
+            $clone = clone $linea;
+            $cuenta = (int) ($clone->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($clone->subd_tipo_mov ?? '')));
+            if ($this->motor->esDisponibilidad($cuenta) && $mov === 'D') {
+                $clone->subd_tipo_mov = 'H';
+            }
+            $adaptadas[] = $clone;
+        }
+
+        return $adaptadas;
     }
 
     /**
@@ -691,16 +1345,27 @@ class MayorConceptoPeriodoProcesador
         $refTipo = $refTipoForzado ?? trim((string) ($lineasOp[0]->subd_ref_tipo ?? $lineasOp[0]->subd_tipo ?? ''));
         $bancoReferenciaAsiento = $this->resolverBancoReferenciaAsiento($lineasOp);
 
-        foreach ($this->contrapartidasImputablesAsiento($lineasOp, $refTipo) as $item) {
+        if ($this->esAsientoTraspasoInternoDisponibilidad($lineasOp)) {
+            $lineaReferencia = $this->lineaReferenciaTraspasoInterno($lineasOp);
+            $itemsTraspaso = $this->itemsTraspasoDoblePierna($lineaReferencia, $refTipo);
+        } else {
+            $itemsTraspaso = null;
+        }
+
+        foreach ($itemsTraspaso ?? $this->contrapartidasImputablesAsiento($lineasOp, $refTipo) as $item) {
             if (! $this->lineaVisible($item['linea'], $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
                 continue;
             }
 
-            $cuentaBanco = (int) ($item['cuenta_disponibilidad'] ?? 0);
+            $cuentaDispItem = (int) ($item['cuenta_disponibilidad'] ?? 0);
+            $cuentaBanco = $cuentaDispItem;
             if ($cuentaBanco <= 0) {
                 $cuentaBanco = $this->resolverCuentaDisponibilidad($item['linea']);
             }
-            if ($cuentaBanco <= 0 || $this->motor->esCuentaCreditoComercialDisp($cuentaBanco)) {
+            if ($cuentaBanco <= 0) {
+                continue;
+            }
+            if ($this->motor->esCuentaCreditoComercialDisp($cuentaBanco) && $cuentaDispItem <= 0) {
                 $cuentaBanco = $bancoReferenciaAsiento > 0 ? $bancoReferenciaAsiento : $cuentaBanco;
             }
             if ($cuentaBanco <= 0) {
@@ -754,6 +1419,7 @@ class MayorConceptoPeriodoProcesador
                 $lineasOp,
                 $subdiarioPorAsiento[$this->claveAsientoIndex($nroAsiento, $fecha)] ?? [],
             );
+            $lineasOp = $this->filtrarLineasOpPorAsiento($lineasOp, $nroAsiento);
         }
 
         $lineasOp = array_values(array_filter(
@@ -765,6 +1431,10 @@ class MayorConceptoPeriodoProcesador
             return [];
         }
 
+        if (! $this->asientoOpTieneCuentaDentroLimiteMayorConcepto($lineasOp)) {
+            return [];
+        }
+
         if ($this->debeProcesarAsientoComRecepcionCtamov($lineasAsiento)) {
             $lineas = $this->procesarAsientoComRecepcionCtamov(
                 $empresaId,
@@ -772,6 +1442,61 @@ class MayorConceptoPeriodoProcesador
                 $lineasOp,
                 $monedaConverter,
                 $monedaReporteId,
+            );
+            if ($lineas !== []) {
+                $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
+                $opsProcesadas[$this->claveAsientoContable($nroAsiento, $fecha)] = true;
+            }
+
+            return $lineas;
+        }
+
+        if ($this->debeProcesarAsientoCtamovVentaMaquinas($lineasAsiento, $lineasOp)) {
+            $lineas = $this->procesarAsientoMultilinea(
+                $empresaId,
+                $lineasOp,
+                $monedaConverter,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+                'Ctamov venta maquinas',
+            );
+            if ($lineas !== []) {
+                $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
+                $opsProcesadas[$this->claveAsientoContable($nroAsiento, $fecha)] = true;
+            }
+
+            return $lineas;
+        }
+
+        if ($this->debeProcesarAsientoCtamovSistemaB($lineasAsiento, $lineasOp)) {
+            $lineas = $this->procesarAsientoCtamovSistemaB(
+                $empresaId,
+                $lineasOp,
+                $monedaConverter,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+            );
+            if ($lineas !== []) {
+                $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
+                $opsProcesadas[$this->claveAsientoContable($nroAsiento, $fecha)] = true;
+            }
+
+            return $lineas;
+        }
+
+        if ($this->esAsientoCtamovDirectoCobranzaCreditoComercial($lineasOp)) {
+            $refTipoDirecto = trim((string) ($lineasOp[0]->subd_ref_tipo ?? $lineasOp[0]->subd_tipo ?? ''));
+            if ($refTipoDirecto === '') {
+                $refTipoDirecto = 'VTA';
+            }
+
+            $lineas = $this->procesarDirectoAsiento(
+                $empresaId,
+                $lineasOp,
+                $monedaConverter,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+                $refTipoDirecto,
             );
             if ($lineas !== []) {
                 $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
@@ -813,17 +1538,28 @@ class MayorConceptoPeriodoProcesador
         }
 
         $claveOp = $this->claveOperacionPago(
+            $empresaId,
             $refTipo,
             (int) ($ref->subd_ref_nro ?? 0),
             $fecha,
         );
 
-        if (isset($opsProcesadas[$claveOp])) {
+        $claveProcesamientoPago = $this->claveProcesamientoPagoOp($claveOp, $nroAsiento);
+        if (isset($opsProcesadas[$claveProcesamientoPago])) {
             return [];
         }
 
         if ($this->debeProcesarComoPagoProveedor($refTipo, $lineasOp, $auxpagPorOp, $claveOp)) {
-            $lineas = $this->procesarPago($empresaId, $lineasOp, $auxpagPorOp[$claveOp] ?? [], $monedaConverter, $monedaReporteId);
+            $auxpagOp = $this->auxpagOperacionConFallback(
+                $empresaId,
+                $refTipo,
+                (int) ($ref->subd_ref_nro ?? 0),
+                $fecha,
+                $auxpagPorOp,
+                $claveOp,
+                $lineasOp,
+            );
+            $lineas = $this->procesarPago($empresaId, $lineasOp, $auxpagOp, $monedaConverter, $monedaReporteId);
         } elseif ($this->debeProcesarAsientoMultilinea($lineasOp, $refTipo)) {
             $lineas = $this->procesarAsientoMultilinea($empresaId, $lineasOp, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $refTipo);
         } else {
@@ -832,10 +1568,1380 @@ class MayorConceptoPeriodoProcesador
 
         if ($lineas !== []) {
             $opsProcesadas[$claveCtamov] = true;
+            $opsProcesadas[$claveProcesamientoPago] = true;
+            $opsProcesadas[$claveOp] = true;
             $opsProcesadas[$this->claveAsientoContable($nroAsiento, $fecha)] = true;
         }
 
         return $lineas;
+    }
+
+    /**
+     * Asientos ctamov con ctav_sistema=B (reclasificaciones, cheques vencidos, etc.):
+     * sin OP de proveedor; imputa cada contrapartida del asiento contra la disponibilidad.
+     *
+     * @param  list<object>  $lineasAsiento
+     * @param  list<object>  $lineasOp
+     */
+    private function debeProcesarAsientoCtamovSistemaB(array $lineasAsiento, array $lineasOp): bool
+    {
+        if ($lineasAsiento === [] || $lineasOp === []) {
+            return false;
+        }
+
+        foreach ($lineasAsiento as $linea) {
+            if (! in_array(strtoupper(trim((string) ($linea->ctav_sistema ?? ''))), ['B', 'V'], true)) {
+                return false;
+            }
+        }
+
+        if ($this->debeProcesarAsientoComRecepcionCtamov($lineasAsiento)) {
+            return false;
+        }
+
+        if ($this->esAsientoCtamovVentaMaquinas($lineasOp)) {
+            return false;
+        }
+
+        if ($this->esAsientoCtamovDirectoCobranzaCreditoComercial($lineasOp)) {
+            return false;
+        }
+
+        $tieneDisponibilidad = false;
+        $soloDisponibilidad = true;
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if ($this->motor->esDisponibilidad($cuenta)) {
+                $tieneDisponibilidad = true;
+            } else {
+                $soloDisponibilidad = false;
+            }
+        }
+
+        if (! $tieneDisponibilidad || $soloDisponibilidad) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Cobranza QR / gastro: un solo movimiento contable (banco Debe + crédito comercial 113 Haber).
+     * Va por procesarDirectoAsiento (legacy "Movimiento directo"), no por anclas/residual sistema B.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function esAsientoCtamovDirectoCobranzaCreditoComercial(array $lineasOp): bool
+    {
+        if (count($lineasOp) !== 2) {
+            return false;
+        }
+
+        $anclas = $this->anclasDisponibilidadMayorAnaliticoCtamovSistemaB($lineasOp);
+        $totalAnclaDebe = 0.0;
+        foreach ($anclas as $movimientos) {
+            $totalAnclaDebe += (float) ($movimientos['D'] ?? 0.0);
+        }
+
+        $importeCreditoHaber = null;
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($importe <= 0 || ! in_array($mov, ['D', 'H'], true)) {
+                return false;
+            }
+
+            if ($this->esPiernaDirectaCreditoComercialCtamovSistemaB($cuenta, $mov) && $mov === 'H') {
+                if ($importeCreditoHaber !== null) {
+                    return false;
+                }
+                $importeCreditoHaber = $importe;
+            }
+        }
+
+        if ($importeCreditoHaber === null || $totalAnclaDebe <= 0) {
+            return false;
+        }
+
+        return abs($importeCreditoHaber - $totalAnclaDebe) < 0.01;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     * @return list<array<string, mixed>>
+     */
+    private function procesarAsientoCtamovSistemaB(
+        int $empresaId,
+        array $lineasOp,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+        bool $soloMonedaOrigen,
+    ): array {
+        $anclas = $this->anclasDisponibilidadMayorAnaliticoCtamovSistemaB($lineasOp);
+        if ($anclas === []) {
+            return [];
+        }
+
+        $lineas = [];
+        $consumo = [];
+        foreach ($anclas as $cuenta => $movimientos) {
+            foreach ($movimientos as $mov => $importe) {
+                if ($importe > 0) {
+                    $consumo[$cuenta][$mov] = 0.0;
+                }
+            }
+        }
+
+        $asientoMultimedio = count($this->mediosCobranzaDebeAsiento($lineasOp)) >= 2;
+        $factorProrrateo = $this->factorProrrateoAnaliticoControlContrapartidas($lineasOp, false);
+        $aplicaProrrateoParcial = $factorProrrateo < 1.0 - 1e-9;
+        $bancoReferencia = $this->resolverBancoReferenciaAsiento($lineasOp);
+        if ($bancoReferencia <= 0) {
+            $bancoReferencia = $this->resolverCuentaDisponibilidadBancoAsiento($lineasOp);
+        }
+        $anclaPrincipal = $bancoReferencia > 0 ? $bancoReferencia : (int) array_key_first($anclas);
+
+        foreach ($lineasOp as $linea) {
+            if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
+                continue;
+            }
+
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($cuenta <= 0 || $importe <= 0) {
+                continue;
+            }
+
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if (! $this->esPiernaDirectaCreditoComercialCtamovSistemaB($cuenta, $mov)) {
+                continue;
+            }
+
+            $cuentaDispCredito = $anclaPrincipal > 0 ? $anclaPrincipal : $cuenta;
+
+            $lineas[] = $this->lineaReporte(
+                $linea,
+                $cuenta,
+                $this->motor->conceptoImputacionCuenta($empresaId, $cuenta),
+                $importe,
+                $mov,
+                $monedaConverter,
+                $monedaReporteId,
+                'Ctamov sistema B medio',
+                [
+                    'cuenta_disponibilidad' => $cuentaDispCredito,
+                    'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                ],
+            );
+        }
+
+        $contrapartidas = [];
+        foreach ($lineasOp as $linea) {
+            if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
+                continue;
+            }
+
+            if (! $this->esContrapartidaImputableCtamovSistemaB($linea, $asientoMultimedio, $aplicaProrrateoParcial)) {
+                continue;
+            }
+
+            if ($this->esPiernaInternaCompensadaCtamovSistemaB($linea, $lineasOp)) {
+                continue;
+            }
+
+            $contrapartidas[] = $linea;
+        }
+
+        usort(
+            $contrapartidas,
+            fn (object $a, object $b): int => ((float) ($b->subd_importe ?? 0)) <=> ((float) ($a->subd_importe ?? 0)),
+        );
+
+        foreach ($contrapartidas as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            $importeImputable = $this->aplicarFactorProrrateoAnaliticoControl($importe, $factorProrrateo);
+            if ($importeImputable <= 0) {
+                continue;
+            }
+
+            foreach ($this->resolverImputacionesContrapartidaAnclasMayorAnalitico(
+                $linea,
+                $lineasOp,
+                $anclas,
+                $consumo,
+                $importeImputable,
+                $bancoReferencia,
+            ) as $imputacion) {
+                if ($imputacion['importe'] <= 0 || $imputacion['cuenta_disponibilidad'] <= 0) {
+                    continue;
+                }
+
+                $lineas[] = $this->lineaReporte(
+                    $linea,
+                    $cuenta,
+                    $this->motor->conceptoImputacionCuenta($empresaId, $cuenta),
+                    $imputacion['importe'],
+                    $mov,
+                    $monedaConverter,
+                    $monedaReporteId,
+                    'Ctamov sistema B',
+                    [
+                        'cuenta_disponibilidad' => $imputacion['cuenta_disponibilidad'],
+                        'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                    ],
+                );
+            }
+        }
+
+        foreach ($anclas as $cuenta => $movimientos) {
+            foreach ($movimientos as $mov => $total) {
+                $residual = round($total - ($consumo[$cuenta][$mov] ?? 0.0), 2);
+                if ($residual <= 0) {
+                    continue;
+                }
+
+                $lineaRef = $this->buscarLineaOpCuentaMov($lineasOp, $cuenta, $mov);
+                if ($lineaRef === null) {
+                    continue;
+                }
+
+                if ($this->esPiernaInternaCompensadaCtamovSistemaB($lineaRef, $lineasOp)) {
+                    continue;
+                }
+
+                $lineas[] = $this->lineaReporte(
+                    $lineaRef,
+                    $cuenta,
+                    $this->motor->conceptoImputacionCuenta($empresaId, $cuenta),
+                    $residual,
+                    $mov,
+                    $monedaConverter,
+                    $monedaReporteId,
+                    'Ctamov sistema B medio',
+                    [
+                        'cuenta_disponibilidad' => $cuenta,
+                        'emisor' => trim((string) ($lineaRef->subd_emisor ?? '')),
+                    ],
+                );
+            }
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * Totales D/H por cuenta de disponibilidad dentro del mayor analítico (≤ límite control).
+     *
+     * @param  list<object>  $lineasOp
+     * @return array<int, array{D: float, H: float}>
+     */
+    private function anclasDisponibilidadMayorAnaliticoCtamovSistemaB(array $lineasOp): array
+    {
+        $anclas = [];
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($cuenta <= 0 || $importe <= 0 || ! in_array($mov, ['D', 'H'], true)) {
+                continue;
+            }
+
+            if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                continue;
+            }
+
+            $anclas[$cuenta][$mov] = round(($anclas[$cuenta][$mov] ?? 0.0) + $importe, 2);
+        }
+
+        return $anclas;
+    }
+
+    /**
+     * Cuentas del asiento que no son ancla del mayor analítico y deben imputarse contra ellas.
+     */
+    private function esContrapartidaImputableCtamovSistemaB(
+        object $linea,
+        bool $asientoMultimedio,
+        bool $aplicaProrrateoParcial,
+    ): bool {
+        $cuenta = (int) ($linea->subd_cuenta ?? 0);
+        $importe = (float) ($linea->subd_importe ?? 0);
+        if ($cuenta <= 0 || $importe <= 0) {
+            return false;
+        }
+
+        $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+        if (! in_array($mov, ['D', 'H'], true)) {
+            return false;
+        }
+
+        if ($this->motor->esDisponibilidad($cuenta) && $this->motor->esCuentaAnaliticoControl($cuenta)) {
+            return false;
+        }
+
+        if ($this->motor->esCuentaCreditoComercialDisp($cuenta)) {
+            return false;
+        }
+
+        if ($this->esMedioCobranzaCtamovVenta($cuenta, $mov)
+            && ! $this->esCuentaPasivaPublicoCtamovSistemaB($cuenta)) {
+            return false;
+        }
+
+        if ($this->esPiernaDirectaNativaCtamovSistemaB($cuenta, $mov, $asientoMultimedio)) {
+            return false;
+        }
+
+        if ($aplicaProrrateoParcial && $this->motor->esCuentaCreditoComercialDisp($cuenta)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Pareo por importe contra ancla opuesta; si no alcanza, prorrateo por capacidad residual de cada ancla.
+     *
+     * @param  array<int, array{D: float, H: float}>  $anclas
+     * @param  array<int, array<string, float>>  $consumo
+     * @return list<array{cuenta_disponibilidad: int, importe: float}>
+     */
+    private function resolverImputacionesContrapartidaAnclasMayorAnalitico(
+        object $linea,
+        array $lineasOp,
+        array $anclas,
+        array &$consumo,
+        float $importeImputable,
+        int $bancoReferencia,
+    ): array {
+        if ($importeImputable <= 0) {
+            return [];
+        }
+
+        $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+        if (! in_array($mov, ['D', 'H'], true)) {
+            return [];
+        }
+
+        $movAncla = $mov === 'D' ? 'H' : 'D';
+
+        $cuentaPareo = $this->resolverBancoParaLineaAsiento($linea, $lineasOp);
+        if ($cuentaPareo > 0 && isset($anclas[$cuentaPareo])) {
+            $disponible = round(($anclas[$cuentaPareo][$movAncla] ?? 0.0) - ($consumo[$cuentaPareo][$movAncla] ?? 0.0), 2);
+            if ($disponible + 0.01 >= $importeImputable) {
+                $consumo[$cuentaPareo][$movAncla] = round(($consumo[$cuentaPareo][$movAncla] ?? 0.0) + $importeImputable, 2);
+
+                return [[
+                    'cuenta_disponibilidad' => $cuentaPareo,
+                    'importe' => $importeImputable,
+                ]];
+            }
+        }
+
+        foreach ($anclas as $cuenta => $movimientos) {
+            $disponible = round(($movimientos[$movAncla] ?? 0.0) - ($consumo[$cuenta][$movAncla] ?? 0.0), 2);
+            if ($disponible + 0.01 >= $importeImputable && abs($disponible - $importeImputable) < 0.01) {
+                $consumo[$cuenta][$movAncla] = round(($consumo[$cuenta][$movAncla] ?? 0.0) + $importeImputable, 2);
+
+                return [[
+                    'cuenta_disponibilidad' => (int) $cuenta,
+                    'importe' => $importeImputable,
+                ]];
+            }
+        }
+
+        $pesos = [];
+        foreach ($anclas as $cuenta => $movimientos) {
+            $disponible = round(($movimientos[$movAncla] ?? 0.0) - ($consumo[$cuenta][$movAncla] ?? 0.0), 2);
+            if ($disponible > 0.01) {
+                $pesos[(int) $cuenta] = $disponible;
+            }
+        }
+
+        if ($pesos === []) {
+            $pesos = $this->pesosAnclasProrrateoResidualCtamovSistemaB($anclas, $consumo, $mov);
+        }
+
+        if ($pesos === [] && $bancoReferencia > 0 && isset($anclas[$bancoReferencia])) {
+            $this->consumirCapacidadAnclaCtamovSistemaB($consumo, $bancoReferencia, $anclas, $mov, $importeImputable);
+
+            return [[
+                'cuenta_disponibilidad' => $bancoReferencia,
+                'importe' => $importeImputable,
+            ]];
+        }
+
+        if ($pesos === []) {
+            return [];
+        }
+
+        $imputaciones = [];
+        foreach ($this->prorratearImportePorMediosCobranzaDestinoConBaseTotal(
+            $importeImputable,
+            $pesos,
+            $pesos,
+        ) as $porcion) {
+            if ($porcion['importe'] <= 0) {
+                continue;
+            }
+
+            $cuenta = (int) $porcion['cuenta'];
+            $this->consumirCapacidadAnclaCtamovSistemaB($consumo, $cuenta, $anclas, $mov, $porcion['importe']);
+            $imputaciones[] = [
+                'cuenta_disponibilidad' => $cuenta,
+                'importe' => $porcion['importe'],
+            ];
+        }
+
+        return $imputaciones;
+    }
+
+    /**
+     * @param  array<int, array{D: float, H: float}>  $anclas
+     * @param  array<int, array<string, float>>  $consumo
+     * @return array<int, float>
+     */
+    private function pesosAnclasProrrateoResidualCtamovSistemaB(array $anclas, array $consumo, string $movContra): array
+    {
+        $pesos = [];
+        $movPreferido = strtoupper(trim($movContra)) === 'H' ? 'D' : 'H';
+
+        foreach ($anclas as $cuenta => $movimientos) {
+            $preferido = round(($movimientos[$movPreferido] ?? 0.0) - ($consumo[$cuenta][$movPreferido] ?? 0.0), 2);
+            $debe = round(($movimientos['D'] ?? 0.0) - ($consumo[$cuenta]['D'] ?? 0.0), 2);
+            $haber = round(($movimientos['H'] ?? 0.0) - ($consumo[$cuenta]['H'] ?? 0.0), 2);
+            $peso = $preferido > 0.01 ? $preferido : max($debe, $haber, abs($debe - $haber));
+
+            if ($peso > 0.01) {
+                $pesos[(int) $cuenta] = $peso;
+            }
+        }
+
+        return $pesos;
+    }
+
+    /**
+     * @param  array<int, array{D: float, H: float}>  $anclas
+     * @param  array<int, array<string, float>>  $consumo
+     */
+    private function consumirCapacidadAnclaCtamovSistemaB(
+        array &$consumo,
+        int $cuenta,
+        array $anclas,
+        string $movContra,
+        float $importe,
+    ): void {
+        if ($importe <= 0 || ! isset($anclas[$cuenta])) {
+            return;
+        }
+
+        $movContra = strtoupper(trim($movContra));
+        $movAncla = $movContra === 'D' ? 'H' : 'D';
+        $movimientos = $anclas[$cuenta];
+        $restante = $importe;
+
+        foreach ([$movAncla, $movContra === 'H' ? 'D' : 'H'] as $mov) {
+            $capacidad = round(($movimientos[$mov] ?? 0.0) - ($consumo[$cuenta][$mov] ?? 0.0), 2);
+            if ($capacidad <= 0.01) {
+                continue;
+            }
+
+            $porcion = round(min($capacidad, $restante), 2);
+            if ($porcion <= 0) {
+                continue;
+            }
+
+            $consumo[$cuenta][$mov] = round(($consumo[$cuenta][$mov] ?? 0.0) + $porcion, 2);
+            $restante = round($restante - $porcion, 2);
+            if ($restante <= 0.01) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     */
+    private function buscarLineaOpCuentaMov(array $lineasOp, int $cuenta, string $mov): ?object
+    {
+        $mov = strtoupper(trim($mov));
+
+        foreach ($lineasOp as $linea) {
+            if ((int) ($linea->subd_cuenta ?? 0) !== $cuenta) {
+                continue;
+            }
+
+            if (strtoupper(trim((string) ($linea->subd_tipo_mov ?? ''))) !== $mov) {
+                continue;
+            }
+
+            return $linea;
+        }
+
+        return null;
+    }
+
+    /**
+     * 211xxx (moneda en poder del público / partidas pendientes): contrapartida en ctamov B, no medio de cobranza.
+     */
+    private function esCuentaPasivaPublicoCtamovSistemaB(int $cuenta): bool
+    {
+        return $cuenta >= 211000000 && $cuenta < 212000000;
+    }
+
+    /**
+     * Reclasificación ctamov B: disponibilidad del mayor (≤ límite) frente a contrapartidas fuera del rango.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function esReclasificacionDispContrapartidasCtamovSistemaB(array $lineasOp): bool
+    {
+        $dispSalidaAnalitico = 0;
+        $contrapartidas = 0;
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($cuenta <= 0 || $importe <= 0) {
+                continue;
+            }
+
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($mov === 'D'
+                && ($this->motor->esCuentaBancoCaja($cuenta) || $this->motor->esCuentaCreditoComercialDisp($cuenta))) {
+                return false;
+            }
+
+            if ($mov === 'H' && $this->esCuentaImputableVentaCtamov($cuenta)) {
+                return false;
+            }
+
+            if ($mov === 'H'
+                && $this->motor->esDisponibilidad($cuenta)
+                && $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                $dispSalidaAnalitico++;
+            }
+
+            if ($this->motor->esDisponibilidad($cuenta)
+                || $this->motor->esCuentaCreditoComercialDisp($cuenta)) {
+                continue;
+            }
+
+            if (in_array($mov, ['D', 'H'], true)) {
+                $contrapartidas++;
+            }
+        }
+
+        return $dispSalidaAnalitico >= 1 && $contrapartidas >= 1;
+    }
+
+    /**
+     * Imputa contrapartidas de reclasificación anclando la disponibilidad del mayor analítico.
+     * Prioriza pareo por importe; si no hay match, prorratea por cantidad de cuentas en cada pata.
+     *
+     * @param  list<object>  $lineasOp
+     * @return list<array{cuenta_disponibilidad: int, importe: float}>
+     */
+    private function imputacionesReclasificacionCtamovSistemaB(
+        object $linea,
+        array $lineasOp,
+        float $importeImputable,
+        string $mov,
+        int $cuentaContra,
+        int $conceptoId,
+        string $emisor,
+        int $bancoReferencia,
+    ): array {
+        if ($importeImputable <= 0 || ! in_array($mov, ['D', 'H'], true)) {
+            return [];
+        }
+
+        if ($this->esPiernaInternaCompensadaCtamovSistemaB($linea, $lineasOp)) {
+            return [];
+        }
+
+        $cuentaDisp = $this->resolverBancoParaLineaAsiento($linea, $lineasOp);
+        if ($cuentaDisp <= 0) {
+            $cuentaDisp = $this->resolverDisponibilidadSalidaCtamovSistemaB($lineasOp);
+        }
+        if ($cuentaDisp <= 0) {
+            $cuentaDisp = $this->resolverDisponibilidadEntradaCtamovSistemaB($lineasOp);
+        }
+        if ($cuentaDisp <= 0) {
+            $cuentaDisp = $bancoReferencia;
+        }
+
+        if ($cuentaDisp > 0) {
+            return [[
+                'cuenta_disponibilidad' => $cuentaDisp,
+                'importe' => $importeImputable,
+            ]];
+        }
+
+        $dispSalida = $this->cuentasDisponibilidadSalidaAnaliticoCtamovSistemaB($lineasOp);
+        $contrapartidas = $this->cuentasContrapartidaReclasificacionCtamovSistemaB($lineasOp);
+        if ($dispSalida === [] || $contrapartidas === []) {
+            return [];
+        }
+
+        $indiceContra = array_search($cuentaContra, $contrapartidas, true);
+        if ($indiceContra === false) {
+            return [];
+        }
+
+        $porciones = $this->prorratearImportePorCantidadCuentas(
+            $importeImputable,
+            count($dispSalida),
+            $indiceContra,
+            count($contrapartidas),
+        );
+
+        $imputaciones = [];
+        foreach ($porciones as $indiceDisp => $porcion) {
+            if ($porcion <= 0) {
+                continue;
+            }
+
+            $imputaciones[] = [
+                'cuenta_disponibilidad' => $dispSalida[$indiceDisp],
+                'importe' => $porcion,
+            ];
+        }
+
+        return $imputaciones;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     * @return list<int>
+     */
+    private function cuentasDisponibilidadSalidaAnaliticoCtamovSistemaB(array $lineasOp): array
+    {
+        $cuentas = [];
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($importe <= 0 || $mov !== 'H') {
+                continue;
+            }
+
+            if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                continue;
+            }
+
+            $cuentas[$cuenta] = true;
+        }
+
+        $lista = array_keys($cuentas);
+        sort($lista, SORT_NUMERIC);
+
+        return $lista;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     * @return list<int>
+     */
+    private function cuentasContrapartidaReclasificacionCtamovSistemaB(array $lineasOp): array
+    {
+        $cuentas = [];
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($importe <= 0 || ! in_array($mov, ['D', 'H'], true)) {
+                continue;
+            }
+
+            if ($this->motor->esDisponibilidad($cuenta) || $this->motor->esCuentaCreditoComercialDisp($cuenta)) {
+                continue;
+            }
+
+            $cuentas[$cuenta] = true;
+        }
+
+        $lista = array_keys($cuentas);
+        sort($lista, SORT_NUMERIC);
+
+        return $lista;
+    }
+
+    /**
+     * Reparte importe entre cuentas destino según posición relativa (cantidad contrapartidas / cantidad disp).
+     *
+     * @return array<int, float>
+     */
+    private function prorratearImportePorCantidadCuentas(
+        float $importe,
+        int $cantidadDestino,
+        int $indiceOrigen,
+        int $cantidadOrigen,
+    ): array {
+        if ($importe <= 0 || $cantidadDestino <= 0 || $cantidadOrigen <= 0) {
+            return [];
+        }
+
+        if ($cantidadDestino === 1) {
+            return [0 => round($importe, 2)];
+        }
+
+        if ($cantidadOrigen === 1) {
+            $porCuenta = round($importe / $cantidadDestino, 2);
+            $porciones = array_fill(0, $cantidadDestino, $porCuenta);
+            $porciones[$cantidadDestino - 1] = round($importe - ($porCuenta * ($cantidadDestino - 1)), 2);
+
+            return $porciones;
+        }
+
+        $destinoInicio = (int) floor($indiceOrigen * $cantidadDestino / $cantidadOrigen);
+        $destinoFin = (int) floor(($indiceOrigen + 1) * $cantidadDestino / $cantidadOrigen) - 1;
+        if ($destinoFin < $destinoInicio) {
+            $destinoFin = $destinoInicio;
+        }
+
+        $cantidadAsignada = $destinoFin - $destinoInicio + 1;
+        $porCuenta = round($importe / $cantidadAsignada, 2);
+        $porciones = array_fill(0, $cantidadDestino, 0.0);
+
+        for ($i = $destinoInicio; $i <= $destinoFin; $i++) {
+            if ($i === $destinoFin) {
+                $porciones[$i] = round($importe - ($porCuenta * ($cantidadAsignada - 1)), 2);
+            } else {
+                $porciones[$i] = $porCuenta;
+            }
+        }
+
+        return $porciones;
+    }
+
+    /**
+     * Disponibilidad al Haber (salida caja/banco) dentro del mayor analítico de control.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function resolverDisponibilidadSalidaCtamovSistemaB(array $lineasOp): int
+    {
+        $mejorCuenta = 0;
+        $mejorImporte = 0.0;
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($importe <= 0 || $mov !== 'H') {
+                continue;
+            }
+
+            if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                continue;
+            }
+
+            if ($importe > $mejorImporte) {
+                $mejorImporte = $importe;
+                $mejorCuenta = $cuenta;
+            }
+        }
+
+        return $mejorCuenta;
+    }
+
+    /**
+     * Disponibilidad al Debe (entrada FCI/banco) para anclar gasto en asientos sistema B sin medio cobranza.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function resolverDisponibilidadEntradaCtamovSistemaB(array $lineasOp): int
+    {
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if ($mov === 'D' && $this->motor->esDisponibilidad($cuenta)) {
+                return $cuenta;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Par D/H mismo importe en la misma cuenta (wash interno del asiento sistema B).
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function esPiernaInternaCompensadaCtamovSistemaB(object $linea, array $lineasOp): bool
+    {
+        $cuenta = (int) ($linea->subd_cuenta ?? 0);
+        $importe = (float) ($linea->subd_importe ?? 0);
+        $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+        if ($cuenta <= 0 || $importe <= 0 || ! in_array($mov, ['D', 'H'], true)) {
+            return false;
+        }
+
+        $opuesto = $mov === 'D' ? 'H' : 'D';
+
+        foreach ($lineasOp as $otra) {
+            if ((int) ($otra->subd_cuenta ?? 0) !== $cuenta) {
+                continue;
+            }
+
+            if (strtoupper(trim((string) ($otra->subd_tipo_mov ?? ''))) !== $opuesto) {
+                continue;
+            }
+
+            if (abs((float) ($otra->subd_importe ?? 0) - $importe) < 0.01) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Ventas ctamov gastro/estacionamiento con medios de cobro al Debe (111, 113, 211…).
+     *
+     * @param  list<object>  $lineasAsiento
+     * @param  list<object>  $lineasOp
+     */
+    private function debeProcesarAsientoCtamovVentaMultibanco(array $lineasAsiento, array $lineasOp): bool
+    {
+        if ($lineasAsiento === [] || $lineasOp === []) {
+            return false;
+        }
+
+        $sistemaEsperado = null;
+        foreach ($lineasAsiento as $linea) {
+            $sistema = strtoupper(trim((string) ($linea->ctav_sistema ?? '')));
+            if (! in_array($sistema, ['B', 'V'], true)) {
+                return false;
+            }
+            $sistemaEsperado ??= $sistema;
+            if ($sistemaEsperado !== $sistema) {
+                return false;
+            }
+        }
+
+        if ($this->debeProcesarAsientoComRecepcionCtamov($lineasAsiento)) {
+            return false;
+        }
+
+        $mediosCobranza = $this->mediosCobranzaDebeAsiento($lineasOp);
+        $lineasVenta = 0;
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if ($mov === 'H' && $this->esCuentaVentaCtamovMultibanco($cuenta)) {
+                $lineasVenta++;
+            }
+        }
+
+        return count($mediosCobranza) >= 1 && $lineasVenta >= 1
+            && $this->esCtamovVentaGastronomiaEstacionamiento($lineasAsiento, $lineasOp);
+    }
+
+    /**
+     * Cobranzas ctamov de gastronomía / estacionamiento (no venta de máquinas 412xxx).
+     *
+     * @param  list<object>  $lineasAsiento
+     * @param  list<object>  $lineasOp
+     */
+    private function esCtamovVentaGastronomiaEstacionamiento(array $lineasAsiento, array $lineasOp): bool
+    {
+        foreach ($lineasAsiento as $linea) {
+            if (strtoupper(trim((string) ($linea->ctav_sistema ?? ''))) === 'V') {
+                return true;
+            }
+
+            $desc = strtolower(trim((string) ($linea->ctav_desc_mov ?? '')));
+            if (str_contains($desc, 'gastronom') || str_contains($desc, 'estacionamiento')) {
+                return true;
+            }
+        }
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if ($cuenta >= 413010000 && $cuenta < 416000000) {
+                return true;
+            }
+
+            if ($cuenta === 214010009) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Venta/IVA imputable al Haber en cierres ctamov multimedio (estilo COM).
+     */
+    private function esCuentaVentaCtamovMultibanco(int $cuenta): bool
+    {
+        if ($cuenta <= 0) {
+            return false;
+        }
+
+        if ($cuenta >= 413010000 && $cuenta < 416000000) {
+            return true;
+        }
+
+        if ($cuenta >= 214010000 && $cuenta < 215000000) {
+            return true;
+        }
+
+        if ($cuenta >= 114010000 && $cuenta < 114020000) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Piernas Debe del asiento que representan cobranza (ancla de imputación, como COM→117010).
+     */
+    private function esMedioCobranzaCtamovVenta(int $cuenta, string $mov): bool
+    {
+        if ($cuenta <= 0 || strtoupper(trim($mov)) !== 'D') {
+            return false;
+        }
+
+        if ($this->esCuentaPasivaPublicoCtamovSistemaB($cuenta)) {
+            return false;
+        }
+
+        return $this->motor->esCuentaBancoCaja($cuenta)
+            || $this->motor->esCuentaCreditoComercialDisp($cuenta)
+            || $this->motor->esProveedor($cuenta);
+    }
+
+    /**
+     * Venta/ingreso imputable al Haber en cierres ctamov (gastro 413xxx, máquinas 412xxx, IVA, percepciones).
+     */
+    private function esCuentaImputableVentaCtamov(int $cuenta): bool
+    {
+        if ($cuenta <= 0) {
+            return false;
+        }
+
+        if ($cuenta >= 412010000 && $cuenta < 413000000) {
+            return true;
+        }
+
+        return $this->esCuentaVentaCtamovMultibanco($cuenta);
+    }
+
+    /**
+     * Piernas nativas ctamov que el mayor plano acumula tal cual (disp = cuenta).
+     * Solo en asientos multimedio: evita duplicar disp con el prorrateo de concepto.
+     */
+    private function esPiernaDirectaNativaCtamovSistemaB(int $cuenta, string $mov, bool $asientoMultimedio): bool
+    {
+        if ($cuenta <= 0) {
+            return false;
+        }
+
+        $mov = strtoupper(trim($mov));
+
+        if ($mov === 'H' && ($this->motor->esDisponibilidad($cuenta) || $this->motor->esCuentaInversionDisp($cuenta))) {
+            return true;
+        }
+
+        if (! $asientoMultimedio) {
+            return $this->esPiernaDirectaCreditoComercialCtamovSistemaB($cuenta, $mov);
+        }
+
+        if ($mov === 'D' && $this->esMedioCobranzaCtamovVenta($cuenta, $mov)) {
+            return true;
+        }
+
+        return $this->esPiernaDirectaCreditoComercialCtamovSistemaB($cuenta, $mov);
+    }
+
+    /**
+     * Crédito comercial 113xxx en ctamov sistema B: imputación directa 100% en la propia cuenta (plano = disp).
+     * Debe: medio de cobranza; Haber: piernas nativas ctamov (ej. ajustes venta máquinas).
+     */
+    private function esPiernaDirectaCreditoComercialCtamovSistemaB(int $cuenta, string $mov): bool
+    {
+        if ($cuenta <= 0 || ! $this->motor->esCuentaCreditoComercialDisp($cuenta)) {
+            return false;
+        }
+
+        $mov = strtoupper(trim($mov));
+
+        if ($mov === 'H') {
+            return true;
+        }
+
+        return $mov === 'D' && $this->esMedioCobranzaCtamovVenta($cuenta, $mov);
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     * @return list<array<string, mixed>>
+     */
+    private function procesarAsientoCtamovVentaMultibanco(
+        int $empresaId,
+        array $lineasOp,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+        bool $soloMonedaOrigen,
+    ): array {
+        $mediosCobranza = $this->mediosCobranzaDebeAsiento($lineasOp);
+        $totalMedios = array_sum($mediosCobranza);
+        if ($totalMedios <= 0) {
+            return [];
+        }
+
+        $lineas = [];
+        $bancoReferencia = $this->resolverBancoReferenciaAsiento($lineasOp);
+        // Prorrateo entre medios (111/113/211) ya alinea concepto con analítico ampliado; no recortar al solo banco.
+        $factorProrrateo = 1.0;
+
+        foreach ($lineasOp as $linea) {
+            if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
+                continue;
+            }
+
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($importe <= 0 || $cuenta <= 0) {
+                continue;
+            }
+
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($this->esMedioCobranzaCtamovVenta($cuenta, $mov)) {
+                continue;
+            }
+
+            if ($this->motor->esDisponibilidad($cuenta)) {
+                continue;
+            }
+
+            if ($mov === 'H' && $this->esCuentaVentaCtamovMultibanco($cuenta)) {
+                $importeImputable = $this->aplicarFactorProrrateoAnaliticoControl($importe, $factorProrrateo);
+                if ($importeImputable <= 0) {
+                    continue;
+                }
+
+                $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
+                foreach ($this->prorratearImportePorMediosCobranza($importeImputable, $mediosCobranza) as $porcion) {
+                    if ($porcion['importe'] <= 0) {
+                        continue;
+                    }
+
+                    $lineas[] = $this->lineaReporte(
+                        $linea,
+                        $cuenta,
+                        $concepto,
+                        $porcion['importe'],
+                        $mov,
+                        $monedaConverter,
+                        $monedaReporteId,
+                        'Ctamov venta cobranza',
+                        [
+                            'cuenta_disponibilidad' => $porcion['cuenta'],
+                            'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                        ],
+                    );
+                }
+
+                continue;
+            }
+
+            if (! $this->esCuentaVisibleAsientoMultilinea($cuenta)) {
+                continue;
+            }
+
+            // Solo contrapartidas al Haber (IVA, percepciones…); piernas D generan disp_haber espurio en el medio.
+            if ($mov !== 'H') {
+                continue;
+            }
+
+            $importeImputable = $this->aplicarFactorProrrateoAnaliticoControl($importe, $factorProrrateo);
+            if ($importeImputable <= 0) {
+                continue;
+            }
+
+            $cuentaDisp = $this->resolverBancoParaLineaAsiento($linea, $lineasOp);
+            if ($cuentaDisp <= 0) {
+                $cuentaDisp = $bancoReferencia > 0 ? $bancoReferencia : $this->resolverCuentaDisponibilidad($linea);
+            }
+            if ($cuentaDisp <= 0) {
+                continue;
+            }
+
+            $lineas[] = $this->lineaReporte(
+                $linea,
+                $cuenta,
+                $this->motor->conceptoImputacionCuenta($empresaId, $cuenta),
+                $importeImputable,
+                $mov,
+                $monedaConverter,
+                $monedaReporteId,
+                'Ctamov venta cobranza',
+                [
+                    'cuenta_disponibilidad' => $cuentaDisp,
+                    'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                ],
+            );
+        }
+
+        return $this->reconciliarImputacionMediosVentaCtamov($lineas, $mediosCobranza);
+    }
+
+    /**
+     * Una sola pierna disparadora por par (evita duplicar al recorrer las dos líneas ctamov/subdiario).
+     */
+    private function esLineaDisparadoraTraspasoDoblePierna(object $linea, int $cuenta, int $contrapartida): bool
+    {
+        $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+        if ($this->motor->esDisponibilidad($cuenta) && $mov === 'D') {
+            return true;
+        }
+
+        if ($this->motor->esDisponibilidad($cuenta) && $mov === 'H'
+            && $this->motor->esDisponibilidadPlano($contrapartida)
+            && ! $this->motor->esDisponibilidad($contrapartida)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Ajusta el neto imputado por medio al Debe nativo del ctamov (prorrateo venta gastronomía).
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @param  array<int, float>  $mediosCobranza
+     * @return list<array<string, mixed>>
+     */
+    private function reconciliarImputacionMediosVentaCtamov(array $lineas, array $mediosCobranza): array
+    {
+        if ($lineas === [] || $mediosCobranza === []) {
+            return $lineas;
+        }
+
+        foreach ($mediosCobranza as $cuentaMedio => $importeNativo) {
+            $importeNativo = round((float) $importeNativo, 2);
+            if ($importeNativo <= 0) {
+                continue;
+            }
+
+            $indices = [];
+            $netoImputado = 0.0;
+
+            foreach ($lineas as $i => $ln) {
+                if (($ln['origen'] ?? '') !== 'Ctamov venta cobranza') {
+                    continue;
+                }
+
+                if ((int) ($ln['cuenta_disponibilidad'] ?? 0) !== (int) $cuentaMedio) {
+                    continue;
+                }
+
+                $indices[] = $i;
+                $netoImputado += round((float) ($ln['disp_debe'] ?? 0) - (float) ($ln['disp_haber'] ?? 0), 2);
+            }
+
+            if ($indices === []) {
+                continue;
+            }
+
+            $delta = round($importeNativo - $netoImputado, 2);
+            if (abs($delta) < 0.01) {
+                continue;
+            }
+
+            if ($delta > 0) {
+                $ultimo = $indices[array_key_last($indices)];
+                $lineas[$ultimo]['disp_debe'] = round((float) ($lineas[$ultimo]['disp_debe'] ?? 0) + $delta, 2);
+
+                continue;
+            }
+
+            $restante = abs($delta);
+            for ($j = count($indices) - 1; $j >= 0 && $restante >= 0.01; $j--) {
+                $idx = $indices[$j];
+                $dispDebe = (float) ($lineas[$idx]['disp_debe'] ?? 0);
+                if ($dispDebe <= 0) {
+                    continue;
+                }
+
+                $quita = min($dispDebe, $restante);
+                $lineas[$idx]['disp_debe'] = round($dispDebe - $quita, 2);
+                $restante = round($restante - $quita, 2);
+            }
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     * @return array<int, float>
+     */
+    private function mediosCobranzaDebeAsiento(array $lineasOp): array
+    {
+        $porCuenta = [];
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($importe <= 0 || ! $this->esMedioCobranzaCtamovVenta($cuenta, $mov)) {
+                continue;
+            }
+
+            $porCuenta[$cuenta] = ($porCuenta[$cuenta] ?? 0.0) + $importe;
+        }
+
+        return $porCuenta;
+    }
+
+    /**
+     * Medios de cobranza dentro del límite mayor por concepto (111–112 ≤ config).
+     *
+     * @param  array<int, float>  $mediosCobranza
+     * @return array<int, float>
+     */
+    private function mediosCobranzaDentroLimiteMayorConcepto(array $mediosCobranza): array
+    {
+        $filtrados = [];
+
+        foreach ($mediosCobranza as $cuenta => $importe) {
+            if ($importe <= 0 || ! $this->motor->esDisponibilidad((int) $cuenta)) {
+                continue;
+            }
+
+            $filtrados[(int) $cuenta] = (float) $importe;
+        }
+
+        return $filtrados;
+    }
+
+    /**
+     * Reparte importe solo entre cuentas destino usando pesos del total de medios del asiento.
+     *
+     * @param  array<int, float>  $mediosDestino
+     * @param  array<int, float>  $mediosBaseTotal
+     * @return list<array{cuenta: int, importe: float}>
+     */
+    private function prorratearImportePorMediosCobranzaDestinoConBaseTotal(
+        float $importe,
+        array $mediosDestino,
+        array $mediosBaseTotal,
+    ): array {
+        $totalBase = array_sum($mediosBaseTotal);
+        if ($importe <= 0 || $totalBase <= 0 || $mediosDestino === []) {
+            return [];
+        }
+
+        $cuentasMedio = array_keys($mediosDestino);
+        $ultimoIndice = count($cuentasMedio) - 1;
+        $acumulado = 0.0;
+        $porciones = [];
+
+        foreach ($cuentasMedio as $indice => $cuentaMedio) {
+            $peso = (float) ($mediosBaseTotal[$cuentaMedio] ?? 0);
+            if ($peso <= 0) {
+                continue;
+            }
+
+            if ($indice === $ultimoIndice) {
+                $porcion = round($importe - $acumulado, 2);
+            } else {
+                $porcion = round($importe * ($peso / $totalBase), 2);
+                $acumulado += $porcion;
+            }
+
+            if ($porcion <= 0) {
+                continue;
+            }
+
+            $porciones[] = [
+                'cuenta' => (int) $cuentaMedio,
+                'importe' => $porcion,
+            ];
+        }
+
+        return $porciones;
+    }
+
+    /**
+     * @param  array<int, float>  $mediosCobranza
+     * @return list<array{cuenta: int, importe: float}>
+     */
+    private function prorratearImportePorMediosCobranza(float $importe, array $mediosCobranza): array
+    {
+        $totalMedios = array_sum($mediosCobranza);
+        if ($importe <= 0 || $totalMedios <= 0 || $mediosCobranza === []) {
+            return [];
+        }
+
+        $cuentasMedio = array_keys($mediosCobranza);
+        $ultimoIndice = count($cuentasMedio) - 1;
+        $acumulado = 0.0;
+        $porciones = [];
+
+        foreach ($cuentasMedio as $indice => $cuentaMedio) {
+            if ($indice === $ultimoIndice) {
+                $porcion = round($importe - $acumulado, 2);
+            } else {
+                $porcion = round($importe * ((float) $mediosCobranza[$cuentaMedio] / $totalMedios), 2);
+                $acumulado += $porcion;
+            }
+
+            if ($porcion <= 0) {
+                continue;
+            }
+
+            $porciones[] = [
+                'cuenta' => (int) $cuentaMedio,
+                'importe' => $porcion,
+            ];
+        }
+
+        return $porciones;
+    }
+
+    /**
+     * Banco/caja del asiento (cualquier D/H) para anclar imputaciones sistema B.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function resolverCuentaDisponibilidadBancoAsiento(array $lineasOp): int
+    {
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if ($this->motor->esCuentaBancoCaja($cuenta)) {
+                return $cuenta;
+            }
+        }
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if ($this->motor->esDisponibilidad($cuenta)) {
+                return $cuenta;
+            }
+        }
+
+        return 0;
     }
 
     private function ctamovComoSubdiario(object $lineaCtamov): object
@@ -876,13 +2982,26 @@ class MayorConceptoPeriodoProcesador
         }
 
         $ref = $lineasAsiento[0];
+        if (trim((string) ($ref->ctav_tipo ?? '')) !== 'COM'
+            || (int) ($ref->ctav_o_compra ?? 0) <= 0) {
+            return false;
+        }
 
-        return trim((string) ($ref->ctav_tipo ?? '')) === 'COM'
-            && (int) ($ref->ctav_o_compra ?? 0) > 0;
+        // Solo recepción clásica con ancla 117010. COM ERP (114040, 115010, 521xxx
+        // sin banco) queda fuera del mayor analítico de control (111–112).
+        foreach ($lineasAsiento as $linea) {
+            $cuenta = (int) ($linea->ctav_cuenta ?? 0);
+            if ($cuenta >= 117010000 && $cuenta < 118000000) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
-     * Recepción COM en ctamov (AnitaERP): imputa gasto 521xxx con ancla 117010 y PEP en ctav_o_compra.
+     * Recepción COM en ctamov (Anita clásico): ancla 117010 + gasto 521xxx vía PEP.
+     * COM ERP (114040 anticipo, 115010 materia prima) no se mayoriza aquí.
      *
      * @param  list<object>  $lineasAsiento
      * @param  list<object>  $lineasOp
@@ -981,6 +3100,12 @@ class MayorConceptoPeriodoProcesador
             }
 
             if ($cuenta >= 117010000 && $cuenta < 118000000) {
+                return false;
+            }
+
+            // Materia prima / stock (115xxx) y anticipos (114xxx): COM ERP fuera del
+            // analítico de control (límite caja/banco 112010-008 → cuentas 111–112).
+            if ($cuenta >= 114000000 && $cuenta < 116000000) {
                 return false;
             }
 
@@ -1113,10 +3238,36 @@ class MayorConceptoPeriodoProcesador
         string $claveOp,
     ): bool {
         if (in_array($refTipo, ['OPP', 'OPA', 'OPV'], true)) {
-            return true;
+            return ! $this->asientoEsOperacionPuenteTransferencia($lineasOp);
         }
 
         return $this->asientoTieneProveedor($lineasOp) && ! empty($auxpagPorOp[$claveOp]);
+    }
+
+    /**
+     * OPV/OPP/OPA banco ↔ 150000-xxx: transferencia con concepto de la puente, no pago proveedor.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function asientoEsOperacionPuenteTransferencia(array $lineasOp): bool
+    {
+        $tienePuente = false;
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
+
+            if ($this->motor->esProveedor($cuenta) || $this->motor->esProveedor($contrapartida)) {
+                return false;
+            }
+
+            if ($this->motor->esCuentaPuenteTransferencia($cuenta)
+                || $this->motor->esCuentaPuenteTransferencia($contrapartida)) {
+                $tienePuente = true;
+            }
+        }
+
+        return $tienePuente;
     }
 
     /**
@@ -1149,23 +3300,101 @@ class MayorConceptoPeriodoProcesador
      */
     private function contrapartidasImputablesAsiento(array $lineasOp, string $refTipo = ''): array
     {
-        $items = [];
-        $vistas = [];
+        $sumadas = $this->agruparContrapartidasPorCuenta($lineasOp, $refTipo, false);
+        $deduplicadas = $this->agruparContrapartidasPorCuenta($lineasOp, $refTipo, true);
+        [, $totalBanco] = $this->resolverLineasBanco($lineasOp);
+        $totalSumado = array_sum(array_map(fn ($item) => (float) ($item['importe'] ?? 0), $sumadas));
+        $totalDedupe = array_sum(array_map(fn ($item) => (float) ($item['importe'] ?? 0), $deduplicadas));
+
+        if ($totalDedupe > 0 && abs($totalSumado - (2 * $totalDedupe)) <= 0.05) {
+            return $deduplicadas;
+        }
+
+        if ($totalBanco > 0 && $totalSumado > $totalBanco + 0.05) {
+            return $deduplicadas;
+        }
+
+        return $sumadas;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     * @return list<array{
+     *   cuenta_contra: int,
+     *   importe: float,
+     *   dh_imputacion: string,
+     *   linea: object,
+     *   origen: string,
+     *   cuenta_disponibilidad?: int,
+     *   concepto_id?: int
+     * }>
+     */
+    private function agruparContrapartidasPorCuenta(array $lineasOp, string $refTipo, bool $dedupePorImporte): array
+    {
+        $porClave = [];
         $refTipo = strtoupper(trim($refTipo));
 
         foreach ($lineasOp as $linea) {
             foreach ($this->itemsImputacionDesdeLinea($linea, $refTipo) as $item) {
-                $clave = $item['cuenta_contra'].'|'.number_format($item['importe'], 2, '.', '').'|'.$item['dh_imputacion']
+                $clave = $item['cuenta_contra'].'|'.$item['dh_imputacion']
                     .'|'.($item['cuenta_disponibilidad'] ?? 0);
-                if (isset($vistas[$clave])) {
+                if ($dedupePorImporte) {
+                    $clave .= '|'.number_format((float) ($item['importe'] ?? 0), 2, '.', '');
+                }
+
+                if (! isset($porClave[$clave])) {
+                    $porClave[$clave] = $item;
+
                     continue;
                 }
-                $vistas[$clave] = true;
-                $items[] = $item;
+
+                $porClave[$clave]['importe'] += $item['importe'];
             }
         }
 
-        return $items;
+        return array_values($porClave);
+    }
+
+    /**
+     * Si el neto prorrateado ya cubre el banco del OP, quita percepciones duplicadas.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function ajustarPercepcionesFacturaOp(array $lineas, int $indicePrimeraLineaFactura, float $totalBancoHaber): array
+    {
+        if ($totalBancoHaber <= 0 || $indicePrimeraLineaFactura >= count($lineas)) {
+            return $lineas;
+        }
+
+        $neto = 0.0;
+        $percepciones = 0.0;
+        for ($i = $indicePrimeraLineaFactura; $i < count($lineas); $i++) {
+            $origen = (string) ($lineas[$i]['origen'] ?? '');
+            $importe = (float) ($lineas[$i]['debe'] ?? 0);
+            if ($origen === 'Percepción factura') {
+                $percepciones += $importe;
+
+                continue;
+            }
+
+            $neto += $importe;
+        }
+
+        if ($percepciones <= 0 || $neto + $percepciones <= $totalBancoHaber + 0.05) {
+            return $lineas;
+        }
+
+        $filtradas = array_slice($lineas, 0, $indicePrimeraLineaFactura);
+        for ($i = $indicePrimeraLineaFactura; $i < count($lineas); $i++) {
+            if (($lineas[$i]['origen'] ?? '') === 'Percepción factura') {
+                continue;
+            }
+
+            $filtradas[] = $lineas[$i];
+        }
+
+        return $filtradas;
     }
 
     /**
@@ -1194,14 +3423,34 @@ class MayorConceptoPeriodoProcesador
             return [];
         }
 
-        if ($this->debeTraspasoDoblePierna($cuenta, $contrapartida, $refTipo)) {
-            $items = $this->itemsTraspasoDoblePierna($linea, $refTipo);
-            if ($items !== []) {
-                return $items;
+        if (! in_array($refTipo, ['ING', 'EGR', 'IEV'], true)
+            && $this->debeTraspasoDoblePierna($cuenta, $contrapartida, $refTipo)) {
+            if ($this->esLineaDisparadoraTraspasoDoblePierna($linea, $cuenta, $contrapartida)) {
+                $items = $this->itemsTraspasoDoblePierna($linea, $refTipo);
+                if ($items !== []) {
+                    return $items;
+                }
             }
+
+            return [];
         }
 
         if (in_array($refTipo, ['ING', 'EGR', 'IEV'], true)) {
+            if ($this->debeIngresoEgresoDobleDisponibilidad($cuenta, $contrapartida)) {
+                if ($this->esLineaDisparadoraIngresoEgresoDobleDisponibilidad($linea, $cuenta, $contrapartida)) {
+                    return $this->itemsTraspasoDoblePierna($linea, $refTipo);
+                }
+
+                return [];
+            }
+
+            $imputacion = $this->imputacionIngresoEgreso($linea, $refTipo);
+            if ($imputacion !== null) {
+                return [$imputacion];
+            }
+        }
+
+        if ($this->debeImputarContrapartidaOperacionDirecta($linea, $refTipo)) {
             $imputacion = $this->imputacionIngresoEgreso($linea, $refTipo);
             if ($imputacion !== null) {
                 return [$imputacion];
@@ -1211,9 +3460,114 @@ class MayorConceptoPeriodoProcesador
         return $this->imputacionMovimientoDirectoLegacy($linea);
     }
 
+    /**
+     * ING/EGR/IEV con banco y contrapartida dentro del límite: dos piernas al 100% (como TRF).
+     */
+    private function debeIngresoEgresoDobleDisponibilidad(int $cuenta, int $contrapartida): bool
+    {
+        return $cuenta > 0
+            && $contrapartida > 0
+            && $this->motor->esDisponibilidad($cuenta)
+            && $this->motor->esDisponibilidad($contrapartida);
+    }
+
+    /**
+     * Una sola disparadora por línea subdiario (cuenta ≤ límite caja/banco).
+     */
+    private function esLineaDisparadoraIngresoEgresoDobleDisponibilidad(object $linea, int $cuenta, int $contrapartida): bool
+    {
+        return $this->motor->esDisponibilidad($cuenta);
+    }
+
+    /**
+     * ING/EGR/IEV y OPV/OPP/OPA con cuenta puente 150000: imputar contrapartida + concepto como operación directa.
+     */
+    private function debeImputarContrapartidaOperacionDirecta(object $linea, string $refTipo): bool
+    {
+        $refTipo = strtoupper(trim($refTipo));
+
+        if (! in_array($refTipo, ['OPP', 'OPA', 'OPV'], true)) {
+            return false;
+        }
+
+        return $this->lineaOperacionPuenteTransferencia($linea);
+    }
+
+    /**
+     * Pierna banco (≤ límite) contra cuenta puente 150000-xxx, sin proveedor 211.
+     */
+    private function lineaOperacionPuenteTransferencia(object $linea): bool
+    {
+        $cuenta = (int) ($linea->subd_cuenta ?? 0);
+        $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
+
+        if ($this->motor->esProveedor($cuenta) || $this->motor->esProveedor($contrapartida)) {
+            return false;
+        }
+
+        $tieneBanco = $this->motor->esDisponibilidad($cuenta) || $this->motor->esDisponibilidad($contrapartida);
+        $tienePuente = $this->motor->esCuentaPuenteTransferencia($cuenta)
+            || $this->motor->esCuentaPuenteTransferencia($contrapartida);
+
+        return $tieneBanco && $tienePuente;
+    }
+
+    /**
+     * Traspaso entre cuentas del mayor analítico (111–112): ctamov trae D y H por separado;
+     * no imputar gasto/concepto externo, solo reflejar el par origen→destino una vez.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function esAsientoTraspasoInternoDisponibilidad(array $lineasOp): bool
+    {
+        if (count($lineasOp) < 2) {
+            return false;
+        }
+
+        $totalDebe = 0.0;
+        $totalHaber = 0.0;
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if ($cuenta <= 0 || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                return false;
+            }
+
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($importe <= 0) {
+                return false;
+            }
+
+            if ($mov === 'D') {
+                $totalDebe += $importe;
+            } elseif ($mov === 'H') {
+                $totalHaber += $importe;
+            } else {
+                return false;
+            }
+        }
+
+        return $totalDebe > 0 && abs($totalDebe - $totalHaber) <= 0.01;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     */
+    private function lineaReferenciaTraspasoInterno(array $lineasOp): object
+    {
+        foreach ($lineasOp as $linea) {
+            if (strtoupper(trim((string) ($linea->subd_tipo_mov ?? ''))) === 'H') {
+                return $linea;
+            }
+        }
+
+        return $lineasOp[0];
+    }
+
     private function debeTraspasoDoblePierna(int $cuenta, int $contrapartida, string $refTipo): bool
     {
-        if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esDisponibilidad($contrapartida)) {
+        if ($cuenta <= 0 || $contrapartida <= 0) {
             return false;
         }
 
@@ -1221,20 +3575,47 @@ class MayorConceptoPeriodoProcesador
             return false;
         }
 
-        if ($this->motor->esCuentaCreditoComercialDisp($cuenta)
-            || $this->motor->esCuentaCreditoComercialDisp($contrapartida)) {
+        $refTipo = strtoupper(trim($refTipo));
+
+        if (! in_array($refTipo, ['0', ''], true)
+            && ($this->motor->esCuentaCreditoComercialDisp($cuenta)
+                || $this->motor->esCuentaCreditoComercialDisp($contrapartida))) {
+            return false;
+        }
+
+        if (! $this->motor->esDisponibilidad($cuenta) && ! $this->motor->esDisponibilidad($contrapartida)) {
             return false;
         }
 
         if ($refTipo === 'TRF') {
-            return true;
+            return $this->motor->esDisponibilidadPlano($cuenta)
+                && $this->motor->esDisponibilidadPlano($contrapartida);
+        }
+
+        if (in_array($refTipo, ['OPP', 'OPA', 'OPV'], true)) {
+            return $this->motor->esCuentaAnaliticoControl($cuenta)
+                && $this->motor->esCuentaAnaliticoControl($contrapartida);
         }
 
         if (in_array($refTipo, ['0', ''], true)) {
-            return $this->motor->esDisponibilidad($cuenta)
-                && $this->motor->esDisponibilidad($contrapartida)
-                && ! $this->motor->esCuentaCreditoComercialDisp($cuenta)
-                && ! $this->motor->esCuentaCreditoComercialDisp($contrapartida);
+            if ($this->motor->esDisponibilidad($cuenta) && $this->motor->esDisponibilidad($contrapartida)) {
+                return ! $this->motor->esCuentaCreditoComercialDisp($cuenta)
+                    && ! $this->motor->esCuentaCreditoComercialDisp($contrapartida);
+            }
+
+            if (! $this->motor->esDisponibilidad($cuenta) && ! $this->motor->esDisponibilidad($contrapartida)) {
+                return false;
+            }
+
+            $tieneBancoLimite = $this->motor->esDisponibilidad($cuenta) || $this->motor->esDisponibilidad($contrapartida);
+            $tieneBancoOInversion = $this->motor->esCuentaBancoCaja($cuenta)
+                || $this->motor->esCuentaInversionDisp($cuenta)
+                || $this->motor->esCuentaBancoCaja($contrapartida)
+                || $this->motor->esCuentaInversionDisp($contrapartida);
+            $tieneCreditoComercial = $this->motor->esCuentaCreditoComercialDisp($cuenta)
+                || $this->motor->esCuentaCreditoComercialDisp($contrapartida);
+
+            return $tieneBancoLimite && $tieneBancoOInversion && $tieneCreditoComercial;
         }
 
         if (! in_array($refTipo, ['ING', 'EGR', 'IEV'], true)) {
@@ -1283,7 +3664,8 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
-     * ING/EGR: imputa la contrapartida (gasto, crédito comercial 113…) como un COM de proveedor.
+     * Imputa la contrapartida (gasto, puente 150000, crédito 113…) anclada al banco del asiento.
+     * Usado en ING/EGR/IEV y en OPV/OPP/OPA con cuenta puente (no proveedor 211).
      *
      * @return array<string, mixed>|null
      */
@@ -1304,15 +3686,15 @@ class MayorConceptoPeriodoProcesador
             return null;
         }
 
-        if ($this->motor->esCuentaBancoCaja($cuentaContra)) {
+        if ($this->debeIngresoEgresoDobleDisponibilidad($cuenta, $contrapartida)) {
             return null;
         }
 
-        if ($this->motor->esCuentaInversionDisp($cuentaContra)) {
+        if ($this->motor->esDisponibilidad($cuentaContra)) {
             return null;
         }
 
-        $dhImputacion = $mov === 'D' ? 'H' : 'D';
+        $dhImputacion = $this->dhImputacionAnitaSubdiario($mov, $cuentaContra, $cuenta);
 
         return [
             'cuenta_contra' => $cuentaContra,
@@ -1322,6 +3704,24 @@ class MayorConceptoPeriodoProcesador
             'origen' => $refTipo.' contrapartida',
             'cuenta_disponibilidad' => $cuentaBanco,
         ];
+    }
+
+    /**
+     * D/H de imputación según convención Anita: subd_tipo_mov es el lado de subd_cuenta;
+     * subd_contrapartida va al lado opuesto.
+     */
+    private function dhImputacionAnitaSubdiario(string $mov, int $cuentaImputada, int $subdCuenta): string
+    {
+        $mov = strtoupper(trim($mov));
+        if (! in_array($mov, ['D', 'H'], true)) {
+            return 'D';
+        }
+
+        if ($cuentaImputada === $subdCuenta) {
+            return $mov;
+        }
+
+        return $mov === 'D' ? 'H' : 'D';
     }
 
     /**
@@ -1337,17 +3737,21 @@ class MayorConceptoPeriodoProcesador
         if ($this->motor->esDisponibilidad($cuenta)) {
             if ($contrapartida > 0 && ! $this->motor->esDisponibilidad($contrapartida)) {
                 $cuentaContra = $contrapartida;
-                $dhImputacion = $mov === 'H' ? 'D' : 'H';
+                $dhImputacion = $this->dhImputacionAnitaSubdiario($mov, $cuentaContra, $cuenta);
             } elseif ($this->motor->esCuentaBancoCaja($cuenta)
                 || $this->motor->esCuentaInversionDisp($cuenta)) {
                 return [];
             } else {
                 $cuentaContra = $cuenta;
-                $dhImputacion = $mov === 'D' ? 'D' : 'H';
+                $dhImputacion = $this->dhImputacionAnitaSubdiario($mov, $cuentaContra, $cuenta);
             }
         } elseif ($this->motor->esDisponibilidad($contrapartida)) {
+            // Crédito comercial (113xxx) con contrapartida banco: imputar solo desde la pierna caja.
+            if ($this->motor->esCuentaCreditoComercialDisp($cuenta)) {
+                return [];
+            }
             $cuentaContra = $cuenta;
-            $dhImputacion = $mov === 'D' ? 'D' : 'H';
+            $dhImputacion = $this->dhImputacionAnitaSubdiario($mov, $cuentaContra, $cuenta);
         } else {
             return [];
         }
@@ -1356,13 +3760,25 @@ class MayorConceptoPeriodoProcesador
             return [];
         }
 
-        return [[
+        $cuentaDisp = 0;
+        if ($this->motor->esDisponibilidad($cuenta)) {
+            $cuentaDisp = $cuenta;
+        } elseif ($this->motor->esDisponibilidad($contrapartida)) {
+            $cuentaDisp = $contrapartida;
+        }
+
+        $item = [
             'cuenta_contra' => $cuentaContra,
             'importe' => $importe,
             'dh_imputacion' => $dhImputacion,
             'linea' => $linea,
             'origen' => 'Movimiento directo',
-        ]];
+        ];
+        if ($cuentaDisp > 0) {
+            $item['cuenta_disponibilidad'] = $cuentaDisp;
+        }
+
+        return [$item];
     }
 
     /**
@@ -1512,6 +3928,22 @@ class MayorConceptoPeriodoProcesador
     ): array {
         $lineas = [];
         $bancoReferencia = $this->resolverBancoReferenciaAsiento($lineasOp);
+        $esVentaMaquinas = $this->esAsientoCtamovVentaMaquinas($lineasOp);
+        $ventaMaquinasConSalidaDisp = $esVentaMaquinas
+            && $this->tieneSalidaNetaDisponibilidadAnaliticoVentaMaquinas($lineasOp);
+        $mediosAnaliticoDebe = $esVentaMaquinas
+            ? $this->mediosDisponibilidadPesoAnaliticoControlVentaMaquinas($lineasOp)
+            : $this->mediosDisponibilidadDebeDentroAnaliticoControl($lineasOp);
+
+        $factorProrrateo = $ventaMaquinasConSalidaDisp
+            ? 1.0
+            : $this->factorProrrateoAnaliticoControlContrapartidas($lineasOp, true);
+        $aplicaProrrateoParcial = $factorProrrateo < 1.0 - 1e-9;
+        $prorratearDispEntreMedios = ! $ventaMaquinasConSalidaDisp
+            && (count($mediosAnaliticoDebe) >= 2 || $aplicaProrrateoParcial);
+        $medioPrincipalVentaMaquinas = $ventaMaquinasConSalidaDisp
+            ? $this->resolverMedioPrincipalDebeVentaMaquinas($lineasOp)
+            : 0;
 
         foreach ($lineasOp as $linea) {
             if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
@@ -1525,12 +3957,17 @@ class MayorConceptoPeriodoProcesador
             }
 
             $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
-            $cuentaDisp = $this->resolverBancoParaLineaAsiento($linea, $lineasOp);
-            if ($cuentaDisp <= 0) {
-                $cuentaDisp = $bancoReferencia > 0 ? $bancoReferencia : $cuenta;
-            }
 
             if ($this->motor->esCuentaCreditoComercialDisp($cuenta)) {
+                if ($aplicaProrrateoParcial) {
+                    continue;
+                }
+
+                $cuentaDisp = $this->resolverBancoParaLineaAsiento($linea, $lineasOp);
+                if ($cuentaDisp <= 0) {
+                    $cuentaDisp = $bancoReferencia;
+                }
+
                 $lineas[] = $this->lineaReporte(
                     $linea,
                     $cuenta,
@@ -1556,23 +3993,526 @@ class MayorConceptoPeriodoProcesador
                 continue;
             }
 
+            $importeImputable = $this->aplicarFactorProrrateoAnaliticoControl($importe, $factorProrrateo);
+            if ($importeImputable <= 0) {
+                continue;
+            }
+
+            $conceptoId = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
+            $emisor = trim((string) ($linea->subd_emisor ?? ''));
+
+            if ($prorratearDispEntreMedios && $mediosAnaliticoDebe !== []) {
+                $cuentaPareo = $this->resolverBancoParaLineaAsiento($linea, $lineasOp);
+                if ($cuentaPareo > 0
+                    && isset($mediosAnaliticoDebe[$cuentaPareo])
+                    && count($mediosAnaliticoDebe) === 1) {
+                    $lineas[] = $this->lineaReporte(
+                        $linea,
+                        $cuenta,
+                        $conceptoId,
+                        $importeImputable,
+                        $mov,
+                        $monedaConverter,
+                        $monedaReporteId,
+                        $refTipo.' contrapartida asiento',
+                        [
+                            'cuenta_disponibilidad' => $cuentaPareo,
+                            'emisor' => $emisor,
+                        ],
+                    );
+
+                    continue;
+                }
+
+                foreach ($this->prorratearImportePorMediosCobranzaDestinoConBaseTotal(
+                    $importeImputable,
+                    $mediosAnaliticoDebe,
+                    $mediosAnaliticoDebe,
+                ) as $porcion) {
+                    if ($porcion['importe'] <= 0) {
+                        continue;
+                    }
+
+                    $lineas[] = $this->lineaReporte(
+                        $linea,
+                        $cuenta,
+                        $conceptoId,
+                        $porcion['importe'],
+                        $mov,
+                        $monedaConverter,
+                        $monedaReporteId,
+                        $refTipo.' contrapartida asiento',
+                        [
+                            'cuenta_disponibilidad' => $porcion['cuenta'],
+                            'emisor' => $emisor,
+                        ],
+                    );
+                }
+
+                continue;
+            }
+
+            $cuentaDisp = $this->resolverBancoParaLineaAsiento($linea, $lineasOp);
+            if ($cuentaDisp <= 0 && $ventaMaquinasConSalidaDisp) {
+                $cuentaDisp = $medioPrincipalVentaMaquinas;
+            }
+            if ($cuentaDisp <= 0) {
+                $cuentaDisp = $bancoReferencia > 0
+                    ? $bancoReferencia
+                    : (int) array_key_first($mediosAnaliticoDebe);
+            }
+            if ($cuentaDisp <= 0) {
+                continue;
+            }
+
             $lineas[] = $this->lineaReporte(
                 $linea,
                 $cuenta,
-                $this->motor->conceptoImputacionCuenta($empresaId, $cuenta),
-                $importe,
+                $conceptoId,
+                $importeImputable,
                 $mov,
                 $monedaConverter,
                 $monedaReporteId,
                 $refTipo.' contrapartida asiento',
                 [
                     'cuenta_disponibilidad' => $cuentaDisp,
-                    'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                    'emisor' => $emisor,
                 ],
             );
         }
 
+        if ($esVentaMaquinas && $aplicaProrrateoParcial && $lineas !== []) {
+            $lineas = $this->reconciliarRedondeoNetoVentaMaquinasMultilinea($lineasOp, $lineas);
+        }
+
         return $lineas;
+    }
+
+    /**
+     * Cierra diferencias de centavos por round(importe × factor) línea a línea en venta máquinas.
+     *
+     * @param  list<object>  $lineasOp
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function reconciliarRedondeoNetoVentaMaquinasMultilinea(array $lineasOp, array $lineas): array
+    {
+        $netAnalitico = 0.0;
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                continue;
+            }
+
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($importe <= 0) {
+                continue;
+            }
+
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if ($mov === 'D') {
+                $netAnalitico += $importe;
+            } elseif ($mov === 'H') {
+                $netAnalitico -= $importe;
+            }
+        }
+
+        $netAnalitico = round($netAnalitico, 2);
+        $netConcepto = round(array_sum(array_map(
+            fn (array $ln): float => (float) ($ln['debe'] ?? 0) - (float) ($ln['haber'] ?? 0),
+            $lineas,
+        )), 2);
+
+        $delta = round(-$netAnalitico - $netConcepto, 2);
+        if (abs($delta) < 0.005 || abs($delta) > 2.0) {
+            return $lineas;
+        }
+
+        $indice = null;
+        $mejor = 0.0;
+        foreach ($lineas as $i => $ln) {
+            $importe = max((float) ($ln['debe'] ?? 0), (float) ($ln['haber'] ?? 0));
+            if ($importe > $mejor) {
+                $mejor = $importe;
+                $indice = $i;
+            }
+        }
+
+        if ($indice === null) {
+            return $lineas;
+        }
+
+        if ((float) ($lineas[$indice]['haber'] ?? 0) > 0) {
+            $lineas[$indice]['haber'] = round((float) $lineas[$indice]['haber'] - $delta, 2);
+            $lineas[$indice]['disp_haber'] = round((float) ($lineas[$indice]['disp_haber'] ?? 0) - $delta, 2);
+        } elseif ((float) ($lineas[$indice]['debe'] ?? 0) > 0) {
+            $lineas[$indice]['debe'] = round((float) $lineas[$indice]['debe'] + $delta, 2);
+            $lineas[$indice]['disp_debe'] = round((float) ($lineas[$indice]['disp_debe'] ?? 0) + $delta, 2);
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * Venta máquinas con salida neta en alguna disponibilidad ≤ límite (ej. wash 111010-004 Haber).
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function tieneSalidaNetaDisponibilidadAnaliticoVentaMaquinas(array $lineasOp): bool
+    {
+        $neto = [];
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($importe <= 0 || ! in_array($mov, ['D', 'H'], true)) {
+                continue;
+            }
+
+            if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                continue;
+            }
+
+            $neto[$cuenta] = ($neto[$cuenta] ?? 0.0) + ($mov === 'D' ? $importe : -$importe);
+        }
+
+        foreach ($neto as $saldo) {
+            if ($saldo < -0.01) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Medio con mayor Debe neto dentro del límite analítico (ancla por defecto venta máquinas con wash).
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function resolverMedioPrincipalDebeVentaMaquinas(array $lineasOp): int
+    {
+        $neto = [];
+        $debeBruto = [];
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($importe <= 0 || ! in_array($mov, ['D', 'H'], true)) {
+                continue;
+            }
+
+            if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                continue;
+            }
+
+            $neto[$cuenta] = ($neto[$cuenta] ?? 0.0) + ($mov === 'D' ? $importe : -$importe);
+            if ($mov === 'D') {
+                $debeBruto[$cuenta] = ($debeBruto[$cuenta] ?? 0.0) + $importe;
+            }
+        }
+
+        $mejorCuenta = 0;
+        $mejorNeto = 0.0;
+        foreach ($neto as $cuenta => $saldo) {
+            if ($saldo > $mejorNeto + 0.01) {
+                $mejorNeto = $saldo;
+                $mejorCuenta = (int) $cuenta;
+            }
+        }
+
+        if ($mejorCuenta > 0) {
+            return $mejorCuenta;
+        }
+
+        $mejorBruto = 0.0;
+        foreach ($debeBruto as $cuenta => $importe) {
+            if ($importe > $mejorBruto) {
+                $mejorBruto = $importe;
+                $mejorCuenta = (int) $cuenta;
+            }
+        }
+
+        return $mejorCuenta;
+    }
+
+    /**
+     * Venta máquinas ctamov sistema B (412xxx al Haber + cobranza 111/113 al Debe).
+     *
+     * @param  list<object>  $lineasAsiento
+     * @param  list<object>  $lineasOp
+     */
+    private function debeProcesarAsientoCtamovVentaMaquinas(array $lineasAsiento, array $lineasOp): bool
+    {
+        if ($lineasAsiento === [] || $lineasOp === []) {
+            return false;
+        }
+
+        foreach ($lineasAsiento as $linea) {
+            if (! in_array(strtoupper(trim((string) ($linea->ctav_sistema ?? ''))), ['B', 'V'], true)) {
+                return false;
+            }
+        }
+
+        if ($this->debeProcesarAsientoComRecepcionCtamov($lineasAsiento)) {
+            return false;
+        }
+
+        if (! $this->esAsientoCtamovVentaMaquinas($lineasOp)) {
+            return false;
+        }
+
+        return $this->mediosDisponibilidadDebeDentroAnaliticoControl($lineasOp) !== [];
+    }
+
+    /**
+     * @param  list<object>  $lineasAsiento
+     */
+    private function esCtamovAsientoSistemaB(array $lineasAsiento): bool
+    {
+        if ($lineasAsiento === []) {
+            return false;
+        }
+
+        foreach ($lineasAsiento as $linea) {
+            if (! in_array(strtoupper(trim((string) ($linea->ctav_sistema ?? ''))), ['B', 'V'], true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     */
+    private function esAsientoCtamovVentaMaquinas(array $lineasOp): bool
+    {
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if ($cuenta >= 412010000 && $cuenta < 413000000) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Pesos de prorrateo por |Debe − Haber| en cada disponibilidad ≤ límite analítico (venta máquinas).
+     *
+     * @param  list<object>  $lineasOp
+     * @return array<int, float>
+     */
+    private function mediosDisponibilidadPesoAnaliticoControlVentaMaquinas(array $lineasOp): array
+    {
+        $neto = [];
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($importe <= 0 || ! in_array($mov, ['D', 'H'], true)) {
+                continue;
+            }
+
+            if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                continue;
+            }
+
+            $neto[$cuenta] = ($neto[$cuenta] ?? 0.0) + ($mov === 'D' ? $importe : -$importe);
+        }
+
+        $pesos = [];
+        foreach ($neto as $cuenta => $saldo) {
+            $peso = abs(round($saldo, 2));
+            if ($peso > 0) {
+                $pesos[(int) $cuenta] = $peso;
+            }
+        }
+
+        return $pesos;
+    }
+
+    /**
+     * Medios de cobranza al Debe dentro del mayor analítico (111–112 ≤ límite).
+     *
+     * @param  list<object>  $lineasOp
+     * @return array<int, float>
+     */
+    private function mediosDisponibilidadDebeDentroAnaliticoControl(array $lineasOp): array
+    {
+        $porCuenta = [];
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($importe <= 0 || $mov !== 'D') {
+                continue;
+            }
+
+            if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                continue;
+            }
+
+            $porCuenta[$cuenta] = round(($porCuenta[$cuenta] ?? 0.0) + $importe, 2);
+        }
+
+        return $porCuenta;
+    }
+
+    /**
+     * Neto |Debe − Haber| en disponibilidades dentro del rango analítico de control.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function totalNetoDisponibilidadAnaliticoControlAsiento(array $lineasOp): float
+    {
+        $debe = 0.0;
+        $haber = 0.0;
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                continue;
+            }
+
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($importe <= 0) {
+                continue;
+            }
+
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if ($mov === 'D') {
+                $debe += $importe;
+            } elseif ($mov === 'H') {
+                $haber += $importe;
+            }
+        }
+
+        return abs(round($debe - $haber, 2));
+    }
+
+    /**
+     * Neto |Debe − Haber| en crédito comercial / disponibilidad fuera del rango analítico de control.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function totalNetoDisponibilidadExcluidaAnaliticoControlAsiento(array $lineasOp): float
+    {
+        $debe = 0.0;
+        $haber = 0.0;
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($importe <= 0 || $cuenta <= 0) {
+                continue;
+            }
+
+            $esCreditoComercial = $this->motor->esCuentaCreditoComercialDisp($cuenta);
+            $esDispFueraAnalitico = $this->motor->esDisponibilidad($cuenta)
+                && ! $this->motor->esCuentaAnaliticoControl($cuenta);
+            if (! $esCreditoComercial && ! $esDispFueraAnalitico) {
+                continue;
+            }
+
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if ($mov === 'D') {
+                $debe += $importe;
+            } elseif ($mov === 'H') {
+                $haber += $importe;
+            }
+        }
+
+        return abs(round($debe - $haber, 2));
+    }
+
+    /**
+     * Suma importes de contrapartidas imputables antes de prorrateo.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function totalImporteContrapartidasProrrateables(array $lineasOp, bool $soloVisibleMultilinea): float
+    {
+        $total = 0.0;
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($cuenta <= 0 || $importe <= 0) {
+                continue;
+            }
+
+            if ($this->motor->esDisponibilidad($cuenta)) {
+                continue;
+            }
+
+            if ($this->motor->esCuentaCreditoComercialDisp($cuenta)) {
+                continue;
+            }
+
+            if ($soloVisibleMultilinea && ! $this->esCuentaVisibleAsientoMultilinea($cuenta)) {
+                continue;
+            }
+
+            $total += $importe;
+        }
+
+        return round($total, 2);
+    }
+
+    /**
+     * Prorratea contrapartidas al neto de caja/banco dentro del rango analítico cuando hay
+     * movimiento en cuentas de disponibilidad excluidas del export (113xxx, disp > límite).
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function factorProrrateoAnaliticoControlContrapartidas(array $lineasOp, bool $soloVisibleMultilinea): float
+    {
+        $dispAnalitico = $this->totalNetoDisponibilidadAnaliticoControlAsiento($lineasOp);
+        if ($dispAnalitico <= 0) {
+            return 1.0;
+        }
+
+        $dispExcluido = $this->totalNetoDisponibilidadExcluidaAnaliticoControlAsiento($lineasOp);
+        if ($dispExcluido <= 0) {
+            return 1.0;
+        }
+
+        $dispCompleto = round($dispAnalitico + $dispExcluido, 2);
+        $totalContra = $this->totalImporteContrapartidasProrrateables($lineasOp, $soloVisibleMultilinea);
+        if ($totalContra <= 0 || $dispCompleto <= $dispAnalitico + 0.01) {
+            return 1.0;
+        }
+
+        // Solo imputaciones tipo pago: contrapartida ≈ caja analítica + crédito comercial excluido.
+        if (abs($totalContra - $dispCompleto) > 0.05) {
+            if ($dispExcluido > 0 && $this->esAsientoCtamovVentaMaquinas($lineasOp)) {
+                return round($dispAnalitico / $dispCompleto, 8);
+            }
+
+            return 1.0;
+        }
+
+        return round($dispAnalitico / $dispCompleto, 8);
+    }
+
+    private function aplicarFactorProrrateoAnaliticoControl(float $importe, float $factor): float
+    {
+        if ($factor >= 1.0 - 1e-9) {
+            return round($importe, 2);
+        }
+
+        return round($importe * $factor, 2);
     }
 
     /**
@@ -1637,6 +4577,11 @@ class MayorConceptoPeriodoProcesador
 
         // Anita imputa_ctav: líneas ctamov con cuenta > límite caja/banco (IVA débito gastro/estac., retenciones…).
         if ($cuenta >= 214010000 && $cuenta < 215000000) {
+            return true;
+        }
+
+        // IVA crédito fiscal (114010-114019) en ventas ctamov (estacionamiento, etc.).
+        if ($cuenta >= 114010000 && $cuenta < 114020000) {
             return true;
         }
 
@@ -1852,6 +4797,7 @@ class MayorConceptoPeriodoProcesador
             }
 
             $comSub = $this->reader->cargarComSubdiario(
+                $empresaId,
                 'COM',
                 trim((string) ($apl->aplp_letra ?? 'X')),
                 (int) ($apl->aplp_sucursal ?? 0),
@@ -2083,6 +5029,7 @@ class MayorConceptoPeriodoProcesador
                     $cuenta,
                     $dDebe,
                     'D',
+                    $lineasReporte,
                     $monedaConverter,
                     $monedaReporteId,
                 );
@@ -2094,6 +5041,7 @@ class MayorConceptoPeriodoProcesador
                     $cuenta,
                     $dHaber,
                     'H',
+                    $lineasReporte,
                     $monedaConverter,
                     $monedaReporteId,
                 );
@@ -2108,6 +5056,7 @@ class MayorConceptoPeriodoProcesador
         int $cuenta,
         float $importe,
         string $dh,
+        array $lineasReporte,
         MayorConceptoMonedaConverter $monedaConverter,
         int $monedaReporteId,
     ): array {
@@ -2126,7 +5075,7 @@ class MayorConceptoPeriodoProcesador
         return $this->lineaReporte(
             $origen,
             $cuenta,
-            $this->motor->conceptoImputacionCuenta($empresaId, $cuenta),
+            $this->conceptoRemanenteMayorPlano($empresaId, $cuenta, $lineasReporte),
             $importe,
             $dh,
             $monedaConverter,
@@ -2137,6 +5086,58 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
+     * Caja/banco sin concepto propio: usar el concepto dominante ya imputado en esa
+     * disponibilidad (p. ej. cobranzas MP → VENTA 47).
+     *
+     * @param  list<array<string, mixed>>  $lineasReporte
+     */
+    private function conceptoRemanenteMayorPlano(int $empresaId, int $cuentaDisp, array $lineasReporte): int
+    {
+        $conceptoCuenta = $this->motor->conceptoImputacionCuenta($empresaId, $cuentaDisp);
+        if ($conceptoCuenta > 0) {
+            return $conceptoCuenta;
+        }
+
+        $porConcepto = [];
+
+        foreach ($lineasReporte as $ln) {
+            if ((int) ($ln['cuenta_disponibilidad'] ?? 0) !== $cuentaDisp) {
+                continue;
+            }
+
+            if (($ln['origen'] ?? '') === 'Remanente mayor plano') {
+                continue;
+            }
+
+            $conceptoId = (int) ($ln['concepto_id'] ?? 0);
+            if ($conceptoId <= 0) {
+                continue;
+            }
+
+            $neto = abs((float) ($ln['disp_debe'] ?? 0)) + abs((float) ($ln['disp_haber'] ?? 0));
+            $porConcepto[$conceptoId] = ($porConcepto[$conceptoId] ?? 0.0) + $neto;
+        }
+
+        if ($porConcepto === []) {
+            return 0;
+        }
+
+        arsort($porConcepto);
+
+        return (int) array_key_first($porConcepto);
+    }
+
+    /**
+     * FIS con nro_interno en auxpag: comprobante de compra (t_comp). Puede tener COM
+     * vía aplicped (honorarios con OC) o imputarse directo desde su subdiario/ctamov.
+     */
+    private function aplicacionEsFisComprobanteCompras(object $aplicacion): bool
+    {
+        return strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? ''))) === 'FIS'
+            && (int) ($aplicacion->axp_nro_interno ?? 0) > 0;
+    }
+
+    /**
      * Indica si la factura FIS resuelve gasto vía cadena COM (aplicped).
      */
     private function aplicacionTieneComGasto(object $aplicacion): bool
@@ -2144,23 +5145,138 @@ class MayorConceptoPeriodoProcesador
         return $this->filtrarComGasto($this->cargarComDesdeFactura($aplicacion)) !== [];
     }
 
-    /**
-     * @return list<object>
-     */
-    /**
-     * Percepciones/retenciones 214xxx del subdiario del comprobante, prorrateadas al monto banco.
-     *
-     * @return list<array{cuenta: int, importe: float}>
-     */
-    private function percepcionesRetencionDesdeAplicacion(
-        object $aplicacion,
-        float $montoBanco,
-        float $montoFactura,
-    ): array {
-        if ($montoBanco <= 0 || $montoFactura <= 0) {
-            return [];
+    private function claveProcesamientoPagoOp(string $claveOp, int $nroAsiento): string
+    {
+        if ($nroAsiento > 0) {
+            return $claveOp.'|ASI|'.$nroAsiento;
         }
 
+        return $claveOp;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     * @return list<object>
+     */
+    private function filtrarLineasOpPorAsiento(array $lineasOp, int $nroAsiento): array
+    {
+        if ($nroAsiento <= 0) {
+            return $lineasOp;
+        }
+
+        $filtradas = array_values(array_filter(
+            $lineasOp,
+            fn ($linea) => (int) ($linea->subd_nro_operacion ?? 0) === $nroAsiento,
+        ));
+
+        return $filtradas !== [] ? $filtradas : $lineasOp;
+    }
+
+    /**
+     * @param  list<object>  $auxpag
+     * @param  list<object>  $lineasOp
+     */
+    private function totalBancoEfectivoOp(array $auxpag, array $lineasOp): float
+    {
+        $cheques = $this->filtrarAplicacionesCheque($auxpag);
+        if ($cheques !== []) {
+            return array_sum(array_map(fn ($c) => (float) ($c->axp_monto_ap ?? 0), $cheques));
+        }
+
+        [, $totalBanco] = $this->resolverLineasBanco($lineasOp);
+
+        return $totalBanco;
+    }
+
+    /**
+     * Coeficiente pago/factura para prorratear la COM en el desglose del cheque.
+     * Prioriza el banco efectivo (pago a cuenta) sobre axp_monto_ap cuando este
+     * último es residual y el cheque cubre más.
+     */
+    private function coeficientePagoSobreFactura(
+        object $aplicacion,
+        float $pesoDocumental,
+        float $montoBancoFactura,
+        float $totalBancoOp,
+    ): float {
+        if ($pesoDocumental <= 0) {
+            return 1.0;
+        }
+
+        $coefBanco = min(1.0, max($montoBancoFactura, $totalBancoOp) / $pesoDocumental);
+        $pagoAplicado = (float) ($aplicacion->axp_monto_ap ?? 0);
+
+        if ($pagoAplicado <= 0.01) {
+            return $coefBanco;
+        }
+
+        if ($pagoAplicado >= $pesoDocumental * 0.995) {
+            return 1.0;
+        }
+
+        $coefAplicado = min(1.0, $pagoAplicado / $pesoDocumental);
+
+        return max($coefAplicado, $coefBanco);
+    }
+
+    /**
+     * @param  list<object>  $sub
+     * @return array<int, float>
+     */
+    private function percepcionesRawDesdeLineasSubdiario(array $sub): array
+    {
+        $porCuenta = [];
+
+        foreach ($sub as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($mov !== 'D' || $cuenta < 214010000 || $cuenta >= 215000000) {
+                continue;
+            }
+
+            if ($this->motor->esCuentaVariacionCapital($cuenta)) {
+                continue;
+            }
+
+            $porCuenta[$cuenta] = ($porCuenta[$cuenta] ?? 0.0) + (float) ($linea->subd_importe ?? 0);
+        }
+
+        return $porCuenta;
+    }
+
+    /**
+     * @param  list<object>  $sub
+     * @return array<int, float>
+     */
+    private function ivaCreditoRawDesdeLineasSubdiario(array $sub): array
+    {
+        $porCuenta = [];
+
+        foreach ($sub as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($mov !== 'D' || $cuenta < 114010000 || $cuenta >= 114020000) {
+                continue;
+            }
+
+            $porCuenta[$cuenta] = ($porCuenta[$cuenta] ?? 0.0) + (float) ($linea->subd_importe ?? 0);
+        }
+
+        return $porCuenta;
+    }
+
+    /**
+     * Percepciones/retenciones 214xxx del subdiario del comprobante, SIN prorratear
+     * (importe crudo por cuenta). El prorrateo al pago real se aplica en procesarPago
+     * usando la base del comprobante (neto COM + percepciones), para no depender del
+     * importe aplicado (axp_monto_ap), que en un pago a cuenta es una fracción mínima.
+     *
+     * @return array<int, float>  cuenta => importe crudo del subdiario
+     */
+    private function percepcionesRawDesdeAplicacion(object $aplicacion): array
+    {
         $sub = $this->cargarSubdiarioComprobanteAplicacion($aplicacion);
         $porCuenta = [];
 
@@ -2179,19 +5295,7 @@ class MayorConceptoPeriodoProcesador
             $porCuenta[$cuenta] = ($porCuenta[$cuenta] ?? 0.0) + (float) ($linea->subd_importe ?? 0);
         }
 
-        $resultado = [];
-        foreach ($porCuenta as $cuenta => $importeSub) {
-            if ($importeSub <= 0) {
-                continue;
-            }
-
-            $resultado[] = [
-                'cuenta' => $cuenta,
-                'importe' => round($montoBanco * ($importeSub / $montoFactura), 2),
-            ];
-        }
-
-        return $resultado;
+        return $porCuenta;
     }
 
     private function cargarGastoDesdeAplicacion(object $aplicacion): array
@@ -2204,7 +5308,10 @@ class MayorConceptoPeriodoProcesador
                 return $comGasto;
             }
 
-            $sub = $this->cargarSubdiarioComprobanteAplicacion($aplicacion);
+            $sub = $this->enriquecerSubdiarioFacturaConCtamov(
+                $aplicacion,
+                $this->cargarSubdiarioComprobanteAplicacion($aplicacion),
+            );
 
             return $this->resolverGastoFisSubdiario($sub);
         }
@@ -2240,7 +5347,100 @@ class MayorConceptoPeriodoProcesador
 
         $sub = $this->cargarSubdiarioComprobanteAplicacion($aplicacion);
 
-        return $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub);
+        // FNB/FNC/etc. sin COM: primera factura del legajo anticipado (114040 en subdiario).
+        $adelantada = $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub);
+        if ($this->subTieneAnticipo114040($adelantada)) {
+            return $this->filtrarLineasAnticipoProveedor($adelantada);
+        }
+
+        return $this->filtrarLineasGastoNetoComprobanteCompras($sub);
+    }
+
+    /**
+     * Gasto neto imputable desde subdiario del comprobante (sin COM): cuentas de
+     * resultado 115+/521+. Excluye 114010-114039 (IVA crédito fiscal, p. ej. NC
+     * descontada en FDT) y percepciones 214xxx (se prorratean aparte).
+     *
+     * @param  list<object>  $sub
+     * @return list<object>
+     */
+    private function filtrarLineasGastoNetoComprobanteCompras(array $sub): array
+    {
+        return array_values(array_filter($sub, function ($linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($mov !== 'D' || $cuenta <= 0) {
+                return false;
+            }
+
+            if ($this->motor->esProveedor($cuenta) || $this->motor->esDisponibilidad($cuenta)) {
+                return false;
+            }
+
+            if ($cuenta >= 114010000 && $cuenta < 114040000) {
+                return false;
+            }
+
+            if ($cuenta >= 214010000 && $cuenta < 215000000) {
+                return false;
+            }
+
+            return ($cuenta >= 115000000 && $cuenta < 600000000 && $cuenta !== 521130001)
+                || ($cuenta >= 123000000 && $cuenta < 124000000);
+        }));
+    }
+
+    private function claveAplicacionPago(object $aplicacion): string
+    {
+        return trim((string) ($aplicacion->axp_pro ?? '')).'|'
+            .trim((string) ($aplicacion->axp_tipo_ap ?? '')).'|'
+            .trim((string) ($aplicacion->axp_letra_comp ?? ' ')).'|'
+            .(int) ($aplicacion->axp_sucursal ?? 0).'|'
+            .(int) ($aplicacion->axp_nro ?? 0);
+    }
+
+    /**
+     * Peso documental del comprobante (COM/subdiario) para repartir el cheque.
+     * No usa axp_monto_ap (importe aplicado).
+     */
+    private function pesoDocumentalFactura(object $aplicacion, bool $inscripto): float
+    {
+        $lineasGasto = $this->cargarGastoDesdeAplicacion($aplicacion);
+        if ($this->subTieneAnticipo114040($lineasGasto)) {
+            $lineasGasto = $this->filtrarLineasAnticipoProveedor($lineasGasto);
+        }
+
+        $peso = array_sum(array_map(fn ($l) => (float) ($l->subd_importe ?? 0), $lineasGasto));
+        $peso += array_sum($this->percepcionesRawDesdeAplicacion($aplicacion));
+        if ($inscripto) {
+            $peso += array_sum($this->ivaCreditoRawDesdeAplicacion($aplicacion));
+        }
+
+        return max(0.0, $peso);
+    }
+
+    /**
+     * IVA crédito fiscal (114010-114019) del subdiario del comprobante, sin prorratear.
+     *
+     * @return array<int, float>
+     */
+    private function ivaCreditoRawDesdeAplicacion(object $aplicacion): array
+    {
+        $porCuenta = [];
+
+        foreach ($this->cargarSubdiarioComprobanteAplicacion($aplicacion) as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+
+            if ($mov !== 'D' || $cuenta < 114010000 || $cuenta >= 114020000) {
+                continue;
+            }
+
+            $porCuenta[$cuenta] = ($porCuenta[$cuenta] ?? 0.0) + (float) ($linea->subd_importe ?? 0);
+        }
+
+        return $porCuenta;
     }
 
     /**
@@ -2317,7 +5517,8 @@ class MayorConceptoPeriodoProcesador
 
         foreach ($lineasOp as $otra) {
             $cuenta = (int) ($otra->subd_cuenta ?? 0);
-            if (! $this->motor->esCuentaBancoCaja($cuenta)) {
+            if (! $this->motor->esCuentaBancoCaja($cuenta)
+                && ! ($this->motor->esDisponibilidad($cuenta) && $this->motor->esCuentaAnaliticoControl($cuenta))) {
                 continue;
             }
 
@@ -2377,23 +5578,83 @@ class MayorConceptoPeriodoProcesador
         $letraAp = trim((string) ($aplicacion->axp_letra_comp ?? ' '));
         $sucAp = (int) ($aplicacion->axp_sucursal ?? 0);
         $nroAp = (int) ($aplicacion->axp_nro ?? 0);
+        $nroInterno = (int) ($aplicacion->axp_nro_interno ?? 0);
+        $proveedor = trim((string) ($aplicacion->axp_pro ?? ''));
 
-        if ($nroAp <= 0) {
-            $nroAp = (int) ($aplicacion->axp_nro_interno ?? 0);
-        }
-
-        $clave = $tipoAp.'|'.$letraAp.'|'.$sucAp.'|'.$nroAp;
+        $clave = $this->claveCacheSubdiarioFactura($tipoAp, $letraAp, $sucAp, $nroAp, $nroInterno);
         if (! isset($this->comSubdiarioCache[$clave])) {
-            $this->comSubdiarioCache[$clave] = $this->reader->cargarComSubdiario(
+            $this->consultasBridgeIndividuales++;
+            $this->comSubdiarioCache[$clave] = $this->reader->cargarSubdiarioFacturaCompras(
+                $this->empresaActiva,
                 $tipoAp,
                 $letraAp,
                 $sucAp,
                 $nroAp,
+                $nroInterno,
+                $proveedor,
                 $this->erroresBridge,
             );
         }
 
         return $this->comSubdiarioCache[$clave];
+    }
+
+    private function claveCacheSubdiarioFactura(
+        string $tipo,
+        string $letra,
+        int $sucursal,
+        int $nro,
+        int $nroInterno,
+    ): string {
+        $clave = $tipo.'|'.$letra.'|'.$sucursal.'|'.$nro;
+        if ($nroInterno > 0) {
+            $clave .= '|'.$nroInterno;
+        }
+
+        return $clave;
+    }
+
+    /**
+     * Si el subdiario del comprobante no trae gasto 521xxx, completa con ctamov del asiento
+     * (FIS puede estar en otro mes que el pago).
+     *
+     * @param  list<object>  $sub
+     * @return list<object>
+     */
+    private function enriquecerSubdiarioFacturaConCtamov(object $aplicacion, array $sub): array
+    {
+        $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
+        if ($tipoAp !== 'FIS' || $sub === []) {
+            return $sub;
+        }
+
+        $gasto = $this->resolverGastoFisSubdiario($sub);
+        if ($gasto !== []) {
+            return $sub;
+        }
+
+        $gastoNeto = $this->filtrarLineasGastoNetoComprobanteCompras($sub);
+        if ($gastoNeto !== []) {
+            return $sub;
+        }
+
+        $asientos = [];
+        foreach ($sub as $linea) {
+            $asi = (int) ($linea->subd_nro_operacion ?? 0);
+            if ($asi > 0) {
+                $asientos[$asi] = true;
+            }
+        }
+
+        $ampliado = $sub;
+        foreach (array_keys($asientos) as $nroAsiento) {
+            $this->consultasBridgeIndividuales++;
+            foreach ($this->reader->cargarCtamovPorAsiento($this->empresaActiva, $nroAsiento, $this->erroresBridge) as $lineaCtamov) {
+                $ampliado[] = $this->ctamovComoSubdiario($lineaCtamov);
+            }
+        }
+
+        return $ampliado;
     }
 
     /**
@@ -2654,6 +5915,29 @@ class MayorConceptoPeriodoProcesador
             $porConcepto[$cid]['cuentas'][$cuenta]['total_haber'] += (float) $linea['haber'];
         }
 
+        foreach ($porConcepto as $cid => $sec) {
+            foreach ($sec['cuentas'] as $cuenta => $cuentaBlock) {
+                usort(
+                    $porConcepto[$cid]['cuentas'][$cuenta]['lineas'],
+                    static function (array $a, array $b): int {
+                        $fechaA = (int) ($a['fecha'] ?? 0);
+                        $fechaB = (int) ($b['fecha'] ?? 0);
+                        if ($fechaA !== $fechaB) {
+                            return $fechaA <=> $fechaB;
+                        }
+
+                        $nroA = (int) ($a['nro_asiento'] ?? 0);
+                        $nroB = (int) ($b['nro_asiento'] ?? 0);
+                        if ($nroA !== $nroB) {
+                            return $nroA <=> $nroB;
+                        }
+
+                        return strcmp((string) ($a['comprobante'] ?? ''), (string) ($b['comprobante'] ?? ''));
+                    },
+                );
+            }
+        }
+
         $secciones = [];
         foreach ($porConcepto as $sec) {
             $cuentas = [];
@@ -2826,9 +6110,14 @@ class MayorConceptoPeriodoProcesador
         );
     }
 
-    private function claveOperacionPago(string $tipo, int $nro, int $fecha): string
+    private function claveOperacionPago(int $empresaId, string $tipo, int $nro, int $fecha): string
     {
-        return strtoupper(trim($tipo)).'|'.$nro.'|'.$fecha;
+        return $empresaId.'|'.strtoupper(trim($tipo)).'|'.$nro.'|'.$fecha;
+    }
+
+    private function claveOperacionPagoRef(int $empresaId, string $tipo, int $nro): string
+    {
+        return $empresaId.'|'.strtoupper(trim($tipo)).'|'.$nro;
     }
 
     private function claveOperacionCtamov(int $nroAsiento, int $fecha): string
@@ -2963,17 +6252,69 @@ class MayorConceptoPeriodoProcesador
     {
         $comLineas = [];
         foreach ($this->resolverClavesComDesdeFactura($aplicacion) as $claveCom) {
-        if (! isset($this->comSubdiarioCache[$claveCom])) {
-            [$ct, $cl, $cs, $cn] = explode('|', $claveCom, 4);
-            $this->consultasBridgeIndividuales++;
-            $this->comSubdiarioCache[$claveCom] = $this->reader->cargarComSubdiario(
-                $ct, $cl, (int) $cs, (int) $cn, $this->erroresBridge,
-            );
-        }
-            $comLineas = array_merge($comLineas, $this->comSubdiarioCache[$claveCom]);
+            $comLineas = array_merge($comLineas, $this->resolverComSubdiarioConFallback($claveCom));
         }
 
         return $comLineas;
+    }
+
+    /**
+     * Subdiario COM Anita; si viene vacío, recepción confirmada en ERP (asiento_movimiento).
+     *
+     * @return list<object>
+     */
+    private function resolverComSubdiarioConFallback(string $claveCom): array
+    {
+        if (! isset($this->comSubdiarioCache[$claveCom])) {
+            [$ct, $cl, $cs, $cn] = array_pad(explode('|', $claveCom, 4), 4, '');
+            $this->consultasBridgeIndividuales++;
+            $this->comSubdiarioCache[$claveCom] = $this->reader->cargarComSubdiario(
+                $this->empresaActiva,
+                $ct,
+                $cl,
+                (int) $cs,
+                (int) $cn,
+                $this->erroresBridge,
+            );
+        }
+
+        if (($this->comSubdiarioCache[$claveCom] ?? []) === []) {
+            $erp = $this->comRecepcionErpSupport->lineasGastoDesdeClaveCom(
+                $this->empresaActiva,
+                $claveCom,
+                $this->motor,
+            );
+            if ($erp !== []) {
+                $this->comSubdiarioCache[$claveCom] = $erp;
+                $this->comSubdiarioErpFallback++;
+            }
+        }
+
+        return $this->comSubdiarioCache[$claveCom] ?? [];
+    }
+
+    /**
+     * @param  list<string>  $clavesCom
+     */
+    private function completarComSubdiarioDesdeRecepcionErp(array $clavesCom): void
+    {
+        $vacias = array_values(array_filter(
+            $clavesCom,
+            fn ($clave) => ($this->comSubdiarioCache[$clave] ?? []) === [],
+        ));
+
+        if ($vacias === []) {
+            return;
+        }
+
+        foreach ($this->comRecepcionErpSupport->lineasGastoPorClavesCom($this->empresaActiva, $vacias, $this->motor) as $clave => $lineas) {
+            if ($lineas === []) {
+                continue;
+            }
+
+            $this->comSubdiarioCache[$clave] = $lineas;
+            $this->comSubdiarioErpFallback++;
+        }
     }
 
     /**
@@ -3179,10 +6520,16 @@ class MayorConceptoPeriodoProcesador
         bool $soloMonedaOrigen,
     ): array {
         $porCuenta = [];
+        $asientosDentroLimite = $this->indexarAsientosDentroLimiteMayorConcepto($subdiario, $ctamovLista);
 
         foreach ($ctamovLista as $lineaCtamov) {
             $adaptada = $this->ctamovComoSubdiario($lineaCtamov);
             if (! $this->lineaVisible($adaptada, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
+                continue;
+            }
+
+            $nroAsiento = (int) ($lineaCtamov->ctav_nro_asiento ?? 0);
+            if ($nroAsiento <= 0 || ! isset($asientosDentroLimite[$nroAsiento])) {
                 continue;
             }
 
@@ -3208,6 +6555,11 @@ class MayorConceptoPeriodoProcesador
                 continue;
             }
 
+            $nroOperacion = (int) ($linea->subd_nro_operacion ?? 0);
+            if ($nroOperacion <= 0 || ! isset($asientosDentroLimite[$nroOperacion])) {
+                continue;
+            }
+
             $importe = $monedaConverter->convertirImporte(
                 (float) ($linea->subd_importe ?? 0),
                 (string) ($linea->subd_cod_mon ?? '1'),
@@ -3218,12 +6570,17 @@ class MayorConceptoPeriodoProcesador
 
             $cuenta = (int) ($linea->subd_cuenta ?? 0);
             $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
-            if ($this->motor->esDisponibilidadPlano($cuenta)) {
+            $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
+            $omitirCuenta = $this->omitirPiernaPlanoSubdiarioBancoCreditoComercial($cuenta, $contrapartida, true);
+            $omitirContrapartida = $this->omitirPiernaPlanoSubdiarioBancoCreditoComercial($cuenta, $contrapartida, false);
+
+            if ($this->subdiarioPiernaPlanoDisponibilidad($cuenta, $contrapartida, true) && ! $omitirCuenta) {
                 $this->acumularMovimientoPlanoDisponibilidad($porCuenta, $cuenta, $mov, $importe);
             }
 
-            $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
-            if ($contrapartida > 0 && $this->motor->esDisponibilidadPlano($contrapartida)) {
+            if ($contrapartida > 0
+                && $this->subdiarioPiernaPlanoDisponibilidad($cuenta, $contrapartida, false)
+                && ! $omitirContrapartida) {
                 $movContra = $mov === 'D' ? 'H' : 'D';
                 $this->acumularMovimientoPlanoDisponibilidad($porCuenta, $contrapartida, $movContra, $importe);
             }
@@ -3242,6 +6599,106 @@ class MayorConceptoPeriodoProcesador
         ksort($porCuenta);
 
         return $porCuenta;
+    }
+
+    /**
+     * Sin cuenta ≤ límite mayor por concepto (112010-008): el asiento no entra al plano ni a la imputación.
+     *
+     * @param  list<object>  $subdiario
+     * @param  list<object>  $ctamovLista
+     * @return array<int, true>
+     */
+    private function indexarAsientosDentroLimiteMayorConcepto(array $subdiario, array $ctamovLista): array
+    {
+        $index = [];
+
+        foreach ($subdiario as $linea) {
+            $nro = (int) ($linea->subd_nro_operacion ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
+            if ($this->motor->esDisponibilidad($cuenta) || $this->motor->esDisponibilidad($contrapartida)) {
+                $index[$nro] = true;
+            }
+        }
+
+        foreach ($ctamovLista as $linea) {
+            $nro = (int) ($linea->ctav_nro_asiento ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+
+            $cuenta = (int) ($linea->ctav_cuenta ?? 0);
+            if ($this->motor->esDisponibilidad($cuenta)) {
+                $index[$nro] = true;
+            }
+        }
+
+        return $index;
+    }
+
+    /**
+     * @param  list<object>  $lineasOp
+     */
+    private function asientoOpTieneCuentaDentroLimiteMayorConcepto(array $lineasOp): bool
+    {
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
+            if ($this->motor->esDisponibilidad($cuenta) || $this->motor->esDisponibilidad($contrapartida)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Subdiario en mayor plano: 113xxx solo si la contrapartida es caja/banco dentro del límite mayor por concepto.
+     * OPs puras 113↔gasto/percepción (ej. EGR 5263065) quedan fuera del bridge de remanente.
+     */
+    private function subdiarioPiernaPlanoDisponibilidad(int $cuenta, int $contrapartida, bool $esPiernaCuenta): bool
+    {
+        $pierna = $esPiernaCuenta ? $cuenta : $contrapartida;
+        $otra = $esPiernaCuenta ? $contrapartida : $cuenta;
+
+        if ($pierna <= 0 || ! $this->motor->esDisponibilidadPlano($pierna)) {
+            return false;
+        }
+
+        if ($this->motor->esDisponibilidad($pierna)) {
+            return true;
+        }
+
+        return $otra > 0 && $this->motor->esDisponibilidad($otra);
+    }
+
+    /**
+     * ING/EGR/IEV: banco dentro del límite mayor por concepto + crédito comercial 113 fuera.
+     * La imputación ancla el 100% al banco (cuenta_disponibilidad); el plano no debe duplicar la pierna 113.
+     */
+    private function omitirPiernaPlanoSubdiarioBancoCreditoComercial(int $cuenta, int $contrapartida, bool $esPiernaCuenta): bool
+    {
+        if ($cuenta <= 0 || $contrapartida <= 0) {
+            return false;
+        }
+
+        $tieneBancoDentroLimite = $this->motor->esDisponibilidad($cuenta) || $this->motor->esDisponibilidad($contrapartida);
+        $tieneCreditoComercial = $this->motor->esCuentaCreditoComercialDisp($cuenta)
+            || $this->motor->esCuentaCreditoComercialDisp($contrapartida);
+
+        if (! $tieneBancoDentroLimite || ! $tieneCreditoComercial) {
+            return false;
+        }
+
+        if ($esPiernaCuenta) {
+            return $this->motor->esCuentaCreditoComercialDisp($cuenta);
+        }
+
+        return $this->motor->esCuentaCreditoComercialDisp($contrapartida);
     }
 
     /**
@@ -3337,6 +6794,449 @@ class MayorConceptoPeriodoProcesador
         ksort($porCuenta);
 
         return $porCuenta;
+    }
+
+    /**
+     * Mayor analítico de control agrupado por asiento (cuentas ≤ límite analítico).
+     * Solo pierna nativa: subd_cuenta/subd_tipo_mov y ctav_cuenta/ctav_d_h (sin espejar contrapartida).
+     *
+     * @param  list<object>  $subdiario
+     * @param  list<object>  $ctamovLista
+     * @return array<int, array<string, mixed>>
+     */
+    private function construirAnaliticoPorAsientoControl(
+        array $subdiario,
+        array $ctamovLista,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+        bool $soloMonedaOrigen,
+    ): array {
+        $porAsiento = [];
+        $asientosCtamovVentaCobranza = $this->indexarAsientosCtamovMediosAnalitico($ctamovLista);
+        $asientosVentaMaquinasCtamov = $this->indexarAsientosCtamovVentaMaquinas($ctamovLista);
+
+        $subdiarioPorOperacion = [];
+        foreach ($subdiario as $linea) {
+            if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
+                continue;
+            }
+
+            $nro = (int) ($linea->subd_nro_operacion ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+
+            $subdiarioPorOperacion[$nro][] = $linea;
+        }
+
+        foreach ($subdiarioPorOperacion as $nro => $lineasOp) {
+            if (isset($asientosVentaMaquinasCtamov[$nro])) {
+                continue;
+            }
+
+            if ($this->esAsientoTraspasoInternoDisponibilidad($lineasOp)) {
+                foreach ($lineasOp as $linea) {
+                    $this->acumularAnaliticoSubdiarioNativo(
+                        $porAsiento,
+                        $linea,
+                        $monedaConverter,
+                        $monedaReporteId,
+                    );
+                }
+
+                continue;
+            }
+
+            foreach ($lineasOp as $linea) {
+                $refTipo = trim((string) ($linea->subd_ref_tipo ?? $linea->subd_tipo ?? ''));
+                $refTipoUpper = strtoupper(trim($refTipo));
+                $cuenta = (int) ($linea->subd_cuenta ?? 0);
+                $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
+                $importe = $monedaConverter->convertirImporte(
+                    (float) ($linea->subd_importe ?? 0),
+                    (string) ($linea->subd_cod_mon ?? '1'),
+                    (float) ($linea->subd_cotizacion ?? 0),
+                    (int) ($linea->subd_fecha ?? 0),
+                    $monedaReporteId,
+                );
+                $fecha = (int) ($linea->subd_fecha ?? 0);
+
+                if ($importe <= 0) {
+                    continue;
+                }
+
+                if (in_array($refTipoUpper, ['ING', 'EGR', 'IEV'], true)) {
+                    if ($this->debeIngresoEgresoDobleDisponibilidad($cuenta, $contrapartida)) {
+                        if ($this->esLineaDisparadoraIngresoEgresoDobleDisponibilidad($linea, $cuenta, $contrapartida)) {
+                            foreach ($this->itemsTraspasoDoblePierna($linea, $refTipoUpper) as $item) {
+                                $this->acumularAnaliticoPorAsientoControl(
+                                    $porAsiento,
+                                    $nro,
+                                    $fecha,
+                                    (int) $item['cuenta_contra'],
+                                    (string) $item['dh_imputacion'],
+                                    $importe,
+                                );
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    if ($this->acumularAnaliticoIngresoEgresoCreditoComercial(
+                        $porAsiento,
+                        $nro,
+                        $fecha,
+                        $linea,
+                        $refTipoUpper,
+                        $importe,
+                    )) {
+                        continue;
+                    }
+
+                    $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+                    $this->acumularAnaliticoPorAsientoControl($porAsiento, $nro, $fecha, $cuenta, $mov, $importe);
+
+                    continue;
+                }
+
+                if ($this->debeTraspasoDoblePierna($cuenta, $contrapartida, $refTipoUpper)) {
+                    foreach ($this->itemsTraspasoDoblePierna($linea, $refTipoUpper) as $item) {
+                        $this->acumularAnaliticoPorAsientoControl(
+                            $porAsiento,
+                            $nro,
+                            $fecha,
+                            (int) $item['cuenta_contra'],
+                            (string) $item['dh_imputacion'],
+                            $importe,
+                        );
+                    }
+
+                    continue;
+                }
+
+                if ($this->acumularAnaliticoIngresoEgresoCreditoComercial(
+                    $porAsiento,
+                    $nro,
+                    $fecha,
+                    $linea,
+                    $refTipo,
+                    $importe,
+                )) {
+                    continue;
+                }
+
+                $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+                $this->acumularAnaliticoPorAsientoControl($porAsiento, $nro, $fecha, $cuenta, $mov, $importe);
+            }
+        }
+
+        foreach ($this->agruparCtamovPorAsiento($ctamovLista) as $lineasAsiento) {
+            if ($lineasAsiento === []) {
+                continue;
+            }
+
+            $nro = (int) ($lineasAsiento[0]->ctav_nro_asiento ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+
+            $lineasOp = $this->ctamovAsientoComoLineasOp($lineasAsiento);
+            $incluirMediosCtamov = isset($asientosCtamovVentaCobranza[$nro]);
+            $esSistemaBCtamov = $this->esCtamovAsientoSistemaB($lineasAsiento);
+            $esSistemaB = $this->debeProcesarAsientoCtamovSistemaB($lineasAsiento, $lineasOp);
+            $esReclasificacionDispContra = $esSistemaBCtamov
+                && $this->esReclasificacionDispContrapartidasCtamovSistemaB($lineasOp);
+            $esVentaMaquinas = $esSistemaBCtamov && $this->esAsientoCtamovVentaMaquinas($lineasOp);
+            $asientoMultimedio = count($this->mediosCobranzaDebeAsiento($lineasOp)) >= 2;
+
+            foreach ($lineasAsiento as $lineaCtamov) {
+                $adaptada = $this->ctamovComoSubdiario($lineaCtamov);
+                if (! $this->lineaVisible($adaptada, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
+                    continue;
+                }
+
+                $cuenta = (int) ($lineaCtamov->ctav_cuenta ?? 0);
+                $mov = strtoupper(trim((string) ($lineaCtamov->ctav_d_h ?? '')));
+                $importe = $monedaConverter->convertirImporte(
+                    (float) ($lineaCtamov->ctav_importe ?? 0),
+                    (string) ($lineaCtamov->ctav_cod_mon ?? '1'),
+                    (float) ($lineaCtamov->ctav_cotizacion ?? 0),
+                    (int) ($lineaCtamov->ctav_fecha ?? 0),
+                    $monedaReporteId,
+                );
+                $fecha = (int) ($lineaCtamov->ctav_fecha ?? 0);
+
+                if ($esSistemaBCtamov && ! $esVentaMaquinas && ! $esReclasificacionDispContra) {
+                    if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                        continue;
+                    }
+                } elseif ($incluirMediosCtamov && $esSistemaB
+                    && ! $this->motor->esCuentaAnaliticoControl($cuenta)
+                    && ! $this->esPiernaDirectaNativaCtamovSistemaB($cuenta, $mov, $asientoMultimedio)) {
+                    continue;
+                }
+
+                if ($esReclasificacionDispContra
+                    && (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta))) {
+                    continue;
+                }
+
+                if ($esVentaMaquinas
+                    && (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta))) {
+                    continue;
+                }
+
+                $this->acumularAnaliticoPorAsientoControl(
+                    $porAsiento,
+                    $nro,
+                    $fecha,
+                    $cuenta,
+                    $mov,
+                    $importe,
+                    $incluirMediosCtamov && ! $esReclasificacionDispContra && ! $esVentaMaquinas && ! $esSistemaBCtamov,
+                );
+            }
+        }
+
+        foreach ($porAsiento as $nro => $row) {
+            $cuentas = array_keys($row['cuentas']);
+            sort($cuentas);
+            $porAsiento[$nro]['debe'] = round($row['debe'], 2);
+            $porAsiento[$nro]['haber'] = round($row['haber'], 2);
+            $porAsiento[$nro]['cuentas'] = $cuentas;
+        }
+
+        ksort($porAsiento, SORT_NUMERIC);
+
+        return $porAsiento;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $porAsiento
+     */
+    private function acumularAnaliticoSubdiarioNativo(
+        array &$porAsiento,
+        object $linea,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+    ): void {
+        $nro = (int) ($linea->subd_nro_operacion ?? 0);
+        $cuenta = (int) ($linea->subd_cuenta ?? 0);
+        $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+        $importe = $monedaConverter->convertirImporte(
+            (float) ($linea->subd_importe ?? 0),
+            (string) ($linea->subd_cod_mon ?? '1'),
+            (float) ($linea->subd_cotizacion ?? 0),
+            (int) ($linea->subd_fecha ?? 0),
+            $monedaReporteId,
+        );
+        $fecha = (int) ($linea->subd_fecha ?? 0);
+
+        $this->acumularAnaliticoPorAsientoControl($porAsiento, $nro, $fecha, $cuenta, $mov, $importe);
+    }
+
+    /**
+     * IEV/ING/EGR con crédito comercial (113) y banco contrapartida: el subdiario trae solo la pierna 113;
+     * concepto imputa Debe en 113 — analítico refleja Haber en el banco (111xxx) para conciliar.
+     *
+     * @param  array<int, array<string, mixed>>  $porAsiento
+     */
+    private function acumularAnaliticoIngresoEgresoCreditoComercial(
+        array &$porAsiento,
+        int $nroAsiento,
+        int $fecha,
+        object $linea,
+        string $refTipo,
+        float $importe,
+    ): bool {
+        if ($importe <= 0 || ! in_array(strtoupper(trim($refTipo)), ['ING', 'EGR', 'IEV'], true)) {
+            return false;
+        }
+
+        $imputacion = $this->imputacionIngresoEgreso($linea, $refTipo);
+        if ($imputacion === null) {
+            return false;
+        }
+
+        $cuentaContra = (int) ($imputacion['cuenta_contra'] ?? 0);
+        $cuentaBanco = (int) ($imputacion['cuenta_disponibilidad'] ?? 0);
+        if ($cuentaContra <= 0 || $cuentaBanco <= 0) {
+            return false;
+        }
+
+        if (! $this->motor->esCuentaCreditoComercialDisp($cuentaContra)
+            || ! $this->motor->esCuentaAnaliticoControl($cuentaBanco)) {
+            return false;
+        }
+
+        $dhConcepto = strtoupper(trim((string) ($imputacion['dh_imputacion'] ?? 'D')));
+        if (! in_array($dhConcepto, ['D', 'H'], true)) {
+            return false;
+        }
+
+        $movAnalitico = $dhConcepto === 'D' ? 'H' : 'D';
+        $this->acumularAnaliticoPorAsientoControl(
+            $porAsiento,
+            $nroAsiento,
+            $fecha,
+            $cuentaBanco,
+            $movAnalitico,
+            $importe,
+        );
+
+        return true;
+    }
+
+    /**
+     * Ctamov sistema B/V con medios 113/111: mismas piernas nativas que imputa procesarAsientoCtamovSistemaB.
+     *
+     * @param  list<object>  $ctamovLista
+     * @return array<int, true>
+     */
+    private function indexarAsientosCtamovMediosAnalitico(array $ctamovLista): array
+    {
+        $index = $this->indexarAsientosCtamovVentaCobranza($ctamovLista);
+
+        foreach ($this->agruparCtamovPorAsiento($ctamovLista) as $lineasAsiento) {
+            if ($lineasAsiento === []) {
+                continue;
+            }
+
+            $nro = (int) ($lineasAsiento[0]->ctav_nro_asiento ?? 0);
+            if ($nro <= 0 || isset($index[$nro])) {
+                continue;
+            }
+
+            $lineasOp = $this->ctamovAsientoComoLineasOp($lineasAsiento);
+            if ($this->debeProcesarAsientoCtamovSistemaB($lineasAsiento, $lineasOp)
+                || $this->debeProcesarAsientoCtamovVentaMaquinas($lineasAsiento, $lineasOp)) {
+                $index[$nro] = true;
+            }
+        }
+
+        return $index;
+    }
+
+    /**
+     * Ctamov gastro/estacionamiento (sistema B o V): incluir 113/211 en analítico por asiento.
+     *
+     * @param  list<object>  $ctamovLista
+     * @return array<int, true>
+     */
+    private function indexarAsientosCtamovVentaCobranza(array $ctamovLista): array
+    {
+        $index = [];
+
+        foreach ($this->agruparCtamovPorAsiento($ctamovLista) as $lineasAsiento) {
+            if ($lineasAsiento === []) {
+                continue;
+            }
+
+            $nro = (int) ($lineasAsiento[0]->ctav_nro_asiento ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+
+            $sistemaOk = true;
+            foreach ($lineasAsiento as $linea) {
+                if (! in_array(strtoupper(trim((string) ($linea->ctav_sistema ?? ''))), ['B', 'V'], true)) {
+                    $sistemaOk = false;
+                    break;
+                }
+            }
+
+            if (! $sistemaOk) {
+                continue;
+            }
+
+            $lineasOp = $this->ctamovAsientoComoLineasOp($lineasAsiento);
+            if ($this->esCtamovVentaGastronomiaEstacionamiento($lineasAsiento, $lineasOp)) {
+                $index[$nro] = true;
+            }
+        }
+
+        return $index;
+    }
+
+    /**
+     * @param  list<object>  $ctamovLista
+     * @return array<int, true>
+     */
+    private function indexarAsientosCtamovVentaMaquinas(array $ctamovLista): array
+    {
+        $index = [];
+
+        foreach ($this->agruparCtamovPorAsiento($ctamovLista) as $lineasAsiento) {
+            if ($lineasAsiento === []) {
+                continue;
+            }
+
+            $nro = (int) ($lineasAsiento[0]->ctav_nro_asiento ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+
+            $lineasOp = $this->ctamovAsientoComoLineasOp($lineasAsiento);
+            if ($this->esCtamovAsientoSistemaB($lineasAsiento)
+                && $this->esAsientoCtamovVentaMaquinas($lineasOp)) {
+                $index[$nro] = true;
+            }
+        }
+
+        return $index;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $porAsiento
+     */
+    private function acumularAnaliticoPorAsientoControl(
+        array &$porAsiento,
+        int $nroAsiento,
+        int $fecha,
+        int $cuenta,
+        string $mov,
+        float $importe,
+        bool $incluirMediosCobranzaVentaCtamov = false,
+    ): void {
+        if ($nroAsiento <= 0 || $importe <= 0) {
+            return;
+        }
+
+        if (! in_array($mov, ['D', 'H'], true)) {
+            return;
+        }
+
+        $incluir = $this->motor->esCuentaAnaliticoControl($cuenta)
+            || ($incluirMediosCobranzaVentaCtamov && $this->esMedioCobranzaCtamovVenta($cuenta, $mov))
+            || ($incluirMediosCobranzaVentaCtamov && $this->esPiernaDirectaCreditoComercialCtamovSistemaB($cuenta, $mov));
+
+        if (! $incluir) {
+            return;
+        }
+
+        if (! isset($porAsiento[$nroAsiento])) {
+            $porAsiento[$nroAsiento] = [
+                'nro_asiento' => $nroAsiento,
+                'debe' => 0.0,
+                'haber' => 0.0,
+                'fecha_min' => $fecha > 0 ? $fecha : null,
+                'cuentas' => [],
+            ];
+        }
+
+        if ($fecha > 0 && ($porAsiento[$nroAsiento]['fecha_min'] === null || $fecha < $porAsiento[$nroAsiento]['fecha_min'])) {
+            $porAsiento[$nroAsiento]['fecha_min'] = $fecha;
+        }
+
+        $codigo = $this->motor->formatearCodigoCuenta($cuenta);
+        $porAsiento[$nroAsiento]['cuentas'][$codigo] = true;
+
+        if ($mov === 'D') {
+            $porAsiento[$nroAsiento]['debe'] += $importe;
+        } else {
+            $porAsiento[$nroAsiento]['haber'] += $importe;
+        }
     }
 
     /**
@@ -3487,14 +7387,7 @@ class MayorConceptoPeriodoProcesador
 
     private function esFactura(object $fila): bool
     {
-        $t = strtoupper(trim((string) ($fila->axp_tipo_ap ?? '')));
-
-        if ($this->mediopagoSupport->esAuxpagIgnorado($t)
-            || $this->mediopagoSupport->esMedioPagoAuxpag($t)) {
-            return false;
-        }
-
-        return in_array($t, MayorConceptoMemoriaMotor::TIPOS_FACTURA_APLICADA, true);
+        return $this->tcompSupport->esFacturaAplicada($fila);
     }
 
     private function esRetencion(object $fila): bool

@@ -39,7 +39,7 @@ final class GastronomiaConciliacionRendgAsientosDiaSupportTest extends TestCase
     public function test_excluye_compensacion_ff(): void
     {
         $tipo = GastronomiaConciliacionRendgAsientosDiaSupport::clasificarObservacionCierreWaitry(
-            'Cierre Waitry jornada 2026-06-23 — 3 — Reduccion FF Maquinas',
+            'Cierre Waitry jornada 2026-06-23 — 3 — Reducion de Fondo fijo',
         );
 
         $this->assertNull($tipo);

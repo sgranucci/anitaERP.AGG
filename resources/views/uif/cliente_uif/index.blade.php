@@ -13,6 +13,9 @@ Clientes UIF
 use App\Support\Uif\ClienteUifListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -29,7 +32,7 @@ use App\Support\Uif\ClienteUifListadoFiltros; ?>
                         'toggleTarget' => '#panel-filtros-cliente-uif',
                         'toggleId' => 'btn-toggle-filtros-cliente-uif',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crea_cliente_uif'),
+                        'nuevoRegistroUrl' => route('crea_cliente_uif', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-cliente-uif',
                     ])
                 </div>
@@ -89,11 +92,11 @@ use App\Support\Uif\ClienteUifListadoFiltros; ?>
                             </td>
                             <td>
                        			@if (can('editar-cliente-uif', false))
-                                	<a href="{{route('edita_cliente_uif', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                	<a href="{{route('edita_cliente_uif', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@elseif (can('listar-cliente-uif', false))
-                                	<a href="{{route('edita_cliente_uif', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Ver registro">
+                                	<a href="{{route('edita_cliente_uif', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Ver registro">
                                     <i class="fa fa-eye"></i>
                                 	</a>
 								@endif

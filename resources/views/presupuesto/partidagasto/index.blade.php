@@ -13,6 +13,9 @@
 use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -29,7 +32,7 @@ use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
                         'toggleTarget' => '#panel-filtros-partidagasto',
                         'toggleId' => 'btn-toggle-filtros-partidagasto',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_partidagasto'),
+                        'nuevoRegistroUrl' => route('crear_partidagasto', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-partidagasto',
                     ])
                 </div>
@@ -66,17 +69,68 @@ use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
                     </thead>
                     <tbody>
                         @foreach ($partidagasto as $data)
-                        <tr>
-                            <td>{{$data->id}}</td>
-                            <td>{{$data->nombreempresa ?? ''}}</td>
-                            <td>{{$data->nombrepresupuesto ?? ''}}</td>
-                            <td>{{$data->nombreescenario ?? ''}}</td>
-                            <td>{{$data->nombrecentrocosto ?? '' }}</td>
-                            <td>{{$data->codigopartida ?? ''}}</td>
-                            <td>{{$data->detalle ?? ''}}</td>
-                            <td>{{$data->descripcionarticulo ?? ''}}</td>
-                            <td>{{$data->nombreproveedor ?? ''}}</td>
-                            <td>{{$data->codigocuentacontable}}-{{$data->nombrecuentacontable ?? ''}}</td>
+                        @php
+                            $esAnuladaFila = ($data->estado ?? '') === 'ANULADA';
+                        @endphp
+                        <tr @if($esAnuladaFila) class="table-secondary" @endif>
+                            <td>{{ $data->id }}</td>
+                            <td>
+                                @include('presupuesto.partials.celda_link_consulta', [
+                                    'mostrarLinks' => true,
+                                    'puede' => $puede_ver_empresa ?? false,
+                                    'id' => $data->empresa_id ?? 0,
+                                    'routeName' => 'editar_empresa',
+                                    'texto' => $data->nombreempresa ?? '',
+                                ])
+                            </td>
+                            <td>
+                                @include('presupuesto.partials.celda_link_consulta', [
+                                    'mostrarLinks' => true,
+                                    'puede' => $puede_ver_presupuesto ?? false,
+                                    'id' => $data->presupuesto_id ?? 0,
+                                    'routeName' => 'editar_presupuesto',
+                                    'texto' => $data->nombrepresupuesto ?? '',
+                                ])
+                            </td>
+                            <td>{{ $data->nombreescenario ?? '' }}</td>
+                            <td>
+                                @include('presupuesto.partials.celda_link_consulta', [
+                                    'mostrarLinks' => true,
+                                    'puede' => $puede_ver_centrocosto ?? false,
+                                    'id' => $data->centrocosto_id ?? 0,
+                                    'routeName' => 'editar_centrocosto',
+                                    'texto' => trim(($data->codigocentrocosto ?? '').' '.($data->nombrecentrocosto ?? '')),
+                                ])
+                            </td>
+                            <td>{{ $data->codigopartida ?? '' }}</td>
+                            <td>{{ $data->detalle ?? '' }}</td>
+                            <td>
+                                @include('presupuesto.partials.celda_link_consulta', [
+                                    'mostrarLinks' => true,
+                                    'puede' => $puede_ver_articulo ?? false,
+                                    'id' => $data->articulo_id ?? 0,
+                                    'routeName' => 'editar_articulo',
+                                    'texto' => $data->descripcionarticulo ?? '',
+                                ])
+                            </td>
+                            <td>
+                                @include('presupuesto.partials.celda_link_consulta', [
+                                    'mostrarLinks' => true,
+                                    'puede' => $puede_ver_proveedor ?? false,
+                                    'id' => $data->proveedor_id ?? 0,
+                                    'routeName' => 'editar_proveedor',
+                                    'texto' => $data->nombreproveedor ?? '',
+                                ])
+                            </td>
+                            <td>
+                                @include('presupuesto.partials.celda_link_consulta', [
+                                    'mostrarLinks' => true,
+                                    'puede' => $puede_ver_cuentacontable ?? false,
+                                    'id' => $data->cuentacontable_id ?? 0,
+                                    'routeName' => 'editar_cuentacontable',
+                                    'texto' => ($data->codigocuentacontable ?? '').'-'.($data->nombrecuentacontable ?? ''),
+                                ])
+                            </td>
                             <td>{{$data->abreviaturamoneda}}</td>
                             <td style="text-align: left;">
                                 @php $montoTotal = 0; @endphp
@@ -85,7 +139,9 @@ use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
                                 @endforeach                                
                                 {{number_format($montoTotal,2)}}
                             </td>
-                            <td>{{$data->estado}}</td>
+                            <td>
+                                @include('presupuesto.partidagasto.partials.estado_badge', ['estado' => $data->estado ?? ''])
+                            </td>
                             <td>
                                 <ul>
                                     @foreach($data->partidagasto_montos as $partida)
@@ -95,7 +151,7 @@ use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
                             </td>
                             <td>
                        			@if (can('editar-partidagasto', false))
-                                	<a href="{{route('editar_partidagasto', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                	<a href="{{route('editar_partidagasto', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif

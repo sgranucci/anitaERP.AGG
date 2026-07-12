@@ -40,7 +40,7 @@ Modo modal en `depmae/editar`: sin permiso `actualizar-depositos` → solo lectu
 
 Aplicada en `DepmaeController@consultaDeposito` y `leeUnDepositoPorCodigo`:
 
-1. **Siempre** restringir a depósitos autorizados del usuario (`UsuarioDepositoAutorizado::aplicarFiltroQuery`), salvo `omitir_filtro_usuario=1` (solo admin usuarios).
+1. **Siempre** restringir a depósitos autorizados del usuario (`UsuarioDepositoAutorizado::aplicarFiltroQuery`), salvo `omitir_filtro_usuario=1` (admin usuarios; **destino de TRA** en mov. stock / transferencia mercadería: cualquier depósito de la empresa del formulario).
 2. **Empresa del formulario cargada** (`#empresa_id` con valor): filtrar además por esa empresa (`empresa_id` en POST/GET).
 3. **Empresa vacía** y usuario con empresas asignadas: filtrar por todas sus empresas (`EmpresaRepository::aplicarFiltroEmpresasAsignadas`).
 4. **Usuario sin empresas asignadas** (acceso total): sin filtro de empresa adicional.

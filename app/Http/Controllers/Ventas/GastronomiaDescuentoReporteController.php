@@ -7,14 +7,21 @@ use App\Exports\Ventas\GastronomiaDescuentoReporteExport;
 use App\Exports\Ventas\GastronomiaDescuentoReporteMultiExport;
 use App\Http\Controllers\Controller;
 use App\Models\Ventas\Cliente;
+use App\Models\Ventas\ClienteVipGastronomia;
 use App\Models\Ventas\DescuentoGastronomia;
+use App\Models\Ventas\MozoGastronomia;
 use App\Queries\Ventas\GastronomiaDescuentoReporteQuery;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Ventas\ClienteVipGastronomiaRepositoryInterface;
+use App\Repositories\Ventas\MozoGastronomiaRepositoryInterface;
 use App\Services\Ventas\GastronomiaDescuentoReporteService;
+use App\Support\Ventas\GastronomiaDescuentoReporteClienteSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteCacheSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteCodigoSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteCostoSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteFiltros;
+use App\Support\Ventas\GastronomiaDescuentoReporteMozoSupport;
+use App\Support\Ventas\GastronomiaDescuentoReporteVipSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +40,8 @@ class GastronomiaDescuentoReporteController extends Controller
         private readonly GastronomiaDescuentoReporteService $reporteService,
         private readonly GastronomiaDescuentoReporteQuery $reporteQuery,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly MozoGastronomiaRepositoryInterface $mozoRepository,
+        private readonly ClienteVipGastronomiaRepositoryInterface $clienteVipRepository,
     ) {
         $this->middleware('auth');
     }
@@ -51,6 +60,9 @@ class GastronomiaDescuentoReporteController extends Controller
 
         $resultado = null;
         $advertencias = [];
+        $clientesRangoCodigosFaltantes = [];
+        $mozosRangoCodigosFaltantes = [];
+        $vipsRangoCodigosFaltantes = [];
         $bloquesPag = null;
         $filasColumnasPag = null;
         $vistaColumnasPag = null;
@@ -60,6 +72,13 @@ class GastronomiaDescuentoReporteController extends Controller
         if ($consultado) {
             ini_set('memory_limit', '-1');
             ini_set('max_execution_time', '0');
+            $clientesRangoCodigosFaltantes = $this->reporteService->codigosClienteRangoSinRegistro($filtros);
+            if (GastronomiaDescuentoReporteFiltros::esModoMozo($filtros)) {
+                $mozosRangoCodigosFaltantes = $this->reporteService->codigosMozoRangoSinRegistro($filtros);
+            }
+            if (GastronomiaDescuentoReporteFiltros::esModoVip($filtros)) {
+                $vipsRangoCodigosFaltantes = $this->reporteService->codigosVipRangoSinRegistro($filtros);
+            }
 
             if ($request->boolean('refrescar_cache')) {
                 GastronomiaDescuentoReporteCacheSupport::limpiar();
@@ -143,12 +162,112 @@ class GastronomiaDescuentoReporteController extends Controller
             'filas_columnas_pag' => $filasColumnasPag,
             'vista_columnas_pag' => $vistaColumnasPag,
             'advertencias' => $advertencias,
+            'clientes_rango_codigos_faltantes' => $clientesRangoCodigosFaltantes,
+            'mozos_rango_codigos_faltantes' => $mozosRangoCodigosFaltantes,
+            'vips_rango_codigos_faltantes' => $vipsRangoCodigosFaltantes,
             'periodo_texto' => GastronomiaDescuentoReporteFiltros::formatearPeriodoTextoLargo($filtros),
             'empresa_texto' => $this->etiquetaEmpresa((int) ($filtros['empresa_id'] ?? 0), $empresaQuery),
             'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
             'puede_ver_factura' => can('ver-factura-gastronomia', false),
             'descuentos_iniciales' => $this->descuentosInicialesDesdeFiltros($filtros),
             'clientes_iniciales' => $this->clientesInicialesDesdeFiltros($filtros),
+            'mozos_iniciales' => $this->mozosInicialesDesdeFiltros($filtros),
+            'vips_iniciales' => $this->vipsInicialesDesdeFiltros($filtros),
+        ]);
+    }
+
+    public function consultaMozo(Request $request)
+    {
+        $this->assertAccesoMenu();
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $filtros = GastronomiaDescuentoReporteFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaQuery);
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $this->assertAccesoEmpresa($empresaId);
+
+        return $this->mozoRepository->consultaMozo(
+            (string) ($request->get('consulta') ?? ''),
+            $empresaId,
+            false,
+        );
+    }
+
+    public function leerMozoPorCodigo(Request $request, string $codigo)
+    {
+        $this->assertAccesoMenu();
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $filtros = GastronomiaDescuentoReporteFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaQuery);
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $this->assertAccesoEmpresa($empresaId);
+
+        if ($empresaId <= 0) {
+            return response()->json(['error' => 'Seleccione empresa antes de consultar mozos.'], 422);
+        }
+
+        $mozo = $this->mozoRepository->findPorCodigo($codigo, $empresaId, false);
+        if (! $mozo) {
+            return response()->json(['error' => 'Mozo no encontrado'], 404);
+        }
+
+        return response()->json([
+            'id' => $mozo->id,
+            'codigo' => $mozo->codigo,
+            'nombre' => $mozo->nombre,
+        ]);
+    }
+
+    public function consultaClienteVip(Request $request)
+    {
+        $this->assertAccesoMenu();
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $filtros = GastronomiaDescuentoReporteFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaQuery);
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $this->assertAccesoEmpresa($empresaId);
+
+        if ($empresaId <= 0) {
+            return response('{"data":"<tr><td colspan=\"8\" class=\"text-center text-muted\">Seleccione empresa antes de consultar clientes VIP.</td></tr>"}')
+                ->header('Content-Type', 'application/json');
+        }
+
+        return $this->clienteVipRepository->consultaClienteVipReporte(
+            (string) ($request->get('consulta') ?? ''),
+            $empresaId,
+        );
+    }
+
+    public function leerClienteVipPorCodigo(Request $request, string $codigo)
+    {
+        $this->assertAccesoMenu();
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $filtros = GastronomiaDescuentoReporteFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaQuery);
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $this->assertAccesoEmpresa($empresaId);
+
+        if ($empresaId <= 0) {
+            return response()->json(['error' => 'Seleccione empresa antes de consultar clientes VIP.'], 422);
+        }
+
+        $codigo = trim($codigo);
+        if ($codigo === '' || ! ctype_digit($codigo)) {
+            return response()->json(['error' => 'Cliente VIP no encontrado'], 404);
+        }
+
+        $vip = $this->clienteVipRepository->findPorNumeroid($empresaId, (int) $codigo);
+        if (! $vip) {
+            return response()->json(['error' => 'Cliente VIP no encontrado'], 404);
+        }
+
+        return response()->json([
+            'id' => (int) $vip->id,
+            'codigo' => (string) $vip->numeroid,
+            'nombre' => $vip->nombreCompleto(),
         ]);
     }
 
@@ -209,7 +328,7 @@ class GastronomiaDescuentoReporteController extends Controller
 
             return redirect()
                 ->route('gastronomia_descuento_reporte', $params)
-                ->with('errores', ['Consulte el reporte y seleccione códigos, clientes internos o marque Listar todos antes de exportar.']);
+                ->with('errores', ['Consulte el reporte y seleccione códigos, clientes internos, mozos, clientes VIP o marque Listar todos antes de exportar.']);
         }
 
         $resultado = GastronomiaDescuentoReporteCacheSupport::recuperar($filtros);
@@ -313,14 +432,54 @@ class GastronomiaDescuentoReporteController extends Controller
         }
 
         if (trim((string) ($filtros['clientes_descuento_ids_raw'] ?? '')) !== '') {
-            $filtros['clientes_descuento_ids'] = GastronomiaDescuentoReporteFiltros::parsearIdsCsv(
+            $explicitos = GastronomiaDescuentoReporteFiltros::parsearIdsCsv(
                 (string) $filtros['clientes_descuento_ids_raw'],
+            );
+            $filtros['clientes_descuento_ids_explicitos'] = $explicitos;
+            $filtros['clientes_descuento_ids'] = GastronomiaDescuentoReporteClienteSupport::fusionarSeleccion(
+                $explicitos,
+                (string) ($filtros['cliente_codigo_desde'] ?? ''),
+                (string) ($filtros['cliente_codigo_hasta'] ?? ''),
             );
         }
 
         if (trim((string) ($filtros['codigos_descuento_cliente'] ?? '')) !== '') {
             $filtros['codigos_descuento_cliente_resueltos'] = GastronomiaDescuentoReporteCodigoSupport::expandir(
                 (string) $filtros['codigos_descuento_cliente'],
+            );
+        }
+
+        if (trim((string) ($filtros['mozos_descuento_ids_raw'] ?? '')) !== ''
+            || GastronomiaDescuentoReporteMozoSupport::tieneRangoCodigo(
+                (string) ($filtros['mozo_codigo_desde'] ?? ''),
+                (string) ($filtros['mozo_codigo_hasta'] ?? ''),
+            )) {
+            $explicitos = GastronomiaDescuentoReporteFiltros::parsearIdsCsv(
+                (string) ($filtros['mozos_descuento_ids_raw'] ?? ''),
+            );
+            $filtros['mozos_descuento_ids_explicitos'] = $explicitos;
+            $filtros['mozos_descuento_ids'] = GastronomiaDescuentoReporteMozoSupport::fusionarSeleccion(
+                $explicitos,
+                (string) ($filtros['mozo_codigo_desde'] ?? ''),
+                (string) ($filtros['mozo_codigo_hasta'] ?? ''),
+                (int) ($filtros['empresa_id'] ?? 0),
+            );
+        }
+
+        if (trim((string) ($filtros['vips_descuento_ids_raw'] ?? '')) !== ''
+            || GastronomiaDescuentoReporteVipSupport::tieneRangoCodigo(
+                (string) ($filtros['vip_codigo_desde'] ?? ''),
+                (string) ($filtros['vip_codigo_hasta'] ?? ''),
+            )) {
+            $explicitos = GastronomiaDescuentoReporteFiltros::parsearIdsCsv(
+                (string) ($filtros['vips_descuento_ids_raw'] ?? ''),
+            );
+            $filtros['vips_descuento_ids_explicitos'] = $explicitos;
+            $filtros['vips_descuento_ids'] = GastronomiaDescuentoReporteVipSupport::fusionarSeleccion(
+                $explicitos,
+                (string) ($filtros['vip_codigo_desde'] ?? ''),
+                (string) ($filtros['vip_codigo_hasta'] ?? ''),
+                (int) ($filtros['empresa_id'] ?? 0),
             );
         }
 
@@ -345,9 +504,41 @@ class GastronomiaDescuentoReporteController extends Controller
             if (trim((string) ($filtros['codigos_descuento'] ?? '')) !== '') {
                 $partes[] = 'Códigos: '.($filtros['codigos_descuento'] ?? '');
             }
-            if (trim((string) ($filtros['clientes_descuento_ids_raw'] ?? '')) !== '') {
-                $partes[] = 'Clientes internos ID: '.($filtros['clientes_descuento_ids_raw'] ?? '');
-            }
+        if (trim((string) ($filtros['clientes_descuento_ids_raw'] ?? '')) !== '') {
+            $partes[] = 'Clientes internos ID: '.($filtros['clientes_descuento_ids_raw'] ?? '');
+        }
+
+        $etiquetaRango = GastronomiaDescuentoReporteClienteSupport::etiquetaRangoCodigo(
+            (string) ($filtros['cliente_codigo_desde'] ?? ''),
+            (string) ($filtros['cliente_codigo_hasta'] ?? ''),
+        );
+        if ($etiquetaRango !== '') {
+            $partes[] = 'Rango cód. cliente: '.$etiquetaRango;
+        }
+
+        $etiquetaRangoMozo = GastronomiaDescuentoReporteMozoSupport::etiquetaRangoCodigo(
+            (string) ($filtros['mozo_codigo_desde'] ?? ''),
+            (string) ($filtros['mozo_codigo_hasta'] ?? ''),
+        );
+        if ($etiquetaRangoMozo !== '') {
+            $partes[] = 'Rango cód. mozo: '.$etiquetaRangoMozo;
+        }
+
+        if (trim((string) ($filtros['mozos_descuento_ids_raw'] ?? '')) !== '') {
+            $partes[] = 'Mozos ID: '.($filtros['mozos_descuento_ids_raw'] ?? '');
+        }
+
+        $etiquetaRangoVip = GastronomiaDescuentoReporteVipSupport::etiquetaRangoCodigo(
+            (string) ($filtros['vip_codigo_desde'] ?? ''),
+            (string) ($filtros['vip_codigo_hasta'] ?? ''),
+        );
+        if ($etiquetaRangoVip !== '') {
+            $partes[] = 'Rango cód. VIP: '.$etiquetaRangoVip;
+        }
+
+        if (trim((string) ($filtros['vips_descuento_ids_raw'] ?? '')) !== '') {
+            $partes[] = 'Clientes VIP ID: '.($filtros['vips_descuento_ids_raw'] ?? '');
+        }
         }
 
         if (trim((string) ($filtros['codigos_descuento_cliente'] ?? '')) !== '') {
@@ -436,7 +627,7 @@ class GastronomiaDescuentoReporteController extends Controller
      */
     private function clientesInicialesDesdeFiltros(array $filtros): array
     {
-        $ids = $filtros['clientes_descuento_ids'] ?? [];
+        $ids = $filtros['clientes_descuento_ids_explicitos'] ?? $filtros['clientes_descuento_ids'] ?? [];
         if (! is_array($ids) || $ids === []) {
             return [];
         }
@@ -452,6 +643,94 @@ class GastronomiaDescuentoReporteController extends Controller
                 'id' => (int) $row->id,
                 'codigo' => trim((string) $row->codigo),
                 'nombre' => trim((string) $row->nombre),
+            ];
+        }
+
+        $out = [];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id <= 0) {
+                continue;
+            }
+            $out[] = $porId[$id] ?? [
+                'id' => $id,
+                'codigo' => (string) $id,
+                'nombre' => '(no registrado en maestro)',
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{id:int,codigo:string,nombre:string}>
+     */
+    private function mozosInicialesDesdeFiltros(array $filtros): array
+    {
+        $ids = $filtros['mozos_descuento_ids_explicitos'] ?? $filtros['mozos_descuento_ids'] ?? [];
+        if (! is_array($ids) || $ids === []) {
+            return [];
+        }
+
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $query = MozoGastronomia::query()->whereIn('id', $ids);
+        if ($empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        $encontrados = $query->orderBy('codigo')->get(['id', 'codigo', 'nombre']);
+
+        $porId = [];
+        foreach ($encontrados as $row) {
+            $porId[(int) $row->id] = [
+                'id' => (int) $row->id,
+                'codigo' => trim((string) $row->codigo),
+                'nombre' => trim((string) $row->nombre),
+            ];
+        }
+
+        $out = [];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id <= 0) {
+                continue;
+            }
+            $out[] = $porId[$id] ?? [
+                'id' => $id,
+                'codigo' => (string) $id,
+                'nombre' => '(no registrado en maestro)',
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{id:int,codigo:string,nombre:string}>
+     */
+    private function vipsInicialesDesdeFiltros(array $filtros): array
+    {
+        $ids = $filtros['vips_descuento_ids_explicitos'] ?? $filtros['vips_descuento_ids'] ?? [];
+        if (! is_array($ids) || $ids === []) {
+            return [];
+        }
+
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $query = ClienteVipGastronomia::query()->whereIn('id', $ids);
+        if ($empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        $encontrados = $query->orderBy('numeroid')->get(['id', 'numeroid', 'apellido', 'nombre']);
+
+        $porId = [];
+        foreach ($encontrados as $row) {
+            $porId[(int) $row->id] = [
+                'id' => (int) $row->id,
+                'codigo' => (string) $row->numeroid,
+                'nombre' => trim(trim((string) $row->apellido).' '.trim((string) $row->nombre)),
             ];
         }
 

@@ -52,6 +52,39 @@ final class GastronomiaAnitaVenGravadoSupportTest extends TestCase
         $this->assertSame(0.0, $dataCae['iva']);
     }
 
+    public function test_montos_cabecera_import_cortesia_minima(): void
+    {
+        $montos = GastronomiaAnitaVenGravadoSupport::montosCabeceraImportDesdeAnita(0.01, 0.01, 0.0, 0.0);
+
+        $this->assertSame(0.01, $montos['total']);
+        $this->assertSame(0.0, $montos['gravado']);
+        $this->assertSame(0.01, $montos['exento']);
+        $this->assertSame(0.0, $montos['iva']);
+    }
+
+    public function test_filas_impuesto_import_cortesia_sin_gravado(): void
+    {
+        $filas = GastronomiaAnitaVenGravadoSupport::filasVentaImpuestoImportCortesiaMinima();
+
+        $this->assertCount(2, $filas);
+        $this->assertSame('Exento', $filas[0]['concepto']);
+        $this->assertSame(0.01, $filas[0]['importe']);
+        $this->assertSame('Total', $filas[1]['concepto']);
+        $conceptos = array_column($filas, 'concepto');
+        $this->assertNotContains('Gravado al 21.000%', $conceptos);
+        $this->assertStringStartsWith('Exento', (string) $filas[0]['concepto']);
+    }
+
+    public function test_montos_cabecera_import_normal_sin_cambio(): void
+    {
+        $montos = GastronomiaAnitaVenGravadoSupport::montosCabeceraImportDesdeAnita(5400.0, 4462.81, 0.0, 937.19);
+
+        $this->assertSame(5400.0, $montos['total']);
+        $this->assertSame(4462.81, $montos['gravado']);
+        $this->assertSame(0.0, $montos['exento']);
+        $this->assertSame(937.19, $montos['iva']);
+    }
+
     public function test_prefiere_gravado_al_si_existe(): void
     {
         $conceptos = [

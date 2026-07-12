@@ -8,8 +8,8 @@ Requisición de sala
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/deposito.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/grabando.js') }}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/sala/requisicion_sala/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/grabando.js') }}?v={{ filemtime(public_path('assets/pages/scripts/sala/requisicion_sala/grabando.js')) }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/crear.js') }}?v={{ filemtime(public_path('assets/pages/scripts/sala/requisicion_sala/crear.js')) }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')

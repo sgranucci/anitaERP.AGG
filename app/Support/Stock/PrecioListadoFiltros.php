@@ -23,7 +23,7 @@ class PrecioListadoFiltros
         'sku' => ['column' => 'articulo.sku', 'type' => 'texto', 'label' => 'SKU'],
         'articulo' => ['column' => 'articulo.descripcion', 'type' => 'texto', 'label' => 'Descripción artículo'],
         'categoria' => ['column' => 'categoria.nombre', 'type' => 'texto', 'label' => 'Categoría'],
-        'listaprecio' => ['column' => 'listaprecio.nombre', 'type' => 'texto', 'label' => 'Lista de precios'],
+        'listaprecio' => ['column' => 'listaprecio.id', 'type' => 'lista', 'label' => 'Lista de precios'],
         'fechavigencia' => ['column' => 'precio.fechavigencia', 'type' => 'fecha', 'label' => 'Fecha vigencia'],
         'moneda' => ['column' => 'moneda.nombre', 'type' => 'texto', 'label' => 'Moneda'],
         'precio' => ['column' => 'precio.precio', 'type' => 'decimal', 'label' => 'Precio'],
@@ -64,6 +64,11 @@ class PrecioListadoFiltros
         'igual' => 'Igual a',
         'mayor' => 'Mayor que',
         'menor' => 'Menor que',
+    ];
+
+    /** @var array<string, string> */
+    public const OPERADORES_LISTA = [
+        'igual' => 'Igual a',
     ];
 
     /** @var array<string, string> */
@@ -352,7 +357,26 @@ class PrecioListadoFiltros
             return;
         }
 
+        if ($type === 'lista') {
+            self::aplicarLista($query, (string) $def['column'], $valor);
+
+            return;
+        }
+
         self::aplicarTexto($query, (string) $def['column'], $operador, $valor);
+    }
+
+    /**
+     * @param  Builder<\App\Models\Stock\Precio>  $query
+     */
+    private static function aplicarLista(Builder $query, string $column, string $valor): void
+    {
+        $id = filter_var(trim($valor), FILTER_VALIDATE_INT);
+        if ($id === false || (int) $id <= 0) {
+            return;
+        }
+
+        $query->where($column, '=', (int) $id);
     }
 
     /**
@@ -581,6 +605,7 @@ class PrecioListadoFiltros
             'entero' => array_keys(self::OPERADORES_ENTERO),
             'decimal' => array_keys(self::OPERADORES_DECIMAL),
             'fecha' => array_keys(self::OPERADORES_FECHA),
+            'lista' => array_keys(self::OPERADORES_LISTA),
             default => array_keys(self::OPERADORES_TEXTO),
         };
 
@@ -602,7 +627,62 @@ class PrecioListadoFiltros
             'entero' => self::OPERADORES_ENTERO,
             'decimal' => self::OPERADORES_DECIMAL,
             'fecha' => self::OPERADORES_FECHA,
+            'lista' => self::OPERADORES_LISTA,
             default => self::OPERADORES_TEXTO,
         };
+    }
+
+    /**
+     * @param  list<object>|iterable<int, object>|null  $listasPrecio
+     */
+    public static function subtituloExport(array $filtros, $listasPrecio = null): string
+    {
+        $partes = [];
+
+        if (($filtros['ocultar_precio_cero'] ?? true) === false) {
+            $partes[] = 'Incluye precio 0';
+        }
+
+        if (! empty($filtros['listaprecio_id'])) {
+            $listaId = (int) $filtros['listaprecio_id'];
+            $etiqueta = 'ID '.$listaId;
+            foreach ($listasPrecio ?? [] as $lista) {
+                if ((int) ($lista->id ?? 0) === $listaId) {
+                    $etiqueta = trim(($lista->codigo ?? '').' — '.($lista->nombre ?? ''));
+                    break;
+                }
+            }
+            $partes[] = 'Lista toolbar: '.$etiqueta;
+        }
+
+        if (self::tieneCriteriosInteligentesAplicados($filtros)) {
+            $campo = (string) ($filtros['campo'] ?? 'sku');
+            $label = self::CAMPOS[$campo]['label'] ?? $campo;
+            $operador = (string) ($filtros['operador'] ?? 'contiene');
+            $valor = trim((string) ($filtros['valor'] ?? ''));
+            $valorHasta = trim((string) ($filtros['valor_hasta'] ?? ''));
+
+            if ($operador === 'vacio') {
+                $partes[] = $label.': vacío';
+            } elseif ($valor !== '') {
+                $texto = $label.' '.$operador.': '.$valor;
+                if ($campo === 'listaprecio') {
+                    foreach ($listasPrecio ?? [] as $lista) {
+                        if ((int) ($lista->id ?? 0) === (int) $valor) {
+                            $texto = $label.': '.trim(($lista->codigo ?? '').' — '.($lista->nombre ?? ''));
+                            break;
+                        }
+                    }
+                }
+                if ($valorHasta !== '') {
+                    $texto .= ' — '.$valorHasta;
+                }
+                $partes[] = $texto;
+            } elseif (($filtros['modo'] ?? self::MODO_TODOS) === self::MODO_TODOS && trim((string) ($filtros['busqueda'] ?? '')) !== '') {
+                $partes[] = 'Búsqueda: '.$filtros['busqueda'];
+            }
+        }
+
+        return implode(' · ', $partes);
     }
 }

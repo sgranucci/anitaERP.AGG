@@ -16,6 +16,7 @@ use App\Models\Presupuesto\Capex_Estado;
 use App\Models\Presupuesto\Capex;
 use App\Queries\Presupuesto\CapexQueryInterface;
 use App\Support\Presupuesto\CapexListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Presupuesto\CapexExport;
 use App\Exports\Presupuesto\CapexOrdenCompraExport;
 use Illuminate\Http\Request;
@@ -143,7 +144,7 @@ class CapexController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-capex');
 
@@ -152,9 +153,10 @@ class CapexController extends Controller
         $moneda_query = $this->monedaRepository->all();
         $presupuesto_query = $this->presupuestoRepository->all();
         $estado_enum = Capex_Estado::$enumEstado;
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, CapexListadoFiltros::class);
 
         return view('presupuesto.capex.crear', compact('empresa_query', 'centrocosto_query', 'presupuesto_query',
-                                                            'moneda_query', 'estado_enum'));
+                                                            'moneda_query', 'estado_enum', 'filtrosQuery'));
     }
 
     /**
@@ -172,7 +174,8 @@ class CapexController extends Controller
         else
             $mensaje = $capex['errores'];
 
-        return redirect('presupuesto/capex')->with('mensaje', $mensaje);
+        return redirect()->route('consultar_capex', QueryRetornoListado::desdeRequest($request, CapexListadoFiltros::class))
+            ->with('mensaje', $mensaje);
 	}
 
     /**
@@ -181,9 +184,9 @@ class CapexController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
         if ($soloConsulta) {
             can('listar-capex');
         } else {
@@ -198,6 +201,9 @@ class CapexController extends Controller
         $estado_enum = Capex_Estado::$enumEstado;
         $puedeActualizarCapex = can('actualizar-capex', false);
         $ocultarVolver = $soloConsulta;
+        $filtrosQuery = $soloConsulta
+            ? []
+            : QueryRetornoListado::desdeRequest($request, CapexListadoFiltros::class);
 
         return view('presupuesto.capex.editar', compact(
             'data',
@@ -209,6 +215,7 @@ class CapexController extends Controller
             'soloConsulta',
             'puedeActualizarCapex',
             'ocultarVolver',
+            'filtrosQuery',
         ));
     }
 
@@ -230,7 +237,16 @@ class CapexController extends Controller
         else
             $mensaje = $capex['errores'];
 
-        return redirect('presupuesto/capex')->with('mensaje', $mensaje);
+        if (QueryRetornoListado::esModalConsulta($request)) {
+            return redirect()->route('editar_capex', [
+                'id' => $id,
+                'origen' => 'modal_consulta',
+                'vista' => 'consulta',
+            ])->with('mensaje', $mensaje);
+        }
+
+        return redirect()->route('consultar_capex', QueryRetornoListado::desdeRequest($request, CapexListadoFiltros::class))
+            ->with('mensaje', $mensaje);
     }
 
     /**

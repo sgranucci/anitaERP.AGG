@@ -29,9 +29,9 @@
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        @if (!empty($errores ?? session('errores')))
+        @if (!empty($errores))
         <div class="alert alert-danger">
-            @foreach ((array) ($errores ?? session('errores', [])) as $err)
+            @foreach ((array) $errores as $err)
                 <div>{{ $err }}</div>
             @endforeach
         </div>

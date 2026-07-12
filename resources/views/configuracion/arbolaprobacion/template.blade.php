@@ -11,7 +11,7 @@
             <select name="centrocosto_ids[]" data-placeholder="Centro de Costo" class="centrocosto form-control required" required data-fouc>
                 <option value="">-- Elija centro de costo --</option>
                 @foreach($centrocosto_query as $key => $value)
-                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                    <option value="{{ $value->id }}">{{ $value->codigo }} - {{ $value->nombre }}</option>    
                 @endforeach
             </select>
         </td>                    

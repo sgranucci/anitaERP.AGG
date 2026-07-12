@@ -20,6 +20,7 @@ final class RecepcionProveedorAsientoAnitaCtamovSupport
         $letra = str_replace("'", "''", trim((string) ($clave['letra'] ?? '')));
         $sucursal = (int) ($clave['sucursal'] ?? 0);
         $nro = (int) ($clave['nro'] ?? 0);
+        $empresaCodigo = RecepcionProveedorAnitaClaveSupport::codigoEmpresaContabAnita($recepcion);
 
         if ($tipo === '' || $nro <= 0) {
             return null;
@@ -31,7 +32,8 @@ final class RecepcionProveedorAsientoAnitaCtamovSupport
             'sistema' => 'contab',
             'tabla' => 'ctamov',
             'campos' => 'ctav_importe,ctav_d_h',
-            'whereArmado' => " WHERE ctav_tipo='{$tipo}'"
+            'whereArmado' => " WHERE ctav_empresa='".str_replace("'", "''", (string) $empresaCodigo)."'"
+                ." AND ctav_tipo='{$tipo}'"
                 ." AND ctav_letra='{$letra}'"
                 .' AND ctav_sucursal='.$sucursal
                 .' AND ctav_nro='.$nro,

@@ -51,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
             $nivelActual = 0;
             $menus = Menu::getMenu(true, $nivelActual);
             $menus = \App\Support\Caja\Estacionamiento\EstacionamientoModuloSupport::filtrarMenuAside($menus);
+            $menus = \App\Support\Caja\Bingo\BingoModuloSupport::filtrarMenuAside($menus);
             $view->with('menusComposer', $menus);
 
             if (auth()->check()) {
@@ -413,6 +414,36 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Caja\Bingo\BingoCartonRepositoryInterface',
+            'App\Repositories\Caja\Bingo\BingoCartonRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Flash\FlashCajaRepositoryInterface',
+            'App\Repositories\Caja\Flash\FlashCajaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepositoryInterface',
+            'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Bingo\JornadaBingoRepositoryInterface',
+            'App\Repositories\Caja\Bingo\JornadaBingoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Bingo\TurnoBingoRepositoryInterface',
+            'App\Repositories\Caja\Bingo\TurnoBingoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\Bingo\ConfiguracionPuntoventaBingoRepositoryInterface',
+            'App\Repositories\Caja\Bingo\ConfiguracionPuntoventaBingoRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Caja\Estacionamiento\ListaPrecioEstacionamientoRepositoryInterface',
             'App\Repositories\Caja\Estacionamiento\ListaPrecioEstacionamientoRepository',
         );
@@ -508,6 +539,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Compras\Requisicion_EstadoRepositoryInterface',
             'App\Repositories\Compras\Requisicion_EstadoRepository',
+        );
+        $this->app->bind(
+            'App\Repositories\Compras\CumplimientoRequisicionCompraRepositoryInterface',
+            'App\Repositories\Compras\CumplimientoRequisicionCompraRepository',
         );
 
         $this->app->bind(
@@ -806,6 +841,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\ConfiguracionTerminalViandaRepositoryInterface',
+            'App\Repositories\Ventas\ConfiguracionTerminalViandaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\MaquinavendingRendicionRepositoryInterface',
             'App\Repositories\Ventas\MaquinavendingRendicionRepository',
         );
@@ -948,6 +988,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Configuracion\Retencion_Cobranza_CuentacontableRepositoryInterface',
             'App\Repositories\Configuracion\Retencion_Cobranza_CuentacontableRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Contable\Sicore_ConfigRepositoryInterface',
+            'App\Repositories\Contable\Sicore_ConfigRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Contable\Sicore_Config_CuentaRepositoryInterface',
+            'App\Repositories\Contable\Sicore_Config_CuentaRepository',
         );
 
         $this->app->bind(
@@ -1164,8 +1214,8 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
-            'App\Repositories\Configuracion\Retencionimpositiva_ArcaRepositoryInterface',
-            'App\Repositories\Configuracion\Retencionimpositiva_ArcaRepository',
+            'App\Repositories\Contable\Retencionimpositiva_ArcaRepositoryInterface',
+            'App\Repositories\Contable\Retencionimpositiva_ArcaRepository',
         );
 
         $this->app->bind(
@@ -1479,6 +1529,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Sala\RequisicionSalaArchivoRepositoryInterface',
             'App\Repositories\Sala\RequisicionSalaArchivoRepository',
+        );
+        $this->app->bind(
+            'App\Repositories\Sala\CumplimientoRequisicionSalaRepositoryInterface',
+            'App\Repositories\Sala\CumplimientoRequisicionSalaRepository',
         );
         $this->app->bind(
             'App\Queries\Sala\RequisicionSalaQueryInterface',

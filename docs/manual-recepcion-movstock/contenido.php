@@ -182,7 +182,7 @@ return [
             'parrafos' => [
                 'Menú: Stock → Movimientos de Stock. Lista movimientos sueltos y transferencias en una sola tabla.',
                 'Columnas: ID, Fecha, Tipo de transacción, Número, Lote, Origen, Destino, Empresa, Cantidad, Ítems, Estado.',
-                'Si ve el aviso «Mostrando movimientos de su sector», su usuario está limitado al centro de costo asignado. Con permiso listar-todos los movimientos de stock ve todo el sector/empresa.',
+                'Si ve el aviso de listado limitado, solo aparecen movimientos y transferencias cargados por usuarios de su centro de costo (más depósitos/tipos autorizados si aplican). Con permiso listar-todos los movimientos de stock ve el listado completo de sus empresas.',
                 'Búsqueda rápida busca movimientos y transferencias a la vez. Export PDF/Excel/CSV respeta filtros activos.',
             ],
             'items' => [

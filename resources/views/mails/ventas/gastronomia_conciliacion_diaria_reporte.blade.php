@@ -23,6 +23,9 @@
             'vending_pv' => 'PV vending',
             'total_vending' => 'TOTAL VENDING',
             'control_gastro_total' => 'Control día (neto)',
+            'control_flash' => 'Control flash (caja)',
+            'control_flash_gastro' => 'Flash gastro (AyB vs rendg)',
+            'control_flash_estacionamiento' => 'Flash estac. (vs rendg)',
             default => (string) ($fila['tipo_pv'] ?? $fila['tipo_fila'] ?? '—'),
         };
     };
@@ -52,7 +55,7 @@
 @endif
 
 <p style="margin:16px 0 8px 0;">
-    Adjunto Excel (y CSV) por circuito: <strong>GASTRO</strong> (salón), <strong>ESTACIONAMIENTO</strong> (PV ERP vs rendgastro), <strong>VENDING</strong> (rendiciones ERP vs rendgastro).
+    Adjunto Excel (y CSV) por circuito: <strong>GASTRO</strong> (salón), <strong>ESTACIONAMIENTO</strong> (PV ERP vs rendgastro), <strong>VENDING</strong> (rendiciones ERP vs rendgastro), <strong>FLASH</strong> (caja Informix: flash_ayb / flash_estac vs rendgastro por unidad de negocio).
 </p>
 
 @foreach ($informe['empresas'] ?? [] as $empresa)
@@ -79,6 +82,17 @@
             if (! empty($dia['control_gastro_total']) && is_array($dia['control_gastro_total'])) {
                 $filasTabla[] = $dia['control_gastro_total'];
             }
+            if (! empty($dia['control_flash']) && is_array($dia['control_flash'])) {
+                if (array_is_list($dia['control_flash'])) {
+                    foreach ($dia['control_flash'] as $filaFlash) {
+                        if (is_array($filaFlash)) {
+                            $filasTabla[] = $filaFlash;
+                        }
+                    }
+                } else {
+                    $filasTabla[] = $dia['control_flash'];
+                }
+            }
             $porCircuito = [];
             foreach ($filasTabla as $f) {
                 $c = (string) ($f['circuito'] ?? 'GASTRO');
@@ -86,36 +100,50 @@
             }
         @endphp
 
-        @foreach (['GASTRO', 'ESTACIONAMIENTO', 'VENDING'] as $circuito)
+        @foreach (['GASTRO', 'ESTACIONAMIENTO', 'VENDING', 'FLASH'] as $circuito)
             @if (empty($porCircuito[$circuito]))
                 @continue
             @endif
             <p style="margin:14px 0 6px 0; font-weight:bold; color:#1a5276;">Circuito {{ $circuito }}</p>
+            @php $tieneFlashControl = $circuito === 'FLASH'; @endphp
             <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:11px; margin-bottom:10px; width:100%;">
                 <tr style="background:#85C1E9; color:#17202A;">
                     <th>Clave</th>
                     <th>Tipo</th>
                     <th>PV</th>
                     <th align="right">ERP</th>
-                    <th align="right">Anita</th>
-                    <th align="right">Rendg</th>
-                    <th align="right">Δ ERP-Rendg</th>
+                    @if ($tieneFlashControl)
+                        <th align="right">Rendg</th>
+                        <th align="right">Flash</th>
+                        <th align="right">Δ Rendg-Flash</th>
+                    @else
+                        <th align="right">Anita</th>
+                        <th align="right">Rendg</th>
+                        <th align="right">Δ ERP-Rendg</th>
+                    @endif
                     <th>Estado</th>
                 </tr>
                 @foreach ($porCircuito[$circuito] as $fila)
                     @php
                         $tipo = $fila['tipo_fila'] ?? '';
                         $erpCol = (float) ($fila['ventas_erp'] ?? 0);
-                        $rendgCol = $fila['rendgastro_neto'] ?? $fila['rendgastro_z'] ?? null;
                     @endphp
                     <tr>
                         <td>{{ $fila['identificador_pc'] ?? '' }}</td>
                         <td><strong>{{ $etiquetaTipo($fila) }}</strong></td>
                         <td>{{ $fila['pv_codigo'] ?? '—' }}</td>
                         <td align="right">{{ $fmt($erpCol) }}</td>
-                        <td align="right">{{ $fmt($fila['ventas_anita'] ?? 0) }}</td>
-                        <td align="right">{{ $rendgCol !== null ? $fmt($rendgCol) : '—' }}</td>
-                        <td align="right">{{ isset($fila['diff_erp_rendg']) ? $fmt($fila['diff_erp_rendg']) : '—' }}</td>
+                        @if ($tieneFlashControl)
+                            @php $rendgFlash = $fila['rendgastro_neto'] ?? $fila['rendgastro_z'] ?? null; @endphp
+                            <td align="right">{{ $rendgFlash !== null ? $fmt($rendgFlash) : '—' }}</td>
+                            <td align="right">{{ $fmt($fila['total_flash'] ?? 0) }}</td>
+                            <td align="right">{{ isset($fila['diff_rendg_flash']) ? $fmt($fila['diff_rendg_flash']) : '—' }}</td>
+                        @else
+                            <td align="right">{{ $fmt($fila['ventas_anita'] ?? 0) }}</td>
+                            @php $rendgCol = $fila['rendgastro_neto'] ?? $fila['rendgastro_z'] ?? null; @endphp
+                            <td align="right">{{ $rendgCol !== null ? $fmt($rendgCol) : '—' }}</td>
+                            <td align="right">{{ isset($fila['diff_erp_rendg']) ? $fmt($fila['diff_erp_rendg']) : '—' }}</td>
+                        @endif
                         <td>{{ $fila['estado'] ?? '—' }}</td>
                     </tr>
                 @endforeach

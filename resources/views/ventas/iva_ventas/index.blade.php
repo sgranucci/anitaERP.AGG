@@ -106,18 +106,33 @@
                                     @checked($filtros['conciliar_contable'] ?? true)>
                                 <label class="form-check-label" for="conciliar_contable">Conciliar contra mayor contable (cuentas ventas e IVA)</label>
                             </div>
-                            <div class="form-check">
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" name="conciliar_por_unidad" id="conciliar_por_unidad" value="1"
+                                    @checked($filtros['conciliar_por_unidad'] ?? true)>
+                                <label class="form-check-label" for="conciliar_por_unidad">Conciliar por unidad de negocio (Gastronomía / Vending / Estacionamiento)</label>
+                            </div>
+                            <div class="form-check mb-1">
                                 <input class="form-check-input" type="checkbox" name="clasificar_por_host" id="clasificar_por_host" value="1"
                                     @checked(! empty($filtros['clasificar_por_host']))>
                                 <label class="form-check-label" for="clasificar_por_host">Clasificar por host (PC de facturación)</label>
                             </div>
+                            <div class="form-check">
+                                <input class="form-check-input js-auto-consultar" type="checkbox" name="agrupar_b_por_dia" id="agrupar_b_por_dia" value="1"
+                                    @checked(! empty($filtros['agrupar_b_por_dia']))>
+                                <label class="form-check-label" for="agrupar_b_por_dia">Unificar Facturas B por día (rango de comprobantes)</label>
+                            </div>
                         </div>
                         <div class="{{ $colLabel }} d-none d-lg-block"></div>
                         <div class="{{ $colInput }}">
-                            <div class="form-check">
+                            <div class="form-check mb-1">
                                 <input class="form-check-input" type="checkbox" name="solo_moneda_origen" id="solo_moneda_origen" value="1"
                                     @checked(! empty($filtros['solo_moneda_origen']))>
                                 <label class="form-check-label" for="solo_moneda_origen">Convertir moneda extranjera con cotización del comprobante</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input js-auto-consultar" type="checkbox" name="auditar_ctamov" id="auditar_ctamov" value="1"
+                                    @checked(! empty($filtros['auditar_ctamov']))>
+                                <label class="form-check-label" for="auditar_ctamov">Auditar contra ctamov (Anita) — lee el bridge, puede demorar</label>
                             </div>
                         </div>
                     </div>
@@ -212,6 +227,7 @@
                     <style>
                         #tabla-paginada thead tr { background-color: #85C1E9; color: #17202A; }
                         #tabla-paginada thead th { font-weight: 600; border-color: #7fb3d5; }
+                        #tabla-paginada tbody tr.iva-ventas-resumen-b { background-color: #fef9e7; font-weight: 600; }
                     </style>
                     <div class="table-responsive border-top">
                         <table id="tabla-paginada" class="table table-striped table-bordered table-hover table-sm mb-0" style="font-size: 0.78rem;">
@@ -232,7 +248,7 @@
                         <div class="card-footer clearfix d-flex flex-wrap align-items-center justify-content-between border-top-0">
                             <span class="small text-muted mb-2 mb-md-0">
                                 @if ($filas->total() > 0)
-                                    Mostrando {{ $filas->firstItem() }}–{{ $filas->lastItem() }} de {{ $filas->total() }} comprobantes
+                                    Mostrando {{ $filas->firstItem() }}–{{ $filas->lastItem() }} de {{ $filas->total() }} {{ ($resultado['agrupado_b_por_dia'] ?? false) ? 'líneas (Facturas B unificadas por día)' : 'comprobantes' }}
                                 @else
                                     Sin registros en esta p&aacute;gina
                                     @if ((int) ($statsIva['ventas'] ?? 0) > 0)
@@ -252,8 +268,17 @@
                         'puede_ver_asiento' => $puede_ver_asiento ?? false,
                     ])
 
+                    @include('ventas.iva_ventas.partials.conciliacion_unidad_negocio', [
+                        'resultado' => $resultado,
+                    ])
+
                     @include('ventas.iva_ventas.partials.auditoria_diaria', [
                         'resultado' => $resultado,
+                    ])
+
+                    @include('ventas.iva_ventas.partials.auditoria_diaria_unidad_negocio', [
+                        'resultado' => $resultado,
+                        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                     ])
 
                     @include('ventas.iva_ventas.partials.auditoria_correlatividad', [

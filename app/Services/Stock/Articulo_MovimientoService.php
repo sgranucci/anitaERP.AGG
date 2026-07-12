@@ -110,6 +110,8 @@ class Articulo_MovimientoService
 				}
 			}
 
+			unset($dataMovimiento['omitir_validacion_saldo']);
+
 			$dataMovimiento = $this->filtrarDatosParaTablaArticuloMovimiento($dataMovimiento);
 
 			$articulo_movimiento = $this->articulo_movimientoRepository->create($dataMovimiento);

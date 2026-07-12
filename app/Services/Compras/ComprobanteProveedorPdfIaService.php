@@ -11,6 +11,8 @@ use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosListaSupport
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorResolucionSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorWscdcConstatacionSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorApocConsultaSupport;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -29,6 +31,8 @@ final class ComprobanteProveedorPdfIaService
         private PrecargaComprobanteAnitaSyncService $precargaAnitaSync,
         private PrecargaProveedorNumeroOcSupport $numeroOcSupport,
         private ComprobanteProveedorFacturaScanStorageService $facturaScanStorage,
+        private PrecargaProveedorWscdcConstatacionSupport $wscdcConstatacionSupport,
+        private PrecargaProveedorApocConsultaSupport $apocConsultaSupport,
     ) {}
 
     /**
@@ -198,7 +202,8 @@ final class ComprobanteProveedorPdfIaService
             'numerocae' => $resuelto['numerocae'] ?? null,
             'numeroordencompra' => $numeroOc,
             'rutaalmacenamiento' => $rutaAlmacenamiento,
-            'pararevisar' => 0,
+            'pararevisar' => $this->wscdcConstatacionSupport->tieneDiscrepancias($resuelto)
+                || $this->apocConsultaSupport->tieneProblemasApoc($resuelto) ? 1 : 0,
             'subtotal' => (float) ($resuelto['subtotal'] ?? 0),
             'total' => (float) ($resuelto['total'] ?? 0),
             'moneda' => (string) ($resuelto['moneda'] ?? 'PESOS'),
@@ -223,9 +228,15 @@ final class ComprobanteProveedorPdfIaService
 
             DB::commit();
 
+            $mensaje = 'Precarga registrada desde PDF+IA.';
+            if ($this->wscdcConstatacionSupport->tieneDiscrepancias($resuelto)
+                || $this->apocConsultaSupport->tieneProblemasApoc($resuelto)) {
+                $mensaje .= ' Marcada con errores (para revisar) por discrepancias con ARCA.';
+            }
+
             return [
                 'precarga_id' => (int) $precarga->id,
-                'message' => 'Precarga registrada desde PDF+IA.',
+                'message' => $mensaje,
             ];
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -279,7 +290,7 @@ final class ComprobanteProveedorPdfIaService
             $advertencias[] = 'La suma de conceptos ('.$totalAsignado.') difiere del total del comprobante ('.$totalFactura.').';
         }
 
-        return [
+        $resuelto = [
             'numero_oc' => $numeroOc,
             'empresa_id' => $empresa['empresa_id'],
             'codigo_empresa' => $empresa['codigo'],
@@ -305,7 +316,12 @@ final class ComprobanteProveedorPdfIaService
             'conceptos_candidatos' => $listaConceptos['conceptos'],
             'conceptos_asignados' => $conceptosAsignados,
             'advertencias' => $advertencias,
+            'pararevisar' => $totalFactura > 0 && abs($totalAsignado - $totalFactura) > 0.05,
         ];
+
+        $resuelto = $this->wscdcConstatacionSupport->constatarYEnriquecer($extraido, $resuelto);
+
+        return $this->apocConsultaSupport->consultarYEnriquecer($resuelto);
     }
 
     private function assertHabilitado(): void

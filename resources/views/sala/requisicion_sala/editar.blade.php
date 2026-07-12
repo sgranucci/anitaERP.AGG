@@ -8,8 +8,8 @@ Requisición de sala
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/deposito.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/grabando.js') }}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/sala/requisicion_sala/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/grabando.js') }}?v={{ filemtime(public_path('assets/pages/scripts/sala/requisicion_sala/grabando.js')) }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/crear.js') }}?v={{ filemtime(public_path('assets/pages/scripts/sala/requisicion_sala/crear.js')) }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -24,6 +24,7 @@ Requisición de sala
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @include('sala.requisicion_sala.partials.cumplimientos_sala', ['data' => $data, 'cumplimientos_sala' => $cumplimientos_sala ?? []])
         @if(!empty($tiene_transferencia_laboratorio) && !empty($puedeActualizarRequisicionSala))
         <div class="alert alert-info mx-0 mb-0 rounded-0 border-left-0 border-right-0">
             <strong>Transferencia al laboratorio asociada.</strong>
@@ -42,9 +43,14 @@ Requisición de sala
                     @endif
                 </h3>
                 <div class="card-tools">
-                    <a href="{{ route('imprimir_pdf_requisicion_sala', ['id' => $data->id]) }}" class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener noreferrer" title="PDF emisión" data-modo-consulta-omitir="1">
+                    <a href="{{ route('imprimir_pdf_requisicion_sala', ['id' => $data->id]) }}" class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener noreferrer" title="PDF emisi&oacute;n" data-modo-consulta-omitir="1">
                         <i class="fa fa-file-pdf-o"></i> PDF
                     </a>
+                    @if (can('cumplir-requisicion-sala', false))
+                    <a href="{{ route('cumplir_requisicion_sala', ['requisicion_sala_id' => $data->id]) }}" class="btn btn-outline-success btn-sm" title="Cumplimientos" data-modo-consulta-omitir="1">
+                        <i class="fa fa-clipboard-check"></i> Cumplimientos
+                    </a>
+                    @endif
                     @if(empty($ocultarVolver))
                     <a href="{{ route('consultar_requisicion_sala') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado

@@ -29,7 +29,7 @@ final class GastronomiaConciliacionDiariaReporteExport implements FromView, Shou
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'AE';
+    private const COL_ULTIMA = 'AL';
 
     private bool $hayFilaLogos = false;
 
@@ -62,7 +62,7 @@ final class GastronomiaConciliacionDiariaReporteExport implements FromView, Shou
         $hasta = (string) ($informe['fecha_hasta'] ?? $desde);
         $this->titulo = 'Conciliación gastronomía ERP / Anita / rendgastro';
         $this->subtitulo = sprintf(
-            'Jornada %s → %s · Circuitos: GASTRO (salón) | ESTACIONAMIENTO | VENDING · Por PC/PV vs rendgastro',
+            'Jornada %s → %s · Circuitos: GASTRO (salón) | ESTACIONAMIENTO | VENDING | FLASH (AyB/estac vs rendg) · Por PC/PV vs rendgastro',
             $desde,
             $hasta,
         );
@@ -116,6 +116,11 @@ final class GastronomiaConciliacionDiariaReporteExport implements FromView, Shou
             'AC' => NumberFormat::FORMAT_NUMBER_00,
             'AD' => NumberFormat::FORMAT_NUMBER_00,
             'AE' => NumberFormat::FORMAT_NUMBER_00,
+            'AF' => NumberFormat::FORMAT_NUMBER_00,
+            'AG' => NumberFormat::FORMAT_NUMBER_00,
+            'AH' => NumberFormat::FORMAT_NUMBER_00,
+            'AI' => NumberFormat::FORMAT_NUMBER_00,
+            'AJ' => NumberFormat::FORMAT_NUMBER_00,
         ];
     }
 
@@ -171,6 +176,13 @@ final class GastronomiaConciliacionDiariaReporteExport implements FromView, Shou
             'AC' => 14,
             'AD' => 14,
             'AE' => 14,
+            'AF' => 12,
+            'AG' => 12,
+            'AH' => 12,
+            'AI' => 14,
+            'AJ' => 14,
+            'AK' => 14,
+            'AL' => 14,
         ];
     }
 
@@ -274,6 +286,7 @@ final class GastronomiaConciliacionDiariaReporteExport implements FromView, Shou
             'diff_erp_anita', 'diff_erp_rendg', 'estado', 'cant_facturas',
             'nc_erp', 'nc_rendg', 'rendg_neto', 'rendg_legacy_z', 'fc_caea_duplicado',
             'asiento_factura_dia', 'asiento_post_cierre', 'asientos_total', 'diff_rendg_asientos',
+            'flash_ayb', 'flash_estac', 'total_flash', 'diff_erp_flash', 'diff_anita_flash', 'diff_rendg_flash',
         ];
 
         $out = [];

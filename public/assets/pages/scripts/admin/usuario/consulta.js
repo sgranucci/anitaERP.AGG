@@ -11,12 +11,52 @@ function contenedorUsuarioConsulta($el) {
     return $el.closest('.form-group');
 }
 
+function omitirFiltroEmpresaUsuarioConsulta($cont) {
+    if (window._consultaUsuarioOmitirFiltroEmpresa) {
+        return true;
+    }
+
+    return $cont && $cont.length && $cont.closest('#ms_panel_destinatario').length > 0;
+}
+
+function paramsConsultaUsuario(consulta) {
+    var params = {
+        consulta: consulta || '',
+        empresa_id: $('#empresa_id').val(),
+    };
+
+    if (typeof window.payloadExtraConsultaUsuario === 'function') {
+        $.extend(params, window.payloadExtraConsultaUsuario() || {});
+    }
+
+    if (params.omitir_filtro_empresa) {
+        delete params.empresa_id;
+    }
+
+    return params;
+}
+
+function paramsResolverUsuario(valor, $cont) {
+    var params = { valor: valor };
+
+    if (omitirFiltroEmpresaUsuarioConsulta($cont)) {
+        params.omitir_filtro_empresa = 1;
+    } else {
+        var empresa_id = $('#empresa_id').val();
+        if (empresa_id) {
+            params.empresa_id = empresa_id;
+        }
+    }
+
+    return params;
+}
+
 function aplicarUsuarioResuelto($row, data) {
     if (!data || !data.ok) {
         alert((data && data.mensaje) ? data.mensaje : 'Usuario no encontrado');
         return false;
     }
-    if (data.empresa_ok === false) {
+    if (data.empresa_ok === false && !omitirFiltroEmpresaUsuarioConsulta($row)) {
         alert('El usuario no pertenece a la empresa seleccionada.');
         return false;
     }
@@ -44,8 +84,6 @@ function aplicarUsuarioResuelto($row, data) {
 }
 
 function buscar_datos_usuario(consulta) {
-    let empresa_id = $("#empresa_id").val();
-
     $.ajax({
         url: carpetaBase+'/configuracion/consultausuario',
         type: 'POST',
@@ -53,10 +91,7 @@ function buscar_datos_usuario(consulta) {
 	    headers: {
         	'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
     	},
-        data: {
-            consulta: consulta,
-            empresa_id: empresa_id
-        },
+        data: paramsConsultaUsuario(consulta),
     })
     .done (function(respuesta) {
 		const resp = respuesta.replace(/\\/g, '');
@@ -94,14 +129,13 @@ function limpiarCamposUsuarioConsulta($cont) {
 $(document).on('blur', '.usuario_codigo_arbol', function () {
     var $cont = contenedorUsuarioConsulta($(this));
     var valor = $.trim($(this).val());
-    var empresa_id = $("#empresa_id").val();
 
     if (!valor) {
         limpiarCamposUsuarioConsulta($cont);
         return;
     }
 
-    $.getJSON(carpetaBase + '/configuracion/resolverusuario', { valor: valor, empresa_id: empresa_id })
+    $.getJSON(carpetaBase + '/configuracion/resolverusuario', paramsResolverUsuario(valor, $cont))
         .done(function (data) {
             if (!aplicarUsuarioResuelto($cont, data)) {
                 limpiarCamposUsuarioConsulta($cont);
@@ -117,19 +151,20 @@ $(document).on('change', '.usuario_id', function (event) {
     }
     var $cont = contenedorUsuarioConsulta($inp);
     var valor = $.trim($inp.val());
-    var empresa_id = $("#empresa_id").val();
 
     if (!valor) {
         $cont.find('.nombreusuario').val('');
         return;
     }
 
-    $.getJSON(carpetaBase + '/configuracion/resolverusuario', { valor: valor, empresa_id: empresa_id })
+    $.getJSON(carpetaBase + '/configuracion/resolverusuario', paramsResolverUsuario(valor, $cont))
         .done(function (data) {
             if (!aplicarUsuarioResuelto($cont, data)) {
                 $inp.val('');
                 $cont.find('.nombreusuario').val('');
+                return;
             }
+            $inp.trigger('usuario-operativo:resuelto', [data]);
         });
 });
 
@@ -188,6 +223,10 @@ function activa_eventos_consultausuario()
 {
     $('.consultausuario').on('click', function (event) {
         var $btn = $(this);
+        window._consultaUsuarioOmitirFiltroEmpresa = $btn.data('omitir_filtro_empresa') === 1
+            || $btn.data('omitir_filtro_empresa') === '1'
+            || $btn.closest('#ms_panel_destinatario').length > 0;
+
         var ptrId = $btn.data('ptrusuario_id') || $btn.attr('data-ptrusuario_id');
         var ptrNom = $btn.data('ptrnombre') || $btn.attr('data-ptrnombre');
         var ptrCod = $btn.data('ptrusuario_codigo') || $btn.attr('data-ptrusuario_codigo');
@@ -213,7 +252,11 @@ function activa_eventos_consultausuario()
 
     $('#consultausuarioModal').on('shown.bs.modal', function () {
         $(this).find('[autofocus]').focus();
-    })
+    });
+
+    $('#consultausuarioModal').on('hidden.bs.modal', function () {
+        window._consultaUsuarioOmitirFiltroEmpresa = false;
+    });
 
     $('#aceptaconsultausuarioModal').on('click', function () {
         $('#consultausuarioModal').modal('hide');

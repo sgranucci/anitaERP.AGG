@@ -14,6 +14,9 @@
         ? '#'.(int) ($data->maquinavendingRendicion?->numero_cierre ?? 0).' — '.($data->maquinavending?->nombre ?? '')
         : '';
     $pvLabel = trim(($data?->puntoventaCae?->codigo ?? '').' — '.($data?->puntoventaCae?->nombre ?? ''), ' —');
+    $fechaJornadaDisplay = $esEdicion
+        ? ($data?->maquinavendingRendicion?->fecha_jornada?->format('d/m/Y') ?? '—')
+        : '—';
 @endphp
 <div id="rendicion-mv-caja-app" data-inicial='@json($inicialApp)'>
     @if (($caja_id ?? 0) <= 0 && ! $esEdicion)
@@ -40,7 +43,7 @@
         <div class="card-header py-2"><strong>Datos de la rendici&oacute;n</strong></div>
         <div class="card-body py-2">
             <div class="form-row">
-                <div class="form-group col-md-4">
+                <div class="form-group col-md-3">
                     <label for="empresa_id" class="requerido">Empresa</label>
                     @if ($esEdicion)
                         <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $empresaId }}">
@@ -56,13 +59,24 @@
                         ])
                     @endif
                 </div>
-                <div class="form-group col-md-4">
-                    <label for="fecharendicion" class="requerido">Fecha/hora registro en caja</label>
-                    <input type="datetime-local" name="fecharendicion" id="fecharendicion" class="form-control" required
-                           value="{{ old('fecharendicion', ($data?->fecharendicion) ? $data->fecharendicion->format('Y-m-d\\TH:i') : now()->format('Y-m-d\\TH:i')) }}">
-                    <small class="text-muted">Momento real del registro. La fecha contable es la jornada de la rendici&oacute;n Ventas.</small>
+                <div class="form-group col-md-3">
+                    <label for="fecha_jornada_cabecera">Fecha jornada</label>
+                    <input type="text" id="fecha_jornada_cabecera" class="form-control" readonly
+                           value="{{ $fechaJornadaDisplay }}">
+                    <small class="text-muted">De la rendici&oacute;n Ventas (no editable).</small>
                 </div>
-                <div class="form-group col-md-4">
+                <div class="form-group col-md-3">
+                    <label>Fecha/hora registro en caja</label>
+                    @if ($esEdicion)
+                        <input type="text" class="form-control" readonly
+                               value="{{ $data->fecharendicion?->format('d/m/Y H:i') ?? '—' }}">
+                    @else
+                        <input type="text" class="form-control" readonly
+                               value="Al guardar (hora del sistema)">
+                    @endif
+                    <small class="text-muted">Momento real del registro. No editable.</small>
+                </div>
+                <div class="form-group col-md-3">
                     <label for="codigo" class="requerido">Ticket / c&oacute;digo caja</label>
                     <input type="text" name="codigo" id="codigo" class="form-control" required maxlength="50" value="{{ $codigo }}"
                            placeholder="Se propone al elegir rendici&oacute;n Ventas">

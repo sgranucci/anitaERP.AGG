@@ -3,7 +3,11 @@
 namespace App\Services\Stock;
 
 use App\Models\Stock\Articulo_ParteUnica;
+use App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport;
+use App\Support\Stock\ArticuloParteUnicaEstados;
+use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\StkParteUnicaAnitaBridgeSupport;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
 class ArticuloParteUnicaService
@@ -50,6 +54,7 @@ class ArticuloParteUnicaService
         return Articulo_ParteUnica::create([
             'articulo_id' => $articuloId,
             'numeroparte' => $numeroparte,
+            'estado' => ArticuloParteUnicaEstados::ACTIVO,
         ]);
     }
 
@@ -69,22 +74,104 @@ class ArticuloParteUnicaService
 
     public function eliminar(Articulo_ParteUnica $parte): void
     {
+        if (ArticuloParteUnicaEstados::esBaja($parte->estado)) {
+            throw new \RuntimeException('El NPU ya fue dado de baja; no puede eliminarse desde el ABM de artículo.');
+        }
+
         DB::transaction(function () use ($parte) {
             StkParteUnicaAnitaBridgeSupport::eliminar($parte);
             $parte->delete();
         });
     }
 
-    public function listarPorArticulo(int $articuloId, int $porPagina = 20)
+    public function darDeBaja(Articulo_ParteUnica $parte, int $movimientostockId, ?string $motivo = null): Articulo_ParteUnica
     {
-        return Articulo_ParteUnica::query()
-            ->where('articulo_id', $articuloId)
+        return DB::transaction(function () use ($parte, $movimientostockId, $motivo) {
+            $parte->refresh();
+            ArticuloParteUnicaDisponibilidadSupport::assertActivaParaUso((int) $parte->numeroparte);
+
+            StkParteUnicaAnitaBridgeSupport::eliminar($parte);
+
+            $parte->update([
+                'estado' => ArticuloParteUnicaEstados::BAJA,
+                'fecha_baja' => now(),
+                'motivo_baja' => trim((string) $motivo) !== ''
+                    ? trim((string) $motivo)
+                    : BajaNpuMovimientoStockSupport::MOTIVO_DEFAULT,
+                'movimientostock_id' => $movimientostockId > 0 ? $movimientostockId : null,
+            ]);
+
+            return $parte->fresh();
+        });
+    }
+
+    /**
+     * Reactiva todos los NPU dados de baja por un movimiento de stock (reversión).
+     */
+    public function reactivarPorMovimientoOrigen(int $movimientoOrigenId): int
+    {
+        $partes = Articulo_ParteUnica::query()
+            ->where('movimientostock_id', $movimientoOrigenId)
+            ->where('estado', ArticuloParteUnicaEstados::BAJA)
+            ->get();
+
+        $reactivados = 0;
+        foreach ($partes as $parte) {
+            $this->reactivar($parte);
+            $reactivados++;
+        }
+
+        return $reactivados;
+    }
+
+    public function reactivar(Articulo_ParteUnica $parte): Articulo_ParteUnica
+    {
+        return DB::transaction(function () use ($parte) {
+            $parte->refresh();
+
+            if (! ArticuloParteUnicaEstados::esBaja($parte->estado)) {
+                throw new \RuntimeException('El NPU '.$parte->numeroparte.' no está dado de baja.');
+            }
+
+            $parte->update([
+                'estado' => ArticuloParteUnicaEstados::ACTIVO,
+                'fecha_baja' => null,
+                'motivo_baja' => null,
+                'movimientostock_id' => null,
+            ]);
+
+            $parte->loadMissing('articulos');
+            StkParteUnicaAnitaBridgeSupport::insertar($parte);
+
+            return $parte->fresh();
+        });
+    }
+
+    /**
+     * @return LengthAwarePaginator<int, Articulo_ParteUnica>
+     */
+    public function listarPorArticulo(int $articuloId, int $porPagina = 20, ?string $estado = null): LengthAwarePaginator
+    {
+        $query = Articulo_ParteUnica::query()
+            ->where('articulo_id', $articuloId);
+
+        if ($estado !== null && $estado !== '' && $estado !== 'T') {
+            $query->where('estado', $estado);
+        }
+
+        return $query
             ->orderByDesc('numeroparte')
             ->paginate($porPagina);
     }
 
-    public function contarPorArticulo(int $articuloId): int
+    public function contarPorArticulo(int $articuloId, ?string $estado = null): int
     {
-        return (int) Articulo_ParteUnica::query()->where('articulo_id', $articuloId)->count();
+        $query = Articulo_ParteUnica::query()->where('articulo_id', $articuloId);
+
+        if ($estado !== null && $estado !== '' && $estado !== 'T') {
+            $query->where('estado', $estado);
+        }
+
+        return (int) $query->count();
     }
 }

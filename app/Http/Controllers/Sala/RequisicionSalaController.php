@@ -10,6 +10,7 @@ use App\Models\Sala\RequisicionSalaEstado;
 use App\Queries\Sala\RequisicionSalaQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Repositories\Sala\CumplimientoRequisicionSalaRepositoryInterface;
 use App\Repositories\Sala\PrioridadSalaRepositoryInterface;
 use App\Repositories\Sala\RequisicionSalaRepositoryInterface;
 use App\Repositories\Sala\ZonaSalaRepositoryInterface;
@@ -38,6 +39,7 @@ class RequisicionSalaController extends Controller
         private ArbolaprobacionService $arbolaprobacionService,
         private RequisicionSalaArbolIntegracionService $arbolIntegracion,
         private RequisicionSalaPdfService $pdfService,
+        private CumplimientoRequisicionSalaRepositoryInterface $cumplimientoRepository,
     ) {
     }
 
@@ -119,6 +121,7 @@ class RequisicionSalaController extends Controller
         return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), $this->datosVistaTransferencia($data), [
             'data' => $data,
             'movimientos_arbol' => $this->arbolIntegracion->findPorRequisicionSala((int) $id),
+            'cumplimientos_sala' => $this->cumplimientoRepository->listarPorRequisicion((int) $id),
             'soloConsulta' => $modoConsulta,
             'ocultarVolver' => $modoConsulta,
             'puedeActualizarRequisicionSala' => can('actualizar-requisicion-sala', false),
@@ -239,6 +242,7 @@ class RequisicionSalaController extends Controller
         return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), $this->datosVistaTransferencia($data), [
             'data' => $data,
             'movimientos_arbol' => $movimientos,
+            'cumplimientos_sala' => $this->cumplimientoRepository->listarPorRequisicion((int) $id),
             'visualizar' => ! $puedeActualizar,
             'acceso_visualizacion_por_hash' => filled($hash),
             'soloConsulta' => true,

@@ -259,28 +259,71 @@ final class GastronomiaAnitaImportCacheSupport
     }
 
     /**
+     * Rangos de número por sucursal para acotar las consultas de detalle al bridge.
+     *
+     * Se agrupa por (sucursal, ven_tipo) y luego se fusionan los intervalos que se
+     * solapan. Así una serie de número bajo (ej. NCD nro 285) no infla el rango de
+     * otra serie del mismo depósito (ej. FAC nro 558692..562027); ese rango inflado
+     * (285..562027) hacía que Informix barriera toda la sucursal y devolviera vacío.
+     * El detalle se sigue consultando SIN filtrar por tipo (solo por rango de número),
+     * preservando el fallback legacy de stkmov tipo NCD en números de FAC.
+     *
      * @param  list<object>  $venta
-     * @return array<int, array{min:int,max:int}>
+     * @return array<int, list<array{min:int,max:int}>>
      */
     private function rangosPorSucursalDesdeVenta(array $venta): array
     {
-        /** @var array<int, array{min:int,max:int}> $rangos */
-        $rangos = [];
+        /** @var array<int, array<string, array{min:int,max:int}>> $porTipo */
+        $porTipo = [];
         foreach ($venta as $fila) {
             $sucursal = (int) preg_replace('/\D+/', '', (string) ($fila->ven_sucursal ?? ''));
             $nro = (int) ($fila->ven_nro ?? 0);
             if ($sucursal <= 0 || $nro <= 0) {
                 continue;
             }
-            if (! isset($rangos[$sucursal])) {
-                $rangos[$sucursal] = ['min' => $nro, 'max' => $nro];
+            $tipo = strtoupper(trim((string) ($fila->ven_tipo ?? ''))) ?: '_';
+            if (! isset($porTipo[$sucursal][$tipo])) {
+                $porTipo[$sucursal][$tipo] = ['min' => $nro, 'max' => $nro];
             } else {
-                $rangos[$sucursal]['min'] = min($rangos[$sucursal]['min'], $nro);
-                $rangos[$sucursal]['max'] = max($rangos[$sucursal]['max'], $nro);
+                $porTipo[$sucursal][$tipo]['min'] = min($porTipo[$sucursal][$tipo]['min'], $nro);
+                $porTipo[$sucursal][$tipo]['max'] = max($porTipo[$sucursal][$tipo]['max'], $nro);
             }
         }
 
+        /** @var array<int, list<array{min:int,max:int}>> $rangos */
+        $rangos = [];
+        foreach ($porTipo as $sucursal => $tipos) {
+            $rangos[$sucursal] = $this->fusionarIntervalos(array_values($tipos));
+        }
+
         return $rangos;
+    }
+
+    /**
+     * Fusiona intervalos [min,max] que se solapan o son contiguos (evita descargar dos veces).
+     *
+     * @param  list<array{min:int,max:int}>  $intervalos
+     * @return list<array{min:int,max:int}>
+     */
+    private function fusionarIntervalos(array $intervalos): array
+    {
+        if ($intervalos === []) {
+            return [];
+        }
+
+        usort($intervalos, static fn (array $a, array $b): int => $a['min'] <=> $b['min']);
+
+        $fusionados = [array_shift($intervalos)];
+        foreach ($intervalos as $rango) {
+            $indice = count($fusionados) - 1;
+            if ($rango['min'] <= $fusionados[$indice]['max'] + 1) {
+                $fusionados[$indice]['max'] = max($fusionados[$indice]['max'], $rango['max']);
+            } else {
+                $fusionados[] = $rango;
+            }
+        }
+
+        return $fusionados;
     }
 
     /**

@@ -4,18 +4,29 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Cumplimiento requisici&oacute;n de sala</title>
     <style>
-        body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 8px; color: #222; }
-        h1 { font-size: 14px; margin: 0 0 6px 0; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-        th, td { border: 1px solid #ccc; padding: 3px 4px; vertical-align: top; }
-        th { background: #85C1E9; color: #17202A; font-weight: bold; }
+        body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11px; color: #222; }
+        h1 { font-size: 18px; margin: 0 0 8px 0; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        th, td { border: 1px solid #ccc; padding: 5px 6px; vertical-align: top; font-size: 10px; }
+        th { background: #85C1E9; color: #17202A; font-weight: bold; font-size: 10px; }
         tr:nth-child(even) td { background: #f5f5f5; }
         .num { text-align: right; white-space: nowrap; }
         .pdf-cabecera td { border: none !important; vertical-align: top; }
-        .pdf-cabecera .logo-empresa { max-width: 160px; max-height: 50px; }
-        .muted { color: #555; font-size: 7px; }
-        .bloque-req { margin-bottom: 12px; page-break-inside: avoid; }
+        .pdf-cabecera .logo-empresa { max-width: 180px; max-height: 56px; }
+        .muted { color: #555; font-size: 9px; }
+        .bloque-req { margin-bottom: 14px; page-break-inside: avoid; }
+        .bloque-req p { font-size: 11px; }
         .total { font-weight: bold; }
+        table.firmas { margin-top: 48px; border: none; }
+        table.firmas td { border: none !important; width: 48%; vertical-align: bottom; padding-top: 36px; }
+        .linea-firma {
+            border-top: 1px solid #444;
+            margin-top: 42px;
+            padding-top: 6px;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -37,10 +48,13 @@
             @if ($logoUri)
                 <img class="logo-empresa" src="{{ $logoUri }}" alt="">
             @endif
-            <div style="font-size: 11px; font-weight: bold; margin-top: 4px;">{{ $nombreEmpresa ?? '—' }}</div>
+            <div style="font-size: 13px; font-weight: bold; margin-top: 6px;">{{ $nombreEmpresa ?? '—' }}</div>
         </td>
         <td style="text-align: right;">
             <h1>Cumplimiento requisici&oacute;n de sala</h1>
+            @if (!empty($data['cumplimiento_numero']))
+                <p class="muted" style="margin: 0;">Comprobante N&ordm; {{ $data['cumplimiento_numero'] }}</p>
+            @endif
             <p class="muted" style="margin: 0;">Generado el {{ $data['generado_en'] ?? date('d/m/Y H:i') }}</p>
             @if (!empty($data['usuario']))
                 <p class="muted" style="margin: 0;">Usuario: {{ $data['usuario'] }}</p>
@@ -105,11 +119,16 @@
     </tfoot>
 </table>
 
-@if (!empty($data['leyenda']))
-    <p style="margin-top: 10px;"><strong>LEYENDA:</strong></p>
-    <p style="margin: 0; white-space: pre-wrap;">{{ $data['leyenda'] }}</p>
-@endif
-
-<p style="margin-top: 24px;" class="muted">Referencia impresi&oacute;n cumplimiento requisici&oacute;n de sala.</p>
+<table class="firmas">
+    <tr>
+        <td>
+            <div class="linea-firma">Firma del emisor</div>
+        </td>
+        <td style="width: 4%;"></td>
+        <td>
+            <div class="linea-firma">Firma del receptor</div>
+        </td>
+    </tr>
+</table>
 </body>
 </html>

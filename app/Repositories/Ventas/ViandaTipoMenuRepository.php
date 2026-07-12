@@ -4,6 +4,7 @@ namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\ViandaTipoMenu;
 use App\Models\Ventas\ViandaTipoMenuArticulo;
+use App\Support\Ventas\Vianda\ViandaEmpresaSupport;
 use App\Support\Ventas\ViandaDiaSemanaSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -16,11 +17,20 @@ class ViandaTipoMenuRepository implements ViandaTipoMenuRepositoryInterface
     ) {
     }
 
-    public function all()
+    public function all(?int $empresaId = null)
     {
-        return $this->model->with(['articulos.articulo'])
-            ->orderBy('nombre')
-            ->get();
+        $query = $this->model->with(['empresa', 'articulos.articulo'])
+            ->orderBy('empresa_id')
+            ->orderBy('nombre');
+
+        // Filtro tradicional del sistema: solo empresas asignadas al usuario en sesión.
+        ViandaEmpresaSupport::aplicarFiltroAsignadas($query, 'empresa_id');
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        return $query->get();
     }
 
     public function existeRegistro(): bool
@@ -60,12 +70,12 @@ class ViandaTipoMenuRepository implements ViandaTipoMenuRepositoryInterface
 
     public function find($id)
     {
-        return $this->model->with(['articulos.articulo'])->find($id);
+        return $this->model->with(['empresa', 'articulos.articulo'])->find($id);
     }
 
     public function findOrFail($id)
     {
-        return $this->model->with(['articulos.articulo'])->findOrFail($id);
+        return $this->model->with(['empresa', 'articulos.articulo'])->findOrFail($id);
     }
 
     /**
@@ -146,6 +156,7 @@ class ViandaTipoMenuRepository implements ViandaTipoMenuRepositoryInterface
     private function filtrarCabecera(array $data): array
     {
         return collect($data)->only([
+            'empresa_id',
             'codigo_anita',
             'nombre',
             'estado',

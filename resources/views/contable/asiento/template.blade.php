@@ -32,13 +32,13 @@
             </select>
         </td>
         <td>
-            <input type="number" name="debes[]" class="form-control debe" value="">
+            <input type="text" inputmode="decimal" name="debes[]" class="form-control text-right debe" value="">
         </td>
         <td>
-            <input type="number" name="haberes[]" class="form-control haber" value="">
+            <input type="text" inputmode="decimal" name="haberes[]" class="form-control text-right haber" value="">
         </td>
         <td>
-            <input type="number" name="cotizaciones[]" class="form-control cotizacion" value="0">
+            <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="">
         </td>
         <td>
             <input type="text" name="observaciones[]" class="form-control observacion" value="">

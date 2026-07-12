@@ -11,7 +11,7 @@ use Auth;
 use Illuminate\Support\Carbon;
 
 /**
- * Sincroniza estadoordencompra según saldo recepcionado (COM confirmadas).
+ * Sincroniza estadoordencompra según saldo recepcionado (COM neto de devoluciones DEP confirmadas).
  */
 class OrdencompraRecepcionCumplimientoService
 {
@@ -36,8 +36,19 @@ class OrdencompraRecepcionCumplimientoService
             return false;
         }
 
-        if (RecepcionProveedorOcPendienteSupport::tieneSaldoPendiente((int) $oc->id)) {
-            return $this->revertirCumplidaSiCorresponde($oc, $usuarioId);
+        $tieneSaldoEstricto = RecepcionProveedorOcPendienteSupport::tieneSaldoPendienteEstricto((int) $oc->id);
+        $tieneSaldoTolerancia = RecepcionProveedorOcPendienteSupport::tieneSaldoPendiente((int) $oc->id);
+
+        if ($tieneSaldoEstricto || $tieneSaldoTolerancia) {
+            if (in_array($estadoActual, [OrdencompraEstados::CUMPLIDA, OrdencompraEstados::CERRADA], true)) {
+                return $this->revertirCierreCabeceraSiCorresponde(
+                    $oc,
+                    $usuarioId,
+                    'Recepción anulada o ajustada: la OC vuelve a tener saldo pendiente'
+                );
+            }
+
+            return false;
         }
 
         if ($estadoActual === OrdencompraEstados::CUMPLIDA) {
@@ -65,9 +76,26 @@ class OrdencompraRecepcionCumplimientoService
         return true;
     }
 
-    private function revertirCumplidaSiCorresponde(Ordencompra $oc, ?int $usuarioId): bool
+    public function recalcularEstadoTrasReaperturaLineas(
+        Ordencompra $oc,
+        ?int $usuarioId = null,
+        ?string $observacion = null
+    ): bool {
+        if (! RecepcionProveedorOcPendienteSupport::tieneSaldoPendienteEstricto((int) $oc->id)) {
+            return false;
+        }
+
+        return $this->revertirCierreCabeceraSiCorresponde(
+            $oc,
+            $usuarioId,
+            $observacion ?? 'Reapertura de líneas: la OC vuelve a tener saldo pendiente por recepciones'
+        );
+    }
+
+    private function revertirCierreCabeceraSiCorresponde(Ordencompra $oc, ?int $usuarioId, string $observacion): bool
     {
-        if ((string) ($oc->estadoordencompra ?? '') !== OrdencompraEstados::CUMPLIDA) {
+        $estadoActual = (string) ($oc->estadoordencompra ?? '');
+        if (! in_array($estadoActual, [OrdencompraEstados::CUMPLIDA, OrdencompraEstados::CERRADA], true)) {
             return false;
         }
 
@@ -85,7 +113,7 @@ class OrdencompraRecepcionCumplimientoService
                 Carbon::now()->toDateTimeString(),
                 $nuevoEstado,
                 $uid,
-                'Recepción anulada o ajustada: la OC vuelve a tener saldo pendiente'
+                $observacion
             );
         }
 

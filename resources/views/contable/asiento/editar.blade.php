@@ -5,6 +5,7 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/contable/asiento/montos_formato.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/asiento/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script>
@@ -22,20 +23,33 @@
         // Valida montos
         let totDebe = 0;
         let totHaber = 0;
+        let parseMonto = window.AsientoMontosFormato
+            ? AsientoMontosFormato.parseDecimal.bind(AsientoMontosFormato)
+            : function (v) {
+                if (v == null || v === '') return 0;
+                var t = String(v).trim().replace(/\s/g, '');
+                if (t.indexOf(',') >= 0) {
+                    t = t.replace(/\./g, '').replace(',', '.');
+                } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+                    t = t.replace(/\./g, '');
+                }
+                var n = parseFloat(t);
+                return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+            };
 
         $("#tbody-cuenta-table .debe").each(function() {
-            let valor = parseFloat($(this).val());
+            let valor = parseMonto($(this).val());
 
             if (valor >= 0)
                 totDebe += valor;
         });
 
         $("#tbody-cuenta-table .haber").each(function() {
-            let valor = parseFloat($(this).val());
+            let valor = parseMonto($(this).val());
 
             if (valor >= 0)
                 totHaber += valor;
-    	});
+        });
 
         if (totDebe - totHaber > 0.009 || totHaber - totDebe > 0.009)
         {

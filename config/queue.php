@@ -38,7 +38,9 @@ return [
             'driver' => 'database',
             'table' => 'jobs',
             'queue' => 'default',
-            'retry_after' => 90,
+            // Debe ser > timeout del job más largo (CAEA informe ~1800s). Si es menor, Laravel
+            // reencola el mismo job y dispara MaxAttemptsExceeded + mail de error falso.
+            'retry_after' => (int) env('QUEUE_RETRY_AFTER', 2000),
             'after_commit' => false,
         ],
 
@@ -66,7 +68,7 @@ return [
             'driver' => 'redis',
             'connection' => 'default',
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => 90,
+            'retry_after' => (int) env('QUEUE_RETRY_AFTER', 2000),
             'block_for' => null,
             'after_commit' => false,
         ],
@@ -106,6 +108,8 @@ return [
         ),
         'email_si_ok' => filter_var(env('QUEUE_VERIFICACION_PICO_EMAIL_SI_OK', false), FILTER_VALIDATE_BOOLEAN),
         'email_throttle_minutos' => (int) env('QUEUE_VERIFICACION_PICO_EMAIL_THROTTLE', 15),
+        // Debe ser > ARCA_CAEA_INFORME_JOB_TIMEOUT (1800). Un job CAEA reservado 3–5 min es normal.
+        'reserved_stuck_sec' => max(180, (int) env('QUEUE_VERIFICACION_PICO_RESERVED_STUCK_SEC', 2100)),
     ],
 
 ];

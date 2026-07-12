@@ -65,7 +65,7 @@ final class GastronomiaFacturacionService
         }
         $payload['opciones_emision'] = $opciones;
         $payload = $this->asegurarVentaReceptorSinClienteMaestro($payload, $cuenta);
-        $payload = $this->aplicarReglasImpuestoConsumidorFinal($payload, $cuenta);
+        $payload = $this->aplicarReglasImpuestoEmisionGastronomia($payload, $cuenta);
 
         $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
 
@@ -263,7 +263,7 @@ final class GastronomiaFacturacionService
             ];
         }
 
-        $payload = $this->aplicarReglasImpuestoConsumidorFinal($payload, $cuenta);
+        $payload = $this->aplicarReglasImpuestoEmisionGastronomia($payload, $cuenta);
 
         $calculo = $this->facturacionService->calculaFacturaGeneral($payload);
 
@@ -504,20 +504,46 @@ final class GastronomiaFacturacionService
     }
 
     /**
-     * Sin cliente de facturación en la cuenta: no percepciones (IVA/IIBB); condición IIBB "No percibe".
+     * Reglas impositivas POS gastronomía: CF sin percepciones; Factura B nunca percibe (IVA/IIBB).
+     * El cálculo de impuestos usa el cliente contable interno (CF), no plantillas VIP/descuento.
      *
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function aplicarReglasImpuestoConsumidorFinal(array $payload, CuentaGastronomia $cuenta): array
+    private function aplicarReglasImpuestoEmisionGastronomia(array $payload, CuentaGastronomia $cuenta): array
     {
-        if (! app(GastronomiaReceptorFacturacionService::class)->facturaComoConsumidorFinal($cuenta)) {
-            return $payload;
+        $receptorSvc = app(GastronomiaReceptorFacturacionService::class);
+
+        if ($receptorSvc->facturaComoConsumidorFinal($cuenta)) {
+            $payload['omitir_percepciones'] = true;
         }
 
-        $payload['omitir_percepciones'] = true;
+        if ($this->esFacturaBDesdePayload($payload)) {
+            $payload['omitir_percepciones'] = true;
+            $payload['cliente_id'] = $receptorSvc->resolverClienteContableInternoId();
+        }
 
         return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function esFacturaBDesdePayload(array $payload): bool
+    {
+        $clienteId = (int) ($payload['cliente_id'] ?? 0);
+        if ($clienteId <= 0) {
+            return true;
+        }
+
+        $condicionivaId = (int) (Cliente::query()->whereKey($clienteId)->value('condicioniva_id') ?? 0);
+        if ($condicionivaId <= 0) {
+            return true;
+        }
+
+        $letra = strtoupper(trim((string) (Condicioniva::query()->whereKey($condicionivaId)->value('letra') ?? 'B')));
+
+        return $letra === 'B';
     }
 
     /**

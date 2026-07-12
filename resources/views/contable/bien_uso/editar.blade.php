@@ -8,6 +8,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('bien_uso', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -17,13 +20,13 @@
                 <h3 class="card-title">Editar bien de uso #{{ $data->id }}</h3>
                 @if(empty($soloConsulta))
                 <div class="card-tools">
-                    <a href="{{ route('bien_uso') }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
                 @endif
             </div>
-            <form action="{{ route('actualizar_bien_uso', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{ route('actualizar_bien_uso', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf
                 @method('PUT')
                 @if(!empty($soloConsulta))

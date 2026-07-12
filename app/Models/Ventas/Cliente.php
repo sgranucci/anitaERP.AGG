@@ -35,6 +35,7 @@ class Cliente extends Model implements Auditable
 							'provincia_id','pais_id','zonavta_id','subzonavta_id','vendedor_id','numerodocumento','condicioniva_id',
 							'retieneiva','nroiibb','condicioniibb_id','tipoempresa_cliente_id','condicionventa_id','listaprecio_id','cuentacontable_id','vaweb',
 							'estado','usuario_id','codigopostal','transporte_id','descuento','leyenda','tiposuspension_id',
+                            'facturas_apocrifas','facturas_apocrifas_consulta_at','facturas_apocrifas_detalle',
                             'tipoalta','modofacturacion', 'cajaespecial',
                             // El Bierzo
                             'abasto_id', 'coeficiente_id', 'porcentajelogistica', 'emitecertificado', 'emitenotadecredito',
@@ -46,6 +47,8 @@ class Cliente extends Model implements Auditable
     protected $table = 'cliente';
 	protected $casts = [
 			'deleted_at' => 'datetime',
+			'facturas_apocrifas' => 'boolean',
+			'facturas_apocrifas_consulta_at' => 'datetime',
 	];
 
 	public function cliente_entregas()

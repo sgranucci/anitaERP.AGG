@@ -238,6 +238,26 @@ class RecepcionProveedorAnitaResincronizacionErpService
     }
 
     /**
+     * Re-sincroniza recepmae/recepmov y ctamov para una COM CONFIRMADA (uso job post-commit / reparación).
+     */
+    public function repararRecepcionConfirmada(int $recepcionId): void
+    {
+        $recepcion = Recepcion_Proveedor::query()
+            ->with('empresas')
+            ->whereKey($recepcionId)
+            ->firstOrFail();
+
+        if ($recepcion->estado !== RecepcionProveedorEstados::CONFIRMADA) {
+            throw new \RuntimeException('Solo se puede reparar Anita en recepciones CONFIRMADA.');
+        }
+
+        $resultado = $this->procesarUna($recepcion, false);
+        if ($resultado === 'omitida') {
+            throw new \RuntimeException('La recepción no es candidata a re-sincronización Anita.');
+        }
+    }
+
+    /**
      * @return 'omitida'|array{claves_corregidas: int, resincronizada: bool, borrador_limpiada: bool}
      */
     private function procesarUna(Recepcion_Proveedor $recepcion, bool $dryRun): string|array

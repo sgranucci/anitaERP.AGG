@@ -24,6 +24,24 @@ class ValidacionTipotransaccion_Stock extends FormRequest
             'maneja_contabilidad' => 'sometimes|boolean',
             'destino_bien_uso' => 'sometimes|boolean',
             'origen_bien_uso' => 'sometimes|boolean',
+            'baja_npu' => 'sometimes|boolean',
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            if (! $this->boolean('baja_npu')) {
+                return;
+            }
+
+            if ($this->input('operacion') !== 'S') {
+                $validator->errors()->add('baja_npu', 'La baja de NPU solo aplica a tipos de salida de stock.');
+            }
+
+            if ($this->input('signo') !== 'R') {
+                $validator->errors()->add('baja_npu', 'La baja de NPU requiere signo Resta.');
+            }
+        });
     }
 }

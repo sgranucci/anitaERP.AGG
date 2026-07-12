@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
@@ -12,6 +13,8 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
 use App\Services\Ventas\FacturacionService;
+use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+use App\Support\Ventas\Gastronomia\RecalcularAsientoVentasMedioRealCierreJornadaSupport;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use Carbon\Carbon;
@@ -32,6 +35,8 @@ final class GastronomiaRecuperarComprobanteArcaService
         private readonly GastronomiaReplicarVentasAnitaErpService $replicarAnitaService,
         private readonly GastronomiaReceptorFacturacionService $receptorFacturacionService,
         private readonly GastronomiaChequeoVentasAnitaErpService $chequeoAnitaService,
+        private readonly GastronomiaCobranzaService $cobranzaGastronomiaService,
+        private readonly RecalcularAsientoVentasMedioRealCierreJornadaSupport $recalcularAsientoCierreSupport,
     ) {
     }
 
@@ -101,7 +106,7 @@ final class GastronomiaRecuperarComprobanteArcaService
             ];
         }
 
-        return DB::transaction(function () use ($payload, $arca, $pv, $cuentaReferenciaId): array {
+        return DB::transaction(function () use ($payload, $arca, $pv, $cuentaReferenciaId, $empresaId): array {
             $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
             if (! empty($resultado['error'])) {
                 throw new RuntimeException((string) $resultado['error']);
@@ -112,7 +117,8 @@ final class GastronomiaRecuperarComprobanteArcaService
                 throw new RuntimeException('generaComprobanteGeneral no devolvió venta_id.');
             }
 
-            if (! empty($resultado['factura_cortesia_total']) || ! empty($payload['factura_cortesia_total'])) {
+            $esCortesia = ! empty($resultado['factura_cortesia_total']) || ! empty($payload['factura_cortesia_total']);
+            if ($esCortesia) {
                 $this->normalizarCortesia($resultado, $ventaId);
             }
 
@@ -145,11 +151,17 @@ final class GastronomiaRecuperarComprobanteArcaService
 
             $this->registrarEmisionRecuperacion($venta, $cuentaReferenciaId, $pv);
 
+            $cobranzaId = $this->generarCobranzaEfectivo($venta->fresh(), $empresaId, $cuentaReferenciaId, $esCortesia);
+
+            $asientoCierre = $this->actualizarAsientoCierreJornadaSiExiste($venta->fresh(), $empresaId);
+
             Log::info('gastronomia.recuperar_comprobante_arca.ok', [
                 'venta_id' => $venta->id,
                 'codigo' => $venta->codigo,
                 'cae' => $venta->cae,
                 'cuenta_referencia_id' => $cuentaReferenciaId,
+                'cobranza_id' => $cobranzaId,
+                'asiento_cierre' => $asientoCierre,
             ]);
 
             return [
@@ -159,6 +171,8 @@ final class GastronomiaRecuperarComprobanteArcaService
                 'codigo' => (string) $venta->codigo,
                 'cae' => (string) $venta->cae,
                 'total' => round((float) $venta->total, 2),
+                'cobranza_id' => $cobranzaId,
+                'asiento_cierre' => $asientoCierre,
                 'arca' => $arca,
             ];
         });
@@ -477,6 +491,114 @@ final class GastronomiaRecuperarComprobanteArcaService
                 'configuracion_puntoventa_gastronomia_id' => null,
             ],
         );
+    }
+
+    /**
+     * Genera la cobranza en efectivo por el total de la venta recuperada.
+     *
+     * Motivo: al recuperar un comprobante ARCA (rollback/deadlock) se reconstruía la factura pero no
+     * la cobranza, dejando la venta facturada sin cobro. El cierre de jornada tomaba esa venta en el
+     * HABER (ventas + IVA) sin contrapartida en el DEBE (medios de cobro), descuadrando el asiento
+     * consolidado contra Diferencia de caja. Registrando el cobro en efectivo, el cierre cuadra solo.
+     *
+     * Se omite en cortesías $0,01 (no tienen cobranza; se imputan a Diferencia de caja como invitación).
+     */
+    private function generarCobranzaEfectivo(
+        Venta $venta,
+        int $empresaId,
+        ?int $cuentaReferenciaId,
+        bool $esCortesia,
+    ): ?int {
+        if (! (bool) config('gastronomia.recuperacion_arca_genera_cobranza_efectivo', true)) {
+            return null;
+        }
+
+        $total = round((float) $venta->total, 2);
+        if ($esCortesia || $total <= 0.02) {
+            return null;
+        }
+
+        // Idempotencia: si la venta ya tiene cobranza directa, no duplicar.
+        if ($venta->cobranzasDirectas()->exists()) {
+            return null;
+        }
+
+        $efectivo = GastronomiaCuentacajaEfectivo::cuentaParaEmpresa($empresaId);
+        if ($efectivo === null || (int) ($efectivo['id'] ?? 0) <= 0) {
+            Log::warning('gastronomia.recuperar_comprobante_arca.sin_cuenta_efectivo', [
+                'venta_id' => $venta->id,
+                'empresa_id' => $empresaId,
+            ]);
+
+            return null;
+        }
+
+        $cfg = $this->resolverConfiguracionPuntoventa($empresaId, $cuentaReferenciaId);
+
+        $mediosPago = [[
+            'cuentacaja_id' => (int) $efectivo['id'],
+            'moneda_id' => (int) ($efectivo['moneda_id'] ?? 1),
+            'monto' => $total,
+            'cotizacion' => 1.,
+            'observacion' => 'Recuperación ARCA (efectivo)',
+        ]];
+
+        $res = $this->cobranzaGastronomiaService->registrarCobranzaPos($venta, $mediosPago, $cfg);
+
+        return (int) ($res['cobranza_id'] ?? 0) ?: null;
+    }
+
+    /**
+     * Si el cierre de jornada Waitry ya grabó el asiento «ventas_medio_real» para la fecha de la venta,
+     * lo recalcula con todas las emisiones/cobranzas actuales (incluye la factura recuperada) en ERP + Anita.
+     *
+     * @return array<string, mixed>|null null si no hay asiento de cierre para esa jornada
+     */
+    private function actualizarAsientoCierreJornadaSiExiste(Venta $venta, int $empresaId): ?array
+    {
+        if (! (bool) config('gastronomia.recuperacion_arca_actualiza_asiento_cierre_jornada', true)) {
+            return null;
+        }
+
+        $fechaJornada = $venta->fechajornada !== null
+            ? Carbon::parse($venta->fechajornada)->format('Y-m-d')
+            : ($venta->fecha !== null ? Carbon::parse($venta->fecha)->format('Y-m-d') : '');
+
+        if ($fechaJornada === '') {
+            Log::warning('gastronomia.recuperar_comprobante_arca.sin_fecha_jornada', [
+                'venta_id' => $venta->id,
+                'empresa_id' => $empresaId,
+            ]);
+
+            return null;
+        }
+
+        return $this->recalcularAsientoCierreSupport->actualizarSiExiste($empresaId, $fechaJornada);
+    }
+
+    private function resolverConfiguracionPuntoventa(int $empresaId, ?int $cuentaReferenciaId): ConfiguracionPuntoventaGastronomia
+    {
+        if ($cuentaReferenciaId !== null && $cuentaReferenciaId > 0) {
+            $cuenta = CuentaGastronomia::query()->with('configuracionPuntoventa')->find($cuentaReferenciaId);
+            $cfg = $cuenta?->configuracionPuntoventa;
+            if ($cfg instanceof ConfiguracionPuntoventaGastronomia) {
+                return $cfg;
+            }
+        }
+
+        $cfg = ConfiguracionPuntoventaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->first();
+        if ($cfg instanceof ConfiguracionPuntoventaGastronomia) {
+            return $cfg;
+        }
+
+        // Config transitoria: registrarCobranzaPos solo necesita empresa_id + resolución de tipotransaccion
+        // de caja (cae al respaldo GASTRONOMIA_TIPO_TRANSACCION_CAJA_ID / fallback por operación).
+        $cfg = new ConfiguracionPuntoventaGastronomia();
+        $cfg->empresa_id = $empresaId;
+
+        return $cfg;
     }
 
     private function asegurarCabeceraAnita(Venta $venta, Tipotransaccion $tipo): void

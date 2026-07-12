@@ -55,6 +55,10 @@
         document.getElementById('codigo').value = d.codigo_sugerido || '';
         document.getElementById('etiqueta_rendicion_ventas').value = '#'.concat(d.numero_cierre, ' — ', d.maquina_nombre);
         document.getElementById('lbl-fecha-jornada').textContent = d.fecha_jornada_fmt || '—';
+        var fechaCabecera = document.getElementById('fecha_jornada_cabecera');
+        if (fechaCabecera) {
+            fechaCabecera.value = d.fecha_jornada_fmt || '—';
+        }
         document.getElementById('lbl-pv').textContent = (d.puntoventa_codigo || '') + ' — ' + (d.puntoventa_nombre || '');
         document.getElementById('totalfactura').value = Number(d.totalfactura || 0).toFixed(2);
         document.getElementById('totalcobrado').value = Number(d.totalcobrado || 0).toFixed(2);
