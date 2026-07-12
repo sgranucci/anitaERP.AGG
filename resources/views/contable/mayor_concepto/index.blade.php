@@ -144,6 +144,15 @@
                 fd.set('ajax', '1');
                 fd.set('empresa_idx', String(empresaIdx));
 
+                // Sincronizar Consolidar desde el botón (evita desfase hidden vs UI).
+                var btnConsol = form.querySelector('.btn-toggle-consolidar-empresas');
+                var inputConsol = form.querySelector('input[name="consolidar_empresas"]');
+                if (btnConsol && inputConsol) {
+                    var activo = btnConsol.classList.contains('btn-success');
+                    inputConsol.value = activo ? '1' : '0';
+                    fd.set('consolidar_empresas', activo ? '1' : '0');
+                }
+
                 return fetch(form.action, {
                     method: 'POST',
                     body: fd,

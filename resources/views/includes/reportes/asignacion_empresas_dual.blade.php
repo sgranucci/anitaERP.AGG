@@ -108,7 +108,7 @@
                                 Consolidar
                             </button>
                             <small class="text-muted d-block mt-1 reporte-consolidar-ayuda">
-                                Off = por empresa
+                                On = empresas juntas · Off = por empresa
                             </small>
                         </div>
                     @endif

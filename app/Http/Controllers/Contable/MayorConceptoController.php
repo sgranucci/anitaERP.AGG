@@ -235,7 +235,9 @@ class MayorConceptoController extends Controller
             $resultado['parametros']['empresa_id'] = $eid;
             $resultado['parametros']['consolidar_empresas'] = true;
         } else {
+            // Multiempresa: consolidar=true fusiona concepto/cuenta; false = bloques por empresa.
             $resultado = $this->reporteService->fusionarBloquesEmpresas($bloques, $empresaIds, $consolidar);
+            $resultado['parametros']['consolidar_empresas'] = $consolidar;
         }
 
         $this->persistirPackDesdeResultado($resultado, $filtros);
@@ -272,6 +274,22 @@ class MayorConceptoController extends Controller
      */
     private function persistirPackDesdeResultado(array $resultado, array $filtros): array
     {
+        $empresaIds = MayorConceptoListadoFiltros::empresaIds(array_merge(
+            $filtros,
+            ['empresa_ids' => $resultado['parametros']['empresa_ids'] ?? ($filtros['empresa_ids'] ?? [])],
+        ));
+        $consolidar = (bool) ($resultado['parametros']['consolidar_empresas']
+            ?? $filtros['consolidar_empresas']
+            ?? true);
+
+        // Misma orden final que aplanar: consolidado = un bloque por concepto/cuenta.
+        if ($consolidar && count($empresaIds) > 1) {
+            $resultado['secciones'] = $this->reporteService->asegurarSeccionesConsolidadas(
+                $resultado['secciones'] ?? []
+            );
+            $resultado['parametros']['consolidar_empresas'] = true;
+        }
+
         $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
         $resumen = $this->reporteService->resumenAgrupado($resultado);
         $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);

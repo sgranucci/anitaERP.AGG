@@ -3,16 +3,164 @@
 namespace App\Support\Contable\MayorConcepto;
 
 use App\ApiAnita;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Carga tablas Anita vía bridge HTTP en memoria para un período acotado (≈1 mes).
+ *
+ * Multiempresa: precargarPeriodoEmpresas() lee subdiario/ctamov/auxpag/ctaconc una vez
+ * con IN (...); cargarPeriodo() reutiliza el slice por empresa (memoria o file cache).
  */
 class MayorConceptoAnitaBridgeReader
 {
+    private const PERIODO_FILE_TTL_HOURS = 2;
+
+    /**
+     * @var array<int, array{
+     *   subdiario: list<object>,
+     *   ctamov: list<object>,
+     *   auxpag: list<object>,
+     *   ctaconc: list<object>,
+     *   promae: list<object>,
+     *   errores: list<string>
+     * }>
+     */
+    private array $periodoPorEmpresa = [];
+
+    private ?string $periodoCacheFirma = null;
+
     public function __construct(
         private readonly ApiAnita $api = new ApiAnita(),
         private readonly MayorConceptoTCompSupport $tcompSupport = new MayorConceptoTCompSupport(),
     ) {
+    }
+
+    /**
+     * Precarga el período para varias empresas en 4 lecturas bridge (IN).
+     * Idempotente: si ya está en memoria/file cache, no vuelve a llamar al bridge.
+     *
+     * @param  list<int>  $empresaIds
+     */
+    public function precargarPeriodoEmpresas(array $empresaIds, int $fechaDesde, int $fechaHasta): void
+    {
+        $empresaIds = array_values(array_unique(array_filter(
+            array_map('intval', $empresaIds),
+            fn (int $id) => $id > 0,
+        )));
+        sort($empresaIds);
+
+        if ($empresaIds === [] || $fechaDesde <= 0 || $fechaHasta <= 0) {
+            return;
+        }
+
+        if (count($empresaIds) === 1) {
+            $this->cargarPeriodo($empresaIds[0], $fechaDesde, $fechaHasta);
+
+            return;
+        }
+
+        $firma = $this->firmaPeriodo($empresaIds, $fechaDesde, $fechaHasta);
+        if ($this->periodoCacheFirma === $firma && $this->periodoPorEmpresa !== []) {
+            return;
+        }
+
+        $fromFile = Cache::store('file')->get($this->periodoFileCacheKey($firma));
+        if (is_array($fromFile) && isset($fromFile['por_empresa']) && is_array($fromFile['por_empresa'])) {
+            $this->periodoPorEmpresa = $fromFile['por_empresa'];
+            $this->periodoCacheFirma = $firma;
+
+            return;
+        }
+
+        $inList = implode(',', $empresaIds);
+        $errores = [];
+
+        $subdiario = $this->listar(
+            'contab',
+            'subdiario',
+            $this->camposSubdiarioPeriodo(),
+            ' WHERE subd_empresa IN ('.$inList.')'
+            .' AND subd_fecha>='.$fechaDesde
+            .' AND subd_fecha<='.$fechaHasta,
+            $errores,
+            'subdiario-multi',
+        );
+
+        $ctamov = $this->listar(
+            'contab',
+            'ctamov',
+            $this->camposCtamovPeriodo(),
+            ' WHERE ctav_empresa IN ('.$inList.')'
+            .' AND ctav_fecha>='.$fechaDesde
+            .' AND ctav_fecha<='.$fechaHasta,
+            $errores,
+            'ctamov-multi',
+        );
+
+        $auxpag = $this->listar(
+            'che_ban',
+            'auxpag',
+            $this->camposAuxpagPeriodo(),
+            ' WHERE axp_empresa IN ('.$inList.')'
+            .' AND axp_fecha>='.$fechaDesde
+            .' AND axp_fecha<='.$fechaHasta,
+            $errores,
+            'auxpag-multi',
+        );
+
+        $ctaconc = $this->listar(
+            'contab',
+            'ctaconc',
+            $this->camposCtaconc(),
+            ' WHERE ctaco_empresa IN ('.$inList.')',
+            $errores,
+            'ctaconc-multi',
+        );
+
+        $porEmpresa = [];
+        foreach ($empresaIds as $empresaId) {
+            $porEmpresa[$empresaId] = [
+                'subdiario' => [],
+                'ctamov' => [],
+                'auxpag' => [],
+                'ctaconc' => [],
+                'promae' => [],
+                'errores' => $errores,
+            ];
+        }
+
+        foreach ($subdiario as $fila) {
+            $empresaId = (int) ($fila->subd_empresa ?? 0);
+            if (isset($porEmpresa[$empresaId])) {
+                $porEmpresa[$empresaId]['subdiario'][] = $fila;
+            }
+        }
+        foreach ($ctamov as $fila) {
+            $empresaId = (int) ($fila->ctav_empresa ?? 0);
+            if (isset($porEmpresa[$empresaId])) {
+                $porEmpresa[$empresaId]['ctamov'][] = $fila;
+            }
+        }
+        foreach ($auxpag as $fila) {
+            $empresaId = (int) ($fila->axp_empresa ?? 0);
+            if (isset($porEmpresa[$empresaId])) {
+                $porEmpresa[$empresaId]['auxpag'][] = $fila;
+            }
+        }
+        foreach ($ctaconc as $fila) {
+            $empresaId = (int) ($fila->ctaco_empresa ?? 0);
+            if (isset($porEmpresa[$empresaId])) {
+                $porEmpresa[$empresaId]['ctaconc'][] = $fila;
+            }
+        }
+
+        $this->periodoPorEmpresa = $porEmpresa;
+        $this->periodoCacheFirma = $firma;
+        Cache::store('file')->put(
+            $this->periodoFileCacheKey($firma),
+            ['por_empresa' => $porEmpresa],
+            now()->addHours(self::PERIODO_FILE_TTL_HOURS),
+        );
     }
 
     /**
@@ -27,12 +175,16 @@ class MayorConceptoAnitaBridgeReader
      */
     public function cargarPeriodo(int $empresaId, int $fechaDesde, int $fechaHasta): array
     {
+        if ($empresaId > 0 && $this->periodoCacheHit($empresaId, $fechaDesde, $fechaHasta)) {
+            return $this->periodoPorEmpresa[$empresaId];
+        }
+
         $errores = [];
 
         $subdiario = $this->listar(
             'contab',
             'subdiario',
-            'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,subd_ref_sucursal,subd_ref_nro,subd_importe,subd_cod_mon,subd_cotizacion,subd_desc_mov,subd_nro_asiento,subd_nro_interno,subd_ccosto_cta,subd_ccosto_con',
+            $this->camposSubdiarioPeriodo(),
             ' WHERE subd_empresa='.$empresaId
             .' AND subd_fecha>='.$fechaDesde
             .' AND subd_fecha<='.$fechaHasta,
@@ -43,7 +195,7 @@ class MayorConceptoAnitaBridgeReader
         $ctamov = $this->listar(
             'contab',
             'ctamov',
-            'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_desc_mov,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_o_compra',
+            $this->camposCtamovPeriodo(),
             ' WHERE ctav_empresa='.$empresaId
             .' AND ctav_fecha>='.$fechaDesde
             .' AND ctav_fecha<='.$fechaHasta,
@@ -54,7 +206,7 @@ class MayorConceptoAnitaBridgeReader
         $auxpag = $this->listar(
             'che_ban',
             'auxpag',
-            'axp_pro,axp_fecha,axp_rec,axp_tipo,axp_nro,axp_tipo_ap,axp_monto_ap,axp_cod_mon_co,axp_sucursal,axp_empresa,axp_letra_comp,axp_nro_interno,axp_banco,axp_concepto',
+            $this->camposAuxpagPeriodo(),
             ' WHERE axp_empresa='.$empresaId
             .' AND axp_fecha>='.$fechaDesde
             .' AND axp_fecha<='.$fechaHasta,
@@ -65,13 +217,13 @@ class MayorConceptoAnitaBridgeReader
         $ctaconc = $this->listar(
             'contab',
             'ctaconc',
-            'ctaco_empresa,ctaco_cuenta,ctaco_concepto',
+            $this->camposCtaconc(),
             ' WHERE ctaco_empresa='.$empresaId,
             $errores,
             'ctaconc'
         );
 
-        return [
+        $resultado = [
             'subdiario' => $subdiario,
             'ctamov' => $ctamov,
             'auxpag' => $auxpag,
@@ -79,6 +231,56 @@ class MayorConceptoAnitaBridgeReader
             'promae' => [],
             'errores' => $errores,
         ];
+
+        $this->periodoPorEmpresa[$empresaId] = $resultado;
+        $this->periodoCacheFirma = $this->firmaPeriodo([$empresaId], $fechaDesde, $fechaHasta);
+
+        return $resultado;
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     */
+    private function firmaPeriodo(array $empresaIds, int $fechaDesde, int $fechaHasta): string
+    {
+        $ids = $empresaIds;
+        sort($ids);
+
+        return implode('-', $ids).'_'.$fechaDesde.'_'.$fechaHasta;
+    }
+
+    private function periodoFileCacheKey(string $firma): string
+    {
+        return 'mayor_concepto_periodo_bridge_'.$firma;
+    }
+
+    private function periodoCacheHit(int $empresaId, int $fechaDesde, int $fechaHasta): bool
+    {
+        if (! isset($this->periodoPorEmpresa[$empresaId]) || $this->periodoCacheFirma === null) {
+            return false;
+        }
+
+        return str_ends_with($this->periodoCacheFirma, '_'.$fechaDesde.'_'.$fechaHasta);
+    }
+
+    private function camposSubdiarioPeriodo(): string
+    {
+        return 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,subd_ref_sucursal,subd_ref_nro,subd_importe,subd_cod_mon,subd_cotizacion,subd_desc_mov,subd_nro_asiento,subd_nro_interno,subd_ccosto_cta,subd_ccosto_con';
+    }
+
+    private function camposCtamovPeriodo(): string
+    {
+        return 'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_desc_mov,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_o_compra';
+    }
+
+    private function camposAuxpagPeriodo(): string
+    {
+        return 'axp_pro,axp_fecha,axp_rec,axp_tipo,axp_nro,axp_tipo_ap,axp_monto_ap,axp_cod_mon_co,axp_sucursal,axp_empresa,axp_letra_comp,axp_nro_interno,axp_banco,axp_concepto';
+    }
+
+    private function camposCtaconc(): string
+    {
+        return 'ctaco_empresa,ctaco_cuenta,ctaco_concepto';
     }
 
     /**

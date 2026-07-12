@@ -60,6 +60,16 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
+     * Lectura batch multiempresa (reader). No altera el motor.
+     *
+     * @param  list<int>  $empresaIds
+     */
+    public function precargarPeriodoEmpresas(array $empresaIds, int $fechaDesde, int $fechaHasta): void
+    {
+        $this->reader->precargarPeriodoEmpresas($empresaIds, $fechaDesde, $fechaHasta);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function generar(

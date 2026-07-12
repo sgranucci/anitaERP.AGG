@@ -13,8 +13,10 @@
 @if (! empty($resumenConcepto) || ! empty($resumenCuenta))
     <div class="px-3 py-2 border-bottom">
         <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
-            <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="collapse" data-target="#panel-resumen-mayor-concepto" aria-expanded="true">
-                <i class="fa fa-chevron-down"></i> Totales resumen
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="collapse"
+                data-target="#panel-resumen-mayor-concepto" aria-expanded="false"
+                id="btn-toggle-resumen-mayor-concepto">
+                <i class="fa fa-chevron-right"></i> Totales resumen
             </button>
             <div class="btn-group btn-group-sm mt-1 mt-md-0" role="group">
                 <button type="button"
@@ -30,7 +32,7 @@
             </div>
         </div>
 
-        <div class="collapse show" id="panel-resumen-mayor-concepto">
+        <div class="collapse" id="panel-resumen-mayor-concepto">
             <div class="table-responsive resumen-mayor-concepto-tabla"
                 id="resumen-tabla-concepto-cuenta"
                 style="{{ $agrupacion === 'cuenta_concepto' ? 'display:none;' : '' }}">
@@ -87,4 +89,32 @@
             </div>
         </div>
     </div>
+    <script>
+        (function () {
+            if (typeof jQuery === 'undefined') {
+                return;
+            }
+            var KEY = 'mayor_concepto_resumen_abierto';
+            var $panel = jQuery('#panel-resumen-mayor-concepto');
+            var $btn = jQuery('#btn-toggle-resumen-mayor-concepto');
+            if ($panel.length === 0 || $btn.length === 0) {
+                return;
+            }
+            // Por defecto colapsado; solo reabrir si el usuario lo dejó abierto en esta pestaña.
+            if (window.sessionStorage && sessionStorage.getItem(KEY) === '1') {
+                $panel.addClass('show');
+                $btn.attr('aria-expanded', 'true');
+                $btn.find('i').removeClass('fa-chevron-right').addClass('fa-chevron-down');
+            }
+            $panel.on('show.bs.collapse', function () {
+                $btn.find('i').removeClass('fa-chevron-right').addClass('fa-chevron-down');
+                $btn.attr('aria-expanded', 'true');
+                try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+            }).on('hide.bs.collapse', function () {
+                $btn.find('i').removeClass('fa-chevron-down').addClass('fa-chevron-right');
+                $btn.attr('aria-expanded', 'false');
+                try { sessionStorage.setItem(KEY, '0'); } catch (e) {}
+            });
+        })();
+    </script>
 @endif
