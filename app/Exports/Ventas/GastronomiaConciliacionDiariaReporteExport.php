@@ -62,7 +62,7 @@ final class GastronomiaConciliacionDiariaReporteExport implements FromView, Shou
         $hasta = (string) ($informe['fecha_hasta'] ?? $desde);
         $this->titulo = 'Conciliación gastronomía ERP / Anita / rendgastro';
         $this->subtitulo = sprintf(
-            'Jornada %s → %s · Circuitos: GASTRO (salón) | ESTACIONAMIENTO | VENDING | FLASH (AyB/estac vs rendg) · Por PC/PV vs rendgastro',
+            'Jornada %s → %s · Circuitos: GASTRO (salón) | ESTACIONAMIENTO | VENDING | FLASH (AyB/estac vs rendg, jornada anterior) · Por PC/PV vs rendgastro',
             $desde,
             $hasta,
         );

@@ -20,6 +20,7 @@ final class GastronomiaConciliacionFlashSupport
     /**
      * @param  list<array<string, mixed>>  $filasDia
      * @param  array{flash_ayb: float, flash_estac: float, total_flash: float}|null  $flashPrecargado
+     * @param  string|null  $fechaFlashEtiqueta  Si el cuadro es de otra jornada (ej. día anterior), se anota en la descripción.
      * @return list<array<string, mixed>>
      */
     public function armarControl(
@@ -29,6 +30,7 @@ final class GastronomiaConciliacionFlashSupport
         bool $jornadaAbierta,
         float $tolerancia,
         ?array $flashPrecargado = null,
+        ?string $fechaFlashEtiqueta = null,
     ): array {
         unset($jornadaAbierta);
 
@@ -45,6 +47,7 @@ final class GastronomiaConciliacionFlashSupport
                 $rendgPorUnidad,
                 $flashAyb,
                 $tolerancia,
+                $fechaFlashEtiqueta,
             ),
             $this->armarFilaSegmento(
                 'estacionamiento',
@@ -52,6 +55,7 @@ final class GastronomiaConciliacionFlashSupport
                 $rendgPorUnidad,
                 $flashEstac,
                 $tolerancia,
+                $fechaFlashEtiqueta,
             ),
         ];
     }
@@ -70,6 +74,7 @@ final class GastronomiaConciliacionFlashSupport
         array $rendgPorUnidad,
         float $flashValor,
         float $tolerancia,
+        ?string $fechaFlashEtiqueta = null,
     ): array {
         $esGastro = $segmento === 'gastro';
 
@@ -100,15 +105,20 @@ final class GastronomiaConciliacionFlashSupport
                 ? 'SIN RENDG'
                 : ($this->cuadranFlashRendg((float) $rendgNeto, $flashValor, $tolerancia) ? 'OK' : 'DIF'));
 
+        $sufijoFecha = $fechaFlashEtiqueta !== null && $fechaFlashEtiqueta !== ''
+            ? ' [jornada flash '.$fechaFlashEtiqueta.']'
+            : '';
+
         return [
             'tipo_fila' => $esGastro ? 'control_flash_gastro' : 'control_flash_estacionamiento',
             'circuito' => 'FLASH',
             'identificador_pc' => $esGastro ? 'FLASH-GASTRO' : 'FLASH-ESTAC',
             'tipo_pv' => 'EMPRESA',
             'pv_codigo' => '—',
-            'descripcion_pc' => $esGastro
+            'descripcion_pc' => ($esGastro
                 ? 'Flash gastro: flash_ayb (Informix caja) vs rendgastro salón (AyB)'
-                : 'Flash estacionamiento: flash_estac (Informix caja) vs rendgastro estacionamiento',
+                : 'Flash estacionamiento: flash_estac (Informix caja) vs rendgastro estacionamiento'
+            ).$sufijoFecha,
             'pv_cae' => '—',
             'pv_caea' => '—',
             'ventas_erp_cae' => 0.0,
@@ -131,6 +141,7 @@ final class GastronomiaConciliacionFlashSupport
             'cantidad_facturas_erp' => null,
             'es_control_flash' => true,
             'segmento_flash' => $segmento,
+            'fecha_flash' => $fechaFlashEtiqueta,
         ];
     }
 

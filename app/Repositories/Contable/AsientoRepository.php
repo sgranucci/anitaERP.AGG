@@ -85,8 +85,14 @@ class AsientoRepository implements AsientoRepositoryInterface
 		
 		$asiento = $this->model->create($data);
 
+		// omitir_anita: el caller sincroniza ctamov después (ej. recepción COM) para evitar doble escritura.
+		$omitirAnita = filter_var($data['omitir_anita'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
 		// Graba anita solo si el asiento queda confirmado (no pendiente de aprobación)
-		if (($data['estado_aprobacion'] ?? Asiento::ESTADO_APROBACION_CONFIRMADO) === Asiento::ESTADO_APROBACION_CONFIRMADO) {
+		if (
+			! $omitirAnita
+			&& ($data['estado_aprobacion'] ?? Asiento::ESTADO_APROBACION_CONFIRMADO) === Asiento::ESTADO_APROBACION_CONFIRMADO
+		) {
 			self::guardarAnita($data);
 		}
 

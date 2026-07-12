@@ -122,7 +122,10 @@ final class GastronomiaConciliacionDiariaReporteService
 
             $empresa = Empresa::query()->find($empresaId);
             $empresaCodigo = (int) ($empresa->codigo ?? $empresaId);
-            $flashDesglosePorJornada = $this->cargarFlashDesgloseEmpresa($empresaCodigo, $desde, $hasta);
+            $flashOffset = $this->controlFlashJornadaOffsetDias();
+            $flashDesde = Carbon::parse($desde)->subDays($flashOffset)->toDateString();
+            $flashHasta = Carbon::parse($hasta)->subDays($flashOffset)->toDateString();
+            $flashDesglosePorJornada = $this->cargarFlashDesgloseEmpresa($empresaCodigo, $flashDesde, $flashHasta);
             $indiceAnitaBulk = null;
             $cacheManifest = null;
 
@@ -476,13 +479,11 @@ final class GastronomiaConciliacionDiariaReporteService
             (float) ($controlGastro['notas_credito_rendg'] ?? 0),
         );
 
-        $controlFlash = $this->flashSupport->armarControl(
+        $controlFlash = $this->armarControlFlashJornada(
             $empresaId,
             $fechaJornada,
-            $filas,
-            $jornadaAbierta,
             $tolerancia,
-            $flashDesglosePorJornada[$fechaJornada] ?? null,
+            $flashDesglosePorJornada,
         );
 
         return [
@@ -499,6 +500,76 @@ final class GastronomiaConciliacionDiariaReporteService
             'control_flash' => $controlFlash,
             'huecos_numeracion' => $this->huecosNumeracionService->resumenJornadaEmpresa($empresaId, $fechaJornada),
         ];
+    }
+
+    /**
+     * Cuadro FLASH: Informix flash_ayb/estac vs rendg/ERP de la jornada offset (default: día anterior).
+     *
+     * @param  array<string, array{flash_ayb: float, flash_estac: float, total_flash: float}>  $flashDesglosePorJornada
+     * @return list<array<string, mixed>>
+     */
+    private function armarControlFlashJornada(
+        int $empresaId,
+        string $fechaJornada,
+        float $tolerancia,
+        array $flashDesglosePorJornada,
+    ): array {
+        $offset = $this->controlFlashJornadaOffsetDias();
+        $fechaFlash = $offset > 0
+            ? Carbon::parse($fechaJornada)->subDays($offset)->toDateString()
+            : $fechaJornada;
+
+        $filasErpFlash = $this->filasErpParaControlFlash($empresaId, $fechaFlash, $tolerancia);
+
+        return $this->flashSupport->armarControl(
+            $empresaId,
+            $fechaFlash,
+            $filasErpFlash,
+            $this->jornadaAbierta($empresaId, $fechaFlash),
+            $tolerancia,
+            $flashDesglosePorJornada[$fechaFlash] ?? null,
+            $fechaFlash !== $fechaJornada ? $fechaFlash : null,
+        );
+    }
+
+    /**
+     * Totales ERP mínimos (gastro + estac) para armar el cuadro FLASH de una jornada.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function filasErpParaControlFlash(int $empresaId, string $fechaFlash, float $tolerancia): array
+    {
+        $gastroNeto = round(
+            (float) ($this->gastroTotalDiaSupport->totalesDiaEmpresa($empresaId, $fechaFlash)['neto'] ?? 0),
+            2,
+        );
+
+        $estac = $this->estacionamientoSupport->filasReporte(
+            $empresaId,
+            $fechaFlash,
+            $tolerancia,
+            $this->jornadaAbierta($empresaId, $fechaFlash),
+        );
+        $estacNeto = round((float) ($estac['totales']['ventas_erp'] ?? 0), 2);
+
+        return [
+            [
+                'tipo_fila' => 'total_gastro',
+                'ventas_erp' => $gastroNeto,
+            ],
+            [
+                'tipo_fila' => 'total_estacionamiento',
+                'ventas_erp' => $estacNeto,
+            ],
+        ];
+    }
+
+    private function controlFlashJornadaOffsetDias(): int
+    {
+        return max(0, (int) config(
+            'gastronomia.conciliacion_diaria_reporte.control_flash_jornada_offset_dias',
+            1,
+        ));
     }
 
     /**

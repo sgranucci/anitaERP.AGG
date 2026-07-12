@@ -17,6 +17,7 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
+use App\Support\Stock\RecepcionProveedorCtamovCuadreSupport;
 use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
@@ -95,7 +96,8 @@ class RecepcionProveedorAsientoService
         $preview = $this->armarPreviewAsiento($recepcion);
         RecepcionProveedorCuadreContableSupport::assertPreview($preview);
 
-        $payloadAsiento = $preview['payload_asiento'];
+        // ERP primero; ctamov se escribe una sola vez en sincronizarCtamovAnitaRecepcion (evita doble insert).
+        $payloadAsiento = array_merge($preview['payload_asiento'], ['omitir_anita' => true]);
         $asiento = $this->asientoRepository->create($payloadAsiento);
         if ($asiento === 'Error' || ! $asiento) {
             throw new \RuntimeException('Error al grabar asiento contable en Anita.');
@@ -320,6 +322,44 @@ class RecepcionProveedorAsientoService
 
         $this->eliminarCtamovAnitaPorComRecepcion($recepcion);
         $this->asientoRepository->sincronizarCtamovAnita($dataAnita);
+        $this->assertCtamovCuadraTrasSync($recepcion, $preview);
+    }
+
+    /**
+     * Lee ctamov Anita tras sync y falla si no cuadra con el asiento ERP / preview.
+     *
+     * @param  array{total_debe?: float, payload_asiento?: array<string, mixed>}  $preview
+     */
+    public function assertCtamovCuadraTrasSync(Recepcion_Proveedor $recepcion, ?array $preview = null): void
+    {
+        $recepcion->loadMissing([
+            'empresas',
+            'asientos.asiento_movimientos.cuentacontables',
+            'asientos.asiento_movimientos.centrocostos',
+            'asientos.asiento_movimientos.monedas',
+        ]);
+
+        $preview ??= $this->armarPreviewAsiento($recepcion);
+        $debeEsperado = round((float) ($preview['total_debe'] ?? 0), 2);
+        $tol = max(0.0, (float) config(
+            'recepcion_proveedor.auditoria_asientos_com_diaria.tolerancia',
+            RecepcionProveedorCuadreContableSupport::tolerancia()
+        ));
+
+        $movimientos = $recepcion->asientos?->asiento_movimientos ?? collect();
+        $eval = RecepcionProveedorCtamovCuadreSupport::evaluarContraErp(
+            $recepcion,
+            $movimientos,
+            $debeEsperado,
+            $tol,
+        );
+
+        if ($eval['requiere_reparacion'] ?? false) {
+            throw new \RuntimeException(
+                'ctamov Anita no cuadra tras sync COM '.(int) $recepcion->numerorecepcion
+                .': '.implode(' ', $eval['motivos'] ?? [])
+            );
+        }
     }
 
     /**

@@ -107,6 +107,8 @@ return [
         'incluir_importadas_anita' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_INCLUIR_IMPORTADAS', false), FILTER_VALIDATE_BOOLEAN),
         // Días calendario inclusive hasta hoy que audita el cron diario (--desde / --hasta).
         'ventana_dias' => max(1, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_VENTANA_DIAS', 7)),
+        // Ante discrepancia ctamov/recepmae: repara desde ERP y re-audita (solo Anita, no toca asiento ERP).
+        'auto_reparar' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_AUTO_REPARAR', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
     /*
@@ -119,6 +121,8 @@ return [
         'job_tries' => max(1, (int) env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION_JOB_TRIES', 3)),
         'job_backoff_segundos' => array_map('intval', explode(',', env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION_JOB_BACKOFF', '30,120,600'))),
         'job_timeout' => max(60, (int) env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION_JOB_TIMEOUT', 300)),
+        // Segundo pase diferido (0 = desactivado) para detectar ctamov que desaparece tras un OK.
+        'recheck_delay_segundos' => max(0, (int) env('RECEPCION_PROVEEDOR_ANITA_TRAS_CONFIRMACION_RECHECK_DELAY', 600)),
     ],
 
 ];

@@ -24,6 +24,7 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
     public function __construct(
         private readonly RecepcionProveedorAsientoService $asientoService,
         private readonly RecepcionProveedorAnitaBridgeService $anitaBridge,
+        private readonly RecepcionProveedorAnitaTrasConfirmacionService $anitaTrasConfirmacion,
     ) {
     }
 
@@ -37,11 +38,13 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
         ?string $fechaDesde = null,
         ?string $fechaHasta = null,
         bool $todas = false,
+        ?bool $autoReparar = null,
     ): array {
         $config = config('recepcion_proveedor.auditoria_asientos_com_diaria', []);
         $fecha = $fechaCalendario ?? Carbon::yesterday()->toDateString();
         $tol = max(0.0, (float) ($config['tolerancia'] ?? RecepcionProveedorCuadreContableSupport::tolerancia()));
         $incluirImportadas = filter_var($config['incluir_importadas_anita'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $autoReparar ??= filter_var($config['auto_reparar'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         $this->autenticarUsuarioSistema($config);
 
@@ -81,6 +84,7 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             'total_com' => $recepciones->count(),
             'ok' => 0,
             'omitidas' => 0,
+            'reparadas' => 0,
             'discrepancias' => [],
             'errores_lectura' => [],
             'filas' => [],
@@ -113,6 +117,41 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
                 continue;
             }
 
+            if ($autoReparar && ($resultado['estado'] ?? '') === 'discrepancia') {
+                $problemasIniciales = $resultado['problemas'] ?? [];
+                try {
+                    $reparacion = $this->anitaTrasConfirmacion->verificarYReparar((int) $recepcion->id);
+                    $resultadoPost = $this->auditarRecepcion($recepcion->fresh(), $tol);
+                    if (($resultadoPost['estado'] ?? '') === 'ok') {
+                        $resultadoPost['reparada_en_auditoria'] = true;
+                        $resultadoPost['problemas_iniciales'] = $problemasIniciales;
+                        $resultadoPost['reparacion_estado'] = $reparacion['estado'] ?? null;
+                        $informe['ok']++;
+                        $informe['reparadas'] = (int) ($informe['reparadas'] ?? 0) + 1;
+                        $informe['filas'][] = $resultadoPost;
+                        Log::warning('recepcion_proveedor.auditoria_asientos_com.reparada', [
+                            'recepcion_id' => (int) $recepcion->id,
+                            'com' => (int) $recepcion->numerorecepcion,
+                            'problemas' => $problemasIniciales,
+                        ]);
+
+                        continue;
+                    }
+                    $resultado = $resultadoPost;
+                    $resultado['reparacion_fallida'] = true;
+                    $resultado['problemas_iniciales'] = $problemasIniciales;
+                } catch (\Throwable $e) {
+                    $resultado['reparacion_fallida'] = true;
+                    $resultado['reparacion_error'] = $e->getMessage();
+                    $resultado['problemas_iniciales'] = $problemasIniciales;
+                    Log::error('recepcion_proveedor.auditoria_asientos_com.reparacion_fallo', [
+                        'recepcion_id' => (int) $recepcion->id,
+                        'com' => (int) $recepcion->numerorecepcion,
+                        'mensaje' => $e->getMessage(),
+                    ]);
+                }
+            }
+
             $informe['discrepancias'][] = $resultado;
             $informe['filas'][] = $resultado;
         }
@@ -143,8 +182,10 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             'total_com' => $informe['total_com'],
             'ok' => $informe['ok'],
             'discrepancias' => count($informe['discrepancias']),
+            'reparadas' => (int) ($informe['reparadas'] ?? 0),
             'errores_lectura' => count($informe['errores_lectura']),
             'requiere_alerta' => $informe['requiere_alerta'],
+            'auto_reparar' => $autoReparar,
         ]);
 
         return $informe;

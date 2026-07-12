@@ -278,6 +278,11 @@ return [
         'anita_reintentos_bridge' => max(1, (int) env('GASTRONOMIA_CONCILIACION_ANITA_REINTENTOS_BRIDGE', 3)),
         /** Control flash (Informix caja: flash_ayb + flash_estac) vs rendgastro neto por unidad de negocio (AyB / estacionamiento). */
         'control_flash_habilitado' => filter_var(env('GASTRONOMIA_CONCILIACION_CONTROL_FLASH_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        /**
+         * Días hacia atrás respecto de la jornada del reporte para el cuadro FLASH.
+         * Default 1: el Informix flash del mismo día suele demorar; se concilia flash/rendg/ERP del día anterior.
+         */
+        'control_flash_jornada_offset_dias' => max(0, (int) env('GASTRONOMIA_CONCILIACION_CONTROL_FLASH_OFFSET_DIAS', 1)),
     ],
 
     /**

@@ -5,7 +5,12 @@
 <div class="px-3 py-2 border-bottom bg-white">
     <form method="get" action="{{ route('mayor_concepto') }}" id="form-filtros-detalle-mayor-concepto" class="mb-0">
         <input type="hidden" name="consultar" value="1">
-        <input type="hidden" name="empresa_id" value="{{ (int) ($filtrosDet['empresa_id'] ?? 0) }}">
+        @foreach (($filtrosDet['empresa_ids'] ?? []) as $empresaIdFiltro)
+            <input type="hidden" name="empresa_ids[]" value="{{ (int) $empresaIdFiltro }}">
+        @endforeach
+        @if (empty($filtrosDet['consolidar_empresas']))
+            <input type="hidden" name="consolidar_empresas" value="0">
+        @endif
         <input type="hidden" name="moneda_id" value="{{ (int) ($filtrosDet['moneda_id'] ?? 1) }}">
         <input type="hidden" name="modo_periodo" value="{{ $filtrosDet['modo_periodo'] ?? 'mes' }}">
         <input type="hidden" name="mes" value="{{ (int) ($filtrosDet['mes'] ?? 0) }}">

@@ -170,11 +170,16 @@ final class RecepcionProveedorAnitaTrasConfirmacionService
     {
         if ($this->resincronizacionErpService->requiereResincronizacion($recepcion)) {
             $this->resincronizacionErpService->repararRecepcionConfirmada((int) $recepcion->id);
-
-            return;
-        }
-
-        if ($this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion) === []) {
+            $recepcion = $recepcion->fresh([
+                'asientos',
+                'empresas',
+                'proveedores',
+                'ordencompras',
+                'recepcion_proveedor_articulos.articulos.categorias',
+                'recepcion_proveedor_articulos.articulos.impuestos',
+                'recepcion_proveedor_articulos.centrocostos',
+            ]) ?? $recepcion;
+        } elseif ($this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion) === []) {
             $this->anitaBridge->sincronizarRecepcion($recepcion->fresh([
                 'proveedores', 'empresas', 'ordencompras',
                 'recepcion_proveedor_articulos.articulos.categorias',

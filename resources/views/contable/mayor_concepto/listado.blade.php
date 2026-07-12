@@ -141,6 +141,9 @@
             <table class="data" style="margin-bottom: 12px;">
                 <thead>
                     <tr>
+                        @if (! empty($conc['multiempresa']))
+                            <th>Empresa</th>
+                        @endif
                         <th>N. asiento</th>
                         <th>Fecha</th>
                         <th class="text-right">Neto anal.</th>
@@ -152,6 +155,9 @@
                 <tbody>
                     @foreach ($filasDescPdf as $fila)
                         <tr style="background-color: #fff3cd;">
+                            @if (! empty($conc['multiempresa']))
+                                <td>{{ $fila['nombreempresa'] ?? '' }}</td>
+                            @endif
                             <td>{{ $fila['nro_asiento'] ?? '' }}</td>
                             <td>{{ $fila['fecha_fmt'] ?? '' }}</td>
                             <td class="text-right">{{ number_format((float) ($fila['neto_analitico'] ?? 0), 2, ',', '.') }}</td>
@@ -171,14 +177,16 @@
     <table class="data">
         @include('contable.mayor_concepto.partials.tabla_datos', [
             'filas' => $filas,
+            'multiempresa' => $multiempresa ?? false,
             'puede_ver_asiento' => false,
             'puede_ver_cuenta' => false,
             'puede_ver_concepto' => false,
         ])
         @if (! empty($tot))
+            @php $colSpanTotalesPdf = ($multiempresa ?? false) ? 16 : 15; @endphp
             <tfoot>
                 <tr class="fila-total-general">
-                    <th colspan="10">Totales</th>
+                    <th colspan="{{ $colSpanTotalesPdf }}">Totales</th>
                     <th class="text-right">{{ number_format((float) ($tot['total_debe'] ?? 0), 2, ',', '.') }}</th>
                     <th class="text-right">{{ number_format((float) ($tot['total_haber'] ?? 0), 2, ',', '.') }}</th>
                 </tr>

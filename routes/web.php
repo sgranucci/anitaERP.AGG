@@ -860,6 +860,7 @@ Route::post('contable/copiar_asiento', 'Contable\AsientoController@copiarAsiento
 Route::post('contable/revertir_asiento', 'Contable\AsientoController@revertirAsiento')->name('revertir_asiento');
 
 Route::get('contable/mayor-concepto', 'Contable\MayorConceptoController@index')->name('mayor_concepto');
+Route::post('contable/mayor-concepto/consultar', 'Contable\MayorConceptoController@consultar')->name('mayor_concepto_consultar');
 Route::get('contable/listar-mayor-concepto/{formato}', 'Contable\MayorConceptoController@exportar')->name('listar_mayor_concepto');
 
 Route::get('contable/sicore', 'Contable\SicoreReporteController@index')->name('sicore');

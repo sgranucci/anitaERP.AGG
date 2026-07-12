@@ -62,6 +62,9 @@
                     <table class="table table-sm table-bordered mb-0" id="tabla-conciliacion-descuadres" style="font-size: 0.75rem;">
                         <thead>
                             <tr style="background-color: #85C1E9; color: #17202A;">
+                                @if (! empty($conc['multiempresa']))
+                                    <th>Empresa</th>
+                                @endif
                                 <th>N. asiento</th>
                                 <th>Fecha</th>
                                 <th class="text-right">Neto analítico</th>
@@ -76,6 +79,9 @@
                         <tbody>
                             @foreach ($filasDescuadradas as $fila)
                                 <tr class="table-warning">
+                                    @if (! empty($conc['multiempresa']))
+                                        <td>{{ $fila['nombreempresa'] ?? '' }}</td>
+                                    @endif
                                     <td class="font-weight-bold">{{ $fila['nro_asiento'] ?? '' }}</td>
                                     <td>{{ $fila['fecha_fmt'] ?? '' }}</td>
                                     <td class="text-right">{{ $formatearMonto($fila['neto_analitico'] ?? null) }}</td>
@@ -105,12 +111,18 @@
                 <button type="button" class="btn btn-outline-success btn-sm mb-2" data-toggle="collapse" data-target="#panel-conciliacion-cuadrados" aria-expanded="false">
                     <i class="fa fa-check"></i>
                     Ver asientos balanceados ({{ number_format($asientosCuadrados, 0, ',', '.') }})
+                    @if (! empty($conc['filas_cuadradas_recortadas']))
+                        <span class="text-muted">— muestra parcial</span>
+                    @endif
                 </button>
                 <div class="collapse" id="panel-conciliacion-cuadrados">
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered mb-0" style="font-size: 0.72rem;">
                             <thead>
                                 <tr style="background-color: #d5f5e3; color: #17202A;">
+                                    @if (! empty($conc['multiempresa']))
+                                        <th>Empresa</th>
+                                    @endif
                                     <th>N. asiento</th>
                                     <th>Fecha</th>
                                     <th class="text-right">Debe anal.</th>
@@ -125,6 +137,9 @@
                             <tbody>
                                 @foreach ($filasCuadradas as $fila)
                                     <tr>
+                                        @if (! empty($conc['multiempresa']))
+                                            <td>{{ $fila['nombreempresa'] ?? '' }}</td>
+                                        @endif
                                         <td>{{ $fila['nro_asiento'] ?? '' }}</td>
                                         <td>{{ $fila['fecha_fmt'] ?? '' }}</td>
                                         <td class="text-right">{{ $formatearMonto($fila['debe_analitico'] ?? null) }}</td>

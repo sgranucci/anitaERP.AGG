@@ -33,7 +33,8 @@ class MayorConceptoReporteService
      */
     public function generarDesdeFiltros(array $filtros): array
     {
-        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $empresaIds = MayorConceptoListadoFiltros::empresaIds($filtros);
+        $consolidar = (bool) ($filtros['consolidar_empresas'] ?? true);
         $monedaId = (int) ($filtros['moneda_id'] ?? 1);
         $usarMes = ($filtros['modo_periodo'] ?? 'mes') === 'mes';
         $soloOrigen = (bool) ($filtros['solo_moneda_origen'] ?? false);
@@ -53,16 +54,243 @@ class MayorConceptoReporteService
             );
         }
 
-        return $this->generar(
-            $empresaId,
-            $fechaDesde !== '' ? $fechaDesde : null,
-            $fechaHasta !== '' ? $fechaHasta : null,
-            $mes,
-            $anio,
-            $usarMes,
-            $monedaId,
-            $soloOrigen,
-        );
+        if ($empresaIds === []) {
+            return $this->generar(
+                0,
+                $fechaDesde !== '' ? $fechaDesde : null,
+                $fechaHasta !== '' ? $fechaHasta : null,
+                $mes,
+                $anio,
+                $usarMes,
+                $monedaId,
+                $soloOrigen,
+            );
+        }
+
+        if (count($empresaIds) === 1) {
+            $resultado = $this->generar(
+                (int) $empresaIds[0],
+                $fechaDesde !== '' ? $fechaDesde : null,
+                $fechaHasta !== '' ? $fechaHasta : null,
+                $mes,
+                $anio,
+                $usarMes,
+                $monedaId,
+                $soloOrigen,
+            );
+            $resultado['parametros']['empresa_ids'] = $empresaIds;
+            $resultado['parametros']['consolidar_empresas'] = true;
+
+            return $resultado;
+        }
+
+        $bloques = [];
+        foreach ($empresaIds as $empresaId) {
+            $bloques[(int) $empresaId] = $this->generar(
+                (int) $empresaId,
+                $fechaDesde !== '' ? $fechaDesde : null,
+                $fechaHasta !== '' ? $fechaHasta : null,
+                $mes,
+                $anio,
+                $usarMes,
+                $monedaId,
+                $soloOrigen,
+            );
+        }
+
+        return $this->fusionarResultadosEmpresas($bloques, $empresaIds, $consolidar);
+    }
+
+    /**
+     * Genera una sola empresa (para consulta progresiva multiempresa vía AJAX).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function generarUnaEmpresaDesdeFiltros(array $filtros, int $empresaId): array
+    {
+        $filtrosUna = array_merge($filtros, [
+            'empresa_ids' => [$empresaId],
+            'empresa_id' => $empresaId,
+            'consolidar_empresas' => true,
+        ]);
+
+        return $this->generarDesdeFiltros($filtrosUna);
+    }
+
+    /**
+     * Fusiona bloques ya generados por empresa (sin volver a llamar al motor).
+     *
+     * @param  array<int, array<string, mixed>>  $bloques
+     * @param  list<int>  $empresaIds
+     * @return array<string, mixed>
+     */
+    public function fusionarBloquesEmpresas(array $bloques, array $empresaIds, bool $consolidar): array
+    {
+        return $this->fusionarResultadosEmpresas($bloques, $empresaIds, $consolidar);
+    }
+
+    /**
+     * Une resultados por empresa sin modificar el motor: cada bloque ya viene del procesador.
+     *
+     * @param  array<int, array<string, mixed>>  $bloques
+     * @param  list<int>  $empresaIds
+     * @return array<string, mixed>
+     */
+    private function fusionarResultadosEmpresas(array $bloques, array $empresaIds, bool $consolidar): array
+    {
+        $secciones = [];
+        $totalDebe = 0.0;
+        $totalHaber = 0.0;
+        $totalLineas = 0;
+        $erroresBridge = [];
+        $stats = [];
+        $resultadosPorEmpresa = [];
+
+        foreach ($empresaIds as $empresaId) {
+            $bloque = $bloques[$empresaId] ?? null;
+            if (! is_array($bloque)) {
+                continue;
+            }
+
+            $resultadosPorEmpresa[$empresaId] = $bloque;
+
+            foreach ($bloque['secciones'] ?? [] as $seccion) {
+                $seccion['empresa_id'] = $empresaId;
+                $secciones[] = $seccion;
+            }
+
+            $totalDebe += (float) ($bloque['totales']['debe'] ?? 0);
+            $totalHaber += (float) ($bloque['totales']['haber'] ?? 0);
+            $totalLineas += (int) ($bloque['totales']['lineas'] ?? 0);
+
+            foreach ($bloque['errores_bridge'] ?? [] as $err) {
+                $erroresBridge[] = '[Empresa '.$empresaId.'] '.$err;
+            }
+
+            foreach ($bloque['stats'] ?? [] as $clave => $valor) {
+                if (is_numeric($valor)) {
+                    $stats[$clave] = (int) ($stats[$clave] ?? 0) + (int) $valor;
+                }
+            }
+        }
+
+        if ($consolidar) {
+            $secciones = $this->fusionarSeccionesConsolidadas($secciones);
+        }
+
+        $parametrosBase = ($bloques[$empresaIds[0]] ?? [])['parametros'] ?? [];
+        $parametrosBase['empresa_id'] = (int) ($empresaIds[0] ?? 0);
+        $parametrosBase['empresa_ids'] = $empresaIds;
+        $parametrosBase['consolidar_empresas'] = $consolidar;
+
+        return [
+            'parametros' => $parametrosBase,
+            'secciones' => $secciones,
+            'totales' => [
+                'debe' => round($totalDebe, 2),
+                'haber' => round($totalHaber, 2),
+                'lineas' => $totalLineas,
+            ],
+            'errores_bridge' => array_values(array_unique($erroresBridge)),
+            'stats' => $stats,
+            'resultados_por_empresa' => $resultadosPorEmpresa,
+        ];
+    }
+
+    /**
+     * Merge real por concepto/cuenta: mismas cuentas de distintas empresas en un solo bloque,
+     * con empresa_id en cada línea (columna Empr. del reporte).
+     *
+     * @param  list<array<string, mixed>>  $secciones
+     * @return list<array<string, mixed>>
+     */
+    private function fusionarSeccionesConsolidadas(array $secciones): array
+    {
+        $porConcepto = [];
+
+        foreach ($secciones as $seccion) {
+            $conceptoId = (int) ($seccion['concepto_id'] ?? 0);
+            $empresaId = (int) ($seccion['empresa_id'] ?? 0);
+
+            if (! isset($porConcepto[$conceptoId])) {
+                $porConcepto[$conceptoId] = [
+                    'concepto_id' => $conceptoId,
+                    'concepto_nombre' => (string) ($seccion['concepto_nombre'] ?? ''),
+                    'empresa_id' => 0,
+                    'cuentas' => [],
+                ];
+            } elseif (($porConcepto[$conceptoId]['concepto_nombre'] ?? '') === ''
+                && ($seccion['concepto_nombre'] ?? '') !== ''
+            ) {
+                $porConcepto[$conceptoId]['concepto_nombre'] = (string) $seccion['concepto_nombre'];
+            }
+
+            foreach ($seccion['cuentas'] ?? [] as $cuentaBlock) {
+                $codigoCuenta = (int) ($cuentaBlock['cuenta'] ?? 0);
+                $claveCuenta = (string) ($cuentaBlock['cuenta_codigo'] ?? $codigoCuenta);
+                if ($claveCuenta === '' || $claveCuenta === '0') {
+                    $claveCuenta = (string) $codigoCuenta;
+                }
+
+                if (! isset($porConcepto[$conceptoId]['cuentas'][$claveCuenta])) {
+                    $porConcepto[$conceptoId]['cuentas'][$claveCuenta] = [
+                        'cuenta' => $codigoCuenta,
+                        'cuenta_codigo' => $cuentaBlock['cuenta_codigo'] ?? (string) $codigoCuenta,
+                        'cuenta_nombre' => $cuentaBlock['cuenta_nombre'] ?? '',
+                        'lineas' => [],
+                        'total_debe' => 0.0,
+                        'total_haber' => 0.0,
+                    ];
+                }
+
+                foreach ($cuentaBlock['lineas'] ?? [] as $linea) {
+                    $linea['empresa_id'] = $empresaId;
+                    $porConcepto[$conceptoId]['cuentas'][$claveCuenta]['lineas'][] = $linea;
+                }
+
+                $porConcepto[$conceptoId]['cuentas'][$claveCuenta]['total_debe'] += (float) ($cuentaBlock['total_debe'] ?? 0);
+                $porConcepto[$conceptoId]['cuentas'][$claveCuenta]['total_haber'] += (float) ($cuentaBlock['total_haber'] ?? 0);
+
+                if (($porConcepto[$conceptoId]['cuentas'][$claveCuenta]['cuenta_nombre'] ?? '') === ''
+                    && ($cuentaBlock['cuenta_nombre'] ?? '') !== ''
+                ) {
+                    $porConcepto[$conceptoId]['cuentas'][$claveCuenta]['cuenta_nombre'] = (string) $cuentaBlock['cuenta_nombre'];
+                }
+            }
+        }
+
+        ksort($porConcepto, SORT_NUMERIC);
+
+        $salida = [];
+        foreach ($porConcepto as $seccionMerge) {
+            $cuentas = array_values($seccionMerge['cuentas']);
+            usort($cuentas, fn (array $a, array $b) => ((int) ($a['cuenta'] ?? 0)) <=> ((int) ($b['cuenta'] ?? 0)));
+
+            foreach ($cuentas as $idx => $cuenta) {
+                $lineas = $cuenta['lineas'] ?? [];
+                usort($lineas, function (array $a, array $b): int {
+                    $cmpFecha = strcmp((string) ($a['fecha'] ?? ''), (string) ($b['fecha'] ?? ''));
+                    if ($cmpFecha !== 0) {
+                        return $cmpFecha;
+                    }
+                    $cmpEmp = ((int) ($a['empresa_id'] ?? 0)) <=> ((int) ($b['empresa_id'] ?? 0));
+                    if ($cmpEmp !== 0) {
+                        return $cmpEmp;
+                    }
+
+                    return ((int) ($a['nro_asiento'] ?? 0)) <=> ((int) ($b['nro_asiento'] ?? 0));
+                });
+                $cuentas[$idx]['lineas'] = $lineas;
+                $cuentas[$idx]['total_debe'] = round((float) ($cuenta['total_debe'] ?? 0), 2);
+                $cuentas[$idx]['total_haber'] = round((float) ($cuenta['total_haber'] ?? 0), 2);
+            }
+
+            $seccionMerge['cuentas'] = $cuentas;
+            $salida[] = $seccionMerge;
+        }
+
+        return $salida;
     }
 
     /**
@@ -77,22 +305,24 @@ class MayorConceptoReporteService
      */
     public function resumenAgrupado(array $resultado): array
     {
-        $empresaId = (int) ($resultado['parametros']['empresa_id'] ?? 0);
-        $codigosCuenta = [];
-
+        $resumen = [];
         foreach ($resultado['secciones'] ?? [] as $seccion) {
+            $empresaId = (int) ($seccion['empresa_id'] ?? $resultado['parametros']['empresa_id'] ?? 0);
+            if ($empresaId <= 0) {
+                $empresaId = (int) (($resultado['parametros']['empresa_ids'] ?? [])[0] ?? 0);
+            }
+            $codigosCuenta = [];
             foreach ($seccion['cuentas'] ?? [] as $cuentaBlock) {
                 $codigo = (int) ($cuentaBlock['cuenta'] ?? 0);
                 if ($codigo > 0) {
                     $codigosCuenta[$codigo] = true;
                 }
             }
-        }
+            $cuentasPorCodigo = $this->lookupCuentasPorCodigo($empresaId, array_keys($codigosCuenta));
+            $nombreEmpresa = $empresaId > 0
+                ? ($this->empresaRepository->find($empresaId)?->nombre ?? '')
+                : '';
 
-        $cuentasPorCodigo = $this->lookupCuentasPorCodigo($empresaId, array_keys($codigosCuenta));
-
-        $resumen = [];
-        foreach ($resultado['secciones'] ?? [] as $seccion) {
             $conceptoId = (int) ($seccion['concepto_id'] ?? 0);
             $totalDebe = 0.0;
             $totalHaber = 0.0;
@@ -110,12 +340,16 @@ class MayorConceptoReporteService
                     'cantidad_lineas' => count($cuentaBlock['lineas'] ?? []),
                     'total_debe' => (float) ($cuentaBlock['total_debe'] ?? 0),
                     'total_haber' => (float) ($cuentaBlock['total_haber'] ?? 0),
+                    'empresa_id' => (int) ($seccion['empresa_id'] ?? 0),
+                    'nombreempresa' => (int) ($seccion['empresa_id'] ?? 0) > 0 ? $nombreEmpresa : '',
                 ];
             }
 
             $resumen[] = [
                 'concepto_id' => $conceptoId,
                 'concepto_nombre' => $seccion['concepto_nombre'] ?? '',
+                'empresa_id' => (int) ($seccion['empresa_id'] ?? 0),
+                'nombreempresa' => (int) ($seccion['empresa_id'] ?? 0) > 0 ? $nombreEmpresa : '',
                 'total_debe' => round($totalDebe, 2),
                 'total_haber' => round($totalHaber, 2),
                 'cantidad_cuentas' => count($cuentas),
@@ -221,10 +455,78 @@ class MayorConceptoReporteService
      */
     public function armarAuditoriaPanel(array $resultado): array
     {
-        $conciliacion = $this->conciliarPorAsiento($resultado);
+        $porEmpresa = $resultado['resultados_por_empresa'] ?? null;
+        if (! is_array($porEmpresa) || $porEmpresa === []) {
+            $conciliacion = $this->conciliarPorAsiento($resultado);
+
+            return [
+                'cuadra' => (bool) ($conciliacion['cuadra'] ?? false),
+                'conciliacion' => $conciliacion,
+            ];
+        }
+
+        if (count($porEmpresa) === 1) {
+            $empresaId = (int) array_key_first($porEmpresa);
+            $bloque = $porEmpresa[$empresaId];
+            $conciliacion = $this->conciliacionAsientoSupport->conciliar($bloque, $empresaId);
+
+            return [
+                'cuadra' => (bool) ($conciliacion['cuadra'] ?? false),
+                'conciliacion' => $conciliacion,
+            ];
+        }
+
+        $filasDescuadradas = [];
+        $filasCuadradas = [];
+        $asientosAnalizados = 0;
+        $asientosCuadrados = 0;
+        $asientosDescuadrados = 0;
+        $tolerancia = 1.0;
+        $regla = 'Neto analítico + Neto concepto = 0';
+
+        foreach ($porEmpresa as $empresaId => $bloque) {
+            $empresaId = (int) $empresaId;
+            $nombreEmpresa = $this->empresaRepository->find($empresaId)?->nombre ?? (string) $empresaId;
+            $conc = $this->conciliacionAsientoSupport->conciliar($bloque, $empresaId);
+
+            $tolerancia = (float) ($conc['tolerancia'] ?? $tolerancia);
+            $regla = (string) ($conc['regla'] ?? $regla);
+            $asientosAnalizados += (int) ($conc['asientos_analizados'] ?? 0);
+            $asientosCuadrados += (int) ($conc['asientos_cuadrados'] ?? 0);
+            $asientosDescuadrados += (int) ($conc['asientos_descuadrados'] ?? 0);
+
+            foreach ($conc['filas_descuadradas'] ?? [] as $fila) {
+                $fila['empresa_id'] = $empresaId;
+                $fila['nombreempresa'] = $nombreEmpresa;
+                $filasDescuadradas[] = $fila;
+            }
+            foreach ($conc['filas_cuadradas'] ?? [] as $fila) {
+                $fila['empresa_id'] = $empresaId;
+                $fila['nombreempresa'] = $nombreEmpresa;
+                $filasCuadradas[] = $fila;
+            }
+        }
+
+        $cuadra = $asientosDescuadrados === 0 && $asientosAnalizados > 0;
+        $porcentaje = $asientosAnalizados > 0
+            ? round(($asientosCuadrados / $asientosAnalizados) * 100, 1)
+            : 0.0;
+
+        $conciliacion = [
+            'cuadra' => $cuadra,
+            'regla' => $regla,
+            'tolerancia' => $tolerancia,
+            'asientos_analizados' => $asientosAnalizados,
+            'asientos_cuadrados' => $asientosCuadrados,
+            'asientos_descuadrados' => $asientosDescuadrados,
+            'porcentaje_cuadrado' => $porcentaje,
+            'filas_descuadradas' => $filasDescuadradas,
+            'filas_cuadradas' => $filasCuadradas,
+            'multiempresa' => true,
+        ];
 
         return [
-            'cuadra' => (bool) ($conciliacion['cuadra'] ?? false),
+            'cuadra' => $cuadra,
             'conciliacion' => $conciliacion,
         ];
     }
@@ -284,11 +586,37 @@ class MayorConceptoReporteService
      */
     private function aplanarFilasInterno(array $resultado, bool $conTotales): array
     {
-        $empresaId = (int) ($resultado['parametros']['empresa_id'] ?? 0);
-        $nombreEmpresa = $this->empresaRepository->find($empresaId)?->nombre ?? '';
+        $empresaIds = array_values(array_filter(array_map(
+            'intval',
+            $resultado['parametros']['empresa_ids'] ?? [],
+        ), fn (int $id) => $id > 0));
+        if ($empresaIds === [] && (int) ($resultado['parametros']['empresa_id'] ?? 0) > 0) {
+            $empresaIds = [(int) $resultado['parametros']['empresa_id']];
+        }
+
+        $consolidar = (bool) ($resultado['parametros']['consolidar_empresas'] ?? true);
+        $nombresEmpresa = [];
+        foreach ($empresaIds as $eid) {
+            $nombresEmpresa[$eid] = $this->empresaRepository->find($eid)?->nombre ?? '';
+        }
 
         $filas = [];
+        $empresaHeaderActual = 0;
+
         foreach ($resultado['secciones'] ?? [] as $seccion) {
+            $empresaId = (int) ($seccion['empresa_id'] ?? $resultado['parametros']['empresa_id'] ?? 0);
+            $nombreEmpresa = $nombresEmpresa[$empresaId]
+                ?? ($this->empresaRepository->find($empresaId)?->nombre ?? '');
+
+            if (! $consolidar && $empresaId > 0 && $empresaId !== $empresaHeaderActual) {
+                $empresaHeaderActual = $empresaId;
+                $filas[] = [
+                    'tipo_fila' => 'header_empresa',
+                    'empresa_id' => $empresaId,
+                    'nombreempresa' => $nombreEmpresa,
+                ];
+            }
+
             $conceptoId = (int) ($seccion['concepto_id'] ?? 0);
             $conceptoNombre = (string) ($seccion['concepto_nombre'] ?? '');
             $totalConceptoDebe = 0.0;
@@ -296,10 +624,16 @@ class MayorConceptoReporteService
 
             foreach ($seccion['cuentas'] ?? [] as $cuentaBlock) {
                 foreach ($cuentaBlock['lineas'] ?? [] as $ln) {
+                    $empresaLinea = (int) ($ln['empresa_id'] ?? $empresaId);
+                    $nombreLinea = $nombresEmpresa[$empresaLinea]
+                        ?? ($empresaLinea > 0
+                            ? ($this->empresaRepository->find($empresaLinea)?->nombre ?? '')
+                            : $nombreEmpresa);
+
                     $filas[] = array_merge($ln, [
                         'tipo_fila' => 'detalle',
-                        'empresa_id' => $empresaId,
-                        'nombreempresa' => $nombreEmpresa,
+                        'empresa_id' => $empresaLinea,
+                        'nombreempresa' => $nombreLinea,
                     ]);
                 }
 
@@ -314,7 +648,7 @@ class MayorConceptoReporteService
                         'debe' => (float) ($cuentaBlock['total_debe'] ?? 0),
                         'haber' => (float) ($cuentaBlock['total_haber'] ?? 0),
                         'empresa_id' => $empresaId,
-                        'nombreempresa' => $nombreEmpresa,
+                        'nombreempresa' => $empresaId > 0 ? $nombreEmpresa : '',
                     ];
                 }
 
@@ -335,7 +669,23 @@ class MayorConceptoReporteService
             }
         }
 
-        return $this->enriquecerEnlaces($filas, $empresaId);
+        return $this->enriquecerEnlaces($filas);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function formatearEmpresasTexto(array $filtros): string
+    {
+        $nombres = [];
+        foreach (MayorConceptoListadoFiltros::empresaIds($filtros) as $empresaId) {
+            $nombre = $this->empresaRepository->find((int) $empresaId)?->nombre;
+            if ($nombre) {
+                $nombres[] = $nombre;
+            }
+        }
+
+        return implode(' · ', $nombres);
     }
 
     /**
@@ -445,47 +795,62 @@ class MayorConceptoReporteService
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
      */
-    private function enriquecerEnlaces(array $filas, int $empresaId): array
+    private function enriquecerEnlaces(array $filas): array
     {
-        if ($filas === [] || $empresaId <= 0) {
+        if ($filas === []) {
             return $filas;
         }
 
-        $numerosAsiento = array_values(array_unique(array_filter(array_map(
-            fn (array $f) => (int) ($f['nro_asiento'] ?? 0),
-            $filas
-        ), fn (int $n) => $n > 0)));
-
-        $codigosCuenta = array_values(array_unique(array_filter(array_map(
-            fn (array $f) => (int) ($f['cuenta'] ?? 0),
-            $filas
-        ), fn (int $n) => $n > 0)));
-
-        $asientosPorNumero = [];
-        if ($numerosAsiento !== []) {
-            $asientosPorNumero = DB::table('asiento')
-                ->where('empresa_id', $empresaId)
-                ->whereIn('numeroasiento', $numerosAsiento)
-                ->pluck('id', 'numeroasiento')
-                ->all();
-        }
-
-        $cuentasPorCodigo = $this->lookupCuentasPorCodigo($empresaId, $codigosCuenta);
-
+        $porEmpresa = [];
         foreach ($filas as $idx => $fila) {
-            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
-                $codigo = (int) ($fila['cuenta'] ?? 0);
-                if ($codigo > 0) {
-                    $filas[$idx]['cuentacontable_id'] = (int) ($cuentasPorCodigo[$codigo] ?? 0);
-                }
-
+            $empresaId = (int) ($fila['empresa_id'] ?? 0);
+            if ($empresaId <= 0) {
                 continue;
             }
+            $porEmpresa[$empresaId][] = $idx;
+        }
 
-            $nro = (int) ($fila['nro_asiento'] ?? 0);
-            $codigo = (int) ($fila['cuenta'] ?? 0);
-            $filas[$idx]['asiento_id'] = $nro > 0 ? (int) ($asientosPorNumero[$nro] ?? 0) : 0;
-            $filas[$idx]['cuentacontable_id'] = $codigo > 0 ? (int) ($cuentasPorCodigo[$codigo] ?? 0) : 0;
+        foreach ($porEmpresa as $empresaId => $indices) {
+            $numerosAsiento = [];
+            $codigosCuenta = [];
+            foreach ($indices as $idx) {
+                $nro = (int) ($filas[$idx]['nro_asiento'] ?? 0);
+                if ($nro > 0) {
+                    $numerosAsiento[$nro] = true;
+                }
+                $codigo = (int) ($filas[$idx]['cuenta'] ?? 0);
+                if ($codigo > 0) {
+                    $codigosCuenta[$codigo] = true;
+                }
+            }
+
+            $asientosPorNumero = [];
+            if ($numerosAsiento !== []) {
+                $asientosPorNumero = DB::table('asiento')
+                    ->where('empresa_id', $empresaId)
+                    ->whereIn('numeroasiento', array_keys($numerosAsiento))
+                    ->pluck('id', 'numeroasiento')
+                    ->all();
+            }
+
+            $cuentasPorCodigo = $this->lookupCuentasPorCodigo($empresaId, array_keys($codigosCuenta));
+
+            foreach ($indices as $idx) {
+                $fila = $filas[$idx];
+                if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                    $codigo = (int) ($fila['cuenta'] ?? 0);
+                    if ($codigo > 0) {
+                        $filas[$idx]['cuentacontable_id'] = (int) ($cuentasPorCodigo[$codigo] ?? 0);
+                    }
+
+                    continue;
+                }
+
+                $nro = (int) ($fila['nro_asiento'] ?? 0);
+                $codigo = (int) ($fila['cuenta'] ?? 0);
+                $filas[$idx]['asiento_id'] = $nro > 0 ? (int) ($asientosPorNumero[$nro] ?? 0) : 0;
+                $filas[$idx]['cuentacontable_id'] = $codigo > 0 ? (int) ($cuentasPorCodigo[$codigo] ?? 0) : 0;
+            }
         }
 
         return $filas;

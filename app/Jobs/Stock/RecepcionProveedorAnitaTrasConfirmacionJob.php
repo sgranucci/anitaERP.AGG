@@ -35,6 +35,8 @@ class RecepcionProveedorAnitaTrasConfirmacionJob implements ShouldBeUnique, Shou
 
     public function __construct(
         public readonly int $recepcionId,
+        /** Segundo pase diferido para detectar ctamov que desaparece tras un OK inicial. */
+        public readonly bool $esRecheck = false,
     ) {
         $cfg = config('recepcion_proveedor.anita_tras_confirmacion', []);
         $this->tries = max(1, (int) ($cfg['job_tries'] ?? 3));
@@ -45,7 +47,9 @@ class RecepcionProveedorAnitaTrasConfirmacionJob implements ShouldBeUnique, Shou
 
     public function uniqueId(): string
     {
-        return 'recepcion-proveedor-anita-tras-confirmacion-'.$this->recepcionId;
+        $sufijo = $this->esRecheck ? '-recheck' : '';
+
+        return 'recepcion-proveedor-anita-tras-confirmacion-'.$this->recepcionId.$sufijo;
     }
 
     public function handle(RecepcionProveedorAnitaTrasConfirmacionService $service): void
@@ -60,6 +64,7 @@ class RecepcionProveedorAnitaTrasConfirmacionJob implements ShouldBeUnique, Shou
         Log::info('recepcion_proveedor.anita_tras_confirmacion.procesando', [
             'recepcion_id' => $this->recepcionId,
             'intento' => $this->attempts(),
+            'es_recheck' => $this->esRecheck,
         ]);
 
         $resultado = $service->verificarYReparar($this->recepcionId);
@@ -68,7 +73,32 @@ class RecepcionProveedorAnitaTrasConfirmacionJob implements ShouldBeUnique, Shou
             'recepcion_id' => $this->recepcionId,
             'estado' => $resultado['estado'] ?? '',
             'com' => $resultado['com'] ?? null,
+            'es_recheck' => $this->esRecheck,
         ]);
+
+        $this->encolarRecheckDiferidoSiCorresponde($resultado);
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     */
+    private function encolarRecheckDiferidoSiCorresponde(array $resultado): void
+    {
+        if ($this->esRecheck) {
+            return;
+        }
+
+        $delay = max(0, (int) config('recepcion_proveedor.anita_tras_confirmacion.recheck_delay_segundos', 600));
+        if ($delay <= 0) {
+            return;
+        }
+
+        // Solo si hubo que reparar: el OK inmediato no necesita segundo pase (evita saturar la cola).
+        if ((string) ($resultado['estado'] ?? '') !== 'reparada') {
+            return;
+        }
+
+        self::dispatch($this->recepcionId, true)->delay(now()->addSeconds($delay));
     }
 
     public function failed(Throwable $exception): void
@@ -76,6 +106,7 @@ class RecepcionProveedorAnitaTrasConfirmacionJob implements ShouldBeUnique, Shou
         Log::error('recepcion_proveedor.anita_tras_confirmacion.fallo', [
             'recepcion_id' => $this->recepcionId,
             'intento' => $this->attempts(),
+            'es_recheck' => $this->esRecheck,
             'mensaje' => $exception->getMessage(),
         ]);
     }

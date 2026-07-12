@@ -23,7 +23,9 @@ class MayorConceptoListadoFiltros
 
     /**
      * @return array{
+     *   empresa_ids: list<int>,
      *   empresa_id: int,
+     *   consolidar_empresas: bool,
      *   moneda_id: int,
      *   modo_periodo: string,
      *   mes: int,
@@ -53,8 +55,21 @@ class MayorConceptoListadoFiltros
             $agrupacion = 'concepto_cuenta';
         }
 
+        $empresaIds = collect($request->input('empresa_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($empresaIds === [] && (int) $request->input('empresa_id', 0) > 0) {
+            $empresaIds = [(int) $request->input('empresa_id')];
+        }
+
         return [
-            'empresa_id' => (int) $request->input('empresa_id', 0),
+            'empresa_ids' => $empresaIds,
+            'empresa_id' => (int) ($empresaIds[0] ?? 0),
+            'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
             'moneda_id' => max(1, (int) $request->input('moneda_id', 1)),
             'modo_periodo' => $modo,
             'mes' => max(1, min(12, (int) $request->input('mes', (int) date('n')))),
@@ -71,6 +86,32 @@ class MayorConceptoListadoFiltros
             'filtro_cuit' => trim((string) $request->input('filtro_cuit', '')),
             'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public static function empresaIds(array $filtros): array
+    {
+        $ids = array_values(array_filter(
+            array_map('intval', $filtros['empresa_ids'] ?? []),
+            fn (int $id) => $id > 0,
+        ));
+
+        if ($ids === [] && (int) ($filtros['empresa_id'] ?? 0) > 0) {
+            return [(int) $filtros['empresa_id']];
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function esMultiempresa(array $filtros): bool
+    {
+        return count(self::empresaIds($filtros)) > 1;
     }
 
     public static function tieneFiltroDetalle(array $filtros): bool
@@ -161,9 +202,12 @@ class MayorConceptoListadoFiltros
 
         foreach ($detalleFiltrado as $fila) {
             $clavesDetalle[self::claveDetalle($fila)] = true;
+            $empresaId = (int) ($fila['empresa_id'] ?? 0);
             $conceptoId = (int) ($fila['concepto_id'] ?? 0);
             $cuentaCodigo = (string) ($fila['cuenta_codigo'] ?? '');
-            $paresCuenta[$conceptoId.'|'.$cuentaCodigo] = true;
+            $paresCuenta[$empresaId.'|'.$conceptoId.'|'.$cuentaCodigo] = true;
+            $paresCuenta[$conceptoId.'|'.$cuentaCodigo] = true; // consolidado (sin empresa en subtotal)
+            $conceptosVisibles[$empresaId.'|'.$conceptoId] = true;
             $conceptosVisibles[$conceptoId] = true;
         }
 
@@ -171,6 +215,12 @@ class MayorConceptoListadoFiltros
 
         foreach ($filasOriginales as $fila) {
             $tipo = $fila['tipo_fila'] ?? 'detalle';
+
+            if ($tipo === 'header_empresa') {
+                $salida[] = $fila;
+
+                continue;
+            }
 
             if ($tipo === 'detalle') {
                 if (isset($clavesDetalle[self::claveDetalle($fila)])) {
@@ -181,32 +231,59 @@ class MayorConceptoListadoFiltros
             }
 
             if ($tipo === 'total_cuenta') {
+                $empresaId = (int) ($fila['empresa_id'] ?? 0);
                 $conceptoId = (int) ($fila['concepto_id'] ?? 0);
                 $cuentaCodigo = (string) ($fila['cuenta_codigo'] ?? '');
-                if (! isset($paresCuenta[$conceptoId.'|'.$cuentaCodigo])) {
-                    continue;
-                }
+                $claveConEmpresa = $empresaId.'|'.$conceptoId.'|'.$cuentaCodigo;
+                $claveSinEmpresa = $conceptoId.'|'.$cuentaCodigo;
 
-                $lineasCuenta = array_values(array_filter(
-                    $detalleFiltrado,
-                    fn (array $d) => (int) ($d['concepto_id'] ?? 0) === $conceptoId
-                        && (string) ($d['cuenta_codigo'] ?? '') === $cuentaCodigo,
-                ));
+                if ($empresaId > 0) {
+                    if (! isset($paresCuenta[$claveConEmpresa])) {
+                        continue;
+                    }
+                    $lineasCuenta = array_values(array_filter(
+                        $detalleFiltrado,
+                        fn (array $d) => (int) ($d['empresa_id'] ?? 0) === $empresaId
+                            && (int) ($d['concepto_id'] ?? 0) === $conceptoId
+                            && (string) ($d['cuenta_codigo'] ?? '') === $cuentaCodigo,
+                    ));
+                } else {
+                    if (! isset($paresCuenta[$claveSinEmpresa])) {
+                        continue;
+                    }
+                    $lineasCuenta = array_values(array_filter(
+                        $detalleFiltrado,
+                        fn (array $d) => (int) ($d['concepto_id'] ?? 0) === $conceptoId
+                            && (string) ($d['cuenta_codigo'] ?? '') === $cuentaCodigo,
+                    ));
+                }
                 $salida[] = self::filaTotalCuentaDesdeDetalle($fila, $lineasCuenta);
 
                 continue;
             }
 
             if ($tipo === 'total_concepto') {
+                $empresaId = (int) ($fila['empresa_id'] ?? 0);
                 $conceptoId = (int) ($fila['concepto_id'] ?? 0);
-                if (! isset($conceptosVisibles[$conceptoId])) {
-                    continue;
-                }
 
-                $lineasConcepto = array_values(array_filter(
-                    $detalleFiltrado,
-                    fn (array $d) => (int) ($d['concepto_id'] ?? 0) === $conceptoId,
-                ));
+                if ($empresaId > 0) {
+                    if (! isset($conceptosVisibles[$empresaId.'|'.$conceptoId])) {
+                        continue;
+                    }
+                    $lineasConcepto = array_values(array_filter(
+                        $detalleFiltrado,
+                        fn (array $d) => (int) ($d['empresa_id'] ?? 0) === $empresaId
+                            && (int) ($d['concepto_id'] ?? 0) === $conceptoId,
+                    ));
+                } else {
+                    if (! isset($conceptosVisibles[$conceptoId])) {
+                        continue;
+                    }
+                    $lineasConcepto = array_values(array_filter(
+                        $detalleFiltrado,
+                        fn (array $d) => (int) ($d['concepto_id'] ?? 0) === $conceptoId,
+                    ));
+                }
                 $salida[] = self::filaTotalConceptoDesdeDetalle($fila, $lineasConcepto);
             }
         }
@@ -250,6 +327,7 @@ class MayorConceptoListadoFiltros
     private static function claveDetalle(array $fila): string
     {
         return implode('|', [
+            (int) ($fila['empresa_id'] ?? 0),
             (int) ($fila['concepto_id'] ?? 0),
             (string) ($fila['cuenta_codigo'] ?? ''),
             (int) ($fila['nro_asiento'] ?? 0),
@@ -348,6 +426,7 @@ class MayorConceptoListadoFiltros
             $fila['cuenta_nombre'] ?? '',
             $fila['concepto_nombre'] ?? '',
             $fila['cuit'] ?? '',
+            $fila['nombreempresa'] ?? '',
             (string) ($fila['nro_asiento'] ?? ''),
             (string) ($fila['nro_oc'] ?? ''),
         ];
@@ -455,7 +534,7 @@ class MayorConceptoListadoFiltros
 
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
-        if ((int) ($filtros['empresa_id'] ?? 0) <= 0) {
+        if (self::empresaIds($filtros) === []) {
             return false;
         }
 
@@ -473,16 +552,23 @@ class MayorConceptoListadoFiltros
     public static function paraQueryString(array $filtros): array
     {
         $out = [
-            'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             'moneda_id' => (int) ($filtros['moneda_id'] ?? 1),
             'modo_periodo' => (string) ($filtros['modo_periodo'] ?? 'mes'),
             'mes' => (int) ($filtros['mes'] ?? 0),
             'anio' => (int) ($filtros['anio'] ?? 0),
         ];
 
+        foreach (self::empresaIds($filtros) as $empresaId) {
+            $out['empresa_ids'][] = $empresaId;
+        }
+
         if (($filtros['modo_periodo'] ?? 'mes') === 'rango') {
             $out['fecha_desde'] = trim((string) ($filtros['fecha_desde'] ?? ''));
             $out['fecha_hasta'] = trim((string) ($filtros['fecha_hasta'] ?? ''));
+        }
+
+        if (empty($filtros['consolidar_empresas'])) {
+            $out['consolidar_empresas'] = 0;
         }
 
         if (! empty($filtros['solo_moneda_origen'])) {
@@ -501,7 +587,8 @@ class MayorConceptoListadoFiltros
             }
         }
 
-        return array_filter($out, fn ($v) => $v !== null && $v !== '' && $v !== 0);
+        // No filtrar consolidar_empresas=0 ni arrays empresa_ids.
+        return $out;
     }
 
     public static function firma(array $filtros): string

@@ -16,7 +16,9 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
                             {--todas : Auditar todas las COM confirmadas (sin filtro de fecha)}
                             {--empresa= : Filtrar por empresa_id}
                             {--export= : Exportar detalle CSV (ruta absoluta o relativa a storage/app)}
-                            {--sin-mail : No envía correo aunque haya discrepancias}';
+                            {--sin-mail : No envía correo aunque haya discrepancias}
+                            {--reparar : Repara ctamov/recepmae ante discrepancia (override config)}
+                            {--sin-reparar : No repara aunque auto_reparar esté activo}';
 
     protected $description = 'Audita recepción ↔ recepmae Anita ↔ asiento ERP ↔ ctamov Anita';
 
@@ -34,6 +36,13 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
         $hasta = trim((string) ($this->option('hasta') ?? ''));
         $empresaOverride = $this->option('empresa') !== null ? (int) $this->option('empresa') : null;
         $enviarMail = ! (bool) $this->option('sin-mail');
+
+        $autoReparar = null;
+        if ((bool) $this->option('reparar')) {
+            $autoReparar = true;
+        } elseif ((bool) $this->option('sin-reparar')) {
+            $autoReparar = false;
+        }
 
         if ($todas && ($fechaOpt !== '' || $desde !== '' || $hasta !== '')) {
             $this->error('Use --todas o filtro de fecha, no ambos.');
@@ -56,11 +65,15 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
             : ($desde !== '' || $hasta !== ''
                 ? 'fecha '.($desde ?: '…').' → '.($hasta ?: '…')
                 : 'fecha '.$fechaCalendario);
+        $modoReparar = $autoReparar === null
+            ? (filter_var(config('recepcion_proveedor.auditoria_asientos_com_diaria.auto_reparar', false), FILTER_VALIDATE_BOOLEAN) ? 'auto' : 'off')
+            : ($autoReparar ? 'on' : 'off');
         $this->line(sprintf(
-            'Auditoría recepción ↔ recepmae ↔ ERP ↔ ctamov · %s%s%s',
+            'Auditoría recepción ↔ recepmae ↔ ERP ↔ ctamov · %s%s%s · reparar=%s',
             $alcance,
             $empresaOverride ? ' · empresa '.$empresaOverride : '',
             $enviarMail ? '' : ' · sin mail',
+            $modoReparar,
         ));
 
         try {
@@ -71,6 +84,7 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
                 $desde !== '' ? $desde : null,
                 $hasta !== '' ? $hasta : null,
                 $todas,
+                $autoReparar,
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
@@ -83,6 +97,7 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
             [
                 ['COM en alcance', (string) ($informe['total_com'] ?? 0)],
                 ['OK (recepción = ERP = Anita)', (string) ($informe['ok'] ?? 0)],
+                ['Reparadas en auditoría', (string) ($informe['reparadas'] ?? 0)],
                 ['Omitidas (sin contabilidad / importe 0)', (string) ($informe['omitidas'] ?? 0)],
                 ['Con discrepancia', (string) count($informe['discrepancias'] ?? [])],
                 ['Errores de lectura', (string) count($informe['errores_lectura'] ?? [])],

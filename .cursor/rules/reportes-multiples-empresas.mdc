@@ -13,7 +13,7 @@ Referencias canónicas:
 | Reporte | Clave preferencias | Partial |
 |---|---|---|
 | Mayor plano cuenta | `mayor_plano_cuenta` | `includes.reportes.asignacion_empresas_dual` |
-| Mayor concepto | `mayor_concepto` | `form-empresa-asignada` (una empresa) + preferencias |
+| Mayor concepto | `mayor_concepto` | `includes.reportes.asignacion_empresas_dual` (orquestación en Service; motor/conciliador mono-empresa) |
 | CAPEX reporte | `capex_reporte` | `form-empresa-asignada` + preferencias |
 
 ## UI obligatoria (multiempresa)

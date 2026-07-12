@@ -6,10 +6,15 @@
 
         return number_format((float) $valor, 2, ',', '.');
     };
-    $colSpanTotales = 15;
+    $mostrarEmpresa = $multiempresa ?? false;
+    $colSpanTotales = $mostrarEmpresa ? 16 : 15;
+    $colSpanVacio = $mostrarEmpresa ? 18 : 17;
 @endphp
 <thead>
     <tr>
+        @if ($mostrarEmpresa)
+            <th>Empr.</th>
+        @endif
         <th>Concepto</th>
         <th>Nombre concepto</th>
         <th>Cuenta</th>
@@ -35,7 +40,14 @@
             $fila = is_array($f) ? $f : (array) $f;
             $tipoFila = $fila['tipo_fila'] ?? 'detalle';
         @endphp
-        @if ($tipoFila === 'total_cuenta')
+        @if ($tipoFila === 'header_empresa')
+            <tr class="fila-header-empresa font-weight-bold" style="background-color: #d6eaf8;">
+                <td colspan="{{ $colSpanVacio }}">
+                    <i class="fa fa-building"></i>
+                    Empresa: {{ $fila['nombreempresa'] ?? '' }}
+                </td>
+            </tr>
+        @elseif ($tipoFila === 'total_cuenta')
             <tr class="fila-total-cuenta font-weight-bold" style="background-color: #e9ecef; border-top: 1px solid #adb5bd;">
                 <td colspan="{{ $colSpanTotales }}" class="text-right">
                     Total cuenta {{ $fila['cuenta_codigo'] ?? '' }}
@@ -59,6 +71,9 @@
             </tr>
         @else
             <tr>
+                @if ($mostrarEmpresa)
+                    <td>{{ $fila['nombreempresa'] ?? '' }}</td>
+                @endif
                 <td>
                     @if (($puede_ver_concepto ?? false) && (int) ($fila['concepto_id'] ?? 0) > 0)
                         <a href="{{ route('editar_conceptogasto', ['id' => $fila['concepto_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
@@ -111,7 +126,7 @@
         @endif
     @empty
         <tr>
-            <td colspan="17" class="text-center text-muted py-4">
+            <td colspan="{{ $colSpanVacio }}" class="text-center text-muted py-4">
                 No se generaron imputaciones para el período seleccionado.
             </td>
         </tr>

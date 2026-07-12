@@ -33,12 +33,27 @@
         overlay.style.display = 'flex';
         overlay.setAttribute('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';
+        window.__mayorConceptoOverlayShownAt = Date.now();
+
+        if (window.__mayorConceptoOverlayHintTimer) {
+            clearTimeout(window.__mayorConceptoOverlayHintTimer);
+        }
+        window.__mayorConceptoOverlayHintTimer = setTimeout(function () {
+            if (subtituloEl && overlay.getAttribute('aria-hidden') === 'false') {
+                subtituloEl.textContent = 'Sigue en curso… Si tarda demasiado, pulse Esc o recargue con F5 (el banner no implica que el servidor siga trabajando).';
+            }
+        }, 90000);
     }
 
     function ocultarProcesoOverlay() {
         var overlay = document.getElementById(OVERLAY_ID);
         if (! overlay) {
             return;
+        }
+
+        if (window.__mayorConceptoOverlayHintTimer) {
+            clearTimeout(window.__mayorConceptoOverlayHintTimer);
+            window.__mayorConceptoOverlayHintTimer = null;
         }
 
         overlay.classList.add('d-none');
@@ -77,13 +92,101 @@
 
     var form = document.getElementById('form-mayor-concepto');
     if (form) {
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            // Reforzar sync de empresa_ids[] desde la lista derecha (dual list).
+            if (window.jQuery) {
+                window.jQuery(form).find('.reporte-empresas-dual').each(function () {
+                    var $c = window.jQuery(this);
+                    var prefix = String($c.data('id-prefix') || 'reporte');
+                    var $hidden = $c.find('#' + prefix + '_empresas_asignadas_hidden');
+                    var $asignado = $c.find('#' + prefix + '_empresas_asignadas_list');
+                    if (! $hidden.length || ! $asignado.length) {
+                        return;
+                    }
+                    $hidden.empty();
+                    $asignado.find('option').each(function () {
+                        $hidden.append(
+                            window.jQuery('<input>', {
+                                type: 'hidden',
+                                name: 'empresa_ids[]',
+                                value: window.jQuery(this).val(),
+                            })
+                        );
+                    });
+                });
+            }
+
             var btn = document.getElementById('btn-consultar');
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando… (puede tardar varios minutos)';
             }
             mostrarProcesoOverlay(TITULO_CONSULTA, SUBTITULO_CONSULTA);
+
+            function actualizarProgreso(texto) {
+                var subtituloEl = document.getElementById(SUBTITULO_ID);
+                if (subtituloEl) {
+                    subtituloEl.textContent = texto;
+                }
+            }
+
+            function restaurarBoton() {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa fa-search"></i> Consultar';
+                }
+            }
+
+            function procesarPaso(empresaIdx) {
+                var fd = new FormData(form);
+                fd.set('ajax', '1');
+                fd.set('empresa_idx', String(empresaIdx));
+
+                return fetch(form.action, {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                }).then(function (res) {
+                    if (res.status === 419) {
+                        throw new Error('Sesión expirada. Recargue la página (F5) e intente de nuevo.');
+                    }
+                    if (res.status === 404 || res.status === 502 || res.status === 504) {
+                        throw new Error('El servidor cortó el request (HTTP ' + res.status + '). Reintente; si persiste, consulte de a una empresa.');
+                    }
+                    if (! res.ok) {
+                        return res.json().catch(function () { return {}; }).then(function (body) {
+                            throw new Error((body && body.mensaje) || ('Error HTTP ' + res.status));
+                        });
+                    }
+                    return res.json();
+                }).then(function (data) {
+                    if (! data || ! data.ok) {
+                        throw new Error((data && data.mensaje) || 'No se pudo generar el reporte.');
+                    }
+                    if (data.done) {
+                        actualizarProgreso(data.mensaje || 'Listo. Abriendo reporte…');
+                        window.location.href = data.redirect;
+                        return;
+                    }
+                    actualizarProgreso(
+                        (data.mensaje || ('Procesando empresa ' + data.procesada + '/' + data.total))
+                        + ' — no cierre esta ventana.'
+                    );
+                    return procesarPaso(data.empresa_idx);
+                });
+            }
+
+            procesarPaso(0).catch(function (err) {
+                ocultarProcesoOverlay();
+                restaurarBoton();
+                window.alert(err && err.message ? err.message : 'Error al generar el mayor por concepto.');
+            });
         });
     }
 
@@ -108,6 +211,30 @@
 
     window.addEventListener('pageshow', function () {
         ocultarProcesoOverlay();
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            ocultarProcesoOverlay();
+        }
+    });
+
+    // Si el GET se aborta (timeout proxy / navegación cancelada), sacar el banner.
+    window.addEventListener('pagehide', function () {
+        ocultarProcesoOverlay();
+    });
+    window.addEventListener('focus', function () {
+        var overlay = document.getElementById(OVERLAY_ID);
+        if (! overlay || overlay.getAttribute('aria-hidden') === 'true') {
+            return;
+        }
+        // Tras 3+ minutos con banner y sin navegación, sugerir Esc (request probablemente muerto).
+        if (window.__mayorConceptoOverlayShownAt && (Date.now() - window.__mayorConceptoOverlayShownAt) > 180000) {
+            var subtituloEl = document.getElementById(SUBTITULO_ID);
+            if (subtituloEl) {
+                subtituloEl.textContent = 'El proceso no respondió a tiempo. Pulse Esc o F5 e intente de nuevo (idealmente una empresa, o menos rango).';
+            }
+        }
     });
 
     function actualizarQueryParamEnlace(enlace, modo) {
@@ -172,6 +299,7 @@
     };
 })();
 </script>
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_dual.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
 
@@ -188,19 +316,20 @@
                     </a>
                 </div>
             </div>
-            <form method="get" action="{{ route('mayor_concepto') }}" id="form-mayor-concepto" class="mb-0">
+            <form method="post" action="{{ route('mayor_concepto_consultar') }}" id="form-mayor-concepto" class="mb-0">
+                @csrf
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Imputación contable por concepto de gasto (motor Anita). Los importes se expresan en la moneda elegida
                         según cotización de cada movimiento.
                     </p>
 
-                    @include('includes.form-empresa-asignada', [
+                    @include('includes.reportes.asignacion_empresas_dual', [
                         'empresa_query' => $empresa_query,
-                        'empresa_id' => $filtros['empresa_id'] ?? null,
-                        'required' => true,
-                        'col_label' => 'col-lg-2',
-                        'col_input' => 'col-lg-4',
+                        'empresa_ids_seleccionados' => $filtros['empresa_ids'] ?? [],
+                        'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,
+                        'reporte_clave' => 'mayor_concepto',
+                        'id_prefix' => 'mco',
                     ])
 
                     <div class="form-group row">
@@ -313,7 +442,16 @@
 
                     <div class="px-3 py-2 border-bottom bg-light">
                         <p class="mb-1 small">
-                            <strong>Empresa:</strong> {{ $empresa->nombre ?? '—' }}
+                            <strong>Empresa{{ count($filtros['empresa_ids'] ?? []) > 1 ? 's' : '' }}:</strong>
+                            {{ $empresas_texto ?? ($empresa->nombre ?? '—') }}
+                            @if (count($filtros['empresa_ids'] ?? []) > 1)
+                                · <strong>Modo:</strong>
+                                @if ($filtros['consolidar_empresas'] ?? true)
+                                    consolidado
+                                @else
+                                    un reporte por empresa
+                                @endif
+                            @endif
                             · <strong>Período:</strong> {{ $periodo_texto }}
                             · <strong>Expresado en:</strong> {{ $moneda->nombre ?? '' }} ({{ $moneda->abreviatura ?? '' }})
                             @if (! empty($filtros['solo_moneda_origen']))
@@ -406,6 +544,7 @@
                         <table id="tabla-mayor-concepto" class="table table-striped table-bordered table-hover table-sm mb-0" style="font-size: 0.8rem;">
                             @include('contable.mayor_concepto.partials.tabla_datos', [
                                 'filas' => $filasVista,
+                                'multiempresa' => $multiempresa ?? false,
                                 'puede_ver_asiento' => $puede_ver_asiento ?? false,
                                 'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                                 'puede_ver_concepto' => $puede_ver_concepto ?? false,

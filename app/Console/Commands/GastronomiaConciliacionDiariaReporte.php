@@ -335,6 +335,10 @@ class GastronomiaConciliacionDiariaReporte extends Command
                         'estacionamiento' => 'CONTROL FLASH ESTAC.',
                         default => 'CONTROL FLASH (caja)',
                     };
+                    $fechaFlashCtrl = trim((string) ($ctrlFlash['fecha_flash'] ?? ''));
+                    if ($fechaFlashCtrl !== '') {
+                        $etiqueta .= ' ['.$fechaFlashCtrl.']';
+                    }
                     $this->line(sprintf(
                         '  <comment>%s</comment>: ERP $ %s | rendg $ %s | flash $ %s | Δ rendg↔flash $ %s | Δ ERP↔flash $ %s | %s',
                         $etiqueta,
