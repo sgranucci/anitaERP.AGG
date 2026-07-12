@@ -7047,8 +7047,9 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
-     * IEV/ING/EGR con crédito comercial (113) y banco contrapartida: el subdiario trae solo la pierna 113;
-     * concepto imputa Debe en 113 — analítico refleja Haber en el banco (111xxx) para conciliar.
+     * IEV/ING/EGR: el subdiario puede traer solo la pierna fuera del límite (113, 116 interco, etc.)
+     * con el banco en contrapartida. Concepto imputa esa contrapartida; el analítico debe reflejar
+     * el D/H del banco ≤ límite para que NetoA + NetoC = 0.
      *
      * @param  array<int, array<string, mixed>>  $porAsiento
      */
@@ -7075,8 +7076,10 @@ class MayorConceptoPeriodoProcesador
             return false;
         }
 
-        if (! $this->motor->esCuentaCreditoComercialDisp($cuentaContra)
-            || ! $this->motor->esCuentaAnaliticoControl($cuentaBanco)) {
+        // Banco dentro del mayor analítico; contrapartida fuera (si ambas ≤ límite ya lo cubre
+        // doble disponibilidad / pierna nativa).
+        if (! $this->motor->esCuentaAnaliticoControl($cuentaBanco)
+            || $this->motor->esCuentaAnaliticoControl($cuentaContra)) {
             return false;
         }
 
