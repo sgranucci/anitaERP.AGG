@@ -370,6 +370,37 @@ Route::put('stock/mventa/{id}', 'Stock\MventaController@actualizar')->name('actu
 Route::delete('stock/mventa/{id}', 'Stock\MventaController@eliminar')->name('eliminar_mventa');
 
 /*
+ * Maestros SIFAB compra (INTERFORMING)
+ */
+Route::get('stock/rubro', 'Stock\RubroController@index')->name('rubro');
+Route::get('stock/rubro/crear', 'Stock\RubroController@crear')->name('crear_rubro');
+Route::post('stock/rubro', 'Stock\RubroController@guardar')->name('guardar_rubro');
+Route::get('stock/rubro/{id}/editar', 'Stock\RubroController@editar')->name('editar_rubro');
+Route::put('stock/rubro/{id}', 'Stock\RubroController@actualizar')->name('actualizar_rubro');
+Route::delete('stock/rubro/{id}', 'Stock\RubroController@eliminar')->name('eliminar_rubro');
+
+Route::get('stock/subrubro', 'Stock\SubrubroController@index')->name('subrubro');
+Route::get('stock/subrubro/crear', 'Stock\SubrubroController@crear')->name('crear_subrubro');
+Route::post('stock/subrubro', 'Stock\SubrubroController@guardar')->name('guardar_subrubro');
+Route::get('stock/subrubro/{id}/editar', 'Stock\SubrubroController@editar')->name('editar_subrubro');
+Route::put('stock/subrubro/{id}', 'Stock\SubrubroController@actualizar')->name('actualizar_subrubro');
+Route::delete('stock/subrubro/{id}', 'Stock\SubrubroController@eliminar')->name('eliminar_subrubro');
+
+Route::get('stock/grupoproducto', 'Stock\GrupoproductoController@index')->name('grupoproducto');
+Route::get('stock/grupoproducto/crear', 'Stock\GrupoproductoController@crear')->name('crear_grupoproducto');
+Route::post('stock/grupoproducto', 'Stock\GrupoproductoController@guardar')->name('guardar_grupoproducto');
+Route::get('stock/grupoproducto/{id}/editar', 'Stock\GrupoproductoController@editar')->name('editar_grupoproducto');
+Route::put('stock/grupoproducto/{id}', 'Stock\GrupoproductoController@actualizar')->name('actualizar_grupoproducto');
+Route::delete('stock/grupoproducto/{id}', 'Stock\GrupoproductoController@eliminar')->name('eliminar_grupoproducto');
+
+Route::get('stock/centroemisor', 'Stock\CentroemisorController@index')->name('centroemisor');
+Route::get('stock/centroemisor/crear', 'Stock\CentroemisorController@crear')->name('crear_centroemisor');
+Route::post('stock/centroemisor', 'Stock\CentroemisorController@guardar')->name('guardar_centroemisor');
+Route::get('stock/centroemisor/{id}/editar', 'Stock\CentroemisorController@editar')->name('editar_centroemisor');
+Route::put('stock/centroemisor/{id}', 'Stock\CentroemisorController@actualizar')->name('actualizar_centroemisor');
+Route::delete('stock/centroemisor/{id}', 'Stock\CentroemisorController@eliminar')->name('eliminar_centroemisor');
+
+/*
  * Depositos
  */
 

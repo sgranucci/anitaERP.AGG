@@ -1,6 +1,6 @@
 <?php
 
-use App\Support\Contable\CuentaAutomaticaClaves;
+use App\Services\Contable\ContabilidadCuentaAutomaticaSeedService;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -25,56 +25,18 @@ return new class extends Migration
             $table->collation = 'utf8mb4_spanish_ci';
         });
 
-        $this->precargarDesdeModulos();
-    }
+        // Seed vía servicio: valida IDs existentes y no castea maps de config (códigos) a int.
+        if (Schema::hasTable('empresa')) {
+            $empresaIds = DB::table('empresa')
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0)
+                ->values()
+                ->all();
 
-    private function precargarDesdeModulos(): void
-    {
-        if (! Schema::hasTable('empresa')) {
-            return;
+            app(ContabilidadCuentaAutomaticaSeedService::class)->asegurarCatalogoEmpresas($empresaIds);
         }
-
-        $empresaIds = DB::table('empresa')->orderBy('id')->pluck('id');
-
-        foreach ($empresaIds as $empresaId) {
-            $empresaId = (int) $empresaId;
-            foreach (CuentaAutomaticaClaves::catalogo() as $clave => $meta) {
-                $cuentaId = null;
-
-                if ($meta['modulo_tabla'] !== null
-                    && $meta['modulo_columna'] !== null
-                    && Schema::hasTable($meta['modulo_tabla'])
-                    && Schema::hasColumn($meta['modulo_tabla'], $meta['modulo_columna'])) {
-                    $moduloValor = DB::table($meta['modulo_tabla'])
-                        ->where('empresa_id', $empresaId)
-                        ->value($meta['modulo_columna']);
-                    $cuentaId = $this->intOrNull($moduloValor);
-                }
-
-                if ($cuentaId === null && $meta['env_config'] !== null) {
-                    $cuentaId = $this->intOrNull(config($meta['env_config']));
-                }
-
-                DB::table('contabilidad_cuenta_automatica')->insert([
-                    'empresa_id' => $empresaId,
-                    'clave' => $clave,
-                    'cuentacontable_id' => $cuentaId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            }
-        }
-    }
-
-    private function intOrNull(mixed $valor): ?int
-    {
-        if ($valor === null || $valor === '') {
-            return null;
-        }
-
-        $id = (int) $valor;
-
-        return $id > 0 ? $id : null;
     }
 
     public function down(): void

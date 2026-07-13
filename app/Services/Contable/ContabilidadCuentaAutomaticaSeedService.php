@@ -137,15 +137,16 @@ class ContabilidadCuentaAutomaticaSeedService
                 ->where('empresa_id', $empresaId)
                 ->value($meta['modulo_columna']);
             $id = $this->intOrNull($moduloValor);
-            if ($id !== null) {
+            if ($id !== null && $this->cuentaExiste($id)) {
                 return $id;
             }
         }
 
         if ($meta['env_config'] !== null && $meta['env_config'] !== '') {
+            // Solo IDs escalares: maps empresa=>[códigos] (ej. iva_ventas) no son cuentacontable_id.
             $id = $this->intOrNull(config($meta['env_config']));
-            if ($id !== null) {
-                return $this->cuentaPerteneceEmpresa($id, $empresaId) ? $id : null;
+            if ($id !== null && $this->cuentaPerteneceEmpresa($id, $empresaId)) {
+                return $id;
             }
         }
 
@@ -198,9 +199,19 @@ class ContabilidadCuentaAutomaticaSeedService
             ->exists();
     }
 
+    private function cuentaExiste(int $cuentacontableId): bool
+    {
+        return DB::table('cuentacontable')->where('id', $cuentacontableId)->exists();
+    }
+
     private function intOrNull(mixed $valor): ?int
     {
-        if ($valor === null || $valor === '') {
+        // PHP casteaba arrays no vacíos a 1 → FK rota (cuentacontable.id inexistente).
+        if ($valor === null || $valor === '' || is_array($valor) || is_object($valor)) {
+            return null;
+        }
+
+        if (! is_numeric($valor)) {
             return null;
         }
 

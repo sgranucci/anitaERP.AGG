@@ -110,6 +110,7 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                                 @endif
                             </td>
                             <td>
+                                @if (can('editar-clientes', false))
                                 	<a href="{{route('editar_cliente', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>

@@ -245,14 +245,15 @@ final class CuentaAutomaticaClaves
                 'descripcion' => 'IVA débito fiscal (haber en ventas gravadas)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
-                'env_config' => 'iva_ventas.conciliacion.cuentas_iva_debito_por_empresa',
+                // No usar iva_ventas.conciliacion.*: son maps de códigos, no cuentacontable_id.
+                'env_config' => null,
             ],
             self::VENTAS_IVA_CREDITO_FISCAL => [
                 'grupo' => 'Ventas — IVA fiscal',
                 'descripcion' => 'IVA crédito fiscal (debe en NC, ej. 114010011)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
-                'env_config' => 'iva_ventas.conciliacion.cuentas_iva_credito_por_empresa',
+                'env_config' => null,
             ],
             self::CAJA_CHEQUES_DIFERIDOS => [
                 'grupo' => 'Caja — cheques',

@@ -37,6 +37,10 @@ class ValidacionArticulo extends FormRequest
             'subrubro' => 'nullable|max:50',
             'lineamaterial' => 'nullable|max:50',
             'grupoproducto' => 'nullable|max:50',
+            'codigo_interno_sifab' => 'nullable|integer',
+            'rubro_sifab' => 'nullable|max:20',
+            'clasematerial' => 'nullable|max:20',
+            'gestioncompra' => 'nullable|max:20',
         ];
     }
 }

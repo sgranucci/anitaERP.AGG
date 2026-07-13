@@ -78,6 +78,7 @@ class Articulo extends Model implements Auditable
                 'sectorsellado_id', 'tipoarticulo_id', 'coeficienteconversion', 'depositoentrega_id', 'numeroparte', 'ubicacionparte',
                 'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado',
                 'subrubro', 'lineamaterial', 'grupoproducto',
+                'codigo_interno_sifab', 'rubro_sifab', 'clasematerial', 'gestioncompra',
             ];
         }
     }

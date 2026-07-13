@@ -120,7 +120,12 @@ final class CuentaAutomaticaResolver
 
     private static function intOrNull(mixed $valor): ?int
     {
-        if ($valor === null || $valor === '') {
+        // Maps de config (códigos por empresa) no son IDs; (int)array === 1 en PHP.
+        if ($valor === null || $valor === '' || is_array($valor) || is_object($valor)) {
+            return null;
+        }
+
+        if (! is_numeric($valor)) {
             return null;
         }
 
