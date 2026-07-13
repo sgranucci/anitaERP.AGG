@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Exports\Contable\CierreRendicionEstacionamientoConciliacionFlashExport;
 use App\Exports\Contable\CierreRendicionEstacionamientoListadoExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -28,10 +29,20 @@ class CierreRendicionEstacionamientoController extends Controller
         can('listar-cierre-rendicion-estacionamiento-contable');
 
         $filtros = $this->resolverFiltrosListado($request);
-        $grupos = $this->service->listarAgrupado($filtros, true);
+        $vistaPorTurno = CierreRendicionEstacionamientoListadoFiltros::esVistaPorTurno($filtros);
+
+        if ($vistaPorTurno) {
+            $coleccion = $this->service->listar($filtros, true);
+            $grupos = null;
+        } else {
+            $coleccion = null;
+            $grupos = $this->service->listarAgrupado($filtros, true);
+        }
 
         return view('contable.cierre_rendicion_estacionamiento.index', [
             'grupos' => $grupos,
+            'coleccion' => $coleccion,
+            'vistaPorTurno' => $vistaPorTurno,
             'filtros' => $filtros,
             'filtrosQuery' => CierreRendicionEstacionamientoListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => CierreRendicionEstacionamientoListadoFiltros::CAMPOS,
@@ -47,11 +58,25 @@ class CierreRendicionEstacionamientoController extends Controller
         ini_set('max_execution_time', '0');
 
         $filtros = $this->resolverFiltrosListado($request, $busqueda);
-        $rendiciones = $this->service->listar($filtros, false);
+        $vistaPorTurno = CierreRendicionEstacionamientoListadoFiltros::esVistaPorTurno($filtros);
+
+        if ($vistaPorTurno) {
+            $rendiciones = $this->service->listar($filtros, false);
+            $grupos = null;
+        } else {
+            $rendiciones = null;
+            $grupos = $this->service->listarAgrupado($filtros, false);
+        }
 
         switch ($formato) {
             case 'PDF':
-                $view = \View::make('contable.cierre_rendicion_estacionamiento.listado', compact('rendiciones'))->render();
+                $view = \View::make('contable.cierre_rendicion_estacionamiento.listado', [
+                    'rendiciones' => $rendiciones,
+                    'grupos' => $grupos,
+                    'vistaPorTurno' => $vistaPorTurno,
+                    'esExcel' => false,
+                    'subtituloFiltros' => CierreRendicionEstacionamientoListadoFiltros::textoCabeceraExport($filtros),
+                ])->render();
                 $path = storage_path('pdf/listados');
                 $nombrePdf = 'listado_cierre_rendicion_estacionamiento';
 
@@ -67,7 +92,12 @@ class CierreRendicionEstacionamientoController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new CierreRendicionEstacionamientoListadoExport($rendiciones),
+                    new CierreRendicionEstacionamientoListadoExport(
+                        $rendiciones,
+                        $grupos,
+                        $vistaPorTurno,
+                        $filtros,
+                    ),
                     'cierre_rendicion_estacionamiento.'.$ext,
                     $mime,
                 );
@@ -120,6 +150,13 @@ class CierreRendicionEstacionamientoController extends Controller
             }
         }
 
+        $filtrosQueryConciliacion = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            'consultar' => $consultar ? 1 : null,
+        ], static fn ($v) => $v !== null && $v !== '');
+
         return view('contable.cierre_rendicion_estacionamiento.conciliacion_flash', [
             'empresa_query' => $empresaQuery,
             'empresa_id' => $empresaId,
@@ -128,8 +165,75 @@ class CierreRendicionEstacionamientoController extends Controller
             'consultar' => $consultar,
             'resultado' => $resultado,
             'error_flash' => $errorFlash,
+            'filtrosQueryConciliacion' => $filtrosQueryConciliacion,
             'retornoListadoQuery' => $this->resolverRetornoListadoQuery($request),
         ]);
+    }
+
+    public function listarConciliacionFlash(Request $request, ?string $formato = null)
+    {
+        can('exportar-cierre-rendicion-estacionamiento-contable');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+
+        $redirectQuery = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            'consultar' => 1,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        if ($empresaId <= 0 || $fechaDesde === '' || $fechaHasta === '') {
+            return redirect()
+                ->route('cierre_rendicion_estacionamiento_conciliacion_flash', $redirectQuery)
+                ->with('mensaje_error', 'Indique empresa y rango de jornadas para exportar.');
+        }
+
+        try {
+            $resultado = $this->service->conciliarFlash($empresaId, $fechaDesde, $fechaHasta);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('cierre_rendicion_estacionamiento_conciliacion_flash', $redirectQuery)
+                ->with('mensaje_error', $e->getMessage());
+        }
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('contable.cierre_rendicion_estacionamiento.conciliacion_flash_listado', [
+                    'resultado' => $resultado,
+                    'esExcel' => false,
+                    'filas' => CierreRendicionEstacionamientoConciliacionFlashExport::aplanarFilas($resultado),
+                ])->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombrePdf = 'listado_conciliacion_flash_estacionamiento';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+            case 'CSV':
+                $mime = $formato === 'CSV' ? Excel::CSV : Excel::XLSX;
+                $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
+
+                return \Maatwebsite\Excel\Facades\Excel::download(
+                    new CierreRendicionEstacionamientoConciliacionFlashExport($resultado),
+                    'conciliacion_flash_estacionamiento.'.$ext,
+                    $mime,
+                );
+        }
+
+        return redirect()->route('cierre_rendicion_estacionamiento_conciliacion_flash', $redirectQuery);
     }
 
     public function apiPreviewAsiento(Request $request): JsonResponse

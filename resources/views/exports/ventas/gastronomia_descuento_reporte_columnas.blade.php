@@ -1,7 +1,15 @@
 @php
+    use App\Support\Ventas\GastronomiaDescuentoReporteTipoArticuloSupport;
+
     $vista = $resultado['vista_columnas'] ?? [];
     $columnas = $vista['columnas'] ?? [];
     $filas = $vista['filas'] ?? [];
+    $grupos = $vista['grupos'] ?? null;
+    if ($grupos === null && $filas !== []) {
+        $agrupado = GastronomiaDescuentoReporteTipoArticuloSupport::agruparFilas($filas);
+        $grupos = $agrupado['grupos'];
+    }
+    $grupos = $grupos ?? [];
     $totalesPorColumna = $vista['totales_por_columna'] ?? [];
     $subCols = 3;
     $colsFijas = 4;
@@ -37,21 +45,51 @@
             <th>Total venta</th>
         @endforeach
     </tr>
-    @foreach ($filas as $fila)
+    @foreach ($grupos as $grupo)
         <tr>
-            <td>{{ $fila['sku'] ?? '' }}</td>
-            <td>{{ $fila['descripcion'] ?? '' }}</td>
-            <td>{{ $fila['costo_unitario'] ?? 0 }}</td>
-            <td>{{ $fila['precio_venta'] ?? 0 }}</td>
+            <td colspan="{{ $colCount }}" style="font-weight: bold; background-color: #D5E8F5;">
+                Tipo: {{ $grupo['tipo_nombre'] }}
+                ({{ $grupo['cantidad_lineas'] }} l&iacute;nea{{ $grupo['cantidad_lineas'] === 1 ? '' : 's' }})
+            </td>
+        </tr>
+        @foreach ($grupo['filas'] as $fila)
+            <tr>
+                <td>{{ $fila['sku'] ?? '' }}</td>
+                <td>{{ $fila['descripcion'] ?? '' }}</td>
+                <td>{{ $fila['costo_unitario'] ?? 0 }}</td>
+                <td>{{ $fila['precio_venta'] ?? 0 }}</td>
+                @foreach ($columnas as $col)
+                    @php $celda = ($fila['celdas'] ?? [])[$col['clave'] ?? ''] ?? null; @endphp
+                    @if ($celda)
+                        <td>{{ $celda['unidades'] ?? 0 }}</td>
+                        <td>{{ $celda['costo_total'] ?? 0 }}</td>
+                        <td>{{ $celda['total_venta'] ?? 0 }}</td>
+                    @else
+                        <td colspan="{{ $subCols }}"></td>
+                    @endif
+                @endforeach
+            </tr>
+        @endforeach
+        <tr>
+            <td colspan="{{ $colsFijas }}"><strong>Total parcial {{ $grupo['tipo_nombre'] }}</strong></td>
             @foreach ($columnas as $col)
-                @php $celda = ($fila['celdas'] ?? [])[$col['clave'] ?? ''] ?? null; @endphp
-                @if ($celda)
-                    <td>{{ $celda['unidades'] ?? 0 }}</td>
-                    <td>{{ $celda['costo_total'] ?? 0 }}</td>
-                    <td>{{ $celda['total_venta'] ?? 0 }}</td>
-                @else
-                    <td colspan="{{ $subCols }}"></td>
-                @endif
+                @php
+                    $sumaUnid = 0.0;
+                    $sumaCosto = 0.0;
+                    $sumaVenta = 0.0;
+                    foreach ($grupo['filas'] as $filaGrupo) {
+                        $celda = ($filaGrupo['celdas'] ?? [])[$col['clave'] ?? ''] ?? null;
+                        if (! $celda) {
+                            continue;
+                        }
+                        $sumaUnid += (float) ($celda['unidades'] ?? 0);
+                        $sumaCosto += (float) ($celda['costo_total'] ?? 0);
+                        $sumaVenta += (float) ($celda['total_venta'] ?? 0);
+                    }
+                @endphp
+                <td><strong>{{ $sumaUnid }}</strong></td>
+                <td><strong>{{ $sumaCosto }}</strong></td>
+                <td><strong>{{ $sumaVenta }}</strong></td>
             @endforeach
         </tr>
     @endforeach

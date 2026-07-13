@@ -15,6 +15,7 @@ use App\Repositories\Stock\RecuentoRepositoryInterface;
 use App\Services\Stock\RecuentoService;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
+use App\Support\Stock\RecuentoDetalleExportSupport;
 use App\Support\Stock\RecuentoListadoFiltros;
 use App\Support\Stock\RecuentoModoCierreSupport;
 use App\Support\Stock\RecuentoVisibilidadSupport;
@@ -262,8 +263,9 @@ class RecuentoController extends Controller
         can('imprimir-recuento');
         $recuento = $this->service->buscar($id);
         ArticuloPrecioUltimaCompraSupport::enriquecerLineas($recuento->items);
+        $detalleExport = RecuentoDetalleExportSupport::agruparPorTipoArticulo($recuento->items);
 
-        $html = view('stock.recuento.pdf', compact('recuento'))->render();
+        $html = view('stock.recuento.pdf', compact('recuento', 'detalleExport'))->render();
         $pdf = \App::make('dompdf.wrapper');
         $pdf->setPaper('legal', 'landscape');
         $pdf->loadHTML($html);
@@ -278,11 +280,12 @@ class RecuentoController extends Controller
         can('imprimir-recuento');
         $recuento = $this->service->buscar($id);
         ArticuloPrecioUltimaCompraSupport::enriquecerLineas($recuento->items);
+        $detalleExport = RecuentoDetalleExportSupport::agruparPorTipoArticulo($recuento->items);
 
         $nombreArchivo = 'Recuento_'.preg_replace('/[^\w\-]+/', '_', (string) $recuento->codigo).'.xlsx';
 
         return (new RecuentoDetalleExport)
-            ->parametros($recuento)
+            ->parametros($recuento, $detalleExport)
             ->download($nombreArchivo);
     }
 

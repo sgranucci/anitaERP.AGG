@@ -14,14 +14,21 @@
         .num { text-align: right; white-space: nowrap; }
         .dif-neg { color: #a00; font-weight: bold; }
         .dif-cero { color: #060; }
+        .grupo { background: #d5e8f5; font-weight: bold; }
+        .subtotal { background: #f0f0f0; font-weight: bold; }
+        .total-general { background: #e8e8e8; font-weight: bold; }
     </style>
 </head>
 <body>
     @php
         use App\Support\Configuracion\EmpresaLogoArchivo;
+        use App\Support\Stock\RecuentoDetalleExportSupport;
+
         $nombreEmpresaLogo = optional($recuento->empresa)->nombre;
         $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($nombreEmpresaLogo);
         $logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;
+        $detalleExport = $detalleExport
+            ?? RecuentoDetalleExportSupport::agruparPorTipoArticulo($recuento->items);
     @endphp
     <table style="width:100%; margin-bottom:10px;">
         <tr>
@@ -55,6 +62,7 @@
 
     <h2>Detalle de conteo</h2>
     <p style="margin:0 0 6px 0; color:#555; font-size:8px;">
+        Ordenado por tipo de art&iacute;culo y SKU.
         Costo unitario = precio de &uacute;ltima compra: primero Anita (stkmae.stkm_pre_compra3);
         si no hay dato, &uacute;ltima COM confirmada en el ERP; si no, costo/PPP del art&iacute;culo.
     </p>
@@ -73,64 +81,74 @@
             </tr>
         </thead>
         <tbody>
-            @php
-                $totalValorContado = 0.0;
-                $totalValorDif = 0.0;
-            @endphp
-            @foreach ($recuento->items as $item)
-                @php
-                    $dif = $item->diferencia();
-                    $costoUc = $item->precio_ultima_compra ?? null;
-                    $contado = (float) $item->cantidad_contada;
-                    $valorContado = ($costoUc !== null) ? $contado * (float) $costoUc : null;
-                    $valorDif = ($costoUc !== null && abs($dif) > 1e-9) ? $dif * (float) $costoUc : null;
-                    if ($valorContado !== null) {
-                        $totalValorContado += $valorContado;
-                    }
-                    if ($valorDif !== null) {
-                        $totalValorDif += $valorDif;
-                    }
-                @endphp
-                <tr>
-                    <td>{{ optional($item->articulos)->sku }}</td>
-                    <td>{{ $item->detalle ?: optional($item->articulos)->descripcion }}</td>
-                    <td>{{ optional($item->unidadmedida)->abreviatura ?? optional($item->articulos?->unidadesdemedidas)->abreviatura }}</td>
-                    <td class="num">{{ rtrim(rtrim(number_format((float) $item->saldo_sistema, 6, '.', ''), '0'), '.') }}</td>
-                    <td class="num">{{ rtrim(rtrim(number_format((float) $item->cantidad_contada, 6, '.', ''), '0'), '.') }}</td>
-                    <td class="num @if (abs($dif) > 1e-9) dif-neg @else dif-cero @endif">
-                        {{ rtrim(rtrim(number_format($dif, 6, '.', ''), '0'), '.') }}
-                    </td>
-                    <td class="num">
-                        @if ($costoUc !== null)
-                            {{ number_format((float) $costoUc, 4, '.', '') }}
-                        @else
-                            —
-                        @endif
-                    </td>
-                    <td class="num">
-                        @if ($valorContado !== null)
-                            {{ number_format($valorContado, 2, '.', '') }}
-                        @else
-                            —
-                        @endif
-                    </td>
-                    <td class="num">
-                        @if ($valorDif !== null)
-                            {{ number_format($valorDif, 2, '.', '') }}
-                        @else
-                            —
-                        @endif
+            @forelse ($detalleExport['grupos'] as $grupo)
+                <tr class="grupo">
+                    <td colspan="9">
+                        Tipo: {{ $grupo['tipo_nombre'] }}
+                        ({{ $grupo['cantidad_lineas'] }} l&iacute;nea{{ $grupo['cantidad_lineas'] === 1 ? '' : 's' }})
                     </td>
                 </tr>
-            @endforeach
+                @foreach ($grupo['items'] as $linea)
+                    @php
+                        $item = $linea['item'];
+                        $dif = $linea['diferencia'];
+                        $costoUc = $linea['costo_uc'];
+                        $valorContado = $linea['valor_contado'];
+                        $valorDif = $linea['valor_dif'];
+                        $claseDif = abs($dif) > 1e-9 ? 'dif-neg' : 'dif-cero';
+                    @endphp
+                    <tr>
+                        <td>{{ optional($item->articulos)->sku }}</td>
+                        <td>{{ $item->detalle ?: optional($item->articulos)->descripcion }}</td>
+                        <td>{{ optional($item->unidadmedida)->abreviatura ?? optional($item->articulos?->unidadesdemedidas)->abreviatura }}</td>
+                        <td class="num">{{ rtrim(rtrim(number_format((float) $item->saldo_sistema, 6, '.', ''), '0'), '.') }}</td>
+                        <td class="num">{{ rtrim(rtrim(number_format((float) $item->cantidad_contada, 6, '.', ''), '0'), '.') }}</td>
+                        <td class="num {{ $claseDif }}">
+                            {{ rtrim(rtrim(number_format($dif, 6, '.', ''), '0'), '.') }}
+                        </td>
+                        <td class="num">
+                            @if ($costoUc !== null)
+                                {{ number_format((float) $costoUc, 4, '.', '') }}
+                            @else
+                                —
+                            @endif
+                        </td>
+                        <td class="num">
+                            @if ($valorContado !== null)
+                                {{ number_format($valorContado, 2, '.', '') }}
+                            @else
+                                —
+                            @endif
+                        </td>
+                        <td class="num">
+                            @if ($valorDif !== null)
+                                {{ number_format($valorDif, 2, '.', '') }}
+                            @else
+                                —
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
+                <tr class="subtotal">
+                    <td colspan="7" class="num">Subtotal {{ $grupo['tipo_nombre'] }}</td>
+                    <td class="num">{{ number_format($grupo['subtotal_valor_contado'], 2, '.', '') }}</td>
+                    <td class="num">{{ number_format($grupo['subtotal_valor_dif'], 2, '.', '') }}</td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="9">Sin l&iacute;neas de conteo.</td>
+                </tr>
+            @endforelse
         </tbody>
-        <tfoot>
-            <tr>
-                <th colspan="7" class="num">Totales (costo u/c)</th>
-                <th class="num">{{ number_format($totalValorContado, 2, '.', '') }}</th>
-                <th class="num">{{ number_format($totalValorDif, 2, '.', '') }}</th>
-            </tr>
-        </tfoot>
+        @if (($detalleExport['cantidad_lineas'] ?? 0) > 0)
+            <tfoot>
+                <tr class="total-general">
+                    <th colspan="7" class="num">Total general (costo u/c)</th>
+                    <th class="num">{{ number_format($detalleExport['total_valor_contado'], 2, '.', '') }}</th>
+                    <th class="num">{{ number_format($detalleExport['total_valor_dif'], 2, '.', '') }}</th>
+                </tr>
+            </tfoot>
+        @endif
     </table>
 </body>
 </html>

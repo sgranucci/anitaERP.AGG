@@ -4,6 +4,7 @@ namespace App\Exports\Stock;
 
 use App\Models\Stock\Recuento;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Stock\RecuentoDetalleExportSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -30,6 +31,9 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
 
     private ?Recuento $recuento = null;
 
+    /** @var array{grupos: list, total_valor_contado: float, total_valor_dif: float, cantidad_lineas: int}|null */
+    private ?array $detalleExport = null;
+
     private bool $hayFilaLogos = false;
 
     private int $filaInicioMeta = 1;
@@ -41,9 +45,13 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
-    public function parametros(Recuento $recuento): self
+    /**
+     * @param  array{grupos: list, total_valor_contado: float, total_valor_dif: float, cantidad_lineas: int}|null  $detalleExport
+     */
+    public function parametros(Recuento $recuento, ?array $detalleExport = null): self
     {
         $this->recuento = $recuento;
+        $this->detalleExport = $detalleExport;
 
         $paraLogos = collect([$recuento])->map(function (Recuento $r) {
             $r->setAttribute('nombreempresa', optional($r->empresa)->nombre);
@@ -64,8 +72,12 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
 
     public function view(): View
     {
+        $detalleExport = $this->detalleExport
+            ?? RecuentoDetalleExportSupport::agruparPorTipoArticulo($this->recuento->items ?? []);
+
         return view('exports.stock.recuento_detalle', [
             'recuento' => $this->recuento,
+            'detalleExport' => $detalleExport,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
         ]);
     }

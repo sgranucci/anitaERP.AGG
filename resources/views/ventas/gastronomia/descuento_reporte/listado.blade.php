@@ -38,6 +38,8 @@
         table.data thead tr { background-color: #85C1E9; }
         table.data th { font-weight: bold; color: #17202A; }
         table.data tfoot tr { background-color: #e8e8e8; font-weight: bold; }
+        table.data tr.grupo-tipo { background-color: #d5e8f5; font-weight: bold; }
+        table.data tr.subtotal-tipo { background-color: #f0f0f0; font-weight: bold; }
         table.data.tabla-columnas-pdf {
             table-layout: fixed;
             width: 100%;

@@ -28,6 +28,10 @@ class GastronomiaDescuentoReporteBloqueExport implements FromView, ShouldAutoSiz
 
     private string $empresaNombre;
 
+    private string $titulo = 'Reporte descuentos gastronomía';
+
+    private string $subtitulo = '';
+
     private string $sheetTitle = 'Descuento';
 
     private bool $hayFilaLogos = false;
@@ -46,10 +50,14 @@ class GastronomiaDescuentoReporteBloqueExport implements FromView, ShouldAutoSiz
         array $bloque,
         string $periodoTexto,
         string $empresaNombre,
+        string $titulo = 'Reporte descuentos gastronomía',
+        string $subtitulo = '',
     ) {
         $this->bloque = $bloque;
         $this->periodoTexto = $periodoTexto;
         $this->empresaNombre = $empresaNombre;
+        $this->titulo = $titulo !== '' ? $titulo : 'Reporte descuentos gastronomía';
+        $this->subtitulo = $subtitulo;
         $this->layout = new GastronomiaDescuentoReporteExcelLayout(false, 2);
     }
 
@@ -66,11 +74,14 @@ class GastronomiaDescuentoReporteBloqueExport implements FromView, ShouldAutoSiz
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogo);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
 
-        $filasMeta = 2;
-        if (trim($this->periodoTexto) !== '') {
+        $tituloBloque = trim((string) (($this->bloque['codigo'] ?? '').' — '.($this->bloque['nombre'] ?? '')));
+        $filasMeta = 2; // título reporte + generado
+        if ($tituloBloque !== '' && $tituloBloque !== '—') {
             $filasMeta++;
         }
-        if (trim($this->empresaNombre) !== '') {
+        if (trim($this->subtitulo) !== '') {
+            $filasMeta++;
+        } elseif (trim($this->periodoTexto) !== '' || trim($this->empresaNombre) !== '') {
             $filasMeta++;
         }
 
@@ -80,12 +91,16 @@ class GastronomiaDescuentoReporteBloqueExport implements FromView, ShouldAutoSiz
             0,
             1,
         );
-        $this->filaSubtituloExcel = $this->layout->filaInicioMeta() + 2;
+        $this->filaSubtituloExcel = trim($this->subtitulo) !== ''
+            ? $this->layout->filaInicioMeta() + ($tituloBloque !== '' && $tituloBloque !== '—' ? 3 : 2)
+            : 0;
 
         return view('exports.ventas.gastronomia_descuento_reporte_bloque', [
             'bloque' => $this->bloque,
             'periodo_texto' => $this->periodoTexto,
             'empresa_nombre' => $this->empresaNombre,
+            'titulo' => $this->titulo,
+            'subtitulo' => $this->subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
         ]);
     }

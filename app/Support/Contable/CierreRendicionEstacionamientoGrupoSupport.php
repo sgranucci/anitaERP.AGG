@@ -128,6 +128,22 @@ final class CierreRendicionEstacionamientoGrupoSupport
     }
 
     /**
+     * Etiqueta de turno para UI/export: nombre de catálogo (no el ID operativo).
+     */
+    public static function etiquetaTurno(RendicionEstacionamientoCaja $rendicion): string
+    {
+        $rendicion->loadMissing(['turnoOperativo.turno']);
+        $nombre = trim((string) ($rendicion->turnoOperativo?->turno?->nombre ?? ''));
+        if ($nombre !== '') {
+            return $nombre;
+        }
+
+        $id = (int) ($rendicion->turno_operativo_estacionamiento_id ?? 0);
+
+        return $id > 0 ? 'Turno '.$id : '—';
+    }
+
+    /**
      * @param  list<RendicionEstacionamientoCaja>  $items
      * @return array<string, mixed>
      */
@@ -148,6 +164,7 @@ final class CierreRendicionEstacionamientoGrupoSupport
         $totalCobrado = 0.0;
         $totalVentas = 0.0;
         $totalInvitaciones = 0.0;
+        $totalNotasCredito = 0.0;
         $pendientes = 0;
         $cerradas = 0;
         $legacy = 0;
@@ -158,6 +175,7 @@ final class CierreRendicionEstacionamientoGrupoSupport
             $totalCobrado = round($totalCobrado + (float) ($row->totalcobrado ?? 0), 2);
             $totalVentas = round($totalVentas + (float) ($row->totalfactura ?? 0), 2);
             $totalInvitaciones = round($totalInvitaciones + (float) ($row->totalinvitacion ?? 0), 2);
+            $totalNotasCredito = round($totalNotasCredito + (float) ($row->totalnotacredito ?? 0), 2);
             if ($row->esCierreContableLegacy()) {
                 $legacy++;
                 $cerradas++;
@@ -185,6 +203,8 @@ final class CierreRendicionEstacionamientoGrupoSupport
         }
 
         $fechaDia = self::fechaDiaDesdeRendicion($primera);
+        $totalVentasBrutas = round($totalVentas + $totalNotasCredito, 2);
+        $mediosCobro = CierreRendicionEstacionamientoMediosCobroSupport::agregarDesdeRendiciones($items);
 
         return [
             'clave' => $clave,
@@ -199,7 +219,10 @@ final class CierreRendicionEstacionamientoGrupoSupport
             'cantidad_cerrada' => $cerradas,
             'cantidad_legacy' => $legacy,
             'total_cobrado' => $totalCobrado,
+            'medios_cobro' => $mediosCobro,
             'total_ventas' => $totalVentas,
+            'total_notas_credito' => $totalNotasCredito,
+            'total_ventas_brutas' => $totalVentasBrutas,
             'total_invitaciones' => $totalInvitaciones,
             'estado_grupo' => $estado,
             'asiento_id' => $asientoId,

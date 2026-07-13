@@ -1,4 +1,6 @@
 @php
+    use App\Support\Ventas\GastronomiaDescuentoReporteTipoArticuloSupport;
+
     $colspan = 7;
     $bloques = $bloques ?? [];
     $totalBloques = count($bloques);
@@ -32,21 +34,44 @@
         </tr>
     @endif
     @foreach ($bloques as $bloque)
+        @php
+            $grupos = $bloque['grupos'] ?? null;
+            if ($grupos === null) {
+                $agrupado = GastronomiaDescuentoReporteTipoArticuloSupport::agruparFilas($bloque['filas'] ?? []);
+                $grupos = $agrupado['grupos'];
+            }
+        @endphp
         <tr>
             <td colspan="{{ $colspan }}" style="font-size: 11pt; font-weight: bold; color: #17202A;">
                 {{ $bloque['codigo'] ?? '' }} &mdash; {{ $bloque['nombre'] ?? '' }}
                 &middot; {{ $resultado['periodo_texto'] ?? '' }}
             </td>
         </tr>
-        @foreach ($bloque['filas'] ?? [] as $fila)
+        @foreach ($grupos as $grupo)
             <tr>
-                <td>{{ $fila['sku'] ?? '' }}</td>
-                <td>{{ $fila['descripcion'] ?? '' }}</td>
-                <td>{{ $fila['unidades'] ?? 0 }}</td>
-                <td>{{ $fila['costo_unitario'] ?? 0 }}</td>
-                <td>{{ $fila['costo_total'] ?? 0 }}</td>
-                <td>{{ $fila['precio_venta'] ?? 0 }}</td>
-                <td>{{ $fila['total_venta'] ?? 0 }}</td>
+                <td colspan="{{ $colspan }}" style="font-weight: bold; background-color: #D5E8F5;">
+                    Tipo: {{ $grupo['tipo_nombre'] }}
+                    ({{ $grupo['cantidad_lineas'] }} l&iacute;nea{{ $grupo['cantidad_lineas'] === 1 ? '' : 's' }})
+                </td>
+            </tr>
+            @foreach ($grupo['filas'] as $fila)
+                <tr>
+                    <td>{{ $fila['sku'] ?? '' }}</td>
+                    <td>{{ $fila['descripcion'] ?? '' }}</td>
+                    <td>{{ $fila['unidades'] ?? 0 }}</td>
+                    <td>{{ $fila['costo_unitario'] ?? 0 }}</td>
+                    <td>{{ $fila['costo_total'] ?? 0 }}</td>
+                    <td>{{ $fila['precio_venta'] ?? 0 }}</td>
+                    <td>{{ $fila['total_venta'] ?? 0 }}</td>
+                </tr>
+            @endforeach
+            <tr>
+                <td colspan="2"><strong>Total parcial {{ $grupo['tipo_nombre'] }}</strong></td>
+                <td><strong>{{ $grupo['subtotal_unidades'] ?? 0 }}</strong></td>
+                <td></td>
+                <td><strong>{{ $grupo['subtotal_costo_total'] ?? 0 }}</strong></td>
+                <td></td>
+                <td><strong>{{ $grupo['subtotal_total_venta'] ?? 0 }}</strong></td>
             </tr>
         @endforeach
         <tr>

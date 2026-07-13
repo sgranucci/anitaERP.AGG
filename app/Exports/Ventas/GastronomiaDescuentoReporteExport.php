@@ -87,6 +87,8 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
             return view('exports.ventas.gastronomia_descuento_reporte_totales', [
                 'resultado' => $this->resultado,
                 'empresa_nombre' => $this->empresaNombre,
+                'titulo' => $this->titulo !== '' ? $this->titulo : 'Reporte descuentos gastronomía',
+                'subtitulo' => $this->subtitulo,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
             ]);
         }
@@ -205,7 +207,7 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
 
         for ($fila = $filaDesde; $fila <= $highest; $fila++) {
             $colA = trim((string) $sheet->getCell('A'.$fila)->getValue());
-            if ($colA === '' || $colA === 'Total final') {
+            if ($colA === '' || str_starts_with($colA, 'Total final') || str_starts_with($colA, 'Total parcial')) {
                 continue;
             }
 
@@ -214,15 +216,20 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
                 continue;
             }
 
+            $esTipo = str_starts_with($colA, 'Tipo:');
             $sheet->mergeCells('A'.$fila.':'.self::COL_ULTIMA.$fila);
             $sheet->getRowDimension($fila)->setRowHeight(22);
             $sheet->getStyle('A'.$fila.':'.self::COL_ULTIMA.$fila)->applyFromArray([
                 'font' => [
                     'bold' => true,
-                    'size' => 11,
+                    'size' => $esTipo ? 10 : 11,
                     'name' => 'Arial',
                     'color' => ['rgb' => '17202A'],
                 ],
+                'fill' => $esTipo ? [
+                    'fillType' => Fill::FILL_SOLID,
+                    'color' => ['rgb' => 'D5E8F5'],
+                ] : [],
             ]);
         }
     }

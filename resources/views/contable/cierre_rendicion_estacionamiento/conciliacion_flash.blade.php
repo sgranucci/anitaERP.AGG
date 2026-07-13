@@ -30,14 +30,15 @@
                 </div>
             </div>
             <div class="card-body">
-                <p class="text-muted small mb-3">
-                    Por cada jornada: rendiciones de turno presentadas en caja, desglosadas por punto de venta,
-                    cruzadas contra &Sigma; <code>flash_estac</code> (Informix m&oacute;dulo caja) y total de asientos contables generados
-                    (Σ debe del asiento por rendici&oacute;n cerrada), para conciliar hacia atr&aacute;s.
-                    La conciliaci&oacute;n con flash usa <strong>facturaci&oacute;n neta</strong> (cobrado + invitaciones $0,01 sin cobranza),
-                    no solo el cobrado: las invitaciones figuran en flash/rendgastro pero no en <code>totalcobrado</code>.
+                <div class="alert alert-info py-2 small mb-3">
+                    <strong>C&oacute;mo leer la conciliaci&oacute;n</strong>
+                    <ul class="mb-0 pl-3">
+                        <li><strong>Fact. neta</strong> (cobrado + invitaciones) se compara con <code>flash_estac</code> → diferencia &ldquo;fact. − flash&rdquo;.</li>
+                        <li><strong>Venta total</strong> (fact. neta + notas de cr&eacute;dito) se compara con &Sigma; debe de asientos → diferencia &ldquo;venta total − asientos&rdquo;.</li>
+                        <li>Si hay NC, el asiento suele ser mayor que el cobrado/flash: eso no es error; mir&aacute; la columna <em>Venta total</em>.</li>
+                    </ul>
                     Tolerancia flash: {{ number_format((float) config('estacionamiento.cierre_rendicion_contable.conciliacion_flash_tolerancia', 0.02), 2, ',', '.') }}.
-                </p>
+                </div>
                 <form method="get" action="{{ route('cierre_rendicion_estacionamiento_conciliacion_flash') }}" class="mb-4">
                     @foreach ($retornoListadoQuery ?? [] as $retornoKey => $retornoVal)
                         <input type="hidden" name="retorno[{{ $retornoKey }}]" value="{{ $retornoVal }}">
@@ -80,6 +81,7 @@
                 @if ($consultar && empty($error_flash) && $resultado !== null)
                     @php
                         $resumen = $resultado['resumen'] ?? [];
+                        $tol = (float) ($resultado['tolerancia'] ?? 0.02);
                     @endphp
                     <div class="alert alert-light border">
                         <div class="d-flex flex-wrap align-items-start justify-content-between">
@@ -100,21 +102,31 @@
                                     @endif
                                 </span>
                             </div>
-                            @if (can('ejecutar-cierre-rendicion-estacionamiento-contable', false)
-                                && (int) ($resumen['total_grupos_pendientes'] ?? 0) > 0)
-                                <button type="button"
-                                        class="btn btn-success btn-sm mt-2 mt-md-0"
-                                        id="btn-cerrar-periodo-conc"
-                                        data-empresa-id="{{ (int) ($resultado['empresa_id'] ?? 0) }}"
-                                        data-fecha-desde="{{ $resultado['fecha_desde'] ?? '' }}"
-                                        data-fecha-hasta="{{ $resultado['fecha_hasta'] ?? '' }}"
-                                        data-grupos="{{ (int) ($resumen['total_grupos_pendientes'] ?? 0) }}"
-                                        data-pendientes="{{ (int) ($resumen['total_pendiente_cierre'] ?? 0) }}"
-                                        data-jornadas="{{ (int) ($resumen['jornadas_con_pendientes'] ?? 0) }}"
-                                        title="Generar asientos de todos los grupos pendientes del periodo">
-                                    <i class="fa fa-lock"></i> Cerrar periodo completo
-                                </button>
-                            @endif
+                            <div class="d-flex flex-wrap align-items-center">
+                                @if (can('exportar-cierre-rendicion-estacionamiento-contable', false))
+                                    <div class="mr-2 mb-1">
+                                        @include('includes.exportar-tabla-queryparams', [
+                                            'ruta' => 'listar_cierre_rendicion_estacionamiento_conciliacion_flash',
+                                            'queryparams' => $filtrosQueryConciliacion ?? [],
+                                        ])
+                                    </div>
+                                @endif
+                                @if (can('ejecutar-cierre-rendicion-estacionamiento-contable', false)
+                                    && (int) ($resumen['total_grupos_pendientes'] ?? 0) > 0)
+                                    <button type="button"
+                                            class="btn btn-success btn-sm mt-2 mt-md-0"
+                                            id="btn-cerrar-periodo-conc"
+                                            data-empresa-id="{{ (int) ($resultado['empresa_id'] ?? 0) }}"
+                                            data-fecha-desde="{{ $resultado['fecha_desde'] ?? '' }}"
+                                            data-fecha-hasta="{{ $resultado['fecha_hasta'] ?? '' }}"
+                                            data-grupos="{{ (int) ($resumen['total_grupos_pendientes'] ?? 0) }}"
+                                            data-pendientes="{{ (int) ($resumen['total_pendiente_cierre'] ?? 0) }}"
+                                            data-jornadas="{{ (int) ($resumen['jornadas_con_pendientes'] ?? 0) }}"
+                                            title="Generar asientos de todos los grupos pendientes del periodo">
+                                        <i class="fa fa-lock"></i> Cerrar periodo completo
+                                    </button>
+                                @endif
+                            </div>
                         </div>
                     </div>
 
@@ -131,6 +143,9 @@
                                         default => 'badge-secondary',
                                     };
                                     $collapseId = 'dia-collapse-'.$idx;
+                                    $difFlash = (float) ($dia['diferencia'] ?? 0);
+                                    $difVentaAsientos = (float) ($dia['diferencia_venta_total_asientos'] ?? 0);
+                                    $hayNc = (float) ($dia['total_rendiciones_notas_credito'] ?? 0) > 0;
                                 @endphp
                                 <div class="card mb-1 {{ $estado === 'DIF' ? 'border-danger' : '' }}">
                                     <div class="card-header p-2" id="heading-{{ $idx }}">
@@ -158,30 +173,37 @@
                                                         <i class="fa fa-lock"></i> Cerrar jornada
                                                     </button>
                                                 @endif
-                                                <span class="mr-3">Cobrado: <strong>{{ number_format((float) ($dia['total_rendiciones_cobrado'] ?? 0), 2, ',', '.') }}</strong></span>
-                                                @if ((float) ($dia['total_rendiciones_invitaciones'] ?? 0) > 0)
-                                                    <span class="mr-3 text-muted">+ Inv.: <strong>{{ number_format((float) ($dia['total_rendiciones_invitaciones'] ?? 0), 2, ',', '.') }}</strong></span>
-                                                @endif
                                                 <span class="mr-3">Fact. neta: <strong>{{ number_format((float) ($dia['total_rendiciones_facturacion'] ?? 0), 2, ',', '.') }}</strong></span>
+                                                @if ($hayNc)
+                                                    <span class="mr-3">NC: <strong>{{ number_format((float) ($dia['total_rendiciones_notas_credito'] ?? 0), 2, ',', '.') }}</strong></span>
+                                                    <span class="mr-3">Venta total: <strong>{{ number_format((float) ($dia['total_rendiciones_ventas_brutas'] ?? 0), 2, ',', '.') }}</strong></span>
+                                                @endif
                                                 <span class="mr-3">Asientos: <strong>{{ number_format((float) ($dia['total_asientos_debe'] ?? 0), 2, ',', '.') }}</strong></span>
-                                                <span class="mr-3">Flash estac.: <strong>{{ number_format((float) ($dia['total_flash_estac'] ?? 0), 2, ',', '.') }}</strong></span>
-                                                <span class="{{ abs((float) ($dia['diferencia'] ?? 0)) > (float) ($resultado['tolerancia'] ?? 0.02) ? 'text-danger font-weight-bold' : 'text-success' }}">
-                                                    Dif. fact.−flash: {{ number_format((float) ($dia['diferencia'] ?? 0), 2, ',', '.') }}
+                                                <span class="mr-3">Flash: <strong>{{ number_format((float) ($dia['total_flash_estac'] ?? 0), 2, ',', '.') }}</strong></span>
+                                                <span class="mr-2 {{ abs($difFlash) > $tol ? 'text-danger font-weight-bold' : 'text-success' }}">
+                                                    Fact.−flash: {{ number_format($difFlash, 2, ',', '.') }}
+                                                </span>
+                                                <span class="{{ abs($difVentaAsientos) > $tol ? 'text-danger font-weight-bold' : 'text-success' }}"
+                                                      title="Venta total (neta + NC) menos Σ debe de asientos">
+                                                    Venta−asientos: {{ number_format($difVentaAsientos, 2, ',', '.') }}
                                                 </span>
                                             </div>
                                         </div>
                                     </div>
                                     <div id="{{ $collapseId }}" class="collapse" data-parent="#accordion-conciliacion-dias">
                                         <div class="card-body p-0">
+                                            <div class="table-responsive">
                                             <table class="table table-sm table-striped mb-0">
                                                 <thead style="background:#85C1E9;color:#17202A;">
                                                     <tr>
                                                         <th>Punto de venta</th>
-                                                        <th class="text-center">Cant. rend.</th>
+                                                        <th class="text-center">Cant.</th>
                                                         <th class="text-right">Cobrado</th>
-                                                        <th class="text-right">Invitaciones</th>
+                                                        <th class="text-right">Invit.</th>
                                                         <th class="text-right">Fact. neta</th>
-                                                        <th class="text-right">Asientos (Σ debe)</th>
+                                                        <th class="text-right">NC</th>
+                                                        <th class="text-right">Venta total</th>
+                                                        <th class="text-right">Asientos (&Sigma; debe)</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -203,6 +225,14 @@
                                                                 @endif
                                                             </td>
                                                             <td class="text-right">{{ number_format((float) ($pv['total_facturacion'] ?? 0), 2, ',', '.') }}</td>
+                                                            <td class="text-right">
+                                                                @if ((float) ($pv['total_notas_credito'] ?? 0) > 0)
+                                                                    {{ number_format((float) $pv['total_notas_credito'], 2, ',', '.') }}
+                                                                @else
+                                                                    —
+                                                                @endif
+                                                            </td>
+                                                            <td class="text-right">{{ number_format((float) ($pv['total_ventas_brutas'] ?? 0), 2, ',', '.') }}</td>
                                                             <td class="text-right">
                                                                 @if ((float) ($pv['total_asientos_debe'] ?? 0) > 0)
                                                                     {{ number_format((float) $pv['total_asientos_debe'], 2, ',', '.') }}
@@ -234,7 +264,7 @@
                                                         </tr>
                                                     @empty
                                                         <tr>
-                                                            <td colspan="6" class="text-center text-muted py-2">Sin rendiciones en esta jornada.</td>
+                                                            <td colspan="8" class="text-center text-muted py-2">Sin rendiciones en esta jornada.</td>
                                                         </tr>
                                                     @endforelse
                                                 </tbody>
@@ -251,16 +281,24 @@
                                                             @endif
                                                         </td>
                                                         <td class="text-right">{{ number_format((float) ($dia['total_rendiciones_facturacion'] ?? 0), 2, ',', '.') }}</td>
+                                                        <td class="text-right">
+                                                            @if ((float) ($dia['total_rendiciones_notas_credito'] ?? 0) > 0)
+                                                                {{ number_format((float) $dia['total_rendiciones_notas_credito'], 2, ',', '.') }}
+                                                            @else
+                                                                —
+                                                            @endif
+                                                        </td>
+                                                        <td class="text-right">{{ number_format((float) ($dia['total_rendiciones_ventas_brutas'] ?? 0), 2, ',', '.') }}</td>
                                                         <td class="text-right">{{ number_format((float) ($dia['total_asientos_debe'] ?? 0), 2, ',', '.') }}</td>
                                                     </tr>
                                                     <tr>
-                                                        <td colspan="5">Flash estacionamiento (&Sigma; flash_estac)</td>
+                                                        <td colspan="7">Flash estacionamiento (&Sigma; flash_estac) — comparable a <em>Fact. neta</em></td>
                                                         <td class="text-right">{{ number_format((float) ($dia['total_flash_estac'] ?? 0), 2, ',', '.') }}</td>
                                                     </tr>
-                                                    @if (abs((float) ($dia['diferencia_cobrado_flash'] ?? 0)) > (float) ($resultado['tolerancia'] ?? 0.02)
-                                                        && abs((float) ($dia['diferencia'] ?? 0)) <= (float) ($resultado['tolerancia'] ?? 0.02))
+                                                    @if (abs((float) ($dia['diferencia_cobrado_flash'] ?? 0)) > $tol
+                                                        && abs($difFlash) <= $tol)
                                                         <tr class="text-muted">
-                                                            <td colspan="5">
+                                                            <td colspan="7">
                                                                 Diferencia solo por invitaciones (cobrado − flash)
                                                                 <small class="font-weight-normal">— tickets $0,01 sin cobranza</small>
                                                             </td>
@@ -268,13 +306,13 @@
                                                         </tr>
                                                     @endif
                                                     <tr class="{{ $estado === 'DIF' ? 'table-danger' : 'table-success' }}">
-                                                        <td colspan="5">Diferencia facturaci&oacute;n neta − flash</td>
-                                                        <td class="text-right">{{ number_format((float) ($dia['diferencia'] ?? 0), 2, ',', '.') }}</td>
+                                                        <td colspan="7">Diferencia facturaci&oacute;n neta − flash</td>
+                                                        <td class="text-right">{{ number_format($difFlash, 2, ',', '.') }}</td>
                                                     </tr>
-                                                    <tr>
-                                                        <td colspan="5">Diferencia cobrado − asientos</td>
-                                                        <td class="text-right {{ abs((float) ($dia['diferencia_rend_asientos'] ?? 0)) > (float) ($resultado['tolerancia'] ?? 0.02) ? 'text-danger' : '' }}">
-                                                            {{ number_format((float) ($dia['diferencia_rend_asientos'] ?? 0), 2, ',', '.') }}
+                                                    <tr class="{{ abs($difVentaAsientos) > $tol ? 'table-warning' : 'table-success' }}">
+                                                        <td colspan="7">
+                                                            Diferencia venta total − asientos
+                                                            <small class="font-weight-normal">(neta + NC vs &Sigma; debe)</small>
                                                             @if ((int) ($dia['cantidad_pendiente'] ?? 0) > 0)
                                                                 <br><small class="text-warning font-weight-normal">{{ (int) $dia['cantidad_pendiente'] }} sin asiento</small>
                                                             @endif
@@ -282,9 +320,20 @@
                                                                 <br><small class="text-muted font-weight-normal">{{ (int) $dia['cantidad_legacy'] }} hist&oacute;rico(s)</small>
                                                             @endif
                                                         </td>
+                                                        <td class="text-right">{{ number_format($difVentaAsientos, 2, ',', '.') }}</td>
                                                     </tr>
+                                                    @if ($hayNc && abs((float) ($dia['diferencia_rend_asientos'] ?? 0)) > $tol)
+                                                        <tr class="text-muted">
+                                                            <td colspan="7">
+                                                                Referencia: cobrado − asientos
+                                                                <small class="font-weight-normal">— suele diferir por NC; us&aacute; venta total − asientos</small>
+                                                            </td>
+                                                            <td class="text-right">{{ number_format((float) ($dia['diferencia_rend_asientos'] ?? 0), 2, ',', '.') }}</td>
+                                                        </tr>
+                                                    @endif
                                                 </tfoot>
                                             </table>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

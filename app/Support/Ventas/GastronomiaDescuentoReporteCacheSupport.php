@@ -12,6 +12,7 @@ final class GastronomiaDescuentoReporteCacheSupport
     public static function firma(array $filtros): string
     {
         $relevante = [
+            'estructura_v' => 2,
             'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
             'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),

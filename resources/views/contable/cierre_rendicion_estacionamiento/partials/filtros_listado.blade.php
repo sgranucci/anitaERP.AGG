@@ -16,6 +16,13 @@
         <div class="form-row align-items-end">
             @include('includes.listado.filtro_empresa_asignada', ['f' => $f])
             <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="vista">Vista del listado</label>
+                <select name="vista" id="vista" class="form-control form-control-sm">
+                    <option value="{{ CierreRendicionEstacionamientoListadoFiltros::VISTA_AGRUPADO }}" @selected(($f['vista'] ?? CierreRendicionEstacionamientoListadoFiltros::VISTA_AGRUPADO) === CierreRendicionEstacionamientoListadoFiltros::VISTA_AGRUPADO)>Unificado (PV + fecha)</option>
+                    <option value="{{ CierreRendicionEstacionamientoListadoFiltros::VISTA_POR_TURNO }}" @selected(($f['vista'] ?? '') === CierreRendicionEstacionamientoListadoFiltros::VISTA_POR_TURNO)>Por turno</option>
+                </select>
+            </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="estado_cierre">Estado cierre contable</label>
                 <select name="estado_cierre" id="estado_cierre" class="form-control form-control-sm">
                     <option value="{{ CierreRendicionEstacionamientoListadoFiltros::ESTADO_TODOS }}" @selected($estadoCierre === CierreRendicionEstacionamientoListadoFiltros::ESTADO_TODOS)>Todos</option>

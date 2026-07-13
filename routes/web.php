@@ -913,6 +913,7 @@ Route::get('contable/exportar-conciliacion-bancaria/{formato}', 'Contable\Concil
 
 Route::get('contable/cierre-rendiciones-estacionamiento', 'Contable\CierreRendicionEstacionamientoController@index')->name('cierre_rendicion_estacionamiento_contable');
 Route::get('contable/cierre-rendiciones-estacionamiento/conciliacion-flash', 'Contable\CierreRendicionEstacionamientoController@conciliacionFlash')->name('cierre_rendicion_estacionamiento_conciliacion_flash');
+Route::get('contable/listar-cierre-rendiciones-estacionamiento-conciliacion-flash/{formato?}', 'Contable\CierreRendicionEstacionamientoController@listarConciliacionFlash')->name('listar_cierre_rendicion_estacionamiento_conciliacion_flash');
 Route::get('contable/listar-cierre-rendiciones-estacionamiento/{formato?}/{busqueda?}', 'Contable\CierreRendicionEstacionamientoController@listar')->name('listar_cierre_rendicion_estacionamiento_contable');
 Route::post('contable/cierre-rendiciones-estacionamiento/api/preview-asiento', 'Contable\CierreRendicionEstacionamientoController@apiPreviewAsiento')->name('api_cierre_rendicion_estacionamiento_preview');
 Route::post('contable/cierre-rendiciones-estacionamiento/api/preview-cierre-rango', 'Contable\CierreRendicionEstacionamientoController@apiPreviewCierreRango')->name('api_cierre_rendicion_estacionamiento_preview_rango');

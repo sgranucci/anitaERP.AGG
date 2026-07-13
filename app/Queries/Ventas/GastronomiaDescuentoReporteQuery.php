@@ -169,6 +169,7 @@ final class GastronomiaDescuentoReporteQuery
             ->join('cuenta_gastronomia as cg', 'cg.id', '=', 'vge.cuenta_gastronomia_id')
             ->join('descuento_gastronomia as dg', 'dg.id', '=', 'cg.descuento_gastronomia_id')
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
+            ->leftJoin('tipoarticulo as ta', 'ta.id', '=', 'a.tipoarticulo_id')
             ->leftJoin('cliente as cli', 'cli.id', '=', 'cg.cliente_interno_descuento_id')
             ->whereNull('v.deleted_at')
             ->whereNull('vge.venta_factura_origen_id')
@@ -195,29 +196,39 @@ final class GastronomiaDescuentoReporteQuery
 
     private function aplicarSelectGroupByOrden(Builder $query, string $agruparPor): void
     {
+        $camposArticulo = [
+            've.articulo_id',
+            'a.sku',
+            'a.descripcion',
+            'a.tipoarticulo_id',
+            'ta.nombre as tipoarticulo_nombre',
+        ];
+        $groupArticulo = [
+            've.articulo_id',
+            'a.sku',
+            'a.descripcion',
+            'a.tipoarticulo_id',
+            'ta.nombre',
+        ];
+
         if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
             $query
-                ->select([
+                ->select(array_merge([
                     'cg.cliente_vip_gastronomia_id as vip_id',
                     'cvg.numeroid as vip_codigo',
                     'cvg.apellido as vip_apellido',
                     'cvg.nombre as vip_nombre',
-                    've.articulo_id',
-                    'a.sku',
-                    'a.descripcion',
-                ])
+                ], $camposArticulo))
                 ->selectRaw('SUM('.self::cantidadExpr().') as unidades')
                 ->selectRaw('SUM('.self::importeExpr().') as total_venta')
-                ->groupBy(
+                ->groupBy(array_merge([
                     'cg.cliente_vip_gastronomia_id',
                     'cvg.numeroid',
                     'cvg.apellido',
                     'cvg.nombre',
-                    've.articulo_id',
-                    'a.sku',
-                    'a.descripcion',
-                )
+                ], $groupArticulo))
                 ->orderBy('cvg.numeroid')
+                ->orderBy('ta.nombre')
                 ->orderBy('a.sku');
 
             return;
@@ -225,25 +236,20 @@ final class GastronomiaDescuentoReporteQuery
 
         if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
             $query
-                ->select([
+                ->select(array_merge([
                     'cg.mozo_gastronomia_id as mozo_id',
                     'mg.codigo as mozo_codigo',
                     'mg.nombre as mozo_nombre',
-                    've.articulo_id',
-                    'a.sku',
-                    'a.descripcion',
-                ])
+                ], $camposArticulo))
                 ->selectRaw('SUM('.self::cantidadExpr().') as unidades')
                 ->selectRaw('SUM('.self::importeExpr().') as total_venta')
-                ->groupBy(
+                ->groupBy(array_merge([
                     'cg.mozo_gastronomia_id',
                     'mg.codigo',
                     'mg.nombre',
-                    've.articulo_id',
-                    'a.sku',
-                    'a.descripcion',
-                )
+                ], $groupArticulo))
                 ->orderBy('mg.codigo')
+                ->orderBy('ta.nombre')
                 ->orderBy('a.sku');
 
             return;
@@ -251,111 +257,92 @@ final class GastronomiaDescuentoReporteQuery
 
         if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
             $query
-                ->select([
+                ->select(array_merge([
                     'cg.cliente_interno_descuento_id as cliente_interno_id',
                     'cli.codigo as cliente_codigo',
                     'cli.nombre as cliente_nombre',
-                    've.articulo_id',
-                    'a.sku',
-                    'a.descripcion',
-                ])
+                ], $camposArticulo))
                 ->selectRaw('SUM('.self::cantidadExpr().') as unidades')
                 ->selectRaw('SUM('.self::importeExpr().') as total_venta')
-                ->groupBy(
+                ->groupBy(array_merge([
                     'cg.cliente_interno_descuento_id',
                     'cli.codigo',
                     'cli.nombre',
-                    've.articulo_id',
-                    'a.sku',
-                    'a.descripcion',
-                )
+                ], $groupArticulo))
                 ->orderBy('cli.codigo')
+                ->orderBy('ta.nombre')
                 ->orderBy('a.sku');
 
             return;
         }
 
         $query
-            ->select([
+            ->select(array_merge([
                 'dg.id as descuento_id',
                 'dg.codigo as descuento_codigo',
                 'dg.nombre as descuento_nombre',
-                've.articulo_id',
-                'a.sku',
-                'a.descripcion',
-            ])
+            ], $camposArticulo))
             ->selectRaw('SUM('.self::cantidadExpr().') as unidades')
             ->selectRaw('SUM('.self::importeExpr().') as total_venta')
-            ->groupBy(
+            ->groupBy(array_merge([
                 'dg.id',
                 'dg.codigo',
                 'dg.nombre',
-                've.articulo_id',
-                'a.sku',
-                'a.descripcion',
-            )
+            ], $groupArticulo))
             ->orderBy('dg.codigo')
+            ->orderBy('ta.nombre')
             ->orderBy('a.sku');
     }
 
     private function mapearFilaAgregada(object $row, string $agruparPor): object
     {
+        $tipoId = (int) ($row->tipoarticulo_id ?? 0);
+        $camposArticulo = [
+            'articulo_id' => (int) $row->articulo_id,
+            'sku' => trim((string) $row->sku),
+            'descripcion' => trim((string) $row->descripcion),
+            'tipoarticulo_id' => $tipoId > 0 ? $tipoId : null,
+            'tipoarticulo_nombre' => trim((string) ($row->tipoarticulo_nombre ?? '')),
+            'unidades' => round(abs((float) ($row->unidades ?? 0)), 4),
+            'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
+        ];
+
         if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_VIP) {
             $vipId = (int) ($row->vip_id ?? 0);
             $nombreVip = trim(trim((string) ($row->vip_apellido ?? '')).' '.trim((string) ($row->vip_nombre ?? '')));
 
-            return (object) [
+            return (object) array_merge([
                 'vip_id' => $vipId,
                 'vip_codigo' => $vipId > 0 ? trim((string) ($row->vip_codigo ?? '')) : '',
                 'vip_nombre' => $vipId > 0 ? ($nombreVip !== '' ? $nombreVip : 'Cliente VIP '.$vipId) : 'Sin cliente VIP',
-                'articulo_id' => (int) $row->articulo_id,
-                'sku' => trim((string) $row->sku),
-                'descripcion' => trim((string) $row->descripcion),
-                'unidades' => round(abs((float) ($row->unidades ?? 0)), 4),
-                'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
-            ];
+            ], $camposArticulo);
         }
 
         if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_MOZO) {
             $mozoId = (int) ($row->mozo_id ?? 0);
 
-            return (object) [
+            return (object) array_merge([
                 'mozo_id' => $mozoId,
                 'mozo_codigo' => $mozoId > 0 ? trim((string) ($row->mozo_codigo ?? '')) : '',
                 'mozo_nombre' => $mozoId > 0 ? trim((string) ($row->mozo_nombre ?? '')) : 'Sin mozo',
-                'articulo_id' => (int) $row->articulo_id,
-                'sku' => trim((string) $row->sku),
-                'descripcion' => trim((string) $row->descripcion),
-                'unidades' => round(abs((float) ($row->unidades ?? 0)), 4),
-                'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
-            ];
+            ], $camposArticulo);
         }
 
         if ($agruparPor === GastronomiaDescuentoReporteFiltros::AGRUPAR_CLIENTE) {
             $clienteId = (int) ($row->cliente_interno_id ?? 0);
 
-            return (object) [
+            return (object) array_merge([
                 'cliente_interno_id' => $clienteId,
                 'cliente_codigo' => $clienteId > 0 ? trim((string) ($row->cliente_codigo ?? '')) : '',
                 'cliente_nombre' => $clienteId > 0 ? trim((string) ($row->cliente_nombre ?? '')) : 'Sin cliente interno',
-                'articulo_id' => (int) $row->articulo_id,
-                'sku' => trim((string) $row->sku),
-                'descripcion' => trim((string) $row->descripcion),
-                'unidades' => round(abs((float) ($row->unidades ?? 0)), 4),
-                'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
-            ];
+            ], $camposArticulo);
         }
 
-        return (object) [
+        return (object) array_merge([
             'descuento_id' => (int) $row->descuento_id,
             'descuento_codigo' => trim((string) $row->descuento_codigo),
             'descuento_nombre' => trim((string) $row->descuento_nombre),
-            'articulo_id' => (int) $row->articulo_id,
-            'sku' => trim((string) $row->sku),
-            'descripcion' => trim((string) $row->descripcion),
-            'unidades' => round(abs((float) ($row->unidades ?? 0)), 4),
-            'total_venta' => round(abs((float) ($row->total_venta ?? 0)), 2),
-        ];
+        ], $camposArticulo);
     }
 
     /**

@@ -69,6 +69,8 @@ class GastronomiaDescuentoReporteMultiExport implements WithMultipleSheets
                 $bloque,
                 $periodoTexto,
                 $this->empresaNombre,
+                $this->titulo,
+                $this->subtitulo,
             );
             $export->setTitle($nombre);
             $sheets[] = $export;

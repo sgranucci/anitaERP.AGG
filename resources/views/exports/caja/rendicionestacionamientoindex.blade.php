@@ -2,7 +2,8 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Listado rendiciones gastronomía caja</title>
+    {{-- PhpSpreadsheet usa <title> como nombre de hoja Excel (máx. 31 chars) --}}
+    <title>Rend. gastronomia caja</title>
     <style>
         table { font-family: DejaVu Sans, Arial, sans-serif; border-collapse: collapse; width: 100%; font-size: 9px; }
         th, td { border: 1px solid #666; padding: 4px 6px; text-align: left; }

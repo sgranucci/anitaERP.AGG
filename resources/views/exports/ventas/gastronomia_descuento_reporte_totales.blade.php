@@ -6,7 +6,7 @@
     <tr>
         <td></td>
         <td colspan="4" style="font-size: 18px; font-weight: bold; text-align: center;">
-            DESCUENTOS — TOTALES
+            {{ $titulo ?? 'Reporte descuentos gastronomía' }} — TOTALES
         </td>
         <td colspan="2"></td>
     </tr>
@@ -21,6 +21,9 @@
         <td></td>
         <td colspan="4" style="font-size: 12px; text-align: center;">
             {{ $empresa_nombre ?? '' }}
+            @if (! empty($subtitulo))
+                · {{ $subtitulo }}
+            @endif
         </td>
         <td colspan="2"></td>
     </tr>

@@ -14,6 +14,7 @@ use App\Support\Ventas\GastronomiaDescuentoReporteClienteSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteCodigoSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteFiltros;
 use App\Support\Ventas\GastronomiaDescuentoReporteMozoSupport;
+use App\Support\Ventas\GastronomiaDescuentoReporteTipoArticuloSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteVipSupport;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
@@ -84,10 +85,13 @@ final class GastronomiaDescuentoReporteService
 
             $articuloId = (int) $fila->articulo_id;
             if (! isset($porClave[$clave]['filas_map'][$articuloId])) {
+                $tipoId = (int) ($fila->tipoarticulo_id ?? 0);
                 $porClave[$clave]['filas_map'][$articuloId] = [
                     'articulo_id' => $articuloId,
                     'sku' => $fila->sku,
                     'descripcion' => $fila->descripcion,
+                    'tipoarticulo_id' => $tipoId > 0 ? $tipoId : null,
+                    'tipoarticulo_nombre' => trim((string) ($fila->tipoarticulo_nombre ?? '')),
                     'unidades' => 0.0,
                     'costo_unitario' => $costoUnit,
                     'costo_total' => 0.0,
@@ -135,19 +139,21 @@ final class GastronomiaDescuentoReporteService
             }
 
             $item = $porClave[$clave];
-            $filas = array_values($item['filas_map']);
-            usort($filas, fn (array $a, array $b) => strcmp((string) $a['sku'], (string) $b['sku']));
+            $agrupado = GastronomiaDescuentoReporteTipoArticuloSupport::agruparFilas(
+                array_values($item['filas_map']),
+            );
 
             $bloque = [
                 'clave' => $item['clave'],
                 'tipo_agrupacion' => $item['tipo_agrupacion'],
                 'codigo' => $item['codigo'],
                 'nombre' => $item['nombre'],
-                'filas' => $filas,
+                'filas' => $agrupado['filas'],
+                'grupos' => $agrupado['grupos'],
                 'totales' => $item['totales'],
             ];
 
-            if (($bloque['totales']['unidades'] ?? 0) <= 0.0001 || $filas === []) {
+            if (($bloque['totales']['unidades'] ?? 0) <= 0.0001 || $agrupado['filas'] === []) {
                 continue;
             }
 
@@ -615,10 +621,13 @@ final class GastronomiaDescuentoReporteService
             foreach ($bloque['filas'] ?? [] as $fila) {
                 $articuloId = (int) ($fila['articulo_id'] ?? 0);
                 if (! isset($articulos[$articuloId])) {
+                    $tipoId = (int) ($fila['tipoarticulo_id'] ?? 0);
                     $articulos[$articuloId] = [
                         'articulo_id' => $articuloId,
                         'sku' => $fila['sku'] ?? '',
                         'descripcion' => $fila['descripcion'] ?? '',
+                        'tipoarticulo_id' => $tipoId > 0 ? $tipoId : null,
+                        'tipoarticulo_nombre' => trim((string) ($fila['tipoarticulo_nombre'] ?? '')),
                         'costo_unitario' => (float) ($fila['costo_unitario'] ?? 0),
                         'precio_venta' => (float) ($fila['precio_venta'] ?? 0),
                         'celdas' => [],
@@ -634,12 +643,12 @@ final class GastronomiaDescuentoReporteService
             }
         }
 
-        $filas = array_values($articulos);
-        usort($filas, fn (array $a, array $b) => strcmp((string) $a['sku'], (string) $b['sku']));
+        $agrupado = GastronomiaDescuentoReporteTipoArticuloSupport::agruparFilas(array_values($articulos));
 
         return [
             'columnas' => $columnas,
-            'filas' => $filas,
+            'filas' => $agrupado['filas'],
+            'grupos' => $agrupado['grupos'],
             'totales_por_columna' => $totalesPorColumna,
         ];
     }

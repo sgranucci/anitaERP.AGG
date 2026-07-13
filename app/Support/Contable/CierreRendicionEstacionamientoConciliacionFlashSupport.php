@@ -192,11 +192,15 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
         $totalRendiciones = 0.0;
         $totalInvitaciones = 0.0;
         $totalFacturacion = 0.0;
+        $totalNotasCredito = 0.0;
+        $totalVentasBrutas = 0.0;
         $totalAsientos = 0.0;
         $cantidad = 0;
         $cantidadAsientos = 0;
         $cantidadPendiente = 0;
         $cantidadLegacy = 0;
+        /** @var array<int, true> $asientosVistosDia */
+        $asientosVistosDia = [];
 
         foreach ($rendiciones as $r) {
             $fecha = $r->turnoOperativo?->jornada?->fecha_jornada?->format('Y-m-d')
@@ -221,29 +225,38 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
                     'total_cobrado' => 0.0,
                     'total_invitaciones' => 0.0,
                     'total_facturacion' => 0.0,
+                    'total_notas_credito' => 0.0,
+                    'total_ventas_brutas' => 0.0,
                     'total_asientos_debe' => 0.0,
                     'cantidad_asientos' => 0,
                     'cantidad_pendiente' => 0,
                     'cantidad_legacy' => 0,
                     'rendicion_ids' => [],
                     'asientos' => [],
+                    'asientos_vistos' => [],
                 ];
             }
 
             $cobrado = round((float) ($r->totalcobrado ?? 0), 2);
             $invitacion = round((float) ($r->totalinvitacion ?? 0), 2);
             $facturacion = round((float) ($r->totalfactura ?? 0), 2);
+            $notasCredito = round((float) ($r->totalnotacredito ?? 0), 2);
             if ($facturacion <= 0.0 && ($cobrado > 0.0 || $invitacion > 0.0)) {
                 $facturacion = round($cobrado + $invitacion, 2);
             }
+            $ventasBrutas = round($facturacion + $notasCredito, 2);
             $porPv[$key]['cantidad']++;
             $porPv[$key]['total_cobrado'] = round($porPv[$key]['total_cobrado'] + $cobrado, 2);
             $porPv[$key]['total_invitaciones'] = round($porPv[$key]['total_invitaciones'] + $invitacion, 2);
             $porPv[$key]['total_facturacion'] = round($porPv[$key]['total_facturacion'] + $facturacion, 2);
+            $porPv[$key]['total_notas_credito'] = round($porPv[$key]['total_notas_credito'] + $notasCredito, 2);
+            $porPv[$key]['total_ventas_brutas'] = round($porPv[$key]['total_ventas_brutas'] + $ventasBrutas, 2);
             $porPv[$key]['rendicion_ids'][] = (int) $r->id;
             $totalRendiciones = round($totalRendiciones + $cobrado, 2);
             $totalInvitaciones = round($totalInvitaciones + $invitacion, 2);
             $totalFacturacion = round($totalFacturacion + $facturacion, 2);
+            $totalNotasCredito = round($totalNotasCredito + $notasCredito, 2);
+            $totalVentasBrutas = round($totalVentasBrutas + $ventasBrutas, 2);
             $cantidad++;
 
             $legacy = $r->esCierreContableLegacy();
@@ -261,17 +274,24 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
                     'legacy' => true,
                 ];
             } elseif ($asientoId > 0 && $r->asiento !== null) {
-                $porPv[$key]['cantidad_asientos']++;
-                $porPv[$key]['total_asientos_debe'] = round($porPv[$key]['total_asientos_debe'] + $totalDebe, 2);
-                $totalAsientos = round($totalAsientos + $totalDebe, 2);
-                $cantidadAsientos++;
-                $porPv[$key]['asientos'][] = [
-                    'asiento_id' => $asientoId,
-                    'numeroasiento' => (string) ($r->asiento->numeroasiento ?? '#'.$asientoId),
-                    'rendicion_id' => (int) $r->id,
-                    'total_debe' => $totalDebe,
-                    'legacy' => false,
-                ];
+                // Varias rendiciones del mismo PV+fecha comparten un asiento: sumar una sola vez.
+                if (! isset($asientosVistosDia[$asientoId])) {
+                    $asientosVistosDia[$asientoId] = true;
+                    $totalAsientos = round($totalAsientos + $totalDebe, 2);
+                    $cantidadAsientos++;
+                }
+                if (! isset($porPv[$key]['asientos_vistos'][$asientoId])) {
+                    $porPv[$key]['asientos_vistos'][$asientoId] = true;
+                    $porPv[$key]['cantidad_asientos']++;
+                    $porPv[$key]['total_asientos_debe'] = round($porPv[$key]['total_asientos_debe'] + $totalDebe, 2);
+                    $porPv[$key]['asientos'][] = [
+                        'asiento_id' => $asientoId,
+                        'numeroasiento' => (string) ($r->asiento->numeroasiento ?? '#'.$asientoId),
+                        'rendicion_id' => (int) $r->id,
+                        'total_debe' => $totalDebe,
+                        'legacy' => false,
+                    ];
+                }
             } else {
                 $porPv[$key]['cantidad_pendiente']++;
                 $cantidadPendiente++;
@@ -279,12 +299,18 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
         }
 
         $puntosVenta = array_values($porPv);
+        foreach ($puntosVenta as &$pvRow) {
+            unset($pvRow['asientos_vistos']);
+        }
+        unset($pvRow);
         usort($puntosVenta, static fn (array $a, array $b): int => strcmp($a['pv_codigo'], $b['pv_codigo']));
 
         $flashEstac = round((float) ($flashPorFecha[$fechaJornada] ?? 0), 2);
         $diferenciaCobradoFlash = round($totalRendiciones - $flashEstac, 2);
         $diferencia = round($totalFacturacion - $flashEstac, 2);
+        // Cobrado vs asientos suele diferir por NC: el asiento incluye piernas de NC.
         $diferenciaAsientos = round($totalRendiciones - $totalAsientos, 2);
+        $diferenciaVentaTotalAsientos = round($totalVentasBrutas - $totalAsientos, 2);
 
         $sinActividad = $cantidad === 0 && abs($flashEstac) <= $tolerancia;
         $estado = $sinActividad
@@ -313,11 +339,14 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
             'total_rendiciones_cobrado' => $totalRendiciones,
             'total_rendiciones_invitaciones' => $totalInvitaciones,
             'total_rendiciones_facturacion' => $totalFacturacion,
+            'total_rendiciones_notas_credito' => $totalNotasCredito,
+            'total_rendiciones_ventas_brutas' => $totalVentasBrutas,
             'total_asientos_debe' => $totalAsientos,
             'total_flash_estac' => $flashEstac,
             'diferencia_cobrado_flash' => $diferenciaCobradoFlash,
             'diferencia' => $diferencia,
             'diferencia_rend_asientos' => $diferenciaAsientos,
+            'diferencia_venta_total_asientos' => $diferenciaVentaTotalAsientos,
             'estado' => $estado,
         ];
     }

@@ -53,6 +53,7 @@ final class GastronomiaDescuentoReportePdfSupport
             $particiones[] = [
                 'columnas' => $colsChunk,
                 'filas' => $filas,
+                'grupos' => $vistaColumnas['grupos'] ?? null,
                 'totales_por_columna' => $totalesChunk,
                 'indice' => $idx + 1,
                 'total_partes' => $totalPartes,

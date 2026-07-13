@@ -25,6 +25,14 @@
 @php
     use App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport;
     use App\Support\Contable\CierreRendicionEstacionamientoListadoFiltros;
+    $vistaPorTurno = ! empty($vistaPorTurno);
+    $vistaActual = $vistaPorTurno
+        ? CierreRendicionEstacionamientoListadoFiltros::VISTA_POR_TURNO
+        : CierreRendicionEstacionamientoListadoFiltros::VISTA_AGRUPADO;
+    $qsBase = $filtrosQuery ?? [];
+    $qsAgrupado = array_merge($qsBase, ['vista' => CierreRendicionEstacionamientoListadoFiltros::VISTA_AGRUPADO]);
+    unset($qsAgrupado['vista']); // default: no enviar vista
+    $qsPorTurno = array_merge($qsBase, ['vista' => CierreRendicionEstacionamientoListadoFiltros::VISTA_POR_TURNO]);
 @endphp
 
 @section('contenido')
@@ -70,11 +78,57 @@
                     'ruta' => 'listar_cierre_rendicion_estacionamiento_contable',
                     'queryparams' => $filtrosQuery ?? [],
                 ])
-                <p class="small text-muted px-3 pt-2 mb-0">
-                    Un asiento contable por <strong>fecha jornada + punto de venta</strong>.
-                    Use <i class="fa fa-chevron-down"></i> para ver cada rendici&oacute;n del d&iacute;a.
-                </p>
+                <div class="d-flex flex-wrap align-items-center justify-content-between px-3 pt-2">
+                    <p class="small text-muted mb-1">
+                        @if ($vistaPorTurno)
+                            Vista <strong>por turno</strong>: una fila por rendici&oacute;n/turno.
+                            El cierre contable sigue siendo por <strong>fecha jornada + punto de venta</strong>.
+                            <strong>Venta neta</strong> = facturas − NC;
+                            <strong>Venta total</strong> = neta + NC (m&aacute;s comparable al asiento).
+                        @else
+                            Vista <strong>unificada</strong>: un asiento contable por <strong>fecha jornada + punto de venta</strong>.
+                            Use <i class="fa fa-chevron-down"></i> para ver cada rendici&oacute;n del d&iacute;a.
+                            <strong>Venta neta</strong> = facturas − NC;
+                            <strong>Venta total</strong> = neta + NC (m&aacute;s comparable al asiento).
+                        @endif
+                    </p>
+                    <div class="btn-group btn-group-sm mb-1" role="group" aria-label="Vista listado">
+                        <a href="{{ route('cierre_rendicion_estacionamiento_contable', $qsAgrupado) }}"
+                           class="btn btn-outline-secondary {{ $vistaPorTurno ? '' : 'active' }}">
+                            Unificado (PV + fecha)
+                        </a>
+                        <a href="{{ route('cierre_rendicion_estacionamiento_contable', $qsPorTurno) }}"
+                           class="btn btn-outline-secondary {{ $vistaPorTurno ? 'active' : '' }}">
+                            Por turno
+                        </a>
+                    </div>
+                </div>
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
+                    @if ($vistaPorTurno)
+                    <thead style="background:#85C1E9;color:#17202A;">
+                        <tr>
+                            <th>Fecha jornada</th>
+                            <th>Empresa</th>
+                            <th>Punto venta</th>
+                            <th>Turno</th>
+                            <th>Ticket</th>
+                            <th class="text-right" title="Venta neta (facturas − NC)">Venta neta</th>
+                            <th class="text-right" title="Notas de crédito (absoluto)">NC</th>
+                            <th class="text-right" title="Venta bruta = neta + NC (comparable al asiento)">Venta total</th>
+                            <th class="text-right">Invit.</th>
+                            <th class="text-right">Cobrado</th>
+                            <th>Estado</th>
+                            <th>Asiento</th>
+                            <th class="width120" data-orderable="false">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @include('contable.cierre_rendicion_estacionamiento.partials.tabla_por_turno', [
+                            'coleccion' => $coleccion,
+                            'retornoListadoQuery' => $retornoListadoQuery,
+                        ])
+                    </tbody>
+                    @else
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width30"></th>
@@ -82,7 +136,9 @@
                             <th>Empresa</th>
                             <th>Punto venta</th>
                             <th class="text-center">Rend.</th>
-                            <th class="text-right" title="Total ventas del grupo">Ventas</th>
+                            <th class="text-right" title="Venta neta del grupo (facturas − NC)">Venta neta</th>
+                            <th class="text-right" title="Notas de crédito (absoluto)">NC</th>
+                            <th class="text-right" title="Venta bruta = neta + NC (comparable al asiento)">Venta total</th>
                             <th class="text-right" title="Total invitaciones del grupo">Invit.</th>
                             <th class="text-right">Cobrado</th>
                             <th>Estado cierre</th>
@@ -122,6 +178,14 @@
                                 @endif
                             </td>
                             <td class="text-right text-nowrap">{{ number_format((float) ($grupo['total_ventas'] ?? 0), 2, ',', '.') }}</td>
+                            <td class="text-right text-nowrap">
+                                @if ((float) ($grupo['total_notas_credito'] ?? 0) > 0.009)
+                                    {{ number_format((float) $grupo['total_notas_credito'], 2, ',', '.') }}
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td class="text-right text-nowrap font-weight-bold">{{ number_format((float) ($grupo['total_ventas_brutas'] ?? 0), 2, ',', '.') }}</td>
                             <td class="text-right text-nowrap">
                                 @if ((float) ($grupo['total_invitaciones'] ?? 0) > 0.009)
                                     {{ number_format((float) $grupo['total_invitaciones'], 2, ',', '.') }}
@@ -174,13 +238,21 @@
                         ])
                         @empty
                         <tr>
-                            <td colspan="11" class="text-center text-muted py-4">Sin rendiciones de turno presentadas en caja.</td>
+                            <td colspan="13" class="text-center text-muted py-4">Sin rendiciones de turno presentadas en caja.</td>
                         </tr>
                         @endforelse
                     </tbody>
+                    @endif
                 </table>
             </div>
-            @if ($grupos instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator)
+            @if ($vistaPorTurno && $coleccion instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator)
+            <div class="card-footer clearfix">
+                <span class="text-muted small">
+                    {{ $coleccion->firstItem() }}–{{ $coleccion->lastItem() }} de {{ $coleccion->total() }} rendici&oacute;n(es)
+                </span>
+                {{ $coleccion->appends($filtrosQuery ?? [])->links() }}
+            </div>
+            @elseif (! $vistaPorTurno && $grupos instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator)
             <div class="card-footer clearfix">
                 <span class="text-muted small">
                     {{ $grupos->firstItem() }}–{{ $grupos->lastItem() }} de {{ $grupos->total() }} grupo(s)

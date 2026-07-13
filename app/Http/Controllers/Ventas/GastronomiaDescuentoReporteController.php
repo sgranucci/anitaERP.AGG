@@ -21,6 +21,7 @@ use App\Support\Ventas\GastronomiaDescuentoReporteCodigoSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteCostoSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteFiltros;
 use App\Support\Ventas\GastronomiaDescuentoReporteMozoSupport;
+use App\Support\Ventas\GastronomiaDescuentoReporteTipoArticuloSupport;
 use App\Support\Ventas\GastronomiaDescuentoReporteVipSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -105,7 +106,11 @@ class GastronomiaDescuentoReporteController extends Controller
                 $page = max(1, min($maxPage, (int) $request->input('page', 1)));
                 $filasColumnasPag = $this->reporteService->paginarItems($filasAll, $perPage, $page);
                 $vistaColumnasPag = $resultado['vista_columnas'];
-                $vistaColumnasPag['filas'] = $filasColumnasPag->items();
+                $agrupadoPagina = GastronomiaDescuentoReporteTipoArticuloSupport::agruparFilas(
+                    array_values($filasColumnasPag->items()),
+                );
+                $vistaColumnasPag['filas'] = $agrupadoPagina['filas'];
+                $vistaColumnasPag['grupos'] = $agrupadoPagina['grupos'];
             } else {
                 $bloquesAll = $resultado['bloques'] ?? [];
                 $totalBloques = count($bloquesAll);
@@ -118,7 +123,11 @@ class GastronomiaDescuentoReporteController extends Controller
                     $pageFilas = max(1, min($maxPageFilas, (int) $request->input('page_filas', 1)));
                     $filasBloquePag = $this->reporteService->paginarItems($filasAll, $perPageFilas, $pageFilas, 'page_filas');
                     $bloquePaginado = $bloque;
-                    $bloquePaginado['filas'] = $filasBloquePag->items();
+                    $agrupadoPagina = GastronomiaDescuentoReporteTipoArticuloSupport::agruparFilas(
+                        array_values($filasBloquePag->items()),
+                    );
+                    $bloquePaginado['filas'] = $agrupadoPagina['filas'];
+                    $bloquePaginado['grupos'] = $agrupadoPagina['grupos'];
                     $bloquesVista = [$bloquePaginado];
                 } elseif ($totalBloques > 1) {
                     $perPage = max(1, min(20, (int) $request->input('per_page', self::PER_PAGE_BLOQUES)));

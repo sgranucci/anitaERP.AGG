@@ -51,6 +51,7 @@ class CierreRendicionEstacionamientoService
                 'asiento:id,numeroasiento,fecha',
                 'cierreContableUsuario:id,nombre',
                 'creousuario:id,nombre',
+                'movimientos.cuentacaja:id,codigo,nombre',
             ])
             ->orderByDesc('fecharendicion')
             ->orderByDesc('id');
