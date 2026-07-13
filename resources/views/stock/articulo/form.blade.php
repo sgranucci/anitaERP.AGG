@@ -35,57 +35,6 @@
                     </select>
     				</div>
               	</div>
-                @if (config('app.empresa') == 'INTERFORMING')
-                    <div class="form-group row">
-                        <label for="codigo_interno_sifab" class="col-lg-4 col-form-label">C&oacute;digo interno SIFAB</label>
-                        <div class="col-lg-5">
-                            <input type="number" name="codigo_interno_sifab" id="codigo_interno_sifab" class="form-control"
-                                value="{{ old('codigo_interno_sifab', $producto->codigo_interno_sifab ?? '') }}"/>
-                        </div>
-                    </div>
-                    <div class="form-group row">
-                        <label for="subrubro" class="col-lg-4 col-form-label">Subrubro (SIFAB)</label>
-                        <div class="col-lg-5">
-                            <input type="text" name="subrubro" id="subrubro" class="form-control" maxlength="50"
-                                value="{{ old('subrubro', $producto->subrubro ?? '') }}"/>
-                        </div>
-                    </div>
-                    <div class="form-group row">
-                        <label for="lineamaterial" class="col-lg-4 col-form-label">L&iacute;nea material (SIFAB)</label>
-                        <div class="col-lg-5">
-                            <input type="text" name="lineamaterial" id="lineamaterial" class="form-control" maxlength="50"
-                                value="{{ old('lineamaterial', $producto->lineamaterial ?? '') }}"/>
-                        </div>
-                    </div>
-                    <div class="form-group row">
-                        <label for="grupoproducto" class="col-lg-4 col-form-label">Grupo producto (SIFAB)</label>
-                        <div class="col-lg-5">
-                            <input type="text" name="grupoproducto" id="grupoproducto" class="form-control" maxlength="50"
-                                value="{{ old('grupoproducto', $producto->grupoproducto ?? '') }}"/>
-                        </div>
-                    </div>
-                    <div class="form-group row">
-                        <label for="rubro_sifab" class="col-lg-4 col-form-label">Rubro SIFAB</label>
-                        <div class="col-lg-5">
-                            <input type="text" name="rubro_sifab" id="rubro_sifab" class="form-control" maxlength="20"
-                                value="{{ old('rubro_sifab', $producto->rubro_sifab ?? '') }}"/>
-                        </div>
-                    </div>
-                    <div class="form-group row">
-                        <label for="clasematerial" class="col-lg-4 col-form-label">Clase material (SIFAB)</label>
-                        <div class="col-lg-5">
-                            <input type="text" name="clasematerial" id="clasematerial" class="form-control" maxlength="20"
-                                value="{{ old('clasematerial', $producto->clasematerial ?? '') }}"/>
-                        </div>
-                    </div>
-                    <div class="form-group row">
-                        <label for="gestioncompra" class="col-lg-4 col-form-label">Gesti&oacute;n compra (SIFAB)</label>
-                        <div class="col-lg-5">
-                            <input type="text" name="gestioncompra" id="gestioncompra" class="form-control" maxlength="20"
-                                value="{{ old('gestioncompra', $producto->gestioncompra ?? '') }}"/>
-                        </div>
-                    </div>
-                @endif
 				<div class="form-group row">
     				<label for="categoria_id" class="col-lg-4 col-form-label requerido">Categor&iacute;a</label>
 					<div class="col-lg-8">
@@ -261,6 +210,63 @@
                 </div>                     
             </div>
         </div>
+        @if (config('app.empresa') == 'INTERFORMING')
+        <div class="row">
+            <div class="col-sm-6">
+                <div class="form-group row">
+                    <label for="codigo_interno_sifab" class="col-lg-4 col-form-label">C&oacute;digo interno SIFAB</label>
+                    <div class="col-lg-5">
+                        <input type="number" name="codigo_interno_sifab" id="codigo_interno_sifab" class="form-control"
+                            value="{{ old('codigo_interno_sifab', $producto->codigo_interno_sifab ?? '') }}"/>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label for="rubro_sifab" class="col-lg-4 col-form-label">Rubro SIFAB</label>
+                    <div class="col-lg-5">
+                        <input type="text" name="rubro_sifab" id="rubro_sifab" class="form-control" maxlength="20"
+                            value="{{ old('rubro_sifab', $producto->rubro_sifab ?? '') }}"/>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label for="subrubro" class="col-lg-4 col-form-label">Subrubro (SIFAB)</label>
+                    <div class="col-lg-5">
+                        <input type="text" name="subrubro" id="subrubro" class="form-control" maxlength="50"
+                            value="{{ old('subrubro', $producto->subrubro ?? '') }}"/>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label for="lineamaterial" class="col-lg-4 col-form-label">L&iacute;nea material (SIFAB)</label>
+                    <div class="col-lg-5">
+                        <input type="text" name="lineamaterial" id="lineamaterial" class="form-control" maxlength="50"
+                            value="{{ old('lineamaterial', $producto->lineamaterial ?? '') }}"/>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6">
+                <div class="form-group row">
+                    <label for="grupoproducto" class="col-lg-4 col-form-label">Grupo producto (SIFAB)</label>
+                    <div class="col-lg-5">
+                        <input type="text" name="grupoproducto" id="grupoproducto" class="form-control" maxlength="50"
+                            value="{{ old('grupoproducto', $producto->grupoproducto ?? '') }}"/>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label for="clasematerial" class="col-lg-4 col-form-label">Clase material (SIFAB)</label>
+                    <div class="col-lg-5">
+                        <input type="text" name="clasematerial" id="clasematerial" class="form-control" maxlength="20"
+                            value="{{ old('clasematerial', $producto->clasematerial ?? '') }}"/>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label for="gestioncompra" class="col-lg-4 col-form-label">Gesti&oacute;n compra (SIFAB)</label>
+                    <div class="col-lg-5">
+                        <input type="text" name="gestioncompra" id="gestioncompra" class="form-control" maxlength="20"
+                            value="{{ old('gestioncompra', $producto->gestioncompra ?? '') }}"/>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endif
         <div class="form-group row">
             <label for="detalle" class="col-lg-2 col-form-label">Detalle</label>
             <div class="col-lg-8">

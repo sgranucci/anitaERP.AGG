@@ -10,7 +10,16 @@ $base = [
 if (config('app.empresa') == 'EL BIERZO') {
     return array_merge($base, [
         'impresora_default' => 'BIE_PS_229',
+        'variante' => 'bierzo',
     ]);
 }
 
-return $base;
+if (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
+    return array_merge($base, [
+        'variante' => 'interforming',
+    ]);
+}
+
+return array_merge($base, [
+    'variante' => 'default',
+]);

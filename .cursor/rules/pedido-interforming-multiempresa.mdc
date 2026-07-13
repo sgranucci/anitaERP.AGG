@@ -1,0 +1,57 @@
+# Pedidos INTERFORMING vs Bierzo/AGG
+
+Un solo repositorio; el ABM de pedidos **no** se bifurca con `@if (empresa)` dentro de `ventas/pedido/*` de Bierzo.
+
+## Separación obligatoria
+
+| Capa | Bierzo / AGG | INTERFORMING |
+|---|---|---|
+| Vistas | `ventas.pedido.*` | `ventas.pedido.interforming.*` |
+| JS | `ventas/pedido/*.js` | `ventas/pedido/interforming/*.js` |
+| Controller | `PedidoController` | `PedidoInterformingController` |
+| Service | `PedidoService` | `PedidoInterformingService` |
+| Modelos | `Pedido`, `Pedido_Articulo` | `PedidoInterforming`, `PedidoArticuloInterforming` (misma tabla, fillable IF) |
+| Gate | — | `PedidoInterformingSupport` |
+| Estados | legacy ERP | `PedidoEstadosInterforming` (pendmae/pendmov.def) |
+
+## Schema
+
+- Columnas/tablas nuevas de Interforming (`orden_compra`, fason, ubicación, etc.): migración con **early return** si `config('app.empresa') !== 'INTERFORMING'`.
+- En Bierzo/AGG esas columnas **no** se crean; el código Bierzo no las referencia.
+- Reutilizar `pedido` / `pedido_articulo` / `motivocierrepedido`; no inventar tablas cabecera/detalle paralelas salvo excepción documentada.
+- Maestro `ubicacion`: solo INTERFORMING.
+
+## Rutas
+
+En `routes/web.php`, el CRUD de `ventas/pedido` apunta al controller según empresa. Reportes kilos/OT de Bierzo siguen en `PedidoController` aunque no apliquen a IF.
+
+## Reutilizar (compartido)
+
+Cliente/consulta modal, transporte, vendedor, zonavta, precio (`PrecioService`), impuestos, depósito modal, `motivocierrepedido`, logos/export genéricos.
+
+## Árbol de aprobación (PE)
+
+Tipo nuevo en `ArbolaprobacionTrait::$enumTipoArbol`: **PE / Pedidos**.
+
+1. Configurar en Configuración → Árbol de aprobación un árbol tipo **Pedidos**.
+2. Niveles con **centro de costo id = 0** (el pedido IF dispara con `centrocosto_id = 0`).
+3. Al guardar pedido se llama `PedidoInterformingArbolIntegracionService::dispararAlGuardar`.
+4. Al completar el árbol: ítems → estado `A` (aprobado). Al rechazar: ítems `R` y cabecera suspendida.
+
+## Ubicaciones (Stock)
+
+ABM `stock/ubicacion` + sync Anita (`stock:sincronizar-ubicacion-anita` o botón Sync). Modelo `App\Models\Stock\Ubicacion`.
+
+## Prohibido
+
+- Campos fason / O.compra / UMD alternativa / ubicación en blades Bierzo.
+- Ampliar `$fillable` de `Pedido` / `Pedido_Articulo` Bierzo con columnas IF.
+- Migración IF sin gate por empresa.
+
+## Comprobación rápida
+
+```bash
+rg "PedidoInterformingSupport|pedido.interforming" app resources routes
+rg "porc_fason|orden_compra|en_stock" resources/views/ventas/pedido --glob '!**/interforming/**'
+# Lo anterior debe quedar vacío fuera de interforming/
+```

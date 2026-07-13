@@ -8,6 +8,8 @@
 <body>
     @if ($tipoArbol == 'Ordenes de venta')
         <p>Hola! Tiene una Orden de venta para aprobación</p>
+    @elseif ($tipoArbol == 'Pedidos')
+        <p>Hola! Tiene un Pedido para aprobación</p>
     @elseif ($tipoArbol == 'Ordenes de compra')
         <p>Hola! Tiene una Orden de compra para aprobación</p>
         @php $mx = $mailExtras ?? []; @endphp
@@ -27,7 +29,27 @@
     @endif
 
     <p>Estos son los datos:</p>
-    @if ($tipoArbol == 'Ordenes de venta')
+    @if ($tipoArbol == 'Pedidos')
+        <ul>
+            <li>Código: {{ $datosComprobante->codigo ?? $datosComprobante->id }}</li>
+            <li>Fecha: {{ date('d/m/Y', strtotime($datosComprobante->fecha ?? '')) }}</li>
+            <li>Cliente: {{ $datosComprobante->clientes->nombre ?? '' }}</li>
+            <li>O. Compra: {{ $datosComprobante->orden_compra ?? '' }}</li>
+            @php $mx = $mailExtras ?? []; @endphp
+            @if (!empty($mx['monto_items']))
+                <li>Monto: {{ $mx['moneda_abrev_items'] ?? '' }} {{ number_format($mx['monto_items'], 2, ',', '.') }}</li>
+            @endif
+            <br><br>
+            <label for="Autorizar">Autorizar:</label>
+            <div><p><a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a></p></div>
+            <br>
+            <label for="Autorizar">Rechazar:</label>
+            <div><p><a href="{{ $linkRechazo }}">{{ $linkRechazo }}</a></p></div>
+        </ul>
+        <br>
+        <label for="Visualizar">Visualizar:</label>
+        <div><p><a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a></p></div>
+    @elseif ($tipoArbol == 'Ordenes de venta')
         <ul>
             <li>Tratamiento: {{ $datosComprobante->tratamiento }} </li>
             <li>Empresa: {{ $datosComprobante->empresas->nombre ?? '' }} </li>

@@ -135,6 +135,14 @@ class ArbolaprobacionService
                     fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
                     fn (...$args) => $this->buscaProximoNivel(...$args),
                 );
+            case 'PE':
+                return app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)->procesaArbol(
+                    (int) $comprobante_id,
+                    $operacion,
+                    fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
+                    fn (...$args) => $this->buscaProximoNivel(...$args),
+                    fn (...$args) => $this->enviaCorreo(...$args),
+                );
             case 'OC':
                 return $this->procesaArbolOrdencompra($arbolaprobacion, $tipoarbol, $comprobante_id, $arrayReplace, $opciones);
             default:
@@ -556,6 +564,10 @@ class ArbolaprobacionService
                 $arbolaprobacion_movimiento = app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)
                     ->findPorRequisicionSala((int) $comprobante_id);
                 break;
+            case 'Pedidos':
+                $arbolaprobacion_movimiento = app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)
+                    ->findPorPedido((int) $comprobante_id);
+                break;
             case 'Ordenes de compra':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 $arbolaprobacion_movimiento = $this->filtrarMovimientosOrdencompraPorCircuito($arbolaprobacion_movimiento, $circuitoOc, $ocTriggerId);
@@ -766,6 +778,8 @@ class ArbolaprobacionService
                 $q->where('requisicion_sala_id', $movimientoPre->requisicion_sala_id);
             } elseif ($movimientoPre->ordenventa_id) {
                 $q->where('ordenventa_id', $movimientoPre->ordenventa_id);
+            } elseif ($movimientoPre->pedido_id) {
+                $q->where('pedido_id', $movimientoPre->pedido_id);
             } elseif ($movimientoPre->ordencompra_id) {
                 $q->where('ordencompra_id', $movimientoPre->ordencompra_id);
             }
@@ -1426,6 +1440,8 @@ class ArbolaprobacionService
                 $q->where('requisicion_sala_id', $movimientoPre->requisicion_sala_id);
             } elseif ($movimientoPre->ordenventa_id) {
                 $q->where('ordenventa_id', $movimientoPre->ordenventa_id);
+            } elseif ($movimientoPre->pedido_id) {
+                $q->where('pedido_id', $movimientoPre->pedido_id);
             } elseif ($movimientoPre->ordencompra_id) {
                 $q->where('ordencompra_id', $movimientoPre->ordencompra_id);
             }
@@ -1469,6 +1485,10 @@ class ArbolaprobacionService
                 case 'RS':
                     app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)
                         ->rechazaPorRechazo($comprobante_id, $usuario_id, $observacion);
+                    break;
+                case 'PE':
+                    app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)
+                        ->rechazaPorRechazo((int) $comprobante_id, $usuario_id, $observacion);
                     break;
                 case 'OC':
                     $estadoOc = OrdencompraEstados::SUSPENDIDA;

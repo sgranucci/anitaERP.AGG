@@ -401,6 +401,17 @@ Route::put('stock/centroemisor/{id}', 'Stock\CentroemisorController@actualizar')
 Route::delete('stock/centroemisor/{id}', 'Stock\CentroemisorController@eliminar')->name('eliminar_centroemisor');
 
 /*
+ * Ubicaciones de stock (INTERFORMING / Anita ubicacion)
+ */
+Route::get('stock/ubicacion', 'Stock\UbicacionController@index')->name('ubicacion');
+Route::post('stock/ubicacion/sincronizar', 'Stock\UbicacionController@sincronizar')->name('sincronizar_ubicacion');
+Route::get('stock/ubicacion/crear', 'Stock\UbicacionController@crear')->name('crear_ubicacion');
+Route::post('stock/ubicacion', 'Stock\UbicacionController@guardar')->name('guardar_ubicacion');
+Route::get('stock/ubicacion/{id}/editar', 'Stock\UbicacionController@editar')->name('editar_ubicacion');
+Route::put('stock/ubicacion/{id}', 'Stock\UbicacionController@actualizar')->name('actualizar_ubicacion');
+Route::delete('stock/ubicacion/{id}', 'Stock\UbicacionController@eliminar')->name('eliminar_ubicacion');
+
+/*
  * Depositos
  */
 
@@ -1775,24 +1786,36 @@ Route::get('ventas/cliente/consultadeuda/{cliente_id}/{empresa_id}/{venta_id?}',
 Route::get('ventas/cliente/editacuentacorriente/{id}', 'Ventas\ClienteController@editarCuentaCorriente')->name('editar_cuentacorriente_cliente');
 Route::get('ventas/cliente/leercuentacorrienteaplicacion/{id}', 'Ventas\ClienteController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion');
 /*
- * Pedidos
+ * Pedidos — CRUD: INTERFORMING usa PedidoInterformingController (vistas pedido.interforming).
+ * Bierzo/AGG mantienen PedidoController. Reportes kilos/OT siguen en PedidoController.
  */
+if (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
+    Route::get('ventas/pedido', 'Ventas\PedidoInterformingController@index')->name('pedido');
+    Route::get('ventas/pedido/crear', 'Ventas\PedidoInterformingController@crear')->name('crear_pedido');
+    Route::post('ventas/pedido', 'Ventas\PedidoInterformingController@guardar')->name('guardar_pedido');
+    Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoInterformingController@editar')->name('editar_pedido')->middleware('modo.consulta');
+    Route::put('ventas/pedido/{id}', 'Ventas\PedidoInterformingController@actualizar')->name('actualizar_pedido')->middleware('modo.consulta');
+    Route::delete('ventas/pedido/{id}', 'Ventas\PedidoInterformingController@eliminar')->name('eliminar_pedido');
+    Route::post('ventas/pedido/limpiafiltro', 'Ventas\PedidoInterformingController@limpiafiltro')->name('pedido.limpiafiltro');
+    Route::get('ventas/listarpedidopdf/{id}/{cliente_id?}', 'Ventas\PedidoInterformingController@listarPedidoPdf')->name('listar_pedido_pdf');
+    Route::get('ventas/listapedido/{formato?}/{busqueda?}', 'Ventas\PedidoInterformingController@listar')->name('lista_pedido');
+} else {
+    Route::get('ventas/pedido', 'Ventas\PedidoController@indexp')->name('pedido');
+    Route::get('ventas/pedido/crear', 'Ventas\PedidoController@crear')->name('crear_pedido');
+    Route::post('ventas/pedido', 'Ventas\PedidoController@guardar')->name('guardar_pedido');
+    Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoController@editar')->name('editar_pedido')->middleware('modo.consulta');
+    Route::put('ventas/pedido/{id}', 'Ventas\PedidoController@actualizar')->name('actualizar_pedido')->middleware('modo.consulta');
+    Route::delete('ventas/pedido/{id}', 'Ventas\PedidoController@eliminar')->name('eliminar_pedido');
+    Route::post('ventas/pedido/limpiafiltro', 'Ventas\PedidoController@limpiafiltro')->name('pedido.limpiafiltro');
+    Route::get('ventas/listarpedidopdf/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedidoPdf')->name('listar_pedido_pdf');
+    Route::get('ventas/listapedido/{formato?}/{busqueda?}', 'Ventas\PedidoController@listar')->name('lista_pedido');
+}
 
-Route::get('ventas/pedido', 'Ventas\PedidoController@indexp')->name('pedido');
-// Route::get('ventas/pedidop', 'Ventas\PedidoController@indexp')->name('pedidop');
-Route::get('ventas/pedido/crear', 'Ventas\PedidoController@crear')->name('crear_pedido');
-Route::post('ventas/pedido', 'Ventas\PedidoController@guardar')->name('guardar_pedido');
-Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoController@editar')->name('editar_pedido')->middleware('modo.consulta');
-Route::put('ventas/pedido/{id}', 'Ventas\PedidoController@actualizar')->name('actualizar_pedido')->middleware('modo.consulta');
-Route::delete('ventas/pedido/{id}', 'Ventas\PedidoController@eliminar')->name('eliminar_pedido');
 Route::get('ventas/listarpedido/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedido')->name('listar_pedido');
-Route::get('ventas/listarpedidopdf/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedidoPdf')->name('listar_pedido_pdf');
 Route::get('ventas/listarprefactura/{id}/{itemid}/{descuentolinea?}', 'Ventas\PedidoController@listarPreFactura')->name('listar_prefactura');
 Route::get('ventas/anularitempedido/{id}/{codigoot}/{motivocierrepedido_id}/{cliente_id?}', 'Ventas\PedidoController@anularItemPedido')->name('anular_item_pedido');
 Route::get('ventas/pedido/cerrar', 'Ventas\PedidoController@cerrarPedido')->name('cerrar_pedido');
 Route::post('ventas/pedido/ejecutacierre', 'Ventas\PedidoController@ejecutaCierre')->name('ejecuta_cierre_pedido');
-Route::post('ventas/pedido/limpiafiltro', 'Ventas\PedidoController@limpiafiltro')->name('pedido.limpiafiltro');
-Route::get('ventas/listapedido/{formato?}/{busqueda?}', 'Ventas\PedidoController@listar')->name('lista_pedido');
 Route::get('ventas/estadoitempedido/{pedido_articulo_id?}', 'Ventas\PedidoController@estadoItemPedido')->name('estado_item_pedido');
 Route::post('ventas/calculafacturaporpedido', 'Ventas\FacturacionController@calculaFacturaPorPedido')->name('calcula_factura_por_pedido');
 Route::post('ventas/facturarporpedido', 'Ventas\FacturacionController@facturarPorPedido')->name('facturar_por_pedido');

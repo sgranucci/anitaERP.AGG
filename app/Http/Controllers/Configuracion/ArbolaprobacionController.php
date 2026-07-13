@@ -249,6 +249,10 @@ class ArbolaprobacionController extends Controller
                 $arbolaprobacion_movimiento = app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)
                     ->findPorRequisicionSala((int) $comprobante_id);
                 break;
+            case 'PE':
+                $arbolaprobacion_movimiento = app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)
+                    ->findPorPedido((int) $comprobante_id);
+                break;
             case 'OC':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 break;
@@ -531,6 +535,10 @@ class ArbolaprobacionController extends Controller
             case 'RS':
                 $arbolaprobacion_movimiento = app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)
                     ->findPorRequisicionSala((int) $comprobante_id);
+                break;
+            case 'PE':
+                $arbolaprobacion_movimiento = app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)
+                    ->findPorPedido((int) $comprobante_id);
                 break;
             case 'OC':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
