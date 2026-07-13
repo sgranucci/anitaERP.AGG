@@ -11,9 +11,11 @@
             <div class="card-header">
                 <h3 class="card-title">SICORE (formato versión 8)</h3>
                 <div class="card-tools">
-                    <a href="{{ route('sicore_config') }}" class="btn btn-outline-secondary btn-sm" title="Configuración">
-                        <i class="fa fa-cogs"></i> Configuración
-                    </a>
+                    @if (can('listar-sicore-config', false))
+                        <a href="{{ route('sicore_config') }}" class="btn btn-outline-secondary btn-sm" title="Configuración">
+                            <i class="fa fa-cogs"></i> Configuración
+                        </a>
+                    @endif
                     <a href="{{ route('sicore') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>

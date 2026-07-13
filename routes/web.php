@@ -1416,7 +1416,7 @@ Route::get('ventas/tipotransaccion', 'Ventas\TipotransaccionController@index')->
 Route::get('ventas/tipotransaccion/arca-tipos-cbte', 'Ventas\TipotransaccionController@tiposCbteArca')->name('tipotransaccion_arca_tipos_cbte');
 Route::get('ventas/tipotransaccion/crear', 'Ventas\TipotransaccionController@crear')->name('crear_tipotransaccion');
 Route::post('ventas/tipotransaccion', 'Ventas\TipotransaccionController@guardar')->name('guardar_tipotransaccion');
-Route::get('ventas/tipotransaccion/{id}/editar', 'Ventas\TipotransaccionController@editar')->name('editar_tipotransaccion');
+Route::get('ventas/tipotransaccion/{id}/editar', 'Ventas\TipotransaccionController@editar')->name('editar_tipotransaccion')->middleware('modo.consulta');
 Route::put('ventas/tipotransaccion/{id}', 'Ventas\TipotransaccionController@actualizar')->name('actualizar_tipotransaccion');
 Route::delete('ventas/tipotransaccion/{id}', 'Ventas\TipotransaccionController@eliminar')->name('eliminar_tipotransaccion');
 
@@ -1723,6 +1723,8 @@ Route::get('ventas/gastronomia/descuento-reporte/leer-clientevip/{codigo}', 'Ven
 Route::get('ventas/listar-gastronomia-descuento-reporte/{formato}', 'Ventas\GastronomiaDescuentoReporteController@exportar')->name('listar_gastronomia_descuento_reporte');
 Route::get('ventas/gastronomia/ventas-articulos-reporte', 'Ventas\GastronomiaVentasArticulosReporteController@index')->name('gastronomia_ventas_articulos_reporte')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-ventas-articulos-reporte/{formato}', 'Ventas\GastronomiaVentasArticulosReporteController@exportar')->name('listar_gastronomia_ventas_articulos_reporte');
+Route::get('ventas/gastronomia/reportes', 'Ventas\GastronomiaAnaliticoReporteController@index')->name('gastronomia_analitico_reporte')->middleware('modo.consulta');
+Route::get('ventas/listar-gastronomia-analitico-reporte/{formato}', 'Ventas\GastronomiaAnaliticoReporteController@exportar')->name('listar_gastronomia_analitico_reporte');
 Route::get('ventas/lista-gastronomia-articulos-vendidos/{formato}', 'Ventas\GastronomiaArticulosVendidosController@exportar')->name('listar_gastronomia_articulos_vendidos');
 Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/facturas', 'Ventas\GastronomiaArticulosVendidosController@apiFacturas')->name('gastronomia_articulos_vendidos_api_facturas');
 Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/movimientos', 'Ventas\GastronomiaArticulosVendidosController@apiMovimientos')->name('gastronomia_articulos_vendidos_api_movimientos');
@@ -1740,7 +1742,7 @@ Route::get('ventas/puntoventa/arca-puntos-venta', 'Ventas\PuntoventaController@p
 Route::post('ventas/puntoventa/sincronizar-anita', 'Ventas\PuntoventaController@sincronizarDesdeAnita')->name('sincronizar_puntoventa_anita');
 Route::get('ventas/puntoventa/crear', 'Ventas\PuntoventaController@crear')->name('crear_puntoventa');
 Route::post('ventas/puntoventa', 'Ventas\PuntoventaController@guardar')->name('guardar_puntoventa');
-Route::get('ventas/puntoventa/{id}/editar', 'Ventas\PuntoventaController@editar')->name('editar_puntoventa');
+Route::get('ventas/puntoventa/{id}/editar', 'Ventas\PuntoventaController@editar')->name('editar_puntoventa')->middleware('modo.consulta');
 Route::put('ventas/puntoventa/{id}', 'Ventas\PuntoventaController@actualizar')->name('actualizar_puntoventa');
 Route::delete('ventas/puntoventa/{id}', 'Ventas\PuntoventaController@eliminar')->name('eliminar_puntoventa');
 

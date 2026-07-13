@@ -43,7 +43,7 @@ return new class extends Migration
     ];
 
     /** @var list<string> */
-    private const ROLES = ['administrador', 'Enc-contaduría', 'Enc-impuestos'];
+    private const ROLES = ['administrador', 'Enc-contaduría', 'Enc-impuestos', 'Op-impuestos'];
 
     public function up(): void
     {

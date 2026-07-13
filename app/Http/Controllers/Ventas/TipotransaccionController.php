@@ -56,13 +56,26 @@ class TipotransaccionController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        can('editar-tipos-transacciones');
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            if (! can('listar-tipos-transacciones', false) && ! can('editar-tipos-transacciones', false)) {
+                abort(403, 'No tiene permiso para consultar el tipo de comprobante.');
+            }
+        } else {
+            can('editar-tipos-transacciones');
+        }
+
         $data = $this->repository->findOrFail($id);
+        $puedeActualizar = can('actualizar-tipos-transacciones', false);
 
         return view('ventas.tipotransaccion.editar', array_merge(
-            ['data' => $data],
+            [
+                'data' => $data,
+                'solo_consulta' => $soloConsulta,
+                'puede_actualizar' => $puedeActualizar,
+            ],
             $this->datosFormulario($data)
         ));
     }

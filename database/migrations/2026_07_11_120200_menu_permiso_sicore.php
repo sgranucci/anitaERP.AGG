@@ -11,7 +11,7 @@ return new class extends Migration
     private const MENU_PADRE_CONFIG = 'Módulo Configuración';
 
     /** @var list<string> */
-    private const ROLES = ['administrador', 'Enc-contaduría', 'Enc-impuestos'];
+    private const ROLES = ['administrador', 'Enc-contaduría', 'Enc-impuestos', 'Op-impuestos'];
 
     public function up(): void
     {

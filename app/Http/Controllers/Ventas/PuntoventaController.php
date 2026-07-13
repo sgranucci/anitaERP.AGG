@@ -103,13 +103,25 @@ class PuntoventaController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        can('editar-tipos-transaccion');
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
+        if ($soloConsulta) {
+            if (! can('listar-puntos-de-venta', false) && ! can('editar-puntos-de-venta', false)) {
+                abort(403, 'No tiene permiso para consultar el punto de venta.');
+            }
+        } else {
+            can('editar-puntos-de-venta');
+        }
+
         $data = $this->repository->findOrFail($id);
 
         return view('ventas.puntoventa.editar', array_merge(
-            ['data' => $data],
+            [
+                'data' => $data,
+                'solo_consulta' => $soloConsulta,
+                'puede_actualizar' => can('actualizar-puntos-de-venta', false),
+            ],
             $this->datosFormulario($data)
         ));
     }
