@@ -76,12 +76,21 @@
                         <input type="text" class="form-control" id="requisicion_display" readonly
                             value="{{ old('requisicion_display', (isset($data) && $data && $data->requisicion_id && $data->requisiciones) ? ('#'.$data->requisiciones->numerorequisicion.' — id '.$data->requisicion_id) : '') }}"
                             placeholder="Opcional — use la lupa para buscar aprobadas">
-                        @if (!$soloLectura)
+                        @php
+                            $ocRequiOrigenFija = !$soloLectura
+                                && isset($data)
+                                && $data
+                                && ! empty($data->requisicion_id);
+                        @endphp
+                        @if (!$soloLectura && ! $ocRequiOrigenFija)
                             <div class="input-group-append">
                                 <button type="button" class="btn btn-outline-primary" id="btn-consulta-requisicion-modal" title="Buscar requisición aprobada">
                                     <i class="fa fa-search"></i>
                                 </button>
                             </div>
+                        @endif
+                        @if ($ocRequiOrigenFija)
+                            <small class="form-text text-muted">La requisición de origen no se puede cambiar en una OC ya vinculada.</small>
                         @endif
                     </div>
                 </div>

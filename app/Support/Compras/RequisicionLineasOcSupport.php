@@ -103,6 +103,12 @@ class RequisicionLineasOcSupport
 
     public static function todasLineasResueltas(int $requisicionId): bool
     {
+        $lineas = self::idsLineasRequisicion($requisicionId);
+        // Sin ítems no hay nada que “procesar”: no marcar GENERO ORDEN COMPRA.
+        if ($lineas === []) {
+            return false;
+        }
+
         return self::cuentaPendientesOc($requisicionId) === 0;
     }
 }

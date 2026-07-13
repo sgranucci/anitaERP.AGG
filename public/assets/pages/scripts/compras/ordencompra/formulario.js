@@ -2021,6 +2021,14 @@ $(function () {
 		if (!id) {
 			return;
 		}
+		var reqActual = parseInt($('#requisicion_id').val(), 10) || 0;
+		var ocIdActual = parseInt($('#ordencompra_id_actual').val(), 10) || 0;
+		// Edición de OC ya vinculada: no permitir cambiar de requisición (reabre la origen).
+		if (ocIdActual > 0 && reqActual > 0 && id !== reqActual) {
+			alert('No se puede cambiar la requisición de origen de una orden de compra ya vinculada. Genere una OC nueva desde la otra requisición.');
+			$('#consultarequisicionModal').modal('hide');
+			return;
+		}
 		$('#requisicion_id').val(id);
 		var num = $tr.find('.requisicion_tabla_num').text();
 		var prov = $tr.find('td').eq(3).text();

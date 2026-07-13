@@ -455,6 +455,16 @@ class OrdencompraGestionService
         $oldReqId = $existente->requisicion_id ? (int) $existente->requisicion_id : null;
         $newReqId = ! empty($cab['requisicion_id']) ? (int) $cab['requisicion_id'] : null;
 
+        // Una OC ya vinculada a requisición no puede reasignarse a otra (ni desvincularse):
+        // eso reabre la requi origen como APROBADA y permite generar OCs duplicadas.
+        if ($oldReqId !== null && $newReqId !== $oldReqId) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'No se puede cambiar ni quitar la requisición de origen de una orden de compra ya vinculada. '
+                    .'Si necesita ítems de otra requisición, genere una OC nueva desde esa requisición.',
+            ];
+        }
+
         if ($newReqId !== null && $newReqId !== $oldReqId) {
             try {
                 $this->assertRequisicionAprobadaParaAsociarOc($newReqId);
@@ -476,14 +486,10 @@ class OrdencompraGestionService
                 $this->ocArbolTriggerDispatcher->dispararPorActualizacion($id);
             }
 
-            if ($oldReqId !== $newReqId) {
-                $uidAct = Auth::user()->id;
-                if ($oldReqId) {
-                    $this->sincronizarEstadoRequisicionSegunLineasOc($oldReqId, $uidAct);
-                }
-                if ($newReqId) {
-                    $this->sincronizarEstadoRequisicionSegunLineasOc($newReqId, $uidAct);
-                }
+            $uidAct = Auth::user()->id;
+            $reqIdsASincronizar = array_values(array_unique(array_filter([$oldReqId, $newReqId])));
+            foreach ($reqIdsASincronizar as $reqIdSync) {
+                $this->sincronizarEstadoRequisicionSegunLineasOc((int) $reqIdSync, $uidAct);
             }
 
             $this->ordencompraAnitaBridge->sincronizarActualizacion($this->ordencompraRepository->find($id));
@@ -507,13 +513,16 @@ class OrdencompraGestionService
             return false;
         }
 
+        $requisicionId = $oc->requisicion_id ? (int) $oc->requisicion_id : null;
+
         DB::beginTransaction();
         try {
-            if ($oc->requisicion_id) {
-                $this->sincronizarEstadoRequisicionSegunLineasOc((int) $oc->requisicion_id, Auth::user()->id);
-            }
             $this->ordencompraAnitaBridge->sincronizarBaja($oc);
             $this->ordencompraRepository->delete($id);
+            // Sync después de borrar: con las líneas aún presentes el sync podía dejar GENERO huérfano.
+            if ($requisicionId) {
+                $this->sincronizarEstadoRequisicionSegunLineasOc($requisicionId, Auth::user()->id);
+            }
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
