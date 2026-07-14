@@ -2,6 +2,7 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Jobs\Ventas\GastronomiaVerificarInformeZCierreJob;
 use App\Models\Caja\RendicionGastronomiaCaja;
 use App\Services\Caja\RendicionGastronomiaAnitaSyncService;
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
@@ -337,12 +338,31 @@ final class GastronomiaJornadaService
 
         if ($this->cierreTotemJornadaService->habilitado()) {
             $this->cierreTotemJornadaService->registrarAlCerrarJornada($jornada, $informeZFinal, $cierreTotemSnapshot);
+            $this->programarVerificacionInformeZTransmision((int) $jornada->id);
         }
 
         // rendg_total_z en Anita: solo desde Caja (rendición turno/jornada), no aquí — las rendiciones
         // pueden cargarse después del cierre gastronómico o en otro orden.
 
         return $jornada;
+    }
+
+    /**
+     * Job diferido: relee Waitry y documenta comandas faltantes en el Z (sin pisar el histórico).
+     */
+    private function programarVerificacionInformeZTransmision(int $jornadaId): void
+    {
+        if ($jornadaId <= 0) {
+            return;
+        }
+        if (! filter_var(config('gastronomia.informe_z_transmision_faltante.habilitado', true), FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        $delayMinutos = max(1, (int) config('gastronomia.informe_z_transmision_faltante.delay_minutos', 15));
+
+        GastronomiaVerificarInformeZCierreJob::dispatch($jornadaId)
+            ->delay(now()->addMinutes($delayMinutos));
     }
 
     /**

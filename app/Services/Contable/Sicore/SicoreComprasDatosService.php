@@ -91,11 +91,7 @@ final class SicoreComprasDatosService
                 'nro_cert' => (int) ($row['retv_nro_retencion'] ?? 0),
                 'codigo_proveedor' => $proveedor['codigo_proveedor'],
                 'razon_social' => substr($proveedor['nombre'], 0, 30),
-                'referencia' => sprintf(
-                    'Ret.GC %s — cert. %s',
-                    $proveedor['codigo_proveedor'],
-                    $row['retv_nro_retencion'] ?? '',
-                ),
+                'referencia' => 'Ret.GC '.$proveedor['codigo_proveedor'],
             ];
         }
 

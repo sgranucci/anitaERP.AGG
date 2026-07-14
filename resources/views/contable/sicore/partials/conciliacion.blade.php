@@ -66,6 +66,16 @@
                                 </td>
                                 <td class="text-right @if (($item['total_mayor'] ?? 0) < 0) text-danger @endif">
                                     {{ number_format((float) ($item['total_mayor'] ?? 0), 2, ',', '.') }}
+                                    <div class="small text-muted" title="Solo generación de retención (sin pago DDJJ SICORE / compensación / reclas)">
+                                        comparable
+                                    </div>
+                                    @if (! empty($item['movimientos_mayor_excluidos']))
+                                        <div class="small text-muted"
+                                            title="Pagos SICORE, compensación y reclasific. excluidos del saldo comparable">
+                                            excl. {{ number_format((float) ($item['total_mayor_excluido'] ?? 0), 2, ',', '.') }}
+                                            ({{ count($item['movimientos_mayor_excluidos']) }})
+                                        </div>
+                                    @endif
                                     @if (! empty($item['total_mayor_saldo_invertido']))
                                         <div class="small text-muted" title="Saldo pasivo invertido (−neto), solo referencia">
                                             saldo inv. {{ number_format((float) $item['total_mayor_saldo_invertido'], 2, ',', '.') }}
@@ -125,7 +135,15 @@
                                                         @if (! empty($exp['diferencia_explicada_por_solo_mayor']))
                                                             <p class="mb-0 mt-2 text-muted">
                                                                 Todo el SICORE cuadra operación por operación; la diferencia total coincide con los movimientos <em>solo mayor</em>
-                                                                (pagos SICORE, cheques, etc. que no generan línea en el archivo).
+                                                                (retenciones en mayor sin par en el archivo).
+                                                            </p>
+                                                        @endif
+                                                        @if (! empty($item['movimientos_mayor_excluidos']))
+                                                            <p class="mb-0 mt-2 text-muted">
+                                                                Del saldo comparable se excluyeron
+                                                                {{ count($item['movimientos_mayor_excluidos']) }} movimiento(s)
+                                                                (pago DDJJ SICORE, compensación o reclasificación):
+                                                                neto {{ number_format((float) ($item['total_mayor_excluido'] ?? 0), 2, ',', '.') }}.
                                                             </p>
                                                         @endif
                                                     </div>
@@ -143,6 +161,9 @@
                                                     @endif
                                                     @if (($resumen['solo_mayor'] ?? 0) > 0)
                                                         <span class="badge badge-info ml-1">{{ $resumen['solo_mayor'] }} solo mayor</span>
+                                                    @endif
+                                                    @if (! empty($item['movimientos_mayor_excluidos']))
+                                                        <span class="badge badge-secondary ml-1">{{ count($item['movimientos_mayor_excluidos']) }} excl. comparable</span>
                                                     @endif
                                                 </div>
 
@@ -233,7 +254,61 @@
                                                     </table>
                                                 </div>
 
-                                                @php $movs = $item['movimientos_mayor'] ?? []; @endphp
+                                                @php
+                                                    $movs = $item['movimientos_mayor'] ?? [];
+                                                    $excluidos = $item['movimientos_mayor_excluidos'] ?? [];
+                                                @endphp
+                                                @if ($excluidos !== [])
+                                                    <p class="mb-1">
+                                                        <a class="small" data-toggle="collapse" href="#{{ $auditId }}-excluidos" role="button" aria-expanded="false">
+                                                            <i class="fa fa-filter"></i> Excluidos del comparable ({{ count($excluidos) }} líneas)
+                                                        </a>
+                                                    </p>
+                                                    <div class="collapse mb-2" id="{{ $auditId }}-excluidos">
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm table-bordered mb-0 bg-white" style="font-size:0.78rem;">
+                                                                <thead>
+                                                                    <tr style="background-color:#d5d8dc;color:#17202A;">
+                                                                        <th>Fecha</th>
+                                                                        <th>Asiento</th>
+                                                                        <th>Motivo</th>
+                                                                        <th>Detalle</th>
+                                                                        <th class="text-right">Debe</th>
+                                                                        <th class="text-right">Haber</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    @foreach ($excluidos as $mov)
+                                                                        @php
+                                                                            $motivoLabel = match ($mov['motivo_exclusion'] ?? '') {
+                                                                                'pago_sicore' => 'Pago DDJJ SICORE',
+                                                                                'compensacion_sicore' => 'Compensación SICORE',
+                                                                                'reclasificacion' => 'Reclasificación',
+                                                                                default => 'Excluido',
+                                                                            };
+                                                                        @endphp
+                                                                        <tr class="table-secondary">
+                                                                            <td>{{ ! empty($mov['fecha']) ? date('d/m/Y', strtotime($mov['fecha'])) : '' }}</td>
+                                                                            <td>{{ $mov['asiento_id'] ?? '' }}</td>
+                                                                            <td>{{ $motivoLabel }}</td>
+                                                                            <td>{{ $mov['detalle'] ?? '' }}</td>
+                                                                            <td class="text-right">
+                                                                                @if (($mov['debe'] ?? null) !== null)
+                                                                                    {{ number_format((float) $mov['debe'], 2, ',', '.') }}
+                                                                                @endif
+                                                                            </td>
+                                                                            <td class="text-right">
+                                                                                @if (($mov['haber'] ?? null) !== null)
+                                                                                    {{ number_format((float) $mov['haber'], 2, ',', '.') }}
+                                                                                @endif
+                                                                            </td>
+                                                                        </tr>
+                                                                    @endforeach
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                @endif
                                                 @if ($movs !== [])
                                                     <p class="mb-1">
                                                         <a class="small" data-toggle="collapse" href="#{{ $auditId }}-mayor" role="button" aria-expanded="false">
@@ -249,13 +324,17 @@
                                                                         <th>Asiento</th>
                                                                         <th>Cuenta</th>
                                                                         <th>Detalle</th>
+                                                                        <th class="text-center">Comp.</th>
                                                                         <th class="text-right">Debe</th>
                                                                         <th class="text-right">Haber</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
                                                                     @foreach ($movs as $mov)
-                                                                        <tr>
+                                                                        @php
+                                                                            $excluidoComp = ! empty($mov['excluido_comparable']);
+                                                                        @endphp
+                                                                        <tr @class(['table-secondary' => $excluidoComp])>
                                                                             <td>{{ ! empty($mov['fecha']) ? date('d/m/Y', strtotime($mov['fecha'])) : '' }}</td>
                                                                             <td>{{ $mov['asiento_id'] ?? '' }}</td>
                                                                             <td>
@@ -265,13 +344,20 @@
                                                                                 @endif
                                                                             </td>
                                                                             <td>{{ $mov['detalle'] ?? '' }}</td>
+                                                                            <td class="text-center">
+                                                                                @if ($excluidoComp)
+                                                                                    <span class="badge badge-secondary" title="Excluido del saldo comparable">No</span>
+                                                                                @else
+                                                                                    <span class="badge badge-success">Sí</span>
+                                                                                @endif
+                                                                            </td>
                                                                             <td class="text-right">
-                                                                                @if ($mov['debe'] !== null)
+                                                                                @if (($mov['debe'] ?? null) !== null)
                                                                                     {{ number_format((float) $mov['debe'], 2, ',', '.') }}
                                                                                 @endif
                                                                             </td>
                                                                             <td class="text-right">
-                                                                                @if ($mov['haber'] !== null)
+                                                                                @if (($mov['haber'] ?? null) !== null)
                                                                                     {{ number_format((float) $mov['haber'], 2, ',', '.') }}
                                                                                 @endif
                                                                             </td>
@@ -298,8 +384,9 @@
 
             <p class="small text-muted px-3 py-2 mb-0 border-top">
                 Tolerancia: {{ number_format((float) ($conciliacion['tolerancia'] ?? 0.05), 2, ',', '.') }}.
-                Total SICORE: neto a presentar (retenciones − anulaciones AOP). Total mayor: neto firmado del período (haber +, debe −), misma convención.
-                La diferencia es SICORE − mayor neto; si todas las líneas SICORE cuadran 1:1, el gap suele ser la suma de movimientos contables que no van al archivo (solo mayor).
+                Total SICORE: neto a presentar (retenciones − anulaciones AOP).
+                Total mayor: neto firmado solo de generación de retención (haber +, debe −); se excluyen pago DDJJ SICORE, compensación y reclasificaciones.
+                La diferencia es SICORE − mayor comparable.
             </p>
         </div>
     </div>

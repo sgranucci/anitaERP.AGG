@@ -12,6 +12,17 @@ use App\Support\Contable\Sicore\SicoreFormatoV8Support;
 final class SicoreSueldosDatosService
 {
     /**
+     * Prefijo de columnas Informix según tabla.
+     * auxrec → aux_*; auxhist → auxh_*
+     *
+     * @var array<string, string>
+     */
+    private const PREFIJO_COLUMNAS = [
+        'auxrec' => 'aux_',
+        'auxhist' => 'auxh_',
+    ];
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function generar(int $empresaId, string $fechaDesde, string $fechaHasta, Sicore_Config $config): array
@@ -24,32 +35,33 @@ final class SicoreSueldosDatosService
         $conceptoDev = (int) ($config->concepto_devolucion_sueldos ?? 0);
         $regimen = (int) ($config->codigo_regimen ?? 160);
 
-        $empleados = $this->listarEmpleados($empresaAnita);
+        if ($conceptoRet <= 0 && $conceptoDev <= 0) {
+            return [];
+        }
+
+        /** @var array<int, array{ret: float, dev: float, base: float}> $acumulado */
+        $acumulado = [];
+        $this->acumularTabla('auxrec', $empresaAnita, $desdeAnita, $hastaAnita, $conceptoRet, $conceptoDev, $acumulado);
+        $this->acumularTabla('auxhist', $empresaAnita, $desdeAnita, $hastaAnita, $conceptoRet, $conceptoDev, $acumulado);
+
+        if ($acumulado === []) {
+            return [];
+        }
+
+        $empleados = $this->mapearEmpleados($empresaAnita, array_keys($acumulado));
         $filas = [];
+        $fechaIso = $fechaHasta;
 
-        foreach ($empleados as $emp) {
-            $emp = (array) $emp;
-            $legajo = (int) ($emp['emp_legajo'] ?? 0);
-            if ($legajo <= 0) {
-                continue;
-            }
-
-            $totRet = 0.0;
-            $totDev = 0.0;
-            $totBase = 0.0;
-
-            $this->acumularAuxrec('auxrec', $empresaAnita, $legajo, $desdeAnita, $hastaAnita, $conceptoRet, $conceptoDev, $totRet, $totDev, $totBase);
-            $this->acumularAuxrec('auxhist', $empresaAnita, $legajo, $desdeAnita, $hastaAnita, $conceptoRet, $conceptoDev, $totRet, $totDev, $totBase);
-
+        foreach ($acumulado as $legajo => $totales) {
+            $emp = $empleados[$legajo] ?? null;
             $cuit = SicoreFormatoV8Support::normalizarCuit((string) ($emp['emp_afil_jubil'] ?? ''));
-            $nombre = substr(trim((string) ($emp['emp_nombre'] ?? '')), 0, 30);
-            $fechaIso = $fechaHasta;
+            $nombre = substr(trim((string) ($emp['emp_nombre'] ?? ('Legajo '.$legajo))), 0, 30);
 
-            if (abs($totRet) >= 0.001) {
-                $filas[] = $this->filaSueldo($config, $regimen, $cuit, $nombre, $fechaIso, $totRet, 7, $legajo);
+            if (abs($totales['ret']) >= 0.001) {
+                $filas[] = $this->filaSueldo($config, $regimen, $cuit, $nombre, $fechaIso, $totales['ret'], 7, $legajo);
             }
-            if ($conceptoDev > 0 && abs($totDev) >= 0.001) {
-                $filas[] = $this->filaSueldo($config, $regimen, $cuit, $nombre, $fechaIso, $totDev, 8, $legajo);
+            if ($conceptoDev > 0 && abs($totales['dev']) >= 0.001) {
+                $filas[] = $this->filaSueldo($config, $regimen, $cuit, $nombre, $fechaIso, $totales['dev'], 8, $legajo);
             }
         }
 
@@ -57,36 +69,70 @@ final class SicoreSueldosDatosService
     }
 
     /**
-     * @return list<object|array<string, mixed>>
+     * @param  list<int>  $legajos
+     * @return array<int, array<string, mixed>>
      */
-    private function listarEmpleados(int $empresaAnita): array
+    private function mapearEmpleados(int $empresaAnita, array $legajos): array
     {
-        $api = new ApiAnita();
-        $payload = [
-            'acc' => 'list',
-            'sistema' => 'sueldos',
-            'tabla' => 'empleado',
-            'campos' => 'emp_empresa, emp_legajo, emp_nombre, emp_afil_jubil',
-            'whereArmado' => ' WHERE emp_empresa = '.$empresaAnita,
-            'orderBy' => 'emp_legajo',
-        ];
+        $legajos = array_values(array_unique(array_filter(array_map('intval', $legajos), static fn (int $l) => $l > 0)));
+        if ($legajos === []) {
+            return [];
+        }
 
-        return ApiAnita::decodificarListaFilas($api->apiCall($payload));
+        $api = new ApiAnita();
+        $mapa = [];
+
+        // Informix / bridge: IN por lotes para no saturar whereArmado.
+        foreach (array_chunk($legajos, 200) as $lote) {
+            $payload = [
+                'acc' => 'list',
+                'sistema' => 'sueldos',
+                'tabla' => 'empleado',
+                'campos' => 'emp_empresa, emp_legajo, emp_nombre, emp_afil_jubil',
+                'whereArmado' => ' WHERE emp_empresa = '.$empresaAnita
+                    .' AND emp_legajo IN ('.implode(',', $lote).')',
+                'orderBy' => 'emp_legajo',
+            ];
+
+            foreach (ApiAnita::decodificarListaFilas($api->apiCall($payload)) as $row) {
+                $row = (array) $row;
+                $legajo = (int) ($row['emp_legajo'] ?? 0);
+                if ($legajo > 0) {
+                    $mapa[$legajo] = $row;
+                }
+            }
+        }
+
+        return $mapa;
     }
 
-    private function acumularAuxrec(
+    /**
+     * @param  array<int, array{ret: float, dev: float, base: float}>  $acumulado
+     */
+    private function acumularTabla(
         string $tabla,
         int $empresaAnita,
-        int $legajo,
         int $desdeAnita,
         int $hastaAnita,
         int $conceptoRet,
         int $conceptoDev,
-        float &$totRet,
-        float &$totDev,
-        float &$totBase,
+        array &$acumulado,
     ): void {
-        if ($conceptoRet <= 0 && $conceptoDev <= 0) {
+        $prefijo = self::PREFIJO_COLUMNAS[$tabla] ?? null;
+        if ($prefijo === null) {
+            return;
+        }
+
+        $colEmpresa = $prefijo.'empresa';
+        $colLegajo = $prefijo.'legajo';
+        $colCodigo = $prefijo.'codigo';
+        $colHaberes = $prefijo.'haberes';
+        $colDeduc = $prefijo.'deduc';
+        $colTotal = $prefijo.'total';
+        $colFecha = $prefijo.'fecha';
+
+        $codigos = array_values(array_filter([$conceptoRet, $conceptoDev], static fn (int $c) => $c > 0));
+        if ($codigos === []) {
             return;
         }
 
@@ -95,25 +141,33 @@ final class SicoreSueldosDatosService
             'acc' => 'list',
             'sistema' => 'sueldos',
             'tabla' => $tabla,
-            'campos' => 'aux_empresa, aux_legajo, aux_codigo, aux_haberes, aux_deduc, aux_total, aux_fecha',
-            'whereArmado' => ' WHERE aux_empresa = '.$empresaAnita
-                .' AND aux_legajo = '.$legajo
-                .' AND aux_fecha >= '.$desdeAnita
-                .' AND aux_fecha <= '.$hastaAnita,
-            'orderBy' => 'aux_fecha',
+            'campos' => implode(', ', [$colEmpresa, $colLegajo, $colCodigo, $colHaberes, $colDeduc, $colTotal, $colFecha]),
+            'whereArmado' => ' WHERE '.$colEmpresa.' = '.$empresaAnita
+                .' AND '.$colFecha.' >= '.$desdeAnita
+                .' AND '.$colFecha.' <= '.$hastaAnita
+                .' AND '.$colCodigo.' IN ('.implode(',', $codigos).')',
+            'orderBy' => $colFecha,
         ];
 
         foreach (ApiAnita::decodificarListaFilas($api->apiCall($payload)) as $row) {
             $row = (array) $row;
-            $codigo = (int) ($row['aux_codigo'] ?? 0);
-            $monto = (float) ($row['aux_haberes'] ?? 0) + (float) ($row['aux_deduc'] ?? 0);
+            $legajo = (int) ($row[$colLegajo] ?? 0);
+            $codigo = (int) ($row[$colCodigo] ?? 0);
+            if ($legajo <= 0 || $codigo <= 0) {
+                continue;
+            }
+
+            $monto = (float) ($row[$colHaberes] ?? 0) + (float) ($row[$colDeduc] ?? 0);
+            if (! isset($acumulado[$legajo])) {
+                $acumulado[$legajo] = ['ret' => 0.0, 'dev' => 0.0, 'base' => 0.0];
+            }
 
             if ($codigo === $conceptoRet) {
-                $totRet += $monto;
-                $totBase += (float) ($row['aux_total'] ?? 0);
+                $acumulado[$legajo]['ret'] += $monto;
+                $acumulado[$legajo]['base'] += (float) ($row[$colTotal] ?? 0);
             } elseif ($conceptoDev > 0 && $codigo === $conceptoDev) {
-                $totDev += $monto;
-                $totBase += (float) ($row['aux_total'] ?? 0);
+                $acumulado[$legajo]['dev'] += $monto;
+                $acumulado[$legajo]['base'] += (float) ($row[$colTotal] ?? 0);
             }
         }
     }

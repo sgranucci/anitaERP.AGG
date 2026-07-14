@@ -16,6 +16,7 @@ use App\Support\Ventas\Waitry\WaitryCierreJornadaDiscrepanciaSupport;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
+use App\Support\Ventas\Waitry\WaitryInformeZTransmisionFaltanteSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenCobroSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenEstadoSupport;
@@ -471,15 +472,22 @@ final class GastronomiaCierreTotemJornadaService
             $resumenInformeZ,
         );
 
-        $lineasConIngreso = array_filter(
+        $lineasConIngreso = array_values(array_filter(
             $lineasActivas,
             static fn (array $ln) => WaitryTotemJornadaResumenSupport::lineaEntraInformeZSistema($ln),
+        ));
+
+        $ordenesInformeZ = WaitryInformeZTransmisionFaltanteSupport::compactarOrdenesDesdeLineas(
+            $lineasConIngreso,
+            $empresaId,
         );
+        $snapshotCierre[WaitryInformeZTransmisionFaltanteSupport::CLAVE_ORDENES_SNAPSHOT] = $ordenesInformeZ;
 
         return [
             'resumen_totems' => $resumenTotems,
             'resumen_informe_z' => $resumenInformeZ,
             'snapshot_cierre' => $snapshotCierre,
+            'lineas_informe_z' => $lineasConIngreso,
             'ventana_operativa' => (string) ($ventana['etiqueta'] ?? ''),
             'waitry_order_id_anterior' => $idAnterior,
             'waitry_order_id_desde' => $desde,
@@ -622,6 +630,10 @@ final class GastronomiaCierreTotemJornadaService
             'resumen_informe_z' => $resumenInformeZ,
             'auditoria' => $auditoria,
         ];
+        $ordenesSnap = $snapshot[WaitryInformeZTransmisionFaltanteSupport::CLAVE_ORDENES_SNAPSHOT] ?? null;
+        if (is_array($ordenesSnap)) {
+            $detalleJson[WaitryInformeZTransmisionFaltanteSupport::CLAVE_ORDENES_SNAPSHOT] = array_values($ordenesSnap);
+        }
         if (is_array($informeZJson) && is_array($informeZJson['totems'] ?? null)) {
             $detalleJson['informe_z_por_totem'] = $informeZJson['totems'];
         }

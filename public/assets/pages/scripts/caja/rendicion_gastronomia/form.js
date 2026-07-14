@@ -1074,6 +1074,7 @@
             html += '</p>';
         }
         html += construirHtmlInformeZCajaEditable(plantilla);
+        html += construirHtmlTransmisionFaltanteZ(d.transmision_faltante_z || null);
         contenidoInformeZJornada.innerHTML = html;
 
         contenidoInformeZJornada.querySelectorAll('.rendicion-informe-z-linea').forEach(function (tr) {
@@ -1083,6 +1084,47 @@
         actualizarAlertaConciliacionInformeZCaja(wrap);
         bindEventosInformeZCaja();
         sincronizarHiddenInformeZ();
+    }
+
+    function construirHtmlTransmisionFaltanteZ(bloque) {
+        if (!bloque || !bloque.tiene_diferencias) {
+            return '';
+        }
+        var html = '<div class="alert alert-danger mt-3 mb-0 transmision-faltante-z-panel">';
+        html += '<h6 class="alert-heading mb-2"><i class="fa fa-exclamation-circle"></i> ';
+        html += 'Comandas no transmitidas a tiempo (' + (bloque.cantidad_comandas || 0) + ')</h6>';
+        html += '<p class="small mb-2">No entraron al Informe Z del cierre (retraso Waitry). ';
+        html += 'El Z histórico no se modifica; sumar estos importes al total de presentación.';
+        if (bloque.calculado_en_fmt) {
+            html += ' Verificado ' + escHtml(bloque.calculado_en_fmt) + '.';
+        }
+        html += '</p>';
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-2 bg-white">';
+        html += '<thead class="thead-light"><tr><th>Comanda</th><th>Medio</th><th class="text-right">Monto</th>';
+        html += '<th>Colocada</th><th>Tótem / mesa</th></tr></thead><tbody>';
+        (bloque.comandas || []).forEach(function (c) {
+            html += '<tr>';
+            html += '<td>' + escHtml(c.display_id || '—');
+            if (c.waitry_order_id) {
+                html += ' <span class="text-muted small">(#' + parseInt(c.waitry_order_id, 10) + ')</span>';
+            }
+            html += '</td>';
+            html += '<td>' + escHtml(c.medio_label || c.tipo_medio || '—') + '</td>';
+            html += '<td class="text-right">$' + fmt(c.monto || 0) + '</td>';
+            html += '<td>' + escHtml(c.placed_at_fmt || '—') + '</td>';
+            html += '<td class="small">' + escHtml(c.waitry_layout_name || '');
+            if (c.waitry_table_name) {
+                html += ' / ' + escHtml(c.waitry_table_name);
+            }
+            html += '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+        html += '<div class="row small font-weight-bold">';
+        html += '<div class="col-md-4">Informe Z al cierre:<span class="d-block">$' + fmt(bloque.total_z_historico || 0) + '</span></div>';
+        html += '<div class="col-md-4">+ No transmitidas:<span class="d-block">$' + fmt(bloque.total_faltante || 0) + '</span></div>';
+        html += '<div class="col-md-4">= Total Tesorería (ajuste):<span class="d-block">$' + fmt(bloque.total_tesoreria || 0) + '</span></div>';
+        html += '</div></div>';
+        return html;
     }
 
     function escHtml(s) {

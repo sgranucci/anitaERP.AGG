@@ -576,6 +576,28 @@ return [
     ],
 
     /**
+     * Tras cerrar jornada: job diferido relee Waitry vs Z congelado; documenta faltantes y mail a Tesorería.
+     * No pisa el Informe Z histórico del cierre.
+     */
+    'informe_z_transmision_faltante' => [
+        'habilitado' => filter_var(
+            env('GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_HABILITADO', true),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+        /** Minutos de espera tras el cierre antes de releer Waitry (da tiempo a completar transmisión). */
+        'delay_minutos' => max(1, (int) env('GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_DELAY_MINUTOS', 15)),
+        'tolerancia' => max(0.0, (float) env(
+            'GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_TOLERANCIA',
+            env('GASTRONOMIA_CIERRE_TOTEM_INFORME_Z_TOLERANCIA', 0.02),
+        )),
+        'email' => env(
+            'GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_EMAIL',
+            'gmagliolo@grupoagg.com,sergiogranucci@gmail.com',
+        ),
+        'cola' => env('GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_COLA', 'default'),
+    ],
+
+    /**
      * Punto de venta fijo para facturación del proceso de cierre Waitry (una factura por permiso).
      * Clave = empresa_id, valor = código PV (ej. BSA empresa 1 → 00003).
      * Prioridad: gastronomia_cierre_jornada_config.puntoventa_id → este mapa.

@@ -6,6 +6,7 @@ use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Support\Ventas\Waitry\WaitryCobrosPostCierreJornadaSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
+use App\Support\Ventas\Waitry\WaitryInformeZTransmisionFaltanteSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
@@ -55,6 +56,11 @@ final class GastronomiaCierreTotemInformeZService
             );
         }
 
+        $bloqueTransmision = is_array($detalle[WaitryInformeZTransmisionFaltanteSupport::CLAVE_DETALLE] ?? null)
+            ? $detalle[WaitryInformeZTransmisionFaltanteSupport::CLAVE_DETALLE]
+            : [];
+        $transmisionFaltante = WaitryInformeZTransmisionFaltanteSupport::paraVista($bloqueTransmision);
+
         return [
             'jornada_id' => $jornadaId,
             'cierre_totem_id' => (int) $cierre->id,
@@ -65,6 +71,7 @@ final class GastronomiaCierreTotemInformeZService
             'totems' => $plantilla,
             'conciliacion' => $conciliacion,
             'cobros_post_cierre' => $cobrosPostCierre,
+            'transmision_faltante_z' => $transmisionFaltante,
             'tolerancia' => WaitryInformeZConciliacionSupport::toleranciaMonto(),
         ];
     }

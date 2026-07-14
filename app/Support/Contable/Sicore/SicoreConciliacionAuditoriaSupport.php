@@ -269,17 +269,58 @@ final class SicoreConciliacionAuditoriaSupport
     }
 
     /**
+     * Texto de auditoría: un solo "Cert. N" / "OP N" (saca duplicados del texto de referencia).
+     *
      * @param  array<string, mixed>  $reg
      */
     private static function referenciaSicore(array $reg): string
     {
-        $partes = array_filter([
-            (int) ($reg['nro_cert'] ?? 0) > 0 ? 'Cert. '.(int) $reg['nro_cert'] : null,
-            (int) ($reg['nro_comp'] ?? 0) > 0 ? 'OP '.(int) $reg['nro_comp'] : null,
-            trim((string) ($reg['referencia'] ?? '')) !== '' ? trim((string) $reg['referencia']) : null,
-        ]);
+        $nroCert = (int) ($reg['nro_cert'] ?? 0);
+        $nroComp = (int) ($reg['nro_comp'] ?? 0);
+        $referencia = trim((string) ($reg['referencia'] ?? ''));
+
+        if ($nroCert > 0) {
+            $referencia = self::quitarMencionNumero($referencia, 'cert', $nroCert);
+        }
+        if ($nroComp > 0) {
+            $referencia = self::quitarMencionNumero($referencia, 'op', $nroComp);
+        }
+        $referencia = trim(preg_replace('/(?:\s*—\s*)+/u', ' — ', $referencia) ?? $referencia);
+        $referencia = trim($referencia, " \t\n\r\0\x0B-");
+        $referencia = preg_replace('/^\s*—\s*|\s*—\s*$/u', '', $referencia) ?? $referencia;
+        $referencia = trim($referencia);
+
+        $partes = [];
+        if ($nroCert > 0) {
+            $partes[] = 'Cert. '.$nroCert;
+        }
+        if ($nroComp > 0) {
+            $partes[] = 'OP '.$nroComp;
+        }
+        if ($referencia !== '') {
+            $partes[] = $referencia;
+        }
 
         return $partes !== [] ? implode(' — ', $partes) : 'SICORE';
+    }
+
+    private static function quitarMencionNumero(string $texto, string $etiqueta, int $numero): string
+    {
+        if ($texto === '' || $numero <= 0) {
+            return $texto;
+        }
+
+        $n = preg_quote((string) $numero, '/');
+        $patron = match ($etiqueta) {
+            'cert' => '/(?:\s*—\s*)?\bcert\.?\s*'.$n.'\b/iu',
+            'op' => '/(?:\s*—\s*)?\bOP\s*'.$n.'\b/iu',
+            default => null,
+        };
+        if ($patron === null) {
+            return $texto;
+        }
+
+        return trim((string) preg_replace($patron, '', $texto));
     }
 
     /**

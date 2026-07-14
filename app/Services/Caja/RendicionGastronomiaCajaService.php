@@ -327,6 +327,7 @@ class RendicionGastronomiaCajaService
             'informe_z_ajuste_caja_usuario' => $marcadores['informe_z_ajuste_caja_usuario'] ?? null,
             'conciliacion_informe_z' => $marcadores['conciliacion_informe_z'] ?? null,
             'tolerancia_informe_z' => (float) ($marcadores['tolerancia_informe_z'] ?? 0.02),
+            'transmision_faltante_z' => $marcadores['transmision_faltante_z'] ?? null,
             'sin_cierre_totem_jornada' => (bool) ($marcadores['sin_cierre_totem_jornada'] ?? false),
             'aviso_cierre_totem' => $marcadores['aviso_cierre_totem'] ?? null,
             'numeracion_comprobantes' => $numeracion,

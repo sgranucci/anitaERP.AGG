@@ -13,6 +13,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemJornadaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Ventas\Waitry\WaitryCobrosPostCierreJornadaSupport;
+use App\Support\Ventas\Waitry\WaitryInformeZTransmisionFaltanteSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use Illuminate\Http\Request;
@@ -271,6 +272,13 @@ class JornadaGastronomiaController extends Controller
             );
         }
 
+        $detalleCierre = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
+        $transmisionFaltante = WaitryInformeZTransmisionFaltanteSupport::paraVista(
+            is_array($detalleCierre[WaitryInformeZTransmisionFaltanteSupport::CLAVE_DETALLE] ?? null)
+                ? $detalleCierre[WaitryInformeZTransmisionFaltanteSupport::CLAVE_DETALLE]
+                : [],
+        );
+
         $empresaNombre = (string) ($cierre->empresa?->nombre ?? '');
         $fechaJornadaFmt = $cierre->jornada?->fecha_jornada?->format('d/m/Y') ?? '';
         $jornadaIdComprobante = (int) $cierre->jornada_gastronomia_id;
@@ -295,6 +303,7 @@ class JornadaGastronomiaController extends Controller
             'conciliacion' => $conciliacion,
             'totems' => $totemsPdf,
             'cobros_post_cierre' => $cobrosPostCierre,
+            'transmision_faltante_z' => $transmisionFaltante,
         ];
 
         $nombre = 'cierre_jornada_'.($fechaJornadaYmd ?? 'sin_fecha').'_'.$jornadaId.'.pdf';

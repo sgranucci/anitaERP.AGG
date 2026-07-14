@@ -169,3 +169,7 @@
     </div>
 </div>
 @endsection
+
+@section('scripts')
+<script src="{{ asset('assets/pages/scripts/contable/sicore/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/sicore/form.js')) ?: time() }}" type="text/javascript"></script>
+@endsection

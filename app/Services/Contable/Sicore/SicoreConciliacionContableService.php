@@ -10,6 +10,7 @@ use App\Support\Contable\Anita\AnitaMayorAnaliticoSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
+use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -66,20 +67,34 @@ final class SicoreConciliacionContableService
             $cuentaInversa = SicoreConciliacionAuditoriaSupport::cuentasSonInversas($cuentasDetalle);
 
             $movimientosErp = $this->listarMayorAnaliticoErp($empresaId, $desde, $hasta, $cuentaIds);
-            $totalMayorNetoErp = SicoreConciliacionAuditoriaSupport::totalMayorNeto($movimientosErp);
-
             $movimientosAnita = $this->listarMayorAnaliticoAnita($empresaId, $desde, $hasta, $config, $cuentaIds);
-            $totalMayorNetoAnita = SicoreConciliacionAuditoriaSupport::totalMayorNeto($movimientosAnita);
 
-            $movimientosMayor = $movimientosErp !== [] ? $movimientosErp : $movimientosAnita;
-            $totalMayorNeto = $movimientosErp !== [] ? $totalMayorNetoErp : $totalMayorNetoAnita;
+            $movimientosMayorCompleto = $movimientosErp !== [] ? $movimientosErp : $movimientosAnita;
             $fuenteMayor = $movimientosErp !== [] ? 'erp' : ($movimientosAnita !== [] ? 'anita' : 'ninguna');
+
+            // Totales y matching 1:1 solo con generación de retención (sin pago DDJJ SICORE / reclas / compensación).
+            $particion = SicoreMayorComparableSupport::particionar($movimientosMayorCompleto);
+            $movimientosComparable = $particion['comparables'];
+            $movimientosExcluidos = $particion['excluidos'];
+            $totalMayorNeto = $particion['total_comparable'];
+            $movimientosMayorCompleto = array_merge($movimientosComparable, $movimientosExcluidos);
+            usort($movimientosMayorCompleto, static function (array $a, array $b): int {
+                return [(string) ($a['fecha'] ?? ''), (int) ($a['asiento_id'] ?? 0)]
+                    <=> [(string) ($b['fecha'] ?? ''), (int) ($b['asiento_id'] ?? 0)];
+            });
+
+            $totalMayorNetoErp = $fuenteMayor === 'erp'
+                ? $totalMayorNeto
+                : SicoreMayorComparableSupport::particionar($movimientosErp)['total_comparable'];
+            $totalMayorNetoAnita = $fuenteMayor === 'anita'
+                ? $totalMayorNeto
+                : SicoreMayorComparableSupport::particionar($movimientosAnita)['total_comparable'];
 
             $tolerancia = SicoreFormatoV8Support::tolerancia();
 
             $auditoria = SicoreConciliacionAuditoriaSupport::auditarOperaciones(
                 $registrosConfig,
-                $movimientosMayor,
+                $movimientosComparable,
                 $cuentaInversa,
                 $tolerancia,
             );
@@ -104,8 +119,10 @@ final class SicoreConciliacionContableService
                 'total_sicore' => $totalSicore,
                 'total_mayor' => $totalMayorNeto,
                 'total_mayor_neto' => $totalMayorNeto,
+                'total_mayor_completo' => SicoreConciliacionAuditoriaSupport::totalMayorNeto($movimientosMayorCompleto),
+                'total_mayor_excluido' => $particion['total_excluido'],
                 'total_mayor_saldo_invertido' => SicoreConciliacionAuditoriaSupport::totalMayorSaldoInvertido(
-                    $movimientosMayor,
+                    $movimientosComparable,
                     $cuentaInversa,
                 ),
                 'total_mayor_erp' => $totalMayorNetoErp,
@@ -115,7 +132,9 @@ final class SicoreConciliacionContableService
                 'explicacion_diferencia' => $explicacion,
                 'registros' => count($registrosConfig),
                 'fuente_mayor' => $fuenteMayor,
-                'movimientos_mayor' => $movimientosMayor,
+                'movimientos_mayor' => $movimientosMayorCompleto,
+                'movimientos_mayor_comparable' => $movimientosComparable,
+                'movimientos_mayor_excluidos' => $movimientosExcluidos,
                 'auditoria' => $auditoria,
             ];
         }

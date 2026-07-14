@@ -9,6 +9,7 @@ use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreTotemJornadaService;
 use App\Support\Ventas\GastronomiaJornadaNumeracionComprobanteSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
+use App\Support\Ventas\Waitry\WaitryInformeZTransmisionFaltanteSupport;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 
@@ -110,6 +111,7 @@ final class RendicionGastronomiaJornadaPresentacionService
 
         $totemTotalGeneral = null;
         $tramoTotem = null;
+        $transmisionFaltante = WaitryInformeZTransmisionFaltanteSupport::paraVista([]);
 
         if ($cierreTotem instanceof CierreTotemJornadaGastronomia) {
             $detalle = is_array($cierreTotem->detalle_json) ? $cierreTotem->detalle_json : [];
@@ -125,6 +127,11 @@ final class RendicionGastronomiaJornadaPresentacionService
                 $conciliacion = $presentacion['conciliacion'];
                 $informeZCargado = true;
             }
+            $transmisionFaltante = WaitryInformeZTransmisionFaltanteSupport::paraVista(
+                is_array($detalle[WaitryInformeZTransmisionFaltanteSupport::CLAVE_DETALLE] ?? null)
+                    ? $detalle[WaitryInformeZTransmisionFaltanteSupport::CLAVE_DETALLE]
+                    : [],
+            );
         }
 
         $informeZPlantilla = $plantilla ?? null;
@@ -146,6 +153,7 @@ final class RendicionGastronomiaJornadaPresentacionService
             'informe_z_ajuste_caja_usuario' => $informeZ['ajuste_caja_usuario_nombre'] ?? null,
             'conciliacion_informe_z' => $conciliacion,
             'tolerancia_informe_z' => WaitryInformeZConciliacionSupport::toleranciaMonto(),
+            'transmision_faltante_z' => $transmisionFaltante,
             'sin_cierre_totem_jornada' => (bool) ($marcadores['sin_cierre_totem_jornada'] ?? false),
             'aviso_cierre_totem' => $marcadores['aviso_cierre_totem'] ?? null,
             'totem_total_general' => $totemTotalGeneral,

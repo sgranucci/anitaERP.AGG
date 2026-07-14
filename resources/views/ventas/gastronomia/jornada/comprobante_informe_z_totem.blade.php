@@ -175,6 +175,7 @@
     @endif
 
     @include('ventas.gastronomia.jornada.partials.cobros_post_cierre', ['d' => $d])
+    @include('ventas.gastronomia.jornada.partials.transmision_faltante_z', ['d' => $d])
 </body>
 </html>
 

@@ -425,6 +425,7 @@
                 <div id="informe-z-resultado" class="d-none mb-3"></div>
                 <div id="informe-z-contenido" class="text-muted">Cargando…</div>
                 <div id="informe-z-post-cierre"></div>
+                <div id="informe-z-transmision-faltante"></div>
             </div>
             <div class="modal-footer flex-wrap">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
