@@ -104,6 +104,17 @@
         }
     }
 
+    function abrirModalCobrador($input) {
+        var $ctx = $input.closest('.tm-cobrador-campo');
+        window.ptrCobrador_id = $ctx.length ? $ctx.find('.cobrador_id') : null;
+        window.ptrCodigoCobrador = $ctx.length ? $ctx.find('.codigocobrador') : null;
+        window.ptrNombreCobrador = $ctx.length ? $ctx.find('.nombrecobrador') : null;
+        $('#consultacobradorModal').modal('show');
+        if (typeof buscar_datos_cobrador === 'function') {
+            buscar_datos_cobrador('');
+        }
+    }
+
     function abrirModalDistribuidor($input) {
         var $ctx = $input.closest('.tm-distribuidor-campo');
         window.ptrDistribuidor_id = $ctx.length ? $ctx.find('.distribuidor_id') : null;
@@ -207,6 +218,17 @@
                 var $ctx = $t.closest('.tm-vendedor-campo');
                 if (typeof resolverPorCodigoVendedor === 'function') {
                     resolverPorCodigoVendedor($t.val(), $ctx.length ? $ctx : null);
+                }
+            },
+        },
+        {
+            match: function (t) { return t.classList.contains('codigocobrador') || t.id === 'codigocobrador'; },
+            modal: '#consultacobradorModal',
+            abrir: abrirModalCobrador,
+            validar: function ($t) {
+                var $ctx = $t.closest('.tm-cobrador-campo');
+                if (typeof resolverPorCodigoCobrador === 'function') {
+                    resolverPorCodigoCobrador($t.val(), $ctx.length ? $ctx : null);
                 }
             },
         },

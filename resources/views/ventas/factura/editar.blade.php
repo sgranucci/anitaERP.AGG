@@ -6,7 +6,11 @@
 @section("scripts")
 <script>window.VALIDACION_PADRON_POST_CARGA = true;</script>
 <script>window.REQUIERE_VALIDACION_PADRON_OPERACION = true;</script>
-<script>window.REQUIERE_VALIDACION_APOC_OPERACION = @json(filter_var(config('arca_wsapoc.validar_factura_cliente', true), FILTER_VALIDATE_BOOLEAN) && filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN));</script>
+@php
+    $requiereValidacionApocOperacion = filter_var(config('arca_wsapoc.validar_factura_cliente', true), FILTER_VALIDATE_BOOLEAN)
+        && filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN);
+@endphp
+<script>window.REQUIERE_VALIDACION_APOC_OPERACION = @json($requiereValidacionApocOperacion);</script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>

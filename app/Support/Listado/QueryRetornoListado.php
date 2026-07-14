@@ -19,7 +19,18 @@ class QueryRetornoListado
      */
     public static function requestTraeContextoIndex(Request $request): bool
     {
-        foreach (['filtro_valor', 'filtro_modo', 'filtro_campo', 'filtro_operador', 'filtro_valor_hasta', 'filtro_busqueda_rapida', 'empresa_id'] as $key) {
+        foreach ([
+            'filtro_valor',
+            'filtro_modo',
+            'filtro_campo',
+            'filtro_operador',
+            'filtro_valor_hasta',
+            'filtro_busqueda_rapida',
+            'filtro_reparto',
+            'fecha_entrega_desde',
+            'fecha_entrega_hasta',
+            'empresa_id',
+        ] as $key) {
             if ($request->query->has($key)) {
                 return true;
             }

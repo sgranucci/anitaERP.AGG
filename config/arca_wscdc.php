@@ -26,7 +26,8 @@ return [
             'wsdl_local' => $wscdcBase.'/wsdl/homo/service.wsdl',
         ],
         'prod' => [
-            'wsdl' => 'https://servicios1.arca.gob.ar/WSCDC/service.asmx?WSDL',
+            // servicios1.arca.gob.ar falla SNI/cert en algunos clientes; AFIP sigue respondiendo.
+            'wsdl' => 'https://servicios1.afip.gov.ar/WSCDC/service.asmx?WSDL',
             'wsdl_local' => $wscdcBase.'/wsdl/prod/service.wsdl',
         ],
     ],

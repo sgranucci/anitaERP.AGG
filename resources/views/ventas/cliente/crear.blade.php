@@ -21,6 +21,7 @@ input:invalid {
 <script src="{{asset("assets/pages/scripts/configuracion/provincia/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/zonavta/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/vendedor/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/cobrador/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/distribuidor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/listaprecio/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>

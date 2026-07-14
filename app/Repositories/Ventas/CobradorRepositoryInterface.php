@@ -1,0 +1,22 @@
+<?php
+
+namespace App\Repositories\Ventas;
+
+interface CobradorRepositoryInterface extends RepositoryInterface
+{
+    public function all();
+
+    public function sincronizarConAnita();
+
+    public function traerRegistroDeAnita($key);
+
+    public function guardarAnita($request);
+
+    public function actualizarAnita($request, $id);
+
+    public function eliminarAnita($id);
+
+    public function consultaCobrador(string $consulta): string;
+
+    public function findPorCodigo(string $codigo);
+}

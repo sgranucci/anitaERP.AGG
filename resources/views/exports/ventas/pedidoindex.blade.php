@@ -1,5 +1,6 @@
 @php
     use App\Support\Ventas\PedidoListadoSupport;
+    $subtituloFiltros = $subtituloFiltros ?? '';
 @endphp
 <table>
     @if (!empty($reservarFilaLogoExcel))
@@ -12,23 +13,36 @@
     <tbody>
         <tr>
             <td colspan="10">
-                <h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de pedidos de clientes</h2>
+                <strong style="font-size: 16pt;">Listado de pedidos de clientes</strong>
             </td>
         </tr>
+        <tr>
+            <td colspan="10">Generado {{ date('d/m/Y H:i') }}</td>
+        </tr>
+        @if (trim((string) $subtituloFiltros) !== '')
+            <tr>
+                <td colspan="10">{{ $subtituloFiltros }}</td>
+            </tr>
+        @endif
+        @if (count($pedidos) > 0)
+            <tr>
+                <td colspan="10">Registros: {{ count($pedidos) }}</td>
+            </tr>
+        @endif
     </tbody>
     <thead>
-        <tr>
-            <th>ID</th>
-            <th>Fecha</th>
-            <th>Fecha entrega</th>
-            <th>Cliente</th>
-            <th>Cajas</th>
-            <th>Piezas</th>
-            <th>Kilos</th>
-            <th>Pesada</th>
-            <th>Reparto</th>
-            <th>Estado</th>
-        </tr>
+    <tr>
+        <th>ID</th>
+        <th>Fecha</th>
+        <th>Fecha entrega</th>
+        <th>Cliente</th>
+        <th>Cajas</th>
+        <th>Piezas</th>
+        <th>Kilos</th>
+        <th>Pesada</th>
+        <th>Reparto</th>
+        <th>Estado</th>
+    </tr>
     </thead>
     <tbody>
         @php $totalCaja = 0; $totalPieza = 0; $totalKilo = 0; $totalPesada = 0; @endphp

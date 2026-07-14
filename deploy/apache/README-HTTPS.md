@@ -1,5 +1,10 @@
 # HTTPS para anitaERP (test .211 → luego prod .210)
 
+> **El Bierzo (público `anitaerp.elbierzo.com.ar`)**: guía completa en
+> [`README-HTTPS-EL-BIERZO.md`](README-HTTPS-EL-BIERZO.md)
+> (conf `anitaERP-anitaerp-elbierzo-com-ar-ssl.conf` + script aplicar).
+> Bookmarks viejos `ip.elbierzo.com.ar:12280/anitaERP/public` → 301 al canónico.
+
 ## Resumen
 
 | Pregunta | Respuesta |

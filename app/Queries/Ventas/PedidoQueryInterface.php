@@ -12,6 +12,16 @@ interface PedidoQueryInterface
     public function allPedidoIndexSinPaginar($busqueda, $estado = '', $reparto = '', $fechaentrega = '');
 
     public function allPedidoIndexListadoCursor($busqueda, $estado = '', $reparto = '', $fechaentrega = '');
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function allPedidoIndexFiltros(array $filtros, bool $flPaginando = true);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function allPedidoIndexFiltrosCursor(array $filtros);
     public function allPendienteOt($articulo_id, $combinacion_id);
     public function leePedidoporCodigo($codigo);
     public function leePedidoporId($id);

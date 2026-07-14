@@ -166,6 +166,10 @@ class FacturacionService
 	protected $numeroRemito;
 	protected $movimientoStockService;
 	protected $flCalculaDesdeGeneracionFactura;
+	/** @var int|null Facturación Bierzo desde remito existente (no gastro/estacionamiento). */
+	protected $facturandoDesdeRemitoId;
+	/** @var int|null Numeración remito ya emitida (no pedir MAX+1). */
+	protected $numeroremitoFijoDesdeRemito;
 
     public function __construct(
 								OrdentrabajoQueryInterface $ordentrabajoquery,
@@ -272,6 +276,8 @@ class FacturacionService
 		$this->numeroComprobanteDivision = 0;
 		$this->numeroRemito = 0;
 		$this->flCalculaDesdeGeneracionFactura = false;
+		$this->facturandoDesdeRemitoId = null;
+		$this->numeroremitoFijoDesdeRemito = null;
     }
 
 	public function leePaginando($busqueda)
@@ -702,8 +708,12 @@ class FacturacionService
 		// Lee el tipo de transaccion
 		$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
 
-		// Recalcula la factura
-		$calculoFactura = Self::calculaFacturaPorPedido($data);
+		// Recalcula la factura (pedido o remito Bierzo)
+		if ($this->facturandoDesdeRemitoId) {
+			$calculoFactura = Self::calculaFacturaPorRemito($data);
+		} else {
+			$calculoFactura = Self::calculaFacturaPorPedido($data);
+		}
 
 		if (! is_array($calculoFactura) || isset($calculoFactura['error'])) {
 			return ['error' => $calculoFactura['error'] ?? 'No se pudo calcular la factura del pedido.'];
@@ -850,7 +860,9 @@ class FacturacionService
 				}
 				else
 				{
-					if ($puntoventaremito && $puntoventa->modofacturacion != 'M')
+					if ($this->numeroremitoFijoDesdeRemito !== null && (int) $this->numeroremitoFijoDesdeRemito > 0) {
+						$numeroremito = (int) $this->numeroremitoFijoDesdeRemito;
+					} elseif ($puntoventaremito && $puntoventa->modofacturacion != 'M')
 						$numeroremito = $this->ventaRepository->traeUltimoNumeroRemito('REM','R',$puntoventaremito->codigo);
 					else	
 						$numeroremito = 0;
@@ -916,7 +928,10 @@ class FacturacionService
 				$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
 
 				// Arma detalle
-				$detalleContable = $tipoAnita." ".$letra." ".$puntoventa->codigo." ".$numero." PEDIDO: ".$pedido_id;
+				$detalleContable = $tipoAnita." ".$letra." ".$puntoventa->codigo." ".$numero.
+					($this->facturandoDesdeRemitoId
+						? (" REMITO: ".$this->facturandoDesdeRemitoId)
+						: (" PEDIDO: ".$pedido_id));
 
 				// Graba la factura
 				DB::beginTransaction();
@@ -926,6 +941,13 @@ class FacturacionService
 						$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
 					else
 						$tipoAnita = $tipotransaccion->abreviatura;
+
+					$ventaPedidoId = $pedido_id ?: null;
+					$ventaRemitoId = $this->facturandoDesdeRemitoId ?: null;
+					// Si la cabecera es Remito, el FK pedido vive en remito.pedido_id
+					if ($this->facturandoDesdeRemitoId && isset($pedido->pedido_id)) {
+						$ventaPedidoId = $pedido->pedido_id ?: null;
+					}
 
 					$venta = ['fecha' => $fechaFactura,
 						'fechajornada' => $fechaFactura,
@@ -964,7 +986,8 @@ class FacturacionService
 						'puntoventaremito_id' => $this->puntoventaremito_id,
             			'numeroremito' => $numeroremito,
 						'cantidadbulto' => $this->cantidadBulto,
-						'pedido_id' => $pedido->id
+						'pedido_id' => $ventaPedidoId,
+						'remito_id' => $ventaRemitoId,
 					];	
 
 					// Graba venta
@@ -1080,15 +1103,56 @@ class FacturacionService
 											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
 											$puntoventa->modofacturacion ?? null);
 					
-					// Marca Pedido como facturado
-					$pedido = $this->pedidoRepository->update(['estadopedido' => 'Facturado'], $pedido_id);
+					// Remito ERP (solo facturación administrativa Bierzo; no gastronomía/estacionamiento)
+					if ($this->facturandoDesdeRemitoId) {
+						app(\App\Services\Ventas\RemitoService::class)->marcarFacturado(
+							(int) $this->facturandoDesdeRemitoId,
+							(int) $vta->id
+						);
+					} elseif ((int) $numeroremito > 0 && $puntoventaremito) {
+						$remitoService = app(\App\Services\Ventas\RemitoService::class);
+						$remitoPendiente = \App\Models\Ventas\Remito::query()
+							->where('pedido_id', $pedido_id)
+							->where('estadoremito', \App\Support\Ventas\RemitoEstadosSupport::ESTADOREMITO_PENDIENTE)
+							->whereNull('venta_id')
+							->orderByDesc('id')
+							->first();
+
+						if ($remitoPendiente) {
+							$remitoService->marcarFacturado((int) $remitoPendiente->id, (int) $vta->id);
+						} else {
+							$persistRemito = $remitoService->persistirDesdeFactura([
+								'venta' => $vta,
+								'pedido' => $pedido,
+								'puntoventa_id' => $this->puntoventaremito_id,
+								'numero' => $numeroremito,
+								'items' => $dataFactura,
+								'origen' => 'factura',
+								'estadoremito' => \App\Support\Ventas\RemitoEstadosSupport::ESTADOREMITO_FACTURADO,
+								'estado' => 'F',
+								'venta_id' => $vta->id,
+								'pedido_id' => $pedido_id,
+								'sin_transaction' => true,
+							]);
+							if (! empty($persistRemito['error'])) {
+								throw new Exception('Error grabando remito ERP: '.$persistRemito['error']);
+							}
+						}
+					}
+
+					// Marca Pedido como facturado (si aplica)
+					$pedidoIdMarcar = $ventaPedidoId ?: $pedido_id;
+					if ($pedidoIdMarcar) {
+						$this->pedidoRepository->update(['estadopedido' => 'Facturado'], $pedidoIdMarcar);
+					}
 
 					if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
 					{
-						// Graba anita por pedido
+						// Graba anita por pedido/remito
+						$anitaPedidoId = (int) ($pedidoIdMarcar ?: 0);
 						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $puntoventaremito->codigo, $numeroremito,
 									$venta, $dataCAE, $conceptosTotales, $cuentaCorriente, $dataFactura, $signo,
-									$codigoTipoTransaccion, $pedido_id,
+									$codigoTipoTransaccion, $anitaPedidoId,
 									true, 0, 0, $referenciaFactura, $empresa->codigo,
 									null, null, false, false, false, false, $puntoventa->modofacturacion ?? null);
 
@@ -6396,7 +6460,245 @@ class FacturacionService
 
 		$this->movimientoStockService->guardaMovimientoStock($data, 'create');
 
-		return ['factura' => $data['codigo']];
+		// Remito ERP solo (flujo pedido Bierzo / reparto 101). No gastronomía ni estacionamiento.
+		$persistRemito = app(\App\Services\Ventas\RemitoService::class)->persistirDesdeFactura([
+			'venta' => (object) [
+				'id' => null,
+				'fecha' => $data['fechafactura'] ?? date('Y-m-d'),
+				'cliente_id' => $cliente->id,
+				'condicionventa_id' => $pedido->condicionventa_id,
+				'vendedor_id' => $pedido->vendedor_id,
+				'transporte_id' => $pedido->transporte_id,
+				'cliente_entrega_id' => $pedido->cliente_entrega_id,
+				'lugarentrega' => $pedido->lugarentrega,
+				'leyenda' => $pedido->leyenda,
+				'descuento' => $pedido->descuento,
+				'moneda_id' => $monedas_id[0] ?? 1,
+			],
+			'pedido' => $pedido,
+			'puntoventa_id' => $this->puntoventaremito_id,
+			'numero' => $numeroRemito,
+			'items' => $dataFactura,
+			'origen' => 'pedido',
+			'estadoremito' => 'Pendiente',
+			'estado' => 'P',
+			'venta_id' => null,
+			'pedido_id' => $pedido->id,
+			'sin_transaction' => true,
+		]);
+		if (! empty($persistRemito['error'])) {
+			return ['error' => 'Error grabando remito ERP: '.$persistRemito['error']];
+		}
+
+		return ['factura' => $data['codigo'], 'remito_id' => $persistRemito['id'] ?? null];
+	}
+
+	/**
+	 * Facturación desde remito Bierzo (cantidad = remito_articulo.kilo).
+	 * Aislado de gastronomía y estacionamiento.
+	 * Facturable: sin venta_id y estadoremito no Facturado/Suspendido/Anulado.
+	 */
+	public function calculaFacturaPorRemito(array $data)
+	{
+		$cliente_id = $data['cliente_id'];
+		$fechaFactura = $data['fechafactura'];
+		$this->descuentoPie = $data['descuentopie'] ?? 0;
+		$this->descuentoLinea = $data['descuentolinea'] ?? 0;
+		$this->descuentoImportePie = $data['descuentoimportepie'] ?? 0;
+		$this->numeroDespacho = '';
+
+		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
+		if (! $cliente) {
+			return ['error' => 'Cliente inexistente'];
+		}
+		if ($cliente->numerodocumento == null) {
+			return ['error' => 'No tiene Documento'];
+		}
+
+		$remito = app(\App\Services\Ventas\RemitoService::class)->leeRemito($data['remito_id'] ?? 0);
+		if (! $remito) {
+			return ['error' => 'Remito inexistente'];
+		}
+
+		$motivo = \App\Support\Ventas\RemitoEstadosSupport::motivoNoFacturable($remito);
+		if ($motivo !== null) {
+			return ['error' => $motivo];
+		}
+
+		$remitoArticuloRepo = app(\App\Repositories\Ventas\Remito_ArticuloRepositoryInterface::class);
+		$remito_articulo_ids = $data['remito_articulo_ids'] ?? [];
+		if ($remito_articulo_ids === []) {
+			$remito_articulo_ids = $remitoArticuloRepo->findPorRemitoId($remito->id)->pluck('id')->all();
+		}
+
+		$dataFactura = [];
+		$totKilo = 0;
+
+		foreach ($remito_articulo_ids as $remito_articulo_id) {
+			$linea = $remitoArticuloRepo->find($remito_articulo_id);
+			if (! $linea || (int) $linea->remito_id !== (int) $remito->id) {
+				continue;
+			}
+			if (! \App\Support\Ventas\RemitoEstadosSupport::lineaPendienteDeFacturar($linea)) {
+				continue;
+			}
+
+			$articulo = $this->articuloQuery->traeArticuloPorId($linea->articulo_id);
+			if (! $articulo) {
+				return ['error' => 'Artículo inexistente en remito'];
+			}
+			if ((float) $linea->kilo == 0.0) {
+				return ['error' => 'Artículo '.$articulo->sku.' sin kilos'];
+			}
+
+			$this->descuentoLinea = 0.;
+			if ($linea->descuentoventa_id > 0) {
+				$descuentoventa = $this->descuentoventaRepository->find($linea->descuentoventa_id);
+				if ($descuentoventa) {
+					$this->descuentoLinea = $descuentoventa->porcentajedescuento;
+				}
+			}
+
+			$precioUnitario = $linea->precio;
+			$kilo = (float) $linea->kilo;
+			$pieza = (float) $linea->pieza;
+			$caja = (float) $linea->caja;
+
+			if ($this->descuentoLinea != 0) {
+				$precioConDescuento = round($precioUnitario * (1. - ($this->descuentoLinea / 100.)), 2);
+			} else {
+				$precioConDescuento = $precioUnitario;
+			}
+
+			$kiloDescuento = $kilo;
+			if (config('app.empresa') == 'EL BIERZO' && $this->descuentoLinea != 0) {
+				$kiloDescuento = round($kilo * (1. - ($this->descuentoLinea / 100.)), 1);
+			}
+
+			$codigoCategoria = '';
+			$categoria = Categoria::find($articulo->categoria_id);
+			if ($categoria) {
+				$codigoCategoria = $categoria->codigo;
+			}
+
+			$dataFactura[] = [
+				'cantidad' => $kilo,
+				'kilodescuento' => $kiloDescuento,
+				'pieza' => $pieza,
+				'caja' => $caja,
+				'preciosindescuento' => $precioUnitario,
+				'precio' => $precioConDescuento,
+				'descuento' => $this->descuentoLinea,
+				'descuentointegrado' => '',
+				'descuentofinal' => $this->descuentoPie,
+				'descuentointegradofinal' => '',
+				'incluyeimpuesto' => $linea->incluyeimpuesto,
+				'impuesto_id' => $articulo->impuesto_id,
+				'articulo_id' => $articulo->id,
+				'sku' => $articulo->sku,
+				'descripcion' => $articulo->descripcion,
+				'codigounidadmedida' => $articulo->unidadesdemedidas->codigo ?? 1,
+				'categoria' => $codigoCategoria,
+				'moneda_id' => $linea->moneda_id,
+				'listaprecio_id' => $linea->listaprecio_id,
+				'despacho' => $this->numeroDespacho,
+				'loteimportacion_id' => null,
+				'pedido_articulo_id' => $linea->pedido_articulo_id,
+				'remito_articulo_id' => $linea->id,
+				'cuentacontable_id' => $articulo->cuentacontableventa_id,
+			];
+			$totKilo += $kilo;
+		}
+
+		$provinciaPercepcion = $this->provinciaPercepcionDesdePedido($cliente, $remito);
+		$datosCliente = [
+			'condicioniva_id' => $cliente->condicioniva_id,
+			'numerodocumento' => $cliente->numerodocumento,
+			'retieneiva' => $cliente->retieneiva,
+			'condicioniibb_id' => $cliente->condicioniibb_id,
+			'provincia' => $provinciaPercepcion,
+			'descuentoimportepie' => $this->descuentoImportePie,
+			'id' => $cliente->id,
+			'abasto_id' => $cliente->abasto_id,
+			'porcentajelogistica' => $cliente->porcentajelogistica,
+		];
+
+		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, false);
+		$totalComprobante = $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total', 'importe');
+
+		if ($dataFactura === []) {
+			return ['error' => 'No hay ítems pendientes para facturar del remito.'];
+		}
+		if ($totalComprobante == 0.) {
+			return ['error' => 'El total del comprobante es 0. Revise precios del remito.'];
+		}
+
+		return [
+			'datosfactura' => $dataFactura,
+			'datoscliente' => $datosCliente,
+			'totalcomprobante' => $totalComprobante,
+			'conceptostotales' => $conceptosTotales,
+		];
+	}
+
+	/**
+	 * Emite factura desde cualquier remito Bierzo sin factura asociada
+	 * (manual, F5, desde pedido). Usa el número de remito ya grabado.
+	 * No gastronomía / estacionamiento.
+	 */
+	public function generaFacturaPorRemito(array $data)
+	{
+		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
+		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
+		Cache::forever(generaKey('puntoventaremito'), $data['puntoventaremito_id'] ?? 0);
+
+		$remito = app(\App\Services\Ventas\RemitoService::class)->leeRemito($data['remito_id'] ?? 0);
+		if (! $remito) {
+			return ['error' => 'Remito inexistente'];
+		}
+
+		$motivo = \App\Support\Ventas\RemitoEstadosSupport::motivoNoFacturable($remito);
+		if ($motivo !== null) {
+			return ['error' => $motivo];
+		}
+
+		$cliente_id = $data['cliente_id'] ?? $remito->cliente_id;
+		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
+		if (! $cliente) {
+			return ['error' => 'Cliente inexistente'];
+		}
+
+		$errorEntrega = $this->validarLugarEntregaPedido($cliente, $remito);
+		if ($errorEntrega) {
+			return $errorEntrega;
+		}
+
+		$this->coeficienteCliente = 0;
+		$this->coeficienteExtraCliente = 0;
+		$this->flCalculaDesdeGeneracionFactura = true;
+		$this->flDivide = false;
+		$this->flGrabaComprobanteDividido = false;
+		$this->facturandoDesdeRemitoId = (int) $remito->id;
+		$this->numeroremitoFijoDesdeRemito = (int) $remito->numero;
+
+		$data['cliente_id'] = $cliente_id;
+		$data['remito_id'] = $remito->id;
+		$data['pedido_id'] = $remito->pedido_id ?: 0;
+		$data['pedido_articulo_ids'] = $data['pedido_articulo_ids'] ?? [];
+		if (empty($data['puntoventaremito_id']) && $remito->puntoventa_id) {
+			$data['puntoventaremito_id'] = $remito->puntoventa_id;
+		}
+		$this->puntoventaremito_id = (int) ($data['puntoventaremito_id'] ?? $remito->puntoventa_id ?? 0);
+
+		try {
+			// $remito actúa como cabecera (mismos campos que pedido: cond/vendedor/transporte/entrega)
+			$retorno = $this->generaUnaFacturaPorPedido($data, $cliente, $remito);
+		} finally {
+			$this->facturandoDesdeRemitoId = null;
+			$this->numeroremitoFijoDesdeRemito = null;
+		}
+
+		return [$retorno];
 	}
 }
 

@@ -35,7 +35,7 @@ class Venta extends Model implements Auditable
             'condicioniva_id', 'cae', 'fechavencimientocae',
             'caea_informado_estado', 'caea_informado_at', 'caea_informado_codigo_error', 'caea_informado_mensaje',
             'puntoventaremito_id',
-            'numeroremito', 'cantidadbulto', 'ordenventa_id', 'pedido_id'
+            'numeroremito', 'cantidadbulto', 'ordenventa_id', 'pedido_id', 'remito_id'
     ];
 
     protected $table = 'venta';
@@ -147,6 +147,11 @@ class Venta extends Model implements Auditable
     public function pedidos()
     {
         return $this->hasOne(Pedido::class, 'id', 'pedido_id');
+    }
+
+    public function remitos()
+    {
+        return $this->hasOne(Remito::class, 'id', 'remito_id');
     }
 
     public function transportes()

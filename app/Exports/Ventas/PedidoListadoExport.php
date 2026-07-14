@@ -4,6 +4,7 @@ namespace App\Exports\Ventas;
 
 use App\Services\Ventas\PedidoService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\PedidoListadoFiltros;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -27,15 +28,8 @@ class PedidoListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
 
     private PedidoService $pedidoService;
 
-    private ?string $busqueda = null;
-
-    private string $estado = '';
-
-    /** @var array<int, mixed>|string */
-    private $reparto = '';
-
-    /** @var \Carbon\Carbon|string */
-    private $fechaEntrega;
+    /** @var array<string, mixed> */
+    private array $filtros = [];
 
     private bool $flDesdeIndex = false;
 
@@ -47,33 +41,47 @@ class PedidoListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
 
     private int $filaTituloExcel = 1;
 
+    private int $filaInicioMeta = 1;
+
+    private int $filasMeta = 2;
+
+    private string $subtituloFiltros = '';
+
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
     public function __construct(PedidoService $pedidoService)
     {
         $this->pedidoService = $pedidoService;
-        $this->fechaEntrega = '';
+        $this->filtros = PedidoListadoFiltros::filtrosVacios();
     }
 
     public function view(): View
     {
-        $pedidos = $this->pedidoService->leePedidosPorEstadoSinPaginar(
-            $this->busqueda ?? '',
-            $this->estado,
-            $this->reparto,
-            $this->fechaEntrega
-        );
+        $pedidos = $this->pedidoService->leePedidosIndex($this->filtros, false);
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($pedidos);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
-        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+        $this->subtituloFiltros = PedidoListadoFiltros::subtituloFiltros($this->filtros);
+
+        $this->filasMeta = 2; // título + generado
+        if (trim($this->subtituloFiltros) !== '') {
+            $this->filasMeta++;
+        }
+        if (count($pedidos) > 0) {
+            $this->filasMeta++; // contador
+        }
+
+        $offsetLogo = $this->hayFilaLogos ? 1 : 0;
+        $this->filaInicioMeta = $offsetLogo + 1;
+        $this->filaTituloExcel = $this->filaInicioMeta;
+        $this->filaCabecerasExcel = $offsetLogo + $this->filasMeta + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
         return view('exports.ventas.pedidoindex', [
             'pedidos' => $pedidos,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'subtituloFiltros' => $this->subtituloFiltros,
         ]);
     }
 
@@ -169,10 +177,13 @@ class PedidoListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
                     }
                 }
 
-                $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit);
-                $sheet->getRowDimension($filaTit)->setRowHeight(30);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                for ($i = 0; $i < $this->filasMeta; $i++) {
+                    $fila = $this->filaInicioMeta + $i;
+                    $sheet->mergeCells('A'.$fila.':'.self::COL_ULTIMA.$fila);
+                }
+
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+                $sheet->getStyle('A'.$this->filaTituloExcel.':'.self::COL_ULTIMA.$this->filaTituloExcel)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 16,
@@ -182,6 +193,37 @@ class PedidoListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
                     'alignment' => [
                         'horizontal' => Alignment::HORIZONTAL_LEFT,
                         'vertical' => Alignment::VERTICAL_CENTER,
+                    ],
+                ]);
+
+                for ($i = 1; $i < $this->filasMeta; $i++) {
+                    $fila = $this->filaInicioMeta + $i;
+                    $sheet->getRowDimension($fila)->setRowHeight($i === 1 && trim($this->subtituloFiltros) !== '' ? 42 : 18);
+                    $sheet->getStyle('A'.$fila.':'.self::COL_ULTIMA.$fila)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'size' => 10,
+                            'name' => 'Arial',
+                            'color' => ['rgb' => '444444'],
+                        ],
+                        'alignment' => [
+                            'horizontal' => Alignment::HORIZONTAL_LEFT,
+                            'vertical' => Alignment::VERTICAL_CENTER,
+                            'wrapText' => true,
+                        ],
+                    ]);
+                }
+
+                $sheet->getStyle('A'.$this->filaCabecerasExcel.':'.self::COL_ULTIMA.$this->filaCabecerasExcel)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '17202A'],
+                        'size' => 11,
+                        'name' => 'Arial',
+                    ],
+                    'fill' => [
+                        'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                        'color' => ['rgb' => '85C1E9'],
                     ],
                 ]);
 
@@ -201,12 +243,12 @@ class PedidoListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
         return 'Pedidos de clientes';
     }
 
-    public function parametros(?string $busqueda, string $estado = '', $reparto = '', $fechaEntrega = ''): self
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function parametros(array $filtros): self
     {
-        $this->busqueda = $busqueda;
-        $this->estado = $estado;
-        $this->reparto = $reparto;
-        $this->fechaEntrega = $fechaEntrega;
+        $this->filtros = $filtros;
         $this->flDesdeIndex = true;
 
         return $this;

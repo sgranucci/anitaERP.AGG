@@ -195,12 +195,6 @@
 						</div>
 					</div>
 				</div>
-				<div class="form-group row">
-					<label for="desdefecha_exclusionpercepcioniva" class="col-lg-4 col-form-label">Desde Fecha Excl. Perc. Iva</label>
-					<div class="col-lg-3">
-						<input type="date" name="desdefecha_exclusionpercepcioniva" id="desdefecha_exclusionpercepcioniva" class="form-control" value="{{substr(old('desdefecha_exclusionpercepcioniva', $data->desdefecha_exclusionpercepcioniva ?? ''),0,10)}}">
-					</div>
-				</div>
 			@endif
 		</div>
 		<div class="col-sm-6">
@@ -272,6 +266,32 @@
 							placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
 						<input type="text" class="form-control nombrevendedor" id="nombrevendedor"
 							value="{{ old('nombrevendedor', $data->vendedores->nombre ?? '') }}"
+							placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+					</div>
+				</div>
+			</div>
+			<div class="form-group row tm-cobrador-campo">
+				<label for="cobrador_id" class="col-lg-4 col-form-label">Cobrador</label>
+				<div class="col-lg-8">
+					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+						<input type="hidden" class="cobrador_id" name="cobrador_id" id="cobrador_id"
+							value="{{ old('cobrador_id', $data->cobrador_id ?? '') }}">
+						<button type="button" title="Consulta cobradores (F1)" class="btn-accion-tabla consultacobrador tooltipsC flex-shrink-0">
+							<i class="fa fa-search text-primary"></i>
+						</button>
+						@if (can('editar-cobrador', false) || can('listar-cobrador', false))
+							<a href="{{ ((int) ($data->cobrador_id ?? 0) > 0) ? route('editar_cobrador', ['id' => (int) $data->cobrador_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+								target="_blank" rel="noopener"
+								class="btn-accion-tabla btn-link-editar-cobrador tooltipsC flex-shrink-0 {{ ((int) ($data->cobrador_id ?? 0) > 0) ? '' : 'd-none' }}"
+								title="Consultar cobrador en ABM">
+								<i class="fa fa-edit"></i>
+							</a>
+						@endif
+						<input type="text" class="form-control codigocobrador flex-shrink-0" id="codigocobrador"
+							value="{{ old('codigocobrador', $data->cobradores->codigo ?? '') }}"
+							placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
+						<input type="text" class="form-control nombrecobrador" id="nombrecobrador"
+							value="{{ old('nombrecobrador', $data->cobradores->nombre ?? '') }}"
 							placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
 					</div>
 				</div>
@@ -348,7 +368,7 @@
 						<select name="agregabonificacion" class="col-lg-4 form-control">
 							@foreach ($agregabonificacion_enum as $value => $agregabonificacion)
 								<option value="{{ $agregabonificacion }}"
-									@if (old('agregabonificacion', $data->agregabonificacion ?? '') == $agregabonificacion) selected @endif
+									@if (old('agregabonificacion', $data->agregabonificacion ?? 'Agrega Bonificacion') == $agregabonificacion) selected @endif
 									>{{ $agregabonificacion }}</option>
 							@endforeach
 						</select>			
@@ -362,7 +382,7 @@
 			@else
 				<input type="hidden" name="descuento" id="descuento" class="form-control" value="{{old('descuento', $data->descuento ?? '0')}}">
 				@if (config('app.empresa') == 'EL BIERZO')
-					<input type="hidden" name="agregabonificacion" value="{{ old('agregabonificacion', $data->agregabonificacion ?? 'No Agrega Bonificacion') }}">
+					<input type="hidden" name="agregabonificacion" value="{{ old('agregabonificacion', $data->agregabonificacion ?? 'Agrega Bonificacion') }}">
 				@endif
 			@endif
 			@if (config('app.empresa') == 'EL BIERZO')
@@ -392,12 +412,6 @@
 					<input type="hidden" name="coeficiente_id" value="{{ old('coeficiente_id', $data->coeficiente_id ?? '') }}">
 					<input type="hidden" name="coeficienteextra" value="{{ old('coeficienteextra', $data->coeficienteextra ?? '0') }}">
 				@endif
-				<div class="form-group row">
-					<label for="hastafecha_exclusionpercepcioniva" class="col-lg-4 col-form-label">Hasta Fecha Excl. Perc. Iva</label>
-					<div class="col-lg-3">
-						<input type="date" name="hastafecha_exclusionpercepcioniva" id="hastafecha_exclusionpercepcioniva" class="form-control" value="{{substr(old('hastafecha_exclusionpercepcioniva', $data->hastafecha_exclusionpercepcioniva ?? ''),0,10)}}">
-					</div>
-				</div>				
 			@endif
 			@if (strtoupper(config('app.empresa')) == 'CALZADOS FERLI')
 				<div class="form-group row">
@@ -424,10 +438,32 @@
 			</div>
 		</div>
 	</div>
+	@if (config('app.empresa') == 'EL BIERZO')
+		@if (can('modificar-exclusion-percepcion-iva-cliente', false))
+			<div class="row">
+				<div class="col-sm-12">
+					<div class="form-group row align-items-center">
+						<label for="desdefecha_exclusionpercepcioniva" class="col-lg-2 col-form-label">Desde Fecha Excl. Perc. Iva</label>
+						<div class="col-lg-2">
+							<input type="date" name="desdefecha_exclusionpercepcioniva" id="desdefecha_exclusionpercepcioniva" class="form-control" value="{{substr(old('desdefecha_exclusionpercepcioniva', $data->desdefecha_exclusionpercepcioniva ?? ''),0,10)}}">
+						</div>
+						<label for="hastafecha_exclusionpercepcioniva" class="col-lg-2 col-form-label">Hasta Fecha Excl. Perc. Iva</label>
+						<div class="col-lg-2">
+							<input type="date" name="hastafecha_exclusionpercepcioniva" id="hastafecha_exclusionpercepcioniva" class="form-control" value="{{substr(old('hastafecha_exclusionpercepcioniva', $data->hastafecha_exclusionpercepcioniva ?? ''),0,10)}}">
+						</div>
+					</div>
+				</div>
+			</div>
+		@else
+			<input type="hidden" name="desdefecha_exclusionpercepcioniva" value="{{substr(old('desdefecha_exclusionpercepcioniva', $data->desdefecha_exclusionpercepcioniva ?? ''),0,10)}}">
+			<input type="hidden" name="hastafecha_exclusionpercepcioniva" value="{{substr(old('hastafecha_exclusionpercepcioniva', $data->hastafecha_exclusionpercepcioniva ?? ''),0,10)}}">
+		@endif
+	@endif
 </div>
 @include('includes.ventas.modalconsultatransporte')
 @include('includes.ventas.modalconsultazonavta')
 @include('includes.ventas.modalconsultavendedor')
+@include('includes.ventas.modalconsultacobrador')
 @include('includes.ventas.modalconsultadistribuidor')
 @include('includes.stock.modalconsultalistaprecio')
 @include('includes.contable.modalconsultacuentacontable')

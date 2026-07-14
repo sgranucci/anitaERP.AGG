@@ -195,6 +195,19 @@ class PedidoService
 		return $pedidos;
 	}
 
+	/**
+	 * Listado index con filtros inteligentes.
+	 *
+	 * @param  array<string, mixed>  $filtros
+	 */
+	public function leePedidosIndex(array $filtros, bool $flPaginando = true)
+	{
+		ini_set('memory_limit', '-1');
+		ini_set('max_execution_time', '0');
+
+		return $this->pedidoQuery->allPedidoIndexFiltros($filtros, $flPaginando);
+	}
+
 	public function listarPedido($id)
 	{
 		$resultado = $this->imprimirPedido((int) $id);

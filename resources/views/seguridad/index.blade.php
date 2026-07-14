@@ -17,6 +17,41 @@
     <link rel="stylesheet" href="{{asset("assets/$theme/dist/css/adminlte.min.css")}}">
     <!-- Google Font: Source Sans Pro -->
     <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700" rel="stylesheet">
+    <style>
+        .login-card-body .btn-toggle-password {
+            background-color: transparent;
+            border: 1px solid #ced4da;
+            border-left: 0;
+            color: #6c757d;
+            box-shadow: none;
+            padding: 0 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 2.5rem;
+        }
+        .login-card-body .btn-toggle-password:hover,
+        .login-card-body .btn-toggle-password:focus {
+            background-color: #f8f9fa;
+            color: #495057;
+            border-color: #ced4da;
+            box-shadow: none;
+            outline: 0;
+        }
+        .login-card-body .btn-toggle-password:focus-visible {
+            outline: 2px solid #80bdff;
+            outline-offset: 1px;
+        }
+        .login-card-body #login-password {
+            border-right: 0;
+        }
+        .login-card-body #login-password:focus {
+            border-right: 0;
+        }
+        .login-card-body #login-password:focus + .input-group-append .btn-toggle-password {
+            border-color: #80bdff;
+        }
+    </style>
 </head>
 <body class="hold-transition login-page">
     <div class="login-box">
@@ -54,11 +89,18 @@
                         </div>
                     </div>
                     <div class="input-group mb-3">
-                        <input type="password" name="password" class="form-control" placeholder="Contraseña">
+                        <input type="password" name="password" id="login-password" class="form-control"
+                            placeholder="Contraseña" autocomplete="current-password">
                         <div class="input-group-append">
-                            <div class="input-group-text">
-                                <span class="fas fa-lock"></span>
-                            </div>
+                            <button type="button"
+                                class="btn btn-toggle-password"
+                                id="btn-toggle-login-password"
+                                aria-label="Mostrar contraseña"
+                                aria-controls="login-password"
+                                aria-pressed="false"
+                                title="Mostrar contraseña">
+                                <i class="fas fa-eye" aria-hidden="true"></i>
+                            </button>
                         </div>
                     </div>
                     <div class="row">
@@ -95,6 +137,30 @@
                 campoUsuario.focus();
                 campoUsuario.select();
             }
+
+            var campoPassword = document.getElementById('login-password');
+            var btnToggle = document.getElementById('btn-toggle-login-password');
+            if (!campoPassword || !btnToggle) {
+                return;
+            }
+
+            var icono = btnToggle.querySelector('i');
+
+            function actualizarToggle(mostrar) {
+                campoPassword.setAttribute('type', mostrar ? 'text' : 'password');
+                btnToggle.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+                btnToggle.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+                btnToggle.setAttribute('title', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+                if (icono) {
+                    icono.classList.toggle('fa-eye', !mostrar);
+                    icono.classList.toggle('fa-eye-slash', mostrar);
+                }
+            }
+
+            btnToggle.addEventListener('click', function () {
+                var visible = campoPassword.getAttribute('type') === 'text';
+                actualizarToggle(!visible);
+            });
         });
     </script>
 </body>

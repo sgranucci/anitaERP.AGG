@@ -319,6 +319,16 @@ class FacturacionController extends Controller
         return $this->facturacionService->generaFacturaPorOrdenventa($request->all());
     }
 
+    public function calculaFacturaPorRemito(Request $request)
+    {
+        return $this->facturacionService->calculaFacturaPorRemito($request->all());
+    }
+
+    public function facturarPorRemito(Request $request)
+    {
+        return $this->facturacionService->generaFacturaPorRemito($request->all());
+    }
+
     // Lista una factura de ventas
     public function listaUnaFactura($id)
     {

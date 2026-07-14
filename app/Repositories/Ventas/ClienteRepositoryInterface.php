@@ -11,6 +11,7 @@ interface ClienteRepositoryInterface extends RepositoryInterface
 
     public function sincronizarAnitaDespuesDeGrabado(int $clienteId): void;
     public function actualizarDistribuidorIdDesdeAnita(): array;
+    public function actualizarCobradorIdDesdeAnita(): array;
     public function previewInsertClimaeSqlPorCodigo(string $codigo): string;
     public function updateEmiteNc($id);
     public function findPorCodigo($codigo);

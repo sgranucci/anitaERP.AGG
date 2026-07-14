@@ -15,7 +15,7 @@ Inicio
                     : config('app.empresa').'.png';
             @endphp
             <div class="text-center py-4">
-                <img src="{{ asset('storage/imagenes/logos/'.$logoInicio) }}" alt="{{ config('app.empresa') }}" class="img-fluid" style="max-height: 160px;">
+                <img src="{{ asset('storage/imagenes/logos/'.$logoInicio) }}" alt="{{ config('app.empresa') }}" class="img-fluid" style="max-height: 320px;">
             </div>
         @endif
     </div>

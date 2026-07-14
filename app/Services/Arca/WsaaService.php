@@ -222,7 +222,10 @@ class WsaaService
         }
         $this->ensureDir($dir, 'cache TA');
 
-        file_put_contents($this->taFile($serviceId, $context), $taXml);
+        $file = $this->taFile($serviceId, $context);
+        file_put_contents($file, $taXml);
+        // CLI (umask 022) deja 0644 y php-fpm (www-data) no puede renovar el TA.
+        @chmod($file, 0664);
     }
 
     private function taFile(string $serviceId, ?array $context = null): string

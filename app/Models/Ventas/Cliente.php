@@ -16,6 +16,7 @@ use App\Models\Configuracion\Pais;
 use App\Models\Ventas\Zonavta;
 use App\Models\Ventas\Subzonavta;
 use App\Models\Ventas\Vendedor;
+use App\Models\Ventas\Cobrador;
 use App\Models\Ventas\Condicionventa;
 use App\Models\Configuracion\Condicioniva;
 use App\Models\Configuracion\CondicionIIBB;
@@ -32,7 +33,7 @@ class Cliente extends Model implements Auditable
 	use ClienteTrait;
 
     protected $fillable = ['nombre','codigo','contacto','fantasia','email','telefono','urlweb','domicilio','localidad_id',
-							'provincia_id','pais_id','zonavta_id','subzonavta_id','vendedor_id','numerodocumento','condicioniva_id',
+							'provincia_id','pais_id','zonavta_id','subzonavta_id','vendedor_id','cobrador_id','numerodocumento','condicioniva_id',
 							'retieneiva','nroiibb','condicioniibb_id','tipoempresa_cliente_id','condicionventa_id','listaprecio_id','cuentacontable_id','vaweb',
 							'estado','usuario_id','codigopostal','transporte_id','descuento','leyenda','tiposuspension_id',
                             'facturas_apocrifas','facturas_apocrifas_consulta_at','facturas_apocrifas_detalle',
@@ -109,6 +110,11 @@ class Cliente extends Model implements Auditable
     public function vendedores()
     {
         return $this->belongsTo(Vendedor::class, 'vendedor_id');
+    }
+
+    public function cobradores()
+    {
+        return $this->belongsTo(Cobrador::class, 'cobrador_id');
     }
 
     public function condicionivas()

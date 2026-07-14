@@ -73,6 +73,14 @@ class ClienteAnitaSyncService
         return $this->clienteRepository->actualizarDistribuidorIdDesdeAnita();
     }
 
+    public function actualizarCobradorIdDesdeAnita(): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        return $this->clienteRepository->actualizarCobradorIdDesdeAnita();
+    }
+
     /**
      * @return list<object>
      */

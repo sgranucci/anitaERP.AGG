@@ -1620,19 +1620,43 @@
 		document.location.href= listarUri;
 	}
 
-	function generaFactura()
+	function abrirModalEmisionPedidoSiPadronOk()
 	{
-		if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
+		var clienteIdFactura = $("#cliente_id").val();
+
+		// Si el padrón/APOC ya está OK (validación al cargar el pedido), no reconsultar ARCA al abrir.
+		if (typeof window.padronOperacionClienteOk === 'function'
+			&& window.padronOperacionClienteOk(clienteIdFactura)) {
+			generaFacturaAbrirModal();
 			return;
 		}
 
-		var clienteIdFactura = $("#cliente_id").val();
 		if (typeof window.ejecutarSiPadronOperacionOk === 'function') {
 			window.ejecutarSiPadronOperacionOk(clienteIdFactura, generaFacturaAbrirModal);
 			return;
 		}
 
 		generaFacturaAbrirModal();
+	}
+
+	function generaFactura()
+	{
+		window.modoEmisionPedido = 'factura';
+		if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
+			return;
+		}
+
+		abrirModalEmisionPedidoSiPadronOk();
+	}
+
+	function generaRemito()
+	{
+		window.modoEmisionPedido = 'remito';
+		if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
+			return;
+		}
+
+		abrirModalEmisionPedidoSiPadronOk();
 	}
 
 	function generaFacturaAbrirModal()
@@ -1667,37 +1691,38 @@
 		nombrecliente = $("#nombrecliente").val();
 		descuentoCliente = $('#descuento').val();
 
-		setTimeout(() => {
-			$("#facturarPedidoModal").modal('show');
-
-			$('#puntoventa_id').on('change', function (event) {
-				event.preventDefault();
-				var puntoventa_id = $(this).val();
-
-				var listarUri = carpetaBase+"/ventas/leeunpuntoventa/"+puntoventa_id;
-
-				$.get(listarUri, function(data){
-					$("#actividad_arca_id").val(data.actividad_arca_id);
-
-					if (data.actividad_arca_id > 0)
-						$('#actividad_arca_id').attr('readonly', true);
-					else
-						$('#actividad_arca_id').attr('readonly', false);
-				});
-			});
-
-		}, 300);
+		$("#facturarPedidoModal").modal('show');
 	}
 
-	// Carga modal de facturacion
+	function aplicarUiModalEmisionPedido(modal)
+	{
+		var esRemito = window.modoEmisionPedido === 'remito';
+		var $modal = $(modal);
+
+		$modal.find('#tipotransaccion, #puntoventa, #actividad_arca').toggle(!esRemito);
+		$modal.find('#puntoventaremito').show();
+		$modal.find('#descuentopie, #descuentolinea, #descuentoimportepie').closest('.form-group').toggle(!esRemito);
+		$modal.find('#div_leyendafacturacion, #datos-exportacion').toggle(!esRemito);
+		$modal.find('#cantidadbulto').closest('.form-group').toggle(!esRemito);
+		$modal.find('#total-factura-pedido-table').closest('.row').toggle(!esRemito);
+		$modal.find('label.col-form-label').filter(function () {
+			return $(this).text().indexOf('Items a') === 0;
+		}).text(esRemito ? 'Items a Remitir' : 'Items a Facturar');
+
+		$modal.find('#aceptaFacturarOrdenTrabajoModal').text(esRemito ? 'Genera Remito' : 'Genera Factura');
+	}
+
+	// Carga modal de facturacion / remito
 	$(document).on('shown.bs.modal', '#facturarPedidoModal', function() {
 		var modal = $(this);
+		var esRemito = window.modoEmisionPedido === 'remito';
 
 		modal.find('#tbody-tabla-factura').empty();
 		modal.find('#tbody-tabla-total-factura').empty();
 		modal.find('#alert-preview-factura-pedido').addClass('d-none').text('');
 
 		modalActivo = "facturarPedidoModal";
+		aplicarUiModalEmisionPedido(modal);
 
 		var numeroPedido = $('#codigopedido').val();
 		let sel_puntoventa = JSON.parse(document.querySelector('#datosfactura').dataset.puntoventa);
@@ -1727,12 +1752,14 @@
 
 		modal.find('#fechafactura').val(hoy.toISOString().substring(0,10));
 		modal.find('#nombrecliente').val(nombrecliente);
-		modal.find('.modal-title').text('Factura PEDIDO '+numeroPedido);
+		modal.find('.modal-title').text((esRemito ? 'Remito PEDIDO ' : 'Factura PEDIDO ') + numeroPedido);
 		modal.find('#facturarMedidasModal').empty();
 		modal.find('#descuentopie').val(descuentoCliente);
 
-    	// Lee punto de venta si es de exportacion
-    	leePuntoVenta(puntoVentaDefault);
+		// Solo en facturación: chequea si el PV es exportación
+		if (!esRemito) {
+			leePuntoVenta(puntoVentaDefault);
+		}
 
 		$("#tbody-tabla .articulo_id").each(function(){
 			let estadoItem = $(this).parents('tr').find('.estados').val();
@@ -1768,33 +1795,32 @@
 			}
 		});
 
-		$("#tbody-tabla-factura .descuentoventa_id_fac").each(function(){
-			let ptr = this;
-			let descuentoventa_id = $(this).val();
+		// Bonificaciones / preview de factura: solo al facturar (no al remitir)
+		if (!esRemito) {
+			$("#tbody-tabla-factura .descuentoventa_id_fac").each(function(){
+				let ptr = this;
+				let descuentoventa_id = $(this).val();
 
-			// Lee descuento
-			if (descuentoventa_id > 0)
-			{
-				var uri = carpetaBase+"/ventas/leeundescuentoventa/"+descuentoventa_id;
+				if (descuentoventa_id > 0)
+				{
+					var uri = carpetaBase+"/ventas/leeundescuentoventa/"+descuentoventa_id;
 
-				$.get(uri, function(data){
-					
-					let pesada = $(ptr).parents('tr').find('.pesada_fac').val();
+					$.get(uri, function(data){
+						
+						let pesada = $(ptr).parents('tr').find('.pesada_fac').val();
 
-					let bonificado = parseFloat(pesada) * parseFloat(data.porcentajedescuento) / 100;
+						let bonificado = parseFloat(pesada) * parseFloat(data.porcentajedescuento) / 100;
 
-					let pesadaSinDescuento = parseFloat(pesada) - parseFloat(bonificado.toFixed(1));
+						let pesadaSinDescuento = parseFloat(pesada) - parseFloat(bonificado.toFixed(1));
 
-					$(ptr).parents('tr').find('.pesada_fac').val(pesadaSinDescuento.toFixed(2));
-					$(ptr).parents('tr').find('.porcentajedescuento_fac').val(bonificado.toFixed(1));
+						$(ptr).parents('tr').find('.pesada_fac').val(pesadaSinDescuento.toFixed(2));
+						$(ptr).parents('tr').find('.porcentajedescuento_fac').val(bonificado.toFixed(1));
 
-				});
+					});
+				}
 
-				setTimeout(() => {
-				}, 300);
-			}
-
-		});
+			});
+		}
 
 		// Agrega totales
 		agregaRenglonTotalItemFactura();
@@ -1815,29 +1841,7 @@
 
 		$('#cantidadbulto').val(totalcajaspedido);
 
-		// Arma select de tipos de transacciones
-		selectTipoTransaccion.empty();
-		selectTipoTransaccion.append('<option value="">-- Seleccionar tipo de transacción --</option>');
-		$.each(sel_tipotransaccion, function(obj, item) {
-			if (tipoTransaccionDefault == item.id)
-				op = 'selected="selected"';
-			else
-				op = '';
-			selectTipoTransaccion.append('<option value="' + item.id + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
-		});
-
-		// Arma select de puntos de venta
-		selectPuntoVenta.empty();
-		selectPuntoVenta.append('<option value="">-- Seleccionar punto de venta --</option>');
-		$.each(sel_puntoventa, function(obj, item) {
-			if (puntoVentaDefault == item.id)
-				op = 'selected="selected"';
-			else
-				op = '';
-			selectPuntoVenta.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
-		});
-
-		// Arma select de puntos de venta del remito
+		// Arma select de puntos de venta del remito (siempre)
 		selectPuntoVentaRemito.empty();
 		selectPuntoVentaRemito.append('<option value="">-- Seleccionar punto de venta --</option>');
 		$.each(sel_puntoventaremito, function(obj, item) {
@@ -1848,7 +1852,32 @@
 			selectPuntoVentaRemito.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
 		});
 
-		// Arma select de incoterms
+		if (esRemito) {
+			return;
+		}
+
+		// --- Solo facturación a partir de acá ---
+
+		selectTipoTransaccion.empty();
+		selectTipoTransaccion.append('<option value="">-- Seleccionar tipo de transacción --</option>');
+		$.each(sel_tipotransaccion, function(obj, item) {
+			if (tipoTransaccionDefault == item.id)
+				op = 'selected="selected"';
+			else
+				op = '';
+			selectTipoTransaccion.append('<option value="' + item.id + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
+		});
+
+		selectPuntoVenta.empty();
+		selectPuntoVenta.append('<option value="">-- Seleccionar punto de venta --</option>');
+		$.each(sel_puntoventa, function(obj, item) {
+			if (puntoVentaDefault == item.id)
+				op = 'selected="selected"';
+			else
+				op = '';
+			selectPuntoVenta.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
+		});
+
 		if (document.querySelector('#datosfactura').dataset.incoterm !== '')
 		{
 			selectIncoterm.empty();
@@ -1858,7 +1887,6 @@
 			});
 		}
 
-		// Arma select de formas de pago
 		if (document.querySelector('#datosfactura').dataset.formapago !== '')
 		{
 			selectFormapago.empty();
@@ -1869,25 +1897,17 @@
 		}
 
 		var token = $('#csrf_token').val();
-		var puntoventa_id = $('#puntoventa_id').val();
-		var tipotransaccion_id = $('#tipotransaccion_id').val();
 		var descuentopie = $('#descuentopie').val();
 		var descuentoimportepie = $('#descuentoimportepie').val();
 		var descuentolinea = $('#descuentolinea').val();
 		var fechafactura = $('#fechafactura').val();
-		var leyendafactura = $('#leyendafactura').val();
-		var cantidadbulto = $('#cantidadbulto').val();
-		var puntoventaremito_id = $('#puntoventaremito_id').val();
 		var formapago_id = $('#formapago_id').val();
 		var incoterm_id = $('#incoterm_id').val();
 		var mercaderia = $('#mercaderia').val();
-		var leyendaexportacion = $('#leyendaexportacion').val();
 		var cliente_id = $('#cliente_id').val();
 		let pedido_id = $('#pedido_id').val();
 
-		// Completa actividad
 		var puntoventa_id = $("#puntoventa_id").val();
-
 		var listarUri = carpetaBase+"/ventas/leeunpuntoventa/"+puntoventa_id;
 
 		$.get(listarUri, function(data){
@@ -1899,7 +1919,6 @@
 				$('#actividad_arca_id').attr('readonly', false);
 		});
 
-		// Calcula factura (preview; padrón ya validado al elegir cliente)
 		$.post(carpetaBase+"/ventas/calculafacturaporpedido",
 		{
 			pedido_id: pedido_id,
@@ -2076,8 +2095,24 @@
 
 		if (estadoPedido != 'Pendiente')
 		{
-			alert("No puede facturar un pedido que no este pendiente");
-			$('#facturarOrdenventaModal').modal('hide');
+			alert(window.modoEmisionPedido === 'remito'
+				? "No puede generar remito de un pedido que no este pendiente"
+				: "No puede facturar un pedido que no este pendiente");
+			$('#facturarPedidoModal').modal('hide');
+			return;
+		}
+
+		if (window.modoEmisionPedido === 'remito') {
+			if (puntoventaremito_id < 1)
+			{
+				alert("No puede generar remito sin punto de venta del remito");
+				return;
+			}
+			if (typeof window.ejecutarSiPadronOperacionOk === 'function') {
+				window.ejecutarSiPadronOperacionOk(cliente_id, emitirRemitoPedidoDesdeModal);
+				return;
+			}
+			emitirRemitoPedidoDesdeModal();
 			return;
 		}
 
@@ -2108,6 +2143,78 @@
 
 		emitirFacturaPedidoDesdeModal();
 	});
+
+	function emitirRemitoPedidoDesdeModal()
+	{
+		var token = $('#csrf_token').val();
+		var puntoventaremito_id = $('#puntoventaremito_id').val();
+		var fechafactura = $('#fechafactura').val();
+		let cliente_id = $('#cliente_id').val();
+		let pedido_id = $('#pedido_id').val();
+
+		$('#facturarPedidoModal').modal('hide');
+		if (typeof iniciarProcesoFacturaPedido === 'function') {
+			iniciarProcesoFacturaPedido();
+		}
+
+		$.ajax({
+			url: carpetaBase + '/ventas/generaremmitodesdepedido',
+			method: 'POST',
+			dataType: 'json',
+			data: {
+				pedido_articulo_ids: pedido_articulo_ids,
+				cliente_id: cliente_id,
+				pedido_id: pedido_id,
+				puntoventaremito_id: puntoventaremito_id,
+				fecharemito: fechafactura,
+				_token: token
+			},
+		})
+			.done(function (data) {
+				if (data.error) {
+					if (typeof mostrarResultadoFacturaPedidoEnOverlay === 'function') {
+						mostrarResultadoFacturaPedidoEnOverlay({
+							estado: 'error',
+							titulo: 'Error al generar remito',
+							subtitulo: data.error,
+							facturas: [],
+							errores: [data.error],
+							exito: false,
+							codigosOk: [],
+						});
+					} else {
+						alert(data.error);
+					}
+					return;
+				}
+				if (typeof mostrarResultadoFacturaPedido === 'function') {
+					mostrarResultadoFacturaPedido([{factura: data.codigo}], function () {
+						window.location.href = carpetaBase + '/ventas/remito/' + data.id + '/editar';
+					});
+				} else {
+					alert('Remito generado: ' + data.codigo);
+					window.location.href = carpetaBase + '/ventas/remito/' + data.id + '/editar';
+				}
+			})
+			.fail(function (xhr) {
+				var msg = (typeof mensajeErrorAjaxFacturaPedido === 'function')
+					? mensajeErrorAjaxFacturaPedido(xhr)
+					: 'Error al generar remito';
+				if (typeof mostrarResultadoFacturaPedidoEnOverlay === 'function') {
+					mostrarResultadoFacturaPedidoEnOverlay({
+						estado: 'error',
+						titulo: 'Error al generar remito',
+						subtitulo: msg,
+						facturas: [],
+						errores: [msg],
+						exito: false,
+						codigosOk: [],
+					});
+				} else {
+					alert(msg);
+				}
+			});
+	}
 
 	function emitirFacturaPedidoDesdeModal()
 	{
@@ -2197,8 +2304,21 @@
 	$('#puntoventa_id').on('change', function () {
 		let puntoventa_id = $('#puntoventa_id').val();
 
+		if (!puntoventa_id) {
+			return;
+		}
+
 		// Lee punto de venta si es de exportacion
 		leePuntoVenta(puntoventa_id);
+
+		$.get(carpetaBase+"/ventas/leeunpuntoventa/"+puntoventa_id, function(data){
+			$("#actividad_arca_id").val(data.actividad_arca_id);
+
+			if (data.actividad_arca_id > 0)
+				$('#actividad_arca_id').attr('readonly', true);
+			else
+				$('#actividad_arca_id').attr('readonly', false);
+		});
 	});
 
 	function leePuntoVenta(puntoventa_id)

@@ -1150,6 +1150,29 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Services\Ventas\RemitoService',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\RemitoRepositoryInterface',
+            'App\Repositories\Ventas\RemitoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\Remito_ArticuloRepositoryInterface',
+            'App\Repositories\Ventas\Remito_ArticuloRepository',
+        );
+
+        $this->app->bind(
+            'App\Queries\Ventas\RemitoQueryInterface',
+            'App\Queries\Ventas\RemitoQuery',
+        );
+
+        $this->app->bind(
+            'App\Services\Ventas\RemitoListadoPdfService',
+        );
+
+        $this->app->bind(
             'App\Queries\Ventas\Pedido_CombinacionQueryInterface',
             'App\Queries\Ventas\Pedido_CombinacionQuery',
         );
@@ -1716,6 +1739,21 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Ventas\DistribuidorRepositoryInterface',
             'App\Repositories\Ventas\DistribuidorRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\CobradorRepositoryInterface',
+            'App\Repositories\Ventas\CobradorRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\CamionRepositoryInterface',
+            'App\Repositories\Ventas\CamionRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Ventas\CaiRepositoryInterface',
+            'App\Repositories\Ventas\CaiRepository',
         );
 
         $this->app->bind(

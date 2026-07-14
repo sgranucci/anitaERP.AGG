@@ -21,8 +21,12 @@ use App\Services\Ventas\PedidoService;
 use App\Services\Ventas\PedidoListadoPdfService;
 use App\Services\Ventas\KiloPedidoReporteService;
 use App\Services\Ventas\KiloCategoriaReporteService;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Ventas\KiloPedidoListadoFiltros;
 use App\Support\Ventas\KiloCategoriaListadoFiltros;
+use App\Support\Ventas\ListadoRepartoFechaEntregaSupport;
+use App\Support\Ventas\PedidoListadoFiltros;
+use Illuminate\Http\RedirectResponse;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Cliente;
 use App\Models\Stock\Articulo;
@@ -154,18 +158,16 @@ class PedidoController extends Controller
     {
 		can('listar-pedidos');
 
-		$filtrosResueltos = $this->resolveFiltrosPedidoIndex($request);
-		$filtros = $filtrosResueltos['filtros'];
-		$busqueda = $request->busqueda;
-		$estado = $filtrosResueltos['estado'];
-		$reparto = $filtrosResueltos['reparto'];
-		$fechaEntrega = $filtrosResueltos['fechaEntrega'];
+		$filtros = PedidoListadoFiltros::resolverDesdeRequest($request);
+		$filtrosQuery = PedidoListadoFiltros::paraQueryString($filtros);
+		$pedidos = $this->pedidoService->leePedidosIndex($filtros, true);
 
-		$pedidos = $this->pedidoService->leePedidosPorEstadoPaginando($busqueda, $estado, $reparto, $fechaEntrega);
-
-		$datas = ['pedidos' => $pedidos, 'busqueda' => $busqueda];
-
-		return view('ventas.pedido.indexp', $datas); 
+		return view('ventas.pedido.indexp', [
+			'pedidos' => $pedidos,
+			'filtros' => $filtros,
+			'filtrosQuery' => $filtrosQuery,
+			'camposFiltro' => PedidoListadoFiltros::CAMPOS,
+		]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -175,38 +177,32 @@ class PedidoController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtrosResueltos = $this->resolveFiltrosPedidoIndex($request);
-        $estado = $filtrosResueltos['estado'];
-        $reparto = $filtrosResueltos['reparto'];
-        $fechaEntrega = $filtrosResueltos['fechaEntrega'];
+        $filtros = PedidoListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $subtitulo = PedidoListadoFiltros::subtituloFiltros($filtros);
 
         switch($formato)
         {
         case 'PDF':
-            $rutaPdf = $this->pedidoListadoPdfService->generar(
-                $busqueda,
-                $estado,
-                $reparto,
-                $fechaEntrega
-            );
+            $rutaPdf = $this->pedidoListadoPdfService->generar($filtros, $subtitulo);
 
             return response()->download($rutaPdf, 'listado_pedido.pdf')->deleteFileAfterSend(true);
 
         case 'EXCEL':
             return (new PedidoListadoExport($this->pedidoService))
-                        ->parametros($busqueda, $estado, $reparto, $fechaEntrega)
+                        ->parametros($filtros)
                         ->download('pedido.xlsx');
 
         case 'CSV':
             return (new PedidoListadoExport($this->pedidoService))
-                        ->parametros($busqueda, $estado, $reparto, $fechaEntrega)
+                        ->parametros($filtros)
                         ->download('pedido.csv', \Maatwebsite\Excel\Excel::CSV);
         }   
 
-        return redirect()->route('pedido', array_filter(['busqueda' => $busqueda]));
+        return redirect()->route('pedido', PedidoListadoFiltros::paraQueryString($filtros));
     }
 
     /**
+     * @deprecated Migrado a PedidoListadoFiltros; se mantiene por compatibilidad de limpiafiltro session.
      * @return array{filtros: array<string, mixed>, estado: string, reparto: array<int, mixed>|string, fechaEntrega: \Carbon\Carbon|string}
      */
     private function resolveFiltrosPedidoIndex(Request $request): array
@@ -808,7 +804,7 @@ class PedidoController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-pedidos');
 
@@ -824,7 +820,8 @@ class PedidoController extends Controller
 		$formapago_query = $this->formapagoRepository->all();
 		$incoterm_query = $this->incotermRepository->all();
 		$descuentoventa_query = $this->descuentoventaRepository->all();
-		$actividad_arca_query = $this->actividad_arcaRepository->all();		
+		$actividad_arca_query = $this->actividad_arcaRepository->all();
+		$filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, PedidoListadoFiltros::class);
 		
         return view('ventas.pedido.crear', compact('cliente_query', 'condicionventa_query', 'vendedor_query',
 			'listaprecio_query', 'moneda_query', 
@@ -832,7 +829,7 @@ class PedidoController extends Controller
 			'motivocierrepedido_query', 'lote_query',
 			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 
 			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query',
-			'descuentoventa_query', 'unidadmedida_query', 'actividad_arca_query'));
+			'descuentoventa_query', 'unidadmedida_query', 'actividad_arca_query', 'filtrosQuery'));
     }
 
     /**
@@ -852,7 +849,30 @@ class PedidoController extends Controller
 		if (isset($data['id']))
 			$mensaje = 'Pedido '.$data['id'].' '.$data['codigo'].' creado con exito ';
 
-    	return redirect('ventas/pedido')->with('mensaje', $mensaje);
+    	return $this->redirectTrasGrabadoPedido($request, $mensaje);
+	}
+
+	/**
+	 * Vuelve al index con filtros del listado; si el default (entrega = hoy) ocultaría
+	 * el pedido recién grabado, ajusta el rango a su fecha de entrega.
+	 */
+	private function redirectTrasGrabadoPedido(Request $request, string $mensaje): RedirectResponse
+	{
+		$retorno = QueryRetornoListado::desdeRequest($request, PedidoListadoFiltros::class);
+		$fechaEntrega = substr(
+			(string) ($request->input('fechaentrega') ?: ListadoRepartoFechaEntregaSupport::fechaHoy()),
+			0,
+			10
+		);
+
+		$desde = (string) ($retorno['fecha_entrega_desde'] ?? ListadoRepartoFechaEntregaSupport::fechaHoy());
+		$hasta = (string) ($retorno['fecha_entrega_hasta'] ?? ListadoRepartoFechaEntregaSupport::fechaHoy());
+		if ($fechaEntrega < $desde || $fechaEntrega > $hasta) {
+			$retorno['fecha_entrega_desde'] = $fechaEntrega;
+			$retorno['fecha_entrega_hasta'] = $fechaEntrega;
+		}
+
+		return redirect()->route('pedido', $retorno)->with('mensaje', $mensaje);
 	}
 
     /**
@@ -907,6 +927,7 @@ class PedidoController extends Controller
 
 		$ocultarVolver = $soloConsulta;
 		$puedeActualizarPedido = can('actualizar-pedidos', false);
+		$filtrosQuery = QueryRetornoListado::desdeRequestSiIndex(request(), PedidoListadoFiltros::class);
 
 		return view('ventas.pedido.editar', compact('pedido', 'cliente_query', 'condicionventa_query', 
 			'vendedor_query', 
@@ -914,7 +935,8 @@ class PedidoController extends Controller
 			'tiposuspensioncliente_query', 'motivocierrepedido_query', 'lote_query',
 			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 'descuentoventa_query',
 			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query',
-			'unidadmedida_query', 'actividad_arca_query', 'soloConsulta', 'ocultarVolver', 'puedeActualizarPedido'));
+			'unidadmedida_query', 'actividad_arca_query', 'soloConsulta', 'ocultarVolver', 'puedeActualizarPedido',
+			'filtrosQuery'));
     }
 
     /**
@@ -956,7 +978,7 @@ class PedidoController extends Controller
 				->with('mensaje', $mensaje);
 		}
 
-        return redirect('ventas/pedido')->with('mensaje', $mensaje);
+        return $this->redirectTrasGrabadoPedido($request, $mensaje);
     }
 
 	// Actualizacion del pedido desde afuera del abm

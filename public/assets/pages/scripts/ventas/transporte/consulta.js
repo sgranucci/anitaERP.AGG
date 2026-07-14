@@ -57,9 +57,10 @@ function resolverPorCodigoTransporte(codigo, $ctx) {
     $.get(urlRes, function(data) {
         if (data && data.id) {
             aplicarTransporteEnContexto($ctx, data);
-            if ($('#fechaentrega').length) {
-                $('#fechaentrega').focus();
+            if ($ctx && $ctx.length && $ctx.closest('#asignarKilosRemitoModal').length) {
+                $('#asigna_kilos_porcentaje').trigger('focus');
             }
+            // No enfocar #fechaentrega: en Firefox rueda/teclas pueden cambiar la fecha sin que se note.
         } else {
             limpiarTransporteEnContexto($ctx);
         }
@@ -75,6 +76,47 @@ function abrirModalConsultaTransporteDesdeInput($input) {
     }
     $('#consultatransporteModal').modal('show');
     buscar_datos_transporte('');
+}
+
+function esTeclaF1Transporte(e) {
+    return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function modalConsultaTransporteAbierto() {
+    var m = document.getElementById('consultatransporteModal');
+    return !!(m && (m.classList.contains('show') || m.classList.contains('in')));
+}
+
+/** Eleva z-index / backdrop cuando la consulta se abre sobre otro modal (ej. Asignar kilos). */
+function apilarModalConsultaTransporteSiAnidado() {
+    var visibles = document.querySelectorAll('.modal.show, .modal.in').length;
+    if (visibles < 2) {
+        return;
+    }
+    var $m = $('#consultatransporteModal');
+    var zHijo = 1040 + (10 * visibles);
+    $m.data('transporteModalApilado', true);
+    $m.css('z-index', zHijo);
+    setTimeout(function () {
+        $('.modal-backdrop').last().css('z-index', zHijo - 1);
+    }, 0);
+}
+
+function desapilarModalConsultaTransporteSiAnidado() {
+    var $m = $('#consultatransporteModal');
+    if (!$m.data('transporteModalApilado')) {
+        return;
+    }
+    $m.removeData('transporteModalApilado');
+    $m.css('z-index', '');
+    if (document.querySelectorAll('.modal.show, .modal.in').length > 0) {
+        $('body').addClass('modal-open');
+    }
+}
+
+function contextoTransporteEnAsignaKilos() {
+    return !!(ptrTransporteContext && ptrTransporteContext.length
+        && ptrTransporteContext.closest('#asignarKilosRemitoModal').length);
 }
 
 // Si pulsamos tecla enter en un Input no envia formulario
@@ -112,7 +154,17 @@ function activa_eventos_consultatransporte()
     });
 
     $('#consultatransporteModal').off('shown.bs.modal.transporte').on('shown.bs.modal.transporte', function () {
+        apilarModalConsultaTransporteSiAnidado();
         $(this).find('[autofocus]').focus();
+    });
+
+    $('#consultatransporteModal').off('hidden.bs.modal.transporteStack').on('hidden.bs.modal.transporteStack', function () {
+        desapilarModalConsultaTransporteSiAnidado();
+        if (contextoTransporteEnAsignaKilos()) {
+            setTimeout(function () {
+                $('#asigna_kilos_porcentaje').trigger('focus');
+            }, 50);
+        }
     });
 
     $('#aceptaconsultatransporteModal').off('click.transporte').on('click.transporte', function () {
@@ -135,10 +187,27 @@ function activa_eventos_consultatransporte()
             $("#codigotransporte").val(data.codigo);
         }
 
+        var enAsignaKilos = contextoTransporteEnAsignaKilos();
         $('#consultatransporteModal').modal('hide');
-        if ($('#fechaentrega').length) {
-            $("#fechaentrega").focus();
+        if (enAsignaKilos) {
+            setTimeout(function () {
+                $('#asigna_kilos_porcentaje').trigger('focus');
+            }, 50);
         }
+        // No enfocar #fechaentrega tras elegir reparto (evita cambio accidental de fecha).
+    });
+
+    // F1 en campo código de reparto/transporte (formulario o modal Asignar kilos)
+    $(document).off('keydown.transporteF1').on('keydown.transporteF1', '.codigotransporte', function (e) {
+        if (!esTeclaF1Transporte(e)) {
+            return;
+        }
+        if (modalConsultaTransporteAbierto()) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        abrirModalConsultaTransporteDesdeInput($(this));
     });
 
     $('.codigotransporte').off('change.transporte blur.transporte').on('change.transporte blur.transporte', function (event) {

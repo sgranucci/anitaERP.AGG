@@ -1811,6 +1811,16 @@ if (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
     Route::post('ventas/pedido/limpiafiltro', 'Ventas\PedidoController@limpiafiltro')->name('pedido.limpiafiltro');
     Route::get('ventas/listarpedidopdf/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedidoPdf')->name('listar_pedido_pdf');
     Route::get('ventas/listapedido/{formato?}/{busqueda?}', 'Ventas\PedidoController@listar')->name('lista_pedido');
+
+    Route::get('ventas/remito', 'Ventas\RemitoController@index')->name('remito');
+    Route::get('ventas/remito/crear', 'Ventas\RemitoController@crear')->name('crear_remito');
+    Route::post('ventas/remito', 'Ventas\RemitoController@guardar')->name('guardar_remito');
+    Route::get('ventas/remito/{id}/editar', 'Ventas\RemitoController@editar')->name('editar_remito')->middleware('modo.consulta');
+    Route::put('ventas/remito/{id}', 'Ventas\RemitoController@actualizar')->name('actualizar_remito')->middleware('modo.consulta');
+    Route::delete('ventas/remito/{id}', 'Ventas\RemitoController@eliminar')->name('eliminar_remito');
+    Route::post('ventas/remito/limpiafiltro', 'Ventas\RemitoController@limpiafiltro')->name('remito.limpiafiltro');
+    Route::get('ventas/listarremitopdf/{id}', 'Ventas\RemitoController@listarRemitoPdf')->name('listar_remito_pdf');
+    Route::get('ventas/listaremito/{formato?}/{busqueda?}', 'Ventas\RemitoController@listar')->name('lista_remito');
 }
 
 Route::get('ventas/listarpedido/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedido')->name('listar_pedido');
@@ -1821,6 +1831,10 @@ Route::post('ventas/pedido/ejecutacierre', 'Ventas\PedidoController@ejecutaCierr
 Route::get('ventas/estadoitempedido/{pedido_articulo_id?}', 'Ventas\PedidoController@estadoItemPedido')->name('estado_item_pedido');
 Route::post('ventas/calculafacturaporpedido', 'Ventas\FacturacionController@calculaFacturaPorPedido')->name('calcula_factura_por_pedido');
 Route::post('ventas/facturarporpedido', 'Ventas\FacturacionController@facturarPorPedido')->name('facturar_por_pedido');
+Route::post('ventas/calculafacturaporremito', 'Ventas\FacturacionController@calculaFacturaPorRemito')->name('calcula_factura_por_remito');
+Route::post('ventas/facturarporremito', 'Ventas\FacturacionController@facturarPorRemito')->name('facturar_por_remito');
+Route::post('ventas/generaremmitodesdepedido', 'Ventas\RemitoController@generarDesdePedido')->name('generar_remito_desde_pedido');
+Route::post('ventas/remito/asignarkilos', 'Ventas\RemitoController@asignarKilos')->name('asignar_kilos_remito');
 
 // Actualiza pedido desde otras aplicaciones fuera del ABM
 Route::get('ventas/actualizasolopedido/{estadopedido}/{pedido_id}', 'Ventas\PedidoController@actualizaSoloPedido')->name('actualiza_solo_pedido');
@@ -3487,6 +3501,44 @@ Route::put('ventas/distribuidor/{id}', 'Ventas\DistribuidorController@actualizar
 Route::delete('ventas/distribuidor/{id}', 'Ventas\DistribuidorController@eliminar')->name('eliminar_distribuidor');
 Route::post('ventas/distribuidor/consultadistribuidor', 'Ventas\DistribuidorController@consultaDistribuidor')->name('consulta_distribuidor');
 Route::get('ventas/leerdistribuidor/{codigo}', 'Ventas\DistribuidorController@leeUnDistribuidor')->name('leer_distribuidor');
+
+/*
+ * Cobrador
+ */
+Route::get('ventas/cobrador', 'Ventas\CobradorController@index')->name('consultar_cobrador');
+Route::get('ventas/cobrador/crear', 'Ventas\CobradorController@crear')->name('crear_cobrador');
+Route::post('ventas/cobrador', 'Ventas\CobradorController@guardar')->name('guardar_cobrador');
+Route::get('ventas/cobrador/{id}/editar', 'Ventas\CobradorController@editar')->name('editar_cobrador')->middleware('modo.consulta');
+Route::put('ventas/cobrador/{id}', 'Ventas\CobradorController@actualizar')->name('actualizar_cobrador')->middleware('modo.consulta');
+Route::delete('ventas/cobrador/{id}', 'Ventas\CobradorController@eliminar')->name('eliminar_cobrador');
+Route::post('ventas/cobrador/consultacobrador', 'Ventas\CobradorController@consultaCobrador')->name('consulta_cobrador');
+Route::get('ventas/leercobrador/{codigo}', 'Ventas\CobradorController@leeUnCobrador')->name('leer_cobrador');
+
+Route::get('ventas/camion', 'Ventas\CamionController@index')->name('consultar_camion');
+Route::get('ventas/camion/crear', 'Ventas\CamionController@crear')->name('crear_camion');
+Route::post('ventas/camion', 'Ventas\CamionController@guardar')->name('guardar_camion');
+Route::get('ventas/camion/{id}/editar', 'Ventas\CamionController@editar')->name('editar_camion')->middleware('modo.consulta');
+Route::put('ventas/camion/{id}', 'Ventas\CamionController@actualizar')->name('actualizar_camion')->middleware('modo.consulta');
+Route::delete('ventas/camion/{id}', 'Ventas\CamionController@eliminar')->name('eliminar_camion');
+Route::post('ventas/camion/consultacamion', 'Ventas\CamionController@consultaCamion')->name('consulta_camion');
+Route::get('ventas/leercamion/{codigo}', 'Ventas\CamionController@leeUnCamion')->name('leer_camion');
+
+Route::get('ventas/certificado-sanitario', 'Ventas\CertificadoSanitarioController@index')->name('consultar_certificado_sanitario');
+Route::get('ventas/certificado-sanitario/crear', 'Ventas\CertificadoSanitarioController@crear')->name('crear_certificado_sanitario');
+Route::post('ventas/certificado-sanitario', 'Ventas\CertificadoSanitarioController@guardar')->name('guardar_certificado_sanitario');
+Route::get('ventas/certificado-sanitario/{id}', 'Ventas\CertificadoSanitarioController@ver')->name('ver_certificado_sanitario');
+Route::get('ventas/certificado-sanitario/{id}/xml/{tipo}', 'Ventas\CertificadoSanitarioController@descargarXml')->name('descargar_certificado_sanitario_xml');
+Route::delete('ventas/certificado-sanitario/{id}', 'Ventas\CertificadoSanitarioController@eliminar')->name('eliminar_certificado_sanitario');
+
+/*
+ * CAI remitos ARCA (letra R)
+ */
+Route::get('ventas/cai', 'Ventas\CaiController@index')->name('consultar_cai');
+Route::get('ventas/cai/crear', 'Ventas\CaiController@crear')->name('crear_cai');
+Route::post('ventas/cai', 'Ventas\CaiController@guardar')->name('guardar_cai');
+Route::get('ventas/cai/{id}/editar', 'Ventas\CaiController@editar')->name('editar_cai');
+Route::put('ventas/cai/{id}', 'Ventas\CaiController@actualizar')->name('actualizar_cai');
+Route::delete('ventas/cai/{id}', 'Ventas\CaiController@eliminar')->name('eliminar_cai');
 
 /*
  * Descuento venta

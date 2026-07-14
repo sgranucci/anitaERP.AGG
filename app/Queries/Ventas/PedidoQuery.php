@@ -7,6 +7,7 @@ use App\Models\Stock\Capeart;
 use App\Models\Stock\Avioart;
 use Illuminate\Support\Collection;
 use App\Repositories\Ventas\VendedorRepositoryInterface;
+use App\Support\Ventas\PedidoListadoFiltros;
 use DB;
 
 class PedidoQuery implements PedidoQueryInterface
@@ -70,6 +71,67 @@ class PedidoQuery implements PedidoQueryInterface
     }
 
     /**
+     * Index con filtros inteligentes (El Bierzo / AGG).
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public function allPedidoIndexFiltros(array $filtros, bool $flPaginando = true)
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $query = $this->queryPedidoIndexFiltros($filtros)
+            ->with('pedido_articulos')
+            ->orderBy('pedido.id', 'desc');
+
+        return $flPaginando ? $query->paginate(10) : $query->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function allPedidoIndexFiltrosCursor(array $filtros)
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        return $this->queryPedidoIndexFiltros($filtros)
+            ->orderBy('pedido.id', 'desc')
+            ->cursor();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function queryPedidoIndexFiltros(array $filtros)
+    {
+        $vendedores = $this->vendedorRepository->leeVendedoresAsociados();
+
+        $pedidos = $this->model->select(
+            'pedido.id as id',
+            'pedido.fecha as fecha',
+            'pedido.fechaentrega as fechaentrega',
+            'cliente.nombre as nombrecliente',
+            'pedido.codigo as codigo',
+            'pedido.estadopedido as estado',
+            'pedido.transporte_id as transporte_id',
+            'transporte.nombre as nombretransporte',
+            'transporte.codigo as codigotransporte',
+            DB::raw("'".addslashes((string) config('app.empresa'))."' as nombreempresa")
+        )
+            ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
+            ->leftJoin('transporte', 'transporte.id', '=', 'pedido.transporte_id');
+
+        if (count($vendedores) > 0) {
+            $pedidos = $pedidos->whereIn('cliente.vendedor_id', $vendedores);
+        }
+
+        PedidoListadoFiltros::aplicar($pedidos, $filtros);
+
+        return $pedidos;
+    }
+
+    /**
      * @param  array<int, mixed>|string  $reparto
      */
     private function queryPedidoIndexListado($busqueda, $estado = '', $reparto = '', $fechaentrega = '')
@@ -85,10 +147,11 @@ class PedidoQuery implements PedidoQueryInterface
             'pedido.estadopedido as estado',
             'pedido.transporte_id as transporte_id',
             'transporte.nombre as nombretransporte',
-            'transporte.codigo as codigotransporte'
+            'transporte.codigo as codigotransporte',
+            DB::raw("'".addslashes((string) config('app.empresa'))."' as nombreempresa")
         )
             ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
-            ->join('transporte', 'transporte.id', 'pedido.transporte_id');
+            ->leftJoin('transporte', 'transporte.id', '=', 'pedido.transporte_id');
 
         if ($estado != '') {
             $pedidos = $pedidos->where('pedido.estadopedido', $estado);

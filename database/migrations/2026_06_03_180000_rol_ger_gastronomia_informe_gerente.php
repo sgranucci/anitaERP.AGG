@@ -16,6 +16,11 @@ return new class extends Migration
 
     public function up(): void
     {
+        // Rol y menú de gastronomía solo aplican en AGG (Biyemas/Kandiko/Rebisco).
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         $rolGerId = $this->resolverOCrearRolGer();
         $rolEncId = $this->resolverRolEncId();
 
@@ -136,6 +141,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         $permisoId = (int) (DB::table('permiso')->where('slug', self::SLUG_INFORME)->value('id') ?? 0);
         if ($permisoId > 0) {
             DB::table('permiso_rol')->where('permiso_id', $permisoId)->delete();

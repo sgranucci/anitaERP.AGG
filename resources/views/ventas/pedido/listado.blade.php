@@ -51,6 +51,9 @@
                 <td style="width: 40%; text-align: center;">
                     <h2 style="margin: 0; font-size: 20px; font-weight: bold;">Listado de pedidos de clientes</h2>
                     <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
+                    @if (!empty($subtituloFiltros))
+                        <div class="meta">{{ $subtituloFiltros }}</div>
+                    @endif
                 </td>
                 <td style="width: 25%; text-align: right; font-size: 8px;">
                     @if ($totalFilas > 0)
