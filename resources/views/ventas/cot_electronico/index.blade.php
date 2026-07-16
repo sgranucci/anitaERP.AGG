@@ -113,7 +113,7 @@
                         </div>
                         <div class="col-lg-7">
                             <p class="form-text mb-0">
-                                Fecha de emisi&oacute;n de las facturas con remito. Seleccione repartos, dominio y CUIT del chofer, consulte remitos y procese el env&iacute;o a ARBA.
+                                Fecha de remitos / facturas Anita. Lee remitos de Anita (comprob + pendmae) y suma los de anitaERP que a&uacute;n no est&eacute;n en el bridge. Seleccione repartos, dominio y CUIT del chofer.
                             </p>
                         </div>
                     </div>
@@ -197,7 +197,7 @@
                         <hr>
                         <h5 class="mt-3">Remitos facturados</h5>
                         @if (count($remitos) === 0)
-                            <div class="alert alert-warning mb-0">No se encontraron remitos facturados para la fecha de facturas y repartos indicados.</div>
+                            <div class="alert alert-warning mb-0">No se encontraron remitos Anita ni anitaERP para la fecha y repartos indicados.</div>
                         @else
                             <div class="table-responsive">
                                 <table class="table table-sm table-bordered" id="tabla-remitos-cot">

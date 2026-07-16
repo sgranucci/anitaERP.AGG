@@ -3,12 +3,14 @@
 namespace App\Services\Ventas\CotElectronico;
 
 use App\Models\Configuracion\Empresa;
-use App\Models\Ventas\Venta;
-use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
 use Carbon\Carbon;
 
 class CotArchivoArbaService
 {
+    public function __construct(
+        private CotRemitoConsultaService $consultaService,
+    ) {}
+
     /**
      * @param  list<array<string, mixed>>  $remitosSeleccionados
      * @return array{nombre:string,ruta:string,contenido:string,cantidad_remitos:int}
@@ -32,36 +34,16 @@ class CotArchivoArbaService
         $lineas = [];
         $lineas[] = '01|'.$cuitEmpresa;
 
-        $ventaIds = collect($remitosSeleccionados)->pluck('venta_id')->filter()->unique()->all();
-        $ventas = Venta::query()
-            ->whereIn('id', $ventaIds)
-            ->with([
-                'clientes.localidades',
-                'clientes.provincias',
-                'clientes.condicionivas',
-                'clientes.tipodocumentos',
-                'venta_emisiones.articulos.unidadesdemedidas',
-                'venta_impuestos',
-                'puntoventaremito',
-            ])
-            ->get()
-            ->keyBy('id');
-
         $cantidadRemitos = 0;
 
         foreach ($remitosSeleccionados as $filaRemito) {
-            $venta = $ventas->get((int) ($filaRemito['venta_id'] ?? 0));
-            if (! $venta) {
-                continue;
-            }
-
-            $productos = $this->armarProductos($venta);
+            $productos = $this->consultaService->productosParaArchivo($filaRemito);
             if ($productos === []) {
                 continue;
             }
 
-            $importe = (float) ($filaRemito['importe'] ?? $this->calcularImporte($venta));
-            $lineas[] = $this->registroRemito($filaRemito, $venta, $importe);
+            $importe = (float) ($filaRemito['importe'] ?? 0);
+            $lineas[] = $this->registroRemito($filaRemito, $importe);
             foreach ($productos as $producto) {
                 $lineas[] = $this->registroProducto($producto);
             }
@@ -89,27 +71,24 @@ class CotArchivoArbaService
     /**
      * @param  array<string, mixed>  $filaRemito
      */
-    private function registroRemito(array $filaRemito, Venta $venta, float $importe): string
+    private function registroRemito(array $filaRemito, float $importe): string
     {
-        $fechaFactura = Carbon::parse($venta->fecha)->startOfDay();
-        $fechaTxt = $fechaFactura->format('Ymd');
+        $fechaRemito = Carbon::parse((string) ($filaRemito['fecha_remito'] ?? now()->toDateString()))->startOfDay();
+        $fechaTxt = $fechaRemito->format('Ymd');
         $horaSalida = Carbon::now()->format('Hi');
         $sucursal = (int) ($filaRemito['sucursal'] ?? config('facturacion.PUNTOVENTA_REMITO', 1));
         $numeroRemito = (int) ($filaRemito['numero_remito'] ?? 0);
         $codigoUnico = $this->codigoUnicoRemito($sucursal, $numeroRemito);
 
-        $cliente = $venta->clientes;
-        $esCf = $this->esConsumidorFinal($cliente?->condicionivas?->nombre ?? '');
-        $cuitDest = $this->soloDigitos((string) ($cliente->numerodocumento ?? ''));
-        $razonSocial = trim((string) ($venta->nombre ?: ($cliente->nombre ?? '')));
-        if (! $esCf) {
-            $razonSocial = trim((string) ($cliente->nombre ?? $razonSocial));
-        }
-
-        $destCalle = $this->partirCalleNumero((string) ($venta->domicilio ?: ($cliente->domicilio ?? '')));
-        $destLocalidad = (string) optional($cliente?->localidades)->nombre ?: (string) ($venta->localidad ?? '');
-        $destProvincia = $this->abreviaturaProvincia($cliente?->provincias?->abreviatura ?? 'B');
-        $destCp = preg_replace('/\D+/', '', (string) ($venta->codigopostal ?: ($cliente->codigopostal ?? ''))) ?: '';
+        $dest = is_array($filaRemito['destinatario'] ?? null) ? $filaRemito['destinatario'] : [];
+        $esCf = (bool) ($dest['es_cf'] ?? false);
+        $cuitDest = $this->soloDigitos((string) ($dest['cuit'] ?? ''));
+        $razonSocial = trim((string) ($dest['razon_social'] ?? $filaRemito['cliente_nombre'] ?? ''));
+        $destCalle = (string) ($dest['calle'] ?? 'S/N');
+        $destNumero = (string) ($dest['numero'] ?? '');
+        $destLocalidad = (string) ($dest['localidad'] ?? '');
+        $destProvincia = $this->abreviaturaProvincia((string) ($dest['provincia'] ?? 'B'));
+        $destCp = preg_replace('/\D+/', '', (string) ($dest['codigo_postal'] ?? '')) ?: '';
 
         $origen = config('arba_cot.origen', []);
         $origenCuit = $this->soloDigitos((string) ($origen['cuit'] ?: $this->cuitEmpresa(null)));
@@ -134,12 +113,12 @@ class CotArchivoArbaService
             'E',
             $esCf ? '1' : '0',
             $esCf ? 'DNI' : '',
-            $esCf ? $this->soloDigitos((string) ($cliente->numerodocumento ?? '')) : '',
+            $esCf ? $this->soloDigitos((string) ($dest['documento'] ?? '')) : '',
             $esCf ? '' : $cuitDest,
             $razonSocial,
             '0',
-            $destCalle['calle'],
-            $destCalle['numero'],
+            $destCalle,
+            $destNumero,
             'S/N',
             '',
             '',
@@ -192,60 +171,6 @@ class CotArchivoArbaService
         ]);
     }
 
-    /** @return list<array<string, mixed>> */
-    private function armarProductos(Venta $venta): array
-    {
-        $productos = [];
-
-        foreach ($venta->venta_emisiones as $item) {
-            $articulo = $item->articulos;
-            if (! $articulo) {
-                continue;
-            }
-
-            $sku = (string) ($articulo->sku ?? '');
-            if ($sku === '' || $sku === 'texto' || $sku === '0000000000903') {
-                continue;
-            }
-
-            $um = strtoupper((string) optional($articulo->unidadesdemedidas)->abreviatura);
-            $cantidad = (float) $item->cantidad;
-            if (str_starts_with($um, 'UN') && (float) ($articulo->coeficienteconversion ?? 0) > 0) {
-                $cantidad *= (float) $articulo->coeficienteconversion;
-            }
-
-            if ($cantidad <= 0) {
-                continue;
-            }
-
-            $codigoNomenclador = trim((string) ($articulo->nomenclador ?? ''));
-            if ($codigoNomenclador === '') {
-                $codigoNomenclador = '1';
-            }
-
-            $codigoUmd = trim((string) ($articulo->unidadmedidanomenclador ?? ''));
-            if ($codigoUmd === '') {
-                $codigoUmd = '3';
-            }
-
-            $clave = $sku.'|'.$codigoNomenclador;
-            if (! isset($productos[$clave])) {
-                $productos[$clave] = [
-                    'sku' => $sku,
-                    'descripcion' => (string) ($articulo->descripcion ?? $sku),
-                    'codigo_nomenclador' => $codigoNomenclador,
-                    'codigo_umd' => $codigoUmd,
-                    'umd_descripcion' => (string) optional($articulo->unidadesdemedidas)->nombre ?: 'KILO',
-                    'cantidad' => 0.0,
-                ];
-            }
-
-            $productos[$clave]['cantidad'] += $cantidad;
-        }
-
-        return array_values($productos);
-    }
-
     private function codigoUnicoRemito(int $sucursal, int $numero): string
     {
         $tipo = (string) config('arba_cot.codigo_comprobante_remito', '091');
@@ -255,16 +180,6 @@ class CotArchivoArbaService
         return $tipo
             .str_pad((string) $sucursal, $digitosSucursal, '0', STR_PAD_LEFT)
             .str_pad((string) $numero, $digitosComp, '0', STR_PAD_LEFT);
-    }
-
-    private function calcularImporte(Venta $venta): float
-    {
-        $desglose = IvaVentasDesgloseSupport::columnasDesdeVenta($venta);
-        $total = (float) ($desglose['neto_gravado'] ?? 0)
-            + (float) ($desglose['exento'] ?? 0)
-            + (float) ($desglose['no_gravado'] ?? 0);
-
-        return $total > 0 ? $total : abs((float) ($venta->total ?? 0));
     }
 
     private function cuitEmpresa(?Empresa $empresa): string
@@ -312,28 +227,6 @@ class CotArchivoArbaService
     private function soloDigitos(string $valor): string
     {
         return preg_replace('/\D+/', '', $valor) ?? '';
-    }
-
-    private function esConsumidorFinal(string $condicionIva): bool
-    {
-        $condicionIva = strtoupper(trim($condicionIva));
-
-        return str_contains($condicionIva, 'CONSUMIDOR');
-    }
-
-    /** @return array{calle:string,numero:string} */
-    private function partirCalleNumero(string $domicilio): array
-    {
-        $domicilio = trim($domicilio);
-        if ($domicilio === '') {
-            return ['calle' => 'S/N', 'numero' => ''];
-        }
-
-        if (preg_match('/^(.+?)\s+(\d+[A-Za-z]?)$/', $domicilio, $m)) {
-            return ['calle' => trim($m[1]), 'numero' => trim($m[2])];
-        }
-
-        return ['calle' => $domicilio, 'numero' => ''];
     }
 
     private function abreviaturaProvincia(?string $abreviatura): string
