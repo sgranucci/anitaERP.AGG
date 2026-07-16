@@ -97,7 +97,7 @@
             $valorPrincipal().val($(this).val());
         });
 
-        $('#form-analitico-gastro-reporte').on('submit', function () {
+        $('#form-analitico-gastro-reporte').on('submit', function (e) {
             sincronizarValorAntesDeEnviar();
             var $panel = $('#panel-filtros-analitico-gastro');
             var panelAbierto = $panel.hasClass('show') || $panel.hasClass('in');
@@ -105,6 +105,16 @@
                 $('#filtro_busqueda_rapida').val('1');
             } else {
                 $('#filtro_busqueda_rapida').val('');
+            }
+
+            var $dual = $(this).find('.reporte-empresas-dual');
+            if ($dual.length && String($dual.data('empresa-unica')) !== '1') {
+                var hayEmpresas = $dual.find('input[name="empresa_ids[]"]').length > 0;
+                if (!hayEmpresas) {
+                    e.preventDefault();
+                    window.alert('Seleccione al menos una empresa.');
+                    return false;
+                }
             }
         });
     });

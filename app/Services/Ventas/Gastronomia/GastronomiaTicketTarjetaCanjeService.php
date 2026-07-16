@@ -3,6 +3,7 @@
 namespace App\Services\Ventas\Gastronomia;
 
 use App\ApiAnita;
+use App\Models\Caja\TicketCanjeCaja;
 use App\Models\Configuracion\Condicioniva;
 use App\Models\Ventas\TickettarjetaGastronomia;
 use App\Models\Ventas\Venta;
@@ -15,10 +16,15 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Canje de tickets tarjeta gastronomía (tabla Informix tickettarj vía bridge Anita).
+ * Canje de tickets tarjeta gastronomía.
+ * Orden de lectura: anitaERP ticket_canje_caja (por empresa) → Informix tickettarj (fallback Anita).
  */
 final class GastronomiaTicketTarjetaCanjeService
 {
+  private const ORIGEN_ERP = 'erp';
+
+  private const ORIGEN_ANITA = 'anita';
+
   public function __construct(
     private readonly ApiAnita $apiAnita,
   ) {
@@ -37,7 +43,7 @@ final class GastronomiaTicketTarjetaCanjeService
     [$ticketId, $numeroTicket, $fila] = $this->resolverTicketDesdeCodigo($codigoBarras, $empresaId);
     $this->assertNoDuplicadoEnSeleccion($ticketId, $numeroTicket, $ticketsYaSeleccionados);
     $this->assertNoCanjeadoEnErp($ticketId, $numeroTicket);
-    $this->validarEstadoAnitaPendiente($fila);
+    $this->validarEstadoPendiente($fila);
     $this->validarVencimiento($fila);
 
     $montoticket = $this->resolverMontoticket($fila);
@@ -103,8 +109,8 @@ final class GastronomiaTicketTarjetaCanjeService
 
       $this->assertNoCanjeadoEnErp($ticket['ticket_id'], $ticket['numeroticket']);
 
-      $fila = $this->buscarTicketEnAnita($ticket['ticket_id'], $ticket['numeroticket'], $empresaId);
-      $this->validarEstadoAnitaPendiente($fila);
+      $fila = $this->buscarTicketParaCanje($ticket['ticket_id'], $ticket['numeroticket'], $empresaId);
+      $this->validarEstadoPendiente($fila);
       $this->validarVencimiento($fila);
 
       $montoticket = $this->resolverMontoticket($fila);
@@ -126,7 +132,11 @@ final class GastronomiaTicketTarjetaCanjeService
         'usuario_id' => $usuarioId,
       ]);
 
-      $this->marcarCanjeadoEnAnita($fila, $venta, $usuarioId, $empresaId);
+      if ($this->esOrigenErp($fila)) {
+        $this->marcarCanjeadoEnErpCaja($fila, $venta);
+      } else {
+        $this->marcarCanjeadoEnAnita($fila, $venta, $usuarioId, $empresaId);
+      }
     }
   }
 
@@ -248,6 +258,16 @@ final class GastronomiaTicketTarjetaCanjeService
       $agregar($lista, $vistos, $ticketId, (int) $cola);
     }
 
+    // UPC-A (12 dígitos): muchas lectoras omiten el 0 inicial del EAN-13.
+    // Ej.: impreso 0000010000014 → leen 000010000014 (sin este atajo interpreta 10/14).
+    // Se agrega al final para no alterar el orden preferido de tickets Anita ya vigentes.
+    if (strlen($digits) === 12) {
+      $ean = '0'.$digits;
+      $ticketIdEan = (int) substr($ean, 0, 6);
+      $colaEan = substr($ean, 6);
+      $agregar($lista, $vistos, $ticketIdEan, self::normalizarNumeroTicketDesdeCola($colaEan));
+    }
+
     return $lista;
   }
 
@@ -305,6 +325,13 @@ final class GastronomiaTicketTarjetaCanjeService
 
     $ultimoError = null;
     foreach ($candidatos as [$ticketId, $numeroTicket]) {
+      // 1) anitaERP primero (ticket_canje_caja de la empresa).
+      $filaErp = $this->buscarTicketEnErpCaja($empresaId, $ticketId, $numeroTicket);
+      if ($filaErp !== null) {
+        return [$ticketId, $numeroTicket, $filaErp];
+      }
+
+      // 2) Fallback Anita tickettarj.
       try {
         $fila = $this->buscarTicketEnAnita($ticketId, $numeroTicket, $empresaId);
 
@@ -313,6 +340,11 @@ final class GastronomiaTicketTarjetaCanjeService
         $ultimoError = $e;
         if (! str_contains($e->getMessage(), 'No se encontró el ticket tarjeta')) {
           throw $e;
+        }
+
+        $resueltoErp = $this->buscarTicketEnErpPorSoloMovimientoId($empresaId, $ticketId);
+        if ($resueltoErp !== null) {
+          return $resueltoErp;
         }
 
         $resuelto = $this->buscarTicketEnAnitaPorSoloMovimientoId($ticketId, $empresaId);
@@ -328,6 +360,12 @@ final class GastronomiaTicketTarjetaCanjeService
         static fn (array $par): int => (int) ($par[1] ?? 0),
         $candidatos
       )));
+
+      $resueltoErp = $this->buscarTicketEnErpPorSoloMovimientoId($empresaId, $movimientoId);
+      if ($resueltoErp !== null) {
+        return $resueltoErp;
+      }
+
       $resuelto = $this->buscarTicketEnAnitaPorSoloMovimientoId($movimientoId, $empresaId);
       if ($resuelto !== null) {
         return $resuelto;
@@ -342,6 +380,115 @@ final class GastronomiaTicketTarjetaCanjeService
     }
 
     throw $ultimoError ?? new InvalidArgumentException('Código de barras inválido.');
+  }
+
+  /**
+   * Busca ticket para validación/registro: ERP primero, Anita fallback.
+   */
+  private function buscarTicketParaCanje(int $ticketId, int $numeroTicket, int $empresaId): object
+  {
+    $filaErp = $this->buscarTicketEnErpCaja($empresaId, $ticketId, $numeroTicket);
+    if ($filaErp !== null) {
+      return $filaErp;
+    }
+
+    return $this->buscarTicketEnAnita($ticketId, $numeroTicket, $empresaId);
+  }
+
+  private function buscarTicketEnErpCaja(int $empresaId, int $movimientoId, int $numeroTicket): ?object
+  {
+    if ($empresaId <= 0 || $movimientoId <= 0 || $numeroTicket <= 0) {
+      return null;
+    }
+
+    $ticket = TicketCanjeCaja::query()
+      ->where('empresa_id', $empresaId)
+      ->where('movimiento_id', $movimientoId)
+      ->where('numero_ticket', $numeroTicket)
+      ->first();
+
+    return $ticket instanceof TicketCanjeCaja
+      ? $this->filaDesdeTicketCanjeCaja($ticket)
+      : null;
+  }
+
+  /**
+   * @return array{0:int,1:int,2:object}|null
+   */
+  private function buscarTicketEnErpPorSoloMovimientoId(int $empresaId, int $movimientoId): ?array
+  {
+    if ($empresaId <= 0 || $movimientoId <= 0) {
+      return null;
+    }
+
+    $ticket = TicketCanjeCaja::query()
+      ->where('empresa_id', $empresaId)
+      ->where('movimiento_id', $movimientoId)
+      ->where('estado', TicketCanjeCaja::ESTADO_PENDIENTE)
+      ->where('monto_ticket', '>', 0)
+      ->orderByDesc('fecha')
+      ->orderByDesc('id')
+      ->first();
+
+    if (! $ticket instanceof TicketCanjeCaja) {
+      return null;
+    }
+
+    $fila = $this->filaDesdeTicketCanjeCaja($ticket);
+
+    return [(int) $ticket->movimiento_id, (int) $ticket->numero_ticket, $fila];
+  }
+
+  /**
+   * Adapta fila ERP al shape Informix que ya consume el resto del servicio.
+   */
+  private function filaDesdeTicketCanjeCaja(TicketCanjeCaja $ticket): object
+  {
+    $ifecha = $ticket->fecha ? (int) $ticket->fecha->format('Ymd') : 0;
+    $ifechacanje = $ticket->fecha_canje ? (int) $ticket->fecha_canje->format('Ymd') : 0;
+
+    return (object) [
+      'imovimientoid' => (int) $ticket->movimiento_id,
+      'inroticket' => (int) $ticket->numero_ticket,
+      'cnrodocumento' => (string) $ticket->nro_documento,
+      'ifecha' => $ifecha,
+      'fmonto' => (float) $ticket->monto_venta,
+      'fmontoticket' => (float) $ticket->monto_ticket,
+      'cnrocupon' => (string) ($ticket->numerocupon ?: $ticket->etiquetaVale()),
+      'cestado' => (string) $ticket->estado,
+      'ifechacanje' => $ifechacanje,
+      '_origen' => self::ORIGEN_ERP,
+      '_ticket_canje_caja_id' => (int) $ticket->id,
+    ];
+  }
+
+  private function esOrigenErp(object $fila): bool
+  {
+    return ($fila->_origen ?? self::ORIGEN_ANITA) === self::ORIGEN_ERP;
+  }
+
+  private function marcarCanjeadoEnErpCaja(object $fila, Venta $venta): void
+  {
+    $id = (int) ($fila->_ticket_canje_caja_id ?? 0);
+    if ($id <= 0) {
+      throw new RuntimeException('Datos incompletos del ticket en anitaERP.');
+    }
+
+    $actualizados = TicketCanjeCaja::query()
+      ->whereKey($id)
+      ->where('estado', TicketCanjeCaja::ESTADO_PENDIENTE)
+      ->update([
+        'estado' => TicketCanjeCaja::ESTADO_CANJEADO,
+        'venta_id' => (int) $venta->id,
+        'fecha_canje' => Carbon::today()->format('Y-m-d'),
+      ]);
+
+    if ($actualizados !== 1) {
+      throw new InvalidArgumentException(
+        'El ticket '.$fila->imovimientoid.'/'.$fila->inroticket
+        .' ya fue canjeado o no está pendiente en anitaERP.'
+      );
+    }
   }
 
   /**
@@ -541,15 +688,16 @@ final class GastronomiaTicketTarjetaCanjeService
     return $fila;
   }
 
-  private function validarEstadoAnitaPendiente(object $fila): void
+  private function validarEstadoPendiente(object $fila): void
   {
     $estado = strtoupper(trim((string) ($fila->cestado ?? '')));
+    $origen = $this->esOrigenErp($fila) ? 'anitaERP' : 'Anita';
     if ($estado === TickettarjetaGastronomia::ESTADO_CANJEADO) {
-      throw new InvalidArgumentException('El ticket ya fue canjeado (estado C en Anita).');
+      throw new InvalidArgumentException('El ticket ya fue canjeado (estado C en '.$origen.').');
     }
     if ($estado !== TickettarjetaGastronomia::ESTADO_PENDIENTE) {
       throw new InvalidArgumentException(
-        'El ticket no está disponible para canje (estado Anita: '.($estado !== '' ? $estado : '?').').'
+        'El ticket no está disponible para canje (estado '.$origen.': '.($estado !== '' ? $estado : '?').').'
       );
     }
   }
@@ -573,7 +721,8 @@ final class GastronomiaTicketTarjetaCanjeService
       $montoticket = round((float) ($fila->fmonto ?? 0.), 2);
     }
     if ($montoticket <= 0.) {
-      throw new InvalidArgumentException('El ticket no tiene importe válido en Anita.');
+      $origen = $this->esOrigenErp($fila) ? 'anitaERP' : 'Anita';
+      throw new InvalidArgumentException('El ticket no tiene importe válido en '.$origen.'.');
     }
 
     return $montoticket;
@@ -614,7 +763,7 @@ final class GastronomiaTicketTarjetaCanjeService
     $saldoTickets = max(0., round($totalFacturaArs - $montoSinTickets, 2));
 
     foreach ($tickets as $ticket) {
-      $fila = $this->buscarTicketEnAnita($ticket['ticket_id'], $ticket['numeroticket'], $empresaId);
+      $fila = $this->buscarTicketParaCanje($ticket['ticket_id'], $ticket['numeroticket'], $empresaId);
       $montoticket = $this->resolverMontoticket($fila);
       $esperado = $this->calcularMontoAplicar($montoticket, $saldoTickets);
       $montoCobranza = round((float) $ticket['monto_cobranza'], 2);

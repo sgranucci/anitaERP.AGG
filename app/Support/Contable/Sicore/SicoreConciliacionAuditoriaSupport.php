@@ -99,7 +99,9 @@ final class SicoreConciliacionAuditoriaSupport
 
     /**
      * @param  list<array<string, mixed>>  $registrosSicore
-     * @param  list<array<string, mixed>>  $movimientosMayor
+     * @param  list<array<string, mixed>>  $movimientosMayor  Mayor del período (totales / solo_mayor)
+     * @param  list<array<string, mixed>>|null  $movimientosMayorMatch  Pool ampliado para matching
+     *                                                                (p. ej. ±1 día: AOP vs Debe)
      * @return array<string, mixed>
      */
     public static function auditarOperaciones(
@@ -107,16 +109,29 @@ final class SicoreConciliacionAuditoriaSupport
         array $movimientosMayor,
         bool $cuentaInversa,
         float $tolerancia,
+        ?array $movimientosMayorMatch = null,
     ): array {
-        /** @var list<array<string, mixed>> $poolMayor */
-        $poolMayor = [];
-        foreach ($movimientosMayor as $idx => $mov) {
-            $poolMayor[] = array_merge($mov, [
+        $poolMatchFuente = $movimientosMayorMatch ?? $movimientosMayor;
+
+        /** @var list<array<string, mixed>> $poolMatch */
+        $poolMatch = [];
+        foreach ($poolMatchFuente as $idx => $mov) {
+            $poolMatch[] = array_merge($mov, [
                 '_idx' => $idx,
                 '_usado' => false,
+                '_en_periodo' => false,
                 'importe_conciliacion' => self::importeLineaMayorFirmado($mov),
             ]);
         }
+
+        $clavesPeriodo = [];
+        foreach ($movimientosMayor as $mov) {
+            $clavesPeriodo[self::claveMovimientoMayor($mov)] = true;
+        }
+        foreach ($poolMatch as &$movPool) {
+            $movPool['_en_periodo'] = isset($clavesPeriodo[self::claveMovimientoMayor($movPool)]);
+        }
+        unset($movPool);
 
         $filas = [];
         $coinciden = 0;
@@ -125,7 +140,7 @@ final class SicoreConciliacionAuditoriaSupport
 
         foreach ($registrosSicore as $reg) {
             $importeSicore = round((float) ($reg['importe'] ?? 0), 2);
-            $match = self::buscarMatchMayor($reg, $poolMayor, $importeSicore, $tolerancia);
+            $match = self::buscarMatchMayor($reg, $poolMatch, $importeSicore, $tolerancia);
 
             $importeMayor = $match !== null ? (float) ($match['importe_conciliacion'] ?? 0) : null;
             $diferencia = $match !== null
@@ -158,8 +173,8 @@ final class SicoreConciliacionAuditoriaSupport
             ];
         }
 
-        foreach ($poolMayor as $mov) {
-            if (! empty($mov['_usado'])) {
+        foreach ($poolMatch as $mov) {
+            if (! empty($mov['_usado']) || empty($mov['_en_periodo'])) {
                 continue;
             }
 
@@ -324,6 +339,37 @@ final class SicoreConciliacionAuditoriaSupport
     }
 
     /**
+     * True si el detalle del mayor menciona la OP/comprobante SICORE
+     * (ej. "Pago: PASTORIZA AGOST #123066").
+     */
+    public static function detalleContieneNroComp(string $detalle, int $nroComp): bool
+    {
+        if ($nroComp <= 0 || $detalle === '') {
+            return false;
+        }
+
+        $n = preg_quote((string) $nroComp, '/');
+
+        return preg_match('/(?:#|\bOP\s*)'.$n.'\b/u', $detalle) === 1;
+    }
+
+    /**
+     * @param  array<string, mixed>  $mov
+     */
+    private static function claveMovimientoMayor(array $mov): string
+    {
+        return implode('|', [
+            (string) ($mov['fecha'] ?? ''),
+            (string) (int) ($mov['asiento_id'] ?? 0),
+            (string) ($mov['cuenta_codigo'] ?? ''),
+            (string) round((float) ($mov['debe'] ?? 0), 2),
+            (string) round((float) ($mov['haber'] ?? 0), 2),
+            trim((string) ($mov['detalle'] ?? '')),
+            (string) ($mov['origen'] ?? ''),
+        ]);
+    }
+
+    /**
      * @param  array<string, mixed>  $reg
      * @param  list<array<string, mixed>>  $poolMayor
      * @return array<string, mixed>|null
@@ -337,35 +383,51 @@ final class SicoreConciliacionAuditoriaSupport
         $fecha = (string) ($reg['fecha_retencion'] ?? '');
         $cert = (string) (int) ($reg['nro_cert'] ?? 0);
         $prov = ltrim(trim((string) ($reg['codigo_proveedor'] ?? '')), '0');
-        $nroComp = (string) (int) ($reg['nro_comp'] ?? 0);
+        $nroComp = (int) ($reg['nro_comp'] ?? 0);
 
-        $estrategias = [
-            static fn (array $mov) => $cert !== '0' && str_contains((string) ($mov['detalle'] ?? ''), $cert),
-            static fn (array $mov) => $prov !== '' && str_contains((string) ($mov['detalle'] ?? ''), $prov),
-            static fn (array $mov) => $nroComp !== '0' && (string) ($mov['asiento_id'] ?? '') === $nroComp,
-            static fn (): bool => true,
+        // 1) Mismo día + mismas claves (cert / proveedor / OP en detalle / importe solo).
+        // 2) Si no hay match (típico AOP en retmov con fecha distinta al Debe del mayor),
+        //    reintentar por importe + nº OP en el detalle, sin exigir misma fecha.
+        $pasadas = [
+            [
+                'exigir_fecha' => true,
+                'estrategias' => [
+                    static fn (array $mov) => $cert !== '0' && str_contains((string) ($mov['detalle'] ?? ''), $cert),
+                    static fn (array $mov) => $prov !== '' && str_contains((string) ($mov['detalle'] ?? ''), $prov),
+                    static fn (array $mov) => self::detalleContieneNroComp((string) ($mov['detalle'] ?? ''), $nroComp),
+                    static fn (): bool => true,
+                ],
+            ],
+            [
+                'exigir_fecha' => false,
+                'estrategias' => [
+                    static fn (array $mov) => self::detalleContieneNroComp((string) ($mov['detalle'] ?? ''), $nroComp),
+                ],
+            ],
         ];
 
-        foreach ($estrategias as $filtroExtra) {
-            foreach ($poolMayor as &$mov) {
-                if (! empty($mov['_usado'])) {
-                    continue;
-                }
-                if ((string) ($mov['fecha'] ?? '') !== $fecha) {
-                    continue;
-                }
-                if (abs($importeSicore - (float) ($mov['importe_conciliacion'] ?? 0)) > $tolerancia) {
-                    continue;
-                }
-                if (! $filtroExtra($mov)) {
-                    continue;
-                }
+        foreach ($pasadas as $pasada) {
+            foreach ($pasada['estrategias'] as $filtroExtra) {
+                foreach ($poolMayor as &$mov) {
+                    if (! empty($mov['_usado'])) {
+                        continue;
+                    }
+                    if ($pasada['exigir_fecha'] && (string) ($mov['fecha'] ?? '') !== $fecha) {
+                        continue;
+                    }
+                    if (abs($importeSicore - (float) ($mov['importe_conciliacion'] ?? 0)) > $tolerancia) {
+                        continue;
+                    }
+                    if (! $filtroExtra($mov)) {
+                        continue;
+                    }
 
-                $mov['_usado'] = true;
+                    $mov['_usado'] = true;
 
-                return $mov;
+                    return $mov;
+                }
+                unset($mov);
             }
-            unset($mov);
         }
 
         return null;

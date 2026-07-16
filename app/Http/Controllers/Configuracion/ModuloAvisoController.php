@@ -159,6 +159,13 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'uif' && $codigo === 'cliente_alta') {
+            return array_merge($comunes, [
+                '{id}', '{nombre}', '{numerodocumento}', '{tipodocumento}',
+                '{cuit}', '{usuario_alta}', '{fecha}',
+            ]);
+        }
+
         return array_merge($comunes, ['{numero}', '{solicitante}', '{empresa}', '{centro_costo}', '{fecha}']);
     }
 }

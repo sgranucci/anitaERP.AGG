@@ -44,6 +44,18 @@ final class RendicionEstacionamientoAnitaTotalZPorPcService
         $this->aplicar($jornada);
     }
 
+    /**
+     * Recalcula Z/NC por PC (CAE+CAEA de esa terminal) aunque se invoque desde reparación operativa.
+     */
+    public function aplicarForzado(JornadaEstacionamiento $jornada): void
+    {
+        if (! $this->anitaSyncService->sincronizacionHabilitada()) {
+            return;
+        }
+
+        $this->aplicar($jornada);
+    }
+
     public function aplicarDesdeRendicionTurno(RendicionEstacionamientoCaja $rendicion): void
     {
         if ($rendicion->esRendicionJornada()) {

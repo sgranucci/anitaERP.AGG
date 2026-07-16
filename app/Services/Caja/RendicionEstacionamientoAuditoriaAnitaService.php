@@ -230,7 +230,11 @@ final class RendicionEstacionamientoAuditoriaAnitaService
         $diffNc = round($erpNc - $anitaNc, 2);
 
         $detalle = $this->rendgastroSupport->detalleCabecerasOrdenado($cabeceras, $portadoraNro);
-        $cabecerasHuerfanas = $this->detectarCabecerasConTotalesFueraPortadora($detalle, $tolerancia);
+        // PV CAEA compartido (20/31/30): agrega cabeceras de varias PC; el Z de cada host es portadora
+        // legítima de su CAE. La conciliación CAEA va por rendg_tot_fc_caea, no por Z único.
+        $cabecerasHuerfanas = $esPuntoventaCaea
+            ? []
+            : $this->detectarCabecerasConTotalesFueraPortadora($detalle, $tolerancia);
         $portadoraTurno = '—';
         foreach ($detalle as $d) {
             if (! empty($d['portadora'])) {

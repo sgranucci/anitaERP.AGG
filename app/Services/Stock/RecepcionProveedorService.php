@@ -593,9 +593,13 @@ class RecepcionProveedorService
         }
     }
 
-    public function precargaDesdeOc(int $numeroOc): array
+    public function precargaDesdeOc(int $numeroOc, ?string $fechaRecepcion = null): array
     {
-        return $this->ocResolver->resolverPorNumeroOc($numeroOc, (int) (Auth::id() ?? 0));
+        return $this->ocResolver->resolverPorNumeroOc(
+            $numeroOc,
+            (int) (Auth::id() ?? 0),
+            $fechaRecepcion
+        );
     }
 
     /** @param list<array<string, mixed>> $items */

@@ -58,8 +58,8 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
     {
         $oc = $this->model->with([
             'empresas', 'centrocostos', 'proveedores', 'requisiciones', 'usuarios', 'sector_legajocompras',
-            'condicioncompras', 'condicionentregas', 'transportes',
-            'ordencompra_articulos.articulos', 'ordencompra_articulos.monedas', 'ordencompra_articulos.centrocostos_destino',
+            'condicioncompras', 'condicionentregas', 'condicionpagos', 'transportes',
+            'ordencompra_articulos.articulos.unidadesdemedidasalternativas', 'ordencompra_articulos.monedas', 'ordencompra_articulos.centrocostos_destino',
             'ordencompra_articulos.partidagastos.articulos', 'ordencompra_articulos.capexs',
             'ordencompra_comprobantes.monedas', 'ordencompra_comprobantes.condicionpagos',
             'ordencompra_comprobantes.ordencompra_comprobante_cuotas.monedas',

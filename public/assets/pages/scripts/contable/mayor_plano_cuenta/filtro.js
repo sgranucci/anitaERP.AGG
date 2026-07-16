@@ -1,4 +1,5 @@
 var mayorPlanoCuentaCampoActivo = null;
+var mayorPlanoCuentasSel = {};
 
 function mayorPlanoNormalizarCodigoCuenta(valor) {
     return String(valor || '').replace(/\D/g, '');
@@ -13,7 +14,7 @@ function mayorPlanoFormatearCodigoCuenta(codigo) {
         return String(codigo || '').trim();
     }
 
-    return digits.substring(0, 6) + '-' + digits.substring(6, 3);
+    return digits.substring(0, 6) + '-' + digits.substring(6, 9);
 }
 
 function mayorPlanoEmpresaIdParaConsultaCuenta() {
@@ -47,7 +48,141 @@ function mayorPlanoLimpiarCampoCuenta($campo) {
     $campo.find('.nombrecuentacontable').val('');
 }
 
-function mayorPlanoResolverNombreCuenta($campo) {
+function mayorPlanoEsCampoPuntual($campo) {
+    return $campo && $campo.length && $campo.hasClass('mpc-cuenta-puntual');
+}
+
+function mayorPlanoSincronizarHiddenCuentas() {
+    var codigos = Object.keys(mayorPlanoCuentasSel)
+        .map(function (c) {
+            return parseInt(c, 10);
+        })
+        .filter(function (c) {
+            return c > 0;
+        })
+        .sort(function (a, b) {
+            return a - b;
+        });
+
+    $('#mpc_cuentas').val(codigos.join(','));
+
+    var $aviso = $('#mpc-aviso-sin-cuentas-puntuales');
+    if ($aviso.length) {
+        $aviso.toggle(codigos.length === 0);
+    }
+}
+
+function mayorPlanoRenderTablaCuentas() {
+    var $tbody = $('#mpc-tbody-cuentas-seleccionadas');
+    if (!$tbody.length) {
+        return;
+    }
+
+    var codigos = Object.keys(mayorPlanoCuentasSel)
+        .map(function (c) {
+            return parseInt(c, 10);
+        })
+        .filter(function (c) {
+            return c > 0;
+        })
+        .sort(function (a, b) {
+            return a - b;
+        });
+
+    var html = '';
+    codigos.forEach(function (codigo) {
+        var item = mayorPlanoCuentasSel[String(codigo)] || {};
+        var codigoFmt = item.codigo_fmt || mayorPlanoFormatearCodigoCuenta(codigo);
+        var nombre = item.nombre || '';
+        html +=
+            '<tr data-codigo="' +
+            codigo +
+            '">' +
+            '<td>' +
+            $('<div>').text(codigoFmt).html() +
+            '</td>' +
+            '<td>' +
+            $('<div>').text(nombre).html() +
+            '</td>' +
+            '<td class="text-center">' +
+            '<button type="button" class="btn btn-outline-danger btn-xs mpc-btn-quitar-cuenta" title="Quitar">' +
+            '<i class="fa fa-times"></i>' +
+            '</button>' +
+            '</td>' +
+            '</tr>';
+    });
+
+    $tbody.html(html);
+    mayorPlanoSincronizarHiddenCuentas();
+}
+
+function mayorPlanoAgregarCuenta(data) {
+    var codigoRaw = mayorPlanoNormalizarCodigoCuenta(data.codigo || data.codigo_fmt || '');
+    var codigo = parseInt(codigoRaw, 10) || 0;
+    if (!codigo) {
+        return false;
+    }
+
+    var key = String(codigo);
+    if (mayorPlanoCuentasSel[key]) {
+        return false;
+    }
+
+    mayorPlanoCuentasSel[key] = {
+        codigo: codigo,
+        codigo_fmt: mayorPlanoFormatearCodigoCuenta(data.codigo || codigo),
+        nombre: data.nombre || '',
+    };
+    mayorPlanoRenderTablaCuentas();
+
+    return true;
+}
+
+function mayorPlanoQuitarCuenta(codigo) {
+    var key = String(parseInt(mayorPlanoNormalizarCodigoCuenta(codigo), 10) || 0);
+    if (!key || key === '0' || !mayorPlanoCuentasSel[key]) {
+        return;
+    }
+
+    delete mayorPlanoCuentasSel[key];
+    mayorPlanoRenderTablaCuentas();
+}
+
+function mayorPlanoCargarCuentasDesdeDom() {
+    mayorPlanoCuentasSel = {};
+    $('#mpc-tbody-cuentas-seleccionadas tr').each(function () {
+        var codigo = parseInt(mayorPlanoNormalizarCodigoCuenta($(this).attr('data-codigo')), 10) || 0;
+        if (!codigo) {
+            return;
+        }
+        mayorPlanoCuentasSel[String(codigo)] = {
+            codigo: codigo,
+            codigo_fmt: $(this).find('td').eq(0).text().trim(),
+            nombre: $(this).find('td').eq(1).text().trim(),
+        };
+    });
+
+    var hidden = $('#mpc_cuentas').val();
+    if (hidden && Object.keys(mayorPlanoCuentasSel).length === 0) {
+        String(hidden)
+            .split(',')
+            .forEach(function (token) {
+                var codigo = parseInt(mayorPlanoNormalizarCodigoCuenta(token), 10) || 0;
+                if (codigo > 0) {
+                    mayorPlanoCuentasSel[String(codigo)] = {
+                        codigo: codigo,
+                        codigo_fmt: mayorPlanoFormatearCodigoCuenta(codigo),
+                        nombre: '',
+                    };
+                }
+            });
+        mayorPlanoRenderTablaCuentas();
+    } else {
+        mayorPlanoSincronizarHiddenCuentas();
+    }
+}
+
+function mayorPlanoResolverNombreCuenta($campo, onOk) {
     var codigo = mayorPlanoNormalizarCodigoCuenta($campo.find('.codigocuentacontable').val());
     var empresaId = mayorPlanoEmpresaIdParaConsultaCuenta();
 
@@ -67,8 +202,45 @@ function mayorPlanoResolverNombreCuenta($campo) {
         if (data && data.id > 0) {
             $campo.find('.codigocuentacontable').val(mayorPlanoFormatearCodigoCuenta(data.codigo || codigo));
             $campo.find('.nombrecuentacontable').val(data.nombre || '');
+            if (typeof onOk === 'function') {
+                onOk({
+                    codigo: data.codigo || codigo,
+                    nombre: data.nombre || '',
+                });
+            }
         } else {
             alert('No existe la cuenta para la empresa seleccionada');
+            mayorPlanoLimpiarCampoCuenta($campo);
+        }
+    });
+}
+
+function mayorPlanoAgregarCuentaDesdeCampo() {
+    var $campo = $('.mpc-cuenta-puntual').first();
+    if (!$campo.length) {
+        return;
+    }
+
+    var codigo = mayorPlanoNormalizarCodigoCuenta($campo.find('.codigocuentacontable').val());
+    if (!codigo) {
+        alert('Ingrese un c\u00f3digo de cuenta');
+        return;
+    }
+
+    var nombre = $campo.find('.nombrecuentacontable').val().trim();
+    if (nombre) {
+        if (!mayorPlanoAgregarCuenta({ codigo: codigo, nombre: nombre })) {
+            alert('La cuenta ya est\u00e1 en la lista');
+        } else {
+            mayorPlanoLimpiarCampoCuenta($campo);
+        }
+        return;
+    }
+
+    mayorPlanoResolverNombreCuenta($campo, function (data) {
+        if (!mayorPlanoAgregarCuenta(data)) {
+            alert('La cuenta ya est\u00e1 en la lista');
+        } else {
             mayorPlanoLimpiarCampoCuenta($campo);
         }
     });
@@ -116,11 +288,42 @@ function mayorPlanoBuscarCuentasModal(consulta) {
 }
 
 function activaEventosMayorPlanoCuentaFiltro() {
+    mayorPlanoCargarCuentasDesdeDom();
+
     $(document)
         .off('change.mpc', '.mpc-cuenta-campo .codigocuentacontable')
         .on('change.mpc', '.mpc-cuenta-campo .codigocuentacontable', function (event) {
             event.preventDefault();
             mayorPlanoResolverNombreCuenta($(this).closest('.mpc-cuenta-campo'));
+        });
+
+    $(document)
+        .off('keydown.mpc', '.mpc-cuenta-campo .codigocuentacontable')
+        .on('keydown.mpc', '.mpc-cuenta-campo .codigocuentacontable', function (event) {
+            if (event.key === 'Enter' || event.keyCode === 13) {
+                event.preventDefault();
+                var $campo = $(this).closest('.mpc-cuenta-campo');
+                if (mayorPlanoEsCampoPuntual($campo)) {
+                    mayorPlanoAgregarCuentaDesdeCampo();
+                } else {
+                    mayorPlanoResolverNombreCuenta($campo);
+                }
+            }
+        });
+
+    $(document)
+        .off('click.mpc', '#mpc-btn-agregar-cuenta')
+        .on('click.mpc', '#mpc-btn-agregar-cuenta', function (event) {
+            event.preventDefault();
+            mayorPlanoAgregarCuentaDesdeCampo();
+        });
+
+    $(document)
+        .off('click.mpc', '.mpc-btn-quitar-cuenta')
+        .on('click.mpc', '.mpc-btn-quitar-cuenta', function (event) {
+            event.preventDefault();
+            var codigo = $(this).closest('tr').attr('data-codigo');
+            mayorPlanoQuitarCuenta(codigo);
         });
 
     $(document)
@@ -173,11 +376,25 @@ function activaEventosMayorPlanoCuentaFiltro() {
             var nombre = $tr.find('.nombrecuentacontable').first().text().trim();
 
             if (mayorPlanoCuentaCampoActivo && mayorPlanoCuentaCampoActivo.length) {
-                mayorPlanoCuentaCampoActivo.find('.codigocuentacontable').val(mayorPlanoFormatearCodigoCuenta(codigo));
-                mayorPlanoCuentaCampoActivo.find('.nombrecuentacontable').val(nombre);
+                if (mayorPlanoEsCampoPuntual(mayorPlanoCuentaCampoActivo)) {
+                    if (!mayorPlanoAgregarCuenta({ codigo: codigo, nombre: nombre })) {
+                        alert('La cuenta ya est\u00e1 en la lista');
+                    } else {
+                        mayorPlanoLimpiarCampoCuenta(mayorPlanoCuentaCampoActivo);
+                    }
+                } else {
+                    mayorPlanoCuentaCampoActivo.find('.codigocuentacontable').val(mayorPlanoFormatearCodigoCuenta(codigo));
+                    mayorPlanoCuentaCampoActivo.find('.nombrecuentacontable').val(nombre);
+                }
             }
 
             $('#consultacuentaModal').modal('hide');
+        });
+
+    $('#form-mayor-plano-cuenta')
+        .off('submit.mpc')
+        .on('submit.mpc', function () {
+            mayorPlanoSincronizarHiddenCuentas();
         });
 
     $('#mpc-empresas-dual, #empresa_id')

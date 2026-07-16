@@ -788,6 +788,62 @@ class MayorConceptoAnitaBridgeReader
     }
 
     /**
+     * Cuenta de gasto de un COM histórico con el mismo pasivo proveedor (y opcionalmente emisor/importe).
+     * Usado por EFE gastronomía para remapar restos FIS → concepto 20 sin cargar meses enteros.
+     */
+    public function buscarCuentaGastoComPorPasivo(
+        int $empresaId,
+        int $pasivo,
+        string $emisor,
+        float $importe,
+        array &$errores,
+    ): ?int {
+        if ($empresaId <= 0 || $pasivo <= 0) {
+            return null;
+        }
+
+        $where = ' WHERE subd_empresa='.$empresaId
+            .' AND subd_tipo="COM"'
+            .' AND subd_contrapartida='.$pasivo
+            .' AND subd_cuenta>=500000000';
+        // Anita no filtra bien por subd_emisor; se acota por importe y se elige en PHP.
+        if ($importe > 0) {
+            $where .= ' AND subd_importe='.(abs($importe - round($importe)) < 0.001
+                ? (string) (int) round($importe)
+                : sprintf('%.2f', $importe));
+        }
+
+        $filas = $this->listar(
+            'contab',
+            'subdiario',
+            'subd_cuenta,subd_importe,subd_fecha,subd_emisor,subd_nro',
+            $where,
+            $errores,
+            'subdiario-com-gasto-pasivo',
+        );
+
+        $emisor = trim($emisor);
+        $mejor = null;
+        $mejorNro = -1;
+        foreach ($filas as $fila) {
+            $cuenta = (int) ($fila->subd_cuenta ?? 0);
+            if ($cuenta < 500000000) {
+                continue;
+            }
+            if ($emisor !== '' && trim((string) ($fila->subd_emisor ?? '')) !== $emisor) {
+                continue;
+            }
+            $nro = (int) ($fila->subd_nro ?? 0);
+            if ($nro >= $mejorNro) {
+                $mejorNro = $nro;
+                $mejor = $cuenta;
+            }
+        }
+
+        return $mejor;
+    }
+
+    /**
      * Trae todas las piernas del asiento del comprobante (p. ej. FIS con 521xxx en el mismo nro_operacion).
      *
      * @param  list<object>  $semillas

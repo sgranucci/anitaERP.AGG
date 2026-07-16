@@ -20,12 +20,17 @@
 <input type="hidden" name="consultar" value="1">
 
 <div class="card-body bg-light border-bottom py-2">
-    <div class="form-row align-items-end">
-        @include('includes.listado.filtro_empresa_asignada', [
-            'f' => $f,
-            'requiere_seleccion' => true,
-        ])
+    @include('includes.reportes.asignacion_empresas_dual', [
+        'empresa_query' => $empresa_query ?? collect(),
+        'empresa_ids_seleccionados' => $f['empresa_ids'] ?? [],
+        'consolidar_empresas' => $f['consolidar_empresas'] ?? true,
+        'reporte_clave' => 'gastronomia_analitico_reporte',
+        'id_prefix' => 'gar',
+        'col_label' => 'col-lg-2',
+        'col_body' => 'col-lg-10',
+    ])
 
+    <div class="form-row align-items-end">
         <div class="form-group col-md-2 col-sm-6 mb-2">
             <label class="small mb-1" for="modo_periodo">Per&iacute;odo</label>
             <select name="modo_periodo" id="modo_periodo" class="form-control form-control-sm">

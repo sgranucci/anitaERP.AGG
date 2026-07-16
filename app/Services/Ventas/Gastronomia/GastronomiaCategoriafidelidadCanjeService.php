@@ -34,6 +34,7 @@ final class GastronomiaCategoriafidelidadCanjeService
         private readonly CategoriafidelidadEntregaGastronomiaRepositoryInterface $entregaRepository,
         private readonly GastronomiaCuentaService $cuentaService,
         private readonly GastronomiaFormulaOpcionalesService $opcionalesService,
+        private readonly GastronomiaJornadaService $jornadaService,
     ) {
     }
 
@@ -325,7 +326,7 @@ final class GastronomiaCategoriafidelidadCanjeService
         int $listaprecioId,
     ): array {
         $items = [];
-        $fechaLista = Carbon::today()->format('Y-m-d');
+        $fechaLista = $this->jornadaService->fechaVigenciaListaPrecio($empresaId);
 
         foreach ($categoria->articulos as $pivot) {
             $articulo = $pivot->articulo;

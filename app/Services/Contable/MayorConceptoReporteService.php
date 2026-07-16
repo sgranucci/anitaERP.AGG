@@ -984,6 +984,43 @@ class MayorConceptoReporteService
             }
         }
 
+        return $this->enriquecerOrdencompraIds($filas);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function enriquecerOrdencompraIds(array $filas): array
+    {
+        $numerosOc = [];
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $nro = (int) ($fila['nro_oc'] ?? 0);
+            if ($nro > 0) {
+                $numerosOc[$nro] = true;
+            }
+        }
+
+        if ($numerosOc === []) {
+            return $filas;
+        }
+
+        $mapa = DB::table('ordencompra')
+            ->whereIn('numeroordencompra', array_keys($numerosOc))
+            ->pluck('id', 'numeroordencompra')
+            ->all();
+
+        foreach ($filas as $idx => $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $nro = (int) ($fila['nro_oc'] ?? 0);
+            $filas[$idx]['ordencompra_id'] = $nro > 0 ? (int) ($mapa[$nro] ?? 0) : 0;
+        }
+
         return $filas;
     }
 

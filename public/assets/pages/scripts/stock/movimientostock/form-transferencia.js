@@ -435,6 +435,64 @@
         }, true);
     }
 
+    function activarEnterDepositoDestinoEnfocaArticulo() {
+        if (!document.getElementById('deposito_entrada_id_codigo')) {
+            return;
+        }
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.which !== 13) {
+                return;
+            }
+
+            var target = e.target;
+            if (!target || !target.classList || !target.classList.contains('codigodeposito')) {
+                return;
+            }
+
+            if (!target.closest('#tm_deposito_entrada') || !esTransferencia()) {
+                return;
+            }
+
+            if (typeof esFormularioDepmaeAbm === 'function' && esFormularioDepmaeAbm()) {
+                return;
+            }
+
+            e.preventDefault();
+            e.stopImmediatePropagation();
+
+            if (typeof empresaRequeridaPendienteEnFormulario === 'function' && empresaRequeridaPendienteEnFormulario()) {
+                alert('Seleccione la empresa del formulario antes de consultar dep\u00f3sitos.');
+                if (typeof enfocarEmpresaFormularioDeposito === 'function') {
+                    enfocarEmpresaFormularioDeposito();
+                }
+                return;
+            }
+
+            var codigo = $.trim(String(target.value || ''));
+            if (!codigo) {
+                return;
+            }
+
+            // Ya resuelto: solo pasar al SKU
+            var depId = parseInt($('#deposito_entrada_id').val(), 10) || 0;
+            if (depId > 0 && $.trim(String($('#deposito_entrada_id_descripcion').val() || ''))) {
+                enfocarPrimerArticuloMovStock();
+                return;
+            }
+
+            if (typeof leerDepositoPorCodigo !== 'function') {
+                return;
+            }
+
+            leerDepositoPorCodigo(codigo, target, function (data) {
+                if (data && data.id) {
+                    enfocarPrimerArticuloMovStock();
+                }
+            });
+        }, true);
+    }
+
     /**
      * Destino de TRA: cualquier depósito de la empresa (o intercompany).
      * Origen / ingreso / egreso: sigue filtrando por usuario_deposito.
@@ -466,7 +524,8 @@
 
         if ($ctx.is('#tm_deposito_entrada')) {
             actualizarPanelDestinatarioMs();
-            enfocarUsuarioDestinoTransferencia();
+            // Enter / elección de depósito destino: foco al SKU (usuario destino es opcional)
+            enfocarPrimerArticuloMovStock();
             return;
         }
 
@@ -500,6 +559,7 @@
             activa_eventos_consultausuario();
         }
         activarEnterDepositoSalidaEnfocaDestino();
+        activarEnterDepositoDestinoEnfocaArticulo();
         activarEnterUsuarioDestinoValidaEnfocaArticulo();
         actualizarPanelesTransferencia();
         actualizarUiModoIntercompanyMs();

@@ -63,30 +63,91 @@ $(function () {
 		});
 	}
 
-	window.onArticuloSeleccionado = function (dataArticulo, ctx) {
-		if (!dataArticulo) return;
-		var oficina = dataArticulo.oficinacompra_id || '';
-		if (!oficina) return;
+	function reqFormatearCantAlt(num) {
+		if (!isFinite(num)) {
+			return '';
+		}
+		var t = parseFloat(num.toFixed(4));
+		if (t === 0) {
+			return '0';
+		}
+		return String(t);
+	}
 
-		var $of = $('#oficinacompra_id');
-		var $ofShow = $('#oficinacompra_id_show');
-		var actual = $of.val() || '';
-		var oficinaNombre = (window.oficinacompraMap && window.oficinacompraMap[String(oficina)]) ? window.oficinacompraMap[String(oficina)] : oficina;
+	function reqLimpiarCantidadAlternativaHint($tr) {
+		$tr.find('.req-unidadesxenvase').val('');
+		$tr.find('.req-um-alt-abrev').val('');
+		$tr.find('.req-cantidadalternativa').val('');
+		$tr.find('.req-cant-alt-valor').addClass('text-muted').text('—');
+		$tr.find('.req-cant-alt-um').text('');
+	}
 
-		if (!actual) {
-			$of.val(oficina);
-			$ofShow.val(oficinaNombre);
+	function reqEnriquecerUmAltDesdeArticulo($tr, dataArticulo) {
+		if (!$tr || !$tr.length || !dataArticulo) {
+			return;
+		}
+		var umdAlt = (dataArticulo.unidadesdemedidasalternativas && dataArticulo.unidadesdemedidasalternativas.abreviatura)
+			|| dataArticulo.um_alternativa_abreviatura
+			|| '';
+		var uxenv = parseFloat(dataArticulo.unidadesxenvase) || 0;
+		$tr.find('.req-unidadesxenvase').val(uxenv > 0 ? uxenv : '');
+		$tr.find('.req-um-alt-abrev').val(umdAlt || '');
+		reqActualizarCantidadAlternativaHint($tr);
+	}
+
+	function reqActualizarCantidadAlternativaHint($tr) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		var uxenv = parseFloat($tr.find('.req-unidadesxenvase').val()) || 0;
+		var abrev = ($tr.find('.req-um-alt-abrev').val() || '').trim();
+		var cant = parseFloat($tr.find('.cantidad-linea').val()) || 0;
+		var $valor = $tr.find('.req-cant-alt-valor');
+		var $um = $tr.find('.req-cant-alt-um');
+		var $hidden = $tr.find('.req-cantidadalternativa');
+
+		if (uxenv <= 0) {
+			$hidden.val('');
+			$valor.addClass('text-muted').text('—');
+			$um.text('');
 			return;
 		}
 
-		if (String(actual) !== String(oficina)) {
-			alert('No se permiten artículos de diferentes oficinas de compra en una requisición.');
-			if (ctx && ctx.row) {
-				var $row = $(ctx.row);
-				$row.find('.articulo_id').val('');
-				$row.find('.codigoarticulo').val('');
-				$row.find('.descripcionarticulo').val('');
+		var altTxt = reqFormatearCantAlt(cant * uxenv);
+		$hidden.val(altTxt);
+		$valor.removeClass('text-muted').text(altTxt);
+		$um.text(abrev || '');
+	}
+
+	window.onArticuloSeleccionado = function (dataArticulo, ctx) {
+		if (!dataArticulo) return;
+		var $row = (ctx && ctx.row) ? $(ctx.row) : $();
+		var enReq = $row.length && $row.closest('#tabla-articulos-requisicion').length;
+		var oficina = dataArticulo.oficinacompra_id || '';
+
+		if (oficina) {
+			var $of = $('#oficinacompra_id');
+			var $ofShow = $('#oficinacompra_id_show');
+			var actual = $of.val() || '';
+			var oficinaNombre = (window.oficinacompraMap && window.oficinacompraMap[String(oficina)]) ? window.oficinacompraMap[String(oficina)] : oficina;
+
+			if (!actual) {
+				$of.val(oficina);
+				$ofShow.val(oficinaNombre);
+			} else if (String(actual) !== String(oficina)) {
+				alert('No se permiten artículos de diferentes oficinas de compra en una requisición.');
+				if (enReq) {
+					$row.find('.articulo_id').val('');
+					$row.find('.codigoarticulo').val('');
+					$row.find('.descripcionarticulo').val('');
+					reqLimpiarCantidadAlternativaHint($row);
+				}
+				return;
 			}
+		}
+
+		if (enReq) {
+			reqEnriquecerUmAltDesdeArticulo($row, dataArticulo);
 		}
 	};
 
@@ -109,6 +170,7 @@ $(function () {
 		var $clone = $first.clone();
 		$clone.removeClass('req-requisicion-linea-cerrada').removeAttr('title');
 		$clone.find('input,select').val('');
+		reqLimpiarCantidadAlternativaHint($clone);
 		$clone.removeAttr('data-req-cc-manual data-req-moneda-manual');
 		$clone.find('select').each(function () {
 			$(this).prop('selectedIndex', 0);
@@ -147,17 +209,34 @@ $(function () {
 		if ($rows.length > 1) {
 			$(this).closest('tr.item-requisicion-articulo').remove();
 		} else {
-			$(this).closest('tr.item-requisicion-articulo').find('input,select').each(function () {
+			var $tr = $(this).closest('tr.item-requisicion-articulo');
+			$tr.find('input,select').each(function () {
 				if ($(this).is('select')) {
 					$(this).prop('selectedIndex', 0);
 				} else {
 					$(this).val('');
 				}
 			});
+			reqLimpiarCantidadAlternativaHint($tr);
 		}
 		if (typeof window.reqLineasScheduleTotales === 'function') {
 			window.reqLineasScheduleTotales();
 		}
+	});
+
+	$(document).on('input change', '#tabla-articulos-requisicion .cantidad-linea', function () {
+		reqActualizarCantidadAlternativaHint($(this).closest('tr.item-requisicion-articulo'));
+	});
+
+	$(document).on('change', '#tabla-articulos-requisicion .codigoarticulo', function () {
+		var sku = ($(this).val() || '').trim();
+		if (!sku) {
+			reqLimpiarCantidadAlternativaHint($(this).closest('tr.item-requisicion-articulo'));
+		}
+	});
+
+	$('#tabla-articulos-requisicion tbody tr.item-requisicion-articulo').each(function () {
+		reqActualizarCantidadAlternativaHint($(this));
 	});
 
 	function requisicionToggleFooterPresupuesto(mostrarSolapaPresupuesto) {

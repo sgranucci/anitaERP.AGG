@@ -49,10 +49,16 @@ final class GastronomiaAnaliticoReporteService
 
         if ($filasRaw instanceof LengthAwarePaginator) {
             $items = collect($filasRaw->items())->map($mapear)->values();
+            if (GastronomiaAnaliticoReporteFiltros::debeSepararPorEmpresa($filtros)) {
+                $items = $this->insertarHeadersEmpresa($items, true);
+            }
             $filasRaw->setCollection($items);
             $filas = $filasRaw;
         } else {
             $filas = $filasRaw->map($mapear)->values();
+            if (GastronomiaAnaliticoReporteFiltros::debeSepararPorEmpresa($filtros)) {
+                $filas = $this->insertarHeadersEmpresa($filas, false);
+            }
         }
 
         $costoTotal = 0.0;
@@ -155,8 +161,49 @@ final class GastronomiaAnaliticoReporteService
         $row->dia = $dia;
         $row->hora = $hora;
         $row->numero_comprobante_fmt = $this->fmtNumeroComprobante($row);
+        $row->tipo_fila = 'detalle';
+        $row->nombreempresa = trim((string) ($row->nombreempresa ?? $row->sala ?? ''));
 
         return $row;
+    }
+
+    /**
+     * Inserta filas header_empresa al cambiar de empresa (modo no consolidado).
+     *
+     * @param  Collection<int, object>  $filas
+     * @return Collection<int, object>
+     */
+    private function insertarHeadersEmpresa(Collection $filas, bool $repetirHeaderAlInicioPagina): Collection
+    {
+        if ($filas->isEmpty()) {
+            return $filas;
+        }
+
+        $out = collect();
+        $empresaActual = null;
+
+        foreach ($filas as $idx => $row) {
+            $empresaId = (int) ($row->empresa_id ?? 0);
+            $nombre = trim((string) ($row->nombreempresa ?? $row->sala ?? ''));
+            if ($nombre === '') {
+                $nombre = $empresaId > 0 ? (string) $empresaId : '—';
+            }
+
+            $cambiar = $empresaId !== $empresaActual;
+            if ($cambiar || ($repetirHeaderAlInicioPagina && $idx === 0)) {
+                $out->push((object) [
+                    'tipo_fila' => 'header_empresa',
+                    'empresa_id' => $empresaId,
+                    'nombreempresa' => $nombre,
+                    'sala' => $nombre,
+                ]);
+                $empresaActual = $empresaId;
+            }
+
+            $out->push($row);
+        }
+
+        return $out->values();
     }
 
     private function fmtNumeroComprobante(object $row): string

@@ -6,6 +6,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\CuentacajaListadoFiltros;
+use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -508,12 +509,14 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             $cuentacontable_id = $cuenta->id;
         else
             $cuentacontable_id = null;
-        // Busca el banco
-        $banco = $this->bancoRepository->findPorCodigo($data->tesm_codigo_banco);
-        if ($banco)
-            $banco_id = $banco->id;
-        else    
+        // Busca el banco (0 / vacío en Anita = sin banco)
+        $codigoBancoAnita = trim((string) ($data->tesm_codigo_banco ?? ''));
+        if ($codigoBancoAnita === '' || $codigoBancoAnita === '0') {
             $banco_id = null;
+        } else {
+            $banco = $this->bancoRepository->findPorCodigo($codigoBancoAnita);
+            $banco_id = $banco ? $banco->id : null;
+        }
         $codigoEmpresaAnita = trim((string) ($data->tesm_empresa ?? ''));
         if ($codigoEmpresaAnita === '' || $codigoEmpresaAnita === '0') {
             $empresa_id = null;
@@ -544,35 +547,36 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
     private function convierteDatosParaAnita($data, &$banco, &$tipoCuenta, &$fecha, &$cuentaContable, &$empresa, &$moneda)
     {
-        $fecha = Carbon::now();
-		$fecha = $fecha->format('Ymd');
+        $fecha = Carbon::now()->format('Ymd');
 
-        // Busca el banco
-        $banco = ' ';
-        if (isset($data['banco_id']))
-        {
-            $banco = $this->bancoRepository->find($data['banco_id']);
-            if ($banco)
-                $banco = $banco->codigo;
-            else    
-                $banco = ' ';
+        // Sin banco en ERP → '0' en Informix (nunca NULL ni vacío ni espacio)
+        $banco = '0';
+        if (! empty($data['banco_id'])) {
+            $bancoModel = $this->bancoRepository->find($data['banco_id']);
+            $codigoBanco = $bancoModel ? trim((string) $bancoModel->codigo) : '';
+            $banco = $codigoBanco !== '' ? $codigoBanco : '0';
         }
-        // Busca la cuenta
-        $cuenta = Cuentacontable::select('id', 'codigo')->where('id' , $data['cuentacontable_id'])->first();
-        if ($cuenta)
-            $cuentaContable = $cuenta->codigo;
-        else
-            $cuentaContable = '000000-000';
-        // Todas las empresas en ERP (empresa_id null) → 0 en Informix (no NULL)
+
+        // tesm_tipo_cuenta en Anita: B banco, T caja/tesorería (ERP tipocuenta R/V no mapea 1:1)
+        $tipoCuenta = ! empty($data['banco_id']) ? 'B' : 'T';
+
+        $cuenta = Cuentacontable::select('id', 'codigo')->where('id', $data['cuentacontable_id'] ?? null)->first();
+        $cuentaContable = $cuenta ? (string) $cuenta->codigo : '000000-000';
+
+        // Multiempresa ERP (empresa_id null/vacío) → '0' en Informix (nunca NULL ni vacío)
         $empresa = '0';
-        if (! empty($data['empresa_id'])) {
-            $empresaModel = Empresa::select('id', 'codigo')->where('id', $data['empresa_id'])->first();
-            if ($empresaModel) {
-                $empresa = $empresaModel->codigo;
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+        if ($empresaId > 0) {
+            $codigoAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
+            if ($codigoAnita > 0) {
+                $empresa = (string) $codigoAnita;
             }
         }
 
-        $moneda = $data['moneda_id'];
+        $moneda = trim((string) ($data['moneda_id'] ?? ''));
+        if ($moneda === '') {
+            $moneda = '0';
+        }
     }
 
     private static function usaTablaTesmcbu(): bool

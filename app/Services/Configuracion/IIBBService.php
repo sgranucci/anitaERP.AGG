@@ -57,12 +57,69 @@ class IIBBService
             case 924: // Tucuman tasas y coeficientes
 				$tasa_iibb = $this->padron_iibbRepository->leePadronIibb($cuit, 'percepcion', $jurisdiccion, $fechaFactura);
 				break;
+			default:
+				$tasa_iibb = null;
+				break;
 		}
 
 		if ($tasa_iibb)
 			$this->flLeyoPadron = true;
 
 		return $tasa_iibb;
+	}
+
+	/**
+	 * Tasa de retención IIBB desde padrón (ARBA/CABA/otras).
+	 *
+	 * @return array{tasa: float|null, tipocontribuyente: string|null, origen: string}|null
+	 */
+	public function leeTasaRetencion($nroinscripcion, $jurisdiccion, $fecha = null): ?array
+	{
+		$cuit = str_replace('-', '', (string) $nroinscripcion);
+		$registro = null;
+
+		switch ((int) $jurisdiccion) {
+			case 901:
+				$registro = $this->padron_iibb_cabaRepository->findPorCuit($cuit, $fecha);
+				break;
+			case 902:
+				$registro = $this->padron_iibb_arbaRepository->findPorCuit($cuit, $fecha);
+				break;
+			case 904:
+			case 908:
+			case 914:
+			case 921:
+			case 924:
+				$registro = $this->padron_iibbRepository->leePadronIibb($cuit, 'retencion', $jurisdiccion, $fecha);
+				break;
+		}
+
+		if ($registro === null) {
+			return null;
+		}
+
+		if (is_array($registro)) {
+			$tasa = $registro['tasa'] ?? $registro['tasaretencion'] ?? null;
+
+			return [
+				'tasa' => $tasa !== null && $tasa !== '' ? (float) $tasa : null,
+				'tipocontribuyente' => $registro['tipocontribuyente'] ?? null,
+				'origen' => 'padron',
+			];
+		}
+
+		$tasa = $registro->tasaretencion ?? null;
+
+		return [
+			'tasa' => $tasa !== null && $tasa !== '' ? (float) $tasa : null,
+			'tipocontribuyente' => $registro->tipocontribuyente ?? null,
+			'origen' => 'padron',
+		];
+	}
+
+	public function leyoPadron(): bool
+	{
+		return (bool) $this->flLeyoPadron;
 	}
 
 	// Calcula percepciones de ingresos brutos para ventas

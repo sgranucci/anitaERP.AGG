@@ -16,8 +16,32 @@ final class SicoreProveedorErpSupport
     /** @var array<string, array{nombre: string, cuit: string, cod_condicion: int}> */
     private array $cache = [];
 
+    /** @var array<string, bool> */
+    private array $existeAnita = [];
+
     /**
-     * @param  list<string>  $codigosProveedor  Códigos Anita (6 dígitos) desde retmov/retimov
+     * Códigos Anita (subd_emisor) que existen en el maestro ERP de proveedores.
+     *
+     * @param  list<string>  $codigosAnita
+     * @return array<string, true>  Clave = código Anita normalizado (bridge)
+     */
+    public function indicesExistentes(array $codigosAnita): array
+    {
+        $this->precargar($codigosAnita);
+
+        $out = [];
+        foreach ($codigosAnita as $codigo) {
+            $anita = $this->normalizarCodigoAnita($codigo);
+            if ($anita !== '' && ! empty($this->existeAnita[$anita])) {
+                $out[$anita] = true;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $codigosProveedor  Códigos Anita (6 dígitos) desde retmov/retimov / subd_emisor
      */
     public function precargar(array $codigosProveedor): void
     {
@@ -55,6 +79,7 @@ final class SicoreProveedorErpSupport
                 ?? $porCodigoErp[str_pad($erpCod, 6, '0', STR_PAD_LEFT)]
                 ?? null;
 
+            $this->existeAnita[$anita] = $proveedor !== null;
             $this->cache[$anita] = $this->datosDesdeProveedor($proveedor);
         }
 
@@ -64,6 +89,7 @@ final class SicoreProveedorErpSupport
                 'cuit' => '',
                 'cod_condicion' => 1,
             ];
+            $this->existeAnita[$anita] ??= false;
         }
     }
 

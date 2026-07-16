@@ -51,6 +51,11 @@
                            class="btn btn-sm btn-outline-info mr-2 mb-1" title="Conciliar rendiciones vs flash">
                             <i class="fa fa-balance-scale"></i> Conciliaci&oacute;n flash
                         </a>
+                        <a href="{{ route('cierre_rendicion_estacionamiento_diario_puntoventa', $retornoListadoQuery) }}"
+                           class="btn btn-sm btn-outline-primary mr-2 mb-1"
+                           title="Diario por punto de venta y medios de pago">
+                            <i class="fa fa-table"></i> Diario por PV / medios
+                        </a>
                     @endif
                     @if (can('ejecutar-cierre-rendicion-estacionamiento-contable', false))
                         <button type="button" class="btn btn-sm btn-success mr-2 mb-1" id="btn-abrir-cierre-rango"

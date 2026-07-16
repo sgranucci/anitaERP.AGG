@@ -1344,6 +1344,159 @@
         return 1;
     }
 
+    function fechaRecepcionForm() {
+        return (($('#fecha').val() || $('input[name="fecha"]').val() || '') + '').substring(0, 10);
+    }
+
+    function sincronizarCotizacionDom(idx) {
+        var item = itemsActuales[idx];
+        if (!item) {
+            return;
+        }
+        var cot = parseFloat(item.cotizacion);
+        if (!(cot > 0)) {
+            cot = 1;
+            item.cotizacion = cot;
+        }
+        var $tr = $('#tbody-items-recepcion tr.item-recepcion-linea[data-idx="' + idx + '"]');
+        if (!$tr.length) {
+            return;
+        }
+        $tr.find('.item-cotizacion').val(cot);
+        $tr.find('input[name="items[' + idx + '][cotizacion]"]').val(cot);
+    }
+
+    /**
+     * Cotización venta del día (cron BNA) por moneda y fecha de recepción.
+     * Agrupa por moneda para minimizar requests.
+     */
+    function refrescarCotizacionesDia(cb) {
+        if (window.recepcionProveedorSoloLectura || esModoDevolucion()) {
+            if (typeof cb === 'function') {
+                cb();
+            }
+            return;
+        }
+        var fecha = fechaRecepcionForm();
+        if (!fecha || !itemsActuales.length) {
+            if (typeof cb === 'function') {
+                cb();
+            }
+            return;
+        }
+
+        var porMoneda = {};
+        itemsActuales.forEach(function (item, idx) {
+            var mid = parseInt(item.moneda_id, 10) || 1;
+            if (mid <= 1) {
+                item.cotizacion = 1;
+                return;
+            }
+            if (!porMoneda[mid]) {
+                porMoneda[mid] = [];
+            }
+            porMoneda[mid].push(idx);
+        });
+
+        var monedas = Object.keys(porMoneda);
+        if (!monedas.length) {
+            itemsActuales.forEach(function (_item, idx) {
+                sincronizarCotizacionDom(idx);
+            });
+            actualizarTotalRecepcion();
+            if (typeof cb === 'function') {
+                cb();
+            }
+            return;
+        }
+
+        var pending = monedas.length;
+        monedas.forEach(function (midStr) {
+            var mid = parseInt(midStr, 10);
+            $.getJSON(carpetaBase + '/stock/recepcion-proveedor/api/cotizacion-moneda-fecha', {
+                fecha: fecha,
+                moneda_id: mid
+            })
+                .done(function (res) {
+                    var cot = parseFloat(res && res.cotizacion);
+                    if (!(cot > 0)) {
+                        cot = 1;
+                    }
+                    (porMoneda[midStr] || []).forEach(function (idx) {
+                        if (itemsActuales[idx]) {
+                            itemsActuales[idx].cotizacion = cot;
+                        }
+                    });
+                })
+                .fail(function () {
+                    (porMoneda[midStr] || []).forEach(function (idx) {
+                        if (itemsActuales[idx] && !(parseFloat(itemsActuales[idx].cotizacion) > 0)) {
+                            itemsActuales[idx].cotizacion = 1;
+                        }
+                    });
+                })
+                .always(function () {
+                    pending -= 1;
+                    if (pending <= 0) {
+                        itemsActuales.forEach(function (_item, idx) {
+                            sincronizarCotizacionDom(idx);
+                        });
+                        actualizarTotalRecepcion();
+                        if (typeof cb === 'function') {
+                            cb();
+                        }
+                    }
+                });
+        });
+    }
+
+    function refrescarCotizacionLinea(idx, cb) {
+        if (window.recepcionProveedorSoloLectura || esModoDevolucion()) {
+            if (typeof cb === 'function') {
+                cb();
+            }
+            return;
+        }
+        var item = itemsActuales[idx];
+        if (!item) {
+            if (typeof cb === 'function') {
+                cb();
+            }
+            return;
+        }
+        var mid = parseInt(item.moneda_id, 10) || 1;
+        var fecha = fechaRecepcionForm();
+        if (!fecha || mid <= 1) {
+            item.cotizacion = 1;
+            sincronizarCotizacionDom(idx);
+            actualizarTotalRecepcion();
+            if (typeof cb === 'function') {
+                cb();
+            }
+            return;
+        }
+        $.getJSON(carpetaBase + '/stock/recepcion-proveedor/api/cotizacion-moneda-fecha', {
+            fecha: fecha,
+            moneda_id: mid
+        })
+            .done(function (res) {
+                var cot = parseFloat(res && res.cotizacion);
+                item.cotizacion = cot > 0 ? cot : 1;
+            })
+            .fail(function () {
+                if (!(parseFloat(item.cotizacion) > 0)) {
+                    item.cotizacion = 1;
+                }
+            })
+            .always(function () {
+                sincronizarCotizacionDom(idx);
+                actualizarTotalRecepcion();
+                if (typeof cb === 'function') {
+                    cb();
+                }
+            });
+    }
+
     function abreviaturaMoneda(monedaId) {
         var id = parseInt(monedaId, 10);
         var monedas = window.recepcionProveedorMonedas || [];
@@ -1955,6 +2108,7 @@
         }
         cargandoOc = true;
         var params = ocId ? { ordencompra_id: ocId } : { numero_oc: numeroOc };
+        params.fecha = fechaRecepcionForm() || '';
         $.getJSON(carpetaBase + '/stock/recepcion-proveedor/api/precarga-oc', params)
             .done(function (data) {
                 ultimoNumeroOcCargado = data.numeroordencompra || numeroOc;
@@ -2468,8 +2622,14 @@
             var item = itemsActuales[idx];
             if (item) {
                 item.moneda_id = parseInt($(this).val(), 10) || 1;
+                refrescarCotizacionLinea(idx);
+            } else {
+                actualizarTotalRecepcion();
             }
-            actualizarTotalRecepcion();
+        });
+
+        $('#fecha').on('change', function () {
+            refrescarCotizacionesDia();
         });
 
         $(document).on('input change', '.item-cotizacion', function () {

@@ -108,8 +108,11 @@ class LibroIvaDigitalController extends Controller
     {
         $empresaId = $this->enteroOpcional($request->input('empresa_id'));
         $periodo = trim((string) $request->input('periodo', ''));
+        $mesReq = $request->input('mes');
+        $anioReq = $request->input('anio');
+        $tieneMesAnio = $mesReq !== null && $mesReq !== '' && $anioReq !== null && $anioReq !== '';
 
-        if ($empresaId === null && $periodo === '' && $empresaQuery !== null) {
+        if ($empresaId === null && $periodo === '' && ! $tieneMesAnio && $empresaQuery !== null) {
             $empresaId = ReportePreferenciasUsuario::leerEmpresaId(self::PREFERENCIAS_CLAVE);
             $periodo = ReportePreferenciasUsuario::leerPeriodo(self::PREFERENCIAS_CLAVE);
         }
@@ -125,15 +128,31 @@ class LibroIvaDigitalController extends Controller
             }
         }
 
+        $anio = null;
+        $mes = null;
+
+        // Preferir mes/año tipados (UI); si no, periodo YYYY-MM / MM-YYYY de preferencias o links export.
+        if ($tieneMesAnio) {
+            $mes = max(1, min(12, (int) $mesReq));
+            $anio = max(2000, min(2100, (int) $anioReq));
+            $periodo = sprintf('%04d-%02d', $anio, $mes);
+        } elseif ($periodo !== '') {
+            try {
+                $periodo = normalizarPeriodoParaUrl($periodo);
+            } catch (\InvalidArgumentException) {
+                $periodo = '';
+            }
+        }
+
         if ($periodo === '') {
             $periodo = date('Y-m', strtotime('first day of last month'));
         }
 
-        $anio = null;
-        $mes = null;
-        if (preg_match('/^(\d{4})-(\d{2})$/', $periodo, $m)) {
-            $anio = (int) $m[1];
-            $mes = (int) $m[2];
+        if ($anio === null || $mes === null) {
+            if (preg_match('/^(\d{4})-(\d{2})$/', $periodo, $m)) {
+                $anio = (int) $m[1];
+                $mes = (int) $m[2];
+            }
         }
 
         return [

@@ -14,6 +14,7 @@ use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use RuntimeException;
@@ -75,7 +76,7 @@ class ComprobanteProveedorAsientoService
             'comprobante_proveedor_conceptos.concepto_ivacompras',
             'proveedores',
             'tipotransaccion_compras',
-            'ordencompras',
+            'ordencompras.ordencompra_articulos',
             'comprobante_proveedor_recepciones.recepcion_proveedores',
         ]);
 
@@ -158,11 +159,26 @@ class ComprobanteProveedorAsientoService
             throw new RuntimeException('No hay conceptos con monto para contabilizar.');
         }
 
-        $cuentaProveedor = (int) ($comprobante->proveedores?->cuentacontable_id
-            ?? $comprobante->proveedores?->cuentacontablecompra_id
-            ?? 0);
+        // MN/ME: moneda OC si hay; si no, moneda del comprobante (Anita filtra_moneda_oc).
+        $resMoneda = ProveedorCuentaContableMonedaSupport::resolverMonedaParaCuentaProveedor($comprobante);
+        $monedaCuentaId = (int) $resMoneda['moneda_id'];
+        $origenMoneda = ProveedorCuentaContableMonedaSupport::etiquetaOrigenMoneda($resMoneda['origen']);
+        $cuentaProveedor = ProveedorCuentaContableMonedaSupport::cuentaProveedorId(
+            $comprobante->proveedores,
+            $monedaCuentaId
+        );
         if ($cuentaProveedor <= 0) {
-            throw new RuntimeException('El proveedor no tiene cuenta contable de proveedores configurada.');
+            throw new RuntimeException(
+                'El proveedor no tiene cuenta contable de '
+                .ProveedorCuentaContableMonedaSupport::etiquetaCuentaEsperada($monedaCuentaId)
+                .' (según '.$origenMoneda.').'
+            );
+        }
+        if (ProveedorCuentaContableMonedaSupport::esMonedaExtranjera($monedaCuentaId)
+            && (int) ($comprobante->proveedores?->cuentacontableme_id ?? 0) <= 0) {
+            throw new RuntimeException(
+                'El proveedor no tiene cuenta contable de proveedores moneda extranjera (m/e) configurada ('.$origenMoneda.').'
+            );
         }
 
         $totalDebe = round(array_sum(array_column($lineasDebe, 'importe')), 2);

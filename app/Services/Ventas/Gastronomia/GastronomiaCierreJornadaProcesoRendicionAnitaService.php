@@ -242,14 +242,15 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
 
     private function assertNroOperEnRangoEmpresa(int $empresaId, int $nroOper): void
     {
-        $piso = RendicionGastronomiaNroOperPisoSupport::pisoParaEmpresa($empresaId);
+        unset($empresaId);
+        $piso = RendicionGastronomiaNroOperPisoSupport::piso();
         if ($piso <= 0) {
             return;
         }
 
-        if (! RendicionGastronomiaNroOperPisoSupport::enRangoEmpresa($empresaId, $nroOper)) {
+        if (! RendicionGastronomiaNroOperPisoSupport::enRango($nroOper)) {
             throw new RuntimeException(
-                'nro_oper '.$nroOper.' fuera del rango dedicado de la empresa '.$empresaId
+                'nro_oper '.$nroOper.' fuera del rango compartido rendgastro'
                 .' (piso '.$piso.'). Revise numeración Anita/ERP.',
             );
         }

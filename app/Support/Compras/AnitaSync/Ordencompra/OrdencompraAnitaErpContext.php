@@ -112,9 +112,13 @@ final class OrdencompraAnitaErpContext
         return substr($this->usuarioAnita, 0, 15);
     }
 
+    /**
+     * ERP tratamiento → Anita penmp_es_anticipo.
+     * No usar str_contains('ANTICIP'): "NO ANTICIPADA" también lo contiene y mandaba S.
+     */
     public function mapTratamientoAnticipo(string $tratamiento): string
     {
-        return str_contains(strtoupper(trim($tratamiento)), 'ANTICIP') ? 'S' : 'N';
+        return Ordencompra::anitaEsAnticipoDesdeTratamiento($tratamiento);
     }
 
     public function codigoProveedor6(?int $proveedorId): string
@@ -383,6 +387,11 @@ final class OrdencompraAnitaErpContext
 
     public function condicionpagoCabecera(Ordencompra $oc): int
     {
+        $desdeCabecera = $this->codigoCondicionpago((int) ($oc->condicionpago_id ?? 0));
+        if ($desdeCabecera > 0) {
+            return $desdeCabecera;
+        }
+
         $comp = $oc->ordencompra_comprobantes->first();
         if (! $comp) {
             return 0;

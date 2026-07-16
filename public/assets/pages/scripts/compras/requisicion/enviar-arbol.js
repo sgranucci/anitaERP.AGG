@@ -273,6 +273,7 @@ $(function () {
 			return;
 		}
 
+		envioPendiente = context;
 		$textoFirmante.text('Hay m\u00e1s de un firmante en el nivel ' + (nivel || '') + ' del \u00e1rbol. Elija a qui\u00e9n enviar la requisici\u00f3n.');
 		renderFirmantes(firmantes);
 		limpiarErrorModal($errorFirmante);

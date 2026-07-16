@@ -598,13 +598,13 @@ class ArbolaprobacionService
             $coeficienteConversion = 1.;
             if ($nivel->moneda_id != $moneda_id) {
                 $cotizacion = $this->cotizacionService->leeCotizacionDiaria($fecha, $moneda_id);
-                $coeficienteConversion = calculaCoeficienteMoneda($nivel->moneda_id, $moneda_id, $cotizacion);
+                $coeficienteConversion = (float) calculaCoeficienteMoneda($nivel->moneda_id, $moneda_id, $cotizacion);
                 if ($coeficienteConversion == 0) {
                     $coeficienteConversion = 1.;
                 }
             }
 
-            $montoEnMonedaNivel = $monto * $coeficienteConversion;
+            $montoEnMonedaNivel = (float) $monto * $coeficienteConversion;
 
             $enRango = ($nivel->desdemonto != 0 || $nivel->hastamonto != 0)
                 ? ($nivel->desdemonto <= $montoEnMonedaNivel && $nivel->hastamonto >= $montoEnMonedaNivel)
@@ -1384,7 +1384,7 @@ class ArbolaprobacionService
             $coeficienteConversion = 1.;
             if ($nivel->moneda_id != $moneda_id && $moneda_id !== null && $moneda_id !== '') {
                 $cotizacion = $this->cotizacionService->leeCotizacionDiaria($fecha, $moneda_id);
-                $coeficienteConversion = calculaCoeficienteMoneda($nivel->moneda_id, $moneda_id, $cotizacion);
+                $coeficienteConversion = (float) calculaCoeficienteMoneda($nivel->moneda_id, $moneda_id, $cotizacion);
                 if ($coeficienteConversion == 0) {
                     $coeficienteConversion = 1.;
                 }

@@ -22,7 +22,7 @@ class Cheque extends Model implements Auditable
     protected $fillable = [ 
             'origen', 'chequera_id', 'caracter', 'estado', 'fechaemision', 'fechapago', 'cuentacaja_id',
             'empresa_id', 'caja_id', 'caja_movimiento_id', 
-            'cobranza_id', 'cheque_reemplaza_id',
+            'cobranza_id', 'pagoproveedor_id', 'cheque_reemplaza_id',
             'numerocheque', 'moneda_id', 'monto', 'cotizacion', 'proveedor_id', 'cliente_id',
             'tipodocumento_id', 'numerodocumento', 'entregado', 'anombrede', 'estadocheque_banco_id', 
             'sucursalpago', 'tipodistribucion', 'banco_id', 'cuentalibradora'
@@ -37,6 +37,11 @@ class Cheque extends Model implements Auditable
     public function caja_movimientos()
     {
         return $this->belongsTo(Caja_Movimiento::class, 'caja_movimiento_id');
+    }
+
+    public function pagoproveedores()
+    {
+        return $this->belongsTo(\App\Models\Compras\Pagoproveedor::class, 'pagoproveedor_id');
     }
 
     public function cobranzas()

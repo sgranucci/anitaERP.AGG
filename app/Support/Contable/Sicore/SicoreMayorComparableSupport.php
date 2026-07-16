@@ -4,14 +4,29 @@ declare(strict_types=1);
 
 namespace App\Support\Contable\Sicore;
 
+use App\Support\Compras\ProveedorExclusionAnitaSupport;
+
 /**
- * Separa del mayor las líneas comparables con el archivo SICORE (generación de retención)
- * de pagos de la DDJJ, compensaciones y reclasificaciones que distorsionan el saldo.
+ * Separa del mayor las líneas comparables con el archivo SICORE (generación/anulación
+ * de retención en pago a proveedores) de pagos DDJJ, compensaciones y reclasificaciones.
+ *
+ * Comparable: OPP/AOP/OPA/OPV y devoluciones por cheque propio (CHP) que imputan la
+ * cuenta de retención, con subd_emisor presente en el maestro de proveedores.
  */
 final class SicoreMayorComparableSupport
 {
+    /** @var list<string> */
+    private const TIPOS_PAGO_PROVEEDOR = ['OPP', 'AOP', 'OPA', 'OPV'];
+
     /**
-     * Detalles del mayor que no representan retención generada (no van al archivo).
+     * Devolución de retención pagada con cheque (banco vs cuenta 214…), sin AOP en retmov.
+     *
+     * @var list<string>
+     */
+    private const TIPOS_DEVOLUCION_CHEQUE = ['CHP'];
+
+    /**
+     * Detalles del mayor que no representan retención generada en pago a proveedor.
      *
      * @var list<string>
      */
@@ -29,6 +44,9 @@ final class SicoreMayorComparableSupport
 
     /**
      * @param  list<array<string, mixed>>  $movimientos
+     * @param  array<string, true>|null  $emisoresProveedor  Códigos Anita de emisor que existen
+     *                                                       en el maestro proveedor; si no es null,
+     *                                                       solo quedan OPP/AOP/OPA/OPV con emisor válido.
      * @return array{
      *     comparables: list<array<string, mixed>>,
      *     excluidos: list<array<string, mixed>>,
@@ -36,13 +54,19 @@ final class SicoreMayorComparableSupport
      *     total_excluido: float
      * }
      */
-    public static function particionar(array $movimientos): array
+    public static function particionar(array $movimientos, ?array $emisoresProveedor = null): array
     {
         $comparables = [];
         $excluidos = [];
 
         foreach ($movimientos as $mov) {
-            $motivo = self::motivoExclusion((string) ($mov['detalle'] ?? ''));
+            $detalle = (string) ($mov['detalle'] ?? '');
+            $motivo = self::motivoExclusion($detalle);
+
+            if ($motivo === null && $emisoresProveedor !== null) {
+                $motivo = self::motivoExclusionNoPagoProveedor($mov, $emisoresProveedor);
+            }
+
             if ($motivo !== null) {
                 $excluidos[] = array_merge($mov, [
                     'excluido_comparable' => true,
@@ -79,6 +103,82 @@ final class SicoreMayorComparableSupport
         }
 
         return null;
+    }
+
+    /**
+     * OPP/AOP/OPA/OPV o CHP (devolución) con emisor presente en maestro de proveedores.
+     *
+     * @param  array<string, mixed>  $mov
+     * @param  array<string, true>  $emisoresProveedor
+     */
+    public static function esLineaPagoProveedor(array $mov, array $emisoresProveedor): bool
+    {
+        $tipo = strtoupper(trim((string) ($mov['subd_tipo'] ?? $mov['tipo_comp'] ?? '')));
+        if (! self::esTipoComparableRetencion($tipo)) {
+            return false;
+        }
+
+        $emisor = self::normalizarEmisor((string) ($mov['subd_emisor'] ?? $mov['emisor'] ?? ''));
+        if ($emisor === '') {
+            return false;
+        }
+
+        return isset($emisoresProveedor[$emisor]);
+    }
+
+    public static function esTipoComparableRetencion(string $tipo): bool
+    {
+        $tipo = strtoupper(trim($tipo));
+
+        return in_array($tipo, self::TIPOS_PAGO_PROVEEDOR, true)
+            || in_array($tipo, self::TIPOS_DEVOLUCION_CHEQUE, true);
+    }
+
+    public static function esTipoDevolucionCheque(string $tipo): bool
+    {
+        return in_array(strtoupper(trim($tipo)), self::TIPOS_DEVOLUCION_CHEQUE, true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $mov
+     * @param  array<string, true>  $emisoresProveedor
+     */
+    public static function motivoExclusionNoPagoProveedor(array $mov, array $emisoresProveedor): ?string
+    {
+        if (self::esLineaPagoProveedor($mov, $emisoresProveedor)) {
+            return null;
+        }
+
+        $tipo = strtoupper(trim((string) ($mov['subd_tipo'] ?? $mov['tipo_comp'] ?? '')));
+        // CHP con proveedor válido ya pasó esLineaPagoProveedor (devolución comparable).
+        // Otros cheques (sin emisor proveedor) no entran al SICORE.
+        if ($tipo === 'CHP' || str_starts_with($tipo, 'CH')) {
+            return 'cheque_no_pago_proveedor';
+        }
+
+        return 'no_pago_proveedor';
+    }
+
+    /**
+     * Extrae el nº de OP/comprobante tipográfico del detalle Anita (#123066 / OP 123066).
+     */
+    public static function extraerNroCompDesdeDetalle(string $detalle): int
+    {
+        if (preg_match('/(?:#|\bOP\s*)(\d+)\b/u', $detalle, $m) === 1) {
+            return (int) $m[1];
+        }
+
+        return 0;
+    }
+
+    public static function normalizarEmisor(string $emisor): string
+    {
+        $emisor = trim($emisor);
+        if ($emisor === '') {
+            return '';
+        }
+
+        return ProveedorExclusionAnitaSupport::codigoAnitaParaBridge($emisor);
     }
 
     public static function esComparable(string $detalle): bool

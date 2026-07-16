@@ -255,6 +255,18 @@
         $('#agrega_renglon_riesgo').on('click', agregaRenglonRiesgo);
         $(document).on('click', '.eliminar_riesgo', borraRenglonRiesgo);
         $(document).on('click', '.eliminar_premio', borraRenglonPremio);
+        $(document).on('click', '#agrega_renglon_premio', function (event) {
+            var $btn = $(this);
+            if ($btn.is('a') && $btn.attr('href')) {
+                return;
+            }
+            event.preventDefault();
+            if (!window.confirm('Se guardará el cliente y luego podrá cargar el premio. ¿Continuar?')) {
+                return;
+            }
+            $('#ir_a_agregar_premio').val('1');
+            $('#form-general').trigger('submit');
+        });
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
         $(document).on('click', '.eliminar-archivo-cliente-uif', borraTarjetaArchivoClienteUif);
@@ -325,13 +337,54 @@
         }
 
         aplicarRestriccionPerfilClienteUif();
+
+        // Alta/edición cajero: no dejar que campos ocultos de form2 bloqueen el Guardar (HTML5).
+        $(document).on('click', '#botonform0', function (event) {
+            var perfil = $('#uif_perfil_cliente').val();
+            if (perfil === 'supervisor') {
+                return;
+            }
+            quitarRequiredCumplimientoUifCajero();
+            var so = ($('#so_uif_id').val() || '').trim();
+            var pep = ($('#pep_uif_id').val() || '').trim();
+            if (!so || !pep) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                $('#botonform2').trigger('click');
+                window.alert('En Datos UIF indique Sujeto Obligado y Expuesto Políticamente (PEP). El resto lo verifica Enc-UIF.');
+                return false;
+            }
+        });
+
+        $('#form-general').on('submit', function (event) {
+            var perfil = $('#uif_perfil_cliente').val();
+            if (perfil === 'supervisor') {
+                return;
+            }
+            quitarRequiredCumplimientoUifCajero();
+            $('.form2').find('input:disabled, select:disabled, textarea:disabled')
+                .prop('required', false)
+                .removeAttr('required');
+
+            var so = ($('#so_uif_id').val() || '').trim();
+            var pep = ($('#pep_uif_id').val() || '').trim();
+            if (!so || !pep) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                $('#botonform2').trigger('click');
+                window.alert('En Datos UIF indique Sujeto Obligado y Expuesto Políticamente (PEP). El resto lo verifica Enc-UIF.');
+                return false;
+            }
+        });
     });
 
     /**
      * Supervisor: sin bloqueos.
      * Cajero: solapa Datos UIF (form2) solo SO, PEP y fecha última firma PEP; solapa Riesgo (form4) solo lectura.
      *        Solapas 1, 3 y 5 sin restricción en esta función.
+     *        Fechas de validación / DNI / DJ / informes las completa Enc-UIF después (no bloquean el alta).
      * Operador (solo visualización en edición): todo bloqueado salvo botones de solapa.
+     *        En alta, operador con crear se trata como cajero (puede grabar con defaults).
      */
     /**
      * Campos de form2 deshabilitados no se envían en el POST; el servidor completa con defectos.
@@ -359,6 +412,19 @@
         });
     }
 
+    /** Campos de cumplimiento que completa Enc-UIF; nunca deben bloquear HTML5 al cajero. */
+    function quitarRequiredCumplimientoUifCajero() {
+        var ids = [
+            '#nivelsocioeconomico_uif_id', '#riesgopep', '#resideparaisofiscal', '#resideexterior',
+            '#cumplenormativaso', '#actividadso', '#fechainformepep', '#fechaconfirmapep',
+            '#fechainformenosis', '#fechavencimientodni', '#fechavencimientoactividad',
+            '#firmodeclaracionjurada', '#fechafirmapep'
+        ];
+        ids.forEach(function (sel) {
+            $(sel).prop('required', false).removeAttr('required').removeClass('required');
+        });
+    }
+
     function aplicarRestriccionPerfilClienteUif() {
         var perfil = $('#uif_perfil_cliente').val();
         var cid = ($('#cliente_uif_id').val() || '').trim();
@@ -369,10 +435,14 @@
             return;
         }
 
-        if (perfil === 'cajero') {
+        // Alta: operador con permiso de crear actúa como cajero (defaults + SO/PEP).
+        var perfilRestringido = (perfil === 'cajero') || (!esEdicion && perfil === 'operador');
+
+        if (perfilRestringido) {
             var $f2 = $('.form2').find('input:not([type=hidden]), select, textarea, button');
             $f2.prop('disabled', true).addClass('bg-light');
             $('#so_uif_id, #pep_uif_id, #fechafirmapep').prop('disabled', false).removeClass('bg-light');
+            quitarRequiredCumplimientoUifCajero();
 
             $('.form4').find('input:not([type=hidden]), select, textarea, button')
                 .prop('disabled', true)
@@ -561,6 +631,13 @@
     }
 
     function actualizaRequeridosSujetoObligado() {
+        // Cajero: no reponer required en campos deshabilitados (bloquea el alta).
+        if ($('#essupervisor').val() !== 'S') {
+            $('#actividadso, #cumplenormativaso').prop('required', false).removeAttr('required');
+            marcarCampoObligatorioSiExiste(document.getElementById('actividadso'), false);
+            marcarCampoObligatorioSiExiste(document.getElementById('cumplenormativaso'), false);
+            return;
+        }
         var esSo = String($('#so_uif_id').val()) === '2';
         $('#actividadso, #cumplenormativaso').prop('required', esSo);
         if (!esSo) {
@@ -732,17 +809,25 @@
         $(selector).css('color', activo ? '#dc3545' : '');
     }
 
-    function renderAlertasCumplimientoUif(items) {
+    function renderAlertasCumplimientoUif(items, opciones) {
         var $box = $('#uif-alertas-cumplimiento');
         var $lista = $('#uif-alertas-cumplimiento-lista');
+        var $titulo = $('#uif-alertas-cumplimiento-titulo');
         if (!$box.length || !$lista.length) {
             return;
         }
+        opciones = opciones || {};
         $lista.empty();
         if (!items.length) {
             $box.addClass('d-none');
             return;
         }
+        if ($titulo.length) {
+            $titulo.text(opciones.titulo || 'Pendientes de cumplimiento UIF');
+        }
+        $box
+            .removeClass('alert-warning alert-info')
+            .addClass(opciones.claseAlert || 'alert-warning');
         items.forEach(function (txt) {
             $lista.append($('<li/>').text(txt));
         });
@@ -755,18 +840,47 @@
             return;
         }
 
-        var avisos = [];
-        var fechaBase = new Date();
-        var fecha6Meses = new Date(fechaBase.getTime());
-        fecha6Meses.setMonth(fecha6Meses.getMonth() - 6);
-        var umbral6MesesMs = fecha6Meses.getTime();
-
         var idsResaltar = [
             '#div-fechafirmapep', '#div-fechaconfirmapep', '#div-fechavencimientodni',
             '#div-fechavencimientoactividad', '#div-firmodeclaracionjurada', '#div-riesgopep',
             '#div-fechainformenosis', '#div-fechainformepep'
         ];
         idsResaltar.forEach(function (sel) { marcarDivAlertaUif(sel, false); });
+
+        // Cajero / no supervisor: aviso informativo (no es error de carga; Enc-UIF verifica después).
+        if ($('#essupervisor').val() !== 'S') {
+            var pendientesCajero = [];
+            if (!parseFechaCampoUif($('#fechaconfirmapep').val())) {
+                pendientesCajero.push('Validación de firma PEP (fecha de confirmación).');
+            }
+            if (!parseFechaCampoUif($('#fechavencimientodni').val())) {
+                pendientesCajero.push('Vencimiento de DNI.');
+            }
+            if (!parseFechaCampoUif($('#fechavencimientoactividad').val())) {
+                pendientesCajero.push('Vencimiento de actividad económica.');
+            }
+            if ($('#firmodeclaracionjurada').val() !== 'S') {
+                pendientesCajero.push('Declaración jurada de origen de ingresos/fondos.');
+            }
+            if (!pendientesCajero.length) {
+                renderAlertasCumplimientoUif([]);
+                return;
+            }
+            renderAlertasCumplimientoUif(
+                pendientesCajero,
+                {
+                    titulo: 'Pendiente de verificación UIF (lo completa un encargado)',
+                    claseAlert: 'alert-info'
+                }
+            );
+            return;
+        }
+
+        var avisos = [];
+        var fechaBase = new Date();
+        var fecha6Meses = new Date(fechaBase.getTime());
+        fecha6Meses.setMonth(fecha6Meses.getMonth() - 6);
+        var umbral6MesesMs = fecha6Meses.getTime();
 
         var fechaConfirmaPep = $('#fechaconfirmapep').val();
         var parsedConfPep = parseFechaCampoUif(fechaConfirmaPep);
@@ -808,24 +922,22 @@
             marcarDivAlertaUif('#div-riesgopep', true);
         }
 
-        if ($('#essupervisor').val() === 'S') {
-            var parsedNosis = parseFechaCampoUif($('#fechainformenosis').val());
-            if (!parsedNosis) {
-                avisos.push('Informe NOSIS: sin fecha o fecha inválida.');
-                marcarDivAlertaUif('#div-fechainformenosis', true);
-            } else if (parsedNosis.ts < umbral6MesesMs) {
-                avisos.push('Informe NOSIS: debe renovar (último: ' + formateaFecha(parsedNosis.isoYmd) + ').');
-                marcarDivAlertaUif('#div-fechainformenosis', true);
-            }
+        var parsedNosis = parseFechaCampoUif($('#fechainformenosis').val());
+        if (!parsedNosis) {
+            avisos.push('Informe NOSIS: sin fecha o fecha inválida.');
+            marcarDivAlertaUif('#div-fechainformenosis', true);
+        } else if (parsedNosis.ts < umbral6MesesMs) {
+            avisos.push('Informe NOSIS: debe renovar (último: ' + formateaFecha(parsedNosis.isoYmd) + ').');
+            marcarDivAlertaUif('#div-fechainformenosis', true);
+        }
 
-            var parsedInfPep = parseFechaCampoUif($('#fechainformepep').val());
-            if (!parsedInfPep) {
-                avisos.push('Informe PEP: sin fecha o fecha inválida.');
-                marcarDivAlertaUif('#div-fechainformepep', true);
-            } else if (parsedInfPep.ts < umbral6MesesMs) {
-                avisos.push('Informe PEP: debe renovar (último: ' + formateaFecha(parsedInfPep.isoYmd) + ').');
-                marcarDivAlertaUif('#div-fechainformepep', true);
-            }
+        var parsedInfPep = parseFechaCampoUif($('#fechainformepep').val());
+        if (!parsedInfPep) {
+            avisos.push('Informe PEP: sin fecha o fecha inválida.');
+            marcarDivAlertaUif('#div-fechainformepep', true);
+        } else if (parsedInfPep.ts < umbral6MesesMs) {
+            avisos.push('Informe PEP: debe renovar (último: ' + formateaFecha(parsedInfPep.isoYmd) + ').');
+            marcarDivAlertaUif('#div-fechainformepep', true);
         }
 
         renderAlertasCumplimientoUif(avisos);

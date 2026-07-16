@@ -20,6 +20,7 @@ class Caja_Movimiento extends Model implements Auditable
     protected $fillable = ['empresa_id', 'tipotransaccion_caja_id', 'numerotransaccion', 'fecha', 
                             'caja_id', 'proveedor_id', 'cliente_id', 'conceptogasto_id', 
                             'cobranza_id',
+                            'pagoproveedor_id',
                             'venta_id',
                             'detalle',
                             'usuario_id',

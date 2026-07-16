@@ -66,6 +66,18 @@ class ReportePreferenciasUsuario
         return preg_match('/^\d{4}-\d{2}$/', $periodo) === 1 ? $periodo : $default;
     }
 
+    public static function leerString(string $reporte, string $campo, string $default = ''): string
+    {
+        $valor = cache()->get(generaKey(self::clave($reporte, $campo)));
+        if (! is_string($valor)) {
+            return $default;
+        }
+
+        $texto = trim($valor);
+
+        return $texto !== '' ? $texto : $default;
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -97,6 +109,12 @@ class ReportePreferenciasUsuario
             if (preg_match('/^\d{4}-\d{2}$/', $periodo) === 1) {
                 Cache::forever(generaKey(self::clave($reporte, 'periodo')), $periodo);
             }
+        }
+
+        if (isset($data['excel_formato_numero']) && is_string($data['excel_formato_numero'])) {
+            $formato = strtolower(trim($data['excel_formato_numero']));
+            $formato = $formato === 'intl' ? 'intl' : 'ar';
+            Cache::forever(generaKey(self::clave($reporte, 'excel_formato_numero')), $formato);
         }
     }
 

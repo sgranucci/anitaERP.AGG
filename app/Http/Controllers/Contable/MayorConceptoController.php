@@ -8,6 +8,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\MayorConceptoReporteService;
 use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
+use App\Support\Contable\MayorConceptoExcelFormatoNumero;
 use App\Support\Contable\MayorConceptoListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
@@ -128,6 +129,7 @@ class MayorConceptoController extends Controller
             'puede_ver_asiento' => can('listar-asiento', false) || can('editar-asiento', false),
             'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
             'puede_ver_concepto' => can('listar-conceptos-de-gastos', false) || can('editar-conceptos-de-gastos', false),
+            'puede_ver_ordencompra' => can('listar-ordencompra', false) || can('editar-ordencompra', false),
         ]);
     }
 
@@ -159,6 +161,7 @@ class MayorConceptoController extends Controller
         ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
             'empresa_ids' => MayorConceptoListadoFiltros::empresaIds($filtros),
             'consolidar_empresas' => ! empty($filtros['consolidar_empresas']),
+            'excel_formato_numero' => $filtros['excel_formato_numero'] ?? 'ar',
         ]);
 
         if ($request->ajax() || $request->boolean('ajax') || $request->wantsJson()) {
@@ -345,12 +348,21 @@ class MayorConceptoController extends Controller
             return $this->descargarPdfPorEmpresa($filtros);
         }
 
-        $resultado = $this->reporteService->generarDesdeFiltros($filtros);
+        // Reutilizar pack de pantalla (evita regenerar Anita al exportar junio / mes completo).
+        $pack = $this->leerCachePack($filtros);
+        if ($pack === null) {
+            $pack = $this->generarYCachearPack($filtros);
+        }
+
+        $resultado = $pack['resultado'];
         $filas = $this->reporteService->aplanarFilasConTotalesFiltradas($resultado, $filtros);
-        $resumen = $this->reporteService->resumenSegunAgrupacion($resultado, $filtros);
-        $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
-        $totales = $this->armarTotalesDesdeResultado($resultado);
-        $auditoriaPanel = $this->reporteService->armarAuditoriaPanel($resultado);
+        $resumen = $pack['resumen'] ?? $this->reporteService->resumenSegunAgrupacion($resultado, $filtros);
+        $resumenPorCuenta = $pack['resumen_por_cuenta'] ?? $this->reporteService->resumenAgrupadoPorCuenta($resultado);
+        if (($filtros['agrupacion_resumen'] ?? 'concepto_cuenta') === 'cuenta_concepto') {
+            $resumen = $this->reporteService->resumenSegunAgrupacion($resultado, $filtros);
+        }
+        $totales = $pack['totales'] ?? $this->armarTotalesDesdeResultado($resultado);
+        $auditoriaPanel = $pack['auditoria_panel'] ?? $this->reporteService->armarAuditoriaPanel($resultado);
         $agrupacionResumen = $filtros['agrupacion_resumen'] ?? 'concepto_cuenta';
         $titulo = 'Mayor por concepto';
         $subtitulo = $this->armarSubtituloExport($filtros);
@@ -375,12 +387,12 @@ class MayorConceptoController extends Controller
 
             case 'EXCEL':
                 return (new MayorConceptoExport($this->reporteService))
-                    ->parametros($filtros)
+                    ->parametros($filtros, $pack)
                     ->download('mayor_por_concepto.xlsx');
 
             case 'CSV':
                 return (new MayorConceptoExport($this->reporteService))
-                    ->parametros($filtros)
+                    ->parametros($filtros, $pack)
                     ->download('mayor_por_concepto.csv', Excel::CSV);
         }
 
@@ -533,6 +545,20 @@ class MayorConceptoController extends Controller
                 self::PREFERENCIAS_CLAVE,
                 'consolidar_empresas',
                 true,
+            );
+        }
+
+        if (! $request->has('excel_formato_numero')) {
+            $filtros['excel_formato_numero'] = MayorConceptoExcelFormatoNumero::normalizar(
+                ReportePreferenciasUsuario::leerString(
+                    self::PREFERENCIAS_CLAVE,
+                    'excel_formato_numero',
+                    MayorConceptoExcelFormatoNumero::AR,
+                )
+            );
+        } else {
+            $filtros['excel_formato_numero'] = MayorConceptoExcelFormatoNumero::normalizar(
+                $filtros['excel_formato_numero'] ?? MayorConceptoExcelFormatoNumero::AR
             );
         }
 

@@ -17,6 +17,19 @@ return [
 
     'tipo_oper' => env('RENDICION_ESTACIONAMIENTO_ANITA_TIPO_OPER', env('RENDICION_GASTRONOMIA_ANITA_TIPO_OPER', 'F')),
 
+    /**
+     * Numeración rendg_nro_oper: misma semilla global 850000+ que gastronomía
+     * (config/rendicion_rendgastro_nro_oper.php).
+     */
+    'nro_oper_piso' => (int) env(
+        'RENDICION_RENDGASTRO_NRO_OPER_PISO',
+        env('RENDICION_ESTACIONAMIENTO_NRO_OPER_PISO', 850000),
+    ),
+    'nro_oper_techo' => (int) env(
+        'RENDICION_RENDGASTRO_NRO_OPER_TECHO',
+        env('RENDICION_ESTACIONAMIENTO_NRO_OPER_TECHO', 0),
+    ),
+
     'cabecera_campos_numericos_insert_cero' => RendicionEstacionamientoRendgastroEsquema::COLUMNAS_NUMERICAS_SIN_MAPEO,
 
     'cabecera_campos_numericos_cero_en_update' => [

@@ -230,6 +230,14 @@ class Cliente_UifController extends Controller
             return redirect()->back()->withInput()->withErrors(['errores' => $result['errores']]);
         }
 
+        $clienteId = (int) ($result['cliente_uif_id'] ?? 0);
+        if ($request->input('ir_a_agregar_premio') == '1' && $clienteId > 0 && can('crear-cliente-premio-uif', false)) {
+            return redirect()->route('crea_cliente_premio_uif', [
+                'id' => $clienteId,
+                'return_cliente_tab' => 3,
+            ])->with('mensaje', 'Cliente creado con éxito. Complete el premio.');
+        }
+
         return redirect()->route('consulta_cliente_uif', QueryRetornoListado::desdeRequest($request, ClienteUifListadoFiltros::class))
             ->with('mensaje', 'Cliente creado con éxito');
 	}

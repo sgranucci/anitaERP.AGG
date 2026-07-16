@@ -4,13 +4,26 @@ var ptrnombreproveedor = $();
 var ptrcodigoproveedor = $();
 
 function actualizarCondicionPagoProveedorDesdeJson(data) {
-    if (!$('#condicionpago_proveedor_show').length) {
+    if ($('#condicionpago_proveedor_show').length) {
+        if (data && data.condicionpagos && data.condicionpagos.nombre) {
+            $('#condicionpago_proveedor_show').val(data.condicionpagos.nombre);
+        } else {
+            $('#condicionpago_proveedor_show').val('');
+        }
+    }
+
+    // Cabecera OC (u otros formularios): defaults del maestro proveedor.
+    if (!data) {
         return;
     }
-    if (data && data.condicionpagos && data.condicionpagos.nombre) {
-        $('#condicionpago_proveedor_show').val(data.condicionpagos.nombre);
-    } else {
-        $('#condicionpago_proveedor_show').val('');
+    if ($('#condicionpago_id').length && data.condicionpago_id) {
+        $('#condicionpago_id').val(String(data.condicionpago_id));
+    }
+    if ($('#condicioncompra_id').length && data.condicioncompra_id) {
+        $('#condicioncompra_id').val(String(data.condicioncompra_id));
+    }
+    if ($('#condicionentrega_id').length && data.condicionentrega_id) {
+        $('#condicionentrega_id').val(String(data.condicionentrega_id));
     }
 }
 

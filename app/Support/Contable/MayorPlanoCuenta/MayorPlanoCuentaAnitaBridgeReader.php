@@ -3,6 +3,7 @@
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\ApiAnita;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Carga ctamov y subdiario vía bridge Anita para el mayor plano por cuenta.
@@ -38,23 +39,9 @@ class MayorPlanoCuentaAnitaBridgeReader
         int $fechaDesde,
         int $fechaComienzoEjercicioAjustada,
     ): int {
-        $fechas = [];
+        $diag = $this->diagnosticarSaldoInicial($empresaIds, $fechaDesde, $fechaComienzoEjercicioAjustada);
 
-        foreach ($empresaIds as $empresaId) {
-            $empresaId = (int) $empresaId;
-            if ($empresaId <= 0) {
-                continue;
-            }
-
-            $fechaSaldo = $fechaComienzoEjercicioAjustada;
-            if (! $this->existeAsientoAperturaEnRango($empresaId, $fechaComienzoEjercicioAjustada, $fechaDesde)) {
-                $fechaSaldo = MayorPlanoCuentaSupport::ejercicioAnterior($fechaComienzoEjercicioAjustada);
-            }
-
-            $fechas[] = max(MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD, $fechaSaldo);
-        }
-
-        return MayorPlanoCuentaSupport::consolidarFechaSaldoDesde($fechas);
+        return (int) ($diag['fecha_saldo_desde'] ?? MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD);
     }
 
     /**
@@ -67,6 +54,7 @@ class MayorPlanoCuentaAnitaBridgeReader
         int $fechaComienzoEjercicioAjustada,
     ): array {
         $porEmpresa = [];
+        $fechas = [];
 
         foreach ($empresaIds as $empresaId) {
             $empresaId = (int) $empresaId;
@@ -83,6 +71,7 @@ class MayorPlanoCuentaAnitaBridgeReader
                 ? $fechaComienzoEjercicioAjustada
                 : MayorPlanoCuentaSupport::ejercicioAnterior($fechaComienzoEjercicioAjustada);
             $fechaSaldo = max(MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD, $fechaSaldo);
+            $fechas[] = $fechaSaldo;
 
             $porEmpresa[$empresaId] = [
                 'ape_en_ejercicio_actual' => $apeEnEjercicio,
@@ -93,11 +82,7 @@ class MayorPlanoCuentaAnitaBridgeReader
         return [
             'fecha_comienzo_ejercicio' => MayorPlanoCuentaSupport::inicioEjercicio($fechaDesde),
             'fecha_comienzo_ajustada' => $fechaComienzoEjercicioAjustada,
-            'fecha_saldo_desde' => $this->resolverFechaSaldoDesde(
-                $empresaIds,
-                $fechaDesde,
-                $fechaComienzoEjercicioAjustada,
-            ),
+            'fecha_saldo_desde' => MayorPlanoCuentaSupport::consolidarFechaSaldoDesde($fechas),
             'origen_minimo' => MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD,
             'por_empresa' => $porEmpresa,
         ];
@@ -126,13 +111,18 @@ class MayorPlanoCuentaAnitaBridgeReader
     }
 
     /**
+     * Carga ctamov + subdiario filtrados por cuenta. No trae pago/auxpag
+     * (se cargan bajo demanda solo si hay OP en el período consultado).
+     *
      * @param  list<int>  $empresaIds
+     * @param  list<int>  $cuentas
      * @return array{
      *   ctamov: list<object>,
      *   subdiario: list<object>,
      *   pago: list<object>,
      *   auxpag: list<object>,
-     *   errores: list<string>
+     *   errores: list<string>,
+     *   timings: array<string, float>
      * }
      */
     public function cargarPeriodo(
@@ -141,12 +131,22 @@ class MayorPlanoCuentaAnitaBridgeReader
         int $fechaHasta,
         int $fechaSaldoDesde,
         bool $incluyeSubdiario,
+        int $cuentaDesde = 0,
+        int $cuentaHasta = 0,
+        array $cuentas = [],
     ): array {
+        $t0 = microtime(true);
         $errores = [];
         $ctamov = [];
         $subdiario = [];
-        $pago = [];
-        $auxpag = [];
+        $timings = [];
+
+        $filtroCtamov = $this->filtroCuentasSql('ctav_cuenta', $cuentaDesde, $cuentaHasta, $cuentas);
+        $condCuentaSubd = $this->condicionCuentas('subd_cuenta', $cuentaDesde, $cuentaHasta, $cuentas);
+        $condContraSubd = $this->condicionCuentas('subd_contrapartida', $cuentaDesde, $cuentaHasta, $cuentas);
+        $filtroSubdiario = $condCuentaSubd !== ''
+            ? ' AND ('.$condCuentaSubd.' OR '.$condContraSubd.')'
+            : '';
 
         foreach ($empresaIds as $empresaId) {
             $empresaId = (int) $empresaId;
@@ -154,7 +154,9 @@ class MayorPlanoCuentaAnitaBridgeReader
                 continue;
             }
 
+            $tEmp = microtime(true);
             $fechaSaldoHasta = $this->fechaAnterior($fechaDesde);
+
             if ($fechaSaldoHasta >= $fechaSaldoDesde) {
                 $ctamov = array_merge(
                     $ctamov,
@@ -163,15 +165,11 @@ class MayorPlanoCuentaAnitaBridgeReader
                         'ctamov',
                         self::CTAMOV_CAMPOS,
                         ' WHERE ctav_empresa='.$empresaId
-                        .' AND ctav_fecha BETWEEN '.$fechaSaldoDesde.' AND '.$fechaSaldoHasta,
+                        .' AND ctav_fecha BETWEEN '.$fechaSaldoDesde.' AND '.$fechaSaldoHasta
+                        .$filtroCtamov,
                         $errores,
                         'ctamov-saldo-empresa-'.$empresaId,
                     ),
-                );
-
-                $pago = array_merge(
-                    $pago,
-                    $this->listarPago($empresaId, $fechaSaldoDesde, $fechaSaldoHasta, $errores),
                 );
             }
 
@@ -182,15 +180,11 @@ class MayorPlanoCuentaAnitaBridgeReader
                     'ctamov',
                     self::CTAMOV_CAMPOS,
                     ' WHERE ctav_empresa='.$empresaId
-                    .' AND ctav_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta,
+                    .' AND ctav_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta
+                    .$filtroCtamov,
                     $errores,
                     'ctamov-periodo-empresa-'.$empresaId,
                 ),
-            );
-
-            $pago = array_merge(
-                $pago,
-                $this->listarPago($empresaId, $fechaDesde, $fechaHasta, $errores),
             );
 
             if ($incluyeSubdiario) {
@@ -202,7 +196,8 @@ class MayorPlanoCuentaAnitaBridgeReader
                             'subdiario',
                             self::SUBDIARIO_CAMPOS,
                             ' WHERE subd_empresa='.$empresaId
-                            .' AND subd_fecha BETWEEN '.$fechaSaldoDesde.' AND '.$fechaSaldoHasta,
+                            .' AND subd_fecha BETWEEN '.$fechaSaldoDesde.' AND '.$fechaSaldoHasta
+                            .$filtroSubdiario,
                             $errores,
                             'subdiario-saldo-empresa-'.$empresaId,
                         ),
@@ -216,12 +211,58 @@ class MayorPlanoCuentaAnitaBridgeReader
                         'subdiario',
                         self::SUBDIARIO_CAMPOS,
                         ' WHERE subd_empresa='.$empresaId
-                        .' AND subd_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta,
+                        .' AND subd_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta
+                        .$filtroSubdiario,
                         $errores,
                         'subdiario-periodo-empresa-'.$empresaId,
                     ),
                 );
             }
+
+            $timings['empresa_'.$empresaId.'_ms'] = round((microtime(true) - $tEmp) * 1000, 1);
+        }
+
+        $timings['ctamov_subdiario_ms'] = round((microtime(true) - $t0) * 1000, 1);
+        $timings['ctamov_filas'] = count($ctamov);
+        $timings['subdiario_filas'] = count($subdiario);
+
+        return [
+            'ctamov' => $ctamov,
+            'subdiario' => $subdiario,
+            'pago' => [],
+            'auxpag' => [],
+            'errores' => $errores,
+            'timings' => $timings,
+        ];
+    }
+
+    /**
+     * Carga pago + auxpag solo del período consultado (no del tramo de saldo inicial).
+     *
+     * @param  list<int>  $empresaIds
+     * @param  list<string>  $errores
+     * @return array{pago: list<object>, auxpag: list<object>, timings: array<string, float>}
+     */
+    public function cargarPagoYAuxpagPeriodo(
+        array $empresaIds,
+        int $fechaDesde,
+        int $fechaHasta,
+        array &$errores,
+    ): array {
+        $t0 = microtime(true);
+        $pago = [];
+        $auxpag = [];
+
+        foreach ($empresaIds as $empresaId) {
+            $empresaId = (int) $empresaId;
+            if ($empresaId <= 0) {
+                continue;
+            }
+
+            $pago = array_merge(
+                $pago,
+                $this->listarPago($empresaId, $fechaDesde, $fechaHasta, $errores),
+            );
 
             $auxpag = array_merge(
                 $auxpag,
@@ -230,7 +271,7 @@ class MayorPlanoCuentaAnitaBridgeReader
                     'auxpag',
                     self::AUXPAG_CAMPOS,
                     ' WHERE axp_empresa='.$empresaId
-                    .' AND axp_fecha BETWEEN '.$fechaSaldoDesde.' AND '.$fechaHasta,
+                    .' AND axp_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta,
                     $errores,
                     'auxpag-empresa-'.$empresaId,
                 ),
@@ -238,12 +279,39 @@ class MayorPlanoCuentaAnitaBridgeReader
         }
 
         return [
-            'ctamov' => $ctamov,
-            'subdiario' => $subdiario,
             'pago' => $pago,
             'auxpag' => $auxpag,
-            'errores' => $errores,
+            'timings' => [
+                'pago_auxpag_ms' => round((microtime(true) - $t0) * 1000, 1),
+                'pago_filas' => count($pago),
+                'auxpag_filas' => count($auxpag),
+            ],
         ];
+    }
+
+    /**
+     * @param  list<object>  $ctamov
+     * @param  list<object>  $subdiario
+     */
+    public function hayOrdenesPagoEnMovimientos(array $ctamov, array $subdiario): bool
+    {
+        foreach ($ctamov as $linea) {
+            if (MayorPlanoCuentaSupport::esTipoOrdenPago((string) ($linea->ctav_tipo ?? ''))) {
+                return true;
+            }
+        }
+
+        foreach ($subdiario as $linea) {
+            $tipo = trim((string) ($linea->subd_ref_tipo ?? ''));
+            if ($tipo === '') {
+                $tipo = trim((string) ($linea->subd_tipo ?? ''));
+            }
+            if (MayorPlanoCuentaSupport::esTipoOrdenPago($tipo)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -275,6 +343,7 @@ class MayorPlanoCuentaAnitaBridgeReader
         array &$errores,
         string $etiqueta,
     ): array {
+        $t0 = microtime(true);
         $raw = $this->api->apiCall([
             'acc' => 'list',
             'sistema' => $sistema,
@@ -286,11 +355,83 @@ class MayorPlanoCuentaAnitaBridgeReader
         $msg = ApiAnita::extraerMensajeError($raw);
         if ($msg !== null) {
             $errores[] = $etiqueta.': '.$msg;
+            Log::info('mayor_plano_cuenta.bridge', [
+                'etiqueta' => $etiqueta,
+                'ms' => round((microtime(true) - $t0) * 1000, 1),
+                'error' => $msg,
+            ]);
 
             return [];
         }
 
-        return ApiAnita::decodificarListaFilas($raw);
+        $filas = ApiAnita::decodificarListaFilas($raw);
+        Log::info('mayor_plano_cuenta.bridge', [
+            'etiqueta' => $etiqueta,
+            'ms' => round((microtime(true) - $t0) * 1000, 1),
+            'filas' => count($filas),
+            'where' => mb_substr($whereArmado, 0, 220),
+        ]);
+
+        return $filas;
+    }
+
+    /**
+     * Condición SQL por cuentas particulares (IN) y/o rango (BETWEEN).
+     * Sin filtro → '' (todas las cuentas).
+     *
+     * @param  list<int>  $cuentas
+     */
+    private function condicionCuentas(string $columna, int $cuentaDesde, int $cuentaHasta, array $cuentas): string
+    {
+        $cuentas = array_values(array_unique(array_filter(array_map('intval', $cuentas), fn (int $c) => $c > 0)));
+        sort($cuentas);
+
+        $partes = [];
+        if ($cuentas !== []) {
+            $partes[] = $columna.' IN ('.implode(',', $cuentas).')';
+        }
+
+        $rango = $this->condicionRangoCuenta($columna, $cuentaDesde, $cuentaHasta);
+        if ($rango !== '') {
+            $partes[] = $rango;
+        }
+
+        if ($partes === []) {
+            return '';
+        }
+
+        if (count($partes) === 1) {
+            return $partes[0];
+        }
+
+        return '('.implode(' OR ', $partes).')';
+    }
+
+    /**
+     * @param  list<int>  $cuentas
+     */
+    private function filtroCuentasSql(string $columna, int $cuentaDesde, int $cuentaHasta, array $cuentas): string
+    {
+        $cond = $this->condicionCuentas($columna, $cuentaDesde, $cuentaHasta, $cuentas);
+
+        return $cond !== '' ? ' AND '.$cond : '';
+    }
+
+    private function condicionRangoCuenta(string $columna, int $cuentaDesde, int $cuentaHasta): string
+    {
+        if ($cuentaDesde <= 0 && $cuentaHasta <= 0) {
+            return '';
+        }
+
+        if ($cuentaDesde > 0 && $cuentaHasta > 0) {
+            return $columna.' BETWEEN '.$cuentaDesde.' AND '.$cuentaHasta;
+        }
+
+        if ($cuentaDesde > 0) {
+            return $columna.'>='.$cuentaDesde;
+        }
+
+        return $columna.'<='.$cuentaHasta;
     }
 
     private function fechaAnterior(int $fechaYmd): int

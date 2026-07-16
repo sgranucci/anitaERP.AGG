@@ -30,6 +30,12 @@
     </div>
 </div>
 <div class="form-group row">
+    <label for="minimoretencion" class="col-lg-3 col-form-label">Mínimo retención</label>
+    <div class="col-lg-3">
+    <input type="number" step="0.01" name="minimoretencion" id="minimoretencion" class="form-control" value="{{old('minimoretencion', $retencionsuss->minimoretencion ?? 0)}}">
+    </div>
+</div>
+<div class="form-group row">
     <label for="regimen" class="col-lg-3 col-form-label requerido">Código de régimen</label>
     <div class="col-lg-3">
     <input type="number" name="regimen" id="regimen" class="form-control" value="{{old('regimen', $retencionsuss->regimen ?? '')}}">

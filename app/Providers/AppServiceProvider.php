@@ -404,6 +404,16 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Caja\ClienteVipCajaRepositoryInterface',
+            'App\Repositories\Caja\ClienteVipCajaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\TicketCanjeCajaRepositoryInterface',
+            'App\Repositories\Caja\TicketCanjeCajaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Caja\Estacionamiento\CategoriaAutomovilRepositoryInterface',
             'App\Repositories\Caja\Estacionamiento\CategoriaAutomovilRepository',
         );
@@ -708,6 +718,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface',
             'App\Repositories\Compras\Proveedor_CuentacorrienteRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Compras\PagoproveedorRepositoryInterface',
+            'App\Repositories\Compras\PagoproveedorRepository',
         );
 
         $this->app->bind(
@@ -1712,6 +1727,22 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Queries\Ordenventa\OrdenventaQueryInterface',
             'App\Queries\Ordenventa\OrdenventaQuery',
+        );
+
+        // Modulo solicitudes de pago
+        $this->app->bind(
+            'App\Repositories\Solicitudpago\Sector_SolicitudpagoRepositoryInterface',
+            'App\Repositories\Solicitudpago\Sector_SolicitudpagoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Solicitudpago\FormapagosolRepositoryInterface',
+            'App\Repositories\Solicitudpago\FormapagosolRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Solicitudpago\Concepto_SolicitudpagoRepositoryInterface',
+            'App\Repositories\Solicitudpago\Concepto_SolicitudpagoRepository',
         );
 
         // Bierzo

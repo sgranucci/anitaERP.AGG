@@ -12,7 +12,7 @@ class Retencionsuss extends Model
 
     protected $fillable = [
 						'nombre', 'codigo', 'regimen', 'formacalculo', 'minimoimponible',
-						'valorretencion'
+						'valorretencion', 'minimoretencion',
 						];
     protected $table = 'retencionsuss';
 	

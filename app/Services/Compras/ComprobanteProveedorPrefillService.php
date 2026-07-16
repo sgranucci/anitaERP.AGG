@@ -6,6 +6,8 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Queries\Configuracion\CotizacionQueryInterface;
+use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -19,6 +21,7 @@ class ComprobanteProveedorPrefillService
     public function __construct(
         private ComprobanteProveedorCondicionPagoDesdeOcService $condicionPagoDesdeOc,
         private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
+        private CotizacionQueryInterface $cotizacionQuery,
     ) {}
 
   /**
@@ -102,6 +105,13 @@ class ComprobanteProveedorPrefillService
             ? ComprobanteProveedorModoCarga::ASIGNA_OC
             : ComprobanteProveedorModoCarga::SIN_RECEPCION;
 
+        $monedaId = $this->resolverMonedaIdDesdePrecarga($precarga, $ordencompra);
+        $cotizacion = $this->resolverCotizacionDesdePrecarga(
+            $fechacomprobante,
+            $monedaId,
+            $precarga->cotizacion
+        );
+
         $data = new Comprobante_Proveedor([
             'empresa_id' => $precarga->empresa_id,
             'proveedor_id' => $precarga->proveedor_id,
@@ -118,8 +128,8 @@ class ComprobanteProveedorPrefillService
             'numerocae' => $precarga->numerocae,
             'subtotal' => $precarga->subtotal,
             'total' => $precarga->total,
-            'moneda_id' => $precarga->moneda_id ?: 1,
-            'cotizacion' => $precarga->cotizacion ?: 1,
+            'moneda_id' => $monedaId,
+            'cotizacion' => $cotizacion,
             'modo_carga' => $modoCarga,
             'estado' => ComprobanteProveedorEstados::BORRADOR,
             'es_fce' => false,
@@ -169,7 +179,11 @@ class ComprobanteProveedorPrefillService
                 $precarga->origen_entrada
             ),
             'conceptos' => $conceptos,
-            'cuotas' => $cuotasMeta['cuotas'],
+            'cuotas' => $this->alinearCuotasConCabecera(
+                $cuotasMeta['cuotas'] ?? [],
+                $monedaId,
+                $cotizacion
+            ),
             'cuotas_escaladas' => (bool) ($cuotasMeta['cuotas_escaladas'] ?? false),
             'permite_edicion_cuotas' => (bool) ($cuotasMeta['permite_edicion_cuotas'] ?? true),
             'ruta_factura_pdf' => $precarga->rutaalmacenamiento,
@@ -191,7 +205,11 @@ class ComprobanteProveedorPrefillService
             if ($cuotasMeta['ordencompra_comprobante_id']) {
                 $prefill['data']->ordencompra_comprobante_id = $cuotasMeta['ordencompra_comprobante_id'];
             }
-            $prefill['cuotas'] = $cuotasMeta['cuotas'];
+            $prefill['cuotas'] = $this->alinearCuotasConCabecera(
+                $cuotasMeta['cuotas'] ?? [],
+                (int) ($prefill['data']->moneda_id ?: $monedaId),
+                (float) ($prefill['data']->cotizacion ?: $cotizacion)
+            );
             $prefill['cuotas_escaladas'] = (bool) ($cuotasMeta['cuotas_escaladas'] ?? false);
         }
 
@@ -202,12 +220,17 @@ class ComprobanteProveedorPrefillService
     public function desdeOrdencompra(int $ordencompraId): array
     {
         $ordencompra = Ordencompra::query()
-            ->with(['empresas', 'proveedores'])
+            ->with(['empresas', 'proveedores', 'ordencompra_articulos'])
             ->findOrFail($ordencompraId);
 
-        $fecha = $ordencompra->fecha
-            ? Carbon::parse($ordencompra->fecha)->format('Y-m-d')
-            : now()->format('Y-m-d');
+        // Día de carga de la factura (no la fecha de la OC).
+        $fecha = now()->format('Y-m-d');
+        $monedaId = $this->resolverMonedaIdDesdeOrdencompra($ordencompra);
+        $cotizacion = ComprobanteProveedorCotizacionSupport::resolverParaMonedaYFecha(
+            $this->cotizacionQuery,
+            $fecha,
+            $monedaId
+        );
 
         $data = new Comprobante_Proveedor([
             'empresa_id' => $ordencompra->empresa_id,
@@ -219,8 +242,8 @@ class ComprobanteProveedorPrefillService
             'estado' => ComprobanteProveedorEstados::BORRADOR,
             'subtotal' => 0,
             'total' => 0,
-            'moneda_id' => 1,
-            'cotizacion' => 1,
+            'moneda_id' => $monedaId,
+            'cotizacion' => $cotizacion,
             'es_fce' => false,
             'pararevisar' => false,
         ]);
@@ -243,11 +266,17 @@ class ComprobanteProveedorPrefillService
             $data->ordencompra_comprobante_id = $cuotasMeta['ordencompra_comprobante_id'];
         }
 
+        $cuotas = $this->alinearCuotasConCabecera(
+            $cuotasMeta['cuotas'] ?? [],
+            $monedaId,
+            $cotizacion
+        );
+
         return [
             'data' => $data,
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::ORDENCOMPRA,
             'conceptos' => collect(),
-            'cuotas' => $cuotasMeta['cuotas'],
+            'cuotas' => $cuotas,
             'cuotas_escaladas' => (bool) ($cuotasMeta['cuotas_escaladas'] ?? false),
             'permite_edicion_cuotas' => (bool) ($cuotasMeta['permite_edicion_cuotas'] ?? true),
             'ruta_factura_pdf' => null,
@@ -313,8 +342,55 @@ class ComprobanteProveedorPrefillService
         }
 
         return Ordencompra::query()
+            ->with('ordencompra_articulos')
             ->where('empresa_id', $precarga->empresa_id)
             ->where('numeroordencompra', $numeroOc)
             ->first();
+    }
+
+    private function resolverMonedaIdDesdeOrdencompra(Ordencompra $ordencompra): int
+    {
+        $ordencompra->loadMissing('ordencompra_articulos');
+        $linea = $ordencompra->ordencompra_articulos->first();
+
+        return max(1, (int) ($linea->moneda_id ?? 1));
+    }
+
+    private function resolverMonedaIdDesdePrecarga(
+        Precarga_Comprobante_Proveedor $precarga,
+        ?Ordencompra $ordencompra,
+    ): int {
+        if ($ordencompra) {
+            return $this->resolverMonedaIdDesdeOrdencompra($ordencompra);
+        }
+
+        return max(1, (int) ($precarga->moneda_id ?: 1));
+    }
+
+    private function resolverCotizacionDesdePrecarga(
+        string $fechaComprobanteYmd,
+        int $monedaId,
+        mixed $cotizacionPrecarga,
+    ): float {
+        return ComprobanteProveedorCotizacionSupport::resolverDesdePrecarga(
+            $this->cotizacionQuery,
+            $fechaComprobanteYmd,
+            $monedaId,
+            $cotizacionPrecarga
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $cuotas
+     * @return list<array<string, mixed>>
+     */
+    private function alinearCuotasConCabecera(array $cuotas, int $monedaId, float $cotizacion): array
+    {
+        return array_map(static function (array $cuota) use ($monedaId, $cotizacion) {
+            $cuota['moneda_id'] = $monedaId;
+            $cuota['cotizacion'] = $cotizacion;
+
+            return $cuota;
+        }, $cuotas);
     }
 }

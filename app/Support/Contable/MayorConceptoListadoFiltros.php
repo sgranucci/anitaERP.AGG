@@ -34,6 +34,7 @@ class MayorConceptoListadoFiltros
      *   fecha_hasta: string,
      *   solo_moneda_origen: bool,
      *   agrupacion_resumen: string,
+     *   excel_formato_numero: string,
      *   filtro_nro_asiento: string,
      *   filtro_cuenta: string,
      *   filtro_concepto: string,
@@ -78,6 +79,9 @@ class MayorConceptoListadoFiltros
             'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
             'solo_moneda_origen' => $request->boolean('solo_moneda_origen'),
             'agrupacion_resumen' => $agrupacion,
+            'excel_formato_numero' => MayorConceptoExcelFormatoNumero::normalizar(
+                $request->input('excel_formato_numero', MayorConceptoExcelFormatoNumero::AR)
+            ),
             'filtro_nro_asiento' => trim((string) $request->input('filtro_nro_asiento', '')),
             'filtro_cuenta' => trim((string) $request->input('filtro_cuenta', '')),
             'filtro_concepto' => trim((string) $request->input('filtro_concepto', '')),
@@ -580,6 +584,13 @@ class MayorConceptoListadoFiltros
             $out['agrupacion_resumen'] = $agrupacion;
         }
 
+        $formatoExcel = MayorConceptoExcelFormatoNumero::normalizar(
+            $filtros['excel_formato_numero'] ?? MayorConceptoExcelFormatoNumero::AR
+        );
+        if ($formatoExcel === MayorConceptoExcelFormatoNumero::INTL) {
+            $out['excel_formato_numero'] = MayorConceptoExcelFormatoNumero::INTL;
+        }
+
         foreach (self::CAMPOS_FILTRO_DETALLE as $campo) {
             $valor = trim((string) ($filtros[$campo] ?? ''));
             if ($valor !== '') {
@@ -594,7 +605,7 @@ class MayorConceptoListadoFiltros
     public static function firma(array $filtros): string
     {
         $filtrosConsulta = $filtros;
-        unset($filtrosConsulta['agrupacion_resumen']);
+        unset($filtrosConsulta['agrupacion_resumen'], $filtrosConsulta['excel_formato_numero']);
         foreach (self::CAMPOS_FILTRO_DETALLE as $campo) {
             unset($filtrosConsulta[$campo]);
         }

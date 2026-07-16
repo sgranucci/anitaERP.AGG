@@ -223,7 +223,22 @@ class WsaaService
         $this->ensureDir($dir, 'cache TA');
 
         $file = $this->taFile($serviceId, $context);
-        file_put_contents($file, $taXml);
+        // Si un CLI creó el TA como usuario distinto (p.ej. sergio:sergio 0644),
+        // php-fpm (www-data) no puede renovarlo: borrar y recrear.
+        if (is_file($file) && ! is_writable($file)) {
+            if (! @unlink($file)) {
+                throw new Exception(
+                    "WSAA: cache TA no escribible y no se pudo reemplazar: '{$file}'. ".
+                    'Ej.: chown www-data:www-data y chmod 664 sobre storage/app/arca/*/ta/*.xml'
+                );
+            }
+        }
+
+        if (@file_put_contents($file, $taXml) === false) {
+            $err = error_get_last();
+            $msg = $err['message'] ?? 'sin detalle';
+            throw new Exception("WSAA: no se pudo grabar cache TA en '{$file}' ({$msg})");
+        }
         // CLI (umask 022) deja 0644 y php-fpm (www-data) no puede renovar el TA.
         @chmod($file, 0664);
     }

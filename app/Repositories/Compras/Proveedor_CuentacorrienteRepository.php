@@ -111,6 +111,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         $query = $this->model->query()
             ->with([
                 'comprobante_proveedores.tipotransaccion_compras',
+                'comprobante_proveedores.ordencompras.ordencompra_articulos',
                 'monedas',
                 'empresas',
             ])

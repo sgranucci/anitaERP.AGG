@@ -5,6 +5,7 @@
 @endsection
 
 @section('scripts')
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_dual.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/reportes/empresas_dual.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/listado-filtros.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/analitico_reporte_filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/analitico_reporte_filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
@@ -75,12 +76,13 @@
                     </div>
 
                     @php
-                        $empresaLogo = ($empresa_query ?? collect())->firstWhere('id', (int) ($filtros['empresa_id'] ?? 0));
-                        $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
-                            $empresaLogo
-                                ? collect([(object) ['nombreempresa' => $empresaLogo->nombre]])
-                                : collect()
-                        );
+                        $empresaIdsSel = \App\Support\Ventas\GastronomiaAnaliticoReporteFiltros::empresaIds($filtros ?? []);
+                        $coleccionLogo = collect($empresaIdsSel)->map(function ($id) use ($empresa_query) {
+                            $emp = ($empresa_query ?? collect())->firstWhere('id', (int) $id);
+
+                            return (object) ['nombreempresa' => $emp->nombre ?? ''];
+                        })->filter(fn ($r) => trim((string) $r->nombreempresa) !== '');
+                        $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion($coleccionLogo);
                     @endphp
                     @if (count($logosVista) > 0)
                         <div class="border-bottom px-3 py-2 d-flex flex-wrap align-items-center">

@@ -113,9 +113,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     {
 		$data = \App\Support\Compras\ProveedorImpuestosRetencionRules::normalizar($data);
 
-		$codigo = '';
-		self::ultimoCodigo($codigo);
-		$data['codigo'] = $codigo;
+		$data['codigo'] = $this->resolverCodigoAlta($data);
 
 		if (substr(config("proveedor.tipoalta"),0,1) == 'P')
 			$data['estado'] = 'Alta Pendiente';
@@ -910,6 +908,14 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 	private function guardarAnita($request) {
         $apiAnita = new ApiAnita();
+		$codigoAnita = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge((string) $request['codigo']);
+
+		// Reintento / huérfano Anita: actualizar cabecera en lugar de insertar de nuevo.
+		if ($this->consultarPromaeAnitaConReintento($apiAnita, $codigoAnita) !== null) {
+			$this->actualizarAnita($request, $request['codigo']);
+
+			return;
+		}
 
 		$cuentacontable = $condicioniva = $retieneganancia = $condicionganancia = '';
 		$retieneiva = $retienesuss = $retieneiibb = $exclusionretiva = '';
@@ -1031,7 +1037,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				prom_ag_perc_iva
 				',
             'valores' => " 
-				'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
+				'".$codigoAnita."', 
 				'".$nombre."',
 				'".$contacto."',
 				'".$domicilio."',
@@ -1090,46 +1096,116 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'".$request['agentepercepcionIIBB']."',
 				'".$request['agentepercepcioniva']."' "
         );
-        $this->apiCallAnitaEscritura($apiAnita, $data, 'promae insert');
+        try {
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'promae insert');
+		} catch (\RuntimeException $e) {
+			// Carrera / lectura Anita flaky: si la clave ya existe, completar como actualización.
+			if (stripos($e->getMessage(), 'duplicate') === false) {
+				throw $e;
+			}
+			$this->actualizarAnita($request, $request['codigo']);
 
-		// Graba leyenda
-		$leyenda = explode("\n", $request['leyenda']);
+			return;
+		}
+
+		$this->reemplazarDependientesAnita($request, $apiAnita, $codigoAnita);
+	}
+
+	private function limpiarTablasDependientesAnita(ApiAnita $apiAnita, string $codigoAnita): void
+	{
+		$tablas = [
+			[$this->tableAnita[1], 'prol_proveedor', 'proley delete previo alta'],
+			['promadic', 'proad_proveedor', 'promadic delete previo alta'],
+			[$this->tableAnita[2], 'proex_proveedor', 'proexcl delete previo alta'],
+			[$this->tableAnita[3], 'prop_proveedor', 'propago delete previo alta'],
+		];
+
+		foreach ($tablas as [$tabla, $campo, $contexto]) {
+			$this->borrarDependienteAnitaVerificado($apiAnita, $tabla, $campo, $codigoAnita, $contexto);
+		}
+	}
+
+	/**
+	 * Borra filas de una tabla dependiente y confirma que quedaron en cero.
+	 * El bridge Anita a veces responde OK sin borrar; sin esta verificación el
+	 * insert posterior choca con clave duplicada (proley/propago).
+	 */
+	private function borrarDependienteAnitaVerificado(
+		ApiAnita $apiAnita,
+		string $tabla,
+		string $campo,
+		string $codigoAnita,
+		string $contexto
+	): void {
+		for ($intento = 1; $intento <= 4; $intento++) {
+			$this->apiCallAnitaEscritura($apiAnita, [
+				'acc' => 'delete',
+				'tabla' => $tabla,
+				'sistema' => 'compras',
+				'whereArmado' => " WHERE {$campo} = '{$codigoAnita}' ",
+			], $contexto);
+
+			$restantes = ApiAnita::decodificarListaFilas($apiAnita->apiCall([
+				'acc' => 'list',
+				'tabla' => $tabla,
+				'sistema' => 'compras',
+				'campos' => $campo,
+				'whereArmado' => " WHERE {$campo} = '{$codigoAnita}' ",
+			]));
+
+			if ($restantes === []) {
+				return;
+			}
+
+			usleep(150000);
+		}
+
+		throw new \RuntimeException(
+			"No se pudieron limpiar filas previas en Anita ({$tabla} {$campo}={$codigoAnita})."
+		);
+	}
+
+	private function reemplazarDependientesAnita(array $request, ApiAnita $apiAnita, string $codigoAnita): void
+	{
+		$this->limpiarTablasDependientesAnita($apiAnita, $codigoAnita);
+
+		$leyenda = explode("\n", (string) ($request['leyenda'] ?? ''));
 		$linea = 0;
-		foreach ($leyenda as $ley)
-		{
-        	$data = array( 'tabla' => $this->tableAnita[1], 'acc' => 'insert',
-							'sistema' => 'compras',
-            				'campos' => '
+		foreach ($leyenda as $ley) {
+			$textoLeyenda = ProveedorExclusionAnitaSupport::escaparSqlAnita(preg_replace("/\r/", '', $ley));
+			$data = [
+				'tabla' => $this->tableAnita[1],
+				'acc' => 'insert',
+				'sistema' => 'compras',
+				'campos' => '
 								prol_proveedor,
 								prol_linea,
 								prol_leyenda
 										',
-            				'valores' => " 
-								'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
-								'".$linea++."', 
-								'".preg_replace("/\r/", "", $ley)."' "
-						);
-
-        	$this->apiCallAnitaEscritura($apiAnita, $data, 'proley insert');
+				'valores' => "
+								'".$codigoAnita."',
+								'".$linea++."',
+								'".$textoLeyenda."' ",
+			];
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'proley insert');
 		}
 
-		// Graba datos adicionales promadic
-		$data = array( 'tabla' => 'promadic', 
-				'acc' => 'insert',
-				'sistema' => 'compras',
-				'campos' => '
+		$data = [
+			'tabla' => 'promadic',
+			'acc' => 'insert',
+			'sistema' => 'compras',
+			'campos' => '
 					proad_proveedor,
 					proad_e_mail_oc,
 					proad_semaforo
 							',
-				'valores' => " 
-					'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
-					'".$request['emailoc']."', 
-					'".substr($request['semaforo'],0,1)."' "
-			);
-
+			'valores' => "
+					'".$codigoAnita."',
+					'".ProveedorExclusionAnitaSupport::escaparSqlAnita((string) ($request['emailoc'] ?? ''))."',
+					'".substr((string) ($request['semaforo'] ?? ' '), 0, 1)."' ",
+		];
 		$this->apiCallAnitaEscritura($apiAnita, $data, 'promadic insert');
-		
+
 		self::grabaExclusion($request, $apiAnita);
 		self::grabaFormaDePago($request, $apiAnita);
 	}
@@ -1253,60 +1329,8 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
         $this->apiCallAnitaEscritura($apiAnita, $data, 'promae update');
 
-		// Borra leyenda
-        $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
-				'sistema' => 'compras',
-				'whereArmado' => " WHERE prol_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $this->apiCallAnitaEscritura($apiAnita, $data, 'proley delete');
-		
-		// Graba leyenda
-		$leyenda = explode("\n", $request['leyenda']);
-		$linea = 0;
-		foreach ($leyenda as $ley)
-		{
-        	$data = array( 'tabla' => $this->tableAnita[1], 'acc' => 'insert',
-							'sistema' => 'compras',
-            				'campos' => '
-								prol_proveedor,
-								prol_linea,
-								prol_leyenda
-										',
-            				'valores' => " 
-								'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
-								'".$linea++."', 
-								'".preg_replace("/\r/", "", $ley)."' "
-						);
-
-        	$this->apiCallAnitaEscritura($apiAnita, $data, 'proley insert');
-		}
-
-		// Graba promadic
-		$data = array( 'tabla' => 'promadic', 
-				'acc' => 'update',
-				'sistema' => 'compras',
-				'valores' => " 
-					proad_e_mail_oc = '".$request['emailoc']."',
-					proad_semaforo  = '".substr($request['semaforo'],0,1)."' "
-					,
-				'whereArmado' => " WHERE proad_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-
-		$this->apiCallAnitaEscritura($apiAnita, $data, 'promadic update');
-
-		// Borra exclusiones
-        $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
-				'sistema' => 'compras',
-				'whereArmado' => " WHERE proex_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $this->apiCallAnitaEscritura($apiAnita, $data, 'proexcl delete');
-
-		self::grabaExclusion($request, $apiAnita);
-
-		// Borra formas de pago
-		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[3], 
-				'sistema' => 'compras',
-				'whereArmado' => " WHERE prop_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $this->apiCallAnitaEscritura($apiAnita, $data, 'propago delete');
-
-		self::grabaFormaDePago($request, $apiAnita);
+		$codigoAnita = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge((string) $id);
+		$this->reemplazarDependientesAnita($request, $apiAnita, $codigoAnita);
 	}
 
 	private function grabaExclusion($request, ?ApiAnita $apiAnita = null)
@@ -1460,19 +1484,132 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 	// Devuelve ultimo codigo de proveedors + 1 para agregar nuevos en Anita
 
 	private function ultimoCodigo(&$codigo) {
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-				'tabla' => $this->tableAnita[0], 
-				'campos' => " max(prom_proveedor) as $this->keyFieldAnita "
-				);
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+		$codigo = $this->leerProximoCodigoDesdeMaxAnita();
+	}
 
-		$codigo = 0;
-        if (isset($dataAnita)) 
-		{
-			$codigo = ltrim($dataAnita[0]->{$this->keyFieldAnita}, '0');
-			$codigo = $codigo + 1;
+	private function leerProximoCodigoDesdeMaxAnita(): int
+	{
+		$apiAnita = new ApiAnita();
+		$ultimoError = null;
+
+		for ($intento = 1; $intento <= 3; $intento++) {
+			$raw = (string) $apiAnita->apiCall([
+				'acc' => 'list',
+				'tabla' => $this->tableAnita[0],
+				'sistema' => 'compras',
+				'campos' => " max({$this->keyFieldAnita}) as {$this->keyFieldAnita} ",
+			]);
+			$ultimoError = ApiAnita::extraerMensajeError($raw === '' ? null : $raw);
+			$filas = ApiAnita::decodificarListaFilas($raw);
+			if ($ultimoError === null && $filas !== [] && isset($filas[0]->{$this->keyFieldAnita})) {
+				$max = (int) ltrim((string) $filas[0]->{$this->keyFieldAnita}, '0');
+
+				return max(1, $max + 1);
+			}
+			usleep(150000);
 		}
+
+		throw new \RuntimeException(
+			'No se pudo leer el último código de proveedor en Anita'
+			.($ultimoError ? ': '.$ultimoError : '.')
+		);
+	}
+
+	private function resolverCodigoAlta(array $data): string
+	{
+		$cuit = trim((string) ($data['nroinscripcion'] ?? ''));
+		if ($cuit !== '') {
+			$codigoHuerfano = $this->reutilizarCodigoHuerfanoAnitaPorCuit($cuit);
+			if ($codigoHuerfano !== null) {
+				return $codigoHuerfano;
+			}
+		}
+
+		return $this->proximoCodigoDisponible();
+	}
+
+	/**
+	 * Si Anita quedó con promae del mismo CUIT sin fila ERP (alta fallida), reutiliza ese código
+	 * para completar el alta sin generar otra clave nueva.
+	 */
+	private function reutilizarCodigoHuerfanoAnitaPorCuit(string $cuit): ?string
+	{
+		$apiAnita = new ApiAnita();
+		$cuitEsc = str_replace("'", "''", $cuit);
+		$filas = [];
+
+		for ($intento = 1; $intento <= 3; $intento++) {
+			$raw = (string) $apiAnita->apiCall([
+				'acc' => 'list',
+				'tabla' => $this->tableAnita[0],
+				'sistema' => 'compras',
+				'campos' => 'prom_proveedor,prom_cuit',
+				'whereArmado' => " WHERE prom_cuit = '{$cuitEsc}' ",
+			]);
+			if (ApiAnita::extraerMensajeError($raw === '' ? null : $raw) !== null) {
+				usleep(150000);
+				continue;
+			}
+			$filas = ApiAnita::decodificarListaFilas($raw);
+			if ($filas !== []) {
+				break;
+			}
+			usleep(150000);
+		}
+
+		$mejor = null;
+		$mejorNum = -1;
+		foreach ($filas as $fila) {
+			$codigoAnita = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge((string) ($fila->prom_proveedor ?? ''));
+			$codigoErp = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita($codigoAnita);
+			if ($this->model->where('codigo', $codigoErp)->exists()) {
+				continue;
+			}
+			$num = (int) $codigoErp;
+			if ($num > $mejorNum) {
+				$mejorNum = $num;
+				$mejor = $codigoErp;
+			}
+		}
+
+		return $mejor;
+	}
+
+	private function proximoCodigoDisponible(): string
+	{
+		$apiAnita = new ApiAnita();
+		$candidato = $this->leerProximoCodigoDesdeMaxAnita();
+		$intentos = 0;
+
+		while ($intentos < 100) {
+			$codigoErp = (string) $candidato;
+			$codigoAnita = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge($codigoErp);
+
+			$existeErp = $this->model->where('codigo', $codigoErp)->exists();
+			$existeAnita = $this->consultarPromaeAnitaConReintento($apiAnita, $codigoAnita);
+			if (! $existeErp && $existeAnita === null) {
+				return $codigoErp;
+			}
+
+			$candidato++;
+			$intentos++;
+		}
+
+		throw new \RuntimeException('No se pudo reservar un código libre de proveedor en ERP/Anita.');
+	}
+
+	private function consultarPromaeAnitaConReintento(ApiAnita $apiAnita, string $key): ?object
+	{
+		for ($intento = 1; $intento <= 3; $intento++) {
+			$fila = $this->consultarPromaeAnita($apiAnita, $key);
+			if ($fila !== null) {
+				return $fila;
+			}
+			// Confirmación: una lectura vacía puede ser flaky del bridge; reintenta antes de asumir libre.
+			usleep(100000);
+		}
+
+		return null;
 	}
 
 	private function setCamposAnita($data, &$cuentacontable, 

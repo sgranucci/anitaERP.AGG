@@ -61,7 +61,9 @@ class EfeDatosGamingSuppliesSupport
                 continue;
             }
 
-            if ((int) ($fila['concepto_id'] ?? 0) !== 0) {
+            // Mayor/c24 con FNS conc=24 (Anita Datos → c12, no mant. edificio).
+            $conceptoActual = (int) ($fila['concepto_id'] ?? 0);
+            if (! in_array($conceptoActual, [0, EfeDatosMantenimientoEdificioSupport::CONCEPTO_MANTENIMIENTO_EDIFICIO], true)) {
                 continue;
             }
 

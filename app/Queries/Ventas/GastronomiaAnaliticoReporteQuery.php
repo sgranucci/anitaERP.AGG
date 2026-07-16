@@ -52,8 +52,14 @@ final class GastronomiaAnaliticoReporteQuery
      */
     public function listado(array $filtros, bool $paginar = true, int $perPage = 25): LengthAwarePaginator|Collection
     {
-        $query = $this->queryBase($filtros)
-            ->orderByDesc('v.fechajornada')
+        $query = $this->queryBase($filtros);
+
+        if (GastronomiaAnaliticoReporteFiltros::debeSepararPorEmpresa($filtros)) {
+            $query->orderBy('e.nombre')
+                ->orderBy('e.id');
+        }
+
+        $query->orderByDesc('v.fechajornada')
             ->orderByDesc('v.id')
             ->orderBy('ve.id');
 
@@ -188,9 +194,13 @@ final class GastronomiaAnaliticoReporteQuery
      */
     private function aplicarFiltrosEstructurales(Builder $query, array $filtros): void
     {
-        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-        if ($empresaId > 0) {
-            $query->where('pv.empresa_id', $empresaId);
+        $empresaIds = GastronomiaAnaliticoReporteFiltros::empresaIds($filtros);
+        if ($empresaIds !== []) {
+            if (count($empresaIds) === 1) {
+                $query->where('pv.empresa_id', $empresaIds[0]);
+            } else {
+                $query->whereIn('pv.empresa_id', $empresaIds);
+            }
         }
 
         [$desde, $hasta] = GastronomiaAnaliticoReporteFiltros::normalizarRangoFechas(

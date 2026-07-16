@@ -107,9 +107,13 @@ final class GastronomiaInformeZTransmisionFaltanteService
      */
     public function enviarMail(array $analisis): bool
     {
-        $destinatarios = self::destinatariosEmail();
+        $empresaId = (int) ($analisis['empresa_id'] ?? 0);
+        $destinatarios = self::destinatariosEmail($empresaId);
         if ($destinatarios === []) {
-            Log::warning('gastronomia.informe_z_transmision_faltante.mail_sin_destinatarios');
+            Log::warning('gastronomia.informe_z_transmision_faltante.mail_sin_destinatarios', [
+                'empresa_id' => $empresaId,
+                'jornada_id' => $analisis['jornada_id'] ?? null,
+            ]);
 
             return false;
         }
@@ -122,6 +126,8 @@ final class GastronomiaInformeZTransmisionFaltanteService
             Log::error('gastronomia.informe_z_transmision_faltante.mail_fallo', [
                 'error' => $e->getMessage(),
                 'jornada_id' => $analisis['jornada_id'] ?? null,
+                'empresa_id' => $empresaId,
+                'destinatarios' => $destinatarios,
             ]);
 
             return false;
@@ -129,20 +135,44 @@ final class GastronomiaInformeZTransmisionFaltanteService
     }
 
     /**
+     * Copia fija + destinatarios de la empresa del cierre.
+     *
      * @return list<string>
      */
-    public static function destinatariosEmail(): array
+    public static function destinatariosEmail(int $empresaId = 0): array
     {
-        $raw = (string) config('gastronomia.informe_z_transmision_faltante.email', '');
-        if ($raw === '') {
-            return [];
+        $emails = [];
+
+        $copia = (string) config('gastronomia.informe_z_transmision_faltante.email_copia', '');
+        if ($copia !== '') {
+            foreach (explode(',', $copia) as $parte) {
+                $emails[] = trim($parte);
+            }
         }
 
-        $emails = array_map('trim', explode(',', $raw));
+        /** @var array<int, string> $porEmpresa */
+        $porEmpresa = (array) config('gastronomia.informe_z_transmision_faltante.email_por_empresa', []);
+        $deEmpresa = (string) ($porEmpresa[$empresaId] ?? '');
+        if ($deEmpresa !== '') {
+            foreach (explode(',', $deEmpresa) as $parte) {
+                $emails[] = trim($parte);
+            }
+        }
 
-        return array_values(array_filter(
-            $emails,
-            static fn (string $e) => $e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL),
-        ));
+        $validos = [];
+        $vistos = [];
+        foreach ($emails as $email) {
+            if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+            $clave = strtolower($email);
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $validos[] = $email;
+        }
+
+        return $validos;
     }
 }

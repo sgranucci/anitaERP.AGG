@@ -11,7 +11,7 @@ use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaTotalZPorPcService;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaCabeceraAnitaMapper;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaValorAnitaMapper;
-use App\Support\Caja\RendicionGastronomiaNroOperPisoSupport;
+use App\Support\Caja\AnitaSync\RendicionRendgastroNroOperCompartidoSupport;
 use App\Support\Caja\RendicionGastronomiaSecuenciaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRendicionAnitaSupport;
 use Illuminate\Support\Facades\Log;
@@ -540,110 +540,68 @@ class RendicionGastronomiaAnitaSyncService
             throw new \InvalidArgumentException('Empresa inválida para numeración Anita.');
         }
 
-        $ultimoErp = $this->ultimoNroOperEnErp($empresaId);
-        $ultimoAnita = null;
-        $consultaAnitaOk = false;
+        return RendicionRendgastroNroOperCompartidoSupport::conLock(function () use ($empresaId) {
+            $ultimoErp = $this->ultimoNroOperEnErp($empresaId);
+            $ultimoAnita = null;
+            $consultaAnitaOk = false;
 
-        try {
-            $ultimoAnita = $this->ultimoNroOperEnAnita($empresaId);
-            $consultaAnitaOk = true;
-        } catch (\Throwable $e) {
-            Log::warning('RendicionGastronomiaAnita: no se pudo consultar último nro_oper en Anita', [
-                'empresa_id' => $empresaId,
-                'mensaje' => $e->getMessage(),
-            ]);
-        }
+            try {
+                $ultimoAnita = $this->ultimoNroOperEnAnita($empresaId);
+                $consultaAnitaOk = true;
+            } catch (\Throwable $e) {
+                Log::warning('RendicionGastronomiaAnita: no se pudo consultar último nro_oper en Anita', [
+                    'empresa_id' => $empresaId,
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
 
-        $calculo = RendicionGastronomiaSecuenciaSupport::calcularSiguiente(
-            $ultimoAnita,
-            $ultimoErp,
-            RendicionGastronomiaNroOperPisoSupport::pisoParaEmpresa($empresaId),
-            RendicionGastronomiaNroOperPisoSupport::techoParaEmpresa($empresaId),
-        );
-        if (! $consultaAnitaOk) {
-            $calculo['fuente'] = RendicionGastronomiaSecuenciaSupport::FUENTE_ERP_FALLBACK;
-        }
-
-        $this->persistirSecuenciaEmpresa($empresaId, $calculo, $consultaAnitaOk);
-
-        $siguiente = (int) $calculo['siguiente'];
-        if (RendicionGastronomiaNroOperPisoSupport::pisoParaEmpresa($empresaId) > 0
-            && ! RendicionGastronomiaNroOperPisoSupport::enRangoEmpresa($empresaId, $siguiente)) {
-            throw new \RuntimeException(
-                'Siguiente nro_oper '.$siguiente.' fuera del rango de la empresa '.$empresaId.'.',
+            $calculo = RendicionRendgastroNroOperCompartidoSupport::calcularSiguiente(
+                $ultimoAnita,
+                $ultimoErp,
             );
-        }
+            if (! $consultaAnitaOk) {
+                $calculo['fuente'] = RendicionRendgastroNroOperCompartidoSupport::FUENTE_ERP_FALLBACK;
+            }
 
-        return [
-            'codigo' => (string) $siguiente,
-            'nro_oper' => $siguiente,
-            'fuente' => $calculo['fuente'],
-            'ultimo_anita' => $calculo['ultimo_anita'],
-            'ultimo_erp' => $calculo['ultimo_erp'],
-            'consulta_anita_ok' => $consultaAnitaOk,
-        ];
+            $this->persistirSecuenciaEmpresa($empresaId, $calculo, $consultaAnitaOk);
+
+            $siguiente = (int) $calculo['siguiente'];
+            if (RendicionRendgastroNroOperCompartidoSupport::piso() > 0
+                && ! RendicionRendgastroNroOperCompartidoSupport::enRango($siguiente)) {
+                throw new \RuntimeException(
+                    'Siguiente nro_oper gastronomía '.$siguiente.' fuera del rango compartido rendgastro (piso '
+                    .RendicionRendgastroNroOperCompartidoSupport::piso().').',
+                );
+            }
+
+            return [
+                'codigo' => (string) $siguiente,
+                'nro_oper' => $siguiente,
+                'fuente' => $calculo['fuente'],
+                'ultimo_anita' => $calculo['ultimo_anita'],
+                'ultimo_erp' => $calculo['ultimo_erp'],
+                'consulta_anita_ok' => $consultaAnitaOk,
+            ];
+        });
     }
 
     public function ultimoNroOperEnAnita(int $empresaId): int
     {
-        $tipoOper = $this->tipoOper();
-        $where = " WHERE rendg_empresa = '".$empresaId."' AND rendg_tipo_oper = '".$tipoOper."' "
-            .RendicionGastronomiaNroOperPisoSupport::filtroSqlAnita($empresaId);
+        unset($empresaId);
 
-        $api = new ApiAnita;
-        $payload = [
-            'acc' => 'list',
-            'sistema' => $this->sistema(),
-            'tabla' => $this->tablaCabecera(),
-            'campos' => 'rendg_nro_oper',
-            'orderBy' => 'rendg_nro_oper desc',
-            'whereArmado' => $where,
-        ];
-
-        $rows = ApiAnita::decodificarListaFilas($api->apiCall($payload));
-        if ($rows === []) {
-            return 0;
-        }
-
-        return max(0, (int) ($rows[0]->rendg_nro_oper ?? 0));
+        return RendicionRendgastroNroOperCompartidoSupport::ultimoNroOperEnAnita(
+            new ApiAnita,
+            $this->sistema(),
+            $this->tablaCabecera(),
+            $this->tipoOper(),
+        );
     }
 
     public function ultimoNroOperEnErp(int $empresaId): int
     {
-        $piso = RendicionGastronomiaNroOperPisoSupport::pisoParaEmpresa($empresaId);
+        unset($empresaId);
 
-        $queryColumna = RendicionGastronomiaCaja::query()->where('empresa_id', $empresaId);
-        $piso = RendicionGastronomiaNroOperPisoSupport::pisoParaEmpresa($empresaId);
-        $techo = RendicionGastronomiaNroOperPisoSupport::techoParaEmpresa($empresaId);
-        if ($piso > 0) {
-            $queryColumna->where('nro_oper_anita', '>=', $piso);
-        }
-        if ($techo > 0) {
-            $queryColumna->where('nro_oper_anita', '<', $techo);
-        }
-        $maxDesdeColumna = (int) ($queryColumna->whereNotNull('nro_oper_anita')->max('nro_oper_anita') ?? 0);
-
-        $maxDesdeCodigo = 0;
-        $codigos = RendicionGastronomiaCaja::query()
-            ->where('empresa_id', $empresaId)
-            ->pluck('codigo');
-
-        $techo = RendicionGastronomiaNroOperPisoSupport::techoParaEmpresa($empresaId);
-
-        foreach ($codigos as $codigo) {
-            $n = RendicionGastronomiaSecuenciaSupport::extraerNroOperDesdeCodigo((string) $codigo);
-            if ($n === null) {
-                continue;
-            }
-            if (! RendicionGastronomiaNroOperPisoSupport::enRangoEmpresa($empresaId, $n)) {
-                continue;
-            }
-            if ($n > $maxDesdeCodigo) {
-                $maxDesdeCodigo = $n;
-            }
-        }
-
-        return max($maxDesdeColumna, $maxDesdeCodigo);
+        return RendicionRendgastroNroOperCompartidoSupport::ultimoNroOperEnErp();
     }
 
     /**

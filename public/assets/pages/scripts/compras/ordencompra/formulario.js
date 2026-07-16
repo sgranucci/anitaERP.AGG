@@ -10,6 +10,78 @@ $(function () {
 
 	var ocMonedaPesoId = parseInt($('#tabla-articulos-ordencompra').attr('data-oc-moneda-peso-id') || '1', 10);
 
+	function ocFormatearCantAlt(num) {
+		if (!isFinite(num)) {
+			return '';
+		}
+		var t = parseFloat(num.toFixed(4));
+		if (t === 0) {
+			return '0';
+		}
+		return String(t);
+	}
+
+	function ocLimpiarCantidadAlternativaHint($tr) {
+		$tr.find('.oc-unidadesxenvase').val('');
+		$tr.find('.oc-um-alt-abrev').val('');
+		$tr.find('.oc-cantidadalternativa').val('');
+		$tr.find('.oc-cant-alt-valor').addClass('text-muted').text('—');
+		$tr.find('.oc-cant-alt-um').text('');
+	}
+
+	function ocEnriquecerUmAltDesdeArticulo($tr, dataArticulo) {
+		if (!$tr || !$tr.length || !dataArticulo) {
+			return;
+		}
+		var umdAlt = (dataArticulo.unidadesdemedidasalternativas && dataArticulo.unidadesdemedidasalternativas.abreviatura)
+			|| dataArticulo.um_alternativa_abreviatura
+			|| '';
+		var uxenv = parseFloat(dataArticulo.unidadesxenvase) || 0;
+		$tr.find('.oc-unidadesxenvase').val(uxenv > 0 ? uxenv : '');
+		$tr.find('.oc-um-alt-abrev').val(umdAlt || '');
+		ocActualizarCantidadAlternativaHint($tr);
+	}
+
+	function ocActualizarCantidadAlternativaHint($tr) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		var uxenv = parseFloat($tr.find('.oc-unidadesxenvase').val()) || 0;
+		var abrev = ($tr.find('.oc-um-alt-abrev').val() || '').trim();
+		var cant = parseFloat($tr.find('.cantidad-linea').val()) || 0;
+		var $valor = $tr.find('.oc-cant-alt-valor');
+		var $um = $tr.find('.oc-cant-alt-um');
+		var $hidden = $tr.find('.oc-cantidadalternativa');
+
+		if (uxenv <= 0) {
+			$hidden.val('');
+			$valor.addClass('text-muted').text('—');
+			$um.text('');
+			return;
+		}
+
+		var alt = cant * uxenv;
+		var altTxt = ocFormatearCantAlt(alt);
+		$hidden.val(altTxt);
+		$valor.removeClass('text-muted').text(altTxt);
+		$um.text(abrev || '');
+	}
+
+	var ocOnArticuloSeleccionadoPrev = window.onArticuloSeleccionado;
+	window.onArticuloSeleccionado = function (dataArticulo, ctx) {
+		if (typeof ocOnArticuloSeleccionadoPrev === 'function') {
+			ocOnArticuloSeleccionadoPrev(dataArticulo, ctx);
+		}
+		if (!dataArticulo || !ctx || !ctx.row) {
+			return;
+		}
+		var $tr = $(ctx.row);
+		if (!$tr.closest('#tabla-articulos-ordencompra').length) {
+			return;
+		}
+		ocEnriquecerUmAltDesdeArticulo($tr, dataArticulo);
+	};
+
 	function mostrarSolapa(sel) {
 		$('.oc-solapa').hide();
 		$(sel).show();
@@ -966,7 +1038,11 @@ $(function () {
 		if ($('#oc_cuotas_fecha_primera_manual').length) {
 			$('#oc_cuotas_fecha_primera_manual').val(fvPrimera);
 		}
-		$('#oc_cuotas_condicionpago_id').val(c.condicionpago_id ? String(c.condicionpago_id) : '');
+		$('#oc_cuotas_condicionpago_id').val(
+			c.condicionpago_id
+				? String(c.condicionpago_id)
+				: ($('#condicionpago_id').val() || '')
+		);
 		ocRefrescarCotizacionComprobante(idx, function () {
 			ocSyncComprobantesToHidden();
 			ocRenderCuotasTbody(c.cuotas && c.cuotas.length ? c.cuotas : []);
@@ -1358,6 +1434,7 @@ $(function () {
 		$clone.find('.descripcionpartidagasto').val('');
 		$clone.find('.descripcioncapex').val('');
 		$clone.find('.oc-ta-detalle-linea').val('');
+		ocLimpiarCantidadAlternativaHint($clone);
 		$tbody.append($clone);
 		$tbody.append($cloneSub);
 		ocRefreshDetalleLineaBadge($clone);
@@ -1409,6 +1486,7 @@ $(function () {
 			$lastRow.find('.oc-precio-origen-tipo').val('');
 			$lastRow.find('.oc-precio-origen-ref-id').val('');
 			$lastRow.find('.oc-precio-origen-etiqueta').val('');
+			ocLimpiarCantidadAlternativaHint($lastRow);
 			ocActualizarCotizacionLinea($lastRow);
 			ocRefreshDetalleLineaBadge($lastRow);
 			ocRefreshOrigenPrecioResumen($lastRow);
@@ -1416,7 +1494,23 @@ $(function () {
 		ocScheduleTotales();
 	});
 
-	$(document).on('input change', '#tabla-articulos-ordencompra .cantidad-linea, #tabla-articulos-ordencompra .precio-linea, #tabla-articulos-ordencompra .oc-cotizacion-linea', ocScheduleTotales);
+	$(document).on('input change', '#tabla-articulos-ordencompra .cantidad-linea, #tabla-articulos-ordencompra .precio-linea, #tabla-articulos-ordencompra .oc-cotizacion-linea', function () {
+		if ($(this).hasClass('cantidad-linea')) {
+			ocActualizarCantidadAlternativaHint($(this).closest('tr.item-ordencompra-articulo'));
+		}
+		ocScheduleTotales();
+	});
+
+	$(document).on('change', '#tabla-articulos-ordencompra .codigoarticulo', function () {
+		var sku = ($(this).val() || '').trim();
+		if (!sku) {
+			ocLimpiarCantidadAlternativaHint($(this).closest('tr.item-ordencompra-articulo'));
+		}
+	});
+
+	$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
+		ocActualizarCantidadAlternativaHint($(this));
+	});
 	$('#fecha, #descuento').on('change input', function () {
 		if ($(this).attr('id') === 'fecha') {
 			ocRefrescarCotizacionesExtranjerasPorFecha();
@@ -1882,11 +1976,15 @@ $(function () {
 		}
 	});
 
-	$('#proveedor_id').on('change.ocordencompra', function () {
+	// Modal/código de proveedor dispara change.cpProveedorCargado (consulta.js);
+	// plantilla/origen precio pueden disparar change genérico.
+	$('#proveedor_id').on('change.ocordencompra change.cpProveedorCargado', function () {
 		var id = $(this).val();
 		if (!id) {
 			return;
 		}
+		// Si consulta.js ya aplicó defaults con el JSON del proveedor, no hace falta
+		// sobrescribir de inmediato; igual re-leemos por si el cambio vino sin ese payload.
 		$.get(carpetaBase + '/compras/leerproveedor/' + id, function (data) {
 			if (!data) {
 				return;
@@ -1896,6 +1994,9 @@ $(function () {
 			}
 			if (data.condicionentrega_id) {
 				$('#condicionentrega_id').val(String(data.condicionentrega_id));
+			}
+			if (data.condicionpago_id) {
+				$('#condicionpago_id').val(String(data.condicionpago_id));
 			}
 		});
 	});
@@ -1958,7 +2059,8 @@ $(function () {
 					$row.find('select[name="moneda_linea_ids[]"]').val(a.moneda_id);
 					$row.find('select[name="centrocostodestino_ids[]"]').val(a.centrocostodestino_id);
 					$row.find('input[name="fechaentrega_articulos[]"]').val(a.fechaentrega);
-					$row.find('input[name="cantidadalternativas[]"]').val(a.cantidadalternativa);
+					$row.find('.oc-unidadesxenvase').val(a.unidadesxenvase > 0 ? a.unidadesxenvase : '');
+					$row.find('.oc-um-alt-abrev').val(a.um_alternativa_abreviatura || '');
 					$row.find('textarea[name="detalle_articulos[]"]').first().val(a.detalle || '');
 					$row.find('.oc-cotizacion-linea').val(a.cotizacion || 1);
 					$row.find('.partidagasto_id').val(a.partidagasto_id || '');
@@ -1967,6 +2069,10 @@ $(function () {
 					$row.find('.capex_id').val(a.capex_id || '');
 					$row.find('.codigocapex').val(a.codigocapex || '');
 					$row.find('.descripcioncapex').val(a.descripcioncapex || '');
+					ocActualizarCantidadAlternativaHint($row);
+					if (!(parseFloat($row.find('.oc-unidadesxenvase').val()) > 0)) {
+						$row.find('.oc-cantidadalternativa').val(a.cantidadalternativa);
+					}
 					$tbody.append($row);
 					$tbody.append($sub);
 				});

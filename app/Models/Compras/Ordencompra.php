@@ -20,7 +20,16 @@ class Ordencompra extends Model
     {
         $t = strtoupper(trim($valorReq));
 
-        return str_contains($t, 'ANTICIP') ? 'ANTICIPADA' : 'NO ANTICIPADA';
+        // Exacto: "NO ANTICIPADA" también contiene "ANTICIP" y no debe mapear a anticipada.
+        return ($t === 'ANTICIPADA' || $t === '2' || $t === 'S') ? 'ANTICIPADA' : 'NO ANTICIPADA';
+    }
+
+    /** Valor Anita penmp_es_anticipo (S/N) desde tratamiento ERP. */
+    public static function anitaEsAnticipoDesdeTratamiento(?string $tratamiento): string
+    {
+        $t = strtoupper(trim((string) $tratamiento));
+
+        return ($t === 'ANTICIPADA' || $t === '2' || $t === 'S') ? 'S' : 'N';
     }
 
     protected $table = 'ordencompra';
@@ -28,7 +37,7 @@ class Ordencompra extends Model
     protected $fillable = [
         'fecha', 'fechaentrega', 'empresa_id', 'numeroordencompra', 'requisicion_id', 'centrocosto_id',
         'comentario', 'detalle', 'lugarentrega', 'transporte_id', 'tratamiento', 'proveedor_id',
-        'condicioncompra_id', 'condicionentrega_id', 'descuento', 'estadoordencompra', 'sector_legajocompra_id',
+        'condicioncompra_id', 'condicionentrega_id', 'condicionpago_id', 'descuento', 'estadoordencompra', 'sector_legajocompra_id',
         'condiciones_contratacion', 'creousuario_id',
     ];
 
@@ -105,6 +114,11 @@ class Ordencompra extends Model
     public function condicionentregas()
     {
         return $this->belongsTo(Condicionentrega::class, 'condicionentrega_id');
+    }
+
+    public function condicionpagos()
+    {
+        return $this->belongsTo(Condicionpago::class, 'condicionpago_id');
     }
 
     public function transportes()

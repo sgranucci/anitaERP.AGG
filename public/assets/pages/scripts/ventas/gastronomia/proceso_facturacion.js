@@ -114,17 +114,43 @@
         return e.key === '+' || e.code === 'NumpadAdd' || (e.key === '=' && e.shiftKey);
     }
 
-    function appPath(path) {
-        if (/^https?:\/\//i.test(path)) {
-            return path;
-        }
+    function baseAppPos() {
         let base = '';
         if (typeof resolverCarpetaBaseApp === 'function') {
             base = resolverCarpetaBaseApp();
         } else if (typeof carpetaBase !== 'undefined' && carpetaBase != null) {
             base = String(carpetaBase).replace(/\/$/, '');
         }
+
+        return String(base || '').replace(/\/$/, '');
+    }
+
+    function appPath(path) {
+        const base = baseAppPos();
+        if (/^https?:\/\//i.test(path)) {
+            try {
+                const url = new URL(path, window.location.origin);
+                if (url.origin !== window.location.origin || !base) {
+                    return path;
+                }
+                const baseConBarra = base + '/';
+                if (url.pathname === base || url.pathname.startsWith(baseConBarra)) {
+                    return url.pathname + url.search + url.hash;
+                }
+                // route()/url() sin APP_CARPETA → /ventas/...; hay que anteponer /anitaERP/public
+                return base + url.pathname + url.search + url.hash;
+            } catch (_) {
+                return path;
+            }
+        }
         const p = path.startsWith('/') ? path : '/' + path;
+        if (!base) {
+            return p;
+        }
+        // Evitar /anitaERP/public/anitaERP/public/... cuando la ruta ya viene prefijada
+        if (p === base || p.startsWith(base + '/')) {
+            return p;
+        }
         return base + p;
     }
 
@@ -4593,9 +4619,16 @@
     }
 
     let canjeTicketValidado = null;
+    let canjeTicketInputTimer = null;
+    let canjeTicketUltimoCodigoValidado = '';
 
     function resetModalCanjeTicket() {
         canjeTicketValidado = null;
+        canjeTicketUltimoCodigoValidado = '';
+        if (canjeTicketInputTimer) {
+            clearTimeout(canjeTicketInputTimer);
+            canjeTicketInputTimer = null;
+        }
         const inp = document.getElementById('gastro-canje-codigo-barras');
         const err = document.getElementById('gastro-canje-ticket-error');
         const prev = document.getElementById('gastro-canje-ticket-preview');
@@ -4636,6 +4669,9 @@
             mostrarErrorModalCanje('Ingrese o escanee el código de barras.');
             return;
         }
+        if (codigo === canjeTicketUltimoCodigoValidado && canjeTicketValidado) {
+            return;
+        }
         if (totalFacturadoArs <= 0) {
             mostrarErrorModalCanje('Calcule el total a facturar antes de canjear tickets.');
             return;
@@ -4660,9 +4696,11 @@
                 }),
             });
             if (!data.ok) {
+                canjeTicketUltimoCodigoValidado = '';
                 mostrarErrorModalCanje(data.error || data.mensaje || 'Ticket no válido.');
                 return;
             }
+            canjeTicketUltimoCodigoValidado = codigo;
             canjeTicketValidado = data;
             const prev = document.getElementById('gastro-canje-ticket-preview');
             const set = (id, val) => {
@@ -4677,8 +4715,29 @@
             const btn = document.getElementById('gastro-canje-ticket-confirmar');
             if (btn) btn.disabled = false;
         } catch (e) {
+            canjeTicketUltimoCodigoValidado = '';
             mostrarErrorModalCanje(e.message || String(e));
         }
+    }
+
+    function programarValidacionCodigoBarrasCanjeTicket() {
+        const inp = document.getElementById('gastro-canje-codigo-barras');
+        if (!inp) {
+            return;
+        }
+        if (canjeTicketInputTimer) {
+            clearTimeout(canjeTicketInputTimer);
+            canjeTicketInputTimer = null;
+        }
+        const digits = String(inp.value || '').replace(/\D/g, '');
+        // EAN-13 completo (13) o UPC-A (12 = EAN sin el 0 inicial).
+        if (digits.length < 12) {
+            return;
+        }
+        canjeTicketInputTimer = setTimeout(() => {
+            canjeTicketInputTimer = null;
+            void validarCodigoBarrasCanjeTicket();
+        }, 120);
     }
 
     function agregarTicketCanjeACobranza() {
@@ -4736,13 +4795,20 @@
         const btnConfirmar = document.getElementById('gastro-canje-ticket-confirmar');
         if (inp) {
             inp.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' || e.keyCode === 13) {
                     e.preventDefault();
+                    if (canjeTicketInputTimer) {
+                        clearTimeout(canjeTicketInputTimer);
+                        canjeTicketInputTimer = null;
+                    }
                     void validarCodigoBarrasCanjeTicket();
                 }
             });
+            inp.addEventListener('input', () => {
+                programarValidacionCodigoBarrasCanjeTicket();
+            });
             inp.addEventListener('change', () => {
-                if ((inp.value || '').trim().length >= 7) {
+                if ((inp.value || '').replace(/\D/g, '').length >= 7) {
                     void validarCodigoBarrasCanjeTicket();
                 }
             });

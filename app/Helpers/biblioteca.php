@@ -377,23 +377,31 @@ function getAllChkboxValues($chk_name) {
 
 function calculaCoeficienteMoneda($aMoneda, $deMoneda, $cotizacion)
 {
-    if ($aMoneda == $deMoneda)
+    if ($aMoneda == $deMoneda) {
         return 1.;
+    }
 
-    if (isset($cotizacion['cotizacionventa']))
-        $cotizacionVenta = $cotizacion['cotizacionventa'];
-    else
+    // leeCotizacionDiaria (y similares) puede devolver ['cotizacionventa' => null, ...].
+    // isset(null) es false y antes se asignaba el array entero → TypeError en float * array.
+    if (is_array($cotizacion)) {
+        $cotizacionVenta = $cotizacion['cotizacionventa'] ?? 0;
+    } else {
         $cotizacionVenta = $cotizacion;
+    }
+    $cotizacionVenta = (float) $cotizacionVenta;
 
-    if ($aMoneda == 1)
+    if ($aMoneda == 1) {
         return $cotizacionVenta;
+    }
 
-    if ($aMoneda > 1 && $deMoneda == 1)
-        return 1/$cotizacionVenta;
+    if ($aMoneda > 1 && $deMoneda == 1) {
+        return $cotizacionVenta != 0.0 ? 1 / $cotizacionVenta : 0.;
+    }
 
     // Faltaria definir bien conversiones entre monedas sin pasar por el peso
-    if ($aMoneda > 1 && $deMoneda > 1)
+    if ($aMoneda > 1 && $deMoneda > 1) {
         return $cotizacionVenta;
+    }
 
     return 1.;
 }

@@ -26,6 +26,7 @@ class Asiento extends Model implements Auditable
 
     protected $fillable = ['empresa_id', 'tipoasiento_id', 'numeroasiento', 'fecha', 'venta_id', 'movimientostock_id',
                             'cobranza_id',
+                            'pagoproveedor_id',
                             'compra_id', 'caja_movimiento_id', 'ordencompra_id', 'recepcionproveedor_id',
                             'comprobante_proveedor_id', 'observacion',
                             'usuario_id', 'estado_aprobacion', 'cuentas_no_autorizadas',

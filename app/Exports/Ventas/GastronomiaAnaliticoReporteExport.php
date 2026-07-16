@@ -69,9 +69,18 @@ class GastronomiaAnaliticoReporteExport implements FromView, ShouldAutoSize, Wit
     public function view(): View
     {
         $this->resultado = $this->reporteService->generar($this->filtros, false);
-        $coleccionLogo = $this->empresaNombre !== ''
-            ? collect([(object) ['nombreempresa' => $this->empresaNombre]])
-            : collect();
+        $filas = $this->resultado['filas'];
+        $coleccionLogo = $filas
+            ->filter(static fn ($f) => ($f->tipo_fila ?? 'detalle') !== 'header_empresa')
+            ->map(static fn ($f) => (object) [
+                'nombreempresa' => trim((string) ($f->nombreempresa ?? $f->sala ?? '')),
+            ])
+            ->filter(static fn ($r) => $r->nombreempresa !== '')
+            ->unique('nombreempresa')
+            ->values();
+        if ($coleccionLogo->isEmpty() && $this->empresaNombre !== '') {
+            $coleccionLogo = collect([(object) ['nombreempresa' => $this->empresaNombre]]);
+        }
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogo);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
 
@@ -86,7 +95,7 @@ class GastronomiaAnaliticoReporteExport implements FromView, ShouldAutoSize, Wit
 
         return view('exports.ventas.gastronomia_analitico_reporteindex', [
             'resultado' => $this->resultado,
-            'filas' => $this->resultado['filas'],
+            'filas' => $filas,
             'titulo' => $this->titulo,
             'subtitulo' => $this->subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,

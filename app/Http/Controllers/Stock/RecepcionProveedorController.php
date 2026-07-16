@@ -9,6 +9,7 @@ use App\Models\Stock\Configuracion_RecepcionProveedor;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Token;
+use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
@@ -17,6 +18,7 @@ use App\Services\Stock\RecepcionProveedorOcrService;
 use App\Services\Stock\RecepcionProveedorOrdencompraResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorService;
+use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
 use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
@@ -37,6 +39,7 @@ class RecepcionProveedorController extends Controller
         private readonly RecepcionProveedorAsientoService $asientoService,
         private readonly Recepcion_ProveedorRepositoryInterface $repository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly CotizacionQueryInterface $cotizacionQuery,
     ) {}
 
     public function index(Request $request)
@@ -184,12 +187,13 @@ class RecepcionProveedorController extends Controller
 
         $ordencompraId = (int) $request->input('ordencompra_id', 0);
         $numeroOc = (int) $request->input('numero_oc', 0);
+        $fechaRecepcion = substr((string) ($request->input('fecha') ?: date('Y-m-d')), 0, 10);
 
         try {
             if ($ordencompraId > 0) {
-                $data = $this->ocResolver->resolverPorId($ordencompraId, true);
+                $data = $this->ocResolver->resolverPorId($ordencompraId, true, $fechaRecepcion);
             } elseif ($numeroOc > 0) {
-                $data = $this->service->precargaDesdeOc($numeroOc);
+                $data = $this->service->precargaDesdeOc($numeroOc, $fechaRecepcion);
             } else {
                 return response()->json(['error' => 'Indique número de OC o seleccione una desde AnitaERP'], 422);
             }
@@ -210,6 +214,37 @@ class RecepcionProveedorController extends Controller
             'tratamiento' => $oc->tratamiento,
             'descuento_ordencompra' => (float) ($oc->descuento ?? 0),
             'lineas' => $data['lineas'],
+        ]);
+    }
+
+    /**
+     * Cotización de venta del día (tabla cotización / cron BNA) para moneda y fecha de recepción.
+     */
+    public function apiCotizacionMonedaFecha(Request $request): JsonResponse
+    {
+        if (! can('crear-recepcion-proveedor', false)
+            && ! can('editar-recepcion-proveedor', false)
+            && ! can('actualizar-recepcion-proveedor', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        $request->validate([
+            'fecha' => 'required|date',
+            'moneda_id' => 'required|integer|exists:moneda,id',
+        ]);
+
+        $fecha = substr((string) $request->query('fecha'), 0, 10);
+        $monedaId = (int) $request->query('moneda_id');
+        $cot = RequisicionTotalesCabecera::cotizacionVentaPorMonedaEnFecha(
+            $this->cotizacionQuery,
+            $fecha,
+            $monedaId
+        );
+
+        return response()->json([
+            'cotizacion' => $cot,
+            'moneda_id' => $monedaId,
+            'fecha' => $fecha,
         ]);
     }
 

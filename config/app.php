@@ -68,6 +68,12 @@ return [
     'anita_sync_cliente_vip_gastronomia_write' => (bool) env('ANITA_SYNC_CLIENTE_VIP_GASTRONOMIA_WRITE', true),
 
     /*
+    | When true, the caja "clientes VIP" index syncs from Anita on first load / shows sync button.
+    | Solo importación (base_admin.clivip); no hay escritura hacia Anita.
+    */
+    'anita_sync_cliente_vip_caja_index' => (bool) env('ANITA_SYNC_CLIENTE_VIP_CAJA_INDEX', true),
+
+    /*
     | When true, opening ventas/puntoventa with lista vacía dispara sync con Anita en la misma petición HTTP.
     */
     'anita_sync_puntoventa_index' => (bool) env('ANITA_SYNC_PUNTOVENTA_INDEX', false),

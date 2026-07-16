@@ -15,7 +15,25 @@
         .' al '
         .\Carbon\Carbon::parse($resultado['fecha_hasta'] ?? now())->format('d/m/Y')
     );
-    $colspan = 13;
+    $colspan = 10;
+    $totRend = 0;
+    $totFact = 0.0;
+    $totNc = 0.0;
+    $totVenta = 0.0;
+    $totFlash = 0.0;
+    $totAsientos = 0.0;
+    $totDifFlash = 0.0;
+    $totDifAsientos = 0.0;
+    foreach ($filas as $fSum) {
+        $totRend += (int) ($fSum['cantidad_rendiciones'] ?? 0);
+        $totFact += (float) ($fSum['total_facturacion'] ?? 0);
+        $totNc += (float) ($fSum['total_notas_credito'] ?? 0);
+        $totVenta += (float) ($fSum['total_ventas_brutas'] ?? 0);
+        $totFlash += (float) ($fSum['total_flash_estac'] ?? 0);
+        $totAsientos += (float) ($fSum['total_asientos_debe'] ?? 0);
+        $totDifFlash += (float) ($fSum['diferencia_flash'] ?? 0);
+        $totDifAsientos += (float) ($fSum['diferencia_venta_asientos'] ?? 0);
+    }
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -35,7 +53,6 @@
         table.data thead tr { background-color: #85C1E9; }
         table.data th { font-weight: bold; color: #17202A; font-size: 6px; }
         .num { text-align: right; }
-        .total-dia { background-color: #e8f4fc !important; font-weight: bold; }
         .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 4px; }
         .listado-header td { border: none; vertical-align: middle; }
         .meta { font-size: 7px; color: #444; margin-top: 2px; }
@@ -84,68 +101,57 @@
     </p>
 @endif
 
-    <table class="data">
-        <thead>
+<table class="data">
+    <thead>
+        <tr>
+            <th>Jornada</th>
+            <th>Estado</th>
+            <th class="num">Rend.</th>
+            <th class="num">Fact. neta</th>
+            <th class="num">NC</th>
+            <th class="num">Venta total</th>
+            <th class="num">Flash estac.</th>
+            <th class="num">Asientos</th>
+            <th class="num">Dif. fact.&minus;flash</th>
+            <th class="num">Dif. venta&minus;asientos</th>
+        </tr>
+    </thead>
+    <tbody>
+        @forelse ($filas as $fila)
             <tr>
-                <th>Fecha jornada</th>
-                <th>Estado</th>
-                <th>Punto de venta</th>
-                <th class="num">Cant.</th>
-                <th class="num">Cobrado</th>
-                <th class="num">Invit.</th>
-                <th class="num">Fact. neta</th>
-                <th class="num">NC</th>
-                <th class="num">Venta total</th>
-                <th class="num">Asientos (&Sigma; debe)</th>
-                <th class="num">Flash estac.</th>
-                <th class="num">Dif. fact.&minus;flash</th>
-                <th class="num">Dif. venta&minus;asientos</th>
+                <td>{{ $fila['fecha_jornada_fmt'] ?? '' }}</td>
+                <td>{{ $fila['estado'] ?? '' }}</td>
+                <td class="num">{{ (int) ($fila['cantidad_rendiciones'] ?? 0) }}</td>
+                <td class="num">{{ number_format((float) ($fila['total_facturacion'] ?? 0), 2, ',', '.') }}</td>
+                <td class="num">{{ number_format((float) ($fila['total_notas_credito'] ?? 0), 2, ',', '.') }}</td>
+                <td class="num">{{ number_format((float) ($fila['total_ventas_brutas'] ?? 0), 2, ',', '.') }}</td>
+                <td class="num">{{ number_format((float) ($fila['total_flash_estac'] ?? 0), 2, ',', '.') }}</td>
+                <td class="num">{{ number_format((float) ($fila['total_asientos_debe'] ?? 0), 2, ',', '.') }}</td>
+                <td class="num">{{ number_format((float) ($fila['diferencia_flash'] ?? 0), 2, ',', '.') }}</td>
+                <td class="num">{{ number_format((float) ($fila['diferencia_venta_asientos'] ?? 0), 2, ',', '.') }}</td>
             </tr>
-        </thead>
-        <tbody>
-            @forelse ($filas as $fila)
-                @php
-                    $esTotal = ($fila['tipo'] ?? '') === 'total_dia';
-                @endphp
-                <tr class="{{ $esTotal ? 'total-dia' : '' }}">
-                    <td>{{ $fila['fecha_jornada_fmt'] ?? '' }}</td>
-                    <td>{{ $fila['estado'] ?? '' }}</td>
-                    <td>{{ $fila['pv_label'] ?? '' }}</td>
-                    <td class="num">{{ (int) ($fila['cantidad'] ?? 0) }}</td>
-                    <td class="num">{{ number_format((float) ($fila['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) ($fila['total_invitaciones'] ?? 0), 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) ($fila['total_facturacion'] ?? 0), 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) ($fila['total_notas_credito'] ?? 0), 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) ($fila['total_ventas_brutas'] ?? 0), 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) ($fila['total_asientos_debe'] ?? 0), 2, ',', '.') }}</td>
-                    <td class="num">
-                        @if ($fila['total_flash_estac'] !== null)
-                            {{ number_format((float) $fila['total_flash_estac'], 2, ',', '.') }}
-                        @else
-                            —
-                        @endif
-                    </td>
-                    <td class="num">
-                        @if ($fila['diferencia_flash'] !== null)
-                            {{ number_format((float) $fila['diferencia_flash'], 2, ',', '.') }}
-                        @else
-                            —
-                        @endif
-                    </td>
-                    <td class="num">
-                        @if ($fila['diferencia_venta_asientos'] !== null)
-                            {{ number_format((float) $fila['diferencia_venta_asientos'], 2, ',', '.') }}
-                        @else
-                            —
-                        @endif
-                    </td>
-                </tr>
-            @empty
-                <tr>
-                    <td colspan="{{ $colspan }}">Sin datos</td>
-                </tr>
-            @endforelse
-        </tbody>
-    </table>
+        @empty
+            <tr>
+                <td colspan="{{ $colspan }}" style="text-align:center;">Sin actividad</td>
+            </tr>
+        @endforelse
+    </tbody>
+    @if (count($filas) > 0)
+        <tfoot>
+            <tr style="background-color:#d6eaf8;font-weight:bold;">
+                <td>Totales ({{ count($filas) }} d&iacute;as)</td>
+                <td></td>
+                <td class="num">{{ $totRend }}</td>
+                <td class="num">{{ number_format($totFact, 2, ',', '.') }}</td>
+                <td class="num">{{ number_format($totNc, 2, ',', '.') }}</td>
+                <td class="num">{{ number_format($totVenta, 2, ',', '.') }}</td>
+                <td class="num">{{ number_format($totFlash, 2, ',', '.') }}</td>
+                <td class="num">{{ number_format($totAsientos, 2, ',', '.') }}</td>
+                <td class="num">{{ number_format($totDifFlash, 2, ',', '.') }}</td>
+                <td class="num">{{ number_format($totDifAsientos, 2, ',', '.') }}</td>
+            </tr>
+        </tfoot>
+    @endif
+</table>
 </body>
 </html>

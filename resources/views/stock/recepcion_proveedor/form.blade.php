@@ -231,7 +231,7 @@
 <div class="form-group row">
     <label class="col-lg-2 col-form-label text-right">Fecha</label>
     <div class="col-lg-3">
-        <input type="date" name="fecha" class="form-control" required
+        <input type="date" id="fecha" name="fecha" class="form-control" required
             max="{{ date('Y-m-d') }}"
             value="{{ old('fecha', optional($recepcion->fecha ?? null)->format('Y-m-d') ?? date('Y-m-d')) }}"
             @if($soloLectura) readonly @endif>

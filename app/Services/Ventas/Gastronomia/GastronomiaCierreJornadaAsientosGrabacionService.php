@@ -12,6 +12,7 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosPreviewSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -91,8 +92,12 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
 
         $tipoAsientoId = $this->resolverTipoAsientoId();
 
+        // ctamov Anita se escribe dentro de create() y NO participa de la transacción MySQL:
+        // si algo falla después, hay que borrar en Anita lo ya insertado (evita asientos huérfanos).
+        $ctamovGrabados = [];
+
         try {
-            $grabados = DB::transaction(function () use ($payloads, $tipoAsientoId, $snapshot, $porcentaje, $fecha) {
+            $grabados = DB::transaction(function () use ($payloads, $tipoAsientoId, $snapshot, $porcentaje, $fecha, &$ctamovGrabados) {
                 $registros = [];
 
                 foreach ($payloads as $item) {
@@ -109,6 +114,11 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
                     if ($asiento === 'Error' || $asiento === null) {
                         throw new RuntimeException('Error al grabar asiento en Anita (bridge ctamov).');
                     }
+
+                    $ctamovGrabados[] = [
+                        'empresa_id' => (int) $data['empresa_id'],
+                        'numeroasiento' => (string) ($asiento->numeroasiento ?? ''),
+                    ];
 
                     $this->asientoMovimientoRepository->create($data, $asiento->id);
 
@@ -137,37 +147,65 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
 
                 return $registros;
             });
+        } catch (Throwable $e) {
+            // MySQL hizo rollback pero Anita ya tiene los ctamov: borrarlos para no dejar huérfanos.
+            $this->revertirCtamovAnita($ctamovGrabados);
 
-            $rendicionAnita = null;
-            try {
-                $rendicionAnita = app(GastronomiaCierreJornadaProcesoRendicionAnitaService::class)
-                    ->grabar($jornadaId);
-            } catch (Throwable $e) {
-                throw new RuntimeException(
-                    'Asientos grabados, pero falló la rendición Anita: '.$e->getMessage(),
-                    0,
-                    $e,
-                );
+            if ($e instanceof InvalidArgumentException) {
+                throw $e;
             }
 
-            return [
-                'ok' => true,
-                'mensaje' => 'Se grabaron '.count($grabados).' asiento(s) contable(s) del proceso'
-                    .($rendicionAnita && empty($rendicionAnita['ya_existia'])
-                        ? ' y la rendición Anita (rendgastro).'
-                        : '.'),
-                'cantidad_asientos' => count($grabados),
-                'asientos' => $grabados,
-                'rendicion_anita' => $rendicionAnita,
-            ];
-        } catch (InvalidArgumentException $e) {
-            throw $e;
-        } catch (Throwable $e) {
             throw new RuntimeException(
                 'Error al grabar asientos del proceso: '.$e->getMessage(),
                 0,
                 $e,
             );
+        }
+
+        $rendicionAnita = null;
+        try {
+            $rendicionAnita = app(GastronomiaCierreJornadaProcesoRendicionAnitaService::class)
+                ->grabar($jornadaId);
+        } catch (Throwable $e) {
+            throw new RuntimeException(
+                'Asientos grabados, pero falló la rendición Anita: '.$e->getMessage(),
+                0,
+                $e,
+            );
+        }
+
+        return [
+            'ok' => true,
+            'mensaje' => 'Se grabaron '.count($grabados).' asiento(s) contable(s) del proceso'
+                .($rendicionAnita && empty($rendicionAnita['ya_existia'])
+                    ? ' y la rendición Anita (rendgastro).'
+                    : '.'),
+            'cantidad_asientos' => count($grabados),
+            'asientos' => $grabados,
+            'rendicion_anita' => $rendicionAnita,
+        ];
+    }
+
+    /**
+     * Rollback compensatorio: elimina en Anita los ctamov de asientos que no llegaron a commitearse en ERP.
+     *
+     * @param  list<array{empresa_id: int, numeroasiento: string}>  $ctamovGrabados
+     */
+    private function revertirCtamovAnita(array $ctamovGrabados): void
+    {
+        foreach ($ctamovGrabados as $ctamov) {
+            try {
+                $this->asientoRepository->eliminarCtamovAnitaPorNumero(
+                    $ctamov['empresa_id'],
+                    $ctamov['numeroasiento'],
+                );
+            } catch (Throwable $rollbackError) {
+                Log::warning('Cierre jornada gastro: rollback ctamov Anita falló', [
+                    'empresa_id' => $ctamov['empresa_id'],
+                    'numeroasiento' => $ctamov['numeroasiento'],
+                    'mensaje' => $rollbackError->getMessage(),
+                ]);
+            }
         }
     }
 

@@ -225,7 +225,7 @@ class OrdencompraAnitaBridgeService
     {
         $oc->loadMissing([
             'empresas', 'centrocostos', 'proveedores', 'requisiciones', 'transportes',
-            'condicioncompras', 'condicionentregas',
+            'condicioncompras', 'condicionentregas', 'condicionpagos',
             'ordencompra_articulos.articulos.categorias',
             'ordencompra_articulos.articulos.impuestos',
             'ordencompra_articulos.articulos.unidadesdemedidas',

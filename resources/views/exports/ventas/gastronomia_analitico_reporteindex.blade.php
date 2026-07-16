@@ -42,6 +42,11 @@
         <th>Día</th>
     </tr>
     @foreach ($filas as $f)
+        @if (($f->tipo_fila ?? 'detalle') === 'header_empresa')
+            <tr>
+                <td colspan="24"><strong>Empresa: {{ $f->nombreempresa ?? $f->sala ?? '' }}</strong></td>
+            </tr>
+        @else
         <tr>
             <td>{{ $f->id ?? '' }}</td>
             <td>{{ $f->fecha_jornada_fmt ?? '' }}</td>
@@ -68,6 +73,7 @@
             <td>{{ $f->mes ?? '' }}</td>
             <td>{{ $f->dia ?? '' }}</td>
         </tr>
+        @endif
     @endforeach
     @if (! empty($tot))
         <tr>

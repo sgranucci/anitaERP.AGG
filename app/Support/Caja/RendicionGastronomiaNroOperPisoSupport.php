@@ -4,67 +4,59 @@ declare(strict_types=1);
 
 namespace App\Support\Caja;
 
+use App\Support\Caja\AnitaSync\RendicionRendgastroNroOperCompartidoSupport;
+
 /**
- * Rangos dedicados de rendg_nro_oper por empresa (gastronomía ERP).
+ * Piso/techo de rendg_nro_oper para gastronomía.
+ * Delega al numerador compartido 850000+ (misma semilla que estacionamiento).
+ *
+ * @deprecated Preferir RendicionRendgastroNroOperCompartidoSupport directamente.
  */
 final class RendicionGastronomiaNroOperPisoSupport
 {
+    public static function piso(): int
+    {
+        return RendicionRendgastroNroOperCompartidoSupport::piso();
+    }
+
+    public static function techo(): int
+    {
+        return RendicionRendgastroNroOperCompartidoSupport::techo();
+    }
+
+    /** @deprecated Usar piso() — ya no hay franja por empresa. */
     public static function pisoParaEmpresa(int $empresaId): int
     {
-        if ($empresaId <= 0) {
-            return 0;
-        }
+        unset($empresaId);
 
-        $mapa = config('rendicion_gastronomia_anita.nro_oper_piso_por_empresa', []);
-
-        return max(0, (int) ($mapa[$empresaId] ?? 0));
+        return self::piso();
     }
 
+    /** @deprecated Usar techo() — ya no hay franja por empresa. */
     public static function techoParaEmpresa(int $empresaId): int
     {
-        if ($empresaId <= 0) {
-            return 0;
-        }
+        unset($empresaId);
 
-        $mapa = config('rendicion_gastronomia_anita.nro_oper_techo_por_empresa', []);
-
-        return max(0, (int) ($mapa[$empresaId] ?? 0));
+        return self::techo();
     }
 
+    public static function enRango(int $nroOper): bool
+    {
+        return RendicionRendgastroNroOperCompartidoSupport::enRango($nroOper);
+    }
+
+    /** @deprecated Usar enRango() — el rango es global. */
     public static function enRangoEmpresa(int $empresaId, int $nroOper): bool
     {
-        if ($nroOper <= 0) {
-            return false;
-        }
+        unset($empresaId);
 
-        $piso = self::pisoParaEmpresa($empresaId);
-        $techo = self::techoParaEmpresa($empresaId);
-
-        if ($piso > 0 && $nroOper < $piso) {
-            return false;
-        }
-
-        if ($techo > 0 && $nroOper >= $techo) {
-            return false;
-        }
-
-        return true;
+        return self::enRango($nroOper);
     }
 
-    public static function filtroSqlAnita(int $empresaId, string $columna = 'rendg_nro_oper'): string
+    public static function filtroSqlAnita(int $empresaId = 0, string $columna = 'rendg_nro_oper'): string
     {
-        $piso = self::pisoParaEmpresa($empresaId);
-        $techo = self::techoParaEmpresa($empresaId);
-        $partes = '';
+        unset($empresaId);
 
-        if ($piso > 0) {
-            $partes .= " AND {$columna} >= '".$piso."' ";
-        }
-
-        if ($techo > 0) {
-            $partes .= " AND {$columna} < '".$techo."' ";
-        }
-
-        return $partes;
+        return RendicionRendgastroNroOperCompartidoSupport::filtroSqlAnita($columna);
     }
 }

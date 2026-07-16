@@ -213,10 +213,133 @@
             return;
         }
 
+        // Export PDF/Excel/CSV: descarga sin navegar → hay que ocultar el banner al terminar.
         if (href.toLowerCase().indexOf('listar-mayor-concepto') !== -1) {
-            mostrarProcesoOverlay(TITULO_EXPORT, SUBTITULO_EXPORT);
+            event.preventDefault();
+            event.stopPropagation();
+            descargarExportacionMayorConcepto(href);
         }
     }, true);
+
+    function nombreArchivoDesdeContentDisposition(disposition, fallback) {
+        if (! disposition) {
+            return fallback;
+        }
+        var match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(disposition);
+        if (! match) {
+            return fallback;
+        }
+        var raw = (match[1] || match[2] || match[3] || '').trim();
+        try {
+            return decodeURIComponent(raw.replace(/['"]/g, ''));
+        } catch (e) {
+            return raw.replace(/['"]/g, '') || fallback;
+        }
+    }
+
+    function dispararDescargaBlob(blob, filename) {
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'mayor_por_concepto';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.setTimeout(function () {
+            window.URL.revokeObjectURL(url);
+        }, 1500);
+    }
+
+    function descargarExportacionMayorConcepto(href) {
+        var lower = String(href).toLowerCase();
+        var formato = 'archivo';
+        if (lower.indexOf('/excel') !== -1) {
+            formato = 'Excel';
+        } else if (lower.indexOf('/pdf') !== -1) {
+            formato = 'PDF';
+        } else if (lower.indexOf('/csv') !== -1) {
+            formato = 'CSV';
+        }
+
+        mostrarProcesoOverlay(
+            TITULO_EXPORT,
+            'Generando ' + formato + '… Puede tardar según el volumen. No cierre la página.'
+        );
+
+        if (window.__mayorConceptoExportAbort) {
+            try { window.__mayorConceptoExportAbort.abort(); } catch (e) {}
+        }
+        var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        window.__mayorConceptoExportAbort = controller;
+
+        // Red de seguridad: si el fetch queda colgado, no dejar el banner eterno.
+        if (window.__mayorConceptoExportSafetyTimer) {
+            clearTimeout(window.__mayorConceptoExportSafetyTimer);
+        }
+        window.__mayorConceptoExportSafetyTimer = setTimeout(function () {
+            ocultarProcesoOverlay();
+        }, 600000);
+
+        fetch(href, {
+            method: 'GET',
+            credentials: 'same-origin',
+            signal: controller ? controller.signal : undefined,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': '*/*',
+            },
+        }).then(function (res) {
+            if (res.status === 419) {
+                throw new Error('Sesión expirada. Recargue la página (F5) e intente de nuevo.');
+            }
+            if (res.redirected && res.url && res.url.indexOf('listar-mayor-concepto') === -1) {
+                // Redirect al index (filtros incompletos / sin formato): salir sin archivo.
+                throw new Error('No se pudo generar la exportación. Verifique los filtros y vuelva a consultar.');
+            }
+            if (! res.ok) {
+                throw new Error('Error HTTP ' + res.status + ' al exportar.');
+            }
+            var fallback = 'mayor_por_concepto';
+            if (formato === 'Excel') {
+                fallback += '.xlsx';
+            } else if (formato === 'PDF') {
+                fallback += '.pdf';
+            } else if (formato === 'CSV') {
+                fallback += '.csv';
+            }
+            var filename = nombreArchivoDesdeContentDisposition(
+                res.headers.get('Content-Disposition'),
+                fallback
+            );
+            return res.blob().then(function (blob) {
+                return { blob: blob, filename: filename };
+            });
+        }).then(function (pack) {
+            if (! pack || ! pack.blob || pack.blob.size === 0) {
+                throw new Error('La exportación vino vacía. Reintente.');
+            }
+            // Si el servidor devolvió HTML de error/login, no descargar basura.
+            if (pack.blob.type && pack.blob.type.indexOf('text/html') !== -1) {
+                throw new Error('La sesión o el permiso fallaron al exportar. Recargue e intente de nuevo.');
+            }
+            dispararDescargaBlob(pack.blob, pack.filename);
+            ocultarProcesoOverlay();
+        }).catch(function (err) {
+            if (err && err.name === 'AbortError') {
+                ocultarProcesoOverlay();
+                return;
+            }
+            ocultarProcesoOverlay();
+            window.alert(err && err.message ? err.message : 'No se pudo descargar la exportación.');
+        }).finally(function () {
+            if (window.__mayorConceptoExportSafetyTimer) {
+                clearTimeout(window.__mayorConceptoExportSafetyTimer);
+                window.__mayorConceptoExportSafetyTimer = null;
+            }
+            window.__mayorConceptoExportAbort = null;
+        });
+    }
 
     window.addEventListener('pageshow', function () {
         ocultarProcesoOverlay();
@@ -262,6 +385,100 @@
             // ignorar enlaces mal formados
         }
     }
+
+    function actualizarFormatoExcelEnEnlaces(formato) {
+        document.querySelectorAll('#mayor-concepto-exportar a').forEach(function (enlace) {
+            if (! enlace || ! enlace.href) {
+                return;
+            }
+            try {
+                var url = new URL(enlace.href, window.location.origin);
+                if (formato === 'intl') {
+                    url.searchParams.set('excel_formato_numero', 'intl');
+                } else {
+                    url.searchParams.delete('excel_formato_numero');
+                }
+                enlace.href = url.toString();
+            } catch (e) {
+                // ignorar
+            }
+        });
+    }
+
+    function marcarBotonesFormatoExcel(formato) {
+        var btnAr = document.getElementById('btn-excel-formato-ar');
+        var btnIntl = document.getElementById('btn-excel-formato-intl');
+        if (btnAr) {
+            btnAr.classList.toggle('btn-secondary', formato === 'ar');
+            btnAr.classList.toggle('btn-outline-secondary', formato !== 'ar');
+        }
+        if (btnIntl) {
+            btnIntl.classList.toggle('btn-secondary', formato === 'intl');
+            btnIntl.classList.toggle('btn-outline-secondary', formato !== 'intl');
+        }
+    }
+
+    window.cambiarFormatoExcelNumero = function (formato) {
+        formato = formato === 'intl' ? 'intl' : 'ar';
+        var input = document.getElementById('excel_formato_numero');
+        if (input) {
+            input.value = formato;
+        }
+        marcarBotonesFormatoExcel(formato);
+        actualizarFormatoExcelEnEnlaces(formato);
+        try {
+            var urlActual = new URL(window.location.href);
+            if (formato === 'intl') {
+                urlActual.searchParams.set('excel_formato_numero', 'intl');
+            } else {
+                urlActual.searchParams.delete('excel_formato_numero');
+            }
+            window.history.replaceState({}, '', urlActual.toString());
+        } catch (e) {
+            // ignorar
+        }
+        try {
+            window.localStorage.setItem('mayor_concepto_excel_formato_numero', formato);
+        } catch (e) {
+            // ignorar
+        }
+    };
+
+    document.addEventListener('click', function (event) {
+        var btn = event.target && event.target.closest
+            ? event.target.closest('#btn-excel-formato-ar, #btn-excel-formato-intl')
+            : null;
+        if (! btn) {
+            return;
+        }
+        event.preventDefault();
+        window.cambiarFormatoExcelNumero(btn.getAttribute('data-formato') || 'ar');
+    });
+
+    // Preferir query/localStorage al cargar (sin invalidar cache del reporte).
+    (function initFormatoExcel() {
+        var actual = 'ar';
+        var input = document.getElementById('excel_formato_numero');
+        if (input && input.value) {
+            actual = input.value === 'intl' ? 'intl' : 'ar';
+        }
+        try {
+            var url = new URL(window.location.href);
+            if (url.searchParams.get('excel_formato_numero') === 'intl') {
+                actual = 'intl';
+            } else if (url.searchParams.has('excel_formato_numero')) {
+                actual = 'ar';
+            } else {
+                var ls = window.localStorage.getItem('mayor_concepto_excel_formato_numero');
+                if (ls === 'intl' || ls === 'ar') {
+                    actual = ls;
+                }
+            }
+        } catch (e) {
+            // ignorar
+        }
+        window.cambiarFormatoExcelNumero(actual);
+    })();
 
     window.cambiarAgrupacionResumen = function (modo) {
         var input = document.getElementById('agrupacion_resumen');
@@ -422,6 +639,8 @@
 
                     <input type="hidden" name="agrupacion_resumen" id="agrupacion_resumen"
                         value="{{ $filtros['agrupacion_resumen'] ?? 'concepto_cuenta' }}">
+                    <input type="hidden" name="excel_formato_numero" id="excel_formato_numero"
+                        value="{{ \App\Support\Contable\MayorConceptoExcelFormatoNumero::normalizar($filtros['excel_formato_numero'] ?? 'ar') }}">
 
                     <div class="form-group row mb-0 mt-3">
                         <div class="col-lg-2"></div>
@@ -476,11 +695,36 @@
                     </div>
 
                     <div class="d-flex flex-wrap align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
-                        <div class="mb-1 mb-md-0" id="mayor-concepto-exportar">
+                        <div class="mb-1 mb-md-0 d-flex flex-wrap align-items-center" id="mayor-concepto-exportar">
                             @include('includes.exportar-tabla-queryparams', [
                                 'ruta' => 'listar_mayor_concepto',
                                 'queryparams' => $filtrosQuery ?? [],
                             ])
+                            @php
+                                $formatoExcelUi = \App\Support\Contable\MayorConceptoExcelFormatoNumero::normalizar(
+                                    $filtros['excel_formato_numero'] ?? 'ar'
+                                );
+                            @endphp
+                            <div class="ml-2 d-inline-flex align-items-center small text-muted"
+                                 title="Formato de n&uacute;meros al exportar Excel/CSV">
+                                <span class="mr-1">N&uacute;m.</span>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Formato num&eacute;rico Excel">
+                                    <button type="button"
+                                        id="btn-excel-formato-ar"
+                                        class="btn {{ $formatoExcelUi === 'ar' ? 'btn-secondary' : 'btn-outline-secondary' }}"
+                                        data-formato="ar"
+                                        title="Argentina: 1.234,56">
+                                        AR
+                                    </button>
+                                    <button type="button"
+                                        id="btn-excel-formato-intl"
+                                        class="btn {{ $formatoExcelUi === 'intl' ? 'btn-secondary' : 'btn-outline-secondary' }}"
+                                        data-formato="intl"
+                                        title="Internacional: 1,234.56">
+                                        INTL
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                         <div class="small mb-1 mb-md-0 text-md-right">
                             @php
@@ -548,6 +792,14 @@
                         #tabla-mayor-concepto thead th { font-weight: 600; border-color: #7fb3d5; }
                         #tabla-mayor-concepto tbody tr.fila-total-cuenta { background-color: #e9ecef !important; }
                         #tabla-mayor-concepto tbody tr.fila-total-concepto { background-color: #ced4da !important; }
+                        #tabla-mayor-concepto a.text-primary {
+                            color: #007bff !important;
+                            font-weight: 600;
+                            text-decoration: underline;
+                        }
+                        #tabla-mayor-concepto a.text-primary:hover {
+                            color: #0056b3 !important;
+                        }
                     </style>
                     <div class="table-responsive">
                         <table id="tabla-mayor-concepto" class="table table-striped table-bordered table-hover table-sm mb-0" style="font-size: 0.8rem;">
@@ -557,6 +809,7 @@
                                 'puede_ver_asiento' => $puede_ver_asiento ?? false,
                                 'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                                 'puede_ver_concepto' => $puede_ver_concepto ?? false,
+                                'puede_ver_ordencompra' => $puede_ver_ordencompra ?? false,
                             ])
                         </table>
                     </div>

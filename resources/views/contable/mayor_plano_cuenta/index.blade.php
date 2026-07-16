@@ -128,50 +128,12 @@
                         </div>
                     </div>
 
-                    <div class="form-group row">
-                        <label class="col-lg-2 control-label">Rango cuentas</label>
-                        <div class="col-lg-9">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <label class="small text-muted mb-1" for="cuenta_desde_codigo">Desde</label>
-                                    <div class="mpc-cuenta-campo mpc-cuenta-inline" data-campo="desde">
-                                        <div class="input-group input-group-sm">
-                                            <input type="text" name="cuenta_desde" id="cuenta_desde_codigo"
-                                                class="form-control codigocuentacontable mpc-cuenta-codigo-input"
-                                                placeholder="111010-001" autocomplete="off"
-                                                value="{{ $cuenta_desde_meta['codigo'] ?? '' }}">
-                                            <input type="text" class="form-control nombrecuentacontable mpc-cuenta-nombre-input" readonly
-                                                placeholder="Nombre cuenta" value="{{ $cuenta_desde_meta['nombre'] ?? '' }}">
-                                            <div class="input-group-append">
-                                                <button type="button" title="Consulta cuentas" class="btn btn-outline-secondary consultacuentacontable tooltipsC">
-                                                    <i class="fa fa-search"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="small text-muted mb-1" for="cuenta_hasta_codigo">Hasta</label>
-                                    <div class="mpc-cuenta-campo mpc-cuenta-inline" data-campo="hasta">
-                                        <div class="input-group input-group-sm">
-                                            <input type="text" name="cuenta_hasta" id="cuenta_hasta_codigo"
-                                                class="form-control codigocuentacontable mpc-cuenta-codigo-input"
-                                                placeholder="111010-999 (vacío = todas)" autocomplete="off"
-                                                value="{{ $cuenta_hasta_meta['codigo'] ?? '' }}">
-                                            <input type="text" class="form-control nombrecuentacontable mpc-cuenta-nombre-input" readonly
-                                                placeholder="Nombre cuenta" value="{{ $cuenta_hasta_meta['nombre'] ?? '' }}">
-                                            <div class="input-group-append">
-                                                <button type="button" title="Consulta cuentas" class="btn btn-outline-secondary consultacuentacontable tooltipsC">
-                                                    <i class="fa fa-search"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <small class="text-muted">Vacío en ambos = todas las cuentas con movimiento. La consulta usa la primera empresa seleccionada.</small>
-                        </div>
-                    </div>
+                    @include('contable.mayor_plano_cuenta.partials.campo_consulta_cuentas', [
+                        'filtros' => $filtros ?? [],
+                        'cuentas_iniciales' => $cuentas_iniciales ?? [],
+                        'cuenta_desde_meta' => $cuenta_desde_meta ?? ['codigo' => '', 'nombre' => ''],
+                        'cuenta_hasta_meta' => $cuenta_hasta_meta ?? ['codigo' => '', 'nombre' => ''],
+                    ])
 
                     <div class="form-group row">
                         <label for="modo_inclusion_asientos" class="col-lg-2 control-label">Asientos cierre</label>

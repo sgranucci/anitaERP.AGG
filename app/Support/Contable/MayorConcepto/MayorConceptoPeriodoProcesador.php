@@ -4500,6 +4500,46 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
+     * Neto Debe − Haber de contrapartidas imputables (sin disp ni 113xxx).
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function totalNetoContrapartidasProrrateables(array $lineasOp, bool $soloVisibleMultilinea): float
+    {
+        $debe = 0.0;
+        $haber = 0.0;
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($cuenta <= 0 || $importe <= 0) {
+                continue;
+            }
+
+            if ($this->motor->esDisponibilidad($cuenta)) {
+                continue;
+            }
+
+            if ($this->motor->esCuentaCreditoComercialDisp($cuenta)) {
+                continue;
+            }
+
+            if ($soloVisibleMultilinea && ! $this->esCuentaVisibleAsientoMultilinea($cuenta)) {
+                continue;
+            }
+
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if ($mov === 'D') {
+                $debe += $importe;
+            } elseif ($mov === 'H') {
+                $haber += $importe;
+            }
+        }
+
+        return round($debe - $haber, 2);
+    }
+
+    /**
      * Prorratea contrapartidas al neto de caja/banco dentro del rango analítico cuando hay
      * movimiento en cuentas de disponibilidad excluidas del export (113xxx, disp > límite).
      *
@@ -4525,8 +4565,16 @@ class MayorConceptoPeriodoProcesador
 
         // Solo imputaciones tipo pago: contrapartida ≈ caja analítica + crédito comercial excluido.
         if (abs($totalContra - $dispCompleto) > 0.05) {
+            // Venta máquinas con piernas fuera del límite (113/114…): el factor se ancla
+            // solo al neto ≤ límite vs neto de contrapartidas visibles, sin mezclar el 113
+            // (sobre el límite) en el denominador.
             if ($dispExcluido > 0 && $this->esAsientoCtamovVentaMaquinas($lineasOp)) {
-                return round($dispAnalitico / $dispCompleto, 8);
+                $netoContra = abs($this->totalNetoContrapartidasProrrateables($lineasOp, $soloVisibleMultilinea));
+                if ($netoContra > 0.05) {
+                    return round($dispAnalitico / $netoContra, 8);
+                }
+
+                return 1.0;
             }
 
             return 1.0;

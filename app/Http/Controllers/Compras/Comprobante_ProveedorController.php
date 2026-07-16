@@ -17,8 +17,10 @@ use App\Services\Compras\ComprobanteProveedorRecepcionesSupport;
 use App\Services\Compras\ComprobanteProveedorComLegajoResolucionService;
 use App\Services\Compras\ComprobanteProveedorContabilizarService;
 use App\Services\Compras\ComprobanteProveedorAsientoService;
+use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -51,6 +53,7 @@ class Comprobante_ProveedorController extends Controller
         private ComprobanteProveedorAsientoPreviewSupport $asientoPreviewSupport,
         private PrecargaProveedorNumeroOcSupport $numeroOcSupport,
         private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
+        private CotizacionQueryInterface $cotizacionQuery,
     ) {}
 
     public function index(Request $request)
@@ -207,6 +210,37 @@ class Comprobante_ProveedorController extends Controller
         return redirect()
             ->route('editar_comprobante_proveedor', ['id' => $id, 'solapa' => 'asiento'])
             ->with('mensaje', 'Comprobante de proveedor actualizado.');
+    }
+
+    /**
+     * Cotización venta del día (tabla cotización / cron BNA) para moneda y fecha de comprobante.
+     */
+    public function apiCotizacionMonedaFecha(Request $request): JsonResponse
+    {
+        if (! can('crear-comprobante-proveedor', false)
+            && ! can('editar-comprobante-proveedor', false)
+            && ! can('actualizar-comprobante-proveedor', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        $request->validate([
+            'fecha' => 'required|date',
+            'moneda_id' => 'required|integer|exists:moneda,id',
+        ]);
+
+        $fecha = substr((string) $request->query('fecha'), 0, 10);
+        $monedaId = (int) $request->query('moneda_id');
+        $cot = ComprobanteProveedorCotizacionSupport::resolverParaMonedaYFecha(
+            $this->cotizacionQuery,
+            $fecha,
+            $monedaId
+        );
+
+        return response()->json([
+            'cotizacion' => $cot,
+            'moneda_id' => $monedaId,
+            'fecha' => $fecha,
+        ]);
     }
 
     public function previewAsientoContable(Request $request, ?int $id = null): JsonResponse

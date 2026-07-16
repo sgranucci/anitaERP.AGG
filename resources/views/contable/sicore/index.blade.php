@@ -106,6 +106,15 @@
         </div>
 
         @if ($consultado && $resultado)
+            @if (can('exportar-sicore', false))
+                <div class="mb-2">
+                    @include('includes.exportar-tabla-queryparams', [
+                        'ruta' => 'listar_sicore',
+                        'queryparams' => $filtrosQuery,
+                    ])
+                </div>
+            @endif
+
             @include('contable.sicore.partials.conciliacion', [
                 'conciliacion' => $resultado['conciliacion'] ?? [],
                 'periodo_texto' => $periodo_texto ?? '',

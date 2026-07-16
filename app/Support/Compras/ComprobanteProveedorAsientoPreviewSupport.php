@@ -64,7 +64,9 @@ final class ComprobanteProveedorAsientoPreviewSupport
         $ocId = (int) ($comprobante->ordencompra_id ?? 0);
         $comprobante->setRelation(
             'ordencompras',
-            $ocId > 0 ? Ordencompra::query()->find($ocId) : null
+            $ocId > 0
+                ? Ordencompra::query()->with('ordencompra_articulos')->find($ocId)
+                : null
         );
 
         $comprobante->setRelation(
@@ -88,18 +90,31 @@ final class ComprobanteProveedorAsientoPreviewSupport
         $avisos = [];
         $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
 
-        $cuentaProveedor = (int) ($comprobante->proveedores?->cuentacontable_id
-            ?? $comprobante->proveedores?->cuentacontablecompra_id
-            ?? 0);
+        // MN/ME: OC si hay; sin OC → moneda del comprobante.
+        $resMoneda = ProveedorCuentaContableMonedaSupport::resolverMonedaParaCuentaProveedor($comprobante);
+        $monedaCuentaId = (int) $resMoneda['moneda_id'];
+        $origenMoneda = ProveedorCuentaContableMonedaSupport::etiquetaOrigenMoneda($resMoneda['origen']);
+        $cuentaProveedor = ProveedorCuentaContableMonedaSupport::cuentaProveedorId(
+            $comprobante->proveedores,
+            $monedaCuentaId
+        );
         if ((int) ($comprobante->proveedor_id ?? 0) <= 0) {
             $avisos[] = [
                 'tipo' => 'proveedor_sin_seleccionar',
                 'mensaje' => 'Seleccione un proveedor con cuenta contable de proveedores.',
             ];
+        } elseif (ProveedorCuentaContableMonedaSupport::esMonedaExtranjera($monedaCuentaId)
+            && (int) ($comprobante->proveedores?->cuentacontableme_id ?? 0) <= 0) {
+            $avisos[] = [
+                'tipo' => 'proveedor_sin_cuenta_me',
+                'mensaje' => 'El proveedor no tiene cuenta contable de proveedores moneda extranjera (m/e) según '.$origenMoneda.'.',
+            ];
         } elseif ($cuentaProveedor <= 0) {
             $avisos[] = [
                 'tipo' => 'proveedor_sin_cuenta',
-                'mensaje' => 'El proveedor no tiene cuenta contable de proveedores (haber del asiento).',
+                'mensaje' => 'El proveedor no tiene cuenta contable de '
+                    .ProveedorCuentaContableMonedaSupport::etiquetaCuentaEsperada($monedaCuentaId)
+                    .' según '.$origenMoneda.' (haber del asiento).',
             ];
         }
 

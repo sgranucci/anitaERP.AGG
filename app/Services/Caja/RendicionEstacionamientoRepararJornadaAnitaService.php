@@ -6,16 +6,19 @@ use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaRendgastroSupport;
+use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaTotalZPorPcService;
+use App\Support\Caja\AnitaSync\RendicionEstacionamientoCabeceraAnitaMapper;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Repara rendg_total_z, rendg_tot_nc y rendvalor (neto por medio) en Anita por fecha de jornada, empresa y PV CAE.
+ * Repara rendg_total_z, rendg_tot_nc y rendvalor (neto por medio) en Anita por fecha de jornada.
  *
- * Portadora del Z/NC del día: secuencia de turno N → T → M (no depende del orden de carga en caja).
- * Si hay varias cabeceras del mismo turno, desempate por hora y nro_oper.
+ * 1) Por PV CAE: portadora N→T→M, Z/NC/X y rendvalor.
+ * 2) Por PC: Z del día = CAE + CAEA compartido (20/31/30) vía TotalZPorPcService.
+ * 3) Desglose CAEA: rendg_tot_fc_caea / tot_nc_caea / suc_caea por host originador.
  */
 final class RendicionEstacionamientoRepararJornadaAnitaService
 {
@@ -23,6 +26,7 @@ final class RendicionEstacionamientoRepararJornadaAnitaService
         private readonly RendicionEstacionamientoAnitaSyncService $anitaSyncService,
         private readonly RendicionEstacionamientoAnitaRendgastroSupport $rendgastroSupport,
         private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroGastroSupport,
+        private readonly RendicionEstacionamientoAnitaTotalZPorPcService $totalZPorPcService,
     ) {
     }
 
@@ -60,6 +64,12 @@ final class RendicionEstacionamientoRepararJornadaAnitaService
             );
         }
 
+        // Sin filtro de un solo PV: Z por PC (incluye CAEA 20/31/30) + desglose CAEA en cabecera.
+        if ($codigoPuntoventaFiltro === null || trim($codigoPuntoventaFiltro) === '') {
+            $caea = $this->aplicarTotalesPorPcYCaea($jornada, $dryRun);
+            $resultados[] = $caea;
+        }
+
         return $resultados;
     }
 
@@ -95,6 +105,87 @@ final class RendicionEstacionamientoRepararJornadaAnitaService
         }
 
         return $resultados;
+    }
+
+    /**
+     * Z/NC del día por identificador_pc (CAE+CAEA) y campos rendg_*_caea por turno.
+     *
+     * @return array<string, mixed>
+     */
+    private function aplicarTotalesPorPcYCaea(JornadaEstacionamiento $jornada, bool $dryRun): array
+    {
+        $rendiciones = RendicionEstacionamientoCaja::query()
+            ->where('tipo', RendicionEstacionamientoCaja::TIPO_TURNO)
+            ->where('empresa_id', (int) $jornada->empresa_id)
+            ->whereHas('turnoOperativo', fn ($q) => $q->where('jornada_estacionamiento_id', (int) $jornada->id))
+            ->with(['puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada'])
+            ->get();
+
+        $porPc = [];
+        $caeaActualizados = 0;
+
+        foreach ($rendiciones as $rendicion) {
+            $pc = trim((string) ($rendicion->turnoOperativo?->identificador_pc ?? ''));
+            if ($pc !== '') {
+                $porPc[$pc] = ($porPc[$pc] ?? 0) + 1;
+            }
+
+            if ($dryRun) {
+                continue;
+            }
+
+            $nroOper = (int) ($rendicion->nro_oper_anita
+                ?? RendicionEstacionamientoCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
+            if ($nroOper <= 0) {
+                continue;
+            }
+
+            $this->anitaSyncService->reaplicarCamposCaeaEnAnita($rendicion);
+            $caeaActualizados++;
+        }
+
+        if (! $dryRun) {
+            $this->totalZPorPcService->aplicarForzado($jornada);
+        }
+
+        $detallePc = [];
+        $empresaId = (int) $jornada->empresa_id;
+        $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d')
+            ?? $jornada->cierre_en?->format('Y-m-d')
+            ?? '';
+        foreach (array_keys($porPc) as $pc) {
+            $detallePc[] = [
+                'host' => $pc,
+                'rendiciones' => $porPc[$pc],
+                'z_dia_pc' => $fechaJornada !== ''
+                    ? EstacionamientoTurnoOperativoTotalesSupport::totalFacturasSinNotasCredito(
+                        $pc,
+                        $empresaId,
+                        $fechaJornada,
+                    )
+                    : null,
+                'nc_dia_pc' => $fechaJornada !== ''
+                    ? EstacionamientoTurnoOperativoTotalesSupport::totalNotasCreditoPorPc(
+                        $pc,
+                        $empresaId,
+                        $fechaJornada,
+                    )
+                    : null,
+            ];
+        }
+
+        return [
+            'puntoventa' => 'POR_PC+CAEA',
+            'sucursal' => 0,
+            'estado' => $dryRun ? 'simulado_pc_caea' : 'actualizado_pc_caea',
+            'total_z' => null,
+            'tot_nc' => null,
+            'portadora_nro_oper' => null,
+            'cabeceras' => $rendiciones->count(),
+            'hosts_pc' => count($porPc),
+            'caea_campos_actualizados' => $dryRun ? 0 : $caeaActualizados,
+            'detalle_pc' => $detallePc,
+        ];
     }
 
     /**
@@ -215,16 +306,33 @@ final class RendicionEstacionamientoRepararJornadaAnitaService
         array $cabeceras,
         int $portadoraNro,
     ): array {
+        unset($portadoraNro);
+
         $ncCabeceras = 0.0;
         foreach ($cabeceras as $fila) {
             $ncCabeceras += round((float) ($fila->rendg_tot_nc ?? 0), 2);
         }
-        $ncErp = EstacionamientoTurnoOperativoTotalesSupport::totalNotasCreditoPorPuntoventa(
+        $erpZ = EstacionamientoTurnoOperativoTotalesSupport::totalFacturasSinNotasCreditoPorPuntoventa(
             (int) $pv->id,
             $empresaId,
             $fechaJornada,
         );
-        $nc = round(max($ncCabeceras, $ncErp), 2);
+        $erpNc = EstacionamientoTurnoOperativoTotalesSupport::totalNotasCreditoPorPuntoventa(
+            (int) $pv->id,
+            $empresaId,
+            $fechaJornada,
+        );
+        $nc = round(max($ncCabeceras, $erpNc), 2);
+
+        // Preferir Z/NC del ERP (misma fuente que la auditoría). Fallback a suma rendg_total_x.
+        if ($erpZ > 0.005 || $erpNc > 0.005) {
+            return [
+                'z' => $erpZ,
+                'nc' => $nc,
+                'origen' => 'erp',
+            ];
+        }
+
         $totales = $this->rendgastroSupport->totalesZPortadoraParaCierre($cabeceras, $nc);
 
         return [

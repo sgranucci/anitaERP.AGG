@@ -1,0 +1,41 @@
+@php
+    $index = $index ?? 1;
+    $usuario = $fila->usuarios ?? null;
+    $usuarioId = $fila->usuario_id ?? '';
+    $codigoUsuario = $usuario->usuario ?? '';
+    $nombreUsuario = $usuario->nombre ?? '';
+@endphp
+<tr class="item-concepto-usuario">
+    <td>
+        <input type="text" class="form-control form-control-sm iiconcepto_usuario" readonly value="{{ $index }}"/>
+    </td>
+    <td>
+        <input type="number" min="1" class="form-control form-control-sm nivel" name="niveles[]"
+               value="{{ $fila->nivel ?? $index }}"/>
+    </td>
+    <td>
+        <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
+            <input type="hidden" class="usuario_id_arbol" name="usuario_ids[]" value="{{ $usuarioId }}">
+            <input type="hidden" class="usuario_id_previa" name="usuario_id_previa[]" value="{{ $usuarioId }}">
+            <input type="text" style="flex: 0 0 110px; width: 110px; height: 38px;"
+                   class="usuario_codigo_arbol form-control" value="{{ $codigoUsuario }}"
+                   placeholder="C&oacute;digo" autocomplete="off">
+            <button type="button" title="Consulta usuarios" style="padding:1; flex: 0 0 auto;"
+                    class="btn-accion-tabla consultausuario tooltipsC">
+                <i class="fa fa-search text-primary"></i>
+            </button>
+            <input type="text" style="flex: 1 1 auto; min-width: 0; height: 38px;"
+                   class="nombreusuario form-control" name="nombreusuarios[]"
+                   value="{{ $nombreUsuario }}" placeholder="(opcional)">
+        </div>
+    </td>
+    <td>
+        <input type="number" step="0.01" min="0" class="form-control form-control-sm desdemonto"
+               name="desdemontos[]" value="{{ $fila->desde_monto ?? '0' }}">
+    </td>
+    <td class="text-center">
+        <button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar_concepto_usuario tooltipsC">
+            <i class="fa fa-times-circle text-danger"></i>
+        </button>
+    </td>
+</tr>

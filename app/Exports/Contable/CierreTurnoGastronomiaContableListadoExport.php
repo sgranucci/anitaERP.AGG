@@ -1,0 +1,135 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Exports\Contable;
+
+use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Contable\CierreTurnoGastronomiaContableListadoFiltros;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
+use Maatwebsite\Excel\Concerns\FromView;
+use Maatwebsite\Excel\Concerns\WithColumnWidths;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+
+class CierreTurnoGastronomiaContableListadoExport implements FromView, WithColumnWidths, WithEvents, WithStyles, WithTitle
+{
+    private const COL_ULTIMA = 'J';
+
+    private bool $hayFilaLogos = false;
+
+    private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
+
+    private int $filaCabecerasExcel = 3;
+
+    private int $filaPrimeraDatosExcel = 4;
+
+    /** @var list<string> */
+    private array $rutasLogosExcel = [];
+
+    private string $subtituloFiltros = '';
+
+    /**
+     * @param  Collection<int, object>  $filas
+     * @param  array<string, mixed>  $filtros
+     */
+    public function __construct(
+        private Collection $filas,
+        private array $filtros = [],
+    ) {
+        $this->subtituloFiltros = CierreTurnoGastronomiaContableListadoFiltros::textoCabeceraExport($this->filtros);
+    }
+
+    public function view(): View
+    {
+        $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($this->filas);
+        $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
+        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
+        $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+        $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
+        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+
+        return view('contable.cierre_turno_gastronomia.listado', [
+            'filas' => $this->filas,
+            'esExcel' => true,
+            'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'subtituloFiltros' => $this->subtituloFiltros,
+        ]);
+    }
+
+    public function title(): string
+    {
+        return 'Cierres gastro';
+    }
+
+    public function columnWidths(): array
+    {
+        return [
+            'A' => 14,
+            'B' => 16,
+            'C' => 22,
+            'D' => 22,
+            'E' => 12,
+            'F' => 22,
+            'G' => 14,
+            'H' => 12,
+            'I' => 18,
+            'J' => 14,
+        ];
+    }
+
+    public function styles(Worksheet $sheet): array
+    {
+        return [];
+    }
+
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+                $col = self::COL_ULTIMA;
+
+                if ($this->hayFilaLogos) {
+                    $sheet->getRowDimension(1)->setRowHeight(54);
+                    $offsetX = 5;
+                    foreach ($this->rutasLogosExcel as $ruta) {
+                        if (! is_file($ruta)) {
+                            continue;
+                        }
+                        $drawing = new Drawing();
+                        $drawing->setPath($ruta);
+                        $drawing->setHeight(48);
+                        $drawing->setCoordinates('A1');
+                        $drawing->setOffsetX($offsetX);
+                        $drawing->setWorksheet($sheet);
+                        $offsetX += 90;
+                    }
+                }
+
+                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.$col.$this->filaTituloExcel);
+                $sheet->mergeCells('A'.$this->filaSubtituloExcel.':'.$col.$this->filaSubtituloExcel);
+                $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setName('Arial')->setSize(16)->setBold(true)->getColor()->setRGB('17202A');
+                $sheet->getStyle('A'.$this->filaSubtituloExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+                $sheet->getStyle('A'.$this->filaSubtituloExcel)->getAlignment()->setWrapText(true);
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+                $sheet->getRowDimension($this->filaSubtituloExcel)->setRowHeight(36);
+
+                $rangoCab = 'A'.$this->filaCabecerasExcel.':'.$col.$this->filaCabecerasExcel;
+                $sheet->getStyle($rangoCab)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('85C1E9');
+                $sheet->getStyle($rangoCab)->getFont()->setName('Arial')->setSize(11)->setBold(true)->getColor()->setRGB('17202A');
+                $sheet->getStyle($rangoCab)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+            },
+        ];
+    }
+}

@@ -578,6 +578,7 @@ return [
     /**
      * Tras cerrar jornada: job diferido relee Waitry vs Z congelado; documenta faltantes y mail a Tesorería.
      * No pisa el Informe Z histórico del cierre.
+     * Destinatarios = copia fija + lista por empresa_id (1 Biyemas, 2 Kandiko, 3 Rebisco).
      */
     'informe_z_transmision_faltante' => [
         'habilitado' => filter_var(
@@ -590,10 +591,40 @@ return [
             'GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_TOLERANCIA',
             env('GASTRONOMIA_CIERRE_TOTEM_INFORME_Z_TOLERANCIA', 0.02),
         )),
-        'email' => env(
-            'GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_EMAIL',
-            'gmagliolo@grupoagg.com,sergiogranucci@gmail.com',
+        /** Copia siempre (además de los de la empresa). */
+        'email_copia' => env(
+            'GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_EMAIL_COPIA',
+            'sergiogranucci@gmail.com',
         ),
+        /**
+         * Destinatarios por empresa_id (CSV por empresa).
+         *
+         * @var array<int, string>
+         */
+        'email_por_empresa' => (static function (): array {
+            $default = [
+                1 => 'bcanosa@grupoagg.com,tesoreria.biy@grupoagg.com',
+                2 => 'tesoreria.kan@grupoagg.com',
+                3 => 'tesoreria.reb@grupoagg.com',
+            ];
+            $raw = env('GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_EMAIL_POR_EMPRESA');
+            if ($raw === null || $raw === '') {
+                return $default;
+            }
+            $decoded = is_array($raw) ? $raw : json_decode((string) $raw, true);
+            if (! is_array($decoded)) {
+                return $default;
+            }
+            $map = [];
+            foreach ($decoded as $empresaId => $emails) {
+                $lista = trim((string) $emails);
+                if ($lista !== '') {
+                    $map[(int) $empresaId] = $lista;
+                }
+            }
+
+            return $map !== [] ? $map : $default;
+        })(),
         'cola' => env('GASTRONOMIA_INFORME_Z_TRANSMISION_FALTANTE_COLA', 'default'),
     ],
 

@@ -31,6 +31,14 @@
 </thead>
 <tbody>
     @forelse ($filas ?? [] as $f)
+        @if (($f->tipo_fila ?? 'detalle') === 'header_empresa')
+            <tr class="fila-header-empresa font-weight-bold" style="background-color: #d6eaf8;">
+                <td colspan="24">
+                    <i class="fa fa-building"></i>
+                    Empresa: {{ $f->nombreempresa ?? $f->sala ?? '' }}
+                </td>
+            </tr>
+        @else
         <tr>
             <td class="text-nowrap">
                 @if ($links && ($puede_ver_factura ?? false) && (int) ($f->venta_id ?? 0) > 0)
@@ -170,6 +178,7 @@
             <td>{{ $f->mes ?? '—' }}</td>
             <td>{{ $f->dia ?? '—' }}</td>
         </tr>
+        @endif
     @empty
         <tr>
             <td colspan="24" class="text-center text-muted py-4">Sin movimientos para los filtros indicados.</td>

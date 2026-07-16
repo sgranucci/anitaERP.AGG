@@ -163,7 +163,8 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
 
         return response()->json([
             'puntoventa_cae' => $this->formatPuntoventaOptions(
-                (clone $puntoventaQuery)->where('modofacturacion', 'C')->get(['id', 'codigo', 'nombre'])
+                // C = CAE clásico; E = electrónico Anita/AGG (mismo camino WSFE en emisión).
+                (clone $puntoventaQuery)->whereIn('modofacturacion', ['C', 'E'])->get(['id', 'codigo', 'nombre'])
             ),
             'puntoventa_caea' => $this->formatPuntoventaOptions(
                 (clone $puntoventaQuery)->where('modofacturacion', 'A')->get(['id', 'codigo', 'nombre'])
@@ -225,7 +226,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
             ->when($empresaId !== null && $empresaId > 0, fn ($q) => $q->where('empresa_id', $empresaId))
             ->orderBy('nombre');
 
-        $puntoventa_cae_query = (clone $puntoventaQuery)->where('modofacturacion', 'C')->get();
+        $puntoventa_cae_query = (clone $puntoventaQuery)->whereIn('modofacturacion', ['C', 'E'])->get();
         $puntoventa_caea_query = (clone $puntoventaQuery)->where('modofacturacion', 'A')->get();
 
         $ubicacion_query = $this->ubicacionGastronomiaRepository->listarParaSelect($empresaId);

@@ -129,6 +129,17 @@ final class GastronomiaAnaliticoReporteFiltros
             $tipoVenta = self::TIPO_VENTA_TODOS;
         }
 
+        $empresaIds = collect($request->input('empresa_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($empresaIds === [] && (int) $request->input('empresa_id', 0) > 0) {
+            $empresaIds = [(int) $request->input('empresa_id')];
+        }
+
         return [
             'modo' => $modo,
             'campo' => $campo,
@@ -137,7 +148,9 @@ final class GastronomiaAnaliticoReporteFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
-            'empresa_id' => (int) $request->input('empresa_id', 0),
+            'empresa_ids' => $empresaIds,
+            'empresa_id' => (int) ($empresaIds[0] ?? 0),
+            'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
             'modo_periodo' => $modoPeriodo,
             'anio' => $anio,
             'mes' => $mes,
@@ -145,6 +158,40 @@ final class GastronomiaAnaliticoReporteFiltros
             'fecha_hasta' => $fechaHasta,
             'tipo_venta' => $tipoVenta,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public static function empresaIds(array $filtros): array
+    {
+        $ids = array_values(array_filter(
+            array_map('intval', $filtros['empresa_ids'] ?? []),
+            fn (int $id) => $id > 0,
+        ));
+
+        if ($ids === [] && (int) ($filtros['empresa_id'] ?? 0) > 0) {
+            return [(int) $filtros['empresa_id']];
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function esMultiempresa(array $filtros): bool
+    {
+        return count(self::empresaIds($filtros)) > 1;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function debeSepararPorEmpresa(array $filtros): bool
+    {
+        return self::esMultiempresa($filtros) && empty($filtros['consolidar_empresas']);
     }
 
     /**
@@ -183,7 +230,7 @@ final class GastronomiaAnaliticoReporteFiltros
      */
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
-        if ((int) ($filtros['empresa_id'] ?? 0) <= 0) {
+        if (self::empresaIds($filtros) === []) {
             return false;
         }
 
@@ -223,7 +270,9 @@ final class GastronomiaAnaliticoReporteFiltros
             'valor_hasta' => '',
             'busqueda' => '',
             'busqueda_rapida' => false,
+            'empresa_ids' => [],
             'empresa_id' => 0,
+            'consolidar_empresas' => true,
             'modo_periodo' => self::PERIODO_RANGO,
             'anio' => (int) date('Y'),
             'mes' => (int) date('n'),
@@ -241,8 +290,12 @@ final class GastronomiaAnaliticoReporteFiltros
     {
         $out = [];
 
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            $out['empresa_id'] = (int) $filtros['empresa_id'];
+        foreach (self::empresaIds($filtros) as $empresaId) {
+            $out['empresa_ids'][] = $empresaId;
+        }
+
+        if (empty($filtros['consolidar_empresas'])) {
+            $out['consolidar_empresas'] = 0;
         }
 
         $modoPeriodo = (string) ($filtros['modo_periodo'] ?? self::PERIODO_RANGO);

@@ -20,19 +20,17 @@ return [
     'tipo_oper' => env('RENDICION_GASTRONOMIA_ANITA_TIPO_OPER', 'F'),
 
     /**
-     * Piso de rendg_nro_oper por empresa (solo cuenta / asigna números >= piso).
-     * Evita colisión con legacy Anita / estacionamiento en secuencia baja.
+     * Numeración rendg_nro_oper: misma semilla global 850000+ que estacionamiento
+     * (config/rendicion_rendgastro_nro_oper.php). Altas nuevas; históricos 200k/300k quedan.
      */
-    'nro_oper_piso_por_empresa' => [
-        2 => (int) env('RENDICION_GASTRONOMIA_NRO_OPER_PISO_KANDIKO', 200001),
-        3 => (int) env('RENDICION_GASTRONOMIA_NRO_OPER_PISO_REBISCO', 300001),
-    ],
-
-    /** Techo exclusivo del rango por empresa (siguiente debe ser < techo). */
-    'nro_oper_techo_por_empresa' => [
-        2 => (int) env('RENDICION_GASTRONOMIA_NRO_OPER_TECHO_KANDIKO', 300000),
-        3 => (int) env('RENDICION_GASTRONOMIA_NRO_OPER_TECHO_REBISCO', 400000),
-    ],
+    'nro_oper_piso' => (int) env(
+        'RENDICION_RENDGASTRO_NRO_OPER_PISO',
+        env('RENDICION_ESTACIONAMIENTO_NRO_OPER_PISO', 850000),
+    ),
+    'nro_oper_techo' => (int) env(
+        'RENDICION_RENDGASTRO_NRO_OPER_TECHO',
+        env('RENDICION_ESTACIONAMIENTO_NRO_OPER_TECHO', 0),
+    ),
 
     /**
      * INSERT: columnas numéricas extra del DDL (además de RendicionGastronomiaRendgastroEsquema::COLUMNAS_NUMERICAS_SIN_MAPEO).

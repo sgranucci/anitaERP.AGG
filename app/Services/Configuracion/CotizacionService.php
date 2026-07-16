@@ -35,7 +35,7 @@ class CotizacionService
 			if ($cotizacion_moneda->moneda_id == $refMoneda)
 			{
 				$cotizacionVenta = $cotizacion_moneda->cotizacionventa;
-				$cotizacionCenta = $cotizacion_moneda->cotizacioncompra;
+				$cotizacionCompra = $cotizacion_moneda->cotizacioncompra;
 				$flEncontro = true;
 			}
 		}

@@ -1,6 +1,13 @@
 @php
     $colSpanExcel = (int) ($colSpanExcel ?? (($multiempresa ?? false) ? 18 : 17));
     $colSpanTotalesExcel = $colSpanExcel - 2;
+    // Resumen: Concepto/Cuenta + Nombre + Cuenta/Concepto + Desc + Líneas + Debe + Haber = 7 cols
+    $colSpanResumenMedio = max(0, $colSpanExcel - 7);
+    $formatoExcel = \App\Support\Contable\MayorConceptoExcelFormatoNumero::normalizar(
+        $excel_formato_numero ?? ($filtros['excel_formato_numero'] ?? 'ar')
+    );
+    $formatearMontoExcel = \App\Support\Contable\MayorConceptoExcelFormatoNumero::formateadorMonto($formatoExcel);
+    $formatearCotizacionExcel = \App\Support\Contable\MayorConceptoExcelFormatoNumero::formateadorMonto($formatoExcel, 4);
 @endphp
 <table>
     @if (!empty($reservarFilaLogoExcel))
@@ -17,6 +24,9 @@
                 @if (!empty($subtitulo))
                     <div style="font-size: 10pt; color: #555;">{{ $subtitulo }}</div>
                 @endif
+                <div style="font-size: 9pt; color: #777;">
+                    Formato n&uacute;meros: {{ \App\Support\Contable\MayorConceptoExcelFormatoNumero::etiqueta($formatoExcel) }}
+                </div>
             </td>
         </tr>
     </tbody>
@@ -35,22 +45,28 @@
                 <td colspan="{{ $colSpanExcel }}"><strong>{{ $tituloResumenExcel }}</strong></td>
             </tr>
             @if ($agrupacionResumen === 'cuenta_concepto')
-                <tr>
+                <tr style="background-color: #85C1E9; color: #17202A;">
                     <td><strong>Cuenta</strong></td>
                     <td><strong>Descripción cuenta</strong></td>
                     <td><strong>Concepto</strong></td>
                     <td><strong>Nombre concepto</strong></td>
-                    <td colspan="{{ $colSpanExcel - 6 }}"></td>
+                    <td style="text-align: right;"><strong>Líneas</strong></td>
+                    @if ($colSpanResumenMedio > 0)
+                        <td colspan="{{ $colSpanResumenMedio }}"></td>
+                    @endif
                     <td style="text-align: right;"><strong>Debe</strong></td>
                     <td style="text-align: right;"><strong>Haber</strong></td>
                 </tr>
             @else
-                <tr>
+                <tr style="background-color: #85C1E9; color: #17202A;">
                     <td><strong>Concepto</strong></td>
                     <td><strong>Nombre</strong></td>
                     <td><strong>Cuenta</strong></td>
                     <td><strong>Descripción cuenta</strong></td>
-                    <td colspan="{{ $colSpanExcel - 6 }}"></td>
+                    <td style="text-align: right;"><strong>Líneas</strong></td>
+                    @if ($colSpanResumenMedio > 0)
+                        <td colspan="{{ $colSpanResumenMedio }}"></td>
+                    @endif
                     <td style="text-align: right;"><strong>Debe</strong></td>
                     <td style="text-align: right;"><strong>Haber</strong></td>
                 </tr>
@@ -59,14 +75,8 @@
                 'resumen' => $datosResumenExcel,
                 'agrupacion_resumen' => $agrupacionResumen,
                 'mostrar_enlaces' => false,
-                'colspan_medio' => max(1, $colSpanExcel - 6),
-                'formatearMonto' => static function ($valor) {
-                    if ($valor === null || $valor === '' || (float) $valor === 0.0) {
-                        return '';
-                    }
-
-                    return number_format((float) $valor, 2, '.', ',');
-                },
+                'colspan_medio' => $colSpanResumenMedio,
+                'formatearMonto' => $formatearMontoExcel,
             ])
             <tr>
                 <td colspan="{{ $colSpanExcel }}">&#160;</td>
@@ -83,7 +93,11 @@
                         <td colspan="{{ $colSpanExcel }}">
                             <strong>Conciliación analítico vs concepto:</strong>
                             {{ (int) ($concExcel['asientos_cuadrados'] ?? 0) }}/{{ (int) ($concExcel['asientos_analizados'] ?? 0) }} asientos
-                            ({{ number_format((float) ($concExcel['porcentaje_cuadrado'] ?? 0), 1, ',', '.') }}%)
+                            ({{ \App\Support\Contable\MayorConceptoExcelFormatoNumero::formatear(
+                                (float) ($concExcel['porcentaje_cuadrado'] ?? 0),
+                                $formatoExcel,
+                                1
+                            ) }}%)
                             @if (! empty($concExcel['cuadra']))
                                 — OK
                             @else
@@ -101,16 +115,19 @@
     @include('contable.mayor_concepto.partials.tabla_datos', [
         'filas' => $filas,
         'multiempresa' => $multiempresa ?? false,
-        'puede_ver_asiento' => false,
-        'puede_ver_cuenta' => false,
-        'puede_ver_concepto' => false,
+        'puede_ver_asiento' => $puede_ver_asiento ?? false,
+        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
+        'puede_ver_concepto' => $puede_ver_concepto ?? false,
+        'puede_ver_ordencompra' => $puede_ver_ordencompra ?? false,
+        'formatearMonto' => $formatearMontoExcel,
+        'formatearCotizacion' => $formatearCotizacionExcel,
     ])
     @if (! empty($totales))
         <tbody>
             <tr style="background-color: #adb5bd; font-weight: bold; border-top: 2px solid #495057;">
                 <td colspan="{{ $colSpanTotalesExcel }}" style="background-color: #adb5bd;"><strong>Totales</strong></td>
-                <td style="text-align: right; background-color: #adb5bd;">{{ number_format((float) ($totales['total_debe'] ?? 0), 2, '.', ',') }}</td>
-                <td style="text-align: right; background-color: #adb5bd;">{{ number_format((float) ($totales['total_haber'] ?? 0), 2, '.', ',') }}</td>
+                <td style="text-align: right; background-color: #adb5bd;">{{ $formatearMontoExcel($totales['total_debe'] ?? 0) }}</td>
+                <td style="text-align: right; background-color: #adb5bd;">{{ $formatearMontoExcel($totales['total_haber'] ?? 0) }}</td>
             </tr>
         </tbody>
     @endif

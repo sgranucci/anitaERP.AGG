@@ -232,18 +232,37 @@
         #tabla-articulos-requisicion tbody tr.req-requisicion-linea-cerrada:hover td {
             background-color: rgba(25, 135, 84, 0.16);
         }
+        #tabla-articulos-requisicion td.req-cant-alt-celda {
+            max-width: 5.5rem;
+            vertical-align: middle;
+        }
+        #tabla-articulos-requisicion .req-cant-alt-texto {
+            display: block;
+            font-size: 0.75rem;
+            line-height: 1.2;
+            color: #495057;
+            white-space: nowrap;
+        }
+        #tabla-articulos-requisicion .req-cant-alt-texto .req-cant-alt-valor {
+            font-weight: 600;
+        }
+        #tabla-articulos-requisicion .req-cant-alt-texto .req-cant-alt-um {
+            color: #6c757d;
+            margin-left: 0.15rem;
+        }
     </style>
     <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-requisicion-moneda-default="{{ $monedaDefaultLinea }}">
         <thead>
             <tr>
-                <th style="width: 14%;">Artículo</th>
-                <th style="width: 17%;">Descripción</th>
-                <th style="width: 8%;">Cantidad</th>
-                <th style="width: 9%;">Precio unit.</th>
+                <th style="width: 13%;">Artículo</th>
+                <th style="width: 15%;">Descripción</th>
+                <th style="width: 7%;">Cantidad</th>
+                <th style="width: 6%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase)">Cant. alt.</th>
+                <th style="width: 8%;">Precio unit.</th>
                 <th style="width: 5%;">Moneda</th>
-                <th style="width: 11%;">CC destino</th>
-                <th style="width: 23%;">Partida presupuesto</th>
-                <th style="width: 23%;">Capex</th>
+                <th style="width: 10%;">CC destino</th>
+                <th style="width: 21%;">Partida presupuesto</th>
+                <th style="width: 21%;">Capex</th>
                 @if(!$lineasSoloLectura)
                 <th style="width: 4%;"></th>
                 @endif
@@ -259,10 +278,24 @@
             @php
                 $_etiqCierre = trim((string) old('precio_origen_etiqueta_linea.'.$idx, $linea->precio_origen_etiqueta ?? ''));
                 $_lineaCerrada = $_etiqCierre !== '';
+                $_artLinea = $linea->articulos;
+                $_uxenv = (float) ($_artLinea?->unidadesxenvase ?? 0);
+                $_umAltAbrev = optional($_artLinea?->unidadesdemedidasalternativas)->abreviatura ?? '';
+                $_cantLinea = (float) old('cantidades.'.$idx, $linea->cantidad ?? 1);
+                $_cantAltOld = old('cantidadalternativas.'.$idx, $linea->cantidadalternativa ?? '');
+                if ($_uxenv > 0 && $_cantLinea != 0.0) {
+                    $_cantAltCalc = $_cantLinea * $_uxenv;
+                    $_cantAltShow = rtrim(rtrim(number_format($_cantAltCalc, 4, '.', ''), '0'), '.');
+                } else {
+                    $_cantAltShow = ($_cantAltOld !== null && $_cantAltOld !== '')
+                        ? rtrim(rtrim(number_format((float) $_cantAltOld, 4, '.', ''), '0'), '.')
+                        : '';
+                }
             @endphp
             <tr class="item-requisicion-articulo{{ $_lineaCerrada ? ' req-requisicion-linea-cerrada' : '' }}"@if($_lineaCerrada) title="{{ e($_etiqCierre) }}"@endif>
                 <td>
                     <input type="hidden" class="requisicion_articulo_id" name="requisicion_articulo_ids[]" value="{{ old('requisicion_articulo_ids.'.$idx, $linea->id ?? '') }}">
+                    <input type="hidden" name="cantidadalternativas[]" class="req-cantidadalternativa" value="{{ $_cantAltShow }}">
                     <div class="form-group row celda-articulo-requisicion mb-0 d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}" >
                         <button type="button" title="Consulta art&iacute;culos (F1)" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
@@ -279,6 +312,21 @@
                 </td>
                 <td>
                     <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }}>
+                    <input type="hidden" class="req-unidadesxenvase" value="{{ $_uxenv > 0 ? $_uxenv : '' }}">
+                    <input type="hidden" class="req-um-alt-abrev" value="{{ $_umAltAbrev }}">
+                </td>
+                <td class="req-cant-alt-celda text-right px-1">
+                    <span class="req-cant-alt-texto" title="Cantidad × unidades x envase">
+                        @if ($_uxenv > 0 && $_cantAltShow !== '')
+                            <span class="req-cant-alt-valor">{{ $_cantAltShow }}</span>
+                            @if ($_umAltAbrev !== '')
+                                <span class="req-cant-alt-um">{{ $_umAltAbrev }}</span>
+                            @endif
+                        @else
+                            <span class="req-cant-alt-valor text-muted">—</span>
+                            <span class="req-cant-alt-um"></span>
+                        @endif
+                    </span>
                 </td>
                 <td>
                     <input type="number" step="0.0001" name="precios[]" class="form-control precio-linea" value="{{ old('precios.'.$idx, $linea->precio ?? '0') }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }}>

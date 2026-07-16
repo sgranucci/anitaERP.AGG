@@ -36,12 +36,17 @@ class MayorPlanoCuentaProcesador
         bool $incluyeSubdiario,
         string $modoInclusionAsientos,
         MayorConceptoMonedaConverter $monedaConverter,
+        array $cuentas = [],
     ): array {
         $empresaIds = array_values(array_filter(array_map('intval', $empresaIds), fn (int $id) => $id > 0));
         if ($empresaIds === []) {
             return $this->resultadoVacio();
         }
 
+        $cuentas = array_values(array_unique(array_filter(array_map('intval', $cuentas), fn (int $c) => $c > 0)));
+        sort($cuentas);
+
+        $t0 = microtime(true);
         $this->precargarNombres($empresaIds);
 
         $inicioEjercicio = MayorPlanoCuentaSupport::inicioEjercicio($fechaDesde);
@@ -49,16 +54,12 @@ class MayorPlanoCuentaProcesador
             $fechaDesde,
             $inicioEjercicio,
         );
-        $fechaSaldoDesde = $this->reader->resolverFechaSaldoDesde(
-            $empresaIds,
-            $fechaDesde,
-            $fechaComienzoAjustada,
-        );
         $diagSaldo = $this->reader->diagnosticarSaldoInicial(
             $empresaIds,
             $fechaDesde,
             $fechaComienzoAjustada,
         );
+        $fechaSaldoDesde = (int) ($diagSaldo['fecha_saldo_desde'] ?? MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD);
 
         $datos = $this->reader->cargarPeriodo(
             $empresaIds,
@@ -66,13 +67,36 @@ class MayorPlanoCuentaProcesador
             $fechaHasta,
             $fechaSaldoDesde,
             $incluyeSubdiario,
+            $cuentaDesde,
+            $cuentaHasta,
+            $cuentas,
         );
 
         $erroresBridge = $datos['errores'] ?? [];
-        $resolverOc = new MayorPlanoCuentaOrdencompraResolver();
-        $statsOc = $resolverOc->preparar($datos['auxpag'] ?? [], $erroresBridge);
+        $timings = $datos['timings'] ?? [];
 
-        $leyendasPago = MayorPlanoCuentaPagoLeyendaIndex::desdeFilas($datos['pago'] ?? []);
+        // pago/auxpag solo si hay OP en los movimientos (leyendas OP y nro OC).
+        // Antes se bajaba TODO el che_ban desde enero → minutos y OOM aunque filtraras 1 cuenta.
+        $pago = [];
+        $auxpag = [];
+        $cargoPagoAuxpag = false;
+        if ($this->reader->hayOrdenesPagoEnMovimientos($datos['ctamov'] ?? [], $datos['subdiario'] ?? [])) {
+            $cargoPagoAuxpag = true;
+            $extra = $this->reader->cargarPagoYAuxpagPeriodo(
+                $empresaIds,
+                $fechaDesde,
+                $fechaHasta,
+                $erroresBridge,
+            );
+            $pago = $extra['pago'] ?? [];
+            $auxpag = $extra['auxpag'] ?? [];
+            $timings = array_merge($timings, $extra['timings'] ?? []);
+        }
+
+        $resolverOc = new MayorPlanoCuentaOrdencompraResolver();
+        $statsOc = $resolverOc->preparar($auxpag, $erroresBridge);
+
+        $leyendasPago = MayorPlanoCuentaPagoLeyendaIndex::desdeFilas($pago);
 
         $movimientos = $this->normalizarMovimientos(
             $datos['ctamov'] ?? [],
@@ -85,18 +109,19 @@ class MayorPlanoCuentaProcesador
             $modoInclusionAsientos,
             $cuentaDesde,
             $cuentaHasta,
+            $cuentas,
         );
 
         $movimientos = $resolverOc->aplicarAMovimientos($movimientos);
         $statsOc['movimientos_oc_resueltos'] = $resolverOc->cantidadMovimientosResueltos();
 
-        $cuentas = $this->cuentasEnRango($movimientos, $cuentaDesde, $cuentaHasta);
+        $cuentasSeccion = $this->cuentasEnRango($movimientos, $cuentaDesde, $cuentaHasta, $cuentas);
         $secciones = [];
         $totalDebe = 0.0;
         $totalHaber = 0.0;
         $totalLineas = 0;
 
-        foreach ($cuentas as $cuenta) {
+        foreach ($cuentasSeccion as $cuenta) {
             $seccion = $this->procesarCuenta(
                 $cuenta,
                 $movimientos,
@@ -119,6 +144,19 @@ class MayorPlanoCuentaProcesador
             $totalLineas += (int) ($seccion['cantidad_lineas'] ?? 0);
         }
 
+        $timings['total_ms'] = round((microtime(true) - $t0) * 1000, 1);
+        $timings['cargo_pago_auxpag'] = $cargoPagoAuxpag;
+        \Illuminate\Support\Facades\Log::info('mayor_plano_cuenta.generar', [
+            'empresas' => $empresaIds,
+            'cuenta_desde' => $cuentaDesde,
+            'cuenta_hasta' => $cuentaHasta,
+            'cuentas' => $cuentas,
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'fecha_saldo_desde' => $fechaSaldoDesde,
+            'timings' => $timings,
+        ]);
+
         return [
             'parametros' => [
                 'empresa_ids' => $empresaIds,
@@ -130,6 +168,7 @@ class MayorPlanoCuentaProcesador
                 'saldo_inicial' => $diagSaldo,
                 'cuenta_desde' => $cuentaDesde,
                 'cuenta_hasta' => $cuentaHasta,
+                'cuentas' => $cuentas,
                 'moneda_id' => $monedaReporteId,
                 'solo_moneda_origen' => $soloMonedaOrigen,
                 'incluye_subdiario' => $incluyeSubdiario,
@@ -146,8 +185,9 @@ class MayorPlanoCuentaProcesador
             'stats' => array_merge([
                 'ctamov_filas' => count($datos['ctamov'] ?? []),
                 'subdiario_filas' => count($datos['subdiario'] ?? []),
-                'pago_filas' => count($datos['pago'] ?? []),
+                'pago_filas' => count($pago),
                 'pago_leyendas_indexadas' => $leyendasPago->cantidadClaves(),
+                'timings' => $timings,
             ], $statsOc),
         ];
     }
@@ -196,12 +236,13 @@ class MayorPlanoCuentaProcesador
         string $modoInclusionAsientos,
         int $cuentaDesde,
         int $cuentaHasta,
+        array $cuentas = [],
     ): array {
         $movs = [];
 
         foreach ($ctamov as $linea) {
             $mov = $this->desdeCtamov($linea, $leyendasPago);
-            if ($mov !== null && $this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta)) {
+            if ($mov !== null && $this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas)) {
                 $movs[] = $mov;
             }
         }
@@ -218,6 +259,7 @@ class MayorPlanoCuentaProcesador
                     $modoInclusionAsientos,
                     $cuentaDesde,
                     $cuentaHasta,
+                    $cuentas,
                 ),
             );
         }
@@ -227,6 +269,7 @@ class MayorPlanoCuentaProcesador
 
     /**
      * @param  array<string, mixed>  $mov
+     * @param  list<int>  $cuentas
      */
     private function movimientoAplica(
         array $mov,
@@ -236,16 +279,14 @@ class MayorPlanoCuentaProcesador
         string $modoInclusionAsientos,
         int $cuentaDesde,
         int $cuentaHasta,
+        array $cuentas = [],
     ): bool {
         $cuenta = (int) ($mov['cuenta'] ?? 0);
         if ($cuenta <= 0) {
             return false;
         }
 
-        if ($cuentaDesde > 0 && $cuenta < $cuentaDesde) {
-            return false;
-        }
-        if ($cuentaHasta > 0 && $cuenta > $cuentaHasta) {
+        if (! $this->cuentaEnFiltro($cuenta, $cuentaDesde, $cuentaHasta, $cuentas)) {
             return false;
         }
 
@@ -269,6 +310,36 @@ class MayorPlanoCuentaProcesador
     }
 
     /**
+     * @param  list<int>  $cuentas
+     */
+    private function cuentaEnFiltro(int $cuenta, int $cuentaDesde, int $cuentaHasta, array $cuentas): bool
+    {
+        $tieneLista = $cuentas !== [];
+        $tieneRango = $cuentaDesde > 0 || $cuentaHasta > 0;
+
+        if (! $tieneLista && ! $tieneRango) {
+            return true;
+        }
+
+        if ($tieneLista && in_array($cuenta, $cuentas, true)) {
+            return true;
+        }
+
+        if ($tieneRango) {
+            if ($cuentaDesde > 0 && $cuenta < $cuentaDesde) {
+                return false;
+            }
+            if ($cuentaHasta > 0 && $cuenta > $cuentaHasta) {
+                return false;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Subdiario l-mayor.c: dos pasadas (índice subd_cuenta y subd_contrapartida), agrupando por
      * nro_operacion + D/H; asiento = subd_nro_operacion con prefijo S al mostrar.
      *
@@ -284,6 +355,7 @@ class MayorPlanoCuentaProcesador
         string $modoInclusionAsientos,
         int $cuentaDesde,
         int $cuentaHasta,
+        array $cuentas = [],
     ): array {
         $movs = [];
 
@@ -293,7 +365,7 @@ class MayorPlanoCuentaProcesador
                 if ($mov === null) {
                     continue;
                 }
-                if ($this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta)) {
+                if ($this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas)) {
                     $movs[] = $mov;
                 }
             }
@@ -489,26 +561,24 @@ class MayorPlanoCuentaProcesador
 
     /**
      * @param  list<array<string, mixed>>  $movimientos
+     * @param  list<int>  $cuentas
      * @return list<int>
      */
-    private function cuentasEnRango(array $movimientos, int $cuentaDesde, int $cuentaHasta): array
+    private function cuentasEnRango(array $movimientos, int $cuentaDesde, int $cuentaHasta, array $cuentas = []): array
     {
-        $cuentas = [];
+        $encontradas = [];
         foreach ($movimientos as $mov) {
             $c = (int) ($mov['cuenta'] ?? 0);
             if ($c <= 0) {
                 continue;
             }
-            if ($cuentaDesde > 0 && $c < $cuentaDesde) {
+            if (! $this->cuentaEnFiltro($c, $cuentaDesde, $cuentaHasta, $cuentas)) {
                 continue;
             }
-            if ($cuentaHasta > 0 && $c > $cuentaHasta) {
-                continue;
-            }
-            $cuentas[$c] = true;
+            $encontradas[$c] = true;
         }
 
-        $lista = array_keys($cuentas);
+        $lista = array_keys($encontradas);
         sort($lista);
 
         return $lista;

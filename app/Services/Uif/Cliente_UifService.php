@@ -14,6 +14,7 @@ use App\Repositories\Uif\Puntaje_UifRepositoryInterface;
 use App\Repositories\Uif\Factorriesgo_UifRepositoryInterface;
 use App\Repositories\Uif\Frecuencia_UifRepositoryInterface;
 use App\Services\Configuracion\CotizacionService;
+use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Uif\ClienteUifFotoDocumento;
 use App\Services\Uif\ClienteUifSexoAprendizajeService;
 use App\Support\Uif\ClienteUifCamposPorDefecto;
@@ -41,6 +42,7 @@ class Cliente_UifService
 	private $frecuencia_uifRepository;
 	private $cotizacionService;
 	private $clienteUifSexoAprendizajeService;
+	private ModuloAvisoService $moduloAvisoService;
 
     public function __construct(Cliente_UifRepositoryInterface $cliente_uifrepository,
                                 Cliente_Archivo_UifRepositoryInterface $cliente_archivo_uifrepository,
@@ -53,7 +55,8 @@ class Cliente_UifService
 								Factorriesgo_UifRepositoryInterface $factorriesgo_uifrepository,
 								Frecuencia_UifRepositoryInterface $frecuencia_uifrepository,
 								CotizacionService $cotizacionservice,
-								ClienteUifSexoAprendizajeService $clienteUifSexoAprendizajeService
+								ClienteUifSexoAprendizajeService $clienteUifSexoAprendizajeService,
+								ModuloAvisoService $moduloAvisoService
 								)
     {
 		$this->cliente_uifRepository = $cliente_uifrepository;
@@ -68,6 +71,7 @@ class Cliente_UifService
 		$this->frecuencia_uifRepository = $frecuencia_uifrepository;
 		$this->cotizacionService = $cotizacionservice;
 		$this->clienteUifSexoAprendizajeService = $clienteUifSexoAprendizajeService;
+		$this->moduloAvisoService = $moduloAvisoService;
     }
 
 	public function guardaCliente_Uif($request, $origen = null)
@@ -103,6 +107,8 @@ class Cliente_UifService
 			);
 
 			DB::commit();
+
+			$this->moduloAvisoService->enviar('uif', 'cliente_alta', (int) $cliente_uif->id);
 		} catch (\Exception $e) {
 			DB::rollback();
 
@@ -110,7 +116,7 @@ class Cliente_UifService
 
 			return ['errores' => $e->getMessage()];
 		}
-        return ['mensaje' => 'ok'];
+        return ['mensaje' => 'ok', 'cliente_uif_id' => $cliente_uif->id ?? null];
 	}
 
 	// Agrega tablas asociadas

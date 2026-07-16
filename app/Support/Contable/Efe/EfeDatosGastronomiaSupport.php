@@ -27,6 +27,10 @@ class EfeDatosGastronomiaSupport
 
     private const TIPOS_APLICACION_GASTRO = ['FIB', 'FGA', 'FDT', 'CIB'];
 
+    private const TIPOS_APLICACION_RETENCION = ['RTP', 'RGP', 'RET'];
+
+    private const TIPOS_APLICACION_BRUTO_PAGO = ['FIB', 'FGA', 'FIS', 'FNB', 'FNA', 'PEP', 'COM'];
+
     /** @var array<int, true> */
     private array $asientosCon115010002 = [];
 
@@ -35,6 +39,21 @@ class EfeDatosGastronomiaSupport
 
     /** @var array<string, array<string, mixed>> */
     private array $auxpagPorRec = [];
+
+    /** @var list<object> */
+    private array $auxpag = [];
+
+    private int $empresaId = 0;
+
+    /**
+     * Piernas FGA/FIS/COM indexadas por tipo+nro (mes EFE + facturas lazy).
+     *
+     * @var array<string, array<string, list<array{cta: int, imp: float, contra: int, emisor: string}>>>
+     */
+    private array $legsPorTipoNro = [];
+
+    /** @var array<string, true> */
+    private array $facturasLazyCargadas = [];
 
     public function __construct(
         private readonly MayorConceptoAnitaBridgeReader $bridgeReader,
@@ -70,15 +89,19 @@ class EfeDatosGastronomiaSupport
         }
 
         $inicio = Carbon::createFromDate($anio, $mes, 1);
+        $finMes = $inicio->copy()->endOfMonth();
         $bridge = $this->bridgeReader->cargarPeriodo(
             $empresaId,
             (int) $inicio->format('Ymd'),
-            (int) $inicio->copy()->endOfMonth()->format('Ymd'),
+            (int) $finMes->format('Ymd'),
         );
         $auxpag = $bridge['auxpag'] ?? [];
         $subdiario = $bridge['subdiario'] ?? [];
 
+        $this->empresaId = $empresaId;
+        $this->auxpag = $auxpag;
         $this->auxpagPorRec = $this->indexarAuxpagPorRec($auxpag);
+        $this->legsPorTipoNro = $this->indexarLegsPorTipoNro($subdiario);
 
         $filas = $this->reclasificarChequesGastro($filas, $nombresConcepto);
         $filas = $this->splitAnticipoTeoraVentas($filas, $auxpag, $nombresConcepto);
@@ -181,7 +204,8 @@ class EfeDatosGastronomiaSupport
     }
 
     /**
-     * Fracción mant. edificio (FGA conc=20/24) que Anita muestra también en c5 114010-010.
+     * IVA C. FISCAL GASTRO (114010-010) del FGA con piernas IVA+anticipo: Anita lo muestra en c5
+     * y deja el anticipo neto en c24 114040. No duplica el CHP: reduce la línea origen.
      *
      * @param  list<array<string, mixed>>  $filas
      * @param  array<int, string>  $nombresConcepto
@@ -210,9 +234,14 @@ class EfeDatosGastronomiaSupport
         }
 
         $nombreGastro = $nombresConcepto[self::CONCEPTO_GASTRONOMIA] ?? 'GASTRONOMIA';
-        $clasificacion = $this->clasificacionSupport->formatearClave(
+        $nombreVarios = $nombresConcepto[EfeDatosVariosSupport::CONCEPTO_VARIOS] ?? 'VARIOS';
+        $clasificacionGastro = $this->clasificacionSupport->formatearClave(
             self::CONCEPTO_GASTRONOMIA,
             $nombreGastro,
+        );
+        $clasificacionVarios = $this->clasificacionSupport->formatearClave(
+            EfeDatosVariosSupport::CONCEPTO_VARIOS,
+            $nombreVarios,
         );
         $nuevas = [];
 
@@ -222,45 +251,344 @@ class EfeDatosGastronomiaSupport
                 continue;
             }
 
-            $tipos = $this->auxpagPorRec[$rec]['tipos'] ?? [];
-            $fgaConc = (int) ($tipos['FGA']['concepto'] ?? 0);
-            if (! in_array($fgaConc, [20, 24], true)) {
+            $split = $this->resolverSplitIvaAnticipoFga($rec);
+            if ($split === null) {
                 continue;
             }
 
             usort($indices, fn (int $a, int $b): int => (float) ($filas[$a]['pagos'] ?? 0)
                 <=> (float) ($filas[$b]['pagos'] ?? 0));
 
-            $origen = $filas[$indices[0]];
-            $pagos = round((float) ($origen['pagos'] ?? 0), 2);
-            if ($pagos <= 0) {
+            $indiceOrigen = $indices[0];
+            $origen = $filas[$indiceOrigen];
+            $pagosOrigen = round((float) ($origen['pagos'] ?? 0), 2);
+            if ($pagosOrigen <= 0 || $split['iva'] <= 0) {
                 continue;
             }
 
-            if ($fgaConc === 24) {
-                $rtp = (float) ($tipos['RTP']['monto'] ?? 0);
-                $rgp = (float) ($tipos['RGP']['monto'] ?? 0);
-                if ($pagos > $rtp && $rtp > 0 && $rgp >= $rtp) {
-                    $pagos = round($pagos - ($rtp / 2) - (($rgp - $rtp) / 33), 2);
-                }
+            $anticipo = $split['anticipo'];
+            $iva = $split['iva'];
+            $resto = round($pagosOrigen - $anticipo - $iva, 2);
+
+            $filas[$indiceOrigen]['pagos'] = $anticipo;
+
+            $nuevas[] = array_merge($origen, [
+                'clasificacion_efe' => $clasificacionGastro,
+                'cuenta' => self::CUENTA_GASTRO_114010010,
+                'cuenta_codigo' => '114010-010',
+                'cuenta_nombre' => 'IVA C. FISCAL GASTRO DIRECTO',
+                'concepto_id' => self::CONCEPTO_GASTRONOMIA,
+                'concepto_nombre' => $nombreGastro,
+                'pagos' => $iva,
+                'cobros' => null,
+            ]);
+
+            if ($resto <= 0.009) {
+                continue;
             }
 
-            if ($pagos <= 0) {
+            $indiceHermano = $this->indiceHermanoMantEdificio($filas, $asiento, $indiceOrigen);
+            if ($indiceHermano !== null) {
+                $filas[$indiceHermano]['pagos'] = round(
+                    (float) ($filas[$indiceHermano]['pagos'] ?? 0) + $resto,
+                    2,
+                );
+
+                continue;
+            }
+
+            $cuentaVarios = $this->resolverCuentaRestoVarios($rec);
+            if ($cuentaVarios === null) {
+                // Conservar total en c24 si no hay destino claro (no inflar c5).
+                $filas[$indiceOrigen]['pagos'] = round($anticipo + $resto, 2);
+
                 continue;
             }
 
             $nuevas[] = array_merge($origen, [
-                'clasificacion_efe' => $clasificacion,
-                'cuenta' => self::CUENTA_GASTRO_114010010,
-                'cuenta_codigo' => '114010-010',
-                'concepto_id' => self::CONCEPTO_GASTRONOMIA,
-                'concepto_nombre' => $nombreGastro,
-                'pagos' => $pagos,
+                'clasificacion_efe' => $clasificacionVarios,
+                'cuenta' => $cuentaVarios,
+                'cuenta_codigo' => $this->formatearCuentaCodigo($cuentaVarios),
+                'cuenta_nombre' => (string) ($origen['cuenta_nombre'] ?? ''),
+                'concepto_id' => EfeDatosVariosSupport::CONCEPTO_VARIOS,
+                'concepto_nombre' => $nombreVarios,
+                'pagos' => $resto,
                 'cobros' => null,
             ]);
         }
 
         return $nuevas === [] ? $filas : array_merge($filas, $nuevas);
+    }
+
+    /**
+     * @return array{iva: float, anticipo: float}|null
+     */
+    private function resolverSplitIvaAnticipoFga(string $rec): ?array
+    {
+        $retenciones = 0.0;
+        $bruto = 0.0;
+        /** @var list<object> */
+        $fgas = [];
+
+        foreach ($this->auxpag as $aplicacion) {
+            if (trim((string) ($aplicacion->axp_rec ?? '')) !== $rec) {
+                continue;
+            }
+
+            $tipo = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
+            $monto = round((float) ($aplicacion->axp_monto_ap ?? 0), 2);
+            $concepto = (int) ($aplicacion->axp_concepto ?? 0);
+
+            if (in_array($tipo, self::TIPOS_APLICACION_RETENCION, true)) {
+                $retenciones += $monto;
+            }
+
+            if (in_array($tipo, self::TIPOS_APLICACION_BRUTO_PAGO, true)) {
+                $bruto += $monto;
+            }
+
+            if ($tipo === 'FGA' && in_array($concepto, [20, 24], true)) {
+                $fgas[] = $aplicacion;
+            }
+        }
+
+        if ($fgas === [] || $bruto <= 0) {
+            return null;
+        }
+
+        $factor = ($bruto - $retenciones) / $bruto;
+        $iva = 0.0;
+        $anticipo = 0.0;
+
+        foreach ($fgas as $fga) {
+            $nro = trim((string) ($fga->axp_nro ?? ''));
+            if ($nro === '') {
+                continue;
+            }
+
+            $this->asegurarLegsFactura('FGA', $fga);
+            $legs = $this->legsPorTipoNro['FGA'][$nro] ?? [];
+            $ivaLeg = 0.0;
+            $anticipoLeg = 0.0;
+            foreach ($legs as $leg) {
+                if ($leg['cta'] === self::CUENTA_GASTRO_114010010) {
+                    $ivaLeg += $leg['imp'];
+                }
+                if ($leg['cta'] === self::CUENTA_ANTICIPO_GAMING) {
+                    $anticipoLeg += $leg['imp'];
+                }
+            }
+
+            // Solo FGA con pierna IVA gastro + anticipo 114040 (no gasto/proveedor puro).
+            if ($ivaLeg <= 0 || $anticipoLeg <= 0) {
+                continue;
+            }
+
+            $iva += $ivaLeg * $factor;
+            $anticipo += $anticipoLeg * $factor;
+        }
+
+        $iva = round($iva, 2);
+        $anticipo = round($anticipo, 2);
+        if ($iva <= 0 || $anticipo <= 0) {
+            return null;
+        }
+
+        return ['iva' => $iva, 'anticipo' => $anticipo];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function indiceHermanoMantEdificio(array $filas, int $asiento, int $indiceOrigen): ?int
+    {
+        foreach ($filas as $indice => $fila) {
+            if ($indice === $indiceOrigen) {
+                continue;
+            }
+
+            if ((int) ($fila['nro_asiento'] ?? 0) !== $asiento) {
+                continue;
+            }
+
+            if ((int) ($fila['concepto_id'] ?? 0) !== EfeDatosMantenimientoEdificioSupport::CONCEPTO_MANTENIMIENTO_EDIFICIO) {
+                continue;
+            }
+
+            if ((int) ($fila['cuenta'] ?? 0) === self::CUENTA_ANTICIPO_GAMING) {
+                continue;
+            }
+
+            return $indice;
+        }
+
+        return null;
+    }
+
+    private function resolverCuentaRestoVarios(string $rec): ?int
+    {
+        foreach ($this->auxpag as $aplicacion) {
+            if (trim((string) ($aplicacion->axp_rec ?? '')) !== $rec) {
+                continue;
+            }
+
+            if (strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? ''))) !== 'FIS') {
+                continue;
+            }
+
+            $nro = trim((string) ($aplicacion->axp_nro ?? ''));
+            if ($nro === '') {
+                continue;
+            }
+
+            $this->asegurarLegsFactura('FIS', $aplicacion);
+            $legs = $this->legsPorTipoNro['FIS'][$nro] ?? [];
+            $emisor = trim((string) ($aplicacion->axp_pro ?? ''));
+            foreach ($legs as $leg) {
+                if ($emisor === '' && $leg['emisor'] !== '') {
+                    $emisor = $leg['emisor'];
+                }
+                // Pasivo proveedor: COM histórico con mismo pasivo → cuenta de gasto (Anita C20).
+                if ($leg['cta'] >= 211000000 && $leg['cta'] < 212000000) {
+                    $gasto = $this->buscarCuentaGastoComPorPasivo($leg['cta'], $emisor, $leg['imp']);
+                    if ($gasto !== null) {
+                        return $gasto;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function buscarCuentaGastoComPorPasivo(int $pasivo, string $emisor, float $importe): ?int
+    {
+        $coms = $this->legsPorTipoNro['COM'] ?? [];
+        foreach ($coms as $legs) {
+            foreach ($legs as $leg) {
+                if ($leg['contra'] !== $pasivo) {
+                    continue;
+                }
+                if ($emisor !== '' && $leg['emisor'] !== '' && $leg['emisor'] !== $emisor) {
+                    continue;
+                }
+                if ($leg['cta'] < 500000000) {
+                    continue;
+                }
+                if ($importe > 0 && abs($leg['imp'] - $importe) > 0.02) {
+                    continue;
+                }
+
+                return $leg['cta'];
+            }
+        }
+
+        $errores = [];
+        return $this->bridgeReader->buscarCuentaGastoComPorPasivo(
+            $this->empresaId,
+            $pasivo,
+            $emisor,
+            $importe,
+            $errores,
+        );
+    }
+
+    private function asegurarLegsFactura(string $tipo, object $aplicacion): void
+    {
+        $nro = trim((string) ($aplicacion->axp_nro ?? ''));
+        if ($nro === '' || $this->empresaId <= 0) {
+            return;
+        }
+
+        $clave = $tipo.'|'.$nro.'|'.trim((string) ($aplicacion->axp_nro_interno ?? ''));
+        if (isset($this->facturasLazyCargadas[$clave])) {
+            return;
+        }
+        $this->facturasLazyCargadas[$clave] = true;
+
+        $legsActuales = $this->legsPorTipoNro[$tipo][$nro] ?? [];
+        $iva = false;
+        $ant = false;
+        foreach ($legsActuales as $leg) {
+            if ($leg['cta'] === self::CUENTA_GASTRO_114010010) {
+                $iva = true;
+            }
+            if ($leg['cta'] === self::CUENTA_ANTICIPO_GAMING) {
+                $ant = true;
+            }
+        }
+
+        // FGA del mes EFE ya indexado con ambas piernas: no ir a Anita otra vez.
+        if ($tipo === 'FGA' && $iva && $ant) {
+            return;
+        }
+        if ($tipo === 'FIS' && $legsActuales !== []) {
+            return;
+        }
+
+        $errores = [];
+        $filas = $this->bridgeReader->cargarSubdiarioFacturaCompras(
+            $this->empresaId,
+            $tipo,
+            trim((string) ($aplicacion->axp_letra_comp ?? 'A')),
+            (int) ($aplicacion->axp_sucursal ?? 0),
+            (int) $nro,
+            (int) ($aplicacion->axp_nro_interno ?? 0),
+            trim((string) ($aplicacion->axp_pro ?? '')),
+            $errores,
+        );
+
+        foreach ($filas as $linea) {
+            $tipoLin = strtoupper(trim((string) ($linea->subd_tipo ?? $tipo)));
+            $nroLin = trim((string) ($linea->subd_nro ?? $nro));
+            if ($nroLin === '') {
+                continue;
+            }
+            $this->legsPorTipoNro[$tipoLin][$nroLin][] = [
+                'cta' => (int) ($linea->subd_cuenta ?? 0),
+                'imp' => round((float) ($linea->subd_importe ?? 0), 2),
+                'contra' => (int) ($linea->subd_contrapartida ?? 0),
+                'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+            ];
+        }
+    }
+
+    /**
+     * @param  list<object>  $subdiario
+     * @return array<string, array<string, list<array{cta: int, imp: float, contra: int, emisor: string}>>>
+     */
+    private function indexarLegsPorTipoNro(array $subdiario): array
+    {
+        /** @var array<string, array<string, list<array{cta: int, imp: float, contra: int, emisor: string}>>> */
+        $mapa = [];
+
+        foreach ($subdiario as $linea) {
+            $tipo = strtoupper(trim((string) ($linea->subd_tipo ?? '')));
+            if (! in_array($tipo, ['FGA', 'FIS', 'COM'], true)) {
+                continue;
+            }
+
+            $nro = trim((string) ($linea->subd_nro ?? ''));
+            if ($nro === '') {
+                continue;
+            }
+
+            $mapa[$tipo][$nro][] = [
+                'cta' => (int) ($linea->subd_cuenta ?? 0),
+                'imp' => round((float) ($linea->subd_importe ?? 0), 2),
+                'contra' => (int) ($linea->subd_contrapartida ?? 0),
+                'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+            ];
+        }
+
+        return $mapa;
+    }
+
+    private function formatearCuentaCodigo(int $cuenta): string
+    {
+        $s = str_pad((string) $cuenta, 9, '0', STR_PAD_LEFT);
+
+        return substr($s, 0, 6).'-'.substr($s, 6, 3);
     }
 
     /**

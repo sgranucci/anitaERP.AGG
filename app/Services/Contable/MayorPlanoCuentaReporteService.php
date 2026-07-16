@@ -46,6 +46,7 @@ class MayorPlanoCuentaReporteService
             (bool) ($filtros['incluye_subdiario'] ?? true),
             (string) ($filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion'),
             $this->monedaConverter,
+            array_values(array_filter(array_map('intval', $filtros['cuentas'] ?? []), fn (int $c) => $c > 0)),
         ];
 
         if ($consolidar || count($empresaIds) <= 1) {

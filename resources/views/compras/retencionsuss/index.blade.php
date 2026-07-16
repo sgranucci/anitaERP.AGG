@@ -46,6 +46,7 @@
 							<th>Forma cálculo</th>
 							<th>Valor retencion</th>
 							<th>Mínimo imponible</th>
+							<th>Mínimo retención</th>
 							<th>Régimen</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
@@ -71,6 +72,7 @@
 								</td>
 								<td>{{ number_format($retencionsuss->valorretencion,2) }}</td>
 								<td>{{ number_format($retencionsuss->minimoimponible,2) }}</td>
+								<td>{{ number_format($retencionsuss->minimoretencion ?? 0,2) }}</td>
 								<td>{{ $retencionsuss->regimen }}</td>
         						<td>
                        			@if (can('editar-retenciones-de-suss', false))

@@ -209,6 +209,10 @@
             <td>{{ optional($data->condicionentregas)->nombre ?? '—' }}</td>
         </tr>
         <tr>
+            <td class="lbl">Cond. pago</td>
+            <td colspan="3">{{ optional($data->condicionpagos)->nombre ?? '—' }}</td>
+        </tr>
+        <tr>
             <td class="lbl">Transporte</td>
             <td colspan="3">{{ optional($data->transportes)->nombre ?? '—' }}</td>
         </tr>

@@ -99,6 +99,7 @@ class MayorPlanoCuentaController extends Controller
             'moneda' => $moneda,
             'cuenta_desde_meta' => $this->metaCuentaFiltro((int) ($filtros['cuenta_desde'] ?? 0), $empresaRefId),
             'cuenta_hasta_meta' => $this->metaCuentaFiltro((int) ($filtros['cuenta_hasta'] ?? 0), $empresaRefId),
+            'cuentas_iniciales' => $this->metaCuentasParticulares($filtros['cuentas'] ?? [], $empresaRefId),
             'periodo_texto' => $this->reporteService->formatearPeriodoTexto($filtros),
             'empresas_texto' => $this->reporteService->formatearEmpresasTexto($filtros),
             'inclusion_asientos_texto' => $this->reporteService->formatearInclusionAsientosTexto($filtros),
@@ -283,6 +284,39 @@ class MayorPlanoCuentaController extends Controller
             'codigo' => $codigoFmt,
             'nombre' => $nombre ? (string) $nombre : '',
         ];
+    }
+
+    /**
+     * @param  list<int|string>  $codigos
+     * @return list<array{codigo: int, codigo_fmt: string, nombre: string}>
+     */
+    private function metaCuentasParticulares(array $codigos, int $empresaId): array
+    {
+        $codigos = array_values(array_unique(array_filter(array_map('intval', $codigos), fn (int $c) => $c > 0)));
+        sort($codigos);
+        if ($codigos === []) {
+            return [];
+        }
+
+        $nombres = [];
+        if ($empresaId > 0) {
+            $nombres = DB::table('cuentacontable')
+                ->where('empresa_id', $empresaId)
+                ->whereIn('codigo', $codigos)
+                ->pluck('nombre', 'codigo')
+                ->all();
+        }
+
+        $out = [];
+        foreach ($codigos as $codigo) {
+            $out[] = [
+                'codigo' => $codigo,
+                'codigo_fmt' => MayorPlanoCuentaSupport::formatearCodigoCuenta($codigo),
+                'nombre' => isset($nombres[$codigo]) ? (string) $nombres[$codigo] : '',
+            ];
+        }
+
+        return $out;
     }
 
     /**

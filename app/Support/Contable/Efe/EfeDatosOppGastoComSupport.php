@@ -63,16 +63,17 @@ class EfeDatosOppGastoComSupport
                 continue;
             }
 
+            $gasto = $gastoPorAsiento[$asiento];
             $cuenta = (int) ($fila['cuenta'] ?? 0);
             if (! $this->cuentaAplica($cuenta)) {
                 continue;
             }
 
-            if (! $this->debeAjustarFila($fila, $cuenta, $gasto)) {
+            $rec = $recPorAsiento[$asiento] ?? '';
+            if (! $this->debeAjustarFila($fila, $cuenta, $gasto, $rec)) {
                 continue;
             }
 
-            $gasto = $gastoPorAsiento[$asiento];
             $conceptoId = (int) ($gasto['concepto_id'] ?? 0);
             if ($conceptoId <= 0) {
                 continue;
@@ -83,12 +84,13 @@ class EfeDatosOppGastoComSupport
             $filas[$indice]['concepto_nombre'] = $nombre;
             $filas[$indice]['clasificacion_efe'] = $this->clasificacionSupport->formatearClave($conceptoId, $nombre);
 
-            if ($this->esCuentaPuente($cuenta)) {
+            $cuentaGasto = (int) ($gasto['cuenta'] ?? 0);
+            if ($cuentaGasto <= 0 || $cuentaGasto === $cuenta) {
                 continue;
             }
 
-            $cuentaGasto = (int) ($gasto['cuenta'] ?? 0);
-            if ($cuentaGasto <= 0 || $cuentaGasto === $cuenta) {
+            // Puentes anticipo/cheque: solo reemplazar cuenta si el COM/FIB trae bienes de uso (123010).
+            if ($this->esCuentaPuente($cuenta) && ! $this->esCuentaBienesUsoPuente($cuentaGasto)) {
                 continue;
             }
 
@@ -104,7 +106,7 @@ class EfeDatosOppGastoComSupport
      * @param  array<string, mixed>  $fila
      * @param  array{cuenta: int, concepto_id: int, cuenta_codigo: string, cuenta_nombre: string}  $gasto
      */
-    private function debeAjustarFila(array $fila, int $cuenta, array $gasto): bool
+    private function debeAjustarFila(array $fila, int $cuenta, array $gasto, string $rec = ''): bool
     {
         if ($this->esCuentaIvaCredito($cuenta)) {
             return false;
@@ -114,6 +116,23 @@ class EfeDatosOppGastoComSupport
         $conceptoDestino = (int) ($gasto['concepto_id'] ?? 0);
         if ($conceptoDestino <= 0) {
             return false;
+        }
+
+        // Gaming supplies (12) ya fijado: no pisar con axp_concepto 24 del FNS/FIB.
+        if ($conceptoActual === EfeDatosGamingSuppliesSupport::CONCEPTO_GAMING_SUPPLIES) {
+            return false;
+        }
+
+        // Concepto 5 solo por axp (sin cuenta COM): Anita Datos no pisa C20 PAPELERA
+        // ni cheques con solo FIB conc=5 (van a varios/publicidad). Sí aplica con FGA/CIB.
+        if ($conceptoDestino === EfeDatosGastronomiaSupport::CONCEPTO_GASTRONOMIA
+            && (int) ($gasto['cuenta'] ?? 0) <= 0) {
+            if ($conceptoActual === EfeDatosVariosSupport::CONCEPTO_VARIOS) {
+                return false;
+            }
+            if ($rec !== '' && ! $this->resolverSupport->recTieneFacturaGastroFuerte($rec)) {
+                return false;
+            }
         }
 
         if ($this->esCuentaHonorariosAdelanto($cuenta)) {
@@ -162,6 +181,11 @@ class EfeDatosOppGastoComSupport
     private function esCuentaIvaCredito(int $cuenta): bool
     {
         return $cuenta >= 214010000 && $cuenta < 215000000;
+    }
+
+    private function esCuentaBienesUsoPuente(int $cuenta): bool
+    {
+        return $cuenta >= 123010000 && $cuenta < 123011000;
     }
 
     /**

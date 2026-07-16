@@ -80,7 +80,7 @@ class RequisicionRepository implements RequisicionRepositoryInterface
     {
         if (null == $req = $this->model->with(['requisicion_estados', 'requisicion_archivos',
             'empresas', 'centrocostos', 'oficinacompras', 'proveedores.condicionpagos', 'formapagos', 'usuarios',
-        ])->with(['requisicion_articulos.articulos', 'requisicion_articulos.monedas',
+        ])->with(['requisicion_articulos.articulos.unidadesdemedidasalternativas', 'requisicion_articulos.monedas',
             'requisicion_articulos.partidagastos', 'requisicion_articulos.capexs',
         ])->find($id)) {
             throw new ModelNotFoundException('Registro no encontrado');

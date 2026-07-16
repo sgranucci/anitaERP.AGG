@@ -251,6 +251,7 @@ jQuery(function ($) {
                                         <th>Proveedor</th>
                                         <th>Condición compra</th>
                                         <th>Condición entrega</th>
+                                        <th>Condición pago</th>
                                         <th class="text-right">Ítems</th>
                                         <th class="text-right">Comp. a venir</th>
                                         <th class="text-right">Archivos</th>
@@ -392,6 +393,12 @@ jQuery(function ($) {
                                 <label class="col-lg-4 col-form-label">Condición entrega</label>
                                 <div class="col-lg-8">
                                     <select class="form-control form-control-sm wz-grupo-condicionentrega"></select>
+                                </div>
+                            </div>
+                            <div class="form-group row mb-2">
+                                <label class="col-lg-4 col-form-label">Condición pago</label>
+                                <div class="col-lg-8">
+                                    <select class="form-control form-control-sm wz-grupo-condicionpago"></select>
                                 </div>
                             </div>
                         </div>

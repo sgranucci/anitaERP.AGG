@@ -94,6 +94,11 @@ final class CabeceraFieldMapper
         return $ctx->fkCondicionentrega($row->penmp_cond_entrega ?? null);
     }
 
+    public static function mapCondicionpagoId(object $row, OrdencompraAnitaSyncContext $ctx): ?int
+    {
+        return $ctx->fkCondicionpago($row->penmp_cond_pago ?? null);
+    }
+
     public static function mapDescuento(object $row): ?float
     {
         if (! isset($row->penmp_dto)) {
@@ -138,6 +143,7 @@ final class CabeceraFieldMapper
             'proveedor_id' => self::mapProveedorId($row, $ctx),
             'condicioncompra_id' => self::mapCondicioncompraId($row, $ctx),
             'condicionentrega_id' => self::mapCondicionentregaId($row, $ctx),
+            'condicionpago_id' => self::mapCondicionpagoId($row, $ctx),
             'descuento' => self::mapDescuento($row),
             'estadoordencompra' => self::mapEstadoordencompra($row, $ctx),
             'sector_legajocompra_id' => self::mapSectorLegajocompraId($ctx),

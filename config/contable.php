@@ -15,7 +15,7 @@ return [
     | Mayor por concepto (cierre mensual). Volúmenes altos: mes completo, varias empresas en consultas sucesivas.
     */
     'mayor_concepto' => [
-        'memory_limit' => env('MAYOR_CONCEPTO_MEMORY_LIMIT', '1024M'),
+        'memory_limit' => env('MAYOR_CONCEPTO_MEMORY_LIMIT', '2048M'),
         'max_execution_time' => (int) env('MAYOR_CONCEPTO_MAX_EXECUTION_TIME', 900),
         // Límite Anita in_limite_caja_banco (argv[13]). Acepta 112010-008 o 112010008.
         'limite_caja_banco' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CAJA_BANCO', '112010008')),

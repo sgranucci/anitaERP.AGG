@@ -18,6 +18,13 @@ class EfeOppComGastoResolverSupport
 
     private const CONCEPTO_HONORARIOS = 7;
 
+    /** Igual que EfeDatosMantenimientoEdificioSupport / Anita Datos: COM con 123010 → C2, no C24. */
+    private const CONCEPTO_BIENES_USO = 2;
+
+    private const CUENTA_BIENES_USO_PUENTE_DESDE = 123010000;
+
+    private const CUENTA_BIENES_USO_PUENTE_HASTA = 123011000;
+
     /** @var array<string, list<object>> */
     private array $auxpagPorRec = [];
 
@@ -32,6 +39,9 @@ class EfeOppComGastoResolverSupport
 
     /** @var array<int, array{nombre: string, codigo: string}> */
     private array $datosCuenta = [];
+
+    /** @var array<string, int> rec OPP → cuenta 123010 del FIB/COM del período */
+    private array $cuentaBienesUsoPorRec = [];
 
     private int $empresaId = 0;
 
@@ -57,6 +67,7 @@ class EfeOppComGastoResolverSupport
         $this->comSubdiarioCache = [];
         $this->conceptoPorCuenta = [];
         $this->datosCuenta = [];
+        $this->cuentaBienesUsoPorRec = [];
 
         $inicio = Carbon::createFromDate($anio, $mes, 1);
         $errores = [];
@@ -76,7 +87,28 @@ class EfeOppComGastoResolverSupport
         }
 
         $this->indexarConceptosAnita($bridge['ctaconc'] ?? []);
+        $this->indexarBienesUsoPorRec($bridge['auxpag'] ?? [], $bridge['subdiario'] ?? []);
         $this->precargarAplicpedYCom($errores);
+    }
+
+    /**
+     * FGA/CIB/FDT con axp_concepto=5: Anita sí lleva el cheque a gastronomía.
+     * Solo FIB conc=5 (PAPELERA, etc.) en Datos suele quedar en varios/otro concepto.
+     */
+    public function recTieneFacturaGastroFuerte(string $rec): bool
+    {
+        foreach ($this->auxpagPorRec[$rec] ?? [] as $aplicacion) {
+            $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
+            if (! in_array($tipoAp, ['FGA', 'CIB', 'FDT'], true)) {
+                continue;
+            }
+
+            if ((int) ($aplicacion->axp_concepto ?? 0) === EfeDatosGastronomiaSupport::CONCEPTO_GASTRONOMIA) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -124,6 +156,20 @@ class EfeOppComGastoResolverSupport
      */
     private function ajustarConceptoPorRec(string $rec, ?array $resuelto): ?array
     {
+        // FIB/COM del período con 123010: Anita Datos → C2 (ej. DIEGER), aunque axp_concepto sea 24.
+        $cuentaBienes = (int) ($this->cuentaBienesUsoPorRec[$rec] ?? 0);
+        if ($cuentaBienes > 0) {
+            $datos = $this->datosCuenta[$cuentaBienes]
+                ?? ['nombre' => '', 'codigo' => $this->formatearCodigoCuenta($cuentaBienes)];
+
+            return [
+                'cuenta' => $cuentaBienes,
+                'concepto_id' => self::CONCEPTO_BIENES_USO,
+                'cuenta_codigo' => $datos['codigo'],
+                'cuenta_nombre' => $datos['nombre'],
+            ];
+        }
+
         if ($resuelto === null) {
             return null;
         }
@@ -138,6 +184,54 @@ class EfeOppComGastoResolverSupport
         }
 
         return $resuelto;
+    }
+
+    /**
+     * @param  list<object>  $auxpag
+     * @param  list<object>  $subdiario
+     */
+    private function indexarBienesUsoPorRec(array $auxpag, array $subdiario): void
+    {
+        /** @var array<int, list<string>> */
+        $recsPorInterno = [];
+
+        foreach ($auxpag as $aplicacion) {
+            $rec = trim((string) ($aplicacion->axp_rec ?? ''));
+            $interno = (int) ($aplicacion->axp_nro_interno ?? 0);
+            if ($rec === '' || $interno <= 0) {
+                continue;
+            }
+
+            $recsPorInterno[$interno][$rec] = true;
+        }
+
+        /** @var array<string, array{cuenta: int, importe: float}> */
+        $mejorPorRec = [];
+
+        foreach ($subdiario as $linea) {
+            $interno = (int) ($linea->subd_nro_interno ?? 0);
+            if ($interno <= 0 || ! isset($recsPorInterno[$interno])) {
+                continue;
+            }
+
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($mov !== 'D' || $importe <= 0 || ! $this->esCuentaBienesUsoPuente($cuenta)) {
+                continue;
+            }
+
+            foreach (array_keys($recsPorInterno[$interno]) as $rec) {
+                $actual = $mejorPorRec[$rec] ?? null;
+                if ($actual === null || $importe >= $actual['importe']) {
+                    $mejorPorRec[$rec] = ['cuenta' => $cuenta, 'importe' => $importe];
+                }
+            }
+        }
+
+        foreach ($mejorPorRec as $rec => $info) {
+            $this->cuentaBienesUsoPorRec[$rec] = (int) $info['cuenta'];
+        }
     }
 
     private function recTieneFis65ConTmb(string $rec): bool
@@ -188,6 +282,20 @@ class EfeOppComGastoResolverSupport
      */
     private function resolverDesdeAplicacion(object $aplicacion): ?array
     {
+        // COM con puente bienes de uso (123010): Anita Datos muestra C2, no el concepto del gasto 521xxx.
+        $cuentaBienesUso = $this->resolverCuentaBienesUsoCom($aplicacion);
+        if ($cuentaBienesUso > 0) {
+            $datos = $this->datosCuenta[$cuentaBienesUso]
+                ?? ['nombre' => '', 'codigo' => $this->formatearCodigoCuenta($cuentaBienesUso)];
+
+            return [
+                'cuenta' => $cuentaBienesUso,
+                'concepto_id' => self::CONCEPTO_BIENES_USO,
+                'cuenta_codigo' => $datos['codigo'],
+                'cuenta_nombre' => $datos['nombre'],
+            ];
+        }
+
         $conceptoAuxpag = (int) ($aplicacion->axp_concepto ?? 0);
         $cuentaCom = $this->resolverCuentaGastoCom($aplicacion);
 
@@ -219,6 +327,44 @@ class EfeOppComGastoResolverSupport
             'cuenta_codigo' => $datos['codigo'],
             'cuenta_nombre' => $datos['nombre'],
         ];
+    }
+
+    /**
+     * Mayor pierna D en 123010-xxx del COM (misma convención que mant. edificio).
+     */
+    private function resolverCuentaBienesUsoCom(object $aplicacion): int
+    {
+        $mejorCuenta = 0;
+        $mejorImporte = 0.0;
+
+        foreach ($this->resolverClavesComDesdeFactura($aplicacion) as $claveCom) {
+            foreach ($this->comSubdiarioCache[$claveCom] ?? [] as $linea) {
+                $cuenta = (int) ($linea->subd_cuenta ?? 0);
+                $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+                $importe = (float) ($linea->subd_importe ?? 0);
+
+                if ($mov !== 'D' || $importe <= 0) {
+                    continue;
+                }
+
+                if (! $this->esCuentaBienesUsoPuente($cuenta)) {
+                    continue;
+                }
+
+                if ($importe >= $mejorImporte) {
+                    $mejorImporte = $importe;
+                    $mejorCuenta = $cuenta;
+                }
+            }
+        }
+
+        return $mejorCuenta;
+    }
+
+    private function esCuentaBienesUsoPuente(int $cuenta): bool
+    {
+        return $cuenta >= self::CUENTA_BIENES_USO_PUENTE_DESDE
+            && $cuenta < self::CUENTA_BIENES_USO_PUENTE_HASTA;
     }
 
     private function resolverCuentaGastoCom(object $aplicacion): int

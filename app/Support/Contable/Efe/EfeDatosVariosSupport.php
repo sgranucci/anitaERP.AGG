@@ -172,7 +172,8 @@ class EfeDatosVariosSupport
                 }
             }
 
-            if ($fibConc5 >= 2) {
+            // Uno o más FIB conc=5 sin FGA/CIB/FDT gastro → Varios (Anita: PAPELERA, etc.).
+            if ($fibConc5 >= 1 && ! $this->recTieneFacturaGastroFuerteEnTipos($tipos)) {
                 return true;
             }
 
@@ -203,6 +204,24 @@ class EfeDatosVariosSupport
             }
 
             if ($fibConc24 === 1 && $fibConc65 === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $tipos
+     */
+    private function recTieneFacturaGastroFuerteEnTipos(array $tipos): bool
+    {
+        foreach (['FGA', 'CIB', 'FDT'] as $tipo) {
+            if (! isset($tipos[$tipo])) {
+                continue;
+            }
+
+            if ((int) ($tipos[$tipo]['concepto'] ?? 0) === EfeDatosGastronomiaSupport::CONCEPTO_GASTRONOMIA) {
                 return true;
             }
         }

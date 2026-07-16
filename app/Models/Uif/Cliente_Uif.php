@@ -3,6 +3,7 @@
 namespace App\Models\Uif;
 
 use App\Models\Configuracion\Tipodocumento;
+use App\Models\Seguridad\Usuario;
 use App\Traits\Uif\Cliente_UifTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;

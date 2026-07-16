@@ -39,6 +39,11 @@ final class ArbolAprobacionEnlaceSupport
     {
         $rutaRelativa = trim($rutaRelativa, '/');
         $hash = trim($hash);
+        $ipBase = trim($ipBase);
+        // Clientes de mail no tratan "10.20.x.x/ruta" como URL; hace falta el esquema.
+        if ($ipBase !== '' && ! preg_match('#^https?://#i', $ipBase)) {
+            $ipBase = 'http://'.$ipBase;
+        }
 
         return rtrim($ipBase, '/').'/anitaERP/public/'.$rutaRelativa.'/'.rawurlencode($hash);
     }

@@ -1,1 +1,6 @@
-curl -s https://www.bna.com.ar/Personas | grep -A 2 'Dolar U.S.A' | head -3  | tail  -1 | sed  's/<//g' | sed 's/>//g' | sed 's/td//g' | sed 's/,/./g' |  sed 's/ //g' | rev| cut -b 3-|rev
+#!/usr/bin/env bash
+# Wrapper legacy: imprime solo la cotización venta BNA (stdout).
+# Parser real: cotizacionbna.py
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$DIR/cotizacionbna.py" "$@"

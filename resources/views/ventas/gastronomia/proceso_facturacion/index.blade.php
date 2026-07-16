@@ -646,9 +646,10 @@
         waitryGetOrdersMinutosAtras: {{ max(0, (int) config('waitry.get_orders_minutos_atras', 20)) }},
         listaprecioId: {{ (int) ($listaprecio_id ?? config('precio.listaprecio_default_id', 1)) }},
         listaprecioNombre: @json($listaprecio_nombre ?? null),
+        // Relativas: api()/appPath() antepone APP_CARPETA. No usar route() (omite carpeta) ni prefijo doble.
         rutasWaitry: {
-            ordenesPendientes: _gastroBase + '/ventas/gastronomia/api/waitry-ordenes-pendientes',
-            importarOrden: _gastroBase + '/ventas/gastronomia/api/waitry-importar-orden',
+            ordenesPendientes: '/ventas/gastronomia/api/waitry-ordenes-pendientes',
+            importarOrden: '/ventas/gastronomia/api/waitry-importar-orden',
         },
     };
     })();
@@ -665,7 +666,7 @@
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/mozo_gastronomia/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/descuento_gastronomia/consulta.js') }}"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js')) ?: time() }}"></script>
 @if ($requiere_habilitacion_turno ?? true)
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/turno_operativo_pos.js') }}"></script>

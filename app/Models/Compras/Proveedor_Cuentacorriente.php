@@ -16,6 +16,7 @@ class Proveedor_Cuentacorriente extends Model
     protected $fillable = [
         'fecha', 'fechavencimiento', 'proveedor_id', 'total', 'moneda_id', 'cotizacion',
         'empresa_id', 'comprobante_proveedor_id', 'comprobante_proveedor_cuota_id',
+        'pagoproveedor_id',
     ];
 
     protected $casts = [
@@ -47,6 +48,11 @@ class Proveedor_Cuentacorriente extends Model
     public function comprobante_proveedor_cuotas()
     {
         return $this->belongsTo(Comprobante_Proveedor_Cuota::class, 'comprobante_proveedor_cuota_id');
+    }
+
+    public function pagoproveedores()
+    {
+        return $this->belongsTo(Pagoproveedor::class, 'pagoproveedor_id');
     }
 
     public function proveedor_cuentacorriente_aplicaciones()

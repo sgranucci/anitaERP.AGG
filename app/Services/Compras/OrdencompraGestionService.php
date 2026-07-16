@@ -92,7 +92,7 @@ class OrdencompraGestionService
         $aprobada = self::nombreEstadoRequisicionAprobada();
         $req = Requisicion::with([
             'proveedores',
-            'requisicion_articulos.articulos',
+            'requisicion_articulos.articulos.unidadesdemedidasalternativas',
             'requisicion_articulos.monedas',
             'requisicion_articulos.centrocostos_destino',
             'requisicion_articulos.partidagastos.articulos',
@@ -120,6 +120,10 @@ class OrdencompraGestionService
             $pg = $lin->partidagastos;
             $cpx = $lin->capexs;
             $art = $lin->articulos;
+            $uxenv = $art ? (float) ($art->unidadesxenvase ?? 0) : 0.0;
+            $umAltAbrev = ($art && $art->unidadesdemedidasalternativas)
+                ? (string) ($art->unidadesdemedidasalternativas->abreviatura ?? '')
+                : '';
             $articulos[] = [
                 'articulo_id' => $lin->articulo_id,
                 'sku' => $art ? (string) ($art->sku ?? '') : '',
@@ -129,6 +133,8 @@ class OrdencompraGestionService
                 'moneda_id' => $lin->moneda_id,
                 'fechaentrega' => $lin->fechaentrega,
                 'cantidadalternativa' => $lin->cantidadalternativa,
+                'unidadesxenvase' => $uxenv > 0 ? $uxenv : null,
+                'um_alternativa_abreviatura' => $umAltAbrev,
                 'detalle' => $lin->detalle,
                 'centrocostodestino_id' => $lin->centrocostodestino_id,
                 'partidagasto_id' => $lin->partidagasto_id,
@@ -763,6 +769,7 @@ class OrdencompraGestionService
             'proveedor_id' => ! empty($payload['proveedor_id']) ? (int) $payload['proveedor_id'] : null,
             'condicioncompra_id' => ! empty($payload['condicioncompra_id']) ? (int) $payload['condicioncompra_id'] : null,
             'condicionentrega_id' => ! empty($payload['condicionentrega_id']) ? (int) $payload['condicionentrega_id'] : null,
+            'condicionpago_id' => ! empty($payload['condicionpago_id']) ? (int) $payload['condicionpago_id'] : null,
             'descuento' => isset($payload['descuento']) ? (float) $payload['descuento'] : null,
             'estadoordencompra' => $estado,
             'sector_legajocompra_id' => $sectorId,
@@ -788,6 +795,7 @@ class OrdencompraGestionService
             'transporte_id' => 'nullable|integer|exists:transporte,id',
             'condicioncompra_id' => 'nullable|integer|exists:condicioncompra,id',
             'condicionentrega_id' => 'nullable|integer|exists:condicionentrega,id',
+            'condicionpago_id' => 'nullable|integer|exists:condicionpago,id',
             'descuento' => 'nullable|numeric',
             'lugarentrega' => 'nullable|string|max:255',
         ];

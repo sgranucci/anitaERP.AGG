@@ -12,6 +12,7 @@ use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaRendgastroSupport;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoAnitaTotalZPorPcService;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoCabeceraAnitaMapper;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoValorAnitaMapper;
+use App\Support\Caja\AnitaSync\RendicionRendgastroNroOperCompartidoSupport;
 use App\Support\Caja\RendicionEstacionamientoSecuenciaSupport;
 use Illuminate\Support\Facades\Log;
 
@@ -170,7 +171,12 @@ class RendicionEstacionamientoAnitaSyncService
             return;
         }
 
-        $this->eliminarEnAnita($nroOper, $this->tipoOper());
+        $rendicion->loadMissing('turnoOperativo.jornada');
+        $fechaJornada = optional($rendicion->turnoOperativo?->jornada)->fecha_jornada
+            ?? substr((string) $rendicion->fecharendicion, 0, 10);
+        $fechaEntera = (int) str_replace('-', '', (string) $fechaJornada);
+
+        $this->eliminarEnAnita($nroOper, $this->tipoOper(), $fechaEntera > 0 ? $fechaEntera : null);
     }
 
     public function insertarEnAnita(RendicionEstacionamientoCaja $rendicion): void
@@ -260,14 +266,14 @@ class RendicionEstacionamientoAnitaSyncService
 
             // Anita puede precargar filas rendvalor al insertar cabecera (p. ej. código 17).
             if ($nroOper > 0 && $tipoOper !== '') {
-                $this->eliminarValores($api, $nroOper, $tipoOper);
+                $this->eliminarValores($api, $nroOper, $tipoOper, (int) ($ctx['fecha_entera'] ?? 0) ?: null);
             }
 
             $this->insertarValores($api, $ctx);
         } catch (\Throwable $e) {
             if ($cabeceraInsertadaEnEsteIntento && $nroOper > 0 && $tipoOper !== '') {
                 try {
-                    $this->eliminarEnAnita($nroOper, $tipoOper);
+                    $this->eliminarEnAnita($nroOper, $tipoOper, (int) ($ctx['fecha_entera'] ?? 0) ?: null);
                 } catch (\Throwable $rollbackErr) {
                     Log::warning(self::LOG_EVENTO.'.compensacion_fallo', [
                         'nro_oper' => $nroOper,
@@ -301,7 +307,7 @@ class RendicionEstacionamientoAnitaSyncService
             'whereArmado' => RendicionEstacionamientoCabeceraAnitaMapper::whereClave($nroOper, $tipoOper),
         ], 'rendgastro update', self::LOG_EVENTO);
 
-        $this->eliminarValores($api, $nroOper, $tipoOper);
+        $this->eliminarValores($api, $nroOper, $tipoOper, (int) ($ctx['fecha_entera'] ?? 0) ?: null);
         $this->insertarValores($api, $ctx);
     }
 
@@ -398,7 +404,8 @@ class RendicionEstacionamientoAnitaSyncService
     }
 
     /**
-     * Actualiza rendg_total_z y rendg_tot_nc por clave nro_oper (reparación por PV/fecha).
+     * Actualiza rendg_total_z, rendg_tot_nc y rendg_total_x por clave nro_oper (reparación por PV/fecha).
+     * total_x se alinea con Z para que la auditoría no reconstituya bruto como Z+NC.
      */
     public function actualizarTotalZYNcPorNroOper(int $nroOper, float $totalZ, float $totNc): void
     {
@@ -416,7 +423,8 @@ class RendicionEstacionamientoAnitaSyncService
 
         $api = new ApiAnita;
         $valores = 'rendg_total_z = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($totalZ)
-            .', rendg_tot_nc = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($totNc);
+            .', rendg_tot_nc = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($totNc)
+            .', rendg_total_x = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($totalZ);
 
         $api->apiCallEscritura([
             'acc' => 'update',
@@ -424,7 +432,63 @@ class RendicionEstacionamientoAnitaSyncService
             'sistema' => $this->sistema(),
             'valores' => $valores,
             'whereArmado' => RendicionEstacionamientoCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
-        ], 'rendgastro update total_z+nc', self::LOG_EVENTO);
+        ], 'rendgastro update total_z+nc+x', self::LOG_EVENTO);
+    }
+
+    /**
+     * Desglose CAEA compartido (PV 20/31/30) en la cabecera de la PC originadora.
+     */
+    public function actualizarCamposCaeaPorNroOper(
+        int $nroOper,
+        int $sucCaea,
+        float $totFcCaea,
+        float $totNcCaea,
+    ): void {
+        if (! $this->sincronizacionHabilitada() || $nroOper <= 0) {
+            return;
+        }
+
+        if ($this->omitirSiSucursalVendingNroOper($nroOper)) {
+            return;
+        }
+
+        $api = new ApiAnita;
+        $valores = 'rendg_suc_caea = '.RendicionEstacionamientoCabeceraAnitaMapper::entero($sucCaea)
+            .', rendg_tot_fc_caea = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($totFcCaea)
+            .', rendg_tot_nc_caea = '.RendicionEstacionamientoCabeceraAnitaMapper::decimal($totNcCaea);
+
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'tabla' => $this->tablaCabecera(),
+            'sistema' => $this->sistema(),
+            'valores' => $valores,
+            'whereArmado' => RendicionEstacionamientoCabeceraAnitaMapper::whereClave($nroOper, $this->tipoOper()),
+        ], 'rendgastro update caea', self::LOG_EVENTO);
+    }
+
+    /**
+     * Reescribe suc_caea / tot_fc_caea / tot_nc_caea desde el turno ERP (CAEA por PC).
+     */
+    public function reaplicarCamposCaeaEnAnita(RendicionEstacionamientoCaja $rendicion): void
+    {
+        if ($rendicion->esRendicionJornada() || ! $this->sincronizacionHabilitada()) {
+            return;
+        }
+
+        $rendicion->loadMissing(['puntoventaCaea', 'turnoOperativo.turno', 'turnoOperativo.jornada']);
+        $nroOper = (int) ($rendicion->nro_oper_anita
+            ?? RendicionEstacionamientoCabeceraAnitaMapper::nroOperDesdeCodigo($rendicion->codigo));
+        if ($nroOper <= 0 || ! $this->existsCabeceraEnAnita($rendicion)) {
+            return;
+        }
+
+        $ctx = RendicionEstacionamientoAnitaContextBuilder::desdeRendicion($rendicion, null);
+        $this->actualizarCamposCaeaPorNroOper(
+            $nroOper,
+            (int) ($ctx['suc_caea'] ?? 0),
+            (float) ($ctx['tot_fc_caea'] ?? 0),
+            (float) ($ctx['tot_nc_caea'] ?? 0),
+        );
     }
 
     /**
@@ -493,7 +557,7 @@ class RendicionEstacionamientoAnitaSyncService
         }
 
         $api = new ApiAnita;
-        $this->eliminarValores($api, $nroOper, $tipoOper);
+        $this->eliminarValores($api, $nroOper, $tipoOper, (int) ($ctx['fecha_entera'] ?? 0) ?: null);
         $this->insertarValores($api, $ctx);
     }
 
@@ -512,18 +576,18 @@ class RendicionEstacionamientoAnitaSyncService
             'whereArmado' => RendicionEstacionamientoCabeceraAnitaMapper::whereClave($nroOper, $tipoOper),
         ], 'rendgastro update', self::LOG_EVENTO);
 
-        $this->eliminarValores($api, $nroOper, $tipoOper);
+        $this->eliminarValores($api, $nroOper, $tipoOper, (int) ($ctx['fecha_entera'] ?? 0) ?: null);
         $this->insertarValores($api, $ctx);
     }
 
-    public function eliminarEnAnita(int $nroOper, string $tipoOper): void
+    public function eliminarEnAnita(int $nroOper, string $tipoOper, ?int $fechaEntera = null): void
     {
         if ($this->omitirSiSucursalVendingNroOper($nroOper)) {
             return;
         }
 
         $api = new ApiAnita;
-        $this->eliminarValores($api, $nroOper, $tipoOper);
+        $this->eliminarValores($api, $nroOper, $tipoOper, $fechaEntera);
 
         $api->apiCallEscritura([
             'acc' => 'delete',
@@ -569,80 +633,68 @@ class RendicionEstacionamientoAnitaSyncService
             throw new \InvalidArgumentException('Empresa inválida para numeración Anita.');
         }
 
-        $ultimoErp = $this->ultimoNroOperEnErp($empresaId);
-        $ultimoAnita = null;
-        $consultaAnitaOk = false;
+        return RendicionRendgastroNroOperCompartidoSupport::conLock(function () use ($empresaId) {
+            $ultimoErp = $this->ultimoNroOperEnErp($empresaId);
+            $ultimoAnita = null;
+            $consultaAnitaOk = false;
 
-        try {
-            $ultimoAnita = $this->ultimoNroOperEnAnita($empresaId);
-            $consultaAnitaOk = true;
-        } catch (\Throwable $e) {
-            Log::warning('RendicionEstacionamientoAnita: no se pudo consultar último nro_oper en Anita', [
-                'empresa_id' => $empresaId,
-                'mensaje' => $e->getMessage(),
-            ]);
-        }
+            try {
+                $ultimoAnita = $this->ultimoNroOperEnAnita($empresaId);
+                $consultaAnitaOk = true;
+            } catch (\Throwable $e) {
+                Log::warning('RendicionEstacionamientoAnita: no se pudo consultar último nro_oper en Anita', [
+                    'empresa_id' => $empresaId,
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
 
-        $calculo = RendicionEstacionamientoSecuenciaSupport::calcularSiguiente($ultimoAnita, $ultimoErp);
-        if (! $consultaAnitaOk) {
-            $calculo['fuente'] = RendicionEstacionamientoSecuenciaSupport::FUENTE_ERP_FALLBACK;
-        }
+            $calculo = RendicionRendgastroNroOperCompartidoSupport::calcularSiguiente(
+                $ultimoAnita,
+                $ultimoErp,
+            );
+            if (! $consultaAnitaOk) {
+                $calculo['fuente'] = RendicionRendgastroNroOperCompartidoSupport::FUENTE_ERP_FALLBACK;
+            }
 
-        $this->persistirSecuenciaEmpresa($empresaId, $calculo, $consultaAnitaOk);
+            $this->persistirSecuenciaEmpresa($empresaId, $calculo, $consultaAnitaOk);
 
-        return [
-            'codigo' => (string) $calculo['siguiente'],
-            'nro_oper' => $calculo['siguiente'],
-            'fuente' => $calculo['fuente'],
-            'ultimo_anita' => $calculo['ultimo_anita'],
-            'ultimo_erp' => $calculo['ultimo_erp'],
-            'consulta_anita_ok' => $consultaAnitaOk,
-        ];
+            $siguiente = (int) $calculo['siguiente'];
+            if (RendicionRendgastroNroOperCompartidoSupport::piso() > 0
+                && ! RendicionRendgastroNroOperCompartidoSupport::enRango($siguiente)) {
+                throw new \RuntimeException(
+                    'Siguiente nro_oper estacionamiento '.$siguiente.' fuera del rango compartido rendgastro (piso '
+                    .RendicionRendgastroNroOperCompartidoSupport::piso().').',
+                );
+            }
+
+            return [
+                'codigo' => (string) $siguiente,
+                'nro_oper' => $siguiente,
+                'fuente' => $calculo['fuente'],
+                'ultimo_anita' => $calculo['ultimo_anita'],
+                'ultimo_erp' => $calculo['ultimo_erp'],
+                'consulta_anita_ok' => $consultaAnitaOk,
+            ];
+        });
     }
 
     public function ultimoNroOperEnAnita(int $empresaId): int
     {
-        $tipoOper = $this->tipoOper();
-        $where = " WHERE rendg_empresa = '".$empresaId."' AND rendg_tipo_oper = '".$tipoOper."' ";
+        unset($empresaId);
 
-        $api = new ApiAnita;
-        $payload = [
-            'acc' => 'list',
-            'sistema' => $this->sistema(),
-            'tabla' => $this->tablaCabecera(),
-            'campos' => 'rendg_nro_oper',
-            'orderBy' => 'rendg_nro_oper desc',
-            'whereArmado' => $where,
-        ];
-
-        $rows = ApiAnita::decodificarListaFilas($api->apiCall($payload));
-        if ($rows === []) {
-            return 0;
-        }
-
-        return max(0, (int) ($rows[0]->rendg_nro_oper ?? 0));
+        return RendicionRendgastroNroOperCompartidoSupport::ultimoNroOperEnAnita(
+            new ApiAnita,
+            $this->sistema(),
+            $this->tablaCabecera(),
+            $this->tipoOper(),
+        );
     }
 
     public function ultimoNroOperEnErp(int $empresaId): int
     {
-        $maxDesdeColumna = (int) (RendicionEstacionamientoCaja::query()
-            ->where('empresa_id', $empresaId)
-            ->whereNotNull('nro_oper_anita')
-            ->max('nro_oper_anita') ?? 0);
+        unset($empresaId);
 
-        $maxDesdeCodigo = 0;
-        $codigos = RendicionEstacionamientoCaja::query()
-            ->where('empresa_id', $empresaId)
-            ->pluck('codigo');
-
-        foreach ($codigos as $codigo) {
-            $n = RendicionEstacionamientoSecuenciaSupport::extraerNroOperDesdeCodigo((string) $codigo);
-            if ($n !== null && $n > $maxDesdeCodigo) {
-                $maxDesdeCodigo = $n;
-            }
-        }
-
-        return max($maxDesdeColumna, $maxDesdeCodigo);
+        return RendicionRendgastroNroOperCompartidoSupport::ultimoNroOperEnErp();
     }
 
     /**
@@ -729,13 +781,19 @@ class RendicionEstacionamientoAnitaSyncService
         );
     }
 
-    private function eliminarValores(ApiAnita $api, int $nroOper, string $tipoOper): void
+    private function eliminarValores(ApiAnita $api, int $nroOper, string $tipoOper, ?int $fechaEntera = null): void
     {
+        $where = RendicionEstacionamientoValorAnitaMapper::wherePorOperacion($nroOper, $tipoOper);
+        // Si hay fecha de jornada, no borrar líneas de otra fecha (p. ej. rendmaquina en el mismo nro_oper).
+        if ($fechaEntera !== null && $fechaEntera > 0) {
+            $where .= " AND rendv_fecha = '".$fechaEntera."' ";
+        }
+
         $api->apiCallEscritura([
             'acc' => 'delete',
             'tabla' => $this->tablaValor(),
             'sistema' => $this->sistema(),
-            'whereArmado' => RendicionEstacionamientoValorAnitaMapper::wherePorOperacion($nroOper, $tipoOper),
+            'whereArmado' => $where,
         ], 'rendvalor delete', self::LOG_EVENTO);
     }
 

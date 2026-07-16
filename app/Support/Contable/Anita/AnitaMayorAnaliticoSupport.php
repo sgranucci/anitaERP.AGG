@@ -11,8 +11,8 @@ use App\ApiAnita;
  */
 final class AnitaMayorAnaliticoSupport
 {
-    private const SUBDIARIO_CAMPOS = 'subd_fecha,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe,'
-        .'subd_desc_mov,subd_nro_operacion,subd_nro_asiento';
+    private const SUBDIARIO_CAMPOS = 'subd_fecha,subd_tipo,subd_emisor,subd_nro,subd_tipo_mov,subd_cuenta,'
+        .'subd_contrapartida,subd_importe,subd_desc_mov,subd_nro_operacion,subd_nro_asiento';
 
     private const CTAMOV_CAMPOS = 'ctav_fecha,ctav_nro_asiento,ctav_nro_linea,ctav_cuenta,ctav_d_h,'
         .'ctav_importe,ctav_desc_mov';
@@ -68,6 +68,9 @@ final class AnitaMayorAnaliticoSupport
                     'haber' => $dhData['haber'],
                     'neto_haber' => $dhData['neto_haber'],
                     'detalle' => trim((string) ($linea->subd_desc_mov ?? '')),
+                    'subd_tipo' => strtoupper(trim((string) ($linea->subd_tipo ?? ''))),
+                    'subd_emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                    'subd_nro' => (int) ($linea->subd_nro ?? 0),
                     'origen' => 'anita_subdiario',
                 ];
             }
@@ -99,6 +102,87 @@ final class AnitaMayorAnaliticoSupport
                 'neto_haber' => $dhData['neto_haber'],
                 'detalle' => trim((string) ($linea->ctav_desc_mov ?? '')),
                 'origen' => 'anita_ctamov',
+            ];
+        }
+
+        usort($out, static function (array $a, array $b): int {
+            return [$a['fecha'], $a['asiento_id'], $a['cuenta_codigo']]
+                <=> [$b['fecha'], $b['asiento_id'], $b['cuenta_codigo']];
+        });
+
+        return $out;
+    }
+
+    /**
+     * Mayor solo desde ctamov, filtrado por tipo de asiento (ej. PER = liquidación sueldos).
+     *
+     * @param  list<int>  $codigosCuenta
+     * @return list<array<string, mixed>>
+     */
+    public function listarMovimientosCtamovTipoAsiento(
+        int $empresaAnita,
+        int $fechaDesdeYmd,
+        int $fechaHastaYmd,
+        array $codigosCuenta,
+        string $tipoAsiento,
+    ): array {
+        $codigosCuenta = array_values(array_unique(array_filter(
+            array_map('intval', $codigosCuenta),
+            static fn (int $codigo) => $codigo > 0,
+        )));
+        $tipoAsiento = strtoupper(trim($tipoAsiento));
+
+        if ($empresaAnita <= 0 || $fechaDesdeYmd <= 0 || $fechaHastaYmd <= 0
+            || $codigosCuenta === [] || $tipoAsiento === '') {
+            return [];
+        }
+
+        $codigosSet = array_fill_keys($codigosCuenta, true);
+        $whereCuentas = $this->whereCuentasCtamov($codigosCuenta);
+
+        $ctamov = $this->listarBridge(
+            'contab',
+            'ctamov',
+            self::CTAMOV_CAMPOS.',ctav_tipo_asiento',
+            ' WHERE ctav_empresa='.$empresaAnita
+            .' AND ctav_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
+            .' AND ctav_tipo_asiento="'.addslashes($tipoAsiento).'"'
+            .' AND '.$whereCuentas,
+        );
+
+        $out = [];
+        foreach ($ctamov as $linea) {
+            // Defensa extra por si el bridge no filtra el tipo.
+            if (strtoupper(trim((string) ($linea->ctav_tipo_asiento ?? ''))) !== $tipoAsiento) {
+                continue;
+            }
+
+            $imputacion = AnitaSubdiarioMayorSupport::imputacionLineaCtamov($linea);
+            if ($imputacion === null) {
+                continue;
+            }
+
+            $cuenta = (int) $imputacion['cuenta'];
+            if (! isset($codigosSet[$cuenta])) {
+                continue;
+            }
+
+            $dhData = AnitaSubdiarioMayorSupport::debeHaberDesdeDh(
+                (string) $imputacion['dh'],
+                (float) $imputacion['importe'],
+            );
+
+            $out[] = [
+                'fecha' => $this->fechaAnitaAIso((int) ($linea->ctav_fecha ?? 0)),
+                'asiento_id' => (int) ($linea->ctav_nro_asiento ?? 0),
+                'cuenta_codigo' => (string) $cuenta,
+                'cuenta_nombre' => '',
+                'debe' => $dhData['debe'],
+                'haber' => $dhData['haber'],
+                'neto_haber' => $dhData['neto_haber'],
+                'detalle' => trim((string) ($linea->ctav_desc_mov ?? '')),
+                'ctav_tipo_asiento' => $tipoAsiento,
+                'origen' => 'anita_ctamov_per',
             ];
         }
 

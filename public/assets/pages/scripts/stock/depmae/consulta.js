@@ -219,7 +219,8 @@ $('input').keydown(function (e) {
     if ($(this).is('#filtro_valor, #filtro_valor_panel') || $(this).attr('name') === 'filtro_valor') {
         return;
     }
-    if ($(this).closest('#tabla-recuento-items').length) {
+    // Grillas que validan SKU / cantidades con Enter (no bloquear)
+    if ($(this).closest('#tabla-recuento-items, #tabla-items-movimientostock, #tabla-items-recepcion').length) {
         return;
     }
     e.preventDefault();

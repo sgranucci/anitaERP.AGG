@@ -123,7 +123,7 @@
 	// Estado
 	// ---------------------------------------------------------------------
 	var lineas = []; // [{rowKey, requisicion_articulo_id, articulo_id, sku, descripcion, cantidad, precio, moneda_id, cotizacion, fechaentrega, centrocostodestino_id, partidagasto_id, codigopartidagasto, descripcionpartidagasto, capex_id, codigocapex, descripcioncapex, detalle, origen: null|{tipo, ref_id, etiqueta, precio, moneda_id, proveedor_id, condicioncompra_id, condicionentrega_id, condicionpago_id}}]
-	var grupos = []; // [{ key, proveedor_id, condicioncompra_id, condicionentrega_id, transporte_id, lugarentrega, comentario, comprobantes: [], archivos: [File], lineasIdx: [int] }]
+	var grupos = []; // [{ key, proveedor_id, condicioncompra_id, condicionentrega_id, condicionpago_id, transporte_id, lugarentrega, comentario, comprobantes: [], archivos: [File], lineasIdx: [int] }]
 	var compEditCtx = { grupoIdx: -1, compIdx: -1 }; // contexto al abrir modal de comprobantes
 	var pendingPrecioRow = null;
 	var requisicionProveedorId = 0; // proveedor sugerido por la requisición (para consultas de lista de precio)
@@ -361,6 +361,36 @@
 		if ($('#modalWizardProveedorFaltante').hasClass('show')) {
 			renderModalProveedorFaltante();
 		}
+		$.get(carpetaBase + '/compras/leerproveedor/' + pid, function (data) {
+			if (!data || !grupos[gidx]) {
+				return;
+			}
+			var grupo = grupos[gidx];
+			if (data.condicioncompra_id && normId(grupo.condicioncompra_id) <= 0) {
+				grupo.condicioncompra_id = parseInt(data.condicioncompra_id, 10);
+			}
+			if (data.condicionentrega_id && normId(grupo.condicionentrega_id) <= 0) {
+				grupo.condicionentrega_id = parseInt(data.condicionentrega_id, 10);
+			}
+			if (data.condicionpago_id && normId(grupo.condicionpago_id) <= 0) {
+				grupo.condicionpago_id = parseInt(data.condicionpago_id, 10);
+			}
+			grupo.lineasIdx.forEach(function (linIdx) {
+				if (lineas[linIdx] && lineas[linIdx].origen) {
+					if (normId(lineas[linIdx].origen.condicioncompra_id) <= 0 && grupo.condicioncompra_id) {
+						lineas[linIdx].origen.condicioncompra_id = grupo.condicioncompra_id;
+					}
+					if (normId(lineas[linIdx].origen.condicionentrega_id) <= 0 && grupo.condicionentrega_id) {
+						lineas[linIdx].origen.condicionentrega_id = grupo.condicionentrega_id;
+					}
+					if (normId(lineas[linIdx].origen.condicionpago_id) <= 0 && grupo.condicionpago_id) {
+						lineas[linIdx].origen.condicionpago_id = grupo.condicionpago_id;
+					}
+				}
+			});
+			renderGruposResumen([]);
+			renderTabsGrupos();
+		});
 	}
 
 	function fmtNum(n, dec) {
@@ -392,6 +422,11 @@
 
 	function condicionEntregaNombre(id) {
 		var p = CC_ENTREGA.find(function (x) { return parseInt(x.id, 10) === parseInt(id, 10); });
+		return p ? p.nombre : '';
+	}
+
+	function condicionPagoNombre(id) {
+		var p = CC_PAGO.find(function (x) { return parseInt(x.id, 10) === parseInt(id, 10); });
 		return p ? p.nombre : '';
 	}
 
@@ -526,6 +561,7 @@
 			var prov = normId(lin.origen.proveedor_id);
 			var cc = normId(lin.origen.condicioncompra_id);
 			var ce = normId(lin.origen.condicionentrega_id);
+			var cp = normId(lin.origen.condicionpago_id);
 			var k = prov + '|' + cc + '|' + ce;
 			if (!nuevos[k]) {
 				var prev = sigueGrupos.find(function (s) { return s.key === k; });
@@ -534,6 +570,7 @@
 					proveedor_id: prov,
 					condicioncompra_id: cc,
 					condicionentrega_id: ce,
+					condicionpago_id: prev ? normId(prev.condicionpago_id) : cp,
 					transporte_id: prev ? prev.transporte_id : 0,
 					lugarentrega: prev ? prev.lugarentrega : '',
 					comentario: prev ? prev.comentario : '',
@@ -541,6 +578,8 @@
 					archivos: prev ? prev.archivos : [],
 					lineasIdx: [],
 				};
+			} else if (normId(nuevos[k].condicionpago_id) <= 0 && cp > 0) {
+				nuevos[k].condicionpago_id = cp;
 			}
 			nuevos[k].lineasIdx.push(idx);
 		});
@@ -574,6 +613,7 @@
 				);
 				$tr.append('<td>' + htmlEsc(condicionCompraNombre(g.condicioncompra_id) || '—') + '</td>');
 				$tr.append('<td>' + htmlEsc(condicionEntregaNombre(g.condicionentrega_id) || '—') + '</td>');
+				$tr.append('<td>' + htmlEsc(condicionPagoNombre(g.condicionpago_id) || '—') + '</td>');
 				$tr.append('<td class="text-right">' + g.lineasIdx.length + '</td>');
 				$tr.append('<td class="text-right">' + g.comprobantes.length + '</td>');
 				$tr.append('<td class="text-right">' + g.archivos.length + '</td>');
@@ -627,6 +667,7 @@
 			$pane.find('.wz-grupo-proveedor-nombre').val(proveedorNombre(g.proveedor_id) || '');
 			$pane.find('.wz-grupo-condicioncompra').html(selectOptionsHtml(CC_COMPRA, 'id', 'nombre', g.condicioncompra_id, true));
 			$pane.find('.wz-grupo-condicionentrega').html(selectOptionsHtml(CC_ENTREGA, 'id', 'nombre', g.condicionentrega_id, true));
+			$pane.find('.wz-grupo-condicionpago').html(selectOptionsHtml(CC_PAGO, 'id', 'nombre', g.condicionpago_id, true));
 			$pane.find('.wz-grupo-transporte').html(selectOptionsHtml(TRANSPORTES, 'id', 'nombre', g.transporte_id, true));
 			$pane.find('.wz-grupo-lugarentrega').val(g.lugarentrega || '');
 			$pane.find('.wz-grupo-comentario').val(g.comentario || '');
@@ -1094,6 +1135,12 @@
 		var gidx = parseInt($(this).closest('.tab-pane').data('gidx'), 10);
 		if (grupos[gidx]) {
 			grupos[gidx].condicionentrega_id = parseInt($(this).val() || '0', 10);
+		}
+	});
+	$(document).on('change', '.wz-grupo-condicionpago', function () {
+		var gidx = parseInt($(this).closest('.tab-pane').data('gidx'), 10);
+		if (grupos[gidx]) {
+			grupos[gidx].condicionpago_id = parseInt($(this).val() || '0', 10);
 		}
 	});
 	$(document).on('change', '.wz-grupo-transporte', function () {
@@ -1634,6 +1681,7 @@
 			nombreproveedor: '',
 			condicioncompra_id: g.condicioncompra_id ? String(g.condicioncompra_id) : '',
 			condicionentrega_id: g.condicionentrega_id ? String(g.condicionentrega_id) : '',
+			condicionpago_id: g.condicionpago_id ? String(g.condicionpago_id) : '',
 			transporte_id: g.transporte_id ? String(g.transporte_id) : '',
 			lugarentrega: g.lugarentrega || '',
 			comprobantes_json: JSON.stringify(g.comprobantes || []),

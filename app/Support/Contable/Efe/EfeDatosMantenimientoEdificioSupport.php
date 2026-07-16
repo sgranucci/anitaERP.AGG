@@ -95,6 +95,11 @@ class EfeDatosMantenimientoEdificioSupport
                 continue;
             }
 
+            // Gaming (12) ya clasificado: Anita Datos prioriza c12 (ej. ERNESTO MAYER / FNS).
+            if ((int) ($fila['concepto_id'] ?? 0) === EfeDatosGamingSuppliesSupport::CONCEPTO_GAMING_SUPPLIES) {
+                continue;
+            }
+
             $filas[$indice]['concepto_id'] = self::CONCEPTO_MANTENIMIENTO_EDIFICIO;
             $filas[$indice]['concepto_nombre'] = $nombreConcepto;
             $filas[$indice]['clasificacion_efe'] = $clasificacion;

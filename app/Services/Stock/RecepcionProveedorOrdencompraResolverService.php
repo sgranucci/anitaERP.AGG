@@ -3,10 +3,12 @@
 namespace App\Services\Stock;
 
 use App\Models\Compras\Ordencompra;
+use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Services\Compras\OrdencompraAnitaSyncService;
 use App\Services\Compras\OrdencompraRecepcionCumplimientoService;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
+use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
 use App\Support\Stock\RecepcionProveedorCentrocostoLineaSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
@@ -24,13 +26,14 @@ class RecepcionProveedorOrdencompraResolverService
         private readonly OrdencompraRepositoryInterface $ordencompraRepository,
         private readonly OrdencompraAnitaSyncService $ordencompraAnitaSyncService,
         private readonly OrdencompraRecepcionCumplimientoService $ordencompraRecepcionCumplimientoService,
+        private readonly CotizacionQueryInterface $cotizacionQuery,
     ) {
     }
 
     /**
      * @return array{cabecera: Ordencompra, lineas: list<array<string, mixed>>}
      */
-    public function resolverPorNumeroOc(int $numeroOc, int $usuarioId): array
+    public function resolverPorNumeroOc(int $numeroOc, int $usuarioId, ?string $fechaRecepcion = null): array
     {
         $oc = $this->buscarOcConRelaciones($numeroOc);
 
@@ -59,11 +62,11 @@ class RecepcionProveedorOrdencompraResolverService
 
         return [
             'cabecera' => $oc,
-            'lineas' => $this->armarLineasPrecarga($oc),
+            'lineas' => $this->armarLineasPrecarga($oc, $fechaRecepcion),
         ];
     }
 
-    public function resolverPorId(int $ordencompraId, bool $validarNuevaRecepcion = false): array
+    public function resolverPorId(int $ordencompraId, bool $validarNuevaRecepcion = false, ?string $fechaRecepcion = null): array
     {
         if (! RecepcionProveedorVisibilidadSupport::ordencompraAccesible($ordencompraId)) {
             throw new \RuntimeException('Orden de compra no encontrada o sin acceso.');
@@ -79,7 +82,7 @@ class RecepcionProveedorOrdencompraResolverService
 
         return [
             'cabecera' => $oc,
-            'lineas' => $this->armarLineasPrecarga($oc),
+            'lineas' => $this->armarLineasPrecarga($oc, $fechaRecepcion),
         ];
     }
 
@@ -90,13 +93,14 @@ class RecepcionProveedorOrdencompraResolverService
     }
 
     /** @return list<array<string, mixed>> */
-    private function armarLineasPrecarga(Ordencompra $oc): array
+    private function armarLineasPrecarga(Ordencompra $oc, ?string $fechaRecepcion = null): array
     {
         $lineas = [];
         $orden = 1;
         $proveedorId = (int) $oc->proveedor_id;
         $empresaId = (int) $oc->empresa_id;
         $ccOc = (int) ($oc->centrocosto_id ?? 0);
+        $fechaCotizacion = $this->normalizarFechaRecepcion($fechaRecepcion);
         $recibidosPorLinea = RecepcionProveedorOcPendienteSupport::cantidadesRecibidasPorLineaOc((int) $oc->id);
 
         RecepcionProveedorDepositoSupport::reiniciarCache();
@@ -237,7 +241,11 @@ class RecepcionProveedorOrdencompraResolverService
                 'precio_lista_proveedor' => $precioLista,
                 'codigo_proveedor' => trim((string) ($precioLista['codigo_articulo_proveedor'] ?? $articulo->skuproveedor ?? '')),
                 'moneda_id' => (int) ($ocArt->moneda_id ?: 1),
-                'cotizacion' => (float) ($ocArt->cotizacion ?: 1),
+                'cotizacion' => RequisicionTotalesCabecera::cotizacionVentaPorMonedaEnFecha(
+                    $this->cotizacionQuery,
+                    $fechaCotizacion,
+                    (int) ($ocArt->moneda_id ?: 1)
+                ),
                 'descuento' => 0,
                 'centrocosto_id' => $ocArt->centrocostodestino_id ?? $oc->centrocosto_id,
                 'detalle' => $ocArt->detalle,
@@ -279,5 +287,15 @@ class RecepcionProveedorOrdencompraResolverService
             ])
             ->where('numeroordencompra', $numeroOc)
             ->first();
+    }
+
+    private function normalizarFechaRecepcion(?string $fechaRecepcion): string
+    {
+        $fecha = trim((string) $fechaRecepcion);
+        if ($fecha === '') {
+            return date('Y-m-d');
+        }
+
+        return substr($fecha, 0, 10);
     }
 }

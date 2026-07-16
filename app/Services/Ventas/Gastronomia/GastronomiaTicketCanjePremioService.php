@@ -28,6 +28,7 @@ final class GastronomiaTicketCanjePremioService
         private readonly WigosCanjePremioService $wigosService,
         private readonly GastronomiaCuentaService $cuentaService,
         private readonly GastronomiaFormulaOpcionalesService $opcionalesService,
+        private readonly GastronomiaJornadaService $jornadaService,
     ) {
     }
 
@@ -327,6 +328,7 @@ final class GastronomiaTicketCanjePremioService
     {
         $items = [];
         $diasVencimiento = max(1, (int) config('gastronomia.canje_premio_vencimiento_dias', 2));
+        $fechaLista = $this->jornadaService->fechaVigenciaListaPrecio($empresaId);
 
         foreach ($filasWigos as $fila) {
             $giftId = trim(str_replace(["\r", "\n"], '', (string) ($fila->GIFT_ID ?? '')));
@@ -357,7 +359,7 @@ final class GastronomiaTicketCanjePremioService
             $precios = PrecioService::asignaPrecioPorLista(
                 (int) $articulo->id,
                 $listaprecioId,
-                Carbon::today()->format('Y-m-d'),
+                $fechaLista,
             );
             $precio = 0.;
             if ($precios !== []) {

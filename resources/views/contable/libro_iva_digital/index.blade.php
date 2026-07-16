@@ -31,11 +31,37 @@
                         'col_input' => 'col-lg-3',
                     ])
 
+                    @php
+                        $mesPeriodo = (int) old('mes', $filtros['mes'] ?? (int) date('n', strtotime('first day of last month')));
+                        $anioPeriodo = (int) old('anio', $filtros['anio'] ?? (int) date('Y', strtotime('first day of last month')));
+                        $mesesPeriodo = [
+                            1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+                            5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+                            9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+                        ];
+                    @endphp
                     <div class="form-group row">
-                        <label for="periodo" class="col-lg-2 control-label requerido">Período</label>
-                        <div class="col-lg-3">
-                            <input type="month" name="periodo" id="periodo" class="form-control required"
-                                   value="{{ old('periodo', $filtros['periodo'] ?? '') }}" required>
+                        <label class="col-lg-2 control-label requerido" for="mes">Per&iacute;odo</label>
+                        <div class="col-lg-5">
+                            <div class="row">
+                                <div class="col-md-6 mb-2 mb-md-0">
+                                    <select name="mes" id="mes" class="form-control" required title="Mes" aria-label="Mes del per&iacute;odo">
+                                        @foreach ($mesesPeriodo as $num => $nombre)
+                                            <option value="{{ $num }}" @selected($mesPeriodo === $num)>
+                                                {{ str_pad((string) $num, 2, '0', STR_PAD_LEFT) }} — {{ $nombre }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="number" name="anio" id="anio" class="form-control"
+                                           min="2000" max="2100" step="1" required
+                                           title="A&ntilde;o" aria-label="A&ntilde;o del per&iacute;odo"
+                                           value="{{ $anioPeriodo }}"
+                                           placeholder="AAAA">
+                                </div>
+                            </div>
+                            <small class="form-text text-muted">Mes y a&ntilde;o a presentar (ej. Jun/2026).</small>
                         </div>
                     </div>
 

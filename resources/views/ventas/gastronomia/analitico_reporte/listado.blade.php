@@ -6,7 +6,11 @@
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($coleccionLogo);
     $tituloReporte = $titulo ?? 'Reporte analítico gastronomía';
     $subtituloReporte = $subtitulo ?? '';
-    $totalFilas = is_countable($filas) ? count($filas) : 0;
+    $totalFilas = (int) (($resultado['totales']['cantidad_filas'] ?? 0));
+    if ($totalFilas <= 0 && is_countable($filas)) {
+        $totalFilas = collect($filas)->filter(static fn ($f) => ($f->tipo_fila ?? 'detalle') !== 'header_empresa')->count();
+    }
+
     $tot = $resultado['totales'] ?? [];
 @endphp
 <!DOCTYPE html>

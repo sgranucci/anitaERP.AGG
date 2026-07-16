@@ -18,7 +18,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class CierreRendicionEstacionamientoConciliacionFlashExport implements FromView, ShouldAutoSize, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
-    private const COL_ULTIMA = 'M';
+    private const COL_ULTIMA = 'J';
 
     private bool $hayFilaLogos = false;
 
@@ -59,6 +59,8 @@ class CierreRendicionEstacionamientoConciliacionFlashExport implements FromView,
     }
 
     /**
+     * Una fila por jornada (mismo criterio que la conciliacion gastronomia Contable).
+     *
      * @param  array<string, mixed>  $resultado
      * @return list<array<string, mixed>>
      */
@@ -66,84 +68,21 @@ class CierreRendicionEstacionamientoConciliacionFlashExport implements FromView,
     {
         $filas = [];
         foreach ($resultado['dias'] ?? [] as $dia) {
-            $pvs = $dia['puntos_venta'] ?? [];
-            if ($pvs === []) {
-                $filas[] = self::filaDesdeDia($dia, '—', 0, [
-                    'total_cobrado' => 0.0,
-                    'total_invitaciones' => 0.0,
-                    'total_facturacion' => (float) ($dia['total_rendiciones_facturacion'] ?? 0),
-                    'total_notas_credito' => (float) ($dia['total_rendiciones_notas_credito'] ?? 0),
-                    'total_ventas_brutas' => (float) ($dia['total_rendiciones_ventas_brutas'] ?? 0),
-                    'total_asientos_debe' => (float) ($dia['total_asientos_debe'] ?? 0),
-                ], true);
-                continue;
-            }
-            foreach ($pvs as $pv) {
-                $codigo = (string) ($pv['pv_codigo'] ?? '');
-                $nombre = (string) ($pv['pv_nombre'] ?? '');
-                $label = $codigo;
-                if ($nombre !== '' && $nombre !== $codigo) {
-                    $label .= ' — '.$nombre;
-                }
-                $filas[] = [
-                    'tipo' => 'pv',
-                    'fecha_jornada_fmt' => $dia['fecha_jornada_fmt'] ?? '',
-                    'estado' => $dia['estado'] ?? '',
-                    'pv_label' => $label,
-                    'cantidad' => (int) ($pv['cantidad'] ?? 0),
-                    'total_cobrado' => (float) ($pv['total_cobrado'] ?? 0),
-                    'total_invitaciones' => (float) ($pv['total_invitaciones'] ?? 0),
-                    'total_facturacion' => (float) ($pv['total_facturacion'] ?? 0),
-                    'total_notas_credito' => (float) ($pv['total_notas_credito'] ?? 0),
-                    'total_ventas_brutas' => (float) ($pv['total_ventas_brutas'] ?? 0),
-                    'total_asientos_debe' => (float) ($pv['total_asientos_debe'] ?? 0),
-                    'total_flash_estac' => null,
-                    'diferencia_flash' => null,
-                    'diferencia_venta_asientos' => null,
-                ];
-            }
-            $filas[] = self::filaDesdeDia($dia, 'TOTAL JORNADA', (int) ($dia['cantidad_rendiciones'] ?? 0), [
-                'total_cobrado' => (float) ($dia['total_rendiciones_cobrado'] ?? 0),
-                'total_invitaciones' => (float) ($dia['total_rendiciones_invitaciones'] ?? 0),
+            $filas[] = [
+                'fecha_jornada_fmt' => $dia['fecha_jornada_fmt'] ?? '',
+                'estado' => $dia['estado'] ?? '',
+                'cantidad_rendiciones' => (int) ($dia['cantidad_rendiciones'] ?? 0),
                 'total_facturacion' => (float) ($dia['total_rendiciones_facturacion'] ?? 0),
                 'total_notas_credito' => (float) ($dia['total_rendiciones_notas_credito'] ?? 0),
                 'total_ventas_brutas' => (float) ($dia['total_rendiciones_ventas_brutas'] ?? 0),
+                'total_flash_estac' => (float) ($dia['total_flash_estac'] ?? 0),
                 'total_asientos_debe' => (float) ($dia['total_asientos_debe'] ?? 0),
-            ], true, 'total_dia');
+                'diferencia_flash' => (float) ($dia['diferencia'] ?? 0),
+                'diferencia_venta_asientos' => (float) ($dia['diferencia_venta_total_asientos'] ?? 0),
+            ];
         }
 
         return $filas;
-    }
-
-    /**
-     * @param  array<string, mixed>  $dia
-     * @param  array<string, float>  $montos
-     * @return array<string, mixed>
-     */
-    private static function filaDesdeDia(
-        array $dia,
-        string $pvLabel,
-        int $cantidad,
-        array $montos,
-        bool $conFlash,
-        string $tipo = 'dia_vacio',
-    ): array {
-        return [
-            'tipo' => $tipo,
-            'fecha_jornada_fmt' => $dia['fecha_jornada_fmt'] ?? '',
-            'estado' => $dia['estado'] ?? '',
-            'pv_label' => $pvLabel,
-            'cantidad' => $cantidad,
-            'total_cobrado' => $montos['total_cobrado'],
-            'total_invitaciones' => $montos['total_invitaciones'],
-            'total_facturacion' => $montos['total_facturacion'],
-            'total_notas_credito' => $montos['total_notas_credito'],
-            'total_ventas_brutas' => $montos['total_ventas_brutas'],
-            'total_asientos_debe' => $montos['total_asientos_debe'],
-            'total_flash_estac' => $conFlash ? (float) ($dia['total_flash_estac'] ?? 0) : null,
-            'diferencia_flash' => $conFlash ? (float) ($dia['diferencia'] ?? 0) : null,
-            'diferencia_venta_asientos' => $conFlash ? (float) ($dia['diferencia_venta_total_asientos'] ?? 0) : null,
-        ];
     }
 
     public function styles(Worksheet $sheet): array
@@ -169,17 +108,14 @@ class CierreRendicionEstacionamientoConciliacionFlashExport implements FromView,
         return [
             'A' => 12,
             'B' => 8,
-            'C' => 22,
-            'D' => 7,
-            'E' => 11,
-            'F' => 10,
-            'G' => 11,
-            'H' => 9,
-            'I' => 11,
-            'J' => 12,
-            'K' => 11,
-            'L' => 12,
-            'M' => 13,
+            'C' => 8,
+            'D' => 12,
+            'E' => 10,
+            'F' => 12,
+            'G' => 12,
+            'H' => 12,
+            'I' => 13,
+            'J' => 14,
         ];
     }
 

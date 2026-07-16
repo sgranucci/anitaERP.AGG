@@ -12,6 +12,7 @@ use App\Support\Contable\CierreRendicionEstacionamientoConfigSupport;
 use App\Support\Contable\CierreRendicionEstacionamientoConciliacionFlashSupport;
 use App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport;
 use App\Support\Contable\CierreRendicionEstacionamientoListadoFiltros;
+use App\Support\Contable\EstacionamientoDiarioPuntoventaReporteSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\RendicionEstacionamientoCajaListadoFiltros;
 use Carbon\Carbon;
@@ -382,6 +383,17 @@ class CierreRendicionEstacionamientoService
         $desde = $this->resolverUltimaJornadaCierreContable($empresaId) ?? $hasta;
 
         return ['desde' => $desde, 'hasta' => $hasta];
+    }
+
+    /**
+     * Diario por PV / medios (facturación estacionamiento ERP).
+     *
+     * @return array<string, mixed>
+     */
+    public function reporteDiarioPuntoventa(int $empresaId, string $fechaDesde, string $fechaHasta): array
+    {
+        return app(EstacionamientoDiarioPuntoventaReporteSupport::class)
+            ->generar($empresaId, $fechaDesde, $fechaHasta);
     }
 
     private function resolverUltimaJornadaCierreContable(int $empresaId): ?string

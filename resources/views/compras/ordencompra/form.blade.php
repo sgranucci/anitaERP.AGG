@@ -238,6 +238,20 @@
             </div>
 
             <div class="form-group row">
+                <label for="condicionpago_id" class="col-lg-4 control-label">Condición pago</label>
+                <div class="col-lg-8">
+                    <select name="condicionpago_id" id="condicionpago_id" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
+                        <option value="">—</option>
+                        @foreach ($condicionpago_query as $row)
+                            <option value="{{ $row->id }}" {{ (int) old('condicionpago_id', (isset($data) && $data) ? ($data->condicionpago_id ?? 0) : 0) === (int) $row->id ? 'selected' : '' }}>
+                                {{ $row->nombre }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group row">
                 <label for="transporte_id" class="col-lg-4 control-label">Transporte</label>
                 <div class="col-lg-8">
                     <select name="transporte_id" id="transporte_id" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
@@ -316,9 +330,27 @@
             min-width: 0;
             flex: 1 1 0;
         }
+        #tabla-articulos-ordencompra td.oc-cant-alt-celda {
+            max-width: 5.5rem;
+            vertical-align: middle;
+        }
+        #tabla-articulos-ordencompra .oc-cant-alt-texto {
+            display: block;
+            font-size: 0.75rem;
+            line-height: 1.2;
+            color: #495057;
+            white-space: nowrap;
+        }
+        #tabla-articulos-ordencompra .oc-cant-alt-texto .oc-cant-alt-valor {
+            font-weight: 600;
+        }
+        #tabla-articulos-ordencompra .oc-cant-alt-texto .oc-cant-alt-um {
+            color: #6c757d;
+            margin-left: 0.15rem;
+        }
     </style>
     @php
-        $ocColspanMetaArticulos = $soloLectura ? 12 : 13;
+        $ocColspanMetaArticulos = $soloLectura ? 13 : 14;
         $fechaDocOc = old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d'));
         $ocMonedaPesoId = (int) (
             optional($moneda_query->firstWhere('abreviatura', '$'))->id
@@ -332,16 +364,17 @@
             <tr>
                 <th style="width: 11%;">Artículo</th>
                 <th style="width: 14%;">Descripción</th>
-                <th style="width: 7%;">Cant.</th>
+                <th style="width: 6%;">Cant.</th>
+                <th style="width: 6%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase)">Cant. alt.</th>
                 <th style="width: 8%;">Precio</th>
                 <th style="width: 5%;">Moneda</th>
                 <th style="width: 6%;">Cotiz.</th>
                 <th style="width: 8%;">F. entrega línea</th>
                 <th style="width: 9%;">CC destino</th>
-                <th style="width: 20%;">Partida presupuesto</th>
-                <th style="width: 18%;">CAPEX</th>
-                <th style="width: 8%;">Det. línea</th>
-                <th style="width: 7%;" class="text-nowrap">Origen</th>
+                <th style="width: 18%;">Partida presupuesto</th>
+                <th style="width: 16%;">CAPEX</th>
+                <th style="width: 7%;">Det. línea</th>
+                <th style="width: 6%;" class="text-nowrap">Origen</th>
                 @if (!$soloLectura)
                     <th style="width: 4%;"></th>
                 @endif
@@ -380,6 +413,19 @@
                     $_poTipo = old('precio_origen_tipos.'.$idx, $linea->precio_origen_tipo ?? '');
                     $_poRef = old('precio_origen_ref_ids.'.$idx, $linea->precio_origen_ref_id ?? '');
                     $_poEtiq = old('precio_origen_etiquetas.'.$idx, $linea->precio_origen_etiqueta ?? '');
+                    $_artLinea = $linea->articulos;
+                    $_uxenv = (float) ($_artLinea?->unidadesxenvase ?? 0);
+                    $_umAltAbrev = optional($_artLinea?->unidadesdemedidasalternativas)->abreviatura ?? '';
+                    $_cantLinea = (float) old('cantidades.'.$idx, $linea->cantidad ?? 1);
+                    $_cantAltOld = old('cantidadalternativas.'.$idx, $linea->cantidadalternativa ?? '');
+                    if ($_uxenv > 0 && $_cantLinea != 0.0) {
+                        $_cantAltCalc = $_cantLinea * $_uxenv;
+                        $_cantAltShow = rtrim(rtrim(number_format($_cantAltCalc, 4, '.', ''), '0'), '.');
+                    } else {
+                        $_cantAltShow = ($_cantAltOld !== null && $_cantAltOld !== '')
+                            ? rtrim(rtrim(number_format((float) $_cantAltOld, 4, '.', ''), '0'), '.')
+                            : '';
+                    }
                 @endphp
                 <tr class="item-ordencompra-articulo">
                     <td>
@@ -390,7 +436,7 @@
                         <input type="hidden" class="oc-precio-origen-ref-id" name="precio_origen_ref_ids[]" value="{{ $_poRef }}">
                         <input type="hidden" class="oc-precio-origen-etiqueta" name="precio_origen_etiquetas[]" value="{{ $_poEtiq }}">
                         <input type="hidden" name="descuentos_linea[]" value="{{ old('descuentos_linea.'.$idx, $linea->descuento ?? '') }}">
-                        <input type="hidden" name="cantidadalternativas[]" value="{{ old('cantidadalternativas.'.$idx, $linea->cantidadalternativa ?? '') }}">
+                        <input type="hidden" name="cantidadalternativas[]" class="oc-cantidadalternativa" value="{{ $_cantAltShow }}">
                         <textarea name="detalle_articulos[]" class="d-none oc-ta-detalle-linea" aria-hidden="true">{{ old('detalle_articulos.'.$idx, $linea->detalle ?? '') }}</textarea>
                         <div class="d-flex align-items-center flex-nowrap">
                             @if (!$soloLectura)
@@ -409,6 +455,21 @@
                     <td>
                         <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea"
                             value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                        <input type="hidden" class="oc-unidadesxenvase" value="{{ $_uxenv > 0 ? $_uxenv : '' }}">
+                        <input type="hidden" class="oc-um-alt-abrev" value="{{ $_umAltAbrev }}">
+                    </td>
+                    <td class="oc-cant-alt-celda text-right px-1">
+                        <span class="oc-cant-alt-texto" title="Cantidad × unidades x envase">
+                            @if ($_uxenv > 0 && $_cantAltShow !== '')
+                                <span class="oc-cant-alt-valor">{{ $_cantAltShow }}</span>
+                                @if ($_umAltAbrev !== '')
+                                    <span class="oc-cant-alt-um">{{ $_umAltAbrev }}</span>
+                                @endif
+                            @else
+                                <span class="oc-cant-alt-valor text-muted">—</span>
+                                <span class="oc-cant-alt-um"></span>
+                            @endif
+                        </span>
                     </td>
                     <td>
                         <input type="number" step="0.0001" name="precios[]" class="form-control precio-linea"

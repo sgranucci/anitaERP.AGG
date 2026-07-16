@@ -193,7 +193,9 @@ $(function () {
         }
 
         var problema = (avisos || []).some(function (a) {
-            return a.tipo === 'proveedor_sin_cuenta' || a.tipo === 'proveedor_sin_seleccionar';
+            return a.tipo === 'proveedor_sin_cuenta'
+                || a.tipo === 'proveedor_sin_cuenta_me'
+                || a.tipo === 'proveedor_sin_seleccionar';
         });
 
         if (problema) {
@@ -418,6 +420,62 @@ $(function () {
         mostrarSolapa('#cp-solapa-archivos');
         marcarTabActivo('cp-boton-archivos');
     }
+
+    (function initCotizacionDiaComprobante() {
+        if (contabilizado) {
+            return;
+        }
+        var carpetaBase = typeof window.carpetaBase !== 'undefined' ? window.carpetaBase : '';
+        var cotizacionManual = false;
+        var refrescoXhr = null;
+
+        function monedaIdForm() {
+            return parseInt($('#moneda_id').val() || '1', 10) || 1;
+        }
+
+        function fechaComprobanteForm() {
+            return (($('#fechacomprobante').val() || '') + '').substring(0, 10);
+        }
+
+        function refrescarCotizacionDia() {
+            var mid = monedaIdForm();
+            var fecha = fechaComprobanteForm();
+            if (mid <= 1) {
+                $('#cotizacion').val(1);
+                return;
+            }
+            if (!fecha) {
+                return;
+            }
+            if (refrescoXhr && refrescoXhr.readyState !== 4) {
+                refrescoXhr.abort();
+            }
+            refrescoXhr = $.getJSON(carpetaBase + '/compras/comprobante-proveedor/api/cotizacion-moneda-fecha', {
+                fecha: fecha,
+                moneda_id: mid
+            }).done(function (res) {
+                if (cotizacionManual) {
+                    return;
+                }
+                var cot = parseFloat(res && res.cotizacion);
+                if (cot > 0) {
+                    $('#cotizacion').val(cot);
+                }
+            });
+        }
+
+        $('#cotizacion').on('input change', function () {
+            cotizacionManual = true;
+        });
+
+        $('#fechacomprobante, #moneda_id').on('change', function () {
+            cotizacionManual = false;
+            refrescarCotizacionDia();
+            if (!contabilizado) {
+                programarPreviewAsiento();
+            }
+        });
+    })();
 
     if (!contabilizado) {
         marcarAvisosConceptosLocales();

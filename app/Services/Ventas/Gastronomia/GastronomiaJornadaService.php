@@ -70,6 +70,20 @@ final class GastronomiaJornadaService
     }
 
     /**
+     * Vigencia de lista de precios en el POS: fecha de la jornada abierta;
+     * si no hay jornada, cae a la fecha calendario de hoy.
+     */
+    public function fechaVigenciaListaPrecio(int $empresaId): string
+    {
+        $jornada = $this->jornadaAbierta($empresaId);
+        if ($jornada?->fecha_jornada !== null) {
+            return $jornada->fecha_jornada->format('Y-m-d');
+        }
+
+        return Carbon::today()->format('Y-m-d');
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */

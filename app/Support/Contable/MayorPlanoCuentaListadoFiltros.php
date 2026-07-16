@@ -46,6 +46,8 @@ class MayorPlanoCuentaListadoFiltros
             $cuentaHasta = $cuentaDesde;
         }
 
+        $cuentas = self::parsearCuentasCsv((string) $request->input('cuentas', ''));
+
         return [
             'empresa_ids' => $empresaIds,
             'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
@@ -60,8 +62,35 @@ class MayorPlanoCuentaListadoFiltros
             'modo_inclusion_asientos' => $modoAsientos,
             'cuenta_desde' => $cuentaDesde,
             'cuenta_hasta' => $cuentaHasta,
+            'cuentas' => $cuentas,
             'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
         ];
+    }
+
+    /**
+     * CSV de códigos de cuenta (con o sin guión) → lista de enteros únicos ordenados.
+     *
+     * @return list<int>
+     */
+    public static function parsearCuentasCsv(string $valor): array
+    {
+        $valor = trim($valor);
+        if ($valor === '') {
+            return [];
+        }
+
+        $codigos = [];
+        foreach (preg_split('/[,\s;]+/', $valor) ?: [] as $token) {
+            $codigo = MayorPlanoCuenta\MayorPlanoCuentaSupport::parsearCodigoCuenta((string) $token);
+            if ($codigo > 0) {
+                $codigos[$codigo] = $codigo;
+            }
+        }
+
+        $lista = array_values($codigos);
+        sort($lista);
+
+        return $lista;
     }
 
     public static function tieneCriteriosAplicados(array $filtros): bool
@@ -118,6 +147,12 @@ class MayorPlanoCuentaListadoFiltros
 
         if ((int) ($filtros['cuenta_hasta'] ?? 0) > 0) {
             $out['cuenta_hasta'] = (int) $filtros['cuenta_hasta'];
+        }
+
+        $cuentas = array_values(array_filter(array_map('intval', $filtros['cuentas'] ?? []), fn (int $c) => $c > 0));
+        if ($cuentas !== []) {
+            sort($cuentas);
+            $out['cuentas'] = implode(',', $cuentas);
         }
 
         $texto = trim((string) ($filtros['filtro_texto'] ?? ''));

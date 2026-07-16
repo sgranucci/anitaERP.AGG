@@ -23,10 +23,12 @@ final class RendicionEstacionamientoSecuenciaSupport
      *   ultimo_erp: int
      * }
      */
-    public static function calcularSiguiente(?int $ultimoAnita, int $ultimoErp): array
+    public static function calcularSiguiente(?int $ultimoAnita, int $ultimoErp, int $piso = 0, int $techo = 0): array
     {
         $ultimoAnita = max(0, (int) ($ultimoAnita ?? 0));
         $ultimoErp = max(0, $ultimoErp);
+        $piso = max(0, $piso);
+        $techo = max(0, $techo);
 
         if ($ultimoAnita >= $ultimoErp) {
             $fuente = $ultimoAnita > 0 && $ultimoErp > 0 && $ultimoAnita !== $ultimoErp
@@ -37,9 +39,22 @@ final class RendicionEstacionamientoSecuenciaSupport
         }
 
         $maximo = max($ultimoAnita, $ultimoErp);
+        $siguiente = $maximo + 1;
+        if ($piso > 0 && $siguiente < $piso) {
+            $siguiente = $piso;
+            if ($maximo < $piso) {
+                $fuente = self::FUENTE_ERP;
+            }
+        }
+
+        if ($techo > 0 && $siguiente >= $techo) {
+            throw new \RuntimeException(
+                'Se agotó el rango de nro_oper Anita estacionamiento (piso '.$piso.', techo '.$techo.').',
+            );
+        }
 
         return [
-            'siguiente' => $maximo + 1,
+            'siguiente' => $siguiente,
             'fuente' => $fuente,
             'ultimo_anita' => $ultimoAnita,
             'ultimo_erp' => $ultimoErp,

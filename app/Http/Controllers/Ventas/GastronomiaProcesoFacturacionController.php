@@ -729,10 +729,11 @@ class GastronomiaProcesoFacturacionController extends Controller
         $listaId = $this->listaPrecioIdDesdeCfg($cfg);
 
         $articulos = $this->cuentaService->queryArticulosCatalogo($cfg, $q, 80)->get(['id', 'sku', 'descripcion']);
+        $fechaVigencia = $this->fechaVigenciaListaPrecioDesdeCfg($cfg);
 
         $out = [];
         foreach ($articulos as $a) {
-            $precios = PrecioService::asignaPrecioPorLista((int) $a->id, $listaId, Carbon::today()->format('Y-m-d'));
+            $precios = PrecioService::asignaPrecioPorLista((int) $a->id, $listaId, $fechaVigencia);
             $precioInfo = $precios !== [] ? end($precios) : ['precio' => 0, 'moneda_id' => 1, 'listaprecio_id' => $listaId];
 
             $out[] = [
@@ -772,7 +773,11 @@ class GastronomiaProcesoFacturacionController extends Controller
         }
 
         $listaId = $this->listaPrecioIdDesdeCfg($cfg);
-        $precios = PrecioService::asignaPrecioPorLista((int) $a->id, $listaId, Carbon::today()->format('Y-m-d'));
+        $precios = PrecioService::asignaPrecioPorLista(
+            (int) $a->id,
+            $listaId,
+            $this->fechaVigenciaListaPrecioDesdeCfg($cfg),
+        );
         $precioInfo = $precios !== [] ? end($precios) : ['precio' => 0, 'moneda_id' => 1, 'listaprecio_id' => $listaId];
 
         return response()->json([
@@ -1567,6 +1572,13 @@ class GastronomiaProcesoFacturacionController extends Controller
         return (int) ($cfg->listaprecio_id ?? 1);
     }
 
+    private function fechaVigenciaListaPrecioDesdeCfg(?ConfiguracionPuntoventaGastronomia $cfg): string
+    {
+        $empresaId = $cfg ? (int) $cfg->empresa_id : 0;
+
+        return $this->jornadaService->fechaVigenciaListaPrecio($empresaId);
+    }
+
     private function respuestaErrorCanjeFidelidad(\Throwable $e): \Illuminate\Http\JsonResponse
     {
         return response()->json([
@@ -1580,7 +1592,11 @@ class GastronomiaProcesoFacturacionController extends Controller
     {
         $cfg = $this->cuentaService->resolverConfiguracionPv();
         $listaId = $cfg ? $this->listaPrecioIdDesdeCfg($cfg) : 1;
-        $precios = PrecioService::asignaPrecioPorLista($articuloId, $listaId, Carbon::today()->format('Y-m-d'));
+        $precios = PrecioService::asignaPrecioPorLista(
+            $articuloId,
+            $listaId,
+            $this->fechaVigenciaListaPrecioDesdeCfg($cfg),
+        );
 
         if ($precios === []) {
             return 0.;
