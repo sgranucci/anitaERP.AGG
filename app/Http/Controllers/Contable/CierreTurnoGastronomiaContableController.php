@@ -111,8 +111,9 @@ class CierreTurnoGastronomiaContableController extends Controller
 
         $fechaDesde = trim((string) $request->input('fecha_desde', ''));
         $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $consultar = $request->boolean('consultar');
 
-        if ($fechaDesde === '' && $fechaHasta === '') {
+        if (! $consultar || ($fechaDesde === '' && $fechaHasta === '')) {
             $defaults = $this->service->resolverRangoConciliacionDefault($empresaId);
             $fechaDesde = $defaults['desde'];
             $fechaHasta = $defaults['hasta'];
@@ -120,12 +121,14 @@ class CierreTurnoGastronomiaContableController extends Controller
             $fechaHasta = now()->toDateString();
         }
 
-        $consultar = $request->boolean('consultar');
         $resultado = null;
         $errorConciliacion = null;
 
         if ($consultar && $empresaId > 0 && $fechaDesde !== '' && $fechaHasta !== '') {
             try {
+                ini_set('memory_limit', '-1');
+                ini_set('max_execution_time', '0');
+
                 $resultado = $this->service->conciliarFlash($empresaId, $fechaDesde, $fechaHasta);
             } catch (\Throwable $e) {
                 $errorConciliacion = $e->getMessage();
@@ -238,8 +241,9 @@ class CierreTurnoGastronomiaContableController extends Controller
 
         $fechaDesde = trim((string) $request->input('fecha_desde', ''));
         $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $consultar = $request->boolean('consultar');
 
-        if ($fechaDesde === '' && $fechaHasta === '') {
+        if (! $consultar || ($fechaDesde === '' && $fechaHasta === '')) {
             $defaults = $this->service->resolverRangoConciliacionDefault($empresaId);
             $fechaDesde = $defaults['desde'];
             $fechaHasta = $defaults['hasta'];
@@ -247,12 +251,14 @@ class CierreTurnoGastronomiaContableController extends Controller
             $fechaHasta = now()->toDateString();
         }
 
-        $consultar = $request->boolean('consultar');
         $resultado = null;
         $errorReporte = null;
 
         if ($consultar && $empresaId > 0 && $fechaDesde !== '' && $fechaHasta !== '') {
             try {
+                ini_set('memory_limit', '-1');
+                ini_set('max_execution_time', '0');
+
                 $resultado = $this->service->reporteDiarioPuntoventa($empresaId, $fechaDesde, $fechaHasta);
             } catch (\Throwable $e) {
                 $errorReporte = $e->getMessage();

@@ -142,9 +142,174 @@
         aplicarRetencionesPorLetra();
 	}
 
+    function valorFpCampo($el) {
+        return (($el.val() || '') + '').trim();
+    }
+
+    function renglonFormapagoTieneDatos($tr) {
+        var selectores = [
+            '.fp-nombre',
+            '.fp-formapago',
+            '.fp-tipocuentacaja',
+            '.fp-moneda',
+            '.fp-cbu',
+            '.fp-numerocuenta',
+            '.fp-nroinscripcion',
+            '.fp-banco',
+            '.fp-mediopago',
+            '.fp-email',
+        ];
+        for (var i = 0; i < selectores.length; i++) {
+            if (valorFpCampo($tr.find(selectores[i]).first()) !== '') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function limpiarRenglonesFormapagoVacios() {
+        $('#tbody-formapago-table tr.item-formapago').each(function () {
+            var $tr = $(this);
+            if (!renglonFormapagoTieneDatos($tr)) {
+                $tr.remove();
+            }
+        });
+        actualizaRenglonesFormapago();
+    }
+
+    function esFilaFormapagoTransferencia($tr) {
+        var $fp = $tr.find('.fp-formapago').first();
+        if (!$fp.length) {
+            return false;
+        }
+        var $opt = $fp.find('option:selected');
+        var abrev = (($opt.attr('data-abreviatura') || '') + '').trim().toUpperCase();
+        return abrev === 'T';
+    }
+
+    function sincronizarRequiredFormapago() {
+        $('#tbody-formapago-table tr.item-formapago').each(function () {
+            var $tr = $(this);
+            var activo = renglonFormapagoTieneDatos($tr);
+
+            // El TC (tipo de cuenta) es obligatorio solo si la forma de pago es transferencia.
+            var $tc = $tr.find('.fp-tipocuentacaja').first();
+            if ($tc.length) {
+                if (esFilaFormapagoTransferencia($tr)) {
+                    $tc.addClass('fp-requerido');
+                } else {
+                    $tc.removeClass('fp-requerido').removeClass('required').removeAttr('required');
+                    if (typeof marcarCampoObligatorio === 'function') {
+                        marcarCampoObligatorio($tc[0], false);
+                    }
+                }
+            }
+
+            $tr.find('.fp-requerido').each(function () {
+                var $campo = $(this);
+                if (activo) {
+                    $campo.addClass('required').attr('required', 'required');
+                } else {
+                    $campo.removeClass('required').removeAttr('required');
+                    if (typeof marcarCampoObligatorio === 'function') {
+                        marcarCampoObligatorio(this, false);
+                    }
+                }
+            });
+        });
+    }
+
+    function validarFormasPagoProveedor() {
+        limpiarRenglonesFormapagoVacios();
+        sincronizarRequiredFormapago();
+
+        var primerInvalido = null;
+        var cantidadInvalidos = 0;
+        var etiqueta = '';
+
+        $('#tbody-formapago-table tr.item-formapago').each(function () {
+            var $tr = $(this);
+            var nro = valorFpCampo($tr.find('.iiformapago')) || '?';
+            $tr.find('.fp-requerido').each(function () {
+                var vacio = valorFpCampo($(this)) === '';
+                if (typeof marcarCampoObligatorio === 'function') {
+                    marcarCampoObligatorio(this, vacio);
+                } else {
+                    this.style.borderColor = vacio ? '#dc3545' : '';
+                }
+                if (vacio) {
+                    cantidadInvalidos++;
+                    if (!primerInvalido) {
+                        primerInvalido = this;
+                        etiqueta = ($(this).attr('data-fp-label') || this.name || 'campo') +
+                            ' (renglón ' + nro + ')';
+                    }
+                }
+            });
+        });
+
+        return {
+            valido: cantidadInvalidos === 0,
+            primerInvalido: primerInvalido,
+            cantidadInvalidos: cantidadInvalidos,
+            etiqueta: etiqueta,
+        };
+    }
+
     $(function () {
-        $('#form-general').on('submit', function () {
+        var formGeneral = document.getElementById('form-general');
+        if (formGeneral) {
+            // Antes del validador global de funciones.js: limpia vacíos y marca required.
+            formGeneral.addEventListener('submit', function () {
+                aplicarReglasRetencionesImpuestos();
+                limpiarRenglonesFormapagoVacios();
+                sincronizarRequiredFormapago();
+            }, true);
+        }
+
+        $('#form-general').on('submit', function (event) {
             aplicarReglasRetencionesImpuestos();
+            var resultadoFp = validarFormasPagoProveedor();
+            if (resultadoFp.valido) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+
+            if (typeof mostrarSolapaDelPrimerCampoInvalido === 'function') {
+                mostrarSolapaDelPrimerCampoInvalido(resultadoFp.primerInvalido);
+            } else {
+                $('#botonform3').trigger('click');
+            }
+
+            var mensaje = 'Complete los campos obligatorios de Formas de pago';
+            if (resultadoFp.cantidadInvalidos > 1) {
+                mensaje += ' (' + resultadoFp.cantidadInvalidos + ' pendientes)';
+            }
+            if (resultadoFp.etiqueta) {
+                mensaje += '. Falta: ' + resultadoFp.etiqueta;
+            }
+            mensaje += '.';
+
+            if (typeof Biblioteca !== 'undefined' && typeof Biblioteca.notificaciones === 'function') {
+                Biblioteca.notificaciones(mensaje, 'Formulario incompleto', 'warning');
+            } else {
+                alert(mensaje);
+            }
+
+            if (typeof enfocarCampoInvalido === 'function') {
+                enfocarCampoInvalido(resultadoFp.primerInvalido);
+            } else if (resultadoFp.primerInvalido) {
+                resultadoFp.primerInvalido.focus();
+            }
+        });
+
+        $(document).on('input change', '#tbody-formapago-table .fp-requerido, #tbody-formapago-table .fp-formapago, #tbody-formapago-table .fp-tipocuentacaja, #tbody-formapago-table .fp-cbu, #tbody-formapago-table .fp-numerocuenta, #tbody-formapago-table .fp-nroinscripcion, #tbody-formapago-table .fp-banco, #tbody-formapago-table .fp-mediopago, #tbody-formapago-table .fp-email', function () {
+            sincronizarRequiredFormapago();
+            if (this.classList.contains('fp-requerido') && valorFpCampo($(this)) !== '' && typeof marcarCampoObligatorio === 'function') {
+                marcarCampoObligatorio(this, false);
+            }
         });
 
         $("#condicioniva_id").change(function(){
@@ -324,6 +489,18 @@
 
         // Muestra tipo de suspension
         muestraTipoSuspension();
+
+        // Formatea los C.U.I.T. ya cargados en Formas de pago (XX-XXXXXXXX-X).
+        if (typeof formatarCUIT === 'function') {
+            $('#tbody-formapago-table .fp-nroinscripcion').each(function () {
+                if (valorFpCampo($(this)) !== '') {
+                    formatarCUIT(this);
+                }
+            });
+        }
+
+        // Marca el TC como requerido en las filas de transferencia ya existentes.
+        sincronizarRequiredFormapago();
 
         $('#agrega_renglon_exclusion').on('click', agregaRenglonExclusion);
         $(document).on('click', '.eliminar_exclusion', borraRenglonExclusion);

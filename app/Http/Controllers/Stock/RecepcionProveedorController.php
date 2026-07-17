@@ -14,6 +14,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorAsientoService;
+use App\Services\Stock\RecepcionProveedorCambioCotizacionService;
 use App\Services\Stock\RecepcionProveedorOcrService;
 use App\Services\Stock\RecepcionProveedorOrdencompraResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
@@ -37,6 +38,7 @@ class RecepcionProveedorController extends Controller
         private readonly RecepcionProveedorOcrService $ocrService,
         private readonly RecepcionProveedorPdfService $pdfService,
         private readonly RecepcionProveedorAsientoService $asientoService,
+        private readonly RecepcionProveedorCambioCotizacionService $cambioCotizacionService,
         private readonly Recepcion_ProveedorRepositoryInterface $repository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly CotizacionQueryInterface $cotizacionQuery,
@@ -148,6 +150,23 @@ class RecepcionProveedorController extends Controller
             RecepcionProveedorListadoFiltros::class,
             $id
         ))->with('mensaje', 'Recepción confirmada. Stock y contabilidad generados.');
+    }
+
+    public function cambiarCotizacion(Request $request, int $id)
+    {
+        can('cambiar-cotizacion-recepcion-proveedor');
+
+        $request->validate([
+            'cotizacion' => 'required|numeric|gt:0',
+        ]);
+
+        try {
+            $this->cambioCotizacionService->cambiar($id, (float) $request->input('cotizacion'));
+        } catch (\Throwable $e) {
+            return back()->with('mensaje', 'Error al cambiar la cotización: '.$e->getMessage());
+        }
+
+        return back()->with('mensaje', 'Cotización actualizada en la recepción, asiento contable ERP y Anita (ctamov y recepmov).');
     }
 
     public function apiPreviewArticuloProveedor(Request $request): JsonResponse

@@ -18,6 +18,9 @@
                 <h3 class="card-title">Encuestas del Proveedor Código {{$encuesta_proveedor[0]->codigoproveedor??''}}-{{$encuesta_proveedor[0]->nombreproveedor??''}}</h3>
                 <div class="d-md-flex justify-content-md-end">
 					<form action="{{ route('listar_encuesta_proveedor', ['id' => $id]) }}" method="GET">
+						@foreach (request()->only(['origen', 'vista']) as $modoConsultaClave => $modoConsultaValor)
+							<input type="hidden" name="{{ $modoConsultaClave }}" value="{{ $modoConsultaValor }}">
+						@endforeach
 						<div class="btn-group">
 							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
 							<button type="submit" class="btn btn-default">
@@ -64,5 +67,5 @@
         </div>
     </div>
 </div>
-{{ $encuesta_proveedor->appends(['busqueda' => $busqueda])->links() }}
+{{ $encuesta_proveedor->appends(array_merge(['busqueda' => $busqueda], request()->only(['origen', 'vista'])))->links() }}
 @endsection

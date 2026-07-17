@@ -12,6 +12,9 @@ Recepción {{ $recepcion->numerorecepcion }}
 @if (config('recepcion_proveedor.modal_articulo_proveedor_habilitado'))
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/modal_articulo_proveedor.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/modal_articulo_proveedor.js')) ?: time() }}" type="text/javascript"></script>
 @endif
+@if (can('cambiar-cotizacion-recepcion-proveedor', false))
+<script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')
@@ -101,26 +104,36 @@ Recepción {{ $recepcion->numerorecepcion }}
                 ])
             </div>
             <div class="card-footer">
-                @include('stock.recepcion_proveedor.partials.boton_imprimir_com_pdf', [
-                    'recepcionId' => $recepcion->id,
-                    'clase' => 'btn btn-danger mr-2 mb-2',
-                ])
-                @if (empty($soloConsulta))
-                @if($recepcion->estado === 'CONFIRMADA' && $recepcion->tipo === 'RECEPCION' && can('devolver-recepcion-proveedor', false))
-                <a href="{{ route('crear_devolucion_recepcion_proveedor', $recepcion->id) }}" class="btn btn-warning">
-                    <i class="fa fa-undo"></i> Devolución a proveedor
-                </a>
-                @endif
-                @if($recepcion->estado === 'CONFIRMADA' && can('anular-recepcion-proveedor', false))
-                <form action="{{ route('anular_recepcion_proveedor', $recepcion->id) }}" method="POST" class="d-inline"
-                      onsubmit="return confirm('¿Anular recepción? Revierte stock, asiento (ctamov) y registros Anita (recepmae/recepmov/recpunica).');">
-                    @csrf
-                    <button type="submit" class="btn btn-outline-danger">
-                        <i class="fa fa-ban"></i> Anular recepción
+                <div class="d-flex flex-wrap align-items-center">
+                    @include('stock.recepcion_proveedor.partials.boton_imprimir_com_pdf', [
+                        'recepcionId' => $recepcion->id,
+                        'clase' => 'btn btn-danger mr-2 mb-2',
+                    ])
+                    @if (empty($soloConsulta))
+                    @if($recepcion->estado === 'CONFIRMADA' && can('cambiar-cotizacion-recepcion-proveedor', false))
+                    <button type="button" class="btn btn-info mr-2 mb-2 btn-cambiar-cotizacion-recepcion"
+                            data-id="{{ $recepcion->id }}"
+                            data-numero="{{ $recepcion->numerorecepcion }}"
+                            data-cotizacion="{{ rtrim(rtrim(number_format((float) ($recepcion->cotizacion ?? 1), 6, '.', ''), '0'), '.') }}">
+                        <i class="fas fa-dollar-sign"></i> Cambiar cotización
                     </button>
-                </form>
-                @endif
-                @endif
+                    @endif
+                    @if($recepcion->estado === 'CONFIRMADA' && $recepcion->tipo === 'RECEPCION' && can('devolver-recepcion-proveedor', false))
+                    <a href="{{ route('crear_devolucion_recepcion_proveedor', $recepcion->id) }}" class="btn btn-warning mr-2 mb-2">
+                        <i class="fa fa-undo"></i> Devolución a proveedor
+                    </a>
+                    @endif
+                    @if($recepcion->estado === 'CONFIRMADA' && can('anular-recepcion-proveedor', false))
+                    <form action="{{ route('anular_recepcion_proveedor', $recepcion->id) }}" method="POST" class="d-inline mr-2 mb-2"
+                          onsubmit="return confirm('¿Anular recepción? Revierte stock, asiento (ctamov) y registros Anita (recepmae/recepmov/recpunica).');">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="fa fa-ban"></i> Anular recepción
+                        </button>
+                    </form>
+                    @endif
+                    @endif
+                </div>
             </div>
             @endif
         </div>
@@ -132,4 +145,5 @@ Recepción {{ $recepcion->numerorecepcion }}
 @endif
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultaordencompra_recepcion')
+@include('stock.recepcion_proveedor.partials.modal_cambiar_cotizacion')
 @endsection

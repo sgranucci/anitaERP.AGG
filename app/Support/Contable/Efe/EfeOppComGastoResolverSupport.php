@@ -34,6 +34,9 @@ class EfeOppComGastoResolverSupport
     /** @var array<string, list<object>> */
     private array $comSubdiarioCache = [];
 
+    /** @var array<string, list<array{cta: int, imp: float}>> */
+    private array $piernasFacturaCache = [];
+
     /** @var array<int, array<int, int>> */
     private array $conceptoPorCuenta = [];
 
@@ -65,6 +68,7 @@ class EfeOppComGastoResolverSupport
         $this->auxpagPorRec = [];
         $this->aplicpedCache = [];
         $this->comSubdiarioCache = [];
+        $this->piernasFacturaCache = [];
         $this->conceptoPorCuenta = [];
         $this->datosCuenta = [];
         $this->cuentaBienesUsoPorRec = [];
@@ -296,15 +300,29 @@ class EfeOppComGastoResolverSupport
             ];
         }
 
-        $conceptoAuxpag = (int) ($aplicacion->axp_concepto ?? 0);
         $cuentaCom = $this->resolverCuentaGastoCom($aplicacion);
 
-        if ($cuentaCom <= 0 && $conceptoAuxpag <= 0) {
-            return null;
+        // Contaduría: en FIB/COM el concepto sale de la cuenta contable (ctaconc), no de axp_concepto.
+        $conceptoId = 0;
+        $cuenta = 0;
+        if ($cuentaCom > 0) {
+            $cuenta = $cuentaCom;
+            $conceptoId = $this->resolverConceptoDesdeCuenta($cuentaCom);
         }
 
-        $cuenta = $cuentaCom > 0 ? $cuentaCom : 0;
-        $conceptoId = $this->resolverConceptoGasto($cuenta, $conceptoAuxpag);
+        if ($conceptoId <= 0) {
+            $conceptoId = $this->resolverConceptoDesdePiernasFactura($aplicacion);
+        }
+
+        // Honorarios adelanto (114020-xxx) sin mapeo ctaconc.
+        if ($conceptoId <= 0 && $cuentaCom > 0 && $cuentaCom >= 114020000 && $cuentaCom < 114021000) {
+            $conceptoId = self::CONCEPTO_HONORARIOS;
+            $cuenta = $cuentaCom;
+        }
+
+        if ($conceptoId <= 0 && $cuentaCom <= 0) {
+            return null;
+        }
 
         if ($conceptoId <= 0) {
             return null;
@@ -418,17 +436,116 @@ class EfeOppComGastoResolverSupport
         return $cuenta >= 521000000 && $cuenta < 600000000 && $cuenta !== 521130001;
     }
 
+    /**
+     * Concepto asociado a la cuenta (ctaconc Anita / cuentacontable ERP).
+     */
+    public function resolverConceptoDesdeCuenta(int $cuenta): int
+    {
+        if ($cuenta <= 0) {
+            return 0;
+        }
+
+        return (int) ($this->conceptoPorCuenta[$this->empresaId][$cuenta] ?? 0);
+    }
+
+    /**
+     * Piernas de la factura aplicada (FIB/FGA/…): concepto de la cuenta de gasto/anticipo,
+     * ignorando pasivo e IVA crédito (63) que no definen el concepto del cheque.
+     */
+    private function resolverConceptoDesdePiernasFactura(object $aplicacion): int
+    {
+        $legs = $this->cargarPiernasFactura($aplicacion);
+        $mejorConcepto = 0;
+        $mejorPrioridad = -1;
+
+        foreach ($legs as $leg) {
+            $cuenta = (int) ($leg['cta'] ?? 0);
+            if ($cuenta <= 0) {
+                continue;
+            }
+
+            // Pasivo proveedores: no define concepto de gasto.
+            if ($cuenta >= 211000000 && $cuenta < 212000000) {
+                continue;
+            }
+
+            $concepto = $this->resolverConceptoDesdeCuenta($cuenta);
+            if ($concepto <= 0) {
+                continue;
+            }
+
+            // IVA crédito fiscal (63) no reclasifica el cheque a c24/c5/etc.
+            if ($concepto === 63) {
+                continue;
+            }
+
+            $prioridad = 1;
+            if ($cuenta >= 521000000 && $cuenta < 600000000) {
+                $prioridad = 3;
+            } elseif ($cuenta >= 114000000 && $cuenta < 115000000) {
+                $prioridad = 2;
+            }
+
+            if ($prioridad > $mejorPrioridad) {
+                $mejorPrioridad = $prioridad;
+                $mejorConcepto = $concepto;
+            }
+        }
+
+        return $mejorConcepto;
+    }
+
+    /**
+     * @return list<array{cta: int, imp: float}>
+     */
+    private function cargarPiernasFactura(object $aplicacion): array
+    {
+        $tipo = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
+        $nro = (int) ($aplicacion->axp_nro ?? 0);
+        $interno = (int) ($aplicacion->axp_nro_interno ?? 0);
+        $clave = $tipo.'|'.$nro.'|'.$interno;
+        if (isset($this->piernasFacturaCache[$clave])) {
+            return $this->piernasFacturaCache[$clave];
+        }
+
+        $errores = [];
+        $filas = $this->bridgeReader->cargarSubdiarioFacturaCompras(
+            $this->empresaId,
+            $tipo,
+            trim((string) ($aplicacion->axp_letra_comp ?? 'A')),
+            (int) ($aplicacion->axp_sucursal ?? 0),
+            $nro,
+            $interno,
+            trim((string) ($aplicacion->axp_pro ?? '')),
+            $errores,
+        );
+
+        $legs = [];
+        foreach ($filas as $linea) {
+            $legs[] = [
+                'cta' => (int) ($linea->subd_cuenta ?? 0),
+                'imp' => round((float) ($linea->subd_importe ?? 0), 2),
+            ];
+        }
+
+        return $this->piernasFacturaCache[$clave] = $legs;
+    }
+
+    /**
+     * @deprecated Preferir resolverConceptoDesdeCuenta / piernas factura.
+     */
     private function resolverConceptoGasto(int $cuenta, int $conceptoAuxpag): int
     {
         if ($cuenta >= 114020000 && $cuenta < 114021000) {
             return self::CONCEPTO_HONORARIOS;
         }
 
-        if ($conceptoAuxpag > 0) {
-            return $conceptoAuxpag;
+        $desdeCuenta = $this->resolverConceptoDesdeCuenta($cuenta);
+        if ($desdeCuenta > 0) {
+            return $desdeCuenta;
         }
 
-        return (int) ($this->conceptoPorCuenta[$this->empresaId][$cuenta] ?? 0);
+        return $conceptoAuxpag > 0 ? $conceptoAuxpag : 0;
     }
 
     /**

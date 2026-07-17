@@ -141,6 +141,9 @@ final class OrdencompraAnitaEscrituraSupport
         $fechaEnt = $ctx->fechaYmd($linea->fechaentrega ?? $oc->fechaentrega);
         $desc = trim((string) ($linea->detalle ?? ''));
         if ($desc === '') {
+            $desc = $ctx->descripcionArticulo((int) $linea->articulo_id);
+        }
+        if ($desc === '') {
             $desc = ' ';
         }
         $deposito = (int) config('ordencompra_anita.escritura.deposito_default', 1);
@@ -222,6 +225,7 @@ final class OrdencompraAnitaEscrituraSupport
         OrdencompraAnitaErpContext $ctx,
         array $clave,
         int $nroCuota,
+        ?Ordencompra $oc = null,
     ): array {
         $detalle = trim((string) ($comprobante->detalle ?? ''));
         if ($detalle === '') {
@@ -233,6 +237,11 @@ final class OrdencompraAnitaEscrituraSupport
             $primeraCuota ? (int) ($primeraCuota->formapago_id ?? 0) : null
         );
 
+        $condPago = $ctx->codigoCondicionpago((int) ($comprobante->condicionpago_id ?? 0));
+        if ($condPago <= 0 && $oc !== null) {
+            $condPago = $ctx->condicionpagoCabecera($oc);
+        }
+
         return RecepcionProveedorAnitaEscrituraSupport::insert([
             'occ_tipo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['tipo'], 3),
             'occ_letra' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['letra'], 1),
@@ -241,7 +250,7 @@ final class OrdencompraAnitaEscrituraSupport
             'occ_nro_cuota' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($nroCuota),
             'occ_fecha_vto' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->fechaYmd($comprobante->fechavencimiento)),
             'occ_monto' => RecepcionProveedorAnitaEscrituraSupport::decimalSql((float) ($comprobante->monto ?? 0)),
-            'occ_cond_pago' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoCondicionpago((int) ($comprobante->condicionpago_id ?? 0))),
+            'occ_cond_pago' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($condPago),
             'occ_medio_pago' => RecepcionProveedorAnitaEscrituraSupport::textoSql($medioPago, 1),
             'occ_detalle' => RecepcionProveedorAnitaEscrituraSupport::textoSql(substr($detalle, 0, 50), 50),
         ]);

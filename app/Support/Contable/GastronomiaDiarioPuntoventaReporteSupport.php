@@ -42,6 +42,8 @@ final class GastronomiaDiarioPuntoventaReporteSupport
         }
 
         $emisiones = $this->cargarEmisiones($empresaId, $desde, $hasta, $puntoventaId);
+        // Prefetch de medios de pago en una sola consulta (evita N+1 por venta).
+        $mediosPorCobranza = $this->prefetchMediosPorCobranza($emisiones);
         /** @var array<string, array<int, list<VentaGastronomiaEmision>>> $porDiaPv */
         $porDiaPv = [];
 
@@ -82,7 +84,7 @@ final class GastronomiaDiarioPuntoventaReporteSupport
 
             ksort($porPv);
             foreach ($porPv as $pvId => $grupo) {
-                $fila = $this->armarFilaPuntoventa($grupo);
+                $fila = $this->armarFilaPuntoventa($grupo, $mediosPorCobranza);
                 $puntoventas[] = $fila;
                 $this->acumularBloque($totDia, $fila);
                 $this->acumularBloque($resumen, $fila);
@@ -165,10 +167,36 @@ final class GastronomiaDiarioPuntoventaReporteSupport
     }
 
     /**
+     * Cobranza_id => medios de pago, resuelto en una sola consulta para todas las emisiones.
+     *
+     * @param  Collection<int, VentaGastronomiaEmision>  $emisiones
+     * @return array<int, list<object>>
+     */
+    private function prefetchMediosPorCobranza(Collection $emisiones): array
+    {
+        $cobranzaIds = [];
+        foreach ($emisiones as $em) {
+            $venta = $em->venta;
+            if ($venta === null) {
+                continue;
+            }
+            foreach (GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta) as $cob) {
+                $id = (int) ($cob->id ?? 0);
+                if ($id > 0) {
+                    $cobranzaIds[$id] = true;
+                }
+            }
+        }
+
+        return GastronomiaVentaDetalleSupport::mediosPagoPorCobranzaIds(array_keys($cobranzaIds));
+    }
+
+    /**
      * @param  list<VentaGastronomiaEmision>  $emisiones
+     * @param  array<int, list<object>>  $mediosPorCobranza
      * @return array<string, mixed>
      */
-    private function armarFilaPuntoventa(array $emisiones): array
+    private function armarFilaPuntoventa(array $emisiones, array $mediosPorCobranza = []): array
     {
         $importeMinimo = GastronomiaFacturacionService::IMPORTE_MINIMO_FACTURA;
         $ventaBruta = 0.0;
@@ -207,7 +235,13 @@ final class GastronomiaDiarioPuntoventaReporteSupport
             $monto = $desglose['total'];
             $esNc = ($em->venta_factura_origen_id ?? null) !== null;
             $cobranzas = GastronomiaVentaDetalleSupport::cobranzasDeVenta($venta);
-            $lineasMedios = GastronomiaVentaDetalleSupport::mediosPagoPorCobranza($cobranzas);
+            $lineasMedios = [];
+            foreach ($cobranzas as $cob) {
+                $cobranzaId = (int) ($cob->id ?? 0);
+                if ($cobranzaId > 0 && isset($mediosPorCobranza[$cobranzaId])) {
+                    $lineasMedios[$cobranzaId] = $mediosPorCobranza[$cobranzaId];
+                }
+            }
             $cobradoVenta = 0.0;
             foreach ($lineasMedios as $lineas) {
                 foreach ($lineas as $linea) {
@@ -216,12 +250,14 @@ final class GastronomiaDiarioPuntoventaReporteSupport
             }
             $cobradoVenta = round($cobradoVenta, 2);
             $totalCobrado += $cobradoVenta;
-            $ventaNeta += $monto;
 
             if ($esNc) {
+                // La NC resta de la venta neta (bruto − NC), en línea con el cobro negativo.
+                $ventaNeta -= abs($monto);
                 $totalNc += abs($monto);
                 $cantNc++;
             } else {
+                $ventaNeta += $monto;
                 $ventaBruta += $monto;
                 $ventaNeto += $desglose['neto'];
                 $ventaIva += $desglose['iva'];

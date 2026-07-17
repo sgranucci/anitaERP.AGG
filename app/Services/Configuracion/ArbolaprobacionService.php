@@ -112,6 +112,15 @@ class ArbolaprobacionService
                 return 0;
             }
             $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($tipoarbol, (int) $ocPre->empresa_id);
+        } elseif ($tipocomprobante === 'SP') {
+            $spPre = \App\Models\Solicitudpago\Solicitudpago::query()->find($comprobante_id);
+            if (! $spPre) {
+                return 0;
+            }
+            $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($tipoarbol, (int) $spPre->empresa_id);
+            if (! $arbolaprobacion || ! $arbolaprobacion->count()) {
+                $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbol($tipoarbol);
+            }
         } else {
             $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbol($tipoarbol);
         }
@@ -137,6 +146,14 @@ class ArbolaprobacionService
                 );
             case 'PE':
                 return app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)->procesaArbol(
+                    (int) $comprobante_id,
+                    $operacion,
+                    fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
+                    fn (...$args) => $this->buscaProximoNivel(...$args),
+                    fn (...$args) => $this->enviaCorreo(...$args),
+                );
+            case 'SP':
+                return app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)->procesaArbol(
                     (int) $comprobante_id,
                     $operacion,
                     fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
@@ -568,6 +585,10 @@ class ArbolaprobacionService
                 $arbolaprobacion_movimiento = app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)
                     ->findPorPedido((int) $comprobante_id);
                 break;
+            case 'Solicitudes de pago':
+                $arbolaprobacion_movimiento = app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
+                    ->findPorSolicitudpago((int) $comprobante_id);
+                break;
             case 'Ordenes de compra':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 $arbolaprobacion_movimiento = $this->filtrarMovimientosOrdencompraPorCircuito($arbolaprobacion_movimiento, $circuitoOc, $ocTriggerId);
@@ -780,6 +801,8 @@ class ArbolaprobacionService
                 $q->where('ordenventa_id', $movimientoPre->ordenventa_id);
             } elseif ($movimientoPre->pedido_id) {
                 $q->where('pedido_id', $movimientoPre->pedido_id);
+            } elseif ($movimientoPre->solicitudpago_id) {
+                $q->where('solicitudpago_id', $movimientoPre->solicitudpago_id);
             } elseif ($movimientoPre->ordencompra_id) {
                 $q->where('ordencompra_id', $movimientoPre->ordencompra_id);
             }
@@ -1442,6 +1465,8 @@ class ArbolaprobacionService
                 $q->where('ordenventa_id', $movimientoPre->ordenventa_id);
             } elseif ($movimientoPre->pedido_id) {
                 $q->where('pedido_id', $movimientoPre->pedido_id);
+            } elseif ($movimientoPre->solicitudpago_id) {
+                $q->where('solicitudpago_id', $movimientoPre->solicitudpago_id);
             } elseif ($movimientoPre->ordencompra_id) {
                 $q->where('ordencompra_id', $movimientoPre->ordencompra_id);
             }
@@ -1488,6 +1513,10 @@ class ArbolaprobacionService
                     break;
                 case 'PE':
                     app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)
+                        ->rechazaPorRechazo((int) $comprobante_id, $usuario_id, $observacion);
+                    break;
+                case 'SP':
+                    app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
                         ->rechazaPorRechazo((int) $comprobante_id, $usuario_id, $observacion);
                     break;
                 case 'OC':

@@ -90,28 +90,56 @@ final class GastronomiaVentaDetalleSupport
             return [];
         }
 
+        return self::mediosPagoPorCobranzaIds($cobranzas->pluck('id')->all());
+    }
+
+    /**
+     * Medios de cobro para un conjunto de cobranzas resueltas en una sola consulta (batch).
+     *
+     * @param  array<int, int|string>  $cobranzaIds
+     * @return array<int, list<object{cuentacaja_id:int,codigo:string,nombre:string,cuenta:string,moneda:string,monto:float}>>
+     */
+    public static function mediosPagoPorCobranzaIds(array $cobranzaIds): array
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $cobranzaIds),
+            static fn (int $id): bool => $id > 0,
+        )));
+        if ($ids === []) {
+            return [];
+        }
+
         $movimientos = Caja_Movimiento::query()
-            ->whereIn('cobranza_id', $cobranzas->pluck('id'))
+            ->whereIn('cobranza_id', $ids)
             ->with(['caja_movimiento_cuentacajas.cuentacajas', 'caja_movimiento_cuentacajas.monedas'])
             ->get();
 
         $out = [];
         foreach ($movimientos as $mov) {
-            $lineas = [];
-            foreach ($mov->caja_movimiento_cuentacajas as $cc) {
-                $lineas[] = (object) [
-                    'cuentacaja_id' => (int) ($cc->cuentacaja_id ?? 0),
-                    'codigo' => (string) ($cc->cuentacajas->codigo ?? ''),
-                    'nombre' => (string) ($cc->cuentacajas->nombre ?? ''),
-                    'cuenta' => trim((string) (($cc->cuentacajas->codigo ?? '').' '.($cc->cuentacajas->nombre ?? ''))),
-                    'moneda' => (string) ($cc->monedas->abreviatura ?? ''),
-                    'monto' => (float) $cc->monto,
-                ];
-            }
-            $out[(int) $mov->cobranza_id] = $lineas;
+            $out[(int) $mov->cobranza_id] = self::lineasMediosDeMovimiento($mov);
         }
 
         return $out;
+    }
+
+    /**
+     * @return list<object{cuentacaja_id:int,codigo:string,nombre:string,cuenta:string,moneda:string,monto:float}>
+     */
+    private static function lineasMediosDeMovimiento(Caja_Movimiento $mov): array
+    {
+        $lineas = [];
+        foreach ($mov->caja_movimiento_cuentacajas as $cc) {
+            $lineas[] = (object) [
+                'cuentacaja_id' => (int) ($cc->cuentacaja_id ?? 0),
+                'codigo' => (string) ($cc->cuentacajas->codigo ?? ''),
+                'nombre' => (string) ($cc->cuentacajas->nombre ?? ''),
+                'cuenta' => trim((string) (($cc->cuentacajas->codigo ?? '').' '.($cc->cuentacajas->nombre ?? ''))),
+                'moneda' => (string) ($cc->monedas->abreviatura ?? ''),
+                'monto' => (float) $cc->monto,
+            ];
+        }
+
+        return $lineas;
     }
 
     /**

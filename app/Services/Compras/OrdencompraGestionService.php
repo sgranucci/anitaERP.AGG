@@ -11,16 +11,20 @@ use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Articulo;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
+use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Compras\Ordencompra_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Ordencompra_ArticuloRepositoryInterface;
 use App\Repositories\Compras\Ordencompra_EstadoRepositoryInterface;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
+use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Services\Configuracion\ImpuestoService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraEstados;
+use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use Auth;
@@ -43,6 +47,9 @@ class OrdencompraGestionService
         private Requisicion_EstadoRepositoryInterface $requisicionEstadoRepository,
         private RequisicionPresupuestoService $requisicionPresupuestoService,
         private OrdencompraAnitaBridgeService $ordencompraAnitaBridge,
+        private ProveedorRepositoryInterface $proveedorRepository,
+        private CotizacionQueryInterface $cotizacionQuery,
+        private ImpuestoService $impuestoService,
     ) {}
 
     public function idSectorCompras(): ?int
@@ -319,6 +326,7 @@ class OrdencompraGestionService
         $payload = $request->all();
 
         try {
+            $this->asegurarComprobanteDesdeProveedor($payload);
             $this->validarComprobantesCuotas($payload);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
@@ -429,6 +437,7 @@ class OrdencompraGestionService
         }
         $payload = $request->all();
         try {
+            $this->asegurarComprobanteDesdeProveedor($payload);
             $this->validarComprobantesCuotas($payload);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
@@ -820,6 +829,246 @@ class OrdencompraGestionService
     }
 
     /**
+     * Precarga el primer comprobante a venir heredando la condición de pago del proveedor
+     * y al menos una cuota con la forma de pago cargada en el ABM del proveedor.
+     *
+     * Si el payload ya trae comprobantes (form u wizard), respeta lo cargado. Si el
+     * proveedor no tiene condición de pago o forma de pago, detiene la grabación de la OC:
+     * no se puede grabar una orden de compra sin comprobante asociado.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function asegurarComprobanteDesdeProveedor(array &$payload): void
+    {
+        if ($this->listaComprobantesDesdePayload($payload) !== []) {
+            return;
+        }
+
+        $proveedorId = (int) ($payload['proveedor_id'] ?? 0);
+        if ($proveedorId <= 0) {
+            throw new \InvalidArgumentException(
+                'No se puede grabar la orden de compra sin comprobante a venir asociado. '
+                .'Seleccione un proveedor con condición de pago y forma de pago cargadas en su ABM.'
+            );
+        }
+
+        $proveedor = $this->proveedorRepository->find($proveedorId);
+        if (! $proveedor) {
+            throw new \InvalidArgumentException('El proveedor indicado no existe.');
+        }
+
+        $condicionpagoId = (int) ($payload['condicionpago_id'] ?? 0);
+        if ($condicionpagoId <= 0) {
+            $condicionpagoId = (int) ($proveedor->condicionpago_id ?? 0);
+        }
+        if ($condicionpagoId <= 0) {
+            throw new \InvalidArgumentException(
+                'El proveedor no tiene condición de pago cargada, por lo que no se puede precargar '
+                .'el comprobante a venir. Cargue la condición de pago en el ABM del proveedor antes de grabar la orden de compra.'
+            );
+        }
+
+        $formapagoId = 0;
+        foreach (($proveedor->proveedor_formapagos ?? []) as $fp) {
+            $fid = (int) ($fp->formapago_id ?? 0);
+            if ($fid > 0) {
+                $formapagoId = $fid;
+                break;
+            }
+        }
+        if ($formapagoId <= 0) {
+            throw new \InvalidArgumentException(
+                'El proveedor no tiene forma de pago cargada en su ABM, por lo que no se puede precargar '
+                .'la cuota del comprobante a venir. Cargue al menos una forma de pago en el ABM del proveedor antes de grabar la orden de compra.'
+            );
+        }
+
+        $totales = OrdencompraTotalesResumen::desdeRequest($payload, $this->cotizacionQuery, $this->impuestoService);
+        $montoTotal = round((float) ($totales['total'] ?? 0), 2);
+        $monedaId = (int) ($totales['moneda_id'] ?? 1);
+        if ($montoTotal <= 0) {
+            throw new \InvalidArgumentException(
+                'No se puede precargar el comprobante a venir: la orden de compra no tiene importe. '
+                .'Cargue al menos un ítem con cantidad y precio.'
+            );
+        }
+        $monedaId = $monedaId > 0 ? $monedaId : 1;
+
+        $fecha = substr((string) ($payload['fecha'] ?? date('Y-m-d')), 0, 10);
+        if ($fecha === '') {
+            $fecha = date('Y-m-d');
+        }
+
+        $cuotas = $this->sugerirCuotasDesdeCondicionpago($condicionpagoId, $fecha, $montoTotal, $monedaId);
+        if ($cuotas === []) {
+            $cuotas = [[
+                'fechavencimiento' => $fecha,
+                'monto' => $montoTotal,
+                'moneda_id' => $monedaId,
+                'cotizacion' => 1.0,
+                'formapago_id' => $formapagoId,
+                'detalle' => 'Cuota 1',
+            ]];
+        }
+
+        $suma = 0.0;
+        foreach ($cuotas as &$q) {
+            $q['monto'] = round((float) ($q['monto'] ?? 0), 2);
+            $q['moneda_id'] = $monedaId;
+            $q['formapago_id'] = $formapagoId;
+            $suma += $q['monto'];
+        }
+        unset($q);
+        $dif = round($montoTotal - $suma, 2);
+        if (abs($dif) >= 0.01) {
+            $ultimo = count($cuotas) - 1;
+            $cuotas[$ultimo]['monto'] = round((float) $cuotas[$ultimo]['monto'] + $dif, 2);
+        }
+
+        $payload['comprobantes_json'] = json_encode([[
+            'tipocomprobante' => 'FACTURA',
+            'fechavencimiento' => $fecha,
+            'monto' => $montoTotal,
+            'moneda_id' => $monedaId,
+            'cotizacion' => null,
+            'detalle' => null,
+            'cantidadcuota' => count($cuotas),
+            'condicionpago_id' => $condicionpagoId,
+            'cuotas' => array_values($cuotas),
+        ]]);
+    }
+
+    /**
+     * Genera y persiste el comprobante "a venir" por defecto para una OC ya existente que no
+     * tiene comprobantes cargados, tomando la condición de pago y forma de pago del proveedor
+     * (misma lógica que la precarga del CRUD). No escribe en Anita.
+     *
+     * @return bool true si generó el comprobante; false si la OC ya tenía comprobantes.
+     *
+     * @throws \InvalidArgumentException cuando faltan datos para precargar (proveedor sin condición
+     *                                   de pago / forma de pago, OC sin importe, etc.)
+     */
+    public function generarComprobanteDefaultDesdeProveedor(int $ordencompraId, ?int $creousuarioId = null): bool
+    {
+        $oc = Ordencompra::with([
+            'ordencompra_articulos.monedas',
+            'ordencompra_articulos.articulos',
+            'ordencompra_comprobantes',
+            'proveedores.proveedor_formapagos',
+        ])->find($ordencompraId);
+
+        if (! $oc) {
+            throw new \InvalidArgumentException("La orden de compra id {$ordencompraId} no existe.");
+        }
+        if ($oc->ordencompra_comprobantes->isNotEmpty()) {
+            return false;
+        }
+
+        $proveedor = $oc->proveedores;
+        if (! $proveedor) {
+            throw new \InvalidArgumentException('La orden de compra no tiene proveedor asociado.');
+        }
+
+        $condicionpagoId = (int) ($oc->condicionpago_id ?? 0);
+        if ($condicionpagoId <= 0) {
+            $condicionpagoId = (int) ($proveedor->condicionpago_id ?? 0);
+        }
+        if ($condicionpagoId <= 0) {
+            throw new \InvalidArgumentException('El proveedor no tiene condición de pago cargada en su ABM.');
+        }
+
+        $formapagoId = 0;
+        foreach (($proveedor->proveedor_formapagos ?? []) as $fp) {
+            $fid = (int) ($fp->formapago_id ?? 0);
+            if ($fid > 0) {
+                $formapagoId = $fid;
+                break;
+            }
+        }
+        if ($formapagoId <= 0) {
+            throw new \InvalidArgumentException('El proveedor no tiene forma de pago cargada en su ABM.');
+        }
+
+        $totales = OrdencompraTotalesResumen::desdeModelo($oc, $this->cotizacionQuery, $this->impuestoService);
+        $montoTotal = round((float) ($totales['total'] ?? 0), 2);
+        $monedaId = (int) ($totales['moneda_id'] ?? 1);
+        $monedaId = $monedaId > 0 ? $monedaId : 1;
+        if ($montoTotal <= 0) {
+            throw new \InvalidArgumentException('La orden de compra no tiene importe (sin ítems con cantidad y precio).');
+        }
+
+        $fecha = substr((string) ($oc->fecha ?? date('Y-m-d')), 0, 10);
+        if ($fecha === '') {
+            $fecha = date('Y-m-d');
+        }
+
+        $cuotas = $this->sugerirCuotasDesdeCondicionpago($condicionpagoId, $fecha, $montoTotal, $monedaId);
+        if ($cuotas === []) {
+            $cuotas = [[
+                'fechavencimiento' => $fecha,
+                'monto' => $montoTotal,
+                'moneda_id' => $monedaId,
+                'cotizacion' => 1.0,
+                'formapago_id' => $formapagoId,
+                'detalle' => 'Cuota 1',
+            ]];
+        }
+
+        $suma = 0.0;
+        foreach ($cuotas as &$q) {
+            $q['monto'] = round((float) ($q['monto'] ?? 0), 2);
+            $q['moneda_id'] = $monedaId;
+            $q['formapago_id'] = $formapagoId;
+            $suma += $q['monto'];
+        }
+        unset($q);
+        $dif = round($montoTotal - $suma, 2);
+        if (abs($dif) >= 0.01) {
+            $ultimo = count($cuotas) - 1;
+            $cuotas[$ultimo]['monto'] = round((float) $cuotas[$ultimo]['monto'] + $dif, 2);
+        }
+
+        $uid = $creousuarioId ?? (int) ($oc->creousuario_id ?? 0);
+        if ($uid <= 0) {
+            $uid = (int) (Auth::id() ?? 0);
+        }
+
+        DB::transaction(function () use ($oc, $fecha, $montoTotal, $monedaId, $condicionpagoId, $cuotas, $uid) {
+            $comp = Ordencompra_Comprobante::create([
+                'ordencompra_id' => (int) $oc->id,
+                'tipocomprobante' => 'FACTURA',
+                'fechavencimiento' => $fecha,
+                'monto' => $montoTotal,
+                'moneda_id' => $monedaId,
+                'cotizacion' => null,
+                'detalle' => null,
+                'cantidadcuota' => count($cuotas),
+                'condicionpago_id' => $condicionpagoId,
+                'creousuario_id' => $uid,
+            ]);
+
+            foreach ($cuotas as $q) {
+                Ordencompra_Comprobante_Cuota::create([
+                    'ordencompra_comprobante_id' => (int) $comp->id,
+                    'fechavencimiento' => (string) ($q['fechavencimiento'] ?? $fecha),
+                    'monto' => (float) ($q['monto'] ?? 0),
+                    'moneda_id' => (int) ($q['moneda_id'] ?? $monedaId),
+                    'cotizacion' => isset($q['cotizacion']) ? (float) $q['cotizacion'] : null,
+                    'formapago_id' => max(1, (int) ($q['formapago_id'] ?? 1)),
+                    'detalle' => $q['detalle'] ?? null,
+                    'creousuario_id' => $uid,
+                ]);
+            }
+
+            $this->regenerarCondicionesContratacion((int) $oc->id);
+        });
+
+        return true;
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      *
      * @throws \InvalidArgumentException
@@ -827,13 +1076,27 @@ class OrdencompraGestionService
     private function validarComprobantesCuotas(array $payload): void
     {
         $lista = $this->listaComprobantesDesdePayload($payload);
+        if ($lista === []) {
+            throw new \InvalidArgumentException(
+                'No se puede grabar la orden de compra sin al menos un comprobante a venir asociado.'
+            );
+        }
         foreach ($lista as $idx => $c) {
             if (! is_array($c)) {
                 continue;
             }
             $cuotas = $c['cuotas'] ?? [];
             if (! is_array($cuotas) || count($cuotas) === 0) {
-                continue;
+                throw new \InvalidArgumentException(
+                    'Comprobante #'.(((int) $idx) + 1).': debe tener al menos una cuota con forma de pago.'
+                );
+            }
+            foreach ($cuotas as $q) {
+                if (is_array($q) && (int) ($q['formapago_id'] ?? 0) <= 0) {
+                    throw new \InvalidArgumentException(
+                        'Comprobante #'.(((int) $idx) + 1).': todas las cuotas deben tener forma de pago.'
+                    );
+                }
             }
             $montoComp = (float) ($c['monto'] ?? 0);
             $monedaComp = (int) ($c['moneda_id'] ?? 1);

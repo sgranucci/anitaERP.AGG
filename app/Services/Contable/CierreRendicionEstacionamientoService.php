@@ -373,14 +373,12 @@ class CierreRendicionEstacionamientoService
     }
 
     /**
-     * Rango por defecto en conciliación: última jornada con cierre contable → hoy.
-     *
      * @return array{desde: string, hasta: string}
      */
     public function resolverRangoConciliacionDefault(int $empresaId): array
     {
         $hasta = Carbon::today()->toDateString();
-        $desde = $this->resolverUltimaJornadaCierreContable($empresaId) ?? $hasta;
+        $desde = Carbon::today()->startOfMonth()->toDateString();
 
         return ['desde' => $desde, 'hasta' => $hasta];
     }
@@ -509,6 +507,7 @@ class CierreRendicionEstacionamientoService
     /**
      * @return array{
      *   ok: list<array{grupo_clave: string, asiento_id: int, numeroasiento: string, rendicion_ids: list<int>}>,
+     *   omitidos: list<array{grupo_clave: string, mensaje: string}>,
      *   errores: list<array{grupo_clave: string, mensaje: string}>
      * }
      */
@@ -530,6 +529,7 @@ class CierreRendicionEstacionamientoService
         );
 
         $ok = [];
+        $omitidos = [];
         $errores = [];
 
         foreach ($grupos as $grupo) {
@@ -547,9 +547,22 @@ class CierreRendicionEstacionamientoService
                     'rendicion_ids' => $resultado['rendicion_ids'],
                 ];
             } catch (\Throwable $e) {
+                $mensaje = $e->getMessage();
+                // Casos idempotentes (p. ej. doble ejecución del rango): el grupo ya quedó
+                // cerrado o sin pendientes. No es un error real, se omite del reporte de errores.
+                if (str_contains($mensaje, 'ya fue cerrada contablemente')
+                    || str_contains($mensaje, 'No hay rendiciones pendientes')) {
+                    $omitidos[] = [
+                        'grupo_clave' => $clave,
+                        'mensaje' => $mensaje,
+                    ];
+
+                    continue;
+                }
+
                 $errores[] = [
                     'grupo_clave' => $clave,
-                    'mensaje' => $e->getMessage(),
+                    'mensaje' => $mensaje,
                 ];
             }
         }
@@ -558,7 +571,7 @@ class CierreRendicionEstacionamientoService
             throw new InvalidArgumentException($errores[0]['mensaje']);
         }
 
-        return ['ok' => $ok, 'errores' => $errores];
+        return ['ok' => $ok, 'omitidos' => $omitidos, 'errores' => $errores];
     }
 
     /**

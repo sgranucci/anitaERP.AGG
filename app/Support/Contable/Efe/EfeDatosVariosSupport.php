@@ -62,7 +62,6 @@ class EfeDatosVariosSupport
         $this->auxpagPorRec = $this->indexarAuxpagPorRec($bridge['auxpag'] ?? []);
 
         $nombreVarios = $nombresConcepto[self::CONCEPTO_VARIOS] ?? 'VARIOS';
-        $nombreMant = $nombresConcepto[self::CONCEPTO_MANTENIMIENTO_EDIFICIO] ?? 'MANTENIMIENTO DE EDIFICIO';
 
         foreach ($filas as $indice => $fila) {
             $cuenta = (int) ($fila['cuenta'] ?? 0);
@@ -105,17 +104,6 @@ class EfeDatosVariosSupport
                     self::CONCEPTO_VARIOS,
                     $nombreVarios,
                 );
-
-                continue;
-            }
-
-            if ($conceptoDestino === self::CONCEPTO_MANTENIMIENTO_EDIFICIO) {
-                $filas[$indice]['concepto_id'] = self::CONCEPTO_MANTENIMIENTO_EDIFICIO;
-                $filas[$indice]['concepto_nombre'] = $nombreMant;
-                $filas[$indice]['clasificacion_efe'] = $this->clasificacionSupport->formatearClave(
-                    self::CONCEPTO_MANTENIMIENTO_EDIFICIO,
-                    $nombreMant,
-                );
             }
         }
 
@@ -126,10 +114,6 @@ class EfeDatosVariosSupport
     {
         if ($this->recEsVarios20($rec, $cuenta, $pagos)) {
             return self::CONCEPTO_VARIOS;
-        }
-
-        if ($cuenta === self::CUENTA_CHEQUE && $this->recChequeEsMantenimientoEdificio($rec, $pagos)) {
-            return self::CONCEPTO_MANTENIMIENTO_EDIFICIO;
         }
 
         return null;
@@ -222,27 +206,6 @@ class EfeDatosVariosSupport
             }
 
             if ((int) ($tipos[$tipo]['concepto'] ?? 0) === EfeDatosGastronomiaSupport::CONCEPTO_GASTRONOMIA) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function recChequeEsMantenimientoEdificio(string $rec, float $pagos): bool
-    {
-        $tipos = $this->auxpagPorRec[$rec]['tipos'] ?? [];
-        $aplicacionesFib = $this->auxpagPorRec[$rec]['fib'] ?? [];
-        if (! isset($tipos['CHP']) || $aplicacionesFib === []) {
-            return false;
-        }
-
-        if (abs((float) ($tipos['CHP']['monto'] ?? 0) - round($pagos, 2)) >= 0.02) {
-            return false;
-        }
-
-        foreach ($aplicacionesFib as $dato) {
-            if ((int) ($dato['concepto'] ?? 0) === self::CONCEPTO_VARIOS) {
                 return true;
             }
         }

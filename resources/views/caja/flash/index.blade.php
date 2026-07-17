@@ -61,6 +61,7 @@
                             <th>Empresa</th>
                             <th class="width100 text-right">AyB</th>
                             <th class="width100 text-right">Estac.</th>
+                            <th class="width100 text-right">Vending</th>
                             <th class="width100 text-right">Bingo</th>
                             <th class="width100 text-right">Gaming</th>
                             <th class="width100 text-right">Revenues</th>
@@ -76,6 +77,7 @@
                             <td>{{ $data->empresa->nombre ?? '' }}</td>
                             <td class="text-right">{{ number_format((float) $data->ayb, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format((float) $data->estac, 2, ',', '.') }}</td>
+                            <td class="text-right">{{ number_format((float) $data->vending, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format((float) $data->bingo_total_venta, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format($data->total_gaming, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format($data->total_revenues, 2, ',', '.') }}</td>

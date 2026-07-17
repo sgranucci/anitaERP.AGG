@@ -632,6 +632,11 @@ $(function () {
 	var ocComprobantesState = [];
 	/** Total orden y moneda de referencia (misma lógica que el panel de totales). */
 	var ocTotalesReferencia = { total: 0, moneda_id: 1 };
+	/** Datos heredados del proveedor para precargar el primer comprobante a venir. */
+	var ocProveedorCondicionpagoId = null;
+	var ocProveedorFormapagoId = null;
+	/** Se intenta precargar el comprobante default hasta tener total (>0) tras elegir proveedor. */
+	var ocAutocompPendiente = false;
 
 	function ocMonedaAbrev(monedaId) {
 		var m = ocMonedas.find(function (x) { return String(x.id) === String(monedaId); });
@@ -845,6 +850,106 @@ $(function () {
 			}
 		});
 		return ocRound2Money(Math.max(0, totalRef - sum));
+	}
+
+	/**
+	 * Precarga el primer comprobante a venir (FACTURA) heredando la condición de pago del
+	 * proveedor y al menos una cuota con la forma de pago cargada en su ABM. Solo actúa si
+	 * todavía no hay comprobantes cargados y ya se conoce el total de la orden.
+	 * Si el proveedor no tiene condición de pago, no precarga (el backend detiene la grabación).
+	 */
+	function ocIntentarPrecargaComprobanteDefault() {
+		if (!ocAutocompPendiente) {
+			return;
+		}
+		if (ocComprobantesState.length > 0) {
+			ocAutocompPendiente = false;
+			return;
+		}
+		if (!ocProveedorCondicionpagoId) {
+			// Sin condición de pago del proveedor no se puede armar el comprobante:
+			// se deja pendiente por si el dato llega, y el backend valida al grabar.
+			return;
+		}
+		var total = ocRound2Money(ocTotalesReferencia.total);
+		if (!(total > 0)) {
+			// Aún sin importe (ítems no cargados): reintentar cuando se recalculen totales.
+			return;
+		}
+		ocAutocompPendiente = false;
+
+		var mid = parseInt(ocTotalesReferencia.moneda_id, 10) || 1;
+		var fecha = ($('#fecha').val() || '').substring(0, 10) || '';
+		var fp = ocProveedorFormapagoId || ocPrimerFormapagoId();
+		var cp = ocProveedorCondicionpagoId;
+
+		var comp = {
+			tipocomprobante: 'FACTURA',
+			fechavencimiento: fecha,
+			monto: total,
+			moneda_id: mid,
+			cotizacion: null,
+			detalle: null,
+			condicionpago_id: cp,
+			cantidadcuota: null,
+			cuotas: []
+		};
+		ocComprobantesState.push(comp);
+		var idx = ocComprobantesState.length - 1;
+
+		function finalizarConCuotas(cuotas) {
+			var cotComp = ocComprobantesState[idx] && ocComprobantesState[idx].cotizacion != null
+				? ocComprobantesState[idx].cotizacion
+				: 1;
+			var sum = 0;
+			cuotas.forEach(function (q) {
+				q.monto = ocRound2Money(q.monto);
+				q.moneda_id = mid;
+				q.formapago_id = fp;
+				q.cotizacion = cotComp;
+				sum += q.monto;
+			});
+			var dif = ocRound2Money(total - sum);
+			if (Math.abs(dif) >= 0.01 && cuotas.length) {
+				cuotas[cuotas.length - 1].monto = ocRound2Money(cuotas[cuotas.length - 1].monto + dif);
+			}
+			if (ocComprobantesState[idx]) {
+				ocComprobantesState[idx].cuotas = cuotas;
+				ocComprobantesState[idx].condicionpago_id = cp;
+				ocComprobantesState[idx].cantidadcuota = cuotas.length;
+			}
+			ocSyncComprobantesToHidden();
+			ocRenderTablaComprobantes();
+		}
+
+		ocRefrescarCotizacionComprobante(idx, function () {
+			$.post(carpetaBase + '/compras/ordencompra/sugerir-cuotas-condicionpago', {
+				_token: $('meta[name="csrf-token"]').attr('content'),
+				condicionpago_id: cp,
+				fecha_base: fecha,
+				monto: total,
+				moneda_id: mid
+			}).done(function (res) {
+				var cuotas = (res && res.cuotas && res.cuotas.length) ? res.cuotas : [{
+					fechavencimiento: fecha,
+					monto: total,
+					moneda_id: mid,
+					cotizacion: 1,
+					formapago_id: fp,
+					detalle: 'Cuota 1'
+				}];
+				finalizarConCuotas(cuotas);
+			}).fail(function () {
+				finalizarConCuotas([{
+					fechavencimiento: fecha,
+					monto: total,
+					moneda_id: mid,
+					cotizacion: 1,
+					formapago_id: fp,
+					detalle: 'Cuota 1'
+				}]);
+			});
+		});
 	}
 
 	/** Suma `add` meses calendario a YYYY-MM-DD (ajusta día si el mes destino es más corto). */
@@ -1119,6 +1224,18 @@ $(function () {
 		ocRenderTablaComprobantes();
 	}
 
+	// Al abrir el formulario con un proveedor ya elegido (crear con requisición/plantilla o editar
+	// una OC sin comprobante), se heredan sus datos y se intenta precargar el comprobante a venir.
+	(function ocInicializarDefaultsProveedor() {
+		var provId = $('#proveedor_id').val();
+		if (!provId || ocComprobantesState.length > 0) {
+			return;
+		}
+		$.get(carpetaBase + '/compras/leerproveedor/' + provId, function (data) {
+			ocAplicarDefaultsComprobanteDesdeProveedor(data);
+		});
+	})();
+
 	$(document).on('click', '#oc_btn_agregar_comprobante', function () {
 		ocAbrirModalCabecera(-1);
 	});
@@ -1373,6 +1490,7 @@ $(function () {
 			if (res.total != null && res.moneda_id != null) {
 				ocTotalesReferencia.total = ocRound2Money(parseFloat(res.total) || 0);
 				ocTotalesReferencia.moneda_id = parseInt(res.moneda_id, 10) || 1;
+				ocIntentarPrecargaComprobanteDefault();
 			}
 			$('#oc-tot-mon-abrev').text(res.moneda_abrev || '—');
 			$('#oc-tot-final-moneda').text(res.moneda_abrev || '—');
@@ -1998,8 +2116,33 @@ $(function () {
 			if (data.condicionpago_id) {
 				$('#condicionpago_id').val(String(data.condicionpago_id));
 			}
+			ocAplicarDefaultsComprobanteDesdeProveedor(data);
 		});
 	});
+
+	/**
+	 * Guarda la condición de pago y la forma de pago del ABM del proveedor e intenta precargar
+	 * el primer comprobante a venir. Al cambiar de proveedor sin comprobantes cargados se rearma.
+	 */
+	function ocAplicarDefaultsComprobanteDesdeProveedor(data) {
+		if (!data) {
+			return;
+		}
+		ocProveedorCondicionpagoId = data.condicionpago_id ? parseInt(data.condicionpago_id, 10) : null;
+		ocProveedorFormapagoId = null;
+		var fps = data.proveedor_formapagos || [];
+		for (var i = 0; i < fps.length; i++) {
+			var fid = parseInt(fps[i] && fps[i].formapago_id, 10);
+			if (fid > 0) {
+				ocProveedorFormapagoId = fid;
+				break;
+			}
+		}
+		if (ocComprobantesState.length === 0) {
+			ocAutocompPendiente = true;
+			ocIntentarPrecargaComprobanteDefault();
+		}
+	}
 
 	function ocAplicarPlantillaRequisicion(id) {
 		$.get(carpetaBase + '/compras/ordencompra/plantilla-requisicion', { requisicion_id: id }).done(function (pl) {

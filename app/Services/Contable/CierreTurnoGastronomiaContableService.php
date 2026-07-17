@@ -82,7 +82,7 @@ final class CierreTurnoGastronomiaContableService
     public function resolverRangoConciliacionDefault(int $empresaId): array
     {
         $hasta = Carbon::today()->toDateString();
-        $desde = $this->resolverUltimaJornadaConCierre($empresaId) ?? Carbon::today()->subDays(7)->toDateString();
+        $desde = Carbon::today()->startOfMonth()->toDateString();
 
         return ['desde' => $desde, 'hasta' => $hasta];
     }

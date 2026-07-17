@@ -128,6 +128,11 @@ class IngresoEgresoService
 				$this->sincronizarComprobantesIva($request, (int) $caja_movimiento->id, (int) $request->input('empresa_id'));
 
 				DB::commit();
+
+				if ($caja_movimiento) {
+					app(\App\Services\Solicitudpago\SolicitudpagoPagoDesdeCajaService::class)
+						->sincronizarDesdeMovimiento($caja_movimiento->fresh());
+				}
 			} catch (\Exception $e) {
 				DB::rollback();
 
@@ -210,6 +215,12 @@ class IngresoEgresoService
 				$this->sincronizarComprobantesIva($request, $id, (int) $request->input('empresa_id'));
 
 				DB::commit();
+
+				$mov = $this->caja_movimientoRepository->find($id);
+				if ($mov) {
+					app(\App\Services\Solicitudpago\SolicitudpagoPagoDesdeCajaService::class)
+						->sincronizarDesdeMovimiento($mov);
+				}
 			} catch (\Exception $e) {
 				DB::rollback();
 

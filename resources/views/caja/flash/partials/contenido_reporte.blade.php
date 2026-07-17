@@ -43,6 +43,7 @@
             <th>Bingo res.</th>
             <th>AyB</th>
             <th>Estac.</th>
+            <th>Vending</th>
             <th>Veh&iacute;culos</th>
             <th>Show</th>
         </tr>
@@ -54,6 +55,7 @@
             <td class="text-right">{{ number_format($bingo_win, 2, ',', '.') }}</td>
             <td class="text-right">{{ number_format((float) $f->ayb, 2, ',', '.') }}</td>
             <td class="text-right">{{ number_format((float) $f->estac, 2, ',', '.') }}</td>
+            <td class="text-right">{{ number_format((float) $f->vending, 2, ',', '.') }}</td>
             <td class="text-right">{{ $f->cant_vehic }}</td>
             <td class="text-right">{{ number_format((float) $f->show, 2, ',', '.') }}</td>
         </tr>

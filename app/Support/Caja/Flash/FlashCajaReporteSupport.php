@@ -15,7 +15,7 @@ final class FlashCajaReporteSupport
         'ayb', 'slot_coin_in', 'slot_d', 'slot_r', 'soft_count', 'hard_count',
         'rul_coin_in', 'rul_d', 'rul_r', 'soft_rul', 'hard_rul',
         'bingo_total_venta', 'bingo_resultado',
-        'win_ol_slot', 'win_ol_rul', 'estac', 'show',
+        'win_ol_slot', 'win_ol_rul', 'estac', 'vending', 'show',
     ];
 
     /** @var list<string> */
@@ -110,6 +110,7 @@ final class FlashCajaReporteSupport
             self::totalGamingDesdeRegistro($flash)
             + (float) $flash->ayb
             + (float) $flash->estac
+            + (float) $flash->vending
             + (float) $flash->show,
             2
         );

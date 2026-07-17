@@ -248,7 +248,7 @@ $(function () {
             </div>
             @if (method_exists($ordencompra, 'links'))
             <div class="card-footer">
-                {{ $ordencompra->appends($filtrosQuery ?? [])->links() }}
+                {{ $ordencompra->appends(array_merge($filtrosQuery ?? [], request()->only(['origen', 'vista'])))->links() }}
             </div>
             @endif
         </div>

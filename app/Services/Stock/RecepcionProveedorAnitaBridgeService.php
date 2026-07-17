@@ -552,6 +552,37 @@ class RecepcionProveedorAnitaBridgeService
     }
 
     /**
+     * Actualiza únicamente recv_cotizacion de las líneas recepmov de la COM (sin tocar cantidades,
+     * precios ni stkmov/pendmovp). Se usa al cambiar la cotización de una recepción confirmada.
+     */
+    public function actualizarCotizacionRecepmov(Recepcion_Proveedor $recepcion, float $nuevaCotizacion): void
+    {
+        if ((int) $recepcion->numerorecepcion <= 0) {
+            return;
+        }
+
+        $recepcion->loadMissing('proveedores');
+
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        if ((int) ($clave['nro'] ?? 0) <= 0) {
+            return;
+        }
+
+        $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
+            'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_linea'),
+            'valores' => RecepcionProveedorAnitaEscrituraSupport::updateSet([
+                'recv_cotizacion' => RecepcionProveedorAnitaEscrituraSupport::decimalSql($nuevaCotizacion),
+            ]),
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmovProveedorCabecera($codigoProveedor, $clave),
+        ], 'recepcion recepmov update cotizacion');
+    }
+
+    /**
      * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
      */
     private function eliminarRecepmov(array $clave, ?string $codigoProveedor = null): void

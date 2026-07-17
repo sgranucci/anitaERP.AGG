@@ -952,6 +952,10 @@ Route::post('contable/cierre-rendiciones-bingo/api/ejecutar-cierre', 'Contable\C
 Route::post('contable/cierre-rendiciones-bingo/api/anular-cierre', 'Contable\CierreRendicionBingoController@apiAnularCierre')->name('api_cierre_rendicion_bingo_anular');
 
 Route::get('contable/cierre-rendiciones-maquinavending', 'Contable\CierreRendicionMaquinavendingController@index')->name('cierre_rendicion_maquinavending_contable');
+Route::get('contable/cierre-rendiciones-maquinavending/conciliacion-flash', 'Contable\CierreRendicionMaquinavendingController@conciliacionFlash')->name('cierre_rendicion_maquinavending_conciliacion_flash');
+Route::get('contable/cierre-rendiciones-maquinavending/diario-puntoventa', 'Contable\CierreRendicionMaquinavendingController@diarioPuntoventa')->name('cierre_rendicion_maquinavending_diario_puntoventa');
+Route::get('contable/listar-cierre-rendiciones-maquinavending-conciliacion-flash/{formato?}', 'Contable\CierreRendicionMaquinavendingController@listarConciliacionFlash')->name('listar_cierre_rendicion_maquinavending_conciliacion_flash');
+Route::get('contable/listar-cierre-rendiciones-maquinavending-diario-puntoventa/{formato?}', 'Contable\CierreRendicionMaquinavendingController@listarDiarioPuntoventa')->name('listar_cierre_rendicion_maquinavending_diario_puntoventa');
 Route::get('contable/listar-cierre-rendiciones-maquinavending/{formato?}/{busqueda?}', 'Contable\CierreRendicionMaquinavendingController@listar')->name('listar_cierre_rendicion_maquinavending_contable');
 Route::post('contable/cierre-rendiciones-maquinavending/api/preview-asiento', 'Contable\CierreRendicionMaquinavendingController@apiPreviewAsiento')->name('api_cierre_rendicion_maquinavending_preview');
 Route::post('contable/cierre-rendiciones-maquinavending/api/preview-cierre-rango', 'Contable\CierreRendicionMaquinavendingController@apiPreviewCierreRango')->name('api_cierre_rendicion_maquinavending_preview_rango');
@@ -1176,6 +1180,7 @@ Route::get('stock/listar-recepcion-proveedor-articulo/{formato?}', 'Stock\Recepc
 Route::get('stock/recepcion-proveedor/{id}/editar', 'Stock\RecepcionProveedorController@editar')->name('editar_recepcion_proveedor')->middleware('modo.consulta');
 Route::put('stock/recepcion-proveedor/{id}', 'Stock\RecepcionProveedorController@actualizar')->name('actualizar_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/{id}/confirmar', 'Stock\RecepcionProveedorController@confirmar')->name('confirmar_recepcion_proveedor');
+Route::post('stock/recepcion-proveedor/{id}/cambiar-cotizacion', 'Stock\RecepcionProveedorController@cambiarCotizacion')->name('cambiar_cotizacion_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/api/preview-articulo-proveedor', 'Stock\RecepcionProveedorController@apiPreviewArticuloProveedor')->name('recepcion_proveedor_preview_articulo_proveedor');
 Route::get('stock/recepcion-proveedor/api/precarga-oc', 'Stock\RecepcionProveedorController@apiPrecargaOc')->name('recepcion_proveedor_precarga_oc');
 Route::get('stock/recepcion-proveedor/api/cotizacion-moneda-fecha', 'Stock\RecepcionProveedorController@apiCotizacionMonedaFecha')->name('recepcion_proveedor_cotizacion_moneda_fecha');
@@ -3505,6 +3510,23 @@ Route::post('solicitudpago/concepto_solicitudpago', 'Solicitudpago\Concepto_Soli
 Route::get('solicitudpago/concepto_solicitudpago/{id}/editar', 'Solicitudpago\Concepto_SolicitudpagoController@editar')->name('editar_concepto_solicitudpago');
 Route::put('solicitudpago/concepto_solicitudpago/{id}', 'Solicitudpago\Concepto_SolicitudpagoController@actualizar')->name('actualizar_concepto_solicitudpago');
 Route::delete('solicitudpago/concepto_solicitudpago/{id}', 'Solicitudpago\Concepto_SolicitudpagoController@eliminar')->name('eliminar_concepto_solicitudpago');
+
+/*
+ * Solicitudes de pago (Anita che_ban / solpago*)
+ */
+Route::get('solicitudpago/solicitudpago', 'Solicitudpago\SolicitudpagoController@index')->name('consultar_solicitudpago');
+Route::get('solicitudpago/lista_solicitudpago/{formato?}/{busqueda?}', 'Solicitudpago\SolicitudpagoController@listar')->name('lista_solicitudpago');
+Route::get('solicitudpago/solicitudpago/crear', 'Solicitudpago\SolicitudpagoController@crear')->name('crear_solicitudpago');
+Route::post('solicitudpago/solicitudpago', 'Solicitudpago\SolicitudpagoController@guardar')->name('guardar_solicitudpago');
+Route::get('solicitudpago/solicitudpago/{id}/editar', 'Solicitudpago\SolicitudpagoController@editar')->name('editar_solicitudpago');
+Route::put('solicitudpago/solicitudpago/{id}', 'Solicitudpago\SolicitudpagoController@actualizar')->name('actualizar_solicitudpago');
+Route::delete('solicitudpago/solicitudpago/{id}', 'Solicitudpago\SolicitudpagoController@eliminar')->name('eliminar_solicitudpago');
+Route::post('solicitudpago/solicitudpago/{id}/suspender', 'Solicitudpago\SolicitudpagoController@suspender')->name('suspender_solicitudpago');
+Route::post('solicitudpago/solicitudpago/{id}/levantar-suspension', 'Solicitudpago\SolicitudpagoController@levantarSuspension')->name('levantar_suspension_solicitudpago');
+Route::get('solicitudpago/solicitudpago/{id}/archivo/{archivoId}', 'Solicitudpago\SolicitudpagoController@descargarArchivo')->name('descargar_archivo_solicitudpago');
+Route::post('solicitudpago/solicitudpago/{id}/importar-cuotas', 'Solicitudpago\SolicitudpagoController@importarCuotas')->name('importar_cuotas_solicitudpago');
+Route::post('solicitudpago/solicitudpago/{id}/marcar-pagada', 'Solicitudpago\SolicitudpagoController@marcarPagada')->name('marcar_pagada_solicitudpago');
+Route::get('solicitudpago/solicitudpago/{id}/ir-a-pago', 'Solicitudpago\SolicitudpagoController@irAPago')->name('ir_a_pago_solicitudpago');
 
 // Bierzo
 

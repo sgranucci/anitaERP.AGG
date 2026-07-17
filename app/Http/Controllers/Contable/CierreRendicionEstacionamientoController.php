@@ -130,8 +130,9 @@ class CierreRendicionEstacionamientoController extends Controller
 
         $fechaDesde = trim((string) $request->input('fecha_desde', ''));
         $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $consultar = $request->boolean('consultar');
 
-        if ($fechaDesde === '' && $fechaHasta === '') {
+        if (! $consultar || ($fechaDesde === '' && $fechaHasta === '')) {
             $defaults = $this->service->resolverRangoConciliacionDefault($empresaId);
             $fechaDesde = $defaults['desde'];
             $fechaHasta = $defaults['hasta'];
@@ -139,12 +140,14 @@ class CierreRendicionEstacionamientoController extends Controller
             $fechaHasta = now()->toDateString();
         }
 
-        $consultar = $request->boolean('consultar');
         $resultado = null;
         $errorFlash = null;
 
         if ($consultar && $empresaId > 0 && $fechaDesde !== '' && $fechaHasta !== '') {
             try {
+                ini_set('memory_limit', '-1');
+                ini_set('max_execution_time', '0');
+
                 $resultado = $this->service->conciliarFlash($empresaId, $fechaDesde, $fechaHasta);
             } catch (\Throwable $e) {
                 $errorFlash = $e->getMessage();
@@ -257,8 +260,9 @@ class CierreRendicionEstacionamientoController extends Controller
 
         $fechaDesde = trim((string) $request->input('fecha_desde', ''));
         $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $consultar = $request->boolean('consultar');
 
-        if ($fechaDesde === '' && $fechaHasta === '') {
+        if (! $consultar || ($fechaDesde === '' && $fechaHasta === '')) {
             $defaults = $this->service->resolverRangoConciliacionDefault($empresaId);
             $fechaDesde = $defaults['desde'];
             $fechaHasta = $defaults['hasta'];
@@ -266,12 +270,14 @@ class CierreRendicionEstacionamientoController extends Controller
             $fechaHasta = now()->toDateString();
         }
 
-        $consultar = $request->boolean('consultar');
         $resultado = null;
         $errorReporte = null;
 
         if ($consultar && $empresaId > 0 && $fechaDesde !== '' && $fechaHasta !== '') {
             try {
+                ini_set('memory_limit', '-1');
+                ini_set('max_execution_time', '0');
+
                 $resultado = $this->service->reporteDiarioPuntoventa($empresaId, $fechaDesde, $fechaHasta);
             } catch (\Throwable $e) {
                 $errorReporte = $e->getMessage();
@@ -451,7 +457,7 @@ class CierreRendicionEstacionamientoController extends Controller
         }
 
         if (! $request->boolean('confirmar')) {
-            return response()->json(['ok' => false, 'mensaje' => 'Debe confirmar el cierre masivo.'], 422);
+            return response()->json(['ok' => false, 'mensaje' => 'Debe confirmar el cierre del rango.'], 422);
         }
 
         try {
@@ -459,7 +465,7 @@ class CierreRendicionEstacionamientoController extends Controller
 
             return response()->json([
                 'ok' => true,
-                'mensaje' => $this->mensajeResultadoCierreMasivo($resultado),
+                'mensaje' => $this->mensajeResultadoCierreRango($resultado),
                 'resultado' => $resultado,
             ]);
         } catch (InvalidArgumentException $e) {
@@ -489,7 +495,7 @@ class CierreRendicionEstacionamientoController extends Controller
 
             return response()->json([
                 'ok' => true,
-                'mensaje' => $this->mensajeResultadoCierreMasivo($resultado),
+                'mensaje' => $this->mensajeResultadoCierreRango($resultado),
                 'resultado' => $resultado,
             ]);
         } catch (InvalidArgumentException $e) {
@@ -500,13 +506,17 @@ class CierreRendicionEstacionamientoController extends Controller
     }
 
     /**
-     * @param  array{ok: list<mixed>, errores: list<mixed>}  $resultado
+     * @param  array{ok: list<mixed>, omitidos?: list<mixed>, errores: list<mixed>}  $resultado
      */
-    private function mensajeResultadoCierreMasivo(array $resultado): string
+    private function mensajeResultadoCierreRango(array $resultado): string
     {
         $cantOk = count($resultado['ok']);
+        $cantOmit = count($resultado['omitidos'] ?? []);
         $cantErr = count($resultado['errores']);
         $mensaje = 'Cierre contable: '.$cantOk.' grupo(s) cerrado(s).';
+        if ($cantOmit > 0) {
+            $mensaje .= ' '.$cantOmit.' ya estaba(n) cerrado(s), se omitió(eron).';
+        }
         if ($cantErr > 0) {
             $mensaje .= ' '.$cantErr.' con error.';
         }

@@ -654,6 +654,91 @@ final class GastronomiaConciliacionPorPcSupport
     }
 
     /**
+     * Total gastronomía ERP NETO del día (facturas − NC), sin consultar Anita/rendgastro.
+     *
+     * Agrega TODAS las emisiones gastronómicas de la jornada (salón + post-cierre CAEA + agregados),
+     * excluyendo puntos de venta de estacionamiento (circuito propio). Fuente única: emisión ERP.
+     *
+     * @return array{bruto: float, nc: float, neto: float, cantidad_facturas: int, cantidad_nc: int}
+     */
+    public function totalErpNetoGastronomiaDia(int $empresaId, string $fechaJornada): array
+    {
+        $idsEstacionamiento = $this->puntoventaIdsEstacionamiento($empresaId);
+
+        $emisiones = VentaGastronomiaEmision::query()
+            ->whereHas('venta', function ($v) use ($empresaId, $fechaJornada) {
+                $v->where(function ($fecha) use ($fechaJornada) {
+                    $fecha->whereDate('fechajornada', $fechaJornada)
+                        ->orWhere(function ($legacy) use ($fechaJornada) {
+                            $legacy->whereNull('fechajornada')
+                                ->whereDate('fecha', $fechaJornada);
+                        });
+                })->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
+            })
+            ->with('venta:id,puntoventa_id,total')
+            ->get();
+
+        $bruto = 0.0;
+        $nc = 0.0;
+        $cantFacturas = 0;
+        $cantNc = 0;
+
+        foreach ($emisiones as $em) {
+            $venta = $em->venta;
+            if ($venta === null) {
+                continue;
+            }
+            $pvId = (int) ($venta->puntoventa_id ?? 0);
+            if ($pvId > 0 && in_array($pvId, $idsEstacionamiento, true)) {
+                continue;
+            }
+            $monto = round((float) ($venta->total ?? 0), 2);
+            if (($em->venta_factura_origen_id ?? null) !== null) {
+                $nc += abs($monto);
+                $cantNc++;
+            } else {
+                $bruto += $monto;
+                $cantFacturas++;
+            }
+        }
+
+        $bruto = round($bruto, 2);
+        $nc = round($nc, 2);
+
+        return [
+            'bruto' => $bruto,
+            'nc' => $nc,
+            'neto' => round($bruto - $nc, 2),
+            'cantidad_facturas' => $cantFacturas,
+            'cantidad_nc' => $cantNc,
+        ];
+    }
+
+    /**
+     * IDs de puntos de venta de estacionamiento de la empresa (config códigos + nombre),
+     * a excluir del total gastronómico salón.
+     *
+     * @return list<int>
+     */
+    private function puntoventaIdsEstacionamiento(int $empresaId): array
+    {
+        $codigos = config('rendicion_gastronomia_anita.auditoria_diaria.puntoventa_codigos_solo_anita', []);
+
+        return Puntoventa::query()
+            ->where('empresa_id', $empresaId)
+            ->where(function ($q) use ($codigos) {
+                $q->where('nombre', 'like', '%estacionamiento%')
+                    ->orWhere('nombre', 'like', '%estac.%');
+                if (! empty($codigos)) {
+                    $q->orWhereIn('codigo', $codigos);
+                }
+            })
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+    }
+
+    /**
      * @return array{
      *   total: float|null,
      *   z_portadora: float|null,

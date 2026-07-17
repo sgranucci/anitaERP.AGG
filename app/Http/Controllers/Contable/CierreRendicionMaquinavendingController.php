@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Exports\Contable\CierreRendicionMaquinavendingConciliacionFlashExport;
 use App\Exports\Contable\CierreRendicionMaquinavendingListadoExport;
+use App\Exports\Contable\MaquinavendingDiarioPuntoventaExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\CierreRendicionMaquinavendingService;
 use App\Support\Contable\CierreRendicionMaquinavendingListadoFiltros;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -78,6 +81,288 @@ class CierreRendicionMaquinavendingController extends Controller
         );
     }
 
+    public function conciliacionFlash(Request $request)
+    {
+        can('listar-cierre-rendicion-maquinavending-contable');
+
+        [$empresaQuery, $empresaId] = $this->resolverEmpresaConciliacion($request);
+
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $consultar = $request->boolean('consultar');
+
+        if (! $consultar || ($fechaDesde === '' && $fechaHasta === '')) {
+            $defaults = $this->service->resolverRangoConciliacionDefault($empresaId);
+            $fechaDesde = $defaults['desde'];
+            $fechaHasta = $defaults['hasta'];
+        } elseif ($fechaHasta === '' && $fechaDesde !== '') {
+            $fechaHasta = now()->toDateString();
+        }
+
+        $resultado = null;
+        $errorFlash = null;
+
+        if ($consultar && $empresaId > 0 && $fechaDesde !== '' && $fechaHasta !== '') {
+            try {
+                ini_set('memory_limit', '-1');
+                ini_set('max_execution_time', '0');
+
+                $resultado = $this->service->conciliarFlash($empresaId, $fechaDesde, $fechaHasta);
+            } catch (\Throwable $e) {
+                $errorFlash = $e->getMessage();
+            }
+        }
+
+        $filtrosQueryConciliacion = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            'consultar' => $consultar ? 1 : null,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        return view('contable.cierre_rendicion_maquinavending.conciliacion_flash', [
+            'empresa_query' => $empresaQuery,
+            'empresa_id' => $empresaId,
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'consultar' => $consultar,
+            'resultado' => $resultado,
+            'error_flash' => $errorFlash,
+            'filtrosQueryConciliacion' => $filtrosQueryConciliacion,
+            'retornoListadoQuery' => $this->resolverRetornoListadoQuery($request),
+        ]);
+    }
+
+    public function listarConciliacionFlash(Request $request, ?string $formato = null)
+    {
+        can('exportar-cierre-rendicion-maquinavending-contable');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+
+        $redirectQuery = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            'consultar' => 1,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        if ($empresaId <= 0 || $fechaDesde === '' || $fechaHasta === '') {
+            return redirect()
+                ->route('cierre_rendicion_maquinavending_conciliacion_flash', $redirectQuery)
+                ->with('mensaje_error', 'Indique empresa y rango de jornadas para exportar.');
+        }
+
+        try {
+            $resultado = $this->service->conciliarFlash($empresaId, $fechaDesde, $fechaHasta);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('cierre_rendicion_maquinavending_conciliacion_flash', $redirectQuery)
+                ->with('mensaje_error', $e->getMessage());
+        }
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('contable.cierre_rendicion_maquinavending.conciliacion_flash_listado', [
+                    'resultado' => $resultado,
+                    'esExcel' => false,
+                    'filas' => CierreRendicionMaquinavendingConciliacionFlashExport::aplanarFilas($resultado),
+                ])->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombrePdf = 'listado_conciliacion_flash_vending';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+            case 'CSV':
+                $mime = $formato === 'CSV' ? Excel::CSV : Excel::XLSX;
+                $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
+
+                return \Maatwebsite\Excel\Facades\Excel::download(
+                    new CierreRendicionMaquinavendingConciliacionFlashExport($resultado),
+                    'conciliacion_flash_vending.'.$ext,
+                    $mime,
+                );
+        }
+
+        return redirect()->route('cierre_rendicion_maquinavending_conciliacion_flash', $redirectQuery);
+    }
+
+    public function diarioPuntoventa(Request $request)
+    {
+        can('listar-cierre-rendicion-maquinavending-contable');
+
+        [$empresaQuery, $empresaId] = $this->resolverEmpresaConciliacion($request);
+
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $consultar = $request->boolean('consultar');
+
+        if (! $consultar || ($fechaDesde === '' && $fechaHasta === '')) {
+            $defaults = $this->service->resolverRangoConciliacionDefault($empresaId);
+            $fechaDesde = $defaults['desde'];
+            $fechaHasta = $defaults['hasta'];
+        } elseif ($fechaHasta === '' && $fechaDesde !== '') {
+            $fechaHasta = now()->toDateString();
+        }
+
+        $resultado = null;
+        $errorReporte = null;
+
+        if ($consultar && $empresaId > 0 && $fechaDesde !== '' && $fechaHasta !== '') {
+            try {
+                ini_set('memory_limit', '-1');
+                ini_set('max_execution_time', '0');
+
+                $resultado = $this->service->reporteDiarioPuntoventa($empresaId, $fechaDesde, $fechaHasta);
+            } catch (\Throwable $e) {
+                $errorReporte = $e->getMessage();
+            }
+        }
+
+        $filtrosQuery = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            'consultar' => $consultar ? 1 : null,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        return view('contable.cierre_rendicion_maquinavending.diario_puntoventa', [
+            'empresa_query' => $empresaQuery,
+            'empresa_id' => $empresaId,
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'consultar' => $consultar,
+            'resultado' => $resultado,
+            'error_reporte' => $errorReporte,
+            'filtrosQuery' => $filtrosQuery,
+            'retornoListadoQuery' => $this->resolverRetornoListadoQuery($request),
+        ]);
+    }
+
+    public function listarDiarioPuntoventa(Request $request, ?string $formato = null)
+    {
+        can('exportar-cierre-rendicion-maquinavending-contable');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+
+        $redirectQuery = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            'consultar' => 1,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        if ($empresaId <= 0 || $fechaDesde === '' || $fechaHasta === '') {
+            return redirect()
+                ->route('cierre_rendicion_maquinavending_diario_puntoventa', $redirectQuery)
+                ->with('mensaje_error', 'Indique empresa y rango de jornadas para exportar.');
+        }
+
+        try {
+            $resultado = $this->service->reporteDiarioPuntoventa($empresaId, $fechaDesde, $fechaHasta);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('cierre_rendicion_maquinavending_diario_puntoventa', $redirectQuery)
+                ->with('mensaje_error', $e->getMessage());
+        }
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('contable.cierre_rendicion_maquinavending.diario_puntoventa_listado', [
+                    'resultado' => $resultado,
+                    'esExcel' => false,
+                    'matriz' => MaquinavendingDiarioPuntoventaExport::matrizAncha($resultado),
+                ])->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombrePdf = 'vending_diario_puntoventa_contable';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+            case 'CSV':
+                $mime = $formato === 'CSV' ? Excel::CSV : Excel::XLSX;
+                $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
+
+                return \Maatwebsite\Excel\Facades\Excel::download(
+                    new MaquinavendingDiarioPuntoventaExport($resultado),
+                    'vending_diario_puntoventa_contable.'.$ext,
+                    $mime,
+                );
+        }
+
+        return redirect()->route('cierre_rendicion_maquinavending_diario_puntoventa', $redirectQuery);
+    }
+
+    /**
+     * @return array{0: \Illuminate\Support\Collection, 1: int}
+     */
+    private function resolverEmpresaConciliacion(Request $request): array
+    {
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
+        $empresaId = (int) $request->input('empresa_id', 0);
+
+        if ($empresaId <= 0 && count($asignadas) === 1) {
+            $primera = $empresaQuery->first();
+            if ($primera !== null) {
+                $empresaId = (int) $primera->id;
+            }
+        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
+            $primera = $empresaQuery->first();
+            $empresaId = $primera !== null ? (int) $primera->id : 0;
+        }
+
+        return [$empresaQuery, $empresaId];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverRetornoListadoQuery(Request $request): array
+    {
+        $retorno = $request->input('retorno');
+        if (is_array($retorno) && $retorno !== []) {
+            $query = [];
+            foreach ($retorno as $key => $value) {
+                if (! is_string($key) || $key === '' || ! is_scalar($value)) {
+                    continue;
+                }
+                $trimmed = is_string($value) ? trim($value) : $value;
+                if ($trimmed === '' || $trimmed === null) {
+                    continue;
+                }
+                $query[$key] = $trimmed;
+            }
+
+            return $query;
+        }
+
+        return QueryRetornoListado::desdeRequest($request, CierreRendicionMaquinavendingListadoFiltros::class);
+    }
 
     public function apiPreviewAsiento(Request $request): JsonResponse
     {

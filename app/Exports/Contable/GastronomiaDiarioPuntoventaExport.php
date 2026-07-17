@@ -72,7 +72,7 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
     }
 
     /**
-     * Matriz a lo ancho: FECHA + por cada PV (medios + Neto + IVA + NC), una fila por jornada.
+     * Matriz a lo ancho: FECHA + por cada PV (medios + Venta + Neto + IVA + NC), una fila por jornada.
      *
      * @param  array<string, mixed>  $resultado
      * @return array{
@@ -147,11 +147,12 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
                 $labelsMedios[] = $label;
                 $labelsFila2[] = $label;
             }
+            $labelsFila2[] = 'Venta';
             $labelsFila2[] = 'Neto';
             $labelsFila2[] = 'IVA';
             $labelsFila2[] = 'NC';
 
-            $colsBloque = count($medios) + 3; // medios + Neto + IVA + NC
+            $colsBloque = count($medios) + 4; // medios + Venta + Neto + IVA + NC
             $bloquesPv[] = [
                 'puntoventa_id' => $pv['puntoventa_id'],
                 'pv_codigo' => $pv['pv_codigo'],
@@ -179,10 +180,11 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
             $labelsMediosTotales[] = $label;
             $labelsFila2[] = $label;
         }
+        $labelsFila2[] = 'Venta';
         $labelsFila2[] = 'Neto';
         $labelsFila2[] = 'IVA';
         $labelsFila2[] = 'NC';
-        $colsTotalDia = count($mediosTotales) + 3;
+        $colsTotalDia = count($mediosTotales) + 4;
         $bloqueTotalDia = [
             'puntoventa_id' => 0,
             'pv_codigo' => '',
@@ -211,6 +213,7 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
             $valores = [];
             /** @var array<int, float> $netoMediosDia */
             $netoMediosDia = [];
+            $ventaBrutaDia = 0.0;
             $ventaNetoDia = 0.0;
             $ventaIvaDia = 0.0;
             $ncDia = 0.0;
@@ -227,6 +230,7 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
                     foreach ($bloque['medios'] as $_) {
                         $valores[] = null;
                     }
+                    $valores[] = null; // Venta
                     $valores[] = null; // Neto
                     $valores[] = null; // IVA
                     $valores[] = null; // NC
@@ -251,12 +255,15 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
                         ? round($netoPorMedio[$ccId], 2)
                         : 0.0;
                 }
+                $brutoPv = round((float) ($pvDia['venta_bruta'] ?? 0), 2);
                 $netoPv = round((float) ($pvDia['venta_neto'] ?? 0), 2);
                 $ivaPv = round((float) ($pvDia['venta_iva'] ?? 0), 2);
                 $ncPv = round((float) ($pvDia['total_nc'] ?? 0), 2);
+                $valores[] = $brutoPv;
                 $valores[] = $netoPv;
                 $valores[] = $ivaPv;
                 $valores[] = $ncPv;
+                $ventaBrutaDia += $brutoPv;
                 $ventaNetoDia += $netoPv;
                 $ventaIvaDia += $ivaPv;
                 $ncDia += $ncPv;
@@ -268,6 +275,7 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
                 $valores[] = round((float) ($netoMediosDia[$ccId] ?? 0), 2);
             }
             $totalesDia = $dia['totales'] ?? [];
+            $valores[] = round((float) ($totalesDia['venta_bruta'] ?? $ventaBrutaDia), 2);
             $valores[] = round((float) ($totalesDia['venta_neto'] ?? $ventaNetoDia), 2);
             $valores[] = round((float) ($totalesDia['venta_iva'] ?? $ventaIvaDia), 2);
             $valores[] = round((float) ($totalesDia['total_nc'] ?? $ncDia), 2);

@@ -1371,56 +1371,70 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 	private function grabaFormaDePago($request, ?ApiAnita $apiAnita = null)
 	{
-		if (isset($request['nombres']))
-		{
-			$apiAnita = $apiAnita ?? new ApiAnita();
+		if (! isset($request['nombres'])) {
+			return;
+		}
 
-			// Graba formas de pago
-			$nombres = $request['nombres'];
-			$formapago_ids = $request['formapago_ids'];
-			$cbus = $request['cbus'];
-			$tipocuentacaja_ids = $request['tipocuentacaja_ids'];
-			$monedas_ids = $request['moneda_ids'];
-			$numerocuentas = $request['numerocuentas'];
-			$nroinscripciones = $request['nroinscripciones'];
-			$banco_ids = $request['banco_ids'];
-			$mediopago_ids = $request['mediopago_ids'];
-			$emails = $request['emails'];
-			if ($formapago_ids[0] != null)
-				$qFormaPago = count($formapago_ids);
-			else
-				$qFormaPago = 0;
-			for ($i_formapago=0; $i_formapago < $qFormaPago; $i_formapago++) 
-			{
-				// Busca forma de pago
-				$formapago = $this->formapagoRepository->find($formapago_ids[$i_formapago]);
-				if ($formapago)
-					$formaPago = $formapago->abreviatura;
-				else
-					$formaPago = null;
+		$apiAnita = $apiAnita ?? new ApiAnita();
 
-				// Busca tipo de cuenta de caja
-				$tipocuentacaja = $this->tipocuentacajaRepository->find($tipocuentacaja_ids[$i_formapago]);
-				if ($tipocuentacaja)
-					$tipoCuenta = $tipocuentacaja->id;
-				else
-					$tipoCuenta = null;
+		$nombres = (array) ($request['nombres'] ?? []);
+		$formapago_ids = (array) ($request['formapago_ids'] ?? []);
+		$cbus = (array) ($request['cbus'] ?? []);
+		$tipocuentacaja_ids = (array) ($request['tipocuentacaja_ids'] ?? []);
+		$monedas_ids = (array) ($request['moneda_ids'] ?? []);
+		$numerocuentas = (array) ($request['numerocuentas'] ?? []);
+		$nroinscripciones = (array) ($request['nroinscripciones'] ?? []);
+		$banco_ids = (array) ($request['banco_ids'] ?? []);
+		$mediopago_ids = (array) ($request['mediopago_ids'] ?? []);
+		$emails = (array) ($request['emails'] ?? []);
 
-				// Busca banco
-				$banco = $this->bancoRepository->find($banco_ids[$i_formapago]);
-				if ($banco)
-					$codigoBanco = $banco->codigo;
-				else
-					$codigoBanco = null;
+		$qFormaPago = max(
+			count($nombres),
+			count($formapago_ids),
+			count($tipocuentacaja_ids),
+			count($monedas_ids)
+		);
 
-				// Busca medio de pago
-				$mediopago = $this->mediopagoRepository->find($mediopago_ids[$i_formapago]);
-				if ($mediopago)
-					$tipoComprobante = $mediopago->codigo;
-				else
-					$tipoComprobante = null;
+		$offsetAnita = 0;
+		for ($i_formapago = 0; $i_formapago < $qFormaPago; $i_formapago++) {
+			$nombre = trim((string) ($nombres[$i_formapago] ?? ''));
+			$formapagoId = (int) ($formapago_ids[$i_formapago] ?? 0);
+			$tipocuentacajaId = (int) ($tipocuentacaja_ids[$i_formapago] ?? 0);
+			$monedaId = (int) ($monedas_ids[$i_formapago] ?? 0);
 
-				$data = array( 'tabla' => $this->tableAnita[3], 'acc' => 'insert',
+			// Renglón vacío o incompleto: no insertar en Anita. El tipo de cuenta (TC) es
+			// opcional (solo relevante en transferencias), por eso no se exige aquí.
+			if ($nombre === '' || $formapagoId <= 0 || $monedaId <= 0) {
+				continue;
+			}
+
+			$formapago = $this->formapagoRepository->find($formapagoId);
+			$formaPago = $formapago ? $formapago->abreviatura : '';
+
+			$tipoCuenta = '';
+			if ($tipocuentacajaId > 0) {
+				$tipocuentacaja = $this->tipocuentacajaRepository->find($tipocuentacajaId);
+				$tipoCuenta = $tipocuentacaja ? $tipocuentacaja->id : $tipocuentacajaId;
+			}
+
+			$bancoId = (int) ($banco_ids[$i_formapago] ?? 0);
+			$banco = $bancoId > 0 ? $this->bancoRepository->find($bancoId) : null;
+			$codigoBanco = $banco ? $banco->codigo : '';
+
+			$mediopagoId = (int) ($mediopago_ids[$i_formapago] ?? 0);
+			$mediopago = $mediopagoId > 0 ? $this->mediopagoRepository->find($mediopagoId) : null;
+			$tipoComprobante = $mediopago ? $mediopago->codigo : '';
+
+			$nombreEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita($nombre);
+			$cbuEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita((string) ($cbus[$i_formapago] ?? ''));
+			$nroCuentaEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita((string) ($numerocuentas[$i_formapago] ?? ''));
+			$cuitEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita((string) ($nroinscripciones[$i_formapago] ?? ''));
+			$emailEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita((string) ($emails[$i_formapago] ?? ''));
+			$formaPagoEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita((string) $formaPago);
+
+			$data = [
+				'tabla' => $this->tableAnita[3],
+				'acc' => 'insert',
 				'sistema' => 'compras',
 				'campos' => '
 						prop_proveedor,
@@ -1436,22 +1450,22 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 						prop_e_mail_conf,
 						prop_offset
 					',
-				'valores' => " 
-						'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
-						'".$nombres[$i_formapago]."', 
-						'".$formaPago."',
-						'".$cbus[$i_formapago]."',
+				'valores' => "
+						'".str_pad($request['codigo'], 6, '0', STR_PAD_LEFT)."',
+						'".$nombreEsc."',
+						'".$formaPagoEsc."',
+						'".$cbuEsc."',
 						'".$tipoCuenta."',
-						'".$monedas_ids[$i_formapago]."',
-						'".$numerocuentas[$i_formapago]."', 
-						'".$nroinscripciones[$i_formapago]."', 
+						'".$monedaId."',
+						'".$nroCuentaEsc."',
+						'".$cuitEsc."',
 						'".$codigoBanco."',
 						'".$tipoComprobante."',
-						'".$emails[$i_formapago]."',
-						'".$i_formapago."' "
-				);
-				$this->apiCallAnitaEscritura($apiAnita, $data, 'propago insert');
-			}
+						'".$emailEsc."',
+						'".$offsetAnita."' ",
+			];
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'propago insert');
+			$offsetAnita++;
 		}
 	}
 

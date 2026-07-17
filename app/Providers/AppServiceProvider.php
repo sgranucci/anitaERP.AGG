@@ -1745,6 +1745,11 @@ class AppServiceProvider extends ServiceProvider
             'App\Repositories\Solicitudpago\Concepto_SolicitudpagoRepository',
         );
 
+        $this->app->bind(
+            'App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface',
+            'App\Repositories\Solicitudpago\SolicitudpagoRepository',
+        );
+
         // Bierzo
 
         $this->app->bind(

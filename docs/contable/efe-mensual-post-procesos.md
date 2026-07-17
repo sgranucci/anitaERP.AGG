@@ -63,8 +63,10 @@ Implementación: `EfeMensualReporteService::armarFilasDatos`.
 ### 3. Mantenimiento de edificio (concepto 24)
 - **Clase:** `EfeDatosMantenimientoEdificioSupport`
 - **Qué:** OPP/cheques/anticipos de mant. edificio → concepto 24.
-- **Señal:** gasto `521180` en subdiario o FIB `axp_concepto=24` **sin** puente bienes de uso `123010`.
+- **Señal:** piernas FIB/COM con cuenta cuyo `ctaconc` / `conceptogasto_id` es **24** (p.ej. `521180`), **sin** puente bienes de uso `123010`.
+- **No** usa `axp_concepto=24` del FIB (solo IVA/pasivo no va a c24).
 - **Nota:** si el FIB/COM trae `123010`, no fuerza 24 (va a bienes de uso vía OPP→COM).
+- **No sobrescribe** concepto 12.
 
 ### 4. Varios (concepto 20)
 - **Clase:** `EfeDatosVariosSupport`

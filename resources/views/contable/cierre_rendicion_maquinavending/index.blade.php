@@ -38,6 +38,23 @@
             <div class="card-header">
                 <h3 class="card-title">Cierre rendiciones vending</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @php
+                        $retornoConciliacion = [];
+                        foreach (($filtrosQuery ?? []) as $rqKey => $rqVal) {
+                            $retornoConciliacion['retorno['.$rqKey.']'] = $rqVal;
+                        }
+                    @endphp
+                    @if (can('listar-cierre-rendicion-maquinavending-contable', false))
+                        <a href="{{ route('cierre_rendicion_maquinavending_conciliacion_flash', $retornoConciliacion) }}"
+                           class="btn btn-sm btn-outline-info mr-2 mb-1" title="Conciliar rendiciones vs flash / rendgastro">
+                            <i class="fa fa-balance-scale"></i> Conciliaci&oacute;n flash
+                        </a>
+                        <a href="{{ route('cierre_rendicion_maquinavending_diario_puntoventa', $retornoConciliacion) }}"
+                           class="btn btn-sm btn-outline-primary mr-2 mb-1"
+                           title="Diario por punto de venta y medios de pago">
+                            <i class="fa fa-table"></i> Diario por PV / medios
+                        </a>
+                    @endif
                     @if (can('ejecutar-cierre-rendicion-maquinavending-contable', false))
                         <button type="button" class="btn btn-sm btn-success mr-2 mb-1" id="btn-abrir-cierre-rango"
                                 title="Cerrar rendiciones pendientes por rango de fechas">

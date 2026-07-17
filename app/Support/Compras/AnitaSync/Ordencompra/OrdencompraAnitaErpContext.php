@@ -284,6 +284,20 @@ final class OrdencompraAnitaErpContext
         return trim($this->skuArticulo13($articuloId), "'");
     }
 
+    public function descripcionArticulo(?int $articuloId): string
+    {
+        if ($articuloId === null || $articuloId <= 0) {
+            return '';
+        }
+        $key = 'desc_'.$articuloId;
+        if (array_key_exists($key, $this->cache)) {
+            return (string) $this->cache[$key];
+        }
+        $desc = Articulo::query()->whereKey($articuloId)->value('descripcion');
+
+        return (string) ($this->cache[$key] = trim((string) ($desc ?? '')));
+    }
+
     public function unidadMedidaArticulo(?int $articuloId): string
     {
         if ($articuloId === null || $articuloId <= 0) {

@@ -21,6 +21,7 @@ class Caja_Movimiento extends Model implements Auditable
                             'caja_id', 'proveedor_id', 'cliente_id', 'conceptogasto_id', 
                             'cobranza_id',
                             'pagoproveedor_id',
+                            'solicitudpago_id',
                             'venta_id',
                             'detalle',
                             'usuario_id',
@@ -69,6 +70,11 @@ class Caja_Movimiento extends Model implements Auditable
     public function ventas()
     {
         return $this->belongsTo(Venta::class, 'venta_id');
+    }
+
+    public function solicitudpagos()
+    {
+        return $this->belongsTo(\App\Models\Solicitudpago\Solicitudpago::class, 'solicitudpago_id');
     }
 
     public function empresas()

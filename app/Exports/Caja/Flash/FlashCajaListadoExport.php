@@ -23,7 +23,7 @@ class FlashCajaListadoExport implements FromView, ShouldAutoSize, WithColumnForm
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'J';
+    private const COL_ULTIMA = 'K';
 
     private FlashCajaRepositoryInterface $repository;
 
@@ -115,7 +115,8 @@ class FlashCajaListadoExport implements FromView, ShouldAutoSize, WithColumnForm
             'G' => 14,
             'H' => 14,
             'I' => 14,
-            'J' => 18,
+            'J' => 14,
+            'K' => 18,
         ];
     }
 

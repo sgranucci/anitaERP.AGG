@@ -3,6 +3,7 @@
 namespace App\Services\Arca;
 
 use Exception;
+use Illuminate\Support\Facades\Log;
 use SoapClient;
 use SoapFault;
 
@@ -33,38 +34,21 @@ class WsapocConsultaService
      */
     public function dummy(): array
     {
-        $this->lastSoapTrace = null;
-
         if (! $this->habilitado()) {
             throw new Exception('WSAPOC deshabilitado (ARCA_WSAPOC_HABILITADO=false).');
         }
 
-        $client = $this->crearClienteSoap();
+        $result = $this->invocarConReintentos('Dummy', [], 'DummyResult');
 
-        try {
-            $resp = $client->Dummy();
-            $result = $resp->DummyResult ?? null;
-            if ($result === null) {
-                throw new Exception('WSAPOC: respuesta inválida (sin DummyResult).');
-            }
+        $data = [
+            'appserver' => isset($result->appserver) ? (string) $result->appserver : null,
+            'dbserver' => isset($result->dbserver) ? (string) $result->dbserver : null,
+            'authserver' => isset($result->authserver) ? (string) $result->authserver : null,
+            'soap' => $this->lastSoapTrace,
+        ];
+        $data['ok'] = ($data['appserver'] ?? '') === 'OK' && ($data['dbserver'] ?? '') === 'OK';
 
-            $data = [
-                'appserver' => isset($result->appserver) ? (string) $result->appserver : null,
-                'dbserver' => isset($result->dbserver) ? (string) $result->dbserver : null,
-                'authserver' => isset($result->authserver) ? (string) $result->authserver : null,
-                'soap' => $this->captureSoapTrace($client),
-            ];
-            $data['ok'] = ($data['appserver'] ?? '') === 'OK' && ($data['dbserver'] ?? '') === 'OK';
-
-            return $data;
-        } catch (SoapFault $e) {
-            $this->lastSoapTrace = $this->captureSoapTrace($client);
-            throw new Exception($this->formatSoapFault($e, $client), (int) $e->getCode(), $e);
-        } finally {
-            if ($this->lastSoapTrace === null) {
-                $this->lastSoapTrace = $this->captureSoapTrace($client);
-            }
-        }
+        return $data;
     }
 
     /**
@@ -74,8 +58,6 @@ class WsapocConsultaService
      */
     public function getPublicacionApoc(string $cuitConsultada): array
     {
-        $this->lastSoapTrace = null;
-
         if (! $this->habilitado()) {
             throw new Exception('WSAPOC deshabilitado (ARCA_WSAPOC_HABILITADO=false).');
         }
@@ -93,35 +75,19 @@ class WsapocConsultaService
         $serviceId = (string) config('arca_wsapoc.wsaa_service_id', 'wsapoc');
         $ts = $this->wsaaService->getTokenSign($serviceId, $this->wsaaContextWsapoc());
 
-        $client = $this->crearClienteSoap();
+        $result = $this->invocarConReintentos('GetPublicacionAPOC', [
+            'Credencial' => [
+                'Token' => $ts['token'],
+                'Sign' => $ts['sign'],
+                'CUITDelegado' => $cuitRepresentada,
+            ],
+            'cuit' => (float) $cuitConsultada,
+        ], 'GetPublicacionAPOCResult');
 
-        try {
-            $resp = $client->GetPublicacionAPOC([
-                'Credencial' => [
-                    'Token' => $ts['token'],
-                    'Sign' => $ts['sign'],
-                    'CUITDelegado' => $cuitRepresentada,
-                ],
-                'cuit' => (float) $cuitConsultada,
-            ]);
+        $data = $this->normalizarMessageResponse($result, $cuitConsultada);
+        $data['soap'] = $this->lastSoapTrace;
 
-            $result = $resp->GetPublicacionAPOCResult ?? null;
-            if ($result === null) {
-                throw new Exception('WSAPOC: respuesta inválida (sin GetPublicacionAPOCResult).');
-            }
-
-            $data = $this->normalizarMessageResponse($result, $cuitConsultada);
-            $data['soap'] = $this->captureSoapTrace($client);
-
-            return $data;
-        } catch (SoapFault $e) {
-            $this->lastSoapTrace = $this->captureSoapTrace($client);
-            throw new Exception($this->formatSoapFault($e, $client), (int) $e->getCode(), $e);
-        } finally {
-            if ($this->lastSoapTrace === null) {
-                $this->lastSoapTrace = $this->captureSoapTrace($client);
-            }
-        }
+        return $data;
     }
 
     /**
@@ -131,8 +97,6 @@ class WsapocConsultaService
      */
     public function getAllByPublicacion(string $desde, string $hasta): array
     {
-        $this->lastSoapTrace = null;
-
         if (! $this->habilitado()) {
             throw new Exception('WSAPOC deshabilitado (ARCA_WSAPOC_HABILITADO=false).');
         }
@@ -148,41 +112,126 @@ class WsapocConsultaService
         $serviceId = (string) config('arca_wsapoc.wsaa_service_id', 'wsapoc');
         $ts = $this->wsaaService->getTokenSign($serviceId, $this->wsaaContextWsapoc());
 
-        $client = $this->crearClienteSoap();
+        $result = $this->invocarConReintentos('GetAllByPublicacion', [
+            'Credencial' => [
+                'Token' => $ts['token'],
+                'Sign' => $ts['sign'],
+                'CUITDelegado' => $cuitRepresentada,
+            ],
+            'desde' => $desde,
+            'hasta' => $hasta,
+        ], 'GetAllByPublicacionResult');
 
-        try {
-            $resp = $client->GetAllByPublicacion([
-                'Credencial' => [
-                    'Token' => $ts['token'],
-                    'Sign' => $ts['sign'],
-                    'CUITDelegado' => $cuitRepresentada,
-                ],
-                'desde' => $desde,
-                'hasta' => $hasta,
-            ]);
+        $data = $this->normalizarMessageResponse($result, null);
+        $data['soap'] = $this->lastSoapTrace;
 
-            $result = $resp->GetAllByPublicacionResult ?? null;
-            if ($result === null) {
-                throw new Exception('WSAPOC: respuesta inválida (sin GetAllByPublicacionResult).');
-            }
-
-            $data = $this->normalizarMessageResponse($result, null);
-            $data['soap'] = $this->captureSoapTrace($client);
-
-            return $data;
-        } catch (SoapFault $e) {
-            $this->lastSoapTrace = $this->captureSoapTrace($client);
-            throw new Exception($this->formatSoapFault($e, $client), (int) $e->getCode(), $e);
-        } finally {
-            if ($this->lastSoapTrace === null) {
-                $this->lastSoapTrace = $this->captureSoapTrace($client);
-            }
-        }
+        return $data;
     }
 
     private function habilitado(): bool
     {
         return filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Invoca un método WSAPOC con reintentos ante fallas transitorias de ARCA
+     * (SoapFault de transporte o respuesta 200 sin el elemento *Result esperado).
+     * Actualiza $this->lastSoapTrace con la traza del último intento.
+     *
+     * @param  array<string, mixed>  $args
+     *
+     * @throws Exception  cuando se agotan los reintentos o el fallo no es transitorio
+     */
+    private function invocarConReintentos(string $metodo, array $args, string $resultProp): object
+    {
+        $this->lastSoapTrace = null;
+        $maxIntentos = max(1, (int) config('arca_wsapoc.reintentos', 3));
+        $pausaMs = max(0, (int) config('arca_wsapoc.reintento_pausa_ms', 500));
+
+        $ultimoError = null;
+
+        for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+            $client = $this->crearClienteSoap();
+
+            try {
+                $resp = $args === [] ? $client->{$metodo}() : $client->{$metodo}($args);
+                $this->lastSoapTrace = $this->captureSoapTrace($client);
+
+                $result = $resp->{$resultProp} ?? null;
+                if (is_object($result)) {
+                    return $result;
+                }
+
+                // HTTP 200 pero sin el elemento esperado: intermitencia de ARCA.
+                $ultimoError = new Exception("WSAPOC: respuesta inválida (sin {$resultProp}).");
+                $this->logIntentoFallido($metodo, $intento, $maxIntentos, $ultimoError->getMessage(), true);
+            } catch (SoapFault $e) {
+                $this->lastSoapTrace = $this->captureSoapTrace($client);
+                $mensaje = $this->formatSoapFault($e, $client);
+
+                if (! $this->esFallaTransitoria($e)) {
+                    throw new Exception($mensaje, (int) $e->getCode(), $e);
+                }
+
+                $ultimoError = new Exception($mensaje, (int) $e->getCode(), $e);
+                $this->logIntentoFallido($metodo, $intento, $maxIntentos, $e->getMessage(), false);
+            }
+
+            if ($intento < $maxIntentos && $pausaMs > 0) {
+                usleep($pausaMs * 1000);
+            }
+        }
+
+        throw $ultimoError ?? new Exception("WSAPOC: respuesta inválida (sin {$resultProp}).");
+    }
+
+    private function esFallaTransitoria(SoapFault $e): bool
+    {
+        $msg = mb_strtolower(trim((string) $e->getMessage()));
+        if ($msg === '') {
+            return true;
+        }
+
+        $patronesTransitorios = [
+            'error fetching http headers',
+            'could not connect to host',
+            'failed to connect',
+            'connection reset',
+            'connection timed out',
+            'timed out',
+            'timeout',
+            'error interno',
+            'service unavailable',
+            'bad gateway',
+            'gateway time',
+            'http error',
+            'error de transporte',
+            '502',
+            '503',
+            '504',
+        ];
+
+        foreach ($patronesTransitorios as $patron) {
+            if (str_contains($msg, $patron)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function logIntentoFallido(string $metodo, int $intento, int $maxIntentos, string $error, bool $sinResultado): void
+    {
+        $response = (string) ($this->lastSoapTrace['response'] ?? '');
+
+        Log::warning('WSAPOC intento fallido', [
+            'metodo' => $metodo,
+            'intento' => $intento,
+            'max_intentos' => $maxIntentos,
+            'sin_resultado' => $sinResultado,
+            'error' => $error,
+            'response' => $response !== '' ? mb_substr($response, 0, 1000) : null,
+        ]);
     }
 
     private function crearClienteSoap(): SoapClient

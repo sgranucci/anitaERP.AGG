@@ -208,12 +208,14 @@ final class EstacionamientoDiarioPuntoventaReporteSupport
             }
             $cobradoVenta = round($cobradoVenta, 2);
             $totalCobrado += $cobradoVenta;
-            $ventaNeta += $monto;
 
             if ($esNc) {
+                // La NC resta de la venta neta (bruto − NC), en línea con el cobro negativo.
+                $ventaNeta -= abs($monto);
                 $totalNc += abs($monto);
                 $cantNc++;
             } else {
+                $ventaNeta += $monto;
                 $ventaBruta += $monto;
                 $ventaNeto += $desglose['neto'];
                 $ventaIva += $desglose['iva'];

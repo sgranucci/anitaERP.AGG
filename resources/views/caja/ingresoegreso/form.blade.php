@@ -1,5 +1,7 @@
 <div class="card form1">
     <div id="form-errors"></div>
+    <input type="hidden" name="solicitudpago_id" id="solicitudpago_id"
+           value="{{ old('solicitudpago_id', $data->solicitudpago_id ?? request('solicitudpago_id')) }}">
     <div class="row">
         <div class="col-sm-6">
             @include('includes.form-empresa-asignada', [

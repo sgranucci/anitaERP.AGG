@@ -96,7 +96,7 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
                                 	</a>
 								@endif
                                 @if (can('listar-cuentacorriente-proveedor', false))
-                                	<a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente">
+                                	<a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente (se abre en modo consulta)">
                                     <i class="fa fa-folder-open"></i>
                                 	</a>
 								@endif                                

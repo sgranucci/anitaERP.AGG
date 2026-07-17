@@ -40,6 +40,9 @@ $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuari
                 <div class="d-md-flex justify-content-md-end flex-wrap align-items-center mt-2 mt-md-0">
                     <form action="{{ route('listar_cuentacorriente_proveedor', ['id' => $id]) }}" method="GET" id="form-cuentacorriente-filtros" class="d-flex flex-wrap align-items-center">
                         <input type="hidden" name="modo_vista" id="modo_vista" value="{{ $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE }}">
+                        @foreach (request()->only(['origen', 'vista']) as $modoConsultaClave => $modoConsultaValor)
+                            <input type="hidden" name="{{ $modoConsultaClave }}" value="{{ $modoConsultaValor }}">
+                        @endforeach
                         <div class="custom-control custom-switch mr-3 mb-2">
                             <input type="checkbox"
                                    class="custom-control-input"
@@ -89,7 +92,7 @@ $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuari
                         'ruta' => 'listar_cuentacorriente_proveedor',
                         'id' => $id,
                         'busqueda' => $busqueda ?? '',
-                        'queryExtra' => ['modo_vista' => $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE],
+                        'queryExtra' => array_merge(['modo_vista' => $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE], request()->only(['origen', 'vista'])),
                     ])
                     <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                         <thead>
@@ -198,5 +201,5 @@ $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuari
     </div>
 </div>
 @include('compras.cuentacorriente.modalaplicacion')
-{{ $cuentacorriente->appends(['busqueda' => $busqueda ?? '', 'modo_vista' => $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE])->links() }}
+{{ $cuentacorriente->appends(array_merge(['busqueda' => $busqueda ?? '', 'modo_vista' => $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE], request()->only(['origen', 'vista'])))->links() }}
 @endsection

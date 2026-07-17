@@ -53,22 +53,22 @@
                         </button>
                     @endif
                     @if (can('listar-cuentacorriente-proveedor', false))
-                        <a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Cuenta Corriente">
+                        <a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Cuenta Corriente (se abre en modo consulta)">
                             <i class="fa fa-folder-open">Cuenta Corriente</i>
                         </a>
                     @endif       
                     @if (can('listar-encuesta-proveedor', false))
-                        <a href="{{route('listar_encuesta_proveedor', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Encuentas del Proveedor">
+                        <a href="{{route('listar_encuesta_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Encuestas del Proveedor (se abre en modo consulta)">
                             <i class="fa fa-question">Encuestas</i>
                         </a>
                     @endif  
                     @if (can('listar-requisicion-proveedor', false))
-                        <a href="{{route('listar_requisicion_proveedor', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Requisiciones del Proveedor">
+                        <a href="{{route('listar_requisicion_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Requisiciones del Proveedor (se abre en modo consulta)">
                             <i class="fa fa-edit">Requisiciones</i>
                         </a>   
                     @endif                             
                     @if (can('listar-ordencompra-proveedor', false))
-                        <a href="{{route('listar_ordencompra_proveedor', ['id' => $data->id])}}" target="_blank" class="btn btn-secondary btn-sm" title="Ordenes de Compra del Proveedor">
+                        <a href="{{route('listar_ordencompra_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Ordenes de Compra del Proveedor (se abre en modo consulta)">
                             <i class="fa fa-shopping-cart">Ordenes de compra</i>
                         </a>        
                     @endif           

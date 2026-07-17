@@ -168,7 +168,7 @@ class IngresoEgresoController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear($caja_id = null)
+    public function crear(Request $request, $caja_id = null)
     {
         can('crear-ingresos-egresos-caja');
 
@@ -193,12 +193,28 @@ class IngresoEgresoController extends Controller
 
             $origen = 'movimientocaja';
         }
+
+        $data = new \App\Models\Caja\Caja_Movimiento();
+        if ($request->filled('solicitudpago_id')) {
+            $data->solicitudpago_id = (int) $request->input('solicitudpago_id');
+        }
+        if ($request->filled('empresa_id')) {
+            $data->empresa_id = (int) $request->input('empresa_id');
+            session(['empresa_id' => $data->empresa_id]);
+        }
+        if ($request->filled('proveedor_id')) {
+            $data->proveedor_id = (int) $request->input('proveedor_id');
+        }
+        if ($request->filled('detalle')) {
+            $data->detalle = (string) $request->input('detalle');
+        }
+
         return view('caja.ingresoegreso.crear', array_merge(
             compact('tipotransaccion_caja_query', 'moneda_query',
                 'conceptogasto_query',
                 'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
                 'centrocosto_query', 'chequera_query', 'caracter_enum',
-                'caja_id', 'nombreCaja', 'origen'),
+                'caja_id', 'nombreCaja', 'origen', 'data'),
             $this->datosComprobantesIva(null),
         ));
     }

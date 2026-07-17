@@ -8,9 +8,11 @@ use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\CierreRendicionMaquinavendingAsientoSupport;
+use App\Support\Contable\CierreRendicionMaquinavendingConciliacionFlashSupport;
 use App\Support\Contable\CierreRendicionMaquinavendingConfigSupport;
 use App\Support\Contable\CierreRendicionMaquinavendingGrupoSupport;
 use App\Support\Contable\CierreRendicionMaquinavendingListadoFiltros;
+use App\Support\Contable\MaquinavendingDiarioPuntoventaReporteSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\RendicionMaquinavendingCajaListadoFiltros;
 use Carbon\Carbon;
@@ -535,6 +537,39 @@ class CierreRendicionMaquinavendingService
                 'cierre_contable_usuario_id' => null,
             ]);
         });
+    }
+
+    /**
+     * Conciliación de rendiciones vending vs flash vending (flash_caja.vending) + rendgastro Z + asientos.
+     *
+     * @return array<string, mixed>
+     */
+    public function conciliarFlash(int $empresaId, string $fechaDesde, string $fechaHasta, ?float $tolerancia = null): array
+    {
+        return app(CierreRendicionMaquinavendingConciliacionFlashSupport::class)
+            ->conciliar($empresaId, $fechaDesde, $fechaHasta, $tolerancia);
+    }
+
+    /**
+     * @return array{desde: string, hasta: string}
+     */
+    public function resolverRangoConciliacionDefault(int $empresaId): array
+    {
+        $hasta = Carbon::today()->toDateString();
+        $desde = Carbon::today()->startOfMonth()->toDateString();
+
+        return ['desde' => $desde, 'hasta' => $hasta];
+    }
+
+    /**
+     * Diario por punto de venta y medios de pago (ventas vending).
+     *
+     * @return array<string, mixed>
+     */
+    public function reporteDiarioPuntoventa(int $empresaId, string $fechaDesde, string $fechaHasta, ?int $puntoventaId = null): array
+    {
+        return app(MaquinavendingDiarioPuntoventaReporteSupport::class)
+            ->generar($empresaId, $fechaDesde, $fechaHasta, $puntoventaId);
     }
 
     public function findParaCierre(int $id): RendicionMaquinavendingCaja

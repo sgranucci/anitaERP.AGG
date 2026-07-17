@@ -138,6 +138,25 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(240)
             ->appendOutputTo(storage_path('logs/costo-mensual-catalogo-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.costo_mensual_catalogo.habilitado', true));
+
+        // Solicitudes de pago — generación de hijas por cuota (Anita p-controlsolpm).
+        // Cron armado pero DESACTIVADO por defecto (SOLICITUDPAGO_GENERAR_CUOTAS_HABILITADO=false).
+        $horariosCuotasSp = config('solicitudpago.generar_cuotas.horarios', ['08:00', '14:00', '18:00']);
+        if (! is_array($horariosCuotasSp) || $horariosCuotasSp === []) {
+            $horariosCuotasSp = ['08:00', '14:00', '18:00'];
+        }
+        foreach ($horariosCuotasSp as $horaCuotaSp) {
+            $horaCuotaSp = trim((string) $horaCuotaSp);
+            if ($horaCuotaSp === '') {
+                continue;
+            }
+            $schedule->command('solicitudpago:generar-cuotas')
+                ->dailyAt($horaCuotaSp)
+                ->runInBackground()
+                ->withoutOverlapping(60)
+                ->appendOutputTo(storage_path('logs/solicitudpago-generar-cuotas-schedule.log'))
+                ->when(fn () => (bool) config('solicitudpago.generar_cuotas.habilitado', false));
+        }
     }
 
     /**

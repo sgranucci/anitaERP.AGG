@@ -9,6 +9,9 @@ Recepciones de proveedores
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/filtro.js') }}" type="text/javascript"></script>
 @include('stock.recepcion_proveedor.partials.banner_confirmando_styles')
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/confirmar.js')) ?: time() }}" type="text/javascript"></script>
+@if (can('cambiar-cotizacion-recepcion-proveedor', false))
+<script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @endsection
 
 <?php use App\Support\Stock\RecepcionProveedorListadoFiltros; ?>
@@ -132,6 +135,16 @@ Recepciones de proveedores
                                     </button>
                                 </form>
                                 @endif
+                                @if($row->estado === 'CONFIRMADA' && can('cambiar-cotizacion-recepcion-proveedor', false))
+                                <button type="button"
+                                        class="btn-accion-tabla tooltipsC btn-cambiar-cotizacion-recepcion"
+                                        title="Cambiar cotización"
+                                        data-id="{{ $row->id }}"
+                                        data-numero="{{ $row->numerorecepcion }}"
+                                        data-cotizacion="{{ rtrim(rtrim(number_format((float) ($row->cotizacion ?? 1), 6, '.', ''), '0'), '.') }}">
+                                    <i class="fas fa-dollar-sign text-info"></i>
+                                </button>
+                                @endif
                                 @if($row->estado === 'BORRADOR' && can('borrar-recepcion-proveedor', false))
                                 <form action="{{ route('eliminar_recepcion_proveedor', ['id' => $row->id]) }}" class="d-inline form-eliminar" method="POST">
                                     @csrf
@@ -153,4 +166,6 @@ Recepciones de proveedores
         </div>
     </div>
 </div>
+
+@include('stock.recepcion_proveedor.partials.modal_cambiar_cotizacion')
 @endsection

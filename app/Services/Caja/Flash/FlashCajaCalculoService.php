@@ -6,19 +6,23 @@ use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Support\Caja\Flash\FlashCajaBingoTotalesSupport;
 use App\Models\Configuracion\Sala;
 use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
-use App\Services\Caja\RendicionGastronomiaAuditoriaAnitaService;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionVendingRendgSupport;
 use App\Support\Wigos\WigosSqlServerProcess;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Calcula campos del flash diario desde Wigos (slots/ruletas) + conciliación rendgastro/ERP (AyB/estac) + ERP (bingo/vehículos).
+ * Calcula campos del flash diario desde Wigos (slots/ruletas) + venta directa ERP
+ * (AyB, estacionamiento y vending netos = facturas − NC) + ERP (bingo/vehículos).
+ * No consulta rendgastro/Anita: la venta del flash sale íntegramente del ERP.
  */
 final class FlashCajaCalculoService
 {
     public function __construct(
-        private readonly RendicionGastronomiaAuditoriaAnitaService $auditoriaRendgService,
+        private readonly GastronomiaConciliacionPorPcSupport $porPcSupport,
+        private readonly GastronomiaConciliacionVendingRendgSupport $vendingRendgSupport,
     ) {
     }
     /**
@@ -52,6 +56,7 @@ final class FlashCajaCalculoService
         $erp = $this->totalesAyBEstacBingo($empresaId, $fechaSql);
         $acumulado['ayb'] = $erp['ayb'];
         $acumulado['estac'] = $erp['estac'];
+        $acumulado['vending'] = $erp['vending'];
         $acumulado['cant_vehic'] = $erp['cant_vehic'];
         $acumulado['bingo_cant_carton'] = $erp['bingo_cant_carton'];
         $acumulado['bingo_total_venta'] = $erp['bingo_total_venta'];
@@ -120,40 +125,35 @@ final class FlashCajaCalculoService
     }
 
     /**
-     * AyB y estacionamiento alineados a {@see RendicionGastronomiaAuditoriaAnitaService}
-     * (total gastro = salón PCs + post-cierre; estac = Σ PV neto ERP por circuito estacionamiento).
-     * Bingo y cantidad de vehículos desde ERP.
+     * AyB, estacionamiento y vending netos (facturas − NC) desde venta directa ERP.
+     * AyB = Σ emisiones gastronómicas del día (salón + post-cierre + agregados) netas.
+     * Estac = Σ (facturas − NC) por jornada de estacionamiento cerrada.
+     * Vending = Σ MaquinavendingRendicion.total_ventas del día.
+     * Bingo desde ERP. Sin consultar rendgastro/Anita.
      *
-     * @return array{ayb: float, estac: float, cant_vehic: int, bingo_cant_carton: int, bingo_total_venta: float, bingo_resultado: float}
+     * @return array{ayb: float, estac: float, vending: float, cant_vehic: int, bingo_cant_carton: int, bingo_total_venta: float, bingo_resultado: float}
      */
     private function totalesAyBEstacBingo(int $empresaId, string $fechaSql): array
     {
         $ayb = 0.0;
-        $estac = 0.0;
-
         try {
-            $informe = $this->auditoriaRendgService->auditarFechaJornada($empresaId, $fechaSql);
-            foreach ($informe['filas'] as $fila) {
-                $tipo = (string) ($fila['tipo_fila'] ?? '');
-                if ($tipo === 'total_gastro') {
-                    $ayb = round((float) ($fila['erp_z'] ?? 0), 2);
-                }
-                if ($tipo === 'total_estacionamiento') {
-                    $estac = round((float) ($fila['erp_z'] ?? 0), 2);
-                }
-            }
+            $ayb = round((float) ($this->porPcSupport->totalErpNetoGastronomiaDia($empresaId, $fechaSql)['neto'] ?? 0), 2);
         } catch (Throwable $e) {
-            Log::warning('Flash conciliación rendgastro '.$fechaSql.': '.$e->getMessage(), [
+            Log::warning('Flash AyB ERP '.$fechaSql.': '.$e->getMessage(), [
                 'empresa_id' => $empresaId,
             ]);
         }
 
+        $vending = $this->totalVending($empresaId, $fechaSql);
+
         $bingo = FlashCajaBingoTotalesSupport::resolver($empresaId, $fechaSql);
 
+        $estac = 0.0;
         $cantVehic = 0;
         $jornadas = JornadaEstacionamiento::query()
             ->where('empresa_id', $empresaId)
             ->whereDate('fecha_jornada', $fechaSql)
+            ->whereNotNull('apertura_en')
             ->whereNotNull('cierre_en')
             ->get();
 
@@ -161,6 +161,9 @@ final class FlashCajaCalculoService
             try {
                 $totales = EstacionamientoTurnoOperativoTotalesSupport::calcularPorJornada($jornada);
                 $cantVehic += (int) ($totales['cantidad_comprobantes'] ?? 0);
+                $facturas = round((float) ($totales['total_facturas'] ?? 0), 2);
+                $notasCredito = round(abs((float) ($totales['total_notas_credito'] ?? 0)), 2);
+                $estac = round($estac + $facturas - $notasCredito, 2);
             } catch (Throwable $e) {
                 Log::warning('Flash estacionamiento jornada '.$jornada->id.': '.$e->getMessage());
             }
@@ -169,11 +172,30 @@ final class FlashCajaCalculoService
         return [
             'ayb' => $ayb,
             'estac' => $estac,
+            'vending' => $vending,
             'cant_vehic' => $cantVehic,
             'bingo_cant_carton' => $bingo['bingo_cant_carton'],
             'bingo_total_venta' => $bingo['bingo_total_venta'],
             'bingo_resultado' => $bingo['bingo_resultado'],
         ];
+    }
+
+    /**
+     * Ventas vending del día (Σ MaquinavendingRendicion.total_ventas por jornada ERP).
+     */
+    private function totalVending(int $empresaId, string $fechaSql): float
+    {
+        try {
+            $map = $this->vendingRendgSupport->totalesMaquinavendingErpPorJornada($empresaId, $fechaSql, $fechaSql);
+
+            return round((float) ($map[$fechaSql] ?? 0), 2);
+        } catch (Throwable $e) {
+            Log::warning('Flash vending '.$fechaSql.': '.$e->getMessage(), [
+                'empresa_id' => $empresaId,
+            ]);
+
+            return 0.0;
+        }
     }
 
     /**
@@ -201,6 +223,7 @@ final class FlashCajaCalculoService
             'win_ol_slot' => 0.0,
             'win_ol_rul' => 0.0,
             'estac' => 0.0,
+            'vending' => 0.0,
             'cant_vehic' => 0,
             'show' => 0.0,
         ];

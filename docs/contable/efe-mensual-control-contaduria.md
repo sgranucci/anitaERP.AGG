@@ -45,18 +45,22 @@ Detalle funcional de cada uno: ver secciones siguientes y el histórico en §4.
 
 ### OPP → COM
 - Puente `123010` → **c2** (ej. DIEGER), aunque `axp_concepto` diga 24.
+- Concepto del gasto: **`ctaconc` / `cuentacontable.conceptogasto_id`** de la cuenta de la factura (no `axp_concepto`).
 - Concepto **5** solo por `axp_concepto` sin cuenta COM: **no pisa c20**; solo aplica si hay **FGA/CIB/FDT** conc=5 (no alcanza un FIB conc=5 solo). → PAPELERA queda en **varios**.
 
 ### Varios (20)
 - Cheque con FIB conc=5 **sin** FGA/CIB/FDT gastro → **c20** (PAPELERA, etc.).
+- Cheque con FIB conc=24 sin cuenta de gasto (solo IVA/pasivo) → **c20** (DI NAPOLI, etc.).
+- **No** fuerza c24 por `axp_concepto` del FIB.
 
 ### Gaming (12)
 - Anticipos `114040` con patrón TMB/FNB o **CHP+FNS conc=24** (ej. ERNESTO MAYER).
 - Puede reclasificar desde mayor **0 o 24**; mant. edificio **no pisa** un 12 ya asignado.
 
-### Mant. edificio (24)
-- FIB/COM conc=24 sin puente bienes de uso; gasto `521180` en subdiario.
-- **No sobrescribe** concepto 12.
+### Mant. edificio (24) / cheques con FIB
+- **Regla contaduría:** el concepto del cheque sale de la **cuenta contable** asociada (`ctaconc`), no de `axp_concepto`.
+- Se marca c24 si alguna pierna FIB/COM tiene cuenta con concepto 24 (p.ej. `521180`) y **sin** puente `123010`.
+- FIB solo con IVA `114010` + pasivo (concepto 63) **no** va a c24.
 
 ---
 
@@ -85,39 +89,43 @@ Detalle funcional de cada uno: ver secciones siguientes y el histórico en §4.
 | Mant. no pisa concepto 12 | `EfeDatosMantenimientoEdificioSupport` | idem |
 | OPP→COM no pisa concepto 12 | `EfeDatosOppGastoComSupport` | evita que FNS conc=24 vuelva a c24 |
 
----
-
-## 5. Estado de desvíos BSA may/26 (última validación limpia)
-
-Sumarias E68: **OK** · Mayor auditoría: **cuadra** (en corrida limpia).
-
-| Concepto | Clase | Δ Excel≈ | Comentario para contaduría |
-|---|---|---|---|
-| C40 / C47 / C49 / C38 / C12 / C45 | `ESPERADO_MOTOR` | grandes | Excel Anita ≠ mayor nuevo; EFE no inventa. **Revisar motor / criterio histórico.** |
-| **C5** | `AJUSTE_EFE` | **~−3.15M** | Posts OK (IVA + cheques gastro reales). Queda sobre todo **mayor** (~−1.6M) + casos puntuales. |
-| **C20** | `AJUSTE_EFE` | **~+3.5M** | Mejoró con PAPELERA. Falta afinar otros. |
-| **C24** | `AJUSTE_EFE` | **~−2.79M** | Ver §6. MAYER (~152k) corregido a c12. Resto: cheques FIB24 en Excel como c20. |
-| **C13** | `AJUSTE_EFE` | **~−13.7M** | Mayor ya viene corto (~−16.8M vs Excel); post solo ~−3M. Gran parte es **mayor**, no post. |
-| C7 / C17 / C55 / C18 / C65 | `AJUSTE_EFE` | chicos | Residuales; priorizar después de C24/C13. |
+### 2026-07-17 — Cheques FIB: concepto por cuenta (ctaconc)
+| Cambio | Archivos | Efecto esperado |
+|---|---|---|
+| OPP→COM: concepto desde cuenta (`ctaconc` / piernas factura); no `axp_concepto` | `EfeOppComGastoResolverSupport` | |
+| Mant. c24: solo si piernas tienen cuenta con concepto 24 (p.ej. 521180); no por `axp_concepto=24` | `EfeDatosMantenimientoEdificioSupport` | DI NAPOLI/TERZAGHI salen de c24 |
+| Varios: ya no fuerza c24 por FIB conc=20 | `EfeDatosVariosSupport` | FARMACIA UOM → c20 |
 
 ---
 
-## 6. Pendiente C24 — decisión contaduría
+## 5. Estado de desvíos BSA may/26 (validación 2026-07-17, regla cuenta)
 
-El residual **~2.9M** son casi todos asientos que el ERP pone en **c24** y el Excel en **c20** (o c12):
+Sumarias E68: **OK** · Mayor auditoría: **cuadra**.
 
-| Ejemplo | Excel | ERP (antes fix MAYER) | Auxpag |
+| Concepto | Clase | Δ EFE−Excel≈ | Comentario |
 |---|---|---|---|
-| DI NAPOLI / TERZAGHI / PROYECTOS DEL NORTE (cheques) | **c20** | c24 | FIB **conc=24**, piernas solo IVA `114010-002` + pasivo (sin `521180`) |
-| BARCA VINCIGUERRA / LLANO / CARAMUTA (cheques) | **c24** | c24 | Mismo patrón FIB (a veces conc=20 o 24) sin `521180` en la factura |
-| FARMACIA UOM | **c20** | c24 | FIB conc=20 |
-| ERNESTO MAYER | **c12** | c12 (corregido) | CHP+FNS conc=24 |
-| RELD (parte) | c24 + **c55** IIBB | c24 monto cheque completo | Falta partir IIBB `214010` |
+| C40 / C47 / C49 / C38 / C7 / C45 | `ESPERADO_MOTOR` | grandes | Excel Anita ≠ mayor; EFE no inventa. |
+| **C24** | `AJUSTE_EFE` | **~+32.6M** | Tras regla cuenta: EFE ≈ mayor (−63M); Excel (−95M) aún clasifica cheques por `axp_concepto`. Ver §6. |
+| **C20** | `AJUSTE_EFE` | **~+1.35M** | Mejoró (antes ~+3.5M): cheques FIB sin cuenta conc. 24 pasan a varios. |
+| **C5** | `AJUSTE_EFE` | **~−3.15M** | Sin cambio relevante. |
+| **C13** | `AJUSTE_EFE` | **~+16.7M** | Mayor corto; post ≈ 0. |
+| C12 / C55 / C8 / C17 / C18 | `AJUSTE_EFE` | chicos–medios | Residuales. |
 
-**Problema:** con el mismo patrón contable (FIB sin `521180`), Anita Excel a veces deja el cheque en **c24** (BARCA) y a veces en **c20** (DI NAPOLI).  
-No hay regla segura solo con `axp_concepto` / piernas sin arriesgar el otro grupo.
+---
 
-**Pedido a contaduría:** criterio explícito (¿lista de proveedores? ¿rubro? ¿otro campo Anita?) para cheques con FIB conc=24 sin cuenta 521180.
+## 6. C24 — regla cuenta vs Excel residual
+
+**Regla vigente (contaduría):** cheques con FIB → concepto de la **cuenta contable** (`ctaconc`), no `axp_concepto`.
+
+| Ejemplo | Excel | ERP (regla cuenta) | Motivo |
+|---|---|---|---|
+| DI NAPOLI / TERZAGHI / PROYECTOS (cheques) | **c20** | **c20** | FIB sin cuenta conc. 24 (solo IVA 63 + pasivo) |
+| FARMACIA UOM | **c20** | **c20** | Idem / no fuerza c24 por axp |
+| ERNESTO MAYER | **c12** | **c12** | Gaming CHP+FNS |
+| BARCA VINCIGUERRA / LLANO / CARAMUTA | **c24** | **c20** si no hay cuenta conc. 24 | Excel histórico usaba axp; con regla cuenta pueden diferir |
+| RELD (parte) | c24 + **c55** IIBB | c24 monto cheque | Falta partir IIBB `214010` |
+
+Si BARCA u otros deben quedar en c24 sin `521180`/cuenta conc. 24, contaduría debe indicar **otra señal** (rubro, proveedor, etc.).
 
 ---
 

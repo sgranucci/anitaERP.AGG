@@ -331,7 +331,7 @@ class FlashCajaController extends Controller
                 'ayb', 'slot_coin_in', 'slot_d', 'slot_r', 'soft_count', 'hard_count', 'cant_slots',
                 'rul_coin_in', 'rul_d', 'rul_r', 'soft_rul', 'hard_rul', 'cant_rul',
                 'bingo_cant_carton', 'bingo_total_venta', 'bingo_resultado',
-                'win_ol_slot', 'win_ol_rul', 'estac', 'cant_vehic',
+                'win_ol_slot', 'win_ol_rul', 'estac', 'vending', 'cant_vehic',
             ]));
         }
 

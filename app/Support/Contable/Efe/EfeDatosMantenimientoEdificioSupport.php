@@ -6,8 +6,9 @@ use App\Support\Contable\MayorConcepto\MayorConceptoAnitaBridgeReader;
 use Carbon\Carbon;
 
 /**
- * Ajuste EFE concepto 24 (MANTENIMIENTO DE EDIFICIO): OPP con gasto 521180 en subdiario
- * o FIB axp_concepto=24 sin puente 123010 (bienes de uso).
+ * Ajuste EFE concepto 24 (MANTENIMIENTO DE EDIFICIO): OPP/cheques/anticipos cuya
+ * factura aplicada tiene cuenta contable con concepto 24 (ctaconc / 521180),
+ * no el axp_concepto del FIB. Sin puente bienes de uso 123010.
  */
 class EfeDatosMantenimientoEdificioSupport
 {
@@ -19,7 +20,7 @@ class EfeDatosMantenimientoEdificioSupport
 
     private const CUENTA_BIENES_USO_PUENTE_HASTA = 123011000;
 
-    private const TIPOS_APLICACION_GASTO = ['FIB', 'FGA', 'COM', 'FIS', 'FNB', 'FNA', 'PEP'];
+    private const TIPOS_APLICACION_GASTO = ['FIB', 'FGA', 'COM', 'FIS', 'FNB', 'FNA', 'FNS', 'PEP'];
 
     /** Cuentas que Anita muestra en Datos bajo concepto 24 (solapa Datos mayo/2026). */
     private const CUENTAS_DATOS_C24 = [
@@ -36,6 +37,11 @@ class EfeDatosMantenimientoEdificioSupport
 
     /** @var array<int, string> */
     private array $recPorAsiento = [];
+
+    /** @var array<int, int> cuenta => conceptogasto */
+    private array $conceptoPorCuenta = [];
+
+    private int $empresaId = 0;
 
     public function __construct(
         private readonly MayorConceptoAnitaBridgeReader $bridgeReader,
@@ -62,6 +68,7 @@ class EfeDatosMantenimientoEdificioSupport
             return $filas;
         }
 
+        $this->empresaId = $empresaId;
         $this->recPorAsiento = $this->indexarRecPorAsiento($filas);
 
         $inicio = Carbon::createFromDate($anio, $mes, 1);
@@ -70,6 +77,7 @@ class EfeDatosMantenimientoEdificioSupport
             (int) $inicio->format('Ymd'),
             (int) $inicio->copy()->endOfMonth()->format('Ymd'),
         );
+        $this->indexarConceptosPorCuenta($bridge['ctaconc'] ?? []);
         $this->recEsConcepto24 = $this->indexarRecConcepto24(
             $bridge['auxpag'] ?? [],
             $bridge['subdiario'] ?? [],
@@ -132,117 +140,140 @@ class EfeDatosMantenimientoEdificioSupport
     }
 
     /**
+     * REC es c24 si alguna factura aplicada tiene cuenta con concepto 24 (ctaconc),
+     * p.ej. 521180 — no si solo trae axp_concepto=24 con piernas IVA/pasivo.
+     *
      * @param  list<object>  $auxpag
      * @param  list<object>  $subdiario
      * @return array<string, true>
      */
     private function indexarRecConcepto24(array $auxpag, array $subdiario): array
     {
-        /** @var array<string, array<int, true>> */
-        $internosPorRec = [];
-        /** @var array<int, list<string>> */
-        $recsPorInterno = [];
+        $this->recEsConcepto24 = [];
 
+        /** @var array<int, list<object>> */
+        $legsPorInterno = [];
+        foreach ($subdiario as $linea) {
+            $interno = (int) ($linea->subd_nro_interno ?? 0);
+            if ($interno > 0) {
+                $legsPorInterno[$interno][] = $linea;
+            }
+        }
+
+        /** @var array<string, list<object>> */
+        $appsPorRec = [];
         foreach ($auxpag as $aplicacion) {
             $rec = trim((string) ($aplicacion->axp_rec ?? ''));
             if ($rec === '') {
                 continue;
             }
-
-            $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
-
-            if (! in_array($tipoAp, self::TIPOS_APLICACION_GASTO, true)) {
-                continue;
-            }
-
-            $interno = (int) ($aplicacion->axp_nro_interno ?? 0);
-            if ($interno <= 0) {
-                continue;
-            }
-
-            $internosPorRec[$rec][$interno] = true;
-            $recsPorInterno[$interno][$rec] = true;
-        }
-
-        /** @var array<string, true> */
-        $recTieneBienesUso = [];
-        /** @var array<string, true> */
-        $recTieneMantEdificio = [];
-        /** @var array<int, true> */
-        $internoFibConcepto24 = [];
-        /** @var array<int, true> */
-        $internoTieneBienesUso = [];
-
-        foreach ($auxpag as $aplicacion) {
             $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
             if (! in_array($tipoAp, self::TIPOS_APLICACION_GASTO, true)) {
                 continue;
             }
-
-            $interno = (int) ($aplicacion->axp_nro_interno ?? 0);
-            if ($interno <= 0) {
-                continue;
-            }
-
-            if ((int) ($aplicacion->axp_concepto ?? 0) === self::CONCEPTO_MANTENIMIENTO_EDIFICIO) {
-                $internoFibConcepto24[$interno] = true;
-            }
+            $appsPorRec[$rec][] = $aplicacion;
         }
 
-        foreach ($subdiario as $linea) {
-            $interno = (int) ($linea->subd_nro_interno ?? 0);
-            if ($interno <= 0) {
-                continue;
-            }
+        foreach ($appsPorRec as $rec => $aplicaciones) {
+            $tieneBienesUso = false;
+            $tieneMantPorCuenta = false;
 
-            $cuenta = (int) ($linea->subd_cuenta ?? 0);
-
-            if ($this->esCuentaBienesUsoPuente($cuenta)) {
-                $internoTieneBienesUso[$interno] = true;
-            }
-
-            if (! isset($recsPorInterno[$interno])) {
-                continue;
-            }
-
-            foreach (array_keys($recsPorInterno[$interno]) as $rec) {
-                if ($this->esCuentaBienesUsoPuente($cuenta)) {
-                    $recTieneBienesUso[$rec] = true;
+            foreach ($aplicaciones as $aplicacion) {
+                $interno = (int) ($aplicacion->axp_nro_interno ?? 0);
+                $legs = $interno > 0 ? ($legsPorInterno[$interno] ?? []) : [];
+                if ($legs === []) {
+                    $legs = $this->cargarPiernasFactura($aplicacion);
                 }
 
-                if ($this->esCuentaMantenimientoEdificio($cuenta)) {
-                    $recTieneMantEdificio[$rec] = true;
+                foreach ($legs as $linea) {
+                    $cuenta = is_array($linea)
+                        ? (int) ($linea['cta'] ?? 0)
+                        : (int) ($linea->subd_cuenta ?? 0);
+
+                    if ($this->esCuentaBienesUsoPuente($cuenta)) {
+                        $tieneBienesUso = true;
+                    }
+
+                    if ($this->cuentaTieneConceptoMantEdificio($cuenta)) {
+                        $tieneMantPorCuenta = true;
+                    }
                 }
             }
-        }
 
-        foreach ($internoFibConcepto24 as $interno => $_) {
-            if (isset($internoTieneBienesUso[$interno])) {
-                continue;
-            }
-
-            if (! isset($recsPorInterno[$interno])) {
-                continue;
-            }
-
-            foreach (array_keys($recsPorInterno[$interno]) as $rec) {
-                if (! isset($recTieneBienesUso[$rec])) {
-                    $this->recEsConcepto24[$rec] = true;
-                }
-            }
-        }
-
-        foreach (array_keys($internosPorRec) as $rec) {
-            if (isset($recTieneBienesUso[$rec])) {
-                continue;
-            }
-
-            if (isset($recTieneMantEdificio[$rec])) {
+            if ($tieneMantPorCuenta && ! $tieneBienesUso) {
                 $this->recEsConcepto24[$rec] = true;
             }
         }
 
         return $this->recEsConcepto24;
+    }
+
+    /**
+     * @param  list<object>  $ctaconc
+     */
+    private function indexarConceptosPorCuenta(array $ctaconc): void
+    {
+        $this->conceptoPorCuenta = [];
+
+        foreach ($ctaconc as $fila) {
+            if ((int) ($fila->ctaco_empresa ?? 0) !== $this->empresaId) {
+                continue;
+            }
+            $cuenta = (int) ($fila->ctaco_cuenta ?? 0);
+            $concepto = (int) ($fila->ctaco_concepto ?? 0);
+            if ($cuenta > 0 && $concepto > 0) {
+                $this->conceptoPorCuenta[$cuenta] = $concepto;
+            }
+        }
+
+        foreach (\Illuminate\Support\Facades\DB::table('cuentacontable')
+            ->where('empresa_id', $this->empresaId)
+            ->whereNotNull('conceptogasto_id')
+            ->where('conceptogasto_id', '>', 0)
+            ->get(['codigo', 'conceptogasto_id']) as $row) {
+            $codigo = (int) $row->codigo;
+            if (! isset($this->conceptoPorCuenta[$codigo])) {
+                $this->conceptoPorCuenta[$codigo] = (int) $row->conceptogasto_id;
+            }
+        }
+    }
+
+    private function cuentaTieneConceptoMantEdificio(int $cuenta): bool
+    {
+        if ($cuenta <= 0) {
+            return false;
+        }
+
+        if ($this->esCuentaMantenimientoEdificio($cuenta)) {
+            return true;
+        }
+
+        return ($this->conceptoPorCuenta[$cuenta] ?? 0) === self::CONCEPTO_MANTENIMIENTO_EDIFICIO;
+    }
+
+    /**
+     * @return list<array{cta: int}>
+     */
+    private function cargarPiernasFactura(object $aplicacion): array
+    {
+        $errores = [];
+        $filas = $this->bridgeReader->cargarSubdiarioFacturaCompras(
+            $this->empresaId,
+            strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? ''))),
+            trim((string) ($aplicacion->axp_letra_comp ?? 'A')),
+            (int) ($aplicacion->axp_sucursal ?? 0),
+            (int) ($aplicacion->axp_nro ?? 0),
+            (int) ($aplicacion->axp_nro_interno ?? 0),
+            trim((string) ($aplicacion->axp_pro ?? '')),
+            $errores,
+        );
+
+        $legs = [];
+        foreach ($filas as $linea) {
+            $legs[] = ['cta' => (int) ($linea->subd_cuenta ?? 0)];
+        }
+
+        return $legs;
     }
 
     /**

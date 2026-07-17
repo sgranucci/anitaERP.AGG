@@ -65,6 +65,10 @@
         <input type="number" step="0.01" name="estac" id="estac" class="form-control form-control-sm flash-campo-calculado" value="{{ $valorCampo('estac') }}">
     </div>
     <div class="form-group col-md-4 col-sm-6">
+        <label for="vending" class="small mb-1">Vending</label>
+        <input type="number" step="0.01" name="vending" id="vending" class="form-control form-control-sm flash-campo-calculado" value="{{ $valorCampo('vending') }}">
+    </div>
+    <div class="form-group col-md-4 col-sm-6">
         <label for="cant_vehic" class="small mb-1">Cant. veh&iacute;culos</label>
         <input type="number" step="1" name="cant_vehic" id="cant_vehic" class="form-control form-control-sm flash-campo-calculado" value="{{ $valorCampo('cant_vehic') }}">
     </div>

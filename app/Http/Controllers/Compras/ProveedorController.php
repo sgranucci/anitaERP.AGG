@@ -35,6 +35,10 @@ use App\Services\Compras\OrdencompraService;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
+use App\Repositories\Compras\OrdencompraRepositoryInterface;
+use App\Models\Compras\Sector_Legajocompra;
+use App\Support\Compras\OrdencompraEstados;
+use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Services\Arca\ConstanciaInscripcionService;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
 use App\Support\Compras\ProveedorFacturasApocrifasSupport;
@@ -774,35 +778,33 @@ class ProveedorController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $formato = $request->formato;
-        $busqueda = $request->busqueda;
         $proveedor = $this->proveedorRepository->find($proveedor_id);
+        $codigoproveedor = $proveedor ? (string) $proveedor->codigo : '';
 
-        $urlOrigen = request()->headers->get('referer');
+        // Reutiliza el índice paginado/filtrable de OC forzando el filtro por proveedor,
+        // así comparte vista, filtros y exportaciones con el listado general.
+        $filtros = [
+            'modo' => OrdencompraListadoFiltros::MODO_CAMPO,
+            'campo' => 'codigoproveedor',
+            'operador' => 'igual',
+            'valor' => $codigoproveedor,
+            'valor_hasta' => '',
+            'busqueda' => $codigoproveedor,
+        ];
 
-        $nombreproveedor = '';
-        $codigoproveedor = '';
-        if ($proveedor)
-        {
-            $nombreproveedor = $proveedor->nombre;
-            $codigoproveedor = $proveedor->codigo;
-        }
+        // Sin restricción por sector: la vista del proveedor muestra todas sus OC.
+        $ordencompra = app(OrdencompraRepositoryInterface::class)->listadoIndex($filtros, null, true);
 
-        $ordencompra = $this->ordencompraService->leeOrdencompraPorProveedor($busqueda, $proveedor_id);
-        $moneda_query = $this->monedaRepository->all();
-
-        if (!isset($ordencompra['ordencompra']))
-            $ordencompra['ordencompra'] = [];
-
-        if (!isset($ordencompra['item']))
-            $ordencompra['item'] = [];
-        
-        $datas = ['ordencompra' => $ordencompra['ordencompra'], 'items' => $ordencompra['item'], 'busqueda' => $busqueda, 
-                    'id' => $proveedor_id, 'codigoproveedor' => $codigoproveedor, 
-                    'nombreproveedor' => $nombreproveedor, 'urlOrigen' => $urlOrigen,
-                    'moneda_query' => $moneda_query];
-
-        return view('compras.ordencompra.index', $datas);
+        return view('compras.ordencompra.index', [
+            'ordencompra' => $ordencompra,
+            'busqueda' => $codigoproveedor,
+            'filtros' => $filtros,
+            'filtrosQuery' => OrdencompraListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => OrdencompraListadoFiltros::CAMPOS,
+            'estados' => OrdencompraEstados::todos(),
+            'sectores' => Sector_Legajocompra::orderBy('nombre')->get(),
+            'sectorUsuario' => null,
+        ]);
     }    
 
     public function listarCuentaCorriente(Request $request, $proveedor_id)

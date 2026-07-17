@@ -50,6 +50,7 @@
             <th>Bingo res.</th>
             <th>AyB</th>
             <th>Estac.</th>
+            <th>Vending</th>
             <th>Gaming</th>
             <th>Revenues</th>
         </tr>
@@ -64,6 +65,7 @@
             <td class="text-right">{{ number_format($dia['bingo_win'], 2, ',', '.') }}</td>
             <td class="text-right">{{ number_format((float) $dia['flash']->ayb, 2, ',', '.') }}</td>
             <td class="text-right">{{ number_format((float) $dia['flash']->estac, 2, ',', '.') }}</td>
+            <td class="text-right">{{ number_format((float) $dia['flash']->vending, 2, ',', '.') }}</td>
             <td class="text-right">{{ number_format($dia['total_gaming'], 2, ',', '.') }}</td>
             <td class="text-right">{{ number_format($dia['total_revenues'], 2, ',', '.') }}</td>
         </tr>

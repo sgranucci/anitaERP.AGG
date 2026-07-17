@@ -1,9 +1,9 @@
 <table>
     @if(!empty($reservarFilaLogoExcel))
-        <tr><td colspan="10" style="height: 52px;"></td></tr>
+        <tr><td colspan="11" style="height: 52px;"></td></tr>
     @endif
     <tr>
-        <td colspan="10"><strong style="font-size: 16px;">Flash diario</strong></td>
+        <td colspan="11"><strong style="font-size: 16px;">Flash diario</strong></td>
     </tr>
     <thead>
         <tr>
@@ -12,6 +12,7 @@
             <th>Empresa</th>
             <th>AyB</th>
             <th>Estac.</th>
+            <th>Vending</th>
             <th>Bingo venta</th>
             <th>Slot win</th>
             <th>Gaming</th>
@@ -27,6 +28,7 @@
             <td>{{ $data->empresa->nombre ?? '' }}</td>
             <td>{{ number_format((float) $data->ayb, 2, '.', '') }}</td>
             <td>{{ number_format((float) $data->estac, 2, '.', '') }}</td>
+            <td>{{ number_format((float) $data->vending, 2, '.', '') }}</td>
             <td>{{ number_format((float) $data->bingo_total_venta, 2, '.', '') }}</td>
             <td>{{ number_format((float) $data->slot_r, 2, '.', '') }}</td>
             <td>{{ number_format($data->total_gaming, 2, '.', '') }}</td>

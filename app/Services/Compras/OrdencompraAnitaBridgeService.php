@@ -10,6 +10,7 @@ use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaLineaSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaOcfpagoCuotaExpander;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaWhereSupport;
+use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -191,6 +192,208 @@ class OrdencompraAnitaBridgeService
         }
 
         return $result;
+    }
+
+    /**
+     * Repara penvp_desc vacío (descripción de línea) y occ_cond_pago = 0 (condición de pago)
+     * en OCs ya grabadas en Anita desde el ERP, con UPDATE puntual (sin borrar/reinsertar
+     * líneas, para no perder penvp_cantentr/penvp_cantfact de recepciones ya aplicadas).
+     *
+     * @return array{numero: int, penvp_desc: int, occ_cond_pago: int}
+     */
+    public function repararDescripcionCondicionpagoAnita(Ordencompra $oc, bool $dryRun = false): array
+    {
+        if (! $this->habilitado()) {
+            throw new \RuntimeException('Escritura OC Anita deshabilitada.');
+        }
+
+        $this->cargarRelaciones($oc);
+        $numero = (int) $oc->numeroordencompra;
+        if ($numero <= 0) {
+            throw new \RuntimeException('La orden de compra no tiene número asignado.');
+        }
+
+        $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
+        if (! $this->existePendmaep($clave)) {
+            throw new \RuntimeException("La OC #{$numero} no existe en pendmaep (Anita).");
+        }
+
+        $ctx = OrdencompraAnitaErpContext::desdeUsuarioId(
+            $oc->creousuario_id !== null ? (int) $oc->creousuario_id : null
+        );
+
+        $result = ['numero' => $numero, 'penvp_desc' => 0, 'occ_cond_pago' => 0];
+        $result['penvp_desc'] = $this->repararPenvpDesc($oc, $ctx, $clave, $dryRun);
+        $result['occ_cond_pago'] = $this->repararOccCondPago($oc, $ctx, $clave, $dryRun);
+
+        return $result;
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function repararPenvpDesc(Ordencompra $oc, OrdencompraAnitaErpContext $ctx, array $clave, bool $dryRun): int
+    {
+        $api = new ApiAnita;
+        $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
+
+        $raw = $api->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => $sistema,
+            'tabla' => config('ordencompra_anita.tablas.linea'),
+            'campos' => 'penvp_orden, penvp_nro_interno, penvp_desc',
+            'whereArmado' => OrdencompraAnitaWhereSupport::pendmovp($clave),
+        ], 'ordencompra reparar penvp_desc list');
+
+        $filas = ApiAnita::decodificarListaFilas((string) $raw);
+        if ($filas === []) {
+            return 0;
+        }
+
+        $lineasPorInterno = [];
+        $lineasPorOrden = [];
+        foreach ($oc->ordencompra_articulos as $linea) {
+            $lineasPorInterno[(int) ($linea->penvp_nro_interno ?? 0)] = $linea;
+            $lineasPorOrden[(int) ($linea->penvp_orden ?? 0)] = $linea;
+        }
+
+        $reparadas = 0;
+        foreach ($filas as $fila) {
+            if (trim((string) ($fila->penvp_desc ?? '')) !== '') {
+                continue;
+            }
+
+            $nroInterno = (int) ($fila->penvp_nro_interno ?? 0);
+            $orden = (int) ($fila->penvp_orden ?? 0);
+            $linea = ($nroInterno > 0 ? ($lineasPorInterno[$nroInterno] ?? null) : null)
+                ?? ($orden > 0 ? ($lineasPorOrden[$orden] ?? null) : null);
+            if ($linea === null) {
+                continue;
+            }
+
+            $desc = trim((string) ($linea->detalle ?? ''));
+            if ($desc === '') {
+                $desc = $ctx->descripcionArticulo((int) $linea->articulo_id);
+            }
+            if ($desc === '') {
+                continue;
+            }
+
+            $where = OrdencompraAnitaWhereSupport::pendmovp($clave);
+            if ($nroInterno > 0) {
+                $where .= ' AND penvp_nro_interno='.$nroInterno;
+            } else {
+                $where .= ' AND penvp_orden='.$orden;
+            }
+
+            if (! $dryRun) {
+                $api->apiCallEscritura([
+                    'acc' => 'update',
+                    'sistema' => $sistema,
+                    'tabla' => config('ordencompra_anita.tablas.linea'),
+                    'valores' => 'penvp_desc = '.RecepcionProveedorAnitaEscrituraSupport::textoSql(substr($desc, 0, 30), 30),
+                    'whereArmado' => $where,
+                ], 'ordencompra reparar penvp_desc update');
+            }
+            $reparadas++;
+        }
+
+        return $reparadas;
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function repararOccCondPago(Ordencompra $oc, OrdencompraAnitaErpContext $ctx, array $clave, bool $dryRun): int
+    {
+        $api = new ApiAnita;
+        $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
+
+        $raw = $api->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => $sistema,
+            'tabla' => config('ordencompra_anita.tablas.cuota'),
+            'campos' => 'occ_nro_cuota, occ_cond_pago',
+            'whereArmado' => OrdencompraAnitaWhereSupport::occuota($clave).' ORDER BY occ_nro_cuota',
+        ], 'ordencompra reparar occ_cond_pago list');
+
+        $filas = ApiAnita::decodificarListaFilas((string) $raw);
+        if ($filas === []) {
+            return 0;
+        }
+
+        $comprobantes = $oc->ordencompra_comprobantes->sortBy('id')->values();
+        $condPagoCabecera = $ctx->condicionpagoCabecera($oc);
+
+        $reparadas = 0;
+        foreach ($filas as $fila) {
+            if ((int) ($fila->occ_cond_pago ?? 0) > 0) {
+                continue;
+            }
+
+            $nroCuota = (int) ($fila->occ_nro_cuota ?? 0);
+            $comprobante = $comprobantes->get($nroCuota - 1);
+            $condPago = $comprobante !== null
+                ? $ctx->codigoCondicionpago((int) ($comprobante->condicionpago_id ?? 0))
+                : 0;
+            if ($condPago <= 0) {
+                $condPago = $condPagoCabecera;
+            }
+            if ($condPago <= 0) {
+                continue;
+            }
+
+            if (! $dryRun) {
+                $api->apiCallEscritura([
+                    'acc' => 'update',
+                    'sistema' => $sistema,
+                    'tabla' => config('ordencompra_anita.tablas.cuota'),
+                    'valores' => 'occ_cond_pago = '.RecepcionProveedorAnitaEscrituraSupport::enteroSql($condPago),
+                    'whereArmado' => OrdencompraAnitaWhereSupport::occuota($clave).' AND occ_nro_cuota='.$nroCuota,
+                ], 'ordencompra reparar occ_cond_pago update');
+            }
+            $reparadas++;
+        }
+
+        return $reparadas;
+    }
+
+    /**
+     * Escribe en Anita solo los comprobantes/cuotas (occuota + ocfpagocuota) y actualiza pendfecha
+     * de una OC ya existente en pendmaep. Idempotente: borra occuota/ocfpagocuota previos y reinserta.
+     * No toca pendmovp/movpresup (no afecta cantidades recibidas).
+     *
+     * @return array{numero: int, comprobantes: int}
+     */
+    public function sincronizarComprobantesCuotasAnita(Ordencompra $oc): array
+    {
+        if (! $this->habilitado()) {
+            throw new \RuntimeException('Escritura OC Anita deshabilitada.');
+        }
+
+        $this->cargarRelaciones($oc);
+        $numero = (int) $oc->numeroordencompra;
+        if ($numero <= 0) {
+            throw new \RuntimeException('La orden de compra no tiene número asignado.');
+        }
+
+        $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
+        if (! $this->existePendmaep($clave)) {
+            throw new \RuntimeException("La OC #{$numero} no existe en pendmaep (Anita).");
+        }
+
+        $ctx = OrdencompraAnitaErpContext::desdeUsuarioId(
+            $oc->creousuario_id !== null ? (int) $oc->creousuario_id : null
+        );
+
+        $this->eliminarComprobantesCuotas($clave);
+        $this->grabarComprobantesCuotas($oc, $ctx, $clave);
+        $this->grabarPendfecha($oc, $ctx, $clave);
+
+        return [
+            'numero' => $numero,
+            'comprobantes' => $oc->ordencompra_comprobantes->count(),
+        ];
     }
 
     public function sincronizarBaja(Ordencompra $oc): void
@@ -383,7 +586,7 @@ class OrdencompraAnitaBridgeService
 
         foreach ($comprobantes as $comprobante) {
             $nroCuotaOcc++;
-            $insertOcc = OrdencompraAnitaEscrituraSupport::occuotaInsert($comprobante, $ctx, $clave, $nroCuotaOcc);
+            $insertOcc = OrdencompraAnitaEscrituraSupport::occuotaInsert($comprobante, $ctx, $clave, $nroCuotaOcc, $oc);
             $api->apiCallEscritura([
                 'acc' => 'insert',
                 'sistema' => $sistema,

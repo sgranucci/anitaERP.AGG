@@ -364,16 +364,39 @@
             });
     }
 
+    var rangoEjecutando = false;
+
+    function setBotonEjecutarRango(procesando) {
+        var btn = document.getElementById('btn-rango-ejecutar');
+        if (!btn) {
+            return;
+        }
+        btn.disabled = procesando;
+        if (procesando) {
+            if (!btn.getAttribute('data-label-original')) {
+                btn.setAttribute('data-label-original', btn.innerHTML);
+            }
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando…';
+        } else if (btn.getAttribute('data-label-original')) {
+            btn.innerHTML = btn.getAttribute('data-label-original');
+        }
+    }
+
     function ejecutarCierreRango() {
+        if (rangoEjecutando) {
+            return;
+        }
         var empresaId = parseInt((document.getElementById('rango-empresa-id') || {}).value || '0', 10);
         var desde = (document.getElementById('rango-fecha-desde') || {}).value || '';
         var hasta = (document.getElementById('rango-fecha-hasta') || {}).value || '';
         if (empresaId <= 0 || !desde || !hasta) {
             return;
         }
-        if (!confirm('¿Confirmar cierre contable masivo por grupos (fecha + punto de venta) en el rango?')) {
+        if (!confirm('¿Confirmar el cierre contable del rango de fechas indicado? Se genera un asiento por fecha jornada + punto de venta.')) {
             return;
         }
+        rangoEjecutando = true;
+        setBotonEjecutarRango(true);
         fetch(cfg.urlEjecutarRango, {
             method: 'POST',
             headers: {
@@ -391,10 +414,12 @@
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.ok) {
-                    alert(data.mensaje || 'No se pudo ejecutar el cierre masivo.');
+                    rangoEjecutando = false;
+                    setBotonEjecutarRango(false);
+                    alert(data.mensaje || 'No se pudo ejecutar el cierre del rango.');
                     return;
                 }
-                var msg = data.mensaje || 'Cierre masivo completado.';
+                var msg = data.mensaje || 'Cierre del rango completado.';
                 var errores = (data.resultado && data.resultado.errores) ? data.resultado.errores : [];
                 if (errores.length) {
                     msg += '\n\nErrores:\n' + errores.map(function (e) {
@@ -406,7 +431,9 @@
                 window.location.reload();
             })
             .catch(function () {
-                alert('Error de comunicación al ejecutar el cierre masivo.');
+                rangoEjecutando = false;
+                setBotonEjecutarRango(false);
+                alert('Error de comunicación al ejecutar el cierre del rango.');
             });
     }
 
@@ -445,6 +472,8 @@
         var btnAbrirRango = document.getElementById('btn-abrir-cierre-rango');
         if (btnAbrirRango) {
             btnAbrirRango.addEventListener('click', function () {
+                rangoEjecutando = false;
+                setBotonEjecutarRango(false);
                 limpiarPreviewRango();
                 $('#modal-cierre-rango-rend-est').modal('show');
             });
@@ -452,7 +481,11 @@
 
         var btnPreviewRango = document.getElementById('btn-rango-preview');
         if (btnPreviewRango) {
-            btnPreviewRango.addEventListener('click', previewCierreRango);
+            btnPreviewRango.addEventListener('click', function () {
+                // Evita que el botón quede con foco/estilo "activo" tras consultar.
+                this.blur();
+                previewCierreRango();
+            });
         }
 
         var btnEjecutarRango = document.getElementById('btn-rango-ejecutar');

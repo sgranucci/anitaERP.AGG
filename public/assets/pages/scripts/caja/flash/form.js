@@ -8,7 +8,7 @@
     var SUBTITULO_DEFAULT = 'Consultando ERP, Wigos y Anita. Por favor espere. No cierre ni recargue la página.';
 
     var CAMPOS_CALCULADOS = [
-        'ayb', 'estac', 'cant_vehic', 'bingo_cant_carton', 'bingo_total_venta', 'bingo_resultado',
+        'ayb', 'estac', 'vending', 'cant_vehic', 'bingo_cant_carton', 'bingo_total_venta', 'bingo_resultado',
         'slot_coin_in', 'slot_d', 'slot_r', 'soft_count', 'hard_count', 'cant_slots', 'win_ol_slot',
         'rul_coin_in', 'rul_d', 'rul_r', 'soft_rul', 'hard_rul', 'cant_rul', 'win_ol_rul'
     ];

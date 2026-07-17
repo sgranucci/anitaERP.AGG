@@ -129,6 +129,14 @@ return [
     'impuesto_exento_id' => (int) env('GASTRONOMIA_IMPUESTO_EXENTO_ID', 1),
 
     /**
+     * Cierre contable de rendiciones vending (conciliación flash / rendgastro).
+     */
+    'cierre_rendicion_vending_contable' => [
+        /** Tolerancia rendiciones vending vs flash_caja.vending / rendgastro Z en conciliación diaria. */
+        'conciliacion_flash_tolerancia' => (float) env('VENDING_CIERRE_RENDICION_FLASH_TOLERANCIA', 0.02),
+    ],
+
+    /**
      * Bridge hacia Informix legacy (respaldo si env() no carga en el proceso PHP).
      */
     'anita_bridge_type' => env('ANITA_BRIDGE_TYPE', 'HTTP'),

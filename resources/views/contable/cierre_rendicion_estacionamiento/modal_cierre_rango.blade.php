@@ -78,7 +78,7 @@
                     <i class="fa fa-eye"></i> Ver pendientes
                 </button>
                 <button type="button" class="btn btn-success d-none" id="btn-rango-ejecutar">
-                    <i class="fa fa-lock"></i> Confirmar cierre masivo
+                    <i class="fa fa-lock"></i> Confirmar cierre del rango
                 </button>
             </div>
         </div>

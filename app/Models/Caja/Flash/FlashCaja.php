@@ -39,6 +39,7 @@ class FlashCaja extends Model implements Auditable
         'win_ol_slot',
         'win_ol_rul',
         'estac',
+        'vending',
         'cant_vehic',
         'show',
         'calculado_en',
@@ -72,6 +73,7 @@ class FlashCaja extends Model implements Auditable
         'win_ol_slot' => 'float',
         'win_ol_rul' => 'float',
         'estac' => 'float',
+        'vending' => 'float',
         'show' => 'float',
     ];
 
@@ -106,6 +108,7 @@ class FlashCaja extends Model implements Auditable
             $this->total_gaming
             + (float) $this->ayb
             + (float) $this->estac
+            + (float) $this->vending
             + (float) $this->show,
             2
         );
