@@ -9,11 +9,61 @@
                 	</div>
                 </div>
                 <div class="form-group row">
-    				<label for="sku" class="col-lg-4 col-form-label requerido">Descripci&oacute;n</label>
+    				<label for="descripcion" class="col-lg-4 col-form-label requerido">Descripci&oacute;n</label>
     				<div class="col-lg-8">
     					<input type="text" name="descripcion" id="descripcion" class="form-control descripcion" value="{{old('descripcion', $producto->descripcion ?? '')}}" required/>
                 	</div>
                 </div>
+            </div>
+            <div class="col-sm-6">
+				<div class="form-group row">
+    				<label for="usoarticulo_id" class="col-lg-4 col-form-label requerido">Uso de art&iacute;culo</label>
+					<div class="col-lg-3">
+					<select id="usoarticulo_id" name="usoarticulo_id" class="form-control" required>
+                        <option value="">-- Seleccionar --</option>
+                        @foreach($usosArticulos as $key => $value)
+                            @if( isset($producto) && (int) $value->id == (int) old('usoarticulo_id', $producto->usoarticulo_id ?? ''))
+                                <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                            @else
+                                <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                            @endif
+                        @endforeach
+                    </select>
+                    </div>
+                    <label for="estado" class="col-lg-2 col-form-label">Estado</label>
+                    <div class="col-lg-2">
+                        <input type="text" name="estado" id="estado" class="form-control" value="{{old('estado', $producto->estado ?? 'ACTIVO')}}" readonly>
+                    </div>
+              	</div>
+				<div class="form-group row">
+    				<label for="unidadmedida" class="col-lg-4 col-form-label requerido">Unidad de medida</label>
+					<div class="col-lg-4">
+					<select id="unidadmedida_id" name="unidadmedida_id" class="form-control unidadmedida" required>
+                        <option value="">-- Seleccionar --</option>
+                        @foreach($unidadmedida as $key => $value)
+                            @if( isset($producto) && (int) $value->id == (int) old('unidadmedida_id', $producto->unidadmedida_id ?? ''))
+                                <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                            @else
+                            	@if( !isset($producto) && (int) $value->abreviatura == "PAR" )
+                                	<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+								@else
+                                	<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                            	@endif
+                            @endif
+                        @endforeach
+                    </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="detalle" class="col-lg-2 col-form-label">Descripci&oacute;n detallada</label>
+            <div class="col-lg-8">
+                <input type="text" name="detalle" id="detalle" class="form-control" value="{{old('detalle', $producto->detalle ?? '')}}"/>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-sm-6">
                 <div class="form-group row">
     				<label for="codigobarra" class="col-lg-4 col-form-label">C&oacute;digo de barra</label>
     				<div class="col-lg-5">
@@ -101,44 +151,6 @@
                 @endif
             </div>
             <div class="col-sm-6">
-				<div class="form-group row">
-    				<label for="usoarticulo_id" class="col-lg-4 col-form-label requerido">Uso de art&iacute;culo</label>
-					<div class="col-lg-3">
-					<select id="usoarticulo_id" name="usoarticulo_id" class="form-control" required>
-                        <option value="">-- Seleccionar --</option>
-                        @foreach($usosArticulos as $key => $value)
-                            @if( isset($producto) && (int) $value->id == (int) old('usoarticulo_id', $producto->usoarticulo_id ?? ''))
-                                <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-                            @else
-                                <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-                            @endif
-                        @endforeach
-                    </select>
-                    </div>
-                    <label for="estado" class="col-lg-2 col-form-label">Estado</label>
-                    <div class="col-lg-2">
-                        <input type="text" name="estado" id="estado" class="form-control" value="{{old('estado', $producto->estado ?? 'ACTIVO')}}" readonly>
-                    </div>
-              	</div>
-				<div class="form-group row">
-    				<label for="unidadmedida" class="col-lg-4 col-form-label requerido">Unidad de medida</label>
-					<div class="col-lg-4">
-					<select id="unidadmedida_id" name="unidadmedida_id" class="form-control unidadmedida" required>
-                        <option value="">-- Seleccionar --</option>
-                        @foreach($unidadmedida as $key => $value)
-                            @if( isset($producto) && (int) $value->id == (int) old('unidadmedida_id', $producto->unidadmedida_id ?? ''))
-                                <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-                            @else
-                            	@if( !isset($producto) && (int) $value->abreviatura == "PAR" )
-                                	<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-								@else
-                                	<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-                            	@endif
-                            @endif
-                        @endforeach
-                    </select>
-                    </div>
-                </div>
 				<div class="form-group row">
     				<label for="unidadmedidaalternativa_id" class="col-lg-4 col-form-label requerido">Unidad de medida alternativa</label>
 					<div class="col-lg-4">
@@ -267,12 +279,6 @@
             </div>
         </div>
         @endif
-        <div class="form-group row">
-            <label for="detalle" class="col-lg-2 col-form-label">Detalle</label>
-            <div class="col-lg-8">
-                <input type="text" name="detalle" id="detalle" class="form-control" value="{{old('detalle', $producto->detalle ?? '')}}"/>
-            </div>
-        </div>  
         <div class="form-group row">
             <label for="foto" class="col-lg-3 col-form-label">Foto</label>
             <div class="col-lg-5">

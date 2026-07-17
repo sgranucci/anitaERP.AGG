@@ -361,7 +361,7 @@
     window.suitecrmNotasRecargar = recargarNotas;
 
     $(function () {
-        if (!$('#tab9').length) {
+        if (!$('#tab-suitecrm').length) {
             return;
         }
 
