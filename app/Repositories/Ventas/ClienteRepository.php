@@ -995,6 +995,28 @@ class ClienteRepository implements ClienteRepositoryInterface
 	}
 
 	/**
+	 * Normaliza una fecha de exclusión de percepción de IVA al formato Ymd que espera Anita.
+	 * Acepta Carbon/DateTime, string ("2026-07-17", "2026-07-17 00:00:00") o vacío.
+	 */
+	private function fechaExclusionPivaParaAnita(mixed $valor): string
+	{
+		if ($valor instanceof \DateTimeInterface) {
+			return $valor->format('Ymd');
+		}
+
+		$texto = $this->fechaSyncCliente($valor);
+		if ($texto === '') {
+			return '00000000';
+		}
+
+		try {
+			return Carbon::parse($texto)->format('Ymd');
+		} catch (\Throwable $e) {
+			return '00000000';
+		}
+	}
+
+	/**
 	 * Código Informix para WHERE (clim_cliente suele estar con 6 dígitos: 010348).
 	 */
 	private function codigoParaConsultaAnita(string $codigo): string
@@ -1229,14 +1251,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$fecha = Carbon::now()->format('Ymd');
 
 		if (config('app.empresa') == 'EL BIERZO') {
-			$desdefecha_exclusionpercepcioniva = $request['desdefecha_exclusionpercepcioniva'] ?? null;
-			$dfexcl_piva = $desdefecha_exclusionpercepcioniva
-				? $desdefecha_exclusionpercepcioniva->format('Ymd')
-				: '00000000';
-			$hastafecha_exclusionpercepcioniva = $request['hastafecha_exclusionpercepcioniva'] ?? null;
-			$hfexcl_piva = $hastafecha_exclusionpercepcioniva
-				? $hastafecha_exclusionpercepcioniva->format('Ymd')
-				: '00000000';
+			$dfexcl_piva = $this->fechaExclusionPivaParaAnita($request['desdefecha_exclusionpercepcioniva'] ?? null);
+			$hfexcl_piva = $this->fechaExclusionPivaParaAnita($request['hastafecha_exclusionpercepcioniva'] ?? null);
 		}
 
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre'] ?? '');
@@ -1585,14 +1601,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$fecha = Carbon::now()->format('Ymd');
 
 		if (config('app.empresa') == 'EL BIERZO') {
-			$desdefecha_exclusionpercepcioniva = $request['desdefecha_exclusionpercepcioniva'] ?? null;
-			$dfexcl_piva = $desdefecha_exclusionpercepcioniva
-				? $desdefecha_exclusionpercepcioniva->format('Ymd')
-				: '00000000';
-			$hastafecha_exclusionpercepcioniva = $request['hastafecha_exclusionpercepcioniva'] ?? null;
-			$hfexcl_piva = $hastafecha_exclusionpercepcioniva
-				? $hastafecha_exclusionpercepcioniva->format('Ymd')
-				: '00000000';
+			$dfexcl_piva = $this->fechaExclusionPivaParaAnita($request['desdefecha_exclusionpercepcioniva'] ?? null);
+			$hfexcl_piva = $this->fechaExclusionPivaParaAnita($request['hastafecha_exclusionpercepcioniva'] ?? null);
 		}
 
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,
