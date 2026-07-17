@@ -20,6 +20,7 @@
     $origenBienUso = (bool) ($origen_bien_uso ?? false);
     $destinoBienUso = (bool) ($destino_bien_uso ?? false);
     $requiereAprobacion = (bool) ($requiere_aprobacion ?? false);
+    $avisoOpcional = (bool) ($aviso_opcional ?? false);
     $bajaNpu = (bool) ($baja_npu ?? false);
     $puedeAbrirAbm = can('editar-tipos-transaccion-stock', false) || can('listar-tipos-transaccion-stock', false);
     $editUrl = ($tipoId > 0 && $puedeAbrirAbm)
@@ -39,6 +40,7 @@
                 data-origen-bien-uso="{{ $origenBienUso ? '1' : '0' }}"
                 data-destino-bien-uso="{{ $destinoBienUso ? '1' : '0' }}"
                 data-requiere-aprobacion="{{ $requiereAprobacion ? '1' : '0' }}"
+                data-aviso-opcional="{{ $avisoOpcional ? '1' : '0' }}"
                 data-baja-npu="{{ $bajaNpu ? '1' : '0' }}"
                 @if ($required && ! $soloLectura) required @endif>
             @if ($soloLectura)

@@ -59,7 +59,8 @@ class TransferenciaMercaderiaController extends Controller
             ->get(['id', 'codigo', 'nombre']);
 
         $tipoDefault = $tipotransacciones->firstWhere('id', (int) ($defaults['tipotransaccion_stock_id'] ?? 0));
-        $mostrarPanelDestinatario = TransferenciaMercaderiaAprobacionSupport::requiereAprobacion($tipoDefault);
+        $mostrarPanelDestinatario = TransferenciaMercaderiaAprobacionSupport::requiereAprobacion($tipoDefault)
+            || TransferenciaMercaderiaAprobacionSupport::avisoOpcional($tipoDefault);
         $opcionesDestinatario = [];
         if ($mostrarPanelDestinatario && (int) optional($depEntrada)->id > 0) {
             $opcionesDestinatario = TransferenciaMercaderiaDestinatarioSupport::opcionesSelector((int) $depEntrada->id);
@@ -355,6 +356,7 @@ class TransferenciaMercaderiaController extends Controller
                 'tipotransaccion_stock_id',
                 'usuario_destino_id',
                 'centrocosto_destino_id',
+                'enviar_aviso',
                 'observacion',
             ]),
             $lineas

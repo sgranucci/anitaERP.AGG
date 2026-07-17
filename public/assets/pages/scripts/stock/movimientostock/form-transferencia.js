@@ -10,6 +10,7 @@
                 origenBienUso: false,
                 destinoBienUso: false,
                 requiereAprobacion: false,
+                avisoOpcional: false,
                 nombre: '',
             };
     }
@@ -28,6 +29,10 @@
 
     function tipoRequiereAprobacion() {
         return meta().requiereAprobacion;
+    }
+
+    function tipoAvisoOpcional() {
+        return meta().avisoOpcional;
     }
 
     function depositoEntradaId() {
@@ -145,7 +150,7 @@
             return;
         }
 
-        var show = esTransferencia() && tipoRequiereAprobacion();
+        var show = esTransferencia() && (tipoRequiereAprobacion() || tipoAvisoOpcional());
         var puedeCargarOpciones = tipoDestinoBienUso() || depositoEntradaId() > 0;
 
         mostrarPanel($('#ms_panel_destinatario'), show);
@@ -554,6 +559,53 @@
         }
     });
 
+    function necesitaModalAviso() {
+        return esTransferencia() && tipoAvisoOpcional() && !$('#ms_transferencia_vinculada').length;
+    }
+
+    var avisoDecididoMs = false;
+
+    function activarInterceptorAvisoOpcional() {
+        var form = document.getElementById('formgeneral');
+        if (!form) {
+            return;
+        }
+
+        form.addEventListener('submit', function (e) {
+            if (!necesitaModalAviso() || avisoDecididoMs) {
+                return;
+            }
+
+            e.preventDefault();
+            e.stopImmediatePropagation();
+
+            if (typeof window.msPreguntarEnvioAviso !== 'function') {
+                // Sin modal disponible: por defecto sin aviso (transferencia directa).
+                $('#ms_enviar_aviso').val('0');
+                avisoDecididoMs = true;
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+                return;
+            }
+
+            window.msPreguntarEnvioAviso(function (decision) {
+                if (decision === null) {
+                    return; // cancelado: no graba
+                }
+                $('#ms_enviar_aviso').val(decision ? '1' : '0');
+                avisoDecididoMs = true;
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+            });
+        }, true);
+    }
+
     $(function () {
         if (typeof activa_eventos_consultausuario === 'function') {
             activa_eventos_consultausuario();
@@ -561,6 +613,7 @@
         activarEnterDepositoSalidaEnfocaDestino();
         activarEnterDepositoDestinoEnfocaArticulo();
         activarEnterUsuarioDestinoValidaEnfocaArticulo();
+        activarInterceptorAvisoOpcional();
         actualizarPanelesTransferencia();
         actualizarUiModoIntercompanyMs();
     });

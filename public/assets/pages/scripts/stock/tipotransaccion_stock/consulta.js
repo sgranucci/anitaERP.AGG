@@ -137,6 +137,7 @@ function activarCapturaEnterAbreviaturaTipotransaccionStock() {
             var origenBien = $tr.find('.origen-bien-uso').html() || '0';
             var destinoBien = $tr.find('.destino-bien-uso').html() || '0';
             var requiereAprobacion = $tr.find('.requiere-aprobacion').html() || '0';
+            var avisoOpcional = $tr.find('.aviso-opcional').html() || '0';
             var bajaNpu = $tr.find('.baja-npu').html() || '0';
 
             if ($('#tipotransaccion_stock_id').length && ptrTipotransaccionStock_id
@@ -151,6 +152,7 @@ function activarCapturaEnterAbreviaturaTipotransaccionStock() {
                     origen_bien_uso: origenBien === '1',
                     destino_bien_uso: destinoBien === '1',
                     requiere_aprobacion: requiereAprobacion === '1',
+                    aviso_opcional: avisoOpcional === '1',
                     baja_npu: bajaNpu === '1',
                 });
                 $('#consultatipotransaccionstockModal').modal('hide');

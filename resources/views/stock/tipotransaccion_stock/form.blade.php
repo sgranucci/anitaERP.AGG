@@ -64,6 +64,11 @@
             <label class="form-check-label" for="requiere_aprobacion">Requiere aprobaci&oacute;n del dep&oacute;sito destino</label>
         </div>
         <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="aviso_opcional" id="aviso_opcional" value="1"
+                @if (old('aviso_opcional', $data->aviso_opcional ?? false)) checked @endif>
+            <label class="form-check-label" for="aviso_opcional">Aviso opcional (el usuario elige al grabar si env&iacute;a el aviso)</label>
+        </div>
+        <div class="form-check">
             <input type="checkbox" class="form-check-input" name="maneja_contabilidad" id="maneja_contabilidad" value="1"
                 @if (old('maneja_contabilidad', $data->maneja_contabilidad ?? false)) checked @endif>
             <label class="form-check-label" for="maneja_contabilidad">Genera asiento contable al confirmar</label>
@@ -86,6 +91,7 @@
         <small class="form-text text-muted">
             Origen y destino en bien de uso son excluyentes. La baja de NPU exige operaci&oacute;n Salida y signo Resta.
             La aprobaci&oacute;n aplica si <code>STOCK_TRANSFERENCIA_MODO_APROBACION=tipo_transaccion</code> en .env.
+            <strong>Aviso opcional</strong> solo aplica a Transferencias (T): al grabar se pregunta si env&iacute;a o no el aviso; si dice que no, la transferencia queda directa (sin aviso ni aprobaci&oacute;n).
         </small>
     </div>
 </div>

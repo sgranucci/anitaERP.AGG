@@ -19,6 +19,7 @@ class Tipotransaccion_Stock extends Model
         'signo',
         'estado',
         'requiere_aprobacion',
+        'aviso_opcional',
         'maneja_contabilidad',
         'destino_bien_uso',
         'origen_bien_uso',
@@ -27,6 +28,7 @@ class Tipotransaccion_Stock extends Model
 
     protected $casts = [
         'requiere_aprobacion' => 'boolean',
+        'aviso_opcional' => 'boolean',
         'maneja_contabilidad' => 'boolean',
         'destino_bien_uso' => 'boolean',
         'origen_bien_uso' => 'boolean',

@@ -766,6 +766,7 @@ class MovimientoStockController extends Controller
                 'tipotransaccion_stock_id' => (int) $request->input('tipotransaccion_stock_id'),
                 'centrocosto_destino_id' => (int) $request->input('centrocosto_destino_id'),
                 'usuario_destino_id' => (int) $request->input('usuario_destino_id'),
+                'enviar_aviso' => $request->has('enviar_aviso') ? $request->input('enviar_aviso') : null,
                 'observacion' => trim((string) $request->input('leyenda', '')),
             ],
             $lineas

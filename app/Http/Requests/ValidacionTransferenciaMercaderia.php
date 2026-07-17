@@ -34,6 +34,7 @@ class ValidacionTransferenciaMercaderia extends FormRequest
             'lineas.*.cantidad' => 'required|numeric|gt:0',
             'usuario_destino_id' => 'nullable|integer|exists:usuario,id',
             'centrocosto_destino_id' => 'nullable|integer|exists:centrocosto,id',
+            'enviar_aviso' => 'nullable|boolean',
             'observacion' => 'nullable|string|max:2000',
         ];
     }

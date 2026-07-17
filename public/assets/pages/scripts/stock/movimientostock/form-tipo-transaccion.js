@@ -35,6 +35,7 @@
             origenBienUso: String($h.attr('data-origen-bien-uso') || '') === '1',
             destinoBienUso: String($h.attr('data-destino-bien-uso') || '') === '1',
             requiereAprobacion: String($h.attr('data-requiere-aprobacion') || '') === '1',
+            avisoOpcional: String($h.attr('data-aviso-opcional') || '') === '1',
             bajaNpu: String($h.attr('data-baja-npu') || '') === '1',
             nombre: String($('#tipotransaccion_stock_id_descripcion').val() || '').trim(),
             abreviatura: String($('#tipotransaccion_stock_id_abreviatura').val() || '').trim(),
@@ -76,6 +77,7 @@
         $hidden.attr('data-origen-bien-uso', normalizarFlag(data.origen_bien_uso) ? '1' : '0');
         $hidden.attr('data-destino-bien-uso', normalizarFlag(data.destino_bien_uso) ? '1' : '0');
         $hidden.attr('data-requiere-aprobacion', normalizarFlag(data.requiere_aprobacion) ? '1' : '0');
+        $hidden.attr('data-aviso-opcional', normalizarFlag(data.aviso_opcional) ? '1' : '0');
         $hidden.attr('data-baja-npu', normalizarFlag(data.baja_npu) ? '1' : '0');
 
         $('#tipotransaccion_stock_id_abreviatura').val(data.abreviatura || '');
@@ -100,6 +102,7 @@
             origen_bien_uso: false,
             destino_bien_uso: false,
             requiere_aprobacion: false,
+            aviso_opcional: false,
             baja_npu: false,
         });
     };

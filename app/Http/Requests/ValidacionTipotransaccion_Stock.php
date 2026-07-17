@@ -21,6 +21,7 @@ class ValidacionTipotransaccion_Stock extends FormRequest
             'signo' => ['required', Rule::in(array_keys(\App\Traits\Stock\Tipotransaccion_StockTrait::$enumSigno))],
             'estado' => ['required', Rule::in(array_keys(\App\Traits\Stock\Tipotransaccion_StockTrait::$enumEstado))],
             'requiere_aprobacion' => 'sometimes|boolean',
+            'aviso_opcional' => 'sometimes|boolean',
             'maneja_contabilidad' => 'sometimes|boolean',
             'destino_bien_uso' => 'sometimes|boolean',
             'origen_bien_uso' => 'sometimes|boolean',
@@ -31,6 +32,10 @@ class ValidacionTipotransaccion_Stock extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
+            if ($this->boolean('aviso_opcional') && $this->input('operacion') !== 'T') {
+                $validator->errors()->add('aviso_opcional', 'El aviso opcional solo aplica a tipos de operación Transferencia (T).');
+            }
+
             if (! $this->boolean('baja_npu')) {
                 return;
             }

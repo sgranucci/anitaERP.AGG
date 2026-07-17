@@ -153,6 +153,7 @@
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/transferencia/aviso-modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/transferencia/aviso-modal.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/transferencia_mercaderia/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/transferencia_mercaderia/index.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
@@ -247,6 +248,7 @@
                                 @foreach ($tipotransacciones as $t)
                                     <option value="{{ $t->id }}"
                                         data-requiere-aprobacion="{{ $t->requiere_aprobacion ? '1' : '0' }}"
+                                        data-aviso-opcional="{{ $t->aviso_opcional ? '1' : '0' }}"
                                         data-destino-bien-uso="{{ $t->destino_bien_uso ? '1' : '0' }}"
                                         data-origen-bien-uso="{{ $t->origen_bien_uso ? '1' : '0' }}"
                                         data-maneja-contabilidad="{{ $t->maneja_contabilidad ? '1' : '0' }}"
@@ -260,6 +262,9 @@
                                         @endif
                                         @if ($t->requiere_aprobacion)
                                             (requiere aprobación)
+                                        @endif
+                                        @if ($t->aviso_opcional)
+                                            (aviso opcional)
                                         @endif
                                         @if ($t->maneja_contabilidad)
                                             (contabilidad)
@@ -345,4 +350,5 @@
 
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultaarticulo')
+@include('includes.stock.modal_aviso_transferencia')
 @endsection

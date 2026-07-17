@@ -26,6 +26,7 @@
     $tipoActual = $tipotransaccion_query->firstWhere('id', $tipoActualId);
     $tipoActualManejaCont = (bool) ($tipoActual?->maneja_contabilidad ?? false);
     $tipoRequiereAprobacionMs = TransferenciaMercaderiaAprobacionSupport::requiereAprobacion($tipoActual);
+    $tipoAvisoOpcionalMs = TransferenciaMercaderiaAprobacionSupport::avisoOpcional($tipoActual);
     $esTransferenciaActual = ($tipoActual?->operacion ?? '') === 'T';
     $movimientoStockModoFerli = $movimientoStockModoFerli ?? \App\Support\Stock\MovimientoStockFerliSupport::esCalzadosFerli();
     $bienesUsoActivos = $bienesUsoActivos ?? collect();
@@ -50,7 +51,7 @@
     $bienUsoOrigenId = (int) old('bien_uso_origen_id', $transferenciaVinculada?->bien_uso_origen_id ?? 0);
     $bienUsoDestinoId = (int) old('bien_uso_destino_id', $transferenciaVinculada?->bien_uso_destino_id ?? 0);
     $mostrarPanelTransferencia = $esTransferenciaActual && ! $transferenciaVinculada;
-    $mostrarPanelDestinatarioMs = $tipoRequiereAprobacionMs && $mostrarPanelTransferencia;
+    $mostrarPanelDestinatarioMs = ($tipoRequiereAprobacionMs || $tipoAvisoOpcionalMs) && $mostrarPanelTransferencia;
     $usuarioDestinoIdMs = (int) old('usuario_destino_id', 0);
     $usuarioDestinoNombreMs = '';
     if ($usuarioDestinoIdMs > 0) {
@@ -89,6 +90,7 @@
                     'origen_bien_uso' => (bool) ($tipoActual?->origen_bien_uso ?? false),
                     'destino_bien_uso' => (bool) ($tipoActual?->destino_bien_uso ?? false),
                     'requiere_aprobacion' => (bool) ($tipoActual?->requiere_aprobacion ?? false),
+                    'aviso_opcional' => (bool) ($tipoActual?->aviso_opcional ?? false),
                     'baja_npu' => (bool) ($tipoActual?->baja_npu ?? false),
                     'col_label' => 'col-lg-4 col-form-label',
                     'col_input' => 'col-lg-8',
@@ -450,6 +452,7 @@
 @endif
 
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
+<input type="hidden" name="enviar_aviso" id="ms_enviar_aviso" value="{{ old('enviar_aviso', '') }}" />
 <input type="hidden" id="tipotransacciondefault_id" class="form-control" value="{{$tipotransacciondefault_id}}" />
 <input type="hidden" id="ms-saldo-origen-url" value="{{ route('movimientostock_saldo_articulo') }}">
 <input type="hidden" id="ms-resolver-npu-url" value="{{ route('movimientostock_resolver_npu_baja') }}">
@@ -459,6 +462,7 @@
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultanpubaja')
 @include('includes.stock.modalconsultatipotransaccionstock')
+@include('includes.stock.modal_aviso_transferencia')
 @if(\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.modal_saldos_articulo')
 @include('includes.stock.modal_kardex_deposito')

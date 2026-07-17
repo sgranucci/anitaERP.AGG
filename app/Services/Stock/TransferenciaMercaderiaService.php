@@ -219,6 +219,13 @@ class TransferenciaMercaderiaService
         $empresaId = (int) ($cabecera['empresa_id'] ?? 0);
         $usuarioDestinoId = (int) ($cabecera['usuario_destino_id'] ?? 0) ?: null;
 
+        $decisionAvisoUsuario = null;
+        if (array_key_exists('enviar_aviso', $cabecera)
+            && $cabecera['enviar_aviso'] !== null
+            && $cabecera['enviar_aviso'] !== '') {
+            $decisionAvisoUsuario = filter_var($cabecera['enviar_aviso'], FILTER_VALIDATE_BOOLEAN);
+        }
+
         if ($tipotransaccionId <= 0) {
             return ['ok' => false, 'mensaje' => 'Debe seleccionar un tipo de transacción.'];
         }
@@ -320,7 +327,7 @@ class TransferenciaMercaderiaService
             PeriodoContableCierreSupport::ALCANCE_TRANSFERENCIA
         );
 
-        $requiereAprobacion = TransferenciaMercaderiaAprobacionSupport::requiereAprobacion($tipoTransferencia);
+        $requiereAprobacion = TransferenciaMercaderiaAprobacionSupport::requiereAprobacion($tipoTransferencia, $decisionAvisoUsuario);
         $usuarioDestino = $destinoBienUso
             ? TransferenciaMercaderiaDestinatarioSupport::resolverUsuarioDestinoBienUso($usuarioDestinoId)
             : TransferenciaMercaderiaDestinatarioSupport::resolverUsuarioDestino(

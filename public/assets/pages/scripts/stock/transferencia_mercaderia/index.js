@@ -254,6 +254,10 @@
         return selectedTipoFlag('requiere-aprobacion');
     }
 
+    function tipoAvisoOpcional() {
+        return selectedTipoFlag('aviso-opcional');
+    }
+
     function mostrarPanel($panel, visible) {
         if (!$panel || !$panel.length) {
             return;
@@ -266,7 +270,7 @@
     }
 
     function actualizarPanelDestinatario() {
-        var show = tipoRequiereAprobacion();
+        var show = tipoRequiereAprobacion() || tipoAvisoOpcional();
         var puedeCargarOpciones = tipoDestinoBienUso() || depositoEntradaId() > 0;
 
         mostrarPanel($('#tm_panel_destinatario'), show);
@@ -704,11 +708,53 @@
             return;
         }
 
-        var msgConfirm = tipoRequiereAprobacion()
+        var contexto = {
+            depSal: depSal,
+            depEnt: depEnt,
+            bienDest: bienDest,
+            bienOrig: bienOrig,
+            destinoBien: destinoBien,
+            origenBien: origenBien,
+            tipo: tipo,
+            lineas: lineas,
+        };
+
+        if (tipoAvisoOpcional() && typeof window.msPreguntarEnvioAviso === 'function') {
+            window.msPreguntarEnvioAviso(function (decision) {
+                if (decision === null) {
+                    return; // cancelado
+                }
+                ejecutarGrabado(contexto, decision);
+            });
+            return;
+        }
+
+        ejecutarGrabado(contexto, null);
+    }
+
+    function ejecutarGrabado(ctx, enviarAviso) {
+        var depSal = ctx.depSal;
+        var depEnt = ctx.depEnt;
+        var bienDest = ctx.bienDest;
+        var bienOrig = ctx.bienOrig;
+        var destinoBien = ctx.destinoBien;
+        var origenBien = ctx.origenBien;
+        var tipo = ctx.tipo;
+        var lineas = ctx.lineas;
+
+        var conAviso = tipoRequiereAprobacion() || enviarAviso === true;
+        var msgConfirm = conAviso
             ? '¿Confirma el envío de ' + lineas.length + ' artículo(s)? Quedará pendiente de aprobación.'
             : '¿Confirma la transferencia de ' + lineas.length + ' artículo(s)?';
         if (!confirm(msgConfirm)) {
             return;
+        }
+
+        var enviarAvisoPayload = '';
+        if (enviarAviso === true) {
+            enviarAvisoPayload = 1;
+        } else if (enviarAviso === false) {
+            enviarAvisoPayload = 0;
         }
 
         cargando = true;
@@ -728,6 +774,7 @@
                 tipotransaccion_stock_id: tipo,
                 centrocosto_destino_id: parseInt($('#centrocosto_destino_id').val(), 10) || '',
                 usuario_destino_id: parseInt($('#usuario_destino_id').val(), 10) || '',
+                enviar_aviso: enviarAvisoPayload,
                 lineas: lineas,
             },
             dataType: 'json',
