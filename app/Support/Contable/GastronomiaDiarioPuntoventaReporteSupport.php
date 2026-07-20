@@ -256,6 +256,14 @@ final class GastronomiaDiarioPuntoventaReporteSupport
                 $ventaNeta -= abs($monto);
                 $totalNc += abs($monto);
                 $cantNc++;
+                // NC de cortesía ($0,01 sin cobranza): es la reversa de una invitación. Debe
+                // descontarse de invitaciones para que el cobrable (neta − invitaciones) siga
+                // cuadrando con el cobrado (que tampoco tiene devolución). Sin esto cada NC de
+                // cortesía deja +$0,01 de diferencia.
+                if ($this->esInvitacion(abs($monto), $cobradoVenta, $importeMinimo)) {
+                    $totalInvitaciones -= abs($monto);
+                    $cantInvitaciones--;
+                }
             } else {
                 $ventaNeta += $monto;
                 $ventaBruta += $monto;
@@ -337,9 +345,16 @@ final class GastronomiaDiarioPuntoventaReporteSupport
     {
         $desglose = IvaVentasDesgloseSupport::columnasDesdeVenta($venta);
         $iva = abs((float) ($desglose['iva'] ?? 0));
-        $total = abs((float) ($desglose['total'] ?? 0));
-        if ($total <= 0) {
-            $total = abs((float) ($venta->total ?? 0));
+        $totalDesglose = abs((float) ($desglose['total'] ?? 0));
+        $totalVenta = abs((float) ($venta->total ?? 0));
+
+        // venta.total es el total realmente facturado/cobrado (autoritativo) y es lo que usa el
+        // cierre de turno. El renglón "Total" de venta_impuesto puede quedar desalineado en
+        // cortesías (la normalización a $0,01 no repatchaba ese concepto), por eso se prefiere
+        // venta.total y el desglose queda solo como respaldo cuando venta.total no está cargado.
+        $total = $totalVenta > 0 ? $totalVenta : $totalDesglose;
+        if ($iva > $total) {
+            $iva = 0.0;
         }
 
         return [

@@ -1,3 +1,20 @@
+@php
+    $esExcel = ! empty($esExcel);
+    $datas = $datas ?? collect();
+    $subtitulo = 'Generado '.date('d/m/Y H:i').' — '.(is_countable($datas) ? count($datas) : 0).' registro(s)';
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtMonto = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
+@endphp
 <table>
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
@@ -9,6 +26,9 @@
 	<tbody>
 		<tr>
 			<td colspan="10"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de solicitudes de pago</h2></td>
+		</tr>
+		<tr>
+			<td colspan="10"><strong>{{ $subtitulo }}</strong></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -36,7 +56,7 @@
 				<td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
 				<td>{{ optional($data->conceptos)->nombre ?? '' }}</td>
 				<td>{{ optional($data->proveedores)->nombre ?? ($data->beneficiario ?? '') }}</td>
-				<td>{{ number_format((float) $data->monto, 2, ',', '.') }}</td>
+				<td>{{ $fmtMonto($data->monto) }}</td>
 				<td>{{ $tratNombre }}</td>
 				<td>{{ $estadoNombre }}</td>
 				<td>{{ optional($data->madre)->codigo ?? '' }}</td>

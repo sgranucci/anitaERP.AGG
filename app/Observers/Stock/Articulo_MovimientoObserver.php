@@ -4,6 +4,7 @@ namespace App\Observers\Stock;
 
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Articulo_Saldo_Deposito;
+use App\Support\Stock\ArticuloStockColorTalleSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -14,24 +15,26 @@ use Illuminate\Support\Facades\Log;
  * Reglas:
  *  - articulo_movimiento.cantidad ya viene firmada (por signo del
  *    tipo de transacción): salidas son negativas, entradas positivas.
- *  - Sumamos esa cantidad sobre la fila (articulo_id, deposito_id) en
- *    la tabla de saldos. Si no existe la fila se crea.
+ *  - Sumamos esa cantidad sobre la fila
+ *    (articulo_id, deposito_id, color_id, talle_id) con 0 = sin variante.
  *  - Sin movimiento no se registra: si articulo_id/deposito_id es null
  *    el saldo no se ve afectado.
- *  - Soporta los cuatro eventos relevantes (created/updated/deleted/
- *    restored). Si la baja es lógica (SoftDeletes) se reversa también.
- *
- * Idempotencia: se usa updateOrCreate sobre la PK lógica
- * (articulo_id, deposito_id) y se aplica el delta dentro de una
- * transacción para no perder consistencia bajo concurrencia.
+ *  - Soporta created/updated/deleted/restored.
  */
 class Articulo_MovimientoObserver
 {
     public function created(Articulo_Movimiento $movimiento): void
     {
+        [$colorId, $talleId] = ArticuloStockColorTalleSupport::claveSaldo(
+            $movimiento->color_id !== null ? (int) $movimiento->color_id : null,
+            $movimiento->talle_id !== null ? (int) $movimiento->talle_id : null,
+        );
+
         $this->aplicarDelta(
             $movimiento->articulo_id,
             $movimiento->deposito_id,
+            $colorId,
+            $talleId,
             (float) $movimiento->cantidad,
             $movimiento->fecha,
         );
@@ -44,32 +47,49 @@ class Articulo_MovimientoObserver
         $articuloAnt = $original['articulo_id'] ?? null;
         $depositoAnt = $original['deposito_id'] ?? null;
         $cantidadAnt = isset($original['cantidad']) ? (float) $original['cantidad'] : 0.0;
+        [$colorAnt, $talleAnt] = ArticuloStockColorTalleSupport::claveSaldo(
+            isset($original['color_id']) && $original['color_id'] !== null ? (int) $original['color_id'] : null,
+            isset($original['talle_id']) && $original['talle_id'] !== null ? (int) $original['talle_id'] : null,
+        );
 
         $articuloNew = $movimiento->articulo_id;
         $depositoNew = $movimiento->deposito_id;
         $cantidadNew = (float) $movimiento->cantidad;
+        [$colorNew, $talleNew] = ArticuloStockColorTalleSupport::claveSaldo(
+            $movimiento->color_id !== null ? (int) $movimiento->color_id : null,
+            $movimiento->talle_id !== null ? (int) $movimiento->talle_id : null,
+        );
 
-        if ($articuloAnt === $articuloNew && $depositoAnt === $depositoNew) {
+        $mismaClave = $articuloAnt === $articuloNew
+            && $depositoAnt === $depositoNew
+            && $colorAnt === $colorNew
+            && $talleAnt === $talleNew;
+
+        if ($mismaClave) {
             $delta = $cantidadNew - $cantidadAnt;
             if (abs($delta) > 1e-9) {
-                $this->aplicarDelta($articuloNew, $depositoNew, $delta, $movimiento->fecha);
+                $this->aplicarDelta($articuloNew, $depositoNew, $colorNew, $talleNew, $delta, $movimiento->fecha);
             }
 
             return;
         }
 
-        // Cambió artículo o depósito: revertimos el viejo y aplicamos el nuevo.
-        $this->aplicarDelta($articuloAnt, $depositoAnt, -$cantidadAnt, $movimiento->fecha);
-        $this->aplicarDelta($articuloNew, $depositoNew, $cantidadNew, $movimiento->fecha);
+        $this->aplicarDelta($articuloAnt, $depositoAnt, $colorAnt, $talleAnt, -$cantidadAnt, $movimiento->fecha);
+        $this->aplicarDelta($articuloNew, $depositoNew, $colorNew, $talleNew, $cantidadNew, $movimiento->fecha);
     }
 
     public function deleted(Articulo_Movimiento $movimiento): void
     {
-        // Forzamos a que SoftDeletes también descuente el saldo: no
-        // queremos que quede stock fantasma cuando el registro se anula.
+        [$colorId, $talleId] = ArticuloStockColorTalleSupport::claveSaldo(
+            $movimiento->color_id !== null ? (int) $movimiento->color_id : null,
+            $movimiento->talle_id !== null ? (int) $movimiento->talle_id : null,
+        );
+
         $this->aplicarDelta(
             $movimiento->articulo_id,
             $movimiento->deposito_id,
+            $colorId,
+            $talleId,
             -((float) $movimiento->cantidad),
             $movimiento->fecha,
         );
@@ -77,9 +97,16 @@ class Articulo_MovimientoObserver
 
     public function restored(Articulo_Movimiento $movimiento): void
     {
+        [$colorId, $talleId] = ArticuloStockColorTalleSupport::claveSaldo(
+            $movimiento->color_id !== null ? (int) $movimiento->color_id : null,
+            $movimiento->talle_id !== null ? (int) $movimiento->talle_id : null,
+        );
+
         $this->aplicarDelta(
             $movimiento->articulo_id,
             $movimiento->deposito_id,
+            $colorId,
+            $talleId,
             (float) $movimiento->cantidad,
             $movimiento->fecha,
         );
@@ -87,26 +114,28 @@ class Articulo_MovimientoObserver
 
     public function forceDeleted(Articulo_Movimiento $movimiento): void
     {
-        // Si ya pasó por deleted() habrá restado el saldo; en force
-        // delete adicional no hay nada que descontar nuevamente.
+        // Si ya pasó por deleted() habrá restado el saldo.
     }
 
-    /**
-     * Aplica un delta firmado (positivo o negativo) sobre el saldo
-     * (articulo, deposito). Se usa transacción + bloqueo "for update"
-     * sobre la fila para evitar carreras bajo concurrencia.
-     */
-    private function aplicarDelta(?int $articuloId, ?int $depositoId, float $delta, $fecha = null): void
-    {
+    private function aplicarDelta(
+        ?int $articuloId,
+        ?int $depositoId,
+        int $colorId,
+        int $talleId,
+        float $delta,
+        $fecha = null
+    ): void {
         if (! $articuloId || ! $depositoId || abs($delta) < 1e-9) {
             return;
         }
 
         try {
-            DB::transaction(function () use ($articuloId, $depositoId, $delta, $fecha) {
+            DB::transaction(function () use ($articuloId, $depositoId, $colorId, $talleId, $delta, $fecha) {
                 $row = Articulo_Saldo_Deposito::query()
                     ->where('articulo_id', $articuloId)
                     ->where('deposito_id', $depositoId)
+                    ->where('color_id', $colorId)
+                    ->where('talle_id', $talleId)
                     ->lockForUpdate()
                     ->first();
 
@@ -114,6 +143,8 @@ class Articulo_MovimientoObserver
                     Articulo_Saldo_Deposito::create([
                         'articulo_id' => $articuloId,
                         'deposito_id' => $depositoId,
+                        'color_id' => $colorId,
+                        'talle_id' => $talleId,
                         'cantidad' => $delta,
                         'fecha_ult_movimiento' => $fecha ? (string) $fecha : now(),
                     ]);
@@ -128,12 +159,11 @@ class Articulo_MovimientoObserver
                 $row->save();
             });
         } catch (\Throwable $e) {
-            // No queremos que un fallo de saldo aborte la operación
-            // de stock; logueamos y seguimos. La tabla de saldos puede
-            // re-construirse con un comando dedicado si hace falta.
             Log::error('Articulo_MovimientoObserver delta error', [
                 'articulo_id' => $articuloId,
                 'deposito_id' => $depositoId,
+                'color_id' => $colorId,
+                'talle_id' => $talleId,
                 'delta' => $delta,
                 'error' => $e->getMessage(),
             ]);

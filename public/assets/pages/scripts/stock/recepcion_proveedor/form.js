@@ -84,7 +84,11 @@
     window.recepcionProveedorActualizarAvisoDescuentoOc = actualizarAvisoDescuentoOc;
 
     function colspanTablaItems() {
-        return esModoDevolucion() ? 10 : COLSPAN_TABLA_ITEMS;
+        var base = esModoDevolucion() ? 10 : COLSPAN_TABLA_ITEMS;
+        if ($('#tabla-items-recepcion th.ms-col-color-talle:visible').length > 0) {
+            return base + 2;
+        }
+        return base;
     }
 
     function prepararItemsDevolucionEnEnvio() {
@@ -1978,6 +1982,8 @@
         html += '<input type="hidden" name="items[' + idx + '][unidadmedida_id]" value="' + (parseInt(item.unidadmedida_id, 10) || '') + '">';
         html += '<input type="hidden" name="items[' + idx + '][coeficienteconversion]" value="' + coefEfectivo(item) + '">';
         html += '<input type="hidden" name="items[' + idx + '][precio_ordencompra]" value="' + (item.precio_ordencompra != null ? item.precio_ordencompra : '') + '">';
+        html += '<input type="hidden" class="item-color-id" name="items[' + idx + '][color_id]" value="' + (item.color_id || '') + '">';
+        html += '<input type="hidden" class="item-talle-id" name="items[' + idx + '][talle_id]" value="' + (item.talle_id || '') + '">';
         if (esModoDevolucion()) {
             html += '<input type="hidden" name="items[' + idx + '][cantidad_rechazada]" value="0">';
             if (item.cantidad_recepcionada_origen != null && item.cantidad_recepcionada_origen !== '') {
@@ -2041,6 +2047,7 @@
             html += '<td class="align-middle">' + (idx + 1) + htmlCamposOcultosLinea(item, idx, depId, tipo) + '</td>';
             html += '<td class="align-middle">' + htmlCeldaArticulo(item, idx) + '</td>';
             html += '<td class="align-middle"><input type="text" class="descripcionarticulo form-control form-control-sm" value="' + escHtml(item.descripcion || '') + '" readonly title="' + escHtml(item.descripcion || '') + '"></td>';
+            html += htmlCeldasColorTalle(item, idx, tipo, soloLecturaOtros);
             html += '<td class="text-right align-middle">';
             if (esModoDevolucion()) {
                 html += '<span class="d-block">' + (maxDevolucion > 0 ? maxDevolucion : '—') + '</span>';
@@ -2083,9 +2090,66 @@
             $tbody.append(html);
             actualizarEstiloLineaPorAccion(idx);
         });
+        actualizarVisibilidadColorTalle();
         actualizarLinksArticuloGrilla();
         actualizarTotalRecepcion();
         actualizarCampoImpuestoInterno();
+    }
+
+    function itemManejaColorTalle(item) {
+        if (!item) {
+            return false;
+        }
+        if (item.maneja_stock_color_talle === true || item.maneja_stock_color_talle === 1 || item.maneja_stock_color_talle === '1') {
+            return true;
+        }
+        return !!(parseInt(item.color_id, 10) || parseInt(item.talle_id, 10));
+    }
+
+    function actualizarVisibilidadColorTalle() {
+        var activo = false;
+        (itemsActuales || []).forEach(function (item) {
+            if (itemManejaColorTalle(item)) {
+                activo = true;
+            }
+        });
+        $('#tabla-items-recepcion .ms-col-color-talle').toggle(activo);
+    }
+
+    function opcionesSelectColorTalle(lista, placeholder, selectedId) {
+        var html = '<option value="">' + placeholder + '</option>';
+        var sel = selectedId ? String(selectedId) : '';
+        (lista || []).forEach(function (opt) {
+            html += '<option value="' + opt.id + '"' + (String(opt.id) === sel ? ' selected' : '') + '>'
+                + escHtml(opt.nombre || '') + '</option>';
+        });
+        return html;
+    }
+
+    function htmlCeldasColorTalle(item, idx, tipo, soloLectura) {
+        var maneja = itemManejaColorTalle(item);
+        var colorNom = item.color_nombre || '';
+        var talleNom = item.talle_nombre || '';
+        var colorId = item.color_id || '';
+        var talleId = item.talle_id || '';
+        var estilo = maneja ? '' : ' style="display:none;"';
+        var html = '';
+
+        if (tipo === 'EXTRA' && maneja && !soloLectura) {
+            html += '<td class="align-middle ms-col-color-talle"' + estilo + '>';
+            html += '<select class="form-control form-control-sm item-color-select" data-idx="' + idx + '">';
+            html += opcionesSelectColorTalle(window.msColoresOpciones || [], '— Color —', colorId);
+            html += '</select></td>';
+            html += '<td class="align-middle ms-col-color-talle"' + estilo + '>';
+            html += '<select class="form-control form-control-sm item-talle-select" data-idx="' + idx + '">';
+            html += opcionesSelectColorTalle(window.msTallesOpciones || [], '— Talle —', talleId);
+            html += '</select></td>';
+            return html;
+        }
+
+        html += '<td class="align-middle ms-col-color-talle small"' + estilo + '>' + escHtml(colorNom || (colorId ? String(colorId) : '—')) + '</td>';
+        html += '<td class="align-middle ms-col-color-talle small"' + estilo + '>' + escHtml(talleNom || (talleId ? String(talleId) : '—')) + '</td>';
+        return html;
     }
 
     function cargarOc(mostrarAlertaSiVacio, opciones) {
@@ -2285,15 +2349,46 @@
                 || 'UN';
         }
         item.maneja_parte_unica = String(dataArticulo.numeroparte || '0') === '1';
+        var manejaCt = !!(dataArticulo.maneja_stock_color_talle === true
+            || dataArticulo.maneja_stock_color_talle === 1
+            || dataArticulo.maneja_stock_color_talle === '1');
+        var modoCt = null;
+        (itemsActuales || []).forEach(function (it, i) {
+            if (i === idx || !it || !it.articulo_id) {
+                return;
+            }
+            if (modoCt === null) {
+                modoCt = itemManejaColorTalle(it);
+            }
+        });
+        if (modoCt !== null && modoCt !== manejaCt) {
+            alert(modoCt
+                ? 'Este comprobante es de stock por color/talle. No puede cargar artículos sin esa gestión.'
+                : 'Este comprobante no admite artículos con stock por color/talle.');
+            item.articulo_id = null;
+            item.sku = '';
+            item.descripcion = '';
+            item.color_id = null;
+            item.talle_id = null;
+            item.color_nombre = '';
+            item.talle_nombre = '';
+            item.maneja_stock_color_talle = false;
+            renderItems(itemsActuales);
+            return;
+        }
+        item.maneja_stock_color_talle = manejaCt;
+        if (!manejaCt) {
+            item.color_id = null;
+            item.talle_id = null;
+            item.color_nombre = '';
+            item.talle_nombre = '';
+        }
         if (!item.moneda_id || parseInt(item.moneda_id, 10) <= 0) {
             item.moneda_id = monedaIdItem(itemsActuales[0] || {}, 0);
         }
         item.cotizacion = cotizacionItem(item, idx);
-        $tr.find('[name*="[articulo_id]"]').val(item.articulo_id);
-        $tr.find('.item-moneda').val(item.moneda_id);
-        $tr.find('.item-cotizacion').val(item.cotizacion);
-        $tr.find('.codigoarticulo').val(item.sku);
-        $tr.find('.descripcionarticulo').val(item.descripcion);
+        renderItems(itemsActuales);
+        $tr = $('#tbody-items-recepcion tr.item-recepcion-linea[data-idx="' + idx + '"]');
         recalcularLinea($tr, item);
         $tr.find('[name*="[deposito_id]"]').val(depositoLinea(item) > 0 ? depositoLinea(item) : '');
         $tr.find('.item-deposito-texto').html(depositoLineaTexto(item));
@@ -2448,6 +2543,31 @@
             var idx = parseInt($(this).data('idx'), 10);
             itemsActuales.splice(idx, 1);
             renderItems(itemsActuales);
+        });
+
+        $(document).on('change', '#tbody-items-recepcion .item-color-select, #tbody-items-recepcion .item-talle-select', function () {
+            var $sel = $(this);
+            var idx = parseInt($sel.data('idx'), 10);
+            var item = itemsActuales[idx];
+            if (!item) {
+                return;
+            }
+            var $tr = $sel.closest('tr');
+            if ($sel.hasClass('item-color-select')) {
+                item.color_id = $sel.val() || null;
+                item.color_nombre = $sel.find('option:selected').text() || '';
+                if (item.color_nombre.indexOf('—') === 0) {
+                    item.color_nombre = '';
+                }
+                $tr.find('.item-color-id').val(item.color_id || '');
+            } else {
+                item.talle_id = $sel.val() || null;
+                item.talle_nombre = $sel.find('option:selected').text() || '';
+                if (item.talle_nombre.indexOf('—') === 0) {
+                    item.talle_nombre = '';
+                }
+                $tr.find('.item-talle-id').val(item.talle_id || '');
+            }
         });
 
         $(document).on('change.recepprovArtSku', '#tbody-items-recepcion tr.item-recepcion-extra .codigoarticulo', function () {

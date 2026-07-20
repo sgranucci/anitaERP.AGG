@@ -10,15 +10,23 @@
         $partidaDesc = (string) ($a['descripcionpartidagasto'] ?? '');
         $capexCodigo = (string) ($a['codigocapex'] ?? '');
         $capexDesc = (string) ($a['descripcioncapex'] ?? '');
+        $colorNombre = (string) ($a['color_nombre'] ?? '');
+        $talleNombre = (string) ($a['talle_nombre'] ?? '');
     @endphp
     <tr class="wizard-oc-fila-item" data-lin-idx="{{ $idx }}"
         data-requisicion-articulo-id="{{ (int) ($a['requisicion_articulo_id'] ?? 0) }}"
         data-articulo-id="{{ (int) ($a['articulo_id'] ?? 0) }}"
         data-sku="{{ e($a['sku'] ?? '') }}"
-        data-descripcion="{{ e($a['descripcion_articulo'] ?? '') }}">
+        data-descripcion="{{ e($a['descripcion_articulo'] ?? '') }}"
+        data-color-id="{{ (int) ($a['color_id'] ?? 0) }}"
+        data-talle-id="{{ (int) ($a['talle_id'] ?? 0) }}"
+        data-color-nombre="{{ e($colorNombre) }}"
+        data-talle-nombre="{{ e($talleNombre) }}">
         <td class="text-center">{{ $idx + 1 }}</td>
         <td>{{ $a['sku'] ?? '' }}</td>
         <td>{{ $a['descripcion_articulo'] ?? '' }}</td>
+        <td>{{ $colorNombre !== '' ? $colorNombre : '—' }}</td>
+        <td>{{ $talleNombre !== '' ? $talleNombre : '—' }}</td>
         <td>
             <input type="number" step="0.0001" class="form-control form-control-sm wz-lin-cantidad" value="{{ $a['cantidad'] ?? '' }}">
         </td>
@@ -72,5 +80,5 @@
         </td>
     </tr>
 @empty
-    <tr><td colspan="12" class="text-center text-muted py-3">La requisición no tiene ítems pendientes.</td></tr>
+    <tr><td colspan="14" class="text-center text-muted py-3">La requisición no tiene ítems pendientes.</td></tr>
 @endforelse

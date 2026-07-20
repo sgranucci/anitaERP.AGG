@@ -16,7 +16,7 @@ final class SicoreFormatoV8Support
         $fechaComp = self::fechaLegacy((string) ($reg['fecha_comp'] ?? ''));
         $fechaRet = self::fechaLegacy((string) ($reg['fecha_retencion'] ?? ''));
         $fechaBoletin = self::fechaLegacy((string) ($reg['fecha_boletin'] ?? ''));
-        if ($fechaBoletin === '') {
+        if (trim($fechaBoletin) === '') {
             $fechaBoletin = '00/00/0000';
         }
 

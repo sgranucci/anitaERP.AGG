@@ -132,6 +132,8 @@ class RequisicionQuery implements RequisicionQueryInterface
                 'requisicion_articulos.centrocostos_destino',
                 'requisicion_articulos.partidagastos.articulos',
                 'requisicion_articulos.capexs',
+                'requisicion_articulos.color',
+                'requisicion_articulos.talle',
             ]);
         }
 

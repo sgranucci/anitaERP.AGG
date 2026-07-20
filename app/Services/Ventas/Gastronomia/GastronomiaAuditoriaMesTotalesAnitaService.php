@@ -534,11 +534,13 @@ final class GastronomiaAuditoriaMesTotalesAnitaService
         }
 
         foreach ($porHost as $grupo) {
-            $suma += $this->rendgastroSupport->netoGrupoHost($grupo);
+            // Incluye hosts de estacionamiento: restar también sus NC (cada host es homogéneo por PV;
+            // no afecta gastro, cuyos grupos no tienen cabeceras de estacionamiento).
+            $suma += $this->rendgastroSupport->netoGrupoHost($grupo, true);
         }
 
         foreach ($porSucursalHostVacio as $grupo) {
-            $suma += $this->rendgastroSupport->netoGrupoHost($grupo);
+            $suma += $this->rendgastroSupport->netoGrupoHost($grupo, true);
         }
 
         $post = array_values(array_filter(

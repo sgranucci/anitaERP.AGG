@@ -200,6 +200,10 @@
 			articulo_id: parseInt($tr.attr('data-articulo-id'), 10) || 0,
 			sku: $tr.attr('data-sku') || '',
 			descripcion: $tr.attr('data-descripcion') || '',
+			color_id: parseInt($tr.attr('data-color-id'), 10) || 0,
+			talle_id: parseInt($tr.attr('data-talle-id'), 10) || 0,
+			color_nombre: $tr.attr('data-color-nombre') || '',
+			talle_nombre: $tr.attr('data-talle-nombre') || '',
 			cantidad: $tr.find('.wz-lin-cantidad').val(),
 			precio: $tr.find('.wz-lin-precio').val(),
 			moneda_id: parseInt($tr.find('.wz-lin-moneda').val(), 10) || (META ? META.moneda_peso_id : 1),
@@ -461,7 +465,7 @@
 	function renderArticulos() {
 		var $b = $('#wizard-oc-tabla-articulos-body').empty();
 		if (!lineas.length) {
-			$b.append('<tr><td colspan="12" class="text-center text-muted py-3">La requisición no tiene ítems.</td></tr>');
+			$b.append('<tr><td colspan="14" class="text-center text-muted py-3">La requisición no tiene ítems.</td></tr>');
 			$('#wizard-oc-articulos-resumen').text('0 ítems');
 			return;
 		}
@@ -478,6 +482,8 @@
 			$tr.append('<td class="text-center">' + (idx + 1) + '</td>');
 			$tr.append('<td>' + htmlEsc(lin.sku) + '</td>');
 			$tr.append('<td>' + htmlEsc(lin.descripcion) + '</td>');
+			$tr.append('<td>' + htmlEsc(lin.color_nombre || (lin.color_id ? String(lin.color_id) : '—')) + '</td>');
+			$tr.append('<td>' + htmlEsc(lin.talle_nombre || (lin.talle_id ? String(lin.talle_id) : '—')) + '</td>');
 			$tr.append(
 				'<td><input type="number" step="0.0001" class="form-control form-control-sm wz-lin-cantidad" value="' + htmlEsc(lin.cantidad) + '"></td>'
 			);
@@ -752,6 +758,10 @@
 				articulo_id: a.articulo_id,
 				sku: a.sku || '',
 				descripcion: a.descripcion_articulo || '',
+				color_id: a.color_id || 0,
+				talle_id: a.talle_id || 0,
+				color_nombre: a.color_nombre || '',
+				talle_nombre: a.talle_nombre || '',
 				cantidad: a.cantidad,
 				precio: a.precio,
 				moneda_id: a.moneda_id,
@@ -1687,6 +1697,8 @@
 			comprobantes_json: JSON.stringify(g.comprobantes || []),
 			// Arrays de líneas
 			articulo_ids: liDel.map(function (l) { return l.articulo_id; }),
+			colores_id: liDel.map(function (l) { return l.color_id || ''; }),
+			talles_id: liDel.map(function (l) { return l.talle_id || ''; }),
 			cantidades: liDel.map(function (l) { return l.cantidad; }),
 			precios: liDel.map(function (l) { return l.precio; }),
 			moneda_linea_ids: liDel.map(function (l) { return l.moneda_id; }),

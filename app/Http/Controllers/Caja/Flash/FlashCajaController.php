@@ -177,7 +177,8 @@ class FlashCajaController extends Controller
 
         $flash = $this->repository->findOrFail($id);
         $this->assertAccesoEmpresa((int) $flash->empresa_id);
-        $reporte = FlashCajaReporteSupport::armar($flash);
+        $conSeason = ! $request->has('con_season') || (int) $request->input('con_season') === 1;
+        $reporte = FlashCajaReporteSupport::armar($flash, $conSeason);
 
         return match (strtoupper((string) $formato)) {
             'EXCEL' => (new FlashCajaReporteExport($reporte))
@@ -275,18 +276,22 @@ class FlashCajaController extends Controller
             $empresa,
             (string) $filtros['fecha_desde'],
             (string) $filtros['fecha_hasta'],
+            (int) ($filtros['con_season'] ?? 1) === 1,
         );
     }
 
     /**
-     * @param  array{empresa_id: int, fecha_desde: string, fecha_hasta: string}  $filtros
-     * @return array{empresa_id: int, fecha_desde: string, fecha_hasta: string}
+     * @param  array{empresa_id: int, fecha_desde: string, fecha_hasta: string, con_season?: int}  $filtros
+     * @return array{empresa_id: int, fecha_desde: string, fecha_hasta: string, con_season: int}
      */
     private function aplicarDefaultsHistorico(array $filtros): array
     {
         if ($filtros['fecha_desde'] === '' && $filtros['fecha_hasta'] === '') {
             $filtros['fecha_desde'] = Carbon::today()->startOfMonth()->format('Y-m-d');
             $filtros['fecha_hasta'] = Carbon::today()->format('Y-m-d');
+        }
+        if (! isset($filtros['con_season'])) {
+            $filtros['con_season'] = 1;
         }
 
         return $filtros;

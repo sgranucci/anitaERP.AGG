@@ -7,6 +7,19 @@
     $subtituloFiltros = $subtituloFiltros ?? '';
     $logosCabecera = $esExcel ? [] : EmpresaLogoArchivo::logosCabeceraDesdeColeccion($filas);
     $colspan = 10;
+
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtNum = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -29,7 +42,8 @@
 </head>
 <body>
 @if ($esExcel)
-    <table>
+    {{-- Una sola tabla: logo + título + subtítulo + cabecera + datos (evita filas vacías entre tablas) --}}
+    <table class="data">
         @if ($reservarFilaLogoExcel)
             <tbody>
                 <tr><td colspan="{{ $colspan }}" style="height: 52px;">&#160;</td></tr>
@@ -42,6 +56,40 @@
             <tr>
                 <td colspan="{{ $colspan }}"><strong>Generado {{ date('d/m/Y H:i') }} — {{ $subtituloFiltros }}</strong></td>
             </tr>
+        </tbody>
+        <thead>
+            <tr>
+                <th>Tipo</th>
+                <th>Fecha / hora</th>
+                <th>Referencia</th>
+                <th>Empresa</th>
+                <th>PC</th>
+                <th>Punto venta</th>
+                <th>Turno</th>
+                <th>Jornada</th>
+                <th>Usuario</th>
+                <th class="num">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($filas as $f)
+                <tr>
+                    <td>{{ $f->tipo_etiqueta }}</td>
+                    <td>{{ $f->fecha_hora }}</td>
+                    <td>{{ $f->referencia }}</td>
+                    <td>{{ $f->nombreempresa }}</td>
+                    <td>{{ $f->identificador_pc }}</td>
+                    <td>{{ $f->puntoventa_etiqueta !== '' ? $f->puntoventa_etiqueta : '—' }}</td>
+                    <td>{{ $f->turno_nombre }}</td>
+                    <td>{{ $f->fecha_jornada }}</td>
+                    <td>{{ $f->usuario }}</td>
+                    <td class="num">{{ $fmtNum($f->total) }}</td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="{{ $colspan }}" style="text-align:center;">Sin registros</td>
+                </tr>
+            @endforelse
         </tbody>
     </table>
 @else
@@ -62,43 +110,43 @@
             </td>
         </tr>
     </table>
-@endif
 
-<table class="data">
-    <thead>
-        <tr>
-            <th>Tipo</th>
-            <th>Fecha / hora</th>
-            <th>Referencia</th>
-            <th>Empresa</th>
-            <th>PC</th>
-            <th>Punto venta</th>
-            <th>Turno</th>
-            <th>Jornada</th>
-            <th>Usuario</th>
-            <th class="num">Total</th>
-        </tr>
-    </thead>
-    <tbody>
-        @forelse ($filas as $f)
+    <table class="data">
+        <thead>
             <tr>
-                <td>{{ $f->tipo_etiqueta }}</td>
-                <td>{{ $f->fecha_hora }}</td>
-                <td>{{ $f->referencia }}</td>
-                <td>{{ $f->nombreempresa }}</td>
-                <td>{{ $f->identificador_pc }}</td>
-                <td>{{ $f->puntoventa_etiqueta !== '' ? $f->puntoventa_etiqueta : '—' }}</td>
-                <td>{{ $f->turno_nombre }}</td>
-                <td>{{ $f->fecha_jornada }}</td>
-                <td>{{ $f->usuario }}</td>
-                <td class="num">{{ number_format((float) $f->total, 2, ',', '.') }}</td>
+                <th>Tipo</th>
+                <th>Fecha / hora</th>
+                <th>Referencia</th>
+                <th>Empresa</th>
+                <th>PC</th>
+                <th>Punto venta</th>
+                <th>Turno</th>
+                <th>Jornada</th>
+                <th>Usuario</th>
+                <th class="num">Total</th>
             </tr>
-        @empty
-            <tr>
-                <td colspan="{{ $colspan }}" style="text-align:center;">Sin registros</td>
-            </tr>
-        @endforelse
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            @forelse ($filas as $f)
+                <tr>
+                    <td>{{ $f->tipo_etiqueta }}</td>
+                    <td>{{ $f->fecha_hora }}</td>
+                    <td>{{ $f->referencia }}</td>
+                    <td>{{ $f->nombreempresa }}</td>
+                    <td>{{ $f->identificador_pc }}</td>
+                    <td>{{ $f->puntoventa_etiqueta !== '' ? $f->puntoventa_etiqueta : '—' }}</td>
+                    <td>{{ $f->turno_nombre }}</td>
+                    <td>{{ $f->fecha_jornada }}</td>
+                    <td>{{ $f->usuario }}</td>
+                    <td class="num">{{ $fmtNum($f->total) }}</td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="{{ $colspan }}" style="text-align:center;">Sin registros</td>
+                </tr>
+            @endforelse
+        </tbody>
+    </table>
+@endif
 </body>
 </html>

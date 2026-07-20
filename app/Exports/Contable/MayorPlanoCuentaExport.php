@@ -4,6 +4,7 @@ namespace App\Exports\Contable;
 
 use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -76,13 +77,17 @@ class MayorPlanoCuentaExport implements FromView, ShouldAutoSize, WithColumnForm
 
     public function columnFormats(): array
     {
+        // Importes con máscara neutra: cada PC los muestra según su config regional.
+        $formato = ExcelFormatoNumero::preferenciaGlobal();
+
         return [
             'B' => NumberFormat::FORMAT_TEXT,
             'H' => NumberFormat::FORMAT_TEXT,
-            'L' => NumberFormat::FORMAT_NUMBER_00,
-            'M' => NumberFormat::FORMAT_NUMBER_00,
-            'N' => NumberFormat::FORMAT_NUMBER_00,
-            'O' => NumberFormat::FORMAT_NUMBER_00,
+            'J' => ExcelFormatoNumero::codigoColumna($formato, 4), // Cotización
+            'L' => ExcelFormatoNumero::codigoColumna($formato, 2), // Debe
+            'M' => ExcelFormatoNumero::codigoColumna($formato, 2), // Haber
+            'N' => ExcelFormatoNumero::codigoColumna($formato, 2), // Saldo del mes
+            'O' => ExcelFormatoNumero::codigoColumna($formato, 2), // Saldo ejercicio
         ];
     }
 

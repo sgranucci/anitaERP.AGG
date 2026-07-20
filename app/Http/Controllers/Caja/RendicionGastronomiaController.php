@@ -73,7 +73,7 @@ class RendicionGastronomiaController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new \App\Exports\Caja\RendicionGastronomiaCajaExport($rendiciones),
+                    new \App\Exports\Caja\RendicionGastronomiaCajaExport($rendiciones, $formato === 'CSV'),
                     'rendicion_gastronomia_caja.'.$ext,
                     $mime,
                 );

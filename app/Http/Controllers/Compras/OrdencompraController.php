@@ -14,6 +14,8 @@ use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
 use App\Models\Configuracion\Moneda;
+use App\Models\Stock\Color;
+use App\Models\Stock\Talle;
 use App\Models\Ventas\Transporte;
 use App\Queries\Compras\RequisicionQueryInterface;
 use App\Queries\Configuracion\CotizacionQueryInterface;
@@ -900,6 +902,9 @@ class OrdencompraController extends Controller
             $oc_revertir_cierre_lineas = $this->ordencompraRevertirCierreLineaService->resumen($id);
         }
 
+        $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
+
         return view('compras.ordencompra.editar', compact(
             'data',
             'empresa_query',
@@ -927,6 +932,8 @@ class OrdencompraController extends Controller
             'sugerir_envio_oc',
             'filtrosQuery',
             'oc_revertir_cierre_lineas',
+            'color_query',
+            'talle_query',
         ));
     }
 }

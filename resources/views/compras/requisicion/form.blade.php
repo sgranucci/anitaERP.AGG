@@ -224,7 +224,25 @@
         if (isset($data) && $data && $data->requisicion_articulos && $data->requisicion_articulos->count()) {
             $monedaDefaultLinea = (int) ($data->requisicion_articulos->first()->moneda_id ?? 1);
         }
+        $modoStockColorTalleInicial = old('modo_stock_color_talle', '');
+        if ($modoStockColorTalleInicial === '' && isset($data) && $data && $data->requisicion_articulos) {
+            foreach ($data->requisicion_articulos as $linModo) {
+                if ((bool) (optional($linModo->articulos)->maneja_stock_color_talle ?? false)
+                    || (int) ($linModo->color_id ?? 0) > 0
+                    || (int) ($linModo->talle_id ?? 0) > 0) {
+                    $modoStockColorTalleInicial = '1';
+                    break;
+                }
+            }
+            if ($modoStockColorTalleInicial === '' && $data->requisicion_articulos->count() > 0) {
+                $modoStockColorTalleInicial = '0';
+            }
+        }
     @endphp
+    <div id="ms-ayuda-color-talle" class="alert alert-info py-2 small mb-2" style="display:none;">
+        Este comprobante usa stock por color y talle: todas las líneas deben tener color y talle.
+    </div>
+    <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
     <style>
         #tabla-articulos-requisicion tbody tr.req-requisicion-linea-cerrada td {
             background-color: rgba(25, 135, 84, 0.1);
@@ -254,15 +272,17 @@
     <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-requisicion-moneda-default="{{ $monedaDefaultLinea }}">
         <thead>
             <tr>
-                <th style="width: 13%;">Artículo</th>
-                <th style="width: 15%;">Descripción</th>
+                <th style="width: 12%;">Artículo</th>
+                <th style="width: 13%;">Descripción</th>
+                <th class="ms-col-color-talle" style="width: 7%; display:none;">Color</th>
+                <th class="ms-col-color-talle" style="width: 6%; display:none;">Talle</th>
                 <th style="width: 7%;">Cantidad</th>
                 <th style="width: 6%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase)">Cant. alt.</th>
-                <th style="width: 8%;">Precio unit.</th>
+                <th style="width: 7%;">Precio unit.</th>
                 <th style="width: 5%;">Moneda</th>
-                <th style="width: 10%;">CC destino</th>
-                <th style="width: 21%;">Partida presupuesto</th>
-                <th style="width: 21%;">Capex</th>
+                <th style="width: 9%;">CC destino</th>
+                <th style="width: 18%;">Partida presupuesto</th>
+                <th style="width: 18%;">Capex</th>
                 @if(!$lineasSoloLectura)
                 <th style="width: 4%;"></th>
                 @endif
@@ -291,8 +311,15 @@
                         ? rtrim(rtrim(number_format((float) $_cantAltOld, 4, '.', ''), '0'), '.')
                         : '';
                 }
+                $_colorIdLin = (int) old('colores_id.'.$idx, $linea->color_id ?? 0);
+                $_talleIdLin = (int) old('talles_id.'.$idx, $linea->talle_id ?? 0);
+                $_manejaColorTalle = (bool) old(
+                    'maneja_stock_color_talle.'.$idx,
+                    optional($linea->articulos)->maneja_stock_color_talle ?? ($_colorIdLin > 0 || $_talleIdLin > 0)
+                );
             @endphp
-            <tr class="item-requisicion-articulo{{ $_lineaCerrada ? ' req-requisicion-linea-cerrada' : '' }}"@if($_lineaCerrada) title="{{ e($_etiqCierre) }}"@endif>
+            <tr class="item-requisicion-articulo{{ $_lineaCerrada ? ' req-requisicion-linea-cerrada' : '' }}"@if($_lineaCerrada) title="{{ e($_etiqCierre) }}"@endif
+                data-maneja-stock-color-talle="{{ $_manejaColorTalle ? '1' : '0' }}">
                 <td>
                     <input type="hidden" class="requisicion_articulo_id" name="requisicion_articulo_ids[]" value="{{ old('requisicion_articulo_ids.'.$idx, $linea->id ?? '') }}">
                     <input type="hidden" name="cantidadalternativas[]" class="req-cantidadalternativa" value="{{ $_cantAltShow }}">
@@ -310,6 +337,11 @@
                 <td>
                     <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{ old('descripcionarticulos.'.$idx, optional($linea->articulos)->descripcion ?? '') }}" readonly>
                 </td>
+                @include('stock.movimientostock.partials.fila_color_talle', [
+                    'colorId' => $_colorIdLin,
+                    'talleId' => $_talleIdLin,
+                    'manejaColorTalle' => $_manejaColorTalle,
+                ])
                 <td>
                     <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $cabeceraSoloLectura ? 'readonly' : '' }}>
                     <input type="hidden" class="req-unidadesxenvase" value="{{ $_uxenv > 0 ? $_uxenv : '' }}">

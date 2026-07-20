@@ -101,7 +101,7 @@ class Comprobante_ProveedorController extends Controller
 
             case 'CSV':
                 return (new ComprobanteProveedorListadoExport($this->comprobanteRepository))
-                    ->parametros($busqueda)
+                    ->parametros($busqueda, true)
                     ->download('comprobante_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 

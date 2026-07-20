@@ -5,9 +5,16 @@
     $modoDeuda = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE)
         === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA;
     $paraExcel = ! empty($para_excel);
-    $formatearMonto = static function ($valor) use ($paraExcel) {
+    // Excel en modo auto: número crudo (adaptable a la región de la PC). CSV/forzado: texto formateado.
+    $formatoNumeroExcel = $formato_numero_excel ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumeroExcel);
+    $formatearMonto = static function ($valor) use ($paraExcel, $formatoNumeroExcel, $autoExcelNum) {
         if ($paraExcel) {
-            return $valor;
+            if ($autoExcelNum) {
+                return number_format((float) $valor, 2, '.', '');
+            }
+
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto((float) $valor, $formatoNumeroExcel, 2);
         }
 
         return number_format((float) $valor, 2, ',', '.');

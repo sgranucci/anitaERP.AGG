@@ -6,6 +6,8 @@
     foreach ($lineasOc as $item) {
         $sku = $item->articulos->sku ?? '';
         $descripcion = $item->articulos->descripcion ?? '';
+        $colorNom = optional($item->color)->nombre ?? '';
+        $talleNom = optional($item->talle)->nombre ?? '';
         $mon = $item->monedas->abreviatura ?? '';
         $ccDestNombre = optional($item->centrocostos_destino)->nombre ?? '';
         $ccDestCod = optional($item->centrocostos_destino)->codigo ?? '';
@@ -28,6 +30,8 @@
         $partes = [
             $sku !== '' ? 'SKU '.$sku : null,
             $descripcion !== '' ? $descripcion : null,
+            $colorNom !== '' ? 'Color '.$colorNom : null,
+            $talleNom !== '' ? 'Talle '.$talleNom : null,
             'Cant. '.($cantidad !== '' ? $cantidad : '—'),
             'P. unit '.($precio !== '' ? $precio : '—').($mon !== '' ? ' '.$mon : ''),
             'Subt. '.number_format($subtotal, 2, ',', '.').($mon !== '' ? ' '.$mon : ''),

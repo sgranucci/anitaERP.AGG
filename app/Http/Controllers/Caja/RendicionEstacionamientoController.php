@@ -74,7 +74,7 @@ class RendicionEstacionamientoController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new \App\Exports\Caja\RendicionEstacionamientoCajaExport($rendiciones),
+                    new \App\Exports\Caja\RendicionEstacionamientoCajaExport($rendiciones, $formato === 'CSV'),
                     'rendicion_estacionamiento_caja.'.$ext,
                     $mime,
                 );

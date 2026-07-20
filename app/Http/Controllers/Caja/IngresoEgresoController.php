@@ -153,7 +153,7 @@ class IngresoEgresoController extends Controller
 
         case 'CSV':
             return (new Caja_MovimientoExport($this->caja_movimientoQuery))
-                        ->parametros($busqueda)
+                        ->parametros($busqueda, true)
                         ->download('caja_movimiento.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   

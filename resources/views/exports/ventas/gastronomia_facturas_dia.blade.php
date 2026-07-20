@@ -1,3 +1,20 @@
+@php
+    $registros = $registros ?? collect();
+    $esExcel = ! empty($esExcel);
+    $subtitulo = 'Generado '.date('d/m/Y H:i').' — '.(is_countable($registros) ? count($registros) : 0).' registro(s)';
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtMonto = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
+@endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
         <tbody>
@@ -9,6 +26,9 @@
     <tbody>
         <tr>
             <td colspan="9"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Facturas gastronomía del día</h2></td>
+        </tr>
+        <tr>
+            <td colspan="9"><strong>{{ $subtitulo }}</strong></td>
         </tr>
     </tbody>
     <thead>
@@ -46,7 +66,7 @@
                 <td>{{ $v ? \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($v) : '—' }}</td>
                 <td>{{ $r->cuenta?->mozo?->nombre ?? '—' }}</td>
                 <td>{{ $pvTxt !== '' ? $pvTxt : '—' }}</td>
-                <td>{{ number_format((float) ($v?->total ?? 0), 2, ',', '.') }}</td>
+                <td>{{ $fmtMonto($v?->total ?? 0) }}</td>
                 <td>{{ $r->cuenta_gastronomia_id ?? '—' }}</td>
                 <td>{{ $r->identificador_pc ?? '—' }}</td>
             </tr>

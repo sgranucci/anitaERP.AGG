@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Exports\Contable;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -19,7 +21,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     private bool $hayFilaLogos = false;
 
@@ -43,6 +45,7 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidth
      */
     public function __construct(
         private array $resultado,
+        private bool $esCsv = false,
     ) {
     }
 
@@ -68,11 +71,24 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidth
             'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'matriz' => $matriz,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
     /**
-     * Matriz a lo ancho: FECHA + por cada PV (medios + Neto + IVA + NC), una fila por jornada.
+     * XLSX usa la preferencia global (auto adapta a la PC); CSV no lleva formato,
+     * así que cae al respaldo de config('export.csv_fallback').
+     */
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
+    }
+
+    /**
+     * Matriz a lo ancho: FECHA + por cada PV (medios + Venta + Neto + IVA + NC), una fila por jornada.
+     * "Venta" es la venta total (neta + NC = venta_bruta).
      *
      * @param  array<string, mixed>  $resultado
      * @return array{
@@ -147,11 +163,12 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidth
                 $labelsMedios[] = $label;
                 $labelsFila2[] = $label;
             }
+            $labelsFila2[] = 'Venta';
             $labelsFila2[] = 'Neto';
             $labelsFila2[] = 'IVA';
             $labelsFila2[] = 'NC';
 
-            $colsBloque = count($medios) + 3; // medios + Neto + IVA + NC
+            $colsBloque = count($medios) + 4; // medios + Venta + Neto + IVA + NC
             $bloquesPv[] = [
                 'puntoventa_id' => $pv['puntoventa_id'],
                 'pv_codigo' => $pv['pv_codigo'],
@@ -179,10 +196,11 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidth
             $labelsMediosTotales[] = $label;
             $labelsFila2[] = $label;
         }
+        $labelsFila2[] = 'Venta';
         $labelsFila2[] = 'Neto';
         $labelsFila2[] = 'IVA';
         $labelsFila2[] = 'NC';
-        $colsTotalDia = count($mediosTotales) + 3;
+        $colsTotalDia = count($mediosTotales) + 4;
         $bloqueTotalDia = [
             'puntoventa_id' => 0,
             'pv_codigo' => '',
@@ -211,6 +229,7 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidth
             $valores = [];
             /** @var array<int, float> $netoMediosDia */
             $netoMediosDia = [];
+            $ventaBrutaDia = 0.0;
             $ventaNetoDia = 0.0;
             $ventaIvaDia = 0.0;
             $ncDia = 0.0;
@@ -227,6 +246,7 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidth
                     foreach ($bloque['medios'] as $_) {
                         $valores[] = null;
                     }
+                    $valores[] = null; // Venta
                     $valores[] = null; // Neto
                     $valores[] = null; // IVA
                     $valores[] = null; // NC
@@ -251,12 +271,15 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidth
                         ? round($netoPorMedio[$ccId], 2)
                         : 0.0;
                 }
+                $brutoPv = round((float) ($pvDia['venta_bruta'] ?? 0), 2);
                 $netoPv = round((float) ($pvDia['venta_neto'] ?? 0), 2);
                 $ivaPv = round((float) ($pvDia['venta_iva'] ?? 0), 2);
                 $ncPv = round((float) ($pvDia['total_nc'] ?? 0), 2);
+                $valores[] = $brutoPv;
                 $valores[] = $netoPv;
                 $valores[] = $ivaPv;
                 $valores[] = $ncPv;
+                $ventaBrutaDia += $brutoPv;
                 $ventaNetoDia += $netoPv;
                 $ventaIvaDia += $ivaPv;
                 $ncDia += $ncPv;
@@ -268,6 +291,7 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidth
                 $valores[] = round((float) ($netoMediosDia[$ccId] ?? 0), 2);
             }
             $totalesDia = $dia['totales'] ?? [];
+            $valores[] = round((float) ($totalesDia['venta_bruta'] ?? $ventaBrutaDia), 2);
             $valores[] = round((float) ($totalesDia['venta_neto'] ?? $ventaNetoDia), 2);
             $valores[] = round((float) ($totalesDia['venta_iva'] ?? $ventaIvaDia), 2);
             $valores[] = round((float) ($totalesDia['total_nc'] ?? $ncDia), 2);
@@ -333,6 +357,23 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnWidth
         }
 
         return $widths;
+    }
+
+    /**
+     * Todas las columnas de datos (B en adelante) son importes: máscara neutra en
+     * modo "auto" para que Excel las muestre según la región de la PC y sean sumables.
+     *
+     * @return array<string, string>
+     */
+    public function columnFormats(): array
+    {
+        $codigo = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+        $formats = [];
+        for ($i = 2; $i <= max(2, $this->cantidadColumnas); $i++) {
+            $formats[Coordinate::stringFromColumnIndex($i)] = $codigo;
+        }
+
+        return $formats;
     }
 
     public function styles(Worksheet $sheet): array

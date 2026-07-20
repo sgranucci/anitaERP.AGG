@@ -71,7 +71,7 @@ class RendicionBingoController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new \App\Exports\Caja\RendicionBingoCajaExport($rendiciones),
+                    new \App\Exports\Caja\RendicionBingoCajaExport($rendiciones, $formato === 'CSV'),
                     'rendicion_bingo_caja.'.$ext,
                     $mime,
                 );

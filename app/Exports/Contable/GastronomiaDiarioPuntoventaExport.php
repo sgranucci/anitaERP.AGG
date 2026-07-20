@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Exports\Contable;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -19,7 +21,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     private bool $hayFilaLogos = false;
 
@@ -43,6 +45,7 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
      */
     public function __construct(
         private array $resultado,
+        private bool $esCsv = false,
     ) {
     }
 
@@ -68,7 +71,19 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
             'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'matriz' => $matriz,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
+    }
+
+    /**
+     * XLSX usa la preferencia global (auto adapta a la PC); CSV no lleva formato,
+     * así que cae al respaldo de config('export.csv_fallback').
+     */
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     /**
@@ -341,6 +356,23 @@ class GastronomiaDiarioPuntoventaExport implements FromView, WithColumnWidths, W
         }
 
         return $widths;
+    }
+
+    /**
+     * Todas las columnas de datos (B en adelante) son importes: máscara neutra en
+     * modo "auto" para que Excel las muestre según la región de la PC y sean sumables.
+     *
+     * @return array<string, string>
+     */
+    public function columnFormats(): array
+    {
+        $codigo = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+        $formats = [];
+        for ($i = 2; $i <= max(2, $this->cantidadColumnas); $i++) {
+            $formats[Coordinate::stringFromColumnIndex($i)] = $codigo;
+        }
+
+        return $formats;
     }
 
     public function styles(Worksheet $sheet): array

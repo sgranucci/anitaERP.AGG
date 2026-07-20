@@ -1,3 +1,8 @@
+@php
+	$fmtMonto = \App\Support\Export\ExcelFormatoNumero::formateadorMonto(
+		\App\Support\Export\ExcelFormatoNumero::preferenciaGlobal()
+	);
+@endphp
 <h2> Asientos </h2>
 <table> 
 	<thead>
@@ -36,7 +41,7 @@
 							@foreach($data->asiento_movimientos as $mov)
 								@php $totalAsiento += ($mov->monto > 0 ? $mov->monto : 0); @endphp
 							@endforeach
-							{{number_format($totalAsiento,2)}}
+							{{ $fmtMonto($totalAsiento) }}
 						</td>
 						@php $flPrimerMovimiento = false; @endphp
 					@else
@@ -47,12 +52,12 @@
 					<td>{{ $movimiento->centrocostos->nombre ?? '' }}</td>
 					<td>
 						@if ($movimiento->monto > 0)
-							{{number_format($movimiento->monto,2)}}
+							{{ $fmtMonto($movimiento->monto) }}
 						@endif
 					</td>
 					<td>
 						@if ($movimiento->monto < 0)
-							{{number_format(abs($movimiento->monto),2)}}
+							{{ $fmtMonto(abs($movimiento->monto)) }}
 						@endif
 					</td>
 					<td>{{ $movimiento->monedas->nombre }}</td>

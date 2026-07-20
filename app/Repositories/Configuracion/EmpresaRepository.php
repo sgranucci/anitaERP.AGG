@@ -33,7 +33,9 @@ class EmpresaRepository implements EmpresaRepositoryInterface
         if (!$hay_empresa)
 			self::sincronizarConAnita();
 
-        return $this->model->orderBy('id','ASC')->get();
+        return $this->model->with(['pais:id,nombre', 'provincia:id,nombre', 'localidad:id,nombre'])
+            ->orderBy('id', 'ASC')
+            ->get();
     }
 
     public function traeEmpresasAsignadas()

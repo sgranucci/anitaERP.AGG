@@ -13,7 +13,7 @@ class Articulo_Movimiento extends Model
 {
     //use SoftDeletes;
     protected $fillable = ['fecha','fechajornada', 'tipotransaccion_id', 'tipotransaccion_stock_id', 'venta_id', 'venta_emision_id', 'movimientostock_id',
-                        'pedido_combinacion_id', 'ordentrabajo_id', 'lote', 'articulo_id', 'numeroparte', 'combinacion_id', 
+                        'pedido_combinacion_id', 'ordentrabajo_id', 'lote', 'articulo_id', 'color_id', 'talle_id', 'numeroparte', 'combinacion_id', 
                         'concepto', 'modulo_id', 'cantidad', 
                         'precio', 'costo', 'listaprecio_id', 'incluyeimpuesto', 
                         'moneda_id', 'descuento', 'descuentointegrado', 'deposito_id', 'bien_uso_id', 'loteimportacion_id',
@@ -49,6 +49,16 @@ class Articulo_Movimiento extends Model
     public function articulos()
     {
         return $this->belongsTo(Articulo::class, 'articulo_id', 'id');
+    }
+
+    public function color()
+    {
+        return $this->belongsTo(Color::class, 'color_id');
+    }
+
+    public function talle()
+    {
+        return $this->belongsTo(Talle::class, 'talle_id');
     }
 
     public function combinaciones()

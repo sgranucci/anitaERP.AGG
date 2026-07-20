@@ -147,6 +147,11 @@ $(function () {
 		}
 
 		if (enReq) {
+			if (typeof window.msAplicarExclusividadColorTalle === 'function') {
+				if (!window.msAplicarExclusividadColorTalle(dataArticulo, $row)) {
+					return;
+				}
+			}
 			reqEnriquecerUmAltDesdeArticulo($row, dataArticulo);
 		}
 	};
@@ -170,6 +175,8 @@ $(function () {
 		var $clone = $first.clone();
 		$clone.removeClass('req-requisicion-linea-cerrada').removeAttr('title');
 		$clone.find('input,select').val('');
+		$clone.find('select.ms-color-id, select.ms-talle-id').val('').attr('data-selected', '');
+		$clone.attr('data-maneja-stock-color-talle', '0');
 		reqLimpiarCantidadAlternativaHint($clone);
 		$clone.removeAttr('data-req-cc-manual data-req-moneda-manual');
 		$clone.find('select').each(function () {

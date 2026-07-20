@@ -9,7 +9,7 @@
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Reporte hist&oacute;rico Flash</h3>
+                <h3 class="card-title">Consolidated Income (Flash Report)</h3>
                 <div class="card-tools">
                     <a href="{{ route('flash_caja') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -35,11 +35,19 @@
                             <label for="fecha_desde">Desde <span class="text-danger">*</span></label>
                             <input type="date" name="fecha_desde" id="fecha_desde" class="form-control" required
                                    value="{{ $filtros['fecha_desde'] ?? '' }}">
+                            <small class="form-text text-muted">El listado arranca el d&iacute;a 1 del mes (como l-flash).</small>
                         </div>
                         <div class="form-group col-md-2 col-sm-6">
-                            <label for="fecha_hasta">Hasta <span class="text-danger">*</span></label>
+                            <label for="fecha_hasta">Hasta (through day) <span class="text-danger">*</span></label>
                             <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control" required
                                    value="{{ $filtros['fecha_hasta'] ?? '' }}">
+                        </div>
+                        <div class="form-group col-md-2 col-sm-6">
+                            <label for="con_season">Season index</label>
+                            <select name="con_season" id="con_season" class="form-control">
+                                <option value="1" {{ (int) ($filtros['con_season'] ?? 1) === 1 ? 'selected' : '' }}>Con season index</option>
+                                <option value="0" {{ (int) ($filtros['con_season'] ?? 1) === 0 ? 'selected' : '' }}>Sin season index</option>
+                            </select>
                         </div>
                         <div class="form-group col-md-auto">
                             <button type="submit" class="btn btn-primary">
@@ -60,58 +68,18 @@
                         <p class="text-muted small mb-3">
                             {!! $subtitulo ?? '' !!}
                             &mdash; {{ $reporte['cantidad_dias'] ?? 0 }} d&iacute;a(s) registrados
+                            @if(!empty($reporte['through_day']))
+                                &mdash; Through day: {{ $reporte['through_day'] }}
+                            @endif
                         </p>
 
                         @if(!empty($reporte['filas_diarias']))
-                            <h5 class="mb-2">Detalle por d&iacute;a</h5>
-                            <div class="table-responsive mb-4">
-                                <table class="table table-sm table-bordered table-striped" id="tabla-paginada">
-                                    <thead style="background:#85C1E9;color:#17202A;">
-                                        <tr>
-                                            <th>Fecha</th>
-                                            <th class="text-right">Att</th>
-                                            <th class="text-right">Slot win</th>
-                                            <th class="text-right">Rul win</th>
-                                            <th class="text-right">Bingo res.</th>
-                                            <th class="text-right">AyB</th>
-                                            <th class="text-right">Estac.</th>
-                                            <th class="text-right">Gaming</th>
-                                            <th class="text-right">Revenues</th>
-                                            <th class="width60"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach($reporte['filas_diarias'] as $dia)
-                                        <tr>
-                                            <td>{{ $dia['fecha'] }}</td>
-                                            <td class="text-right">{{ $dia['attendance'] ?? '' }}</td>
-                                            <td class="text-right">{{ number_format($dia['slot_win'], 2, ',', '.') }}</td>
-                                            <td class="text-right">{{ number_format($dia['rul_win'], 2, ',', '.') }}</td>
-                                            <td class="text-right">{{ number_format($dia['bingo_win'], 2, ',', '.') }}</td>
-                                            <td class="text-right">{{ number_format((float) $dia['flash']->ayb, 2, ',', '.') }}</td>
-                                            <td class="text-right">{{ number_format((float) $dia['flash']->estac, 2, ',', '.') }}</td>
-                                            <td class="text-right">{{ number_format($dia['total_gaming'], 2, ',', '.') }}</td>
-                                            <td class="text-right">{{ number_format($dia['total_revenues'], 2, ',', '.') }}</td>
-                                            <td class="text-center">
-                                                @if(can('exportar-reporte-flash-caja', false) && !empty($dia['id']))
-                                                    <a href="{{ route('flash_caja_reporte', ['id' => $dia['id'], 'formato' => 'PDF']) }}" class="text-danger" target="_blank" rel="noopener" title="PDF d&iacute;a"><i class="fa fa-file-pdf-o"></i></a>
-                                                    <a href="{{ route('flash_caja_reporte', ['id' => $dia['id'], 'formato' => 'EXCEL']) }}" class="text-success ml-1" title="Excel d&iacute;a"><i class="fa fa-file-excel-o"></i></a>
-                                                @endif
-                                            </td>
-                                        </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
+                            @include('caja.flash.partials.tabla_consolidated_income', [
+                                'reporte' => $reporte,
+                                'mostrar_acciones' => true,
+                            ])
                         @else
                             <div class="alert alert-warning">No hay registros flash en el per&iacute;odo seleccionado.</div>
-                        @endif
-
-                        @if(($reporte['cantidad_dias'] ?? 0) > 0)
-                            <h5 class="mb-2">Totales consolidados del per&iacute;odo</h5>
-                            <div class="border p-3 bg-light">
-                                @include('caja.flash.partials.contenido_reporte', $reporte)
-                            </div>
                         @endif
                     @endif
                 </div>

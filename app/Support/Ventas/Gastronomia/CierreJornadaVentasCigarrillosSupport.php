@@ -143,13 +143,14 @@ final class CierreJornadaVentasCigarrillosSupport
         float $totalFactura,
         float $impuestoInterno,
         float $importeCigarrillos,
+        float $exento = 0.0,
     ): array {
         if (abs($totalFactura) <= 0.0001) {
             return self::importesVacios();
         }
 
         if (abs($impuestoInterno) <= 0.0001) {
-            $base = self::desglosarBaseIvaConSigno($totalFactura, 0.0);
+            $base = self::desglosarBaseIvaConSigno($totalFactura, 0.0, $exento);
 
             return [
                 'ventas_gravadas' => $base['gravado'],
@@ -166,9 +167,15 @@ final class CierreJornadaVentasCigarrillosSupport
 
         $importeResto = round($totalFactura - $importeCig, 2);
 
-        $baseCig = self::desglosarBaseIvaConSigno($importeCig, $impuestoInterno);
-        $baseResto = abs($importeResto) > 0.0001
-            ? self::desglosarBaseIvaConSigno($importeResto, 0.0)
+        // El exento (venta sin IVA) se atribuye al tramo no-cigarrillos; si la factura es
+        // toda cigarrillos, al tramo cigarrillos. Nunca se le calcula IVA.
+        $restoTieneImporte = abs($importeResto) > 0.0001;
+        $exentoResto = $restoTieneImporte ? $exento : 0.0;
+        $exentoCig = $restoTieneImporte ? 0.0 : $exento;
+
+        $baseCig = self::desglosarBaseIvaConSigno($importeCig, $impuestoInterno, $exentoCig);
+        $baseResto = $restoTieneImporte
+            ? self::desglosarBaseIvaConSigno($importeResto, 0.0, $exentoResto)
             : ['gravado' => 0.0, 'iva' => 0.0, 'neto_venta' => 0.0];
 
         return [
@@ -182,20 +189,51 @@ final class CierreJornadaVentasCigarrillosSupport
     /**
      * @return array{gravado:float,iva:float,neto_venta:float}
      */
-    public static function desglosarBaseIvaConSigno(float $total, float $impuestoInterno): array
+    public static function desglosarBaseIvaConSigno(float $total, float $impuestoInterno, float $exento = 0.0): array
     {
         $sign = $total >= 0 ? 1.0 : -1.0;
         $absTotal = abs($total);
         $absImpuestoInterno = abs($impuestoInterno);
         $netoVentas = round(max(0.0, $absTotal - $absImpuestoInterno), 2);
-        $gravado = round($netoVentas / (1.0 + self::TASA_IVA_DEFAULT / 100.0), 2);
-        $iva = round($netoVentas - $gravado, 2);
+        // El exento es parte de la venta que NO lleva IVA (a ARCA el IVA va sobre el neto
+        // gravado, no sobre el exento): se excluye de la base gravable y se imputa igual a
+        // ventas. La base gravable = neto - impuesto interno - exento.
+        $absExento = min($netoVentas, abs($exento));
+        $baseGravable = round(max(0.0, $netoVentas - $absExento), 2);
+        $gravadoIva = round($baseGravable / (1.0 + self::TASA_IVA_DEFAULT / 100.0), 2);
+        $iva = round($baseGravable - $gravadoIva, 2);
+        // Ventas (gravado + exento) = neto menos el IVA (el exento no genera IVA).
+        $gravado = round($netoVentas - $iva, 2);
 
         return [
             'gravado' => round($sign * $gravado, 2),
             'iva' => round($sign * $iva, 2),
             'neto_venta' => round($sign * $netoVentas, 2),
         ];
+    }
+
+    /**
+     * Exento de cabecera (venta_impuestos concepto "Exento"), con signo según el comprobante.
+     */
+    public static function resolverExentoVenta(Venta $venta): float
+    {
+        $exento = self::sumarExentoCabecera($venta);
+        if (abs($exento) <= 0.0001) {
+            return 0.0;
+        }
+
+        return self::firmarImpuestoInternoSegunComprobante($venta, $exento);
+    }
+
+    public static function resolverExentoVentaPorVentaId(int $ventaId): float
+    {
+        if ($ventaId <= 0) {
+            return 0.0;
+        }
+
+        $venta = Venta::query()->find($ventaId);
+
+        return $venta !== null ? self::resolverExentoVenta($venta) : 0.0;
     }
 
     public static function articuloEsLineaMenuCigarrillos(Articulo $articulo): bool
@@ -251,6 +289,20 @@ final class CierreJornadaVentasCigarrillosSupport
         foreach ($venta->venta_impuestos ?? [] as $vi) {
             $concepto = mb_strtolower((string) ($vi->concepto ?? ''));
             if (str_contains($concepto, 'intern')) {
+                $total += (float) ($vi->importe ?? 0);
+            }
+        }
+
+        return round($total, 2);
+    }
+
+    private static function sumarExentoCabecera(Venta $venta): float
+    {
+        $venta->loadMissing('venta_impuestos');
+        $total = 0.0;
+        foreach ($venta->venta_impuestos ?? [] as $vi) {
+            $concepto = mb_strtolower((string) ($vi->concepto ?? ''));
+            if (str_contains($concepto, 'exent')) {
                 $total += (float) ($vi->importe ?? 0);
             }
         }

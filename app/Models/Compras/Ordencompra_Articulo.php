@@ -7,6 +7,8 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Presupuesto\Capex;
 use App\Models\Presupuesto\Partidagasto;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Color;
+use App\Models\Stock\Talle;
 use Illuminate\Database\Eloquent\Model;
 
 class Ordencompra_Articulo extends Model
@@ -14,7 +16,7 @@ class Ordencompra_Articulo extends Model
     protected $table = 'ordencompra_articulo';
 
     protected $fillable = [
-        'ordencompra_id', 'requisicion_articulo_id', 'fechaentrega', 'articulo_id', 'penvp_orden', 'penvp_nro_interno', 'estado_linea_oc', 'cantidad', 'precio', 'moneda_id', 'cotizacion',
+        'ordencompra_id', 'requisicion_articulo_id', 'fechaentrega', 'articulo_id', 'color_id', 'talle_id', 'penvp_orden', 'penvp_nro_interno', 'estado_linea_oc', 'cantidad', 'precio', 'moneda_id', 'cotizacion',
         'descuento', 'cantidadalternativa', 'detalle', 'centrocostodestino_id', 'partidagasto_id', 'capex_id',
         'precio_origen_tipo', 'precio_origen_ref_id', 'precio_origen_etiqueta',
     ];
@@ -27,6 +29,16 @@ class Ordencompra_Articulo extends Model
     public function articulos()
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
+    }
+
+    public function color()
+    {
+        return $this->belongsTo(Color::class, 'color_id');
+    }
+
+    public function talle()
+    {
+        return $this->belongsTo(Talle::class, 'talle_id');
     }
 
     public function monedas()

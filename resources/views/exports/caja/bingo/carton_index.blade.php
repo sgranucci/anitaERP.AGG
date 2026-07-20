@@ -1,3 +1,21 @@
+@php
+    $esExcel = ! empty($esExcel);
+    $datas = $datas ?? collect();
+    $subtitulo = 'Generado '.date('d/m/Y H:i').' — '.(is_countable($datas) ? count($datas) : 0).' registro(s)';
+
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtMonto = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
+@endphp
 <table>
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
@@ -9,6 +27,9 @@
 	<tbody>
 		<tr>
 			<td colspan="8"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de cartones de bingo</h2></td>
+		</tr>
+		<tr>
+			<td colspan="8"><strong>{{ $subtitulo }}</strong></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -29,7 +50,7 @@
 				<td>{{ $data->id }}</td>
 				<td>{{ $data->codigo }}</td>
 				<td>{{ $data->nombre }}</td>
-				<td>{{ number_format((float) $data->precio_unitario, 2, ',', '.') }}</td>
+				<td>{{ $fmtMonto($data->precio_unitario) }}</td>
 				<td>{{ $data->lineas }}</td>
 				<td>
                     @if ($data->es_azar)

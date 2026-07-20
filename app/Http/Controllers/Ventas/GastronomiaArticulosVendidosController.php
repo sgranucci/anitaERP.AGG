@@ -132,7 +132,7 @@ class GastronomiaArticulosVendidosController extends Controller
                     ->download('articulos_vendidos_gastronomia.xlsx');
 
             case 'CSV':
-                return (new GastronomiaArticulosVendidosExport($filas, $filtros))
+                return (new GastronomiaArticulosVendidosExport($filas, $filtros, true))
                     ->download('articulos_vendidos_gastronomia.csv', Excel::CSV);
         }
 

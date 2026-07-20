@@ -16,6 +16,8 @@ use App\Models\Compras\Requisicion_Estado;
 use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Oficinacompra;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Color;
+use App\Models\Stock\Talle;
 use App\Queries\Compras\RequisicionQueryInterface;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
@@ -181,6 +183,8 @@ class RequisicionController extends Controller
         $modo_provisorio = RequisicionProvisorioSupport::usuarioUsaModoProvisorio();
         $estado_provisorio = RequisicionProvisorioSupport::nombreEstadoProvisorio();
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class);
+        $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
         return view('compras.requisicion.crear', compact(
             'data',
@@ -196,6 +200,8 @@ class RequisicionController extends Controller
             'modo_provisorio',
             'estado_provisorio',
             'filtrosQuery',
+            'color_query',
+            'talle_query',
         ));
     }
 
@@ -420,6 +426,8 @@ class RequisicionController extends Controller
         $estado_provisorio = $nombreProvisorio;
         $puede_confirmar_provisorio = $es_provisorio && can('confirmar-requisicion', false);
         $cambios_articulo = app(RequisicionArticuloCambioService::class)->listarPorRequisicion((int) $id);
+        $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
         return view('compras.requisicion.editar', compact(
             'data',
@@ -451,6 +459,8 @@ class RequisicionController extends Controller
             'edicionLimitadaAprobada',
             'filtrosQuery',
             'cambios_articulo',
+            'color_query',
+            'talle_query',
         ));
     }
 
@@ -1062,6 +1072,8 @@ class RequisicionController extends Controller
             $puede_wizard_generar_multiples_oc = $datosOc['puede_wizard_generar_multiples_oc'];
             $requisicion_wizard_multiples_oc_url = $datosOc['requisicion_wizard_multiples_oc_url'];
             $cambios_articulo = app(RequisicionArticuloCambioService::class)->listarPorRequisicion((int) $id);
+            $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
+            $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
             return view('compras.requisicion.editar', compact(
                 'data',
@@ -1086,6 +1098,8 @@ class RequisicionController extends Controller
                 'requisicion_wizard_multiples_oc_url',
                 'filtrosQuery',
                 'cambios_articulo',
+                'color_query',
+                'talle_query',
             ));
         }
 

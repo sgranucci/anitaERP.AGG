@@ -16,6 +16,18 @@
         .\Carbon\Carbon::parse($resultado['fecha_hasta'] ?? now())->format('d/m/Y')
     );
     $colspan = 11;
+    $formatoExcelNum = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoExcelNum);
+    $fmtNum = function ($v) use ($esExcel, $formatoExcelNum, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoExcelNum, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
     $totRend = 0;
     $totFact = 0.0;
     $totVenta = 0.0;
@@ -61,23 +73,7 @@
     </style>
 </head>
 <body>
-@if ($esExcel)
-    <table>
-        @if ($reservarFilaLogoExcel)
-            <tbody>
-                <tr><td colspan="{{ $colspan }}" style="height: 52px;">&#160;</td></tr>
-            </tbody>
-        @endif
-        <tbody>
-            <tr>
-                <td colspan="{{ $colspan }}"><strong style="font-size: 16pt;">Conciliaci&oacute;n flash vending</strong></td>
-            </tr>
-            <tr>
-                <td colspan="{{ $colspan }}"><strong>Generado {{ date('d/m/Y H:i') }} — {{ $subtitulo }}</strong></td>
-            </tr>
-        </tbody>
-    </table>
-@else
+@if (! $esExcel)
     <table class="listado-header">
         <tr>
             <td style="width: 28%;">
@@ -105,6 +101,22 @@
 @endif
 
 <table class="data">
+    @if ($esExcel)
+        {{-- Una sola tabla: logo + t&iacute;tulo + subt&iacute;tulo + cabecera + datos (evita fila vac&iacute;a que desalinea la franja celeste y el freeze) --}}
+        @if ($reservarFilaLogoExcel)
+            <tbody>
+                <tr><td colspan="{{ $colspan }}" style="height: 52px;">&#160;</td></tr>
+            </tbody>
+        @endif
+        <tbody>
+            <tr>
+                <td colspan="{{ $colspan }}"><strong style="font-size: 16pt;">Conciliaci&oacute;n flash vending</strong></td>
+            </tr>
+            <tr>
+                <td colspan="{{ $colspan }}"><strong>Generado {{ date('d/m/Y H:i') }} — {{ $subtitulo }}</strong></td>
+            </tr>
+        </tbody>
+    @endif
     <thead>
         <tr>
             <th>Jornada</th>
@@ -126,14 +138,14 @@
                 <td>{{ $fila['fecha_jornada_fmt'] ?? '' }}</td>
                 <td>{{ $fila['estado'] ?? '' }}</td>
                 <td class="num">{{ (int) ($fila['cantidad_rendiciones'] ?? 0) }}</td>
-                <td class="num">{{ number_format((float) ($fila['total_facturacion'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['total_ventas_brutas'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['total_flash_vending'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['total_rendgastro_z'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['total_asientos_debe'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['diferencia_flash'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['diferencia_rendgastro'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['diferencia_venta_asientos'] ?? 0), 2, ',', '.') }}</td>
+                <td class="num">{{ $fmtNum($fila['total_facturacion'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['total_ventas_brutas'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['total_flash_vending'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['total_rendgastro_z'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['total_asientos_debe'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['diferencia_flash'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['diferencia_rendgastro'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['diferencia_venta_asientos'] ?? 0) }}</td>
             </tr>
         @empty
             <tr>
@@ -147,14 +159,14 @@
                 <td>Totales ({{ count($filas) }} d&iacute;as)</td>
                 <td></td>
                 <td class="num">{{ $totRend }}</td>
-                <td class="num">{{ number_format($totFact, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totVenta, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totFlash, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totRendg, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totAsientos, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totDifFlash, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totDifRendg, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totDifAsientos, 2, ',', '.') }}</td>
+                <td class="num">{{ $fmtNum($totFact) }}</td>
+                <td class="num">{{ $fmtNum($totVenta) }}</td>
+                <td class="num">{{ $fmtNum($totFlash) }}</td>
+                <td class="num">{{ $fmtNum($totRendg) }}</td>
+                <td class="num">{{ $fmtNum($totAsientos) }}</td>
+                <td class="num">{{ $fmtNum($totDifFlash) }}</td>
+                <td class="num">{{ $fmtNum($totDifRendg) }}</td>
+                <td class="num">{{ $fmtNum($totDifAsientos) }}</td>
             </tr>
         </tfoot>
     @endif

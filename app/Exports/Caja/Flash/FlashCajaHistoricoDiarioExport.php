@@ -20,7 +20,7 @@ class FlashCajaHistoricoDiarioExport implements FromView, ShouldAutoSize, WithEv
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'K';
+    private const COL_ULTIMA = 'AZ';
 
     /** @var array<string, mixed> */
     private array $reporte;

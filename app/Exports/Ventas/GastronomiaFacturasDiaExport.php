@@ -3,6 +3,7 @@
 namespace App\Exports\Ventas;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -25,32 +26,45 @@ class GastronomiaFacturasDiaExport implements FromView, ShouldAutoSize, WithColu
 
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 2;
+    private int $filaCabecerasExcel = 3;
 
-    private int $filaPrimeraDatosExcel = 3;
+    private int $filaPrimeraDatosExcel = 4;
 
     private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
+
+    private bool $esCsv = false;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
     private const ULTIMA_COL = 'I';
 
+    /** Congela Venta ID y Fecha (A y B): freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
     public function __construct(
-        private Collection $registros
-    ) {}
+        private Collection $registros,
+        bool $esCsv = false,
+    ) {
+        $this->esCsv = $esCsv;
+    }
 
     public function view(): View
     {
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($this->registros);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
         $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+        $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+        $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
         return view('exports.ventas.gastronomia_facturas_dia', [
             'registros' => $this->registros,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'esExcel' => true,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
@@ -63,10 +77,18 @@ class GastronomiaFacturasDiaExport implements FromView, ShouldAutoSize, WithColu
             'D' => NumberFormat::FORMAT_TEXT,
             'E' => NumberFormat::FORMAT_TEXT,
             'F' => NumberFormat::FORMAT_TEXT,
-            'G' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
+            // G = Total: número real con máscara neutra (sumable/adaptable).
+            'G' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
             'H' => NumberFormat::FORMAT_NUMBER,
             'I' => NumberFormat::FORMAT_TEXT,
         ];
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function styles(Worksheet $sheet)
@@ -147,7 +169,10 @@ class GastronomiaFacturasDiaExport implements FromView, ShouldAutoSize, WithColu
                     ],
                 ]);
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $sheet->mergeCells('A'.$this->filaSubtituloExcel.':'.$ult.$this->filaSubtituloExcel);
+                $sheet->getStyle('A'.$this->filaSubtituloExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }

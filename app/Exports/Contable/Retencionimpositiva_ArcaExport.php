@@ -18,6 +18,7 @@ use Maatwebsite\Excel\Events\AfterSheet;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use App\Repositories\Contable\Retencionimpositiva_ArcaRepositoryInterface;
+use App\Support\Export\ExcelFormatoNumero;
 use Carbon\Carbon;
 use App\ApiAnita;
 
@@ -55,6 +56,8 @@ class Retencionimpositiva_ArcaExport implements FromView, WithColumnFormatting, 
 				'A' => NumberFormat::FORMAT_TEXT,
 				'B' => NumberFormat::FORMAT_TEXT,
 				'E' => NumberFormat::FORMAT_GENERAL,
+				// Monto Retención como número real: cada PC lo muestra según su config regional.
+				'H' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
 			];
     }
 

@@ -110,6 +110,8 @@
         $.get(saldoUrl, {
             articulo_id: articuloId,
             deposito_id: depId,
+            color_id: colorIdFila($tr),
+            talle_id: talleIdFila($tr),
         }).done(function (data) {
             if (data && data.error) {
                 mostrarSaldoFila($tr, null, true);
@@ -119,6 +121,14 @@
         }).fail(function () {
             mostrarSaldoFila($tr, null, true);
         });
+    }
+
+    function colorIdFila($tr) {
+        return parseInt($tr.find('select.ms-color-id').val(), 10) || 0;
+    }
+
+    function talleIdFila($tr) {
+        return parseInt($tr.find('select.ms-talle-id').val(), 10) || 0;
     }
 
     function programarSaldoFila($tr) {

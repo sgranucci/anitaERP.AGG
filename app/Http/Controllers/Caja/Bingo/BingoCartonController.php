@@ -67,7 +67,7 @@ class BingoCartonController extends Controller
 
             case 'CSV':
                 return (new BingoCartonListadoExport($this->repository))
-                    ->parametros($filtros)
+                    ->parametros($filtros, true)
                     ->download('bingo_cartones.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 

@@ -499,10 +499,12 @@ final class CierreJornadaFacturadoAnitaSupport
                 $empresaId,
                 $importeCigarrillos,
             );
+            $exento = CierreJornadaVentasCigarrillosSupport::resolverExentoVenta($venta);
             $desglose = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables(
                 $monto,
                 $impuestoInterno,
                 $importeCigarrillos,
+                $exento,
             );
 
             if (abs($impuestoInterno) > 0.0001) {

@@ -1,3 +1,20 @@
+@php
+    $esExcel = ! empty($esExcel);
+    $registros = $registros ?? collect();
+    $subtitulo = 'Generado '.date('d/m/Y H:i').' — '.(is_countable($registros) ? count($registros) : 0).' registro(s)';
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtMonto = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
+@endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
         <tbody>
@@ -9,6 +26,9 @@
     <tbody>
         <tr>
             <td colspan="11"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Transferencias Interbanking (persistidas)</h2></td>
+        </tr>
+        <tr>
+            <td colspan="11"><strong>{{ $subtitulo }}</strong></td>
         </tr>
     </tbody>
     <thead>
@@ -34,7 +54,7 @@
                 <td>{{ $r->getAttribute('nombrebanco') ?? '' }}</td>
                 <td>{{ $r->debit_account_number ?? '' }}</td>
                 <td>{{ (string) ($r->transfer_type_description ?? $r->transfer_type_code ?? '') }}</td>
-                <td>{{ (float) $r->amount }}</td>
+                <td>{{ $fmtMonto($r->amount) }}</td>
                 <td>{{ $r->currency ?? '' }}</td>
                 <td>{{ $r->debit_account ?? '' }}</td>
                 <td>{{ $r->credit_account ?? '' }}</td>

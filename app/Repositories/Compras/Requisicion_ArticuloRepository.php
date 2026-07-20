@@ -3,6 +3,7 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Requisicion_Articulo;
+use App\Support\Stock\ArticuloStockColorTalleSupport;
 
 class Requisicion_ArticuloRepository implements Requisicion_ArticuloRepositoryInterface
 {
@@ -51,10 +52,18 @@ class Requisicion_ArticuloRepository implements Requisicion_ArticuloRepositoryIn
             }
 
             $precio = (float) ($data['precios'][$i] ?? 0);
+            $colorId = (int) ($data['colores_id'][$i] ?? 0);
+            $talleId = (int) ($data['talles_id'][$i] ?? 0);
+            [$colorMov, $talleMov] = ArticuloStockColorTalleSupport::valoresMovimiento(
+                $colorId > 0 ? $colorId : null,
+                $talleId > 0 ? $talleId : null,
+            );
             $payload = [
                 'requisicion_id' => $requisicion_id,
                 'fechaentrega' => $data['fechaentrega_articulos'][$i] ?? $data['fechaentrega'] ?? $data['fecha'] ?? date('Y-m-d'),
                 'articulo_id' => $articulo_id,
+                'color_id' => $colorMov,
+                'talle_id' => $talleMov,
                 'cantidad' => $cantidad,
                 'precio' => $precio,
                 'moneda_id' => $data['moneda_linea_ids'][$i] ?? $data['moneda_id'],

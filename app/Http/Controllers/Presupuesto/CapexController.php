@@ -131,7 +131,7 @@ class CapexController extends Controller
 
         case 'CSV':
             return (new CapexExport($this->capexQuery))
-                        ->parametros($filtros)
+                        ->parametros($filtros, true)
                         ->download('capex.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   
@@ -346,7 +346,7 @@ class CapexController extends Controller
             case 'CSV':
                 $ordencompra = $this->ordencompraService->leeOrdenCompraPorCodigo($capex->codigo);
                 return (new CapexOrdenCompraExport($ordencompra))
-                            ->parametros($codigoproyecto)
+                            ->parametros($codigoproyecto, true)
                             ->download('capex_ordencompra.csv', \Maatwebsite\Excel\Excel::CSV);
                 break;            
             }   

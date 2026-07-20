@@ -21,6 +21,18 @@
         .\Carbon\Carbon::parse($resultado['fecha_hasta'] ?? now())->format('d/m/Y')
     );
     $resumen = $resultado['resumen'] ?? [];
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtNum = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -67,7 +79,7 @@
                     Neto {{ number_format((float) ($resumen['venta_neta'] ?? 0), 2, ',', '.') }}
                     — {{ (int) ($resumen['cantidad_dias'] ?? 0) }} jornada(s)
                     — {{ count($bloquesPv) }} PV
-                    — columnas: FECHA + por cada PV: medios, Neto, IVA y NC + TOTAL DÍA
+                    — columnas: FECHA + por cada PV: medios, Venta, Neto, IVA y NC + TOTAL DÍA
                 </td>
             </tr>
         </tbody>
@@ -92,7 +104,7 @@
             </td>
             <td style="width: 22%; text-align: right; font-size: 6.5px;">
                 FECHA + PV a lo ancho<br>
-                (medios / Neto / IVA / NC)
+                (medios / Venta / Neto / IVA / NC)
             </td>
         </tr>
     </table>
@@ -118,6 +130,7 @@
                     @foreach ($bloque['labels_medios'] ?? [] as $labelMedio)
                         <th class="th-medio {{ $esTotal ? 'th-total-dia' : '' }}">{{ $labelMedio }}</th>
                     @endforeach
+                    <th class="th-venta {{ $esTotal ? 'th-total-dia' : '' }}">Venta</th>
                     <th class="th-venta {{ $esTotal ? 'th-total-dia' : '' }}">Neto</th>
                     <th class="th-iva {{ $esTotal ? 'th-total-dia' : '' }}">IVA</th>
                     <th class="th-nc {{ $esTotal ? 'th-total-dia' : '' }}">NC</th>
@@ -131,7 +144,7 @@
                     @foreach ($fila['valores'] ?? [] as $valor)
                         <td class="num">
                             @if ($valor !== null)
-                                {{ number_format((float) $valor, 2, ',', '.') }}
+                                {{ $fmtNum($valor) }}
                             @endif
                         </td>
                     @endforeach

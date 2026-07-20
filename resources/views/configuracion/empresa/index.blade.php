@@ -30,7 +30,11 @@ Empresas
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
-                            <th>Domicilio</th>
+                            <th>Direcci&oacute;n</th>
+                            <th>Localidad</th>
+                            <th>CP</th>
+                            <th>Provincia</th>
+                            <th>Pa&iacute;s</th>
                             <th>Nro. de inscripci&oacute;n</th>
                             <th>Nro. de IIBB</th>
                             <th>Fecha Ini. Act.</th>
@@ -44,6 +48,10 @@ Empresas
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->domicilio}}</td>
+                            <td>{{ optional($data->localidad)->nombre }}</td>
+                            <td>{{$data->codigopostal}}</td>
+                            <td>{{ optional($data->provincia)->nombre }}</td>
+                            <td>{{ optional($data->pais)->nombre }}</td>
                             <td>{{$data->nroinscripcion}}</td>
                             <td>{{$data->numeroiibb}}</td>
                             <td>{{date("d/m/Y", strtotime($data->fechainicioactividad ?? ''))}}</td>

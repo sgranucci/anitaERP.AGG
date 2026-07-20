@@ -187,7 +187,7 @@ class GastronomiaFacturasDiaController extends Controller
                     ->download('gastronomia_facturas_dia.xlsx');
 
             case 'CSV':
-                return (new GastronomiaFacturasDiaExport($registros))
+                return (new GastronomiaFacturasDiaExport($registros, true))
                     ->download('gastronomia_facturas_dia.csv', Excel::CSV);
         }
 

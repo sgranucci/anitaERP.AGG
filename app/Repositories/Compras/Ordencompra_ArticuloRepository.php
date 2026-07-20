@@ -3,6 +3,7 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Ordencompra_Articulo;
+use App\Support\Stock\ArticuloStockColorTalleSupport;
 
 class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryInterface
 {
@@ -46,11 +47,19 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
             if ($cot <= 0) {
                 $cot = 1.0;
             }
+            $colorId = (int) ($data['colores_id'][$i] ?? 0);
+            $talleId = (int) ($data['talles_id'][$i] ?? 0);
+            [$colorMov, $talleMov] = ArticuloStockColorTalleSupport::valoresMovimiento(
+                $colorId > 0 ? $colorId : null,
+                $talleId > 0 ? $talleId : null,
+            );
 
             $payload = [
                 'ordencompra_id' => $ordencompra_id,
                 'fechaentrega' => $data['fechaentrega_articulos'][$i] ?? $data['fechaentrega'] ?? $data['fecha'] ?? date('Y-m-d'),
                 'articulo_id' => $articulo_id,
+                'color_id' => $colorMov,
+                'talle_id' => $talleMov,
                 'cantidad' => $cantidad,
                 'precio' => $precio,
                 'moneda_id' => $data['moneda_linea_ids'][$i] ?? $data['moneda_id'] ?? 1,

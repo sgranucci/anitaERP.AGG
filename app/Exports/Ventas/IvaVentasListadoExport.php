@@ -4,8 +4,10 @@ namespace App\Exports\Ventas;
 
 use App\Services\Ventas\IvaVentasReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Ventas\IvaVentasListadoFiltros;
 use Illuminate\Contracts\View\View;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -43,6 +45,17 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
 
     private string $colUltima = 'Q';
 
+    /** Primera columna de importes (1-based). */
+    private int $idxPrimerMonto = 8;
+
+    /** Cantidad de columnas de importes. */
+    private int $cantidadMontos = 0;
+
+    private bool $esCsv = false;
+
+    /** Congela Cliente y Nombre (A y B): freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
     public function __construct(
         private readonly IvaVentasReporteService $reporteService,
     ) {
@@ -52,10 +65,11 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
      * @param  array<string, mixed>  $filtros
      * @param  array<string, mixed>|null  $resultado
      */
-    public function parametros(array $filtros, ?array $resultado = null): self
+    public function parametros(array $filtros, ?array $resultado = null, bool $esCsv = false): self
     {
         $this->filtros = $filtros;
         $this->resultado = $resultado;
+        $this->esCsv = $esCsv;
 
         return $this;
     }
@@ -63,6 +77,7 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
     public function view(): View
     {
         $resultado = $this->resultado ?? $this->reporteService->generarDesdeFiltros($this->filtros);
+        $this->resultado = $resultado;
         $filas = $resultado['filas_display'] ?? $resultado['filas'] ?? [];
         $coleccionLogos = collect($filas)->map(fn (array $f) => ['nombreempresa' => $f['nombreempresa'] ?? '']);
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogos);
@@ -70,6 +85,14 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
         $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
         $this->filaCabecerasExcel = $this->hayFilaLogos ? 4 : 3;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+
+        // Columnas fijas: sin host = 7 (A–G), con host = 8 (A–H). Los importes arrancan justo después.
+        $clasificarHost = ! empty($this->filtros['clasificar_por_host']);
+        $columnasFijas = $clasificarHost ? 8 : 7;
+        $this->cantidadMontos = count($resultado['columnas'] ?? []);
+        $this->idxPrimerMonto = $columnasFijas + 1;
+        $totalColumnas = max($columnasFijas, $columnasFijas + $this->cantidadMontos);
+        $this->colUltima = Coordinate::stringFromColumnIndex($totalColumnas);
 
         $subtitulo = 'Período: '.IvaVentasListadoFiltros::formatearPeriodoTexto($this->filtros)
             .' · Orden: '.IvaVentasListadoFiltros::formatearOrdenTexto($this->filtros)
@@ -82,20 +105,35 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
             'titulo' => 'IVA VENTAS',
             'subtitulo' => $subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
-            'clasificar_por_host' => ! empty($this->filtros['clasificar_por_host']),
+            'clasificar_por_host' => $clasificarHost,
             'para_pdf' => true,
+            'esExcel' => true,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
             'puede_ver_venta' => false,
         ]);
     }
 
     public function columnFormats(): array
     {
+        // Columnas fijas identificadoras como texto; columnas de importe con máscara neutra (sumables/adaptables).
+        $codigoMonto = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
         $cols = [];
-        foreach (range('A', $this->colUltima) as $c) {
-            $cols[$c] = NumberFormat::FORMAT_TEXT;
+
+        for ($i = 1; $i < $this->idxPrimerMonto; $i++) {
+            $cols[Coordinate::stringFromColumnIndex($i)] = NumberFormat::FORMAT_TEXT;
+        }
+        for ($i = 0; $i < $this->cantidadMontos; $i++) {
+            $cols[Coordinate::stringFromColumnIndex($this->idxPrimerMonto + $i)] = $codigoMonto;
         }
 
         return $cols;
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function styles(Worksheet $sheet)
@@ -157,7 +195,7 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
                     'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
                 ]);
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }

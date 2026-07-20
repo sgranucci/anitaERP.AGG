@@ -16,6 +16,18 @@
         .\Carbon\Carbon::parse($resultado['fecha_hasta'] ?? now())->format('d/m/Y')
     );
     $colspan = 11;
+    $formatoExcelNum = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoExcelNum);
+    $fmtNum = function ($v) use ($esExcel, $formatoExcelNum, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoExcelNum, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
     $totFact = 0.0;
     $totFlash = 0.0;
     $totAsientos = 0.0;
@@ -114,13 +126,13 @@
                 <td>{{ $fila['fecha_flash'] ?? '' }}</td>
                 <td>{{ $fila['estado'] ?? '' }}</td>
                 <td class="num">{{ (int) ($fila['cantidad_cierres'] ?? 0) }}</td>
-                <td class="num">{{ number_format((float) ($fila['total_facturacion'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['total_flash_ayb'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['total_asientos_debe'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['total_mayor_neto'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['diferencia_flash'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['diferencia_asientos'] ?? 0), 2, ',', '.') }}</td>
-                <td class="num">{{ number_format((float) ($fila['diferencia_mayor'] ?? 0), 2, ',', '.') }}</td>
+                <td class="num">{{ $fmtNum($fila['total_facturacion'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['total_flash_ayb'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['total_asientos_debe'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['total_mayor_neto'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['diferencia_flash'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['diferencia_asientos'] ?? 0) }}</td>
+                <td class="num">{{ $fmtNum($fila['diferencia_mayor'] ?? 0) }}</td>
             </tr>
         @empty
             <tr>
@@ -134,13 +146,13 @@
                 <td colspan="2">Totales ({{ count($filas) }} d&iacute;as)</td>
                 <td></td>
                 <td class="num">{{ $totCierres }}</td>
-                <td class="num">{{ number_format($totFact, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totFlash, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totAsientos, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totMayor, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totDifFlash, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totDifAsientos, 2, ',', '.') }}</td>
-                <td class="num">{{ number_format($totDifMayor, 2, ',', '.') }}</td>
+                <td class="num">{{ $fmtNum($totFact) }}</td>
+                <td class="num">{{ $fmtNum($totFlash) }}</td>
+                <td class="num">{{ $fmtNum($totAsientos) }}</td>
+                <td class="num">{{ $fmtNum($totMayor) }}</td>
+                <td class="num">{{ $fmtNum($totDifFlash) }}</td>
+                <td class="num">{{ $fmtNum($totDifAsientos) }}</td>
+                <td class="num">{{ $fmtNum($totDifMayor) }}</td>
             </tr>
         </tfoot>
     @endif

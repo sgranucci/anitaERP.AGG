@@ -5,9 +5,11 @@ namespace App\Exports\Contable;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Contable\CierreRendicionEstacionamientoListadoFiltros;
 use App\Support\Contable\CierreRendicionEstacionamientoMediosCobroSupport;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromView;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -18,7 +20,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class CierreRendicionEstacionamientoListadoExport implements FromView, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class CierreRendicionEstacionamientoListadoExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     private bool $hayFilaLogos = false;
 
@@ -50,6 +52,7 @@ class CierreRendicionEstacionamientoListadoExport implements FromView, WithColum
         private ?array $grupos,
         private bool $vistaPorTurno,
         private array $filtros = [],
+        private bool $esCsv = false,
     ) {
         $fuente = $vistaPorTurno
             ? ($this->rendiciones ?? collect())
@@ -81,12 +84,59 @@ class CierreRendicionEstacionamientoListadoExport implements FromView, WithColum
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'columnasMedios' => $this->columnasMedios,
             'subtituloFiltros' => $this->subtituloFiltros,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
     public function styles(Worksheet $sheet): array
     {
         return [];
+    }
+
+    /**
+     * Montos con máscara neutra (#,##0.00): sumables y adaptables a la región de
+     * la PC. Se resuelven dinámicamente porque las columnas de medios de cobro
+     * varían por consulta.
+     *
+     * @return array<string, string>
+     */
+    public function columnFormats(): array
+    {
+        $codigoMonto = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+        $formats = [];
+        foreach ($this->indicesColumnasMonto() as $idxCol) {
+            $letra = CierreRendicionEstacionamientoMediosCobroSupport::columnaExcel($idxCol);
+            $formats[$letra] = $codigoMonto;
+        }
+
+        return $formats;
+    }
+
+    /**
+     * Índices 0-based de columnas de dinero (2 decimales), excluyendo la columna
+     * "Rend." (conteo entero) de la vista por PV.
+     *
+     * @return list<int>
+     */
+    private function indicesColumnasMonto(): array
+    {
+        $idxs = $this->indicesColumnasNumericas();
+        if (! $this->vistaPorTurno) {
+            $idxs = array_values(array_filter($idxs, static fn (int $i): bool => $i !== 3));
+        }
+
+        return $idxs;
+    }
+
+    /**
+     * XLSX usa la preferencia global (auto adapta a la PC); CSV cae al respaldo
+     * de config('export.csv_fallback').
+     */
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function columnWidths(): array

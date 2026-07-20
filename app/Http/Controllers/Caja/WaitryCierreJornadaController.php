@@ -561,7 +561,7 @@ class WaitryCierreJornadaController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new \App\Exports\Caja\WaitryCierreJornadaExport($filas, $resumen, $titulo),
+                    new \App\Exports\Caja\WaitryCierreJornadaExport($filas, $resumen, $titulo, $empresaNombre, $formato === 'CSV'),
                     'waitry_cierre_jornada_'.$empresaId.'_'.$fechaJornada.'.'.$ext,
                     $mime,
                 );

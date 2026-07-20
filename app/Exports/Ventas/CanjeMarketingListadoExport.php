@@ -4,6 +4,7 @@ namespace App\Exports\Ventas;
 
 use App\Queries\Ventas\CanjeMarketingListadoQuery;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Ventas\CanjeMarketingListadoListaprecioCmvSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -25,16 +26,23 @@ class CanjeMarketingListadoExport implements FromView, ShouldAutoSize, WithColum
 
     private const COL_ULTIMA = 'M';
 
+    /** Congela Fecha y Empresa (A y B): freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
     /** @var array<string, mixed> */
     private array $filtros = [];
 
+    private bool $esCsv = false;
+
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 2;
+    private int $filaCabecerasExcel = 3;
 
-    private int $filaPrimeraDatosExcel = 3;
+    private int $filaPrimeraDatosExcel = 4;
 
     private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
@@ -47,9 +55,10 @@ class CanjeMarketingListadoExport implements FromView, ShouldAutoSize, WithColum
     /**
      * @param  array<string, mixed>  $filtros
      */
-    public function parametros(array $filtros): self
+    public function parametros(array $filtros, bool $esCsv = false): self
     {
         $this->filtros = $filtros;
+        $this->esCsv = $esCsv;
 
         return $this;
     }
@@ -60,7 +69,8 @@ class CanjeMarketingListadoExport implements FromView, ShouldAutoSize, WithColum
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($filas);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
         $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+        $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+        $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
         return view('exports.ventas.canje_marketing_listadoindex', [
@@ -69,17 +79,29 @@ class CanjeMarketingListadoExport implements FromView, ShouldAutoSize, WithColum
             'totales' => $this->query->totales($this->filtros),
             'listaprecio_cmv_etiqueta' => CanjeMarketingListadoListaprecioCmvSupport::etiquetaLista(),
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'esExcel' => true,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
     public function columnFormats(): array
     {
+        $pref = ExcelFormatoNumero::preferenciaGlobal();
+
         return [
             'C' => NumberFormat::FORMAT_TEXT,
-            'J' => NumberFormat::FORMAT_NUMBER_00,
-            'K' => NumberFormat::FORMAT_NUMBER_00,
-            'L' => NumberFormat::FORMAT_NUMBER_00,
+            // I = Cantidad (3 decimales); J = CMV; K = P. venta. L=Sala y M=SKU son texto.
+            'I' => ExcelFormatoNumero::codigoColumna($pref, 3),
+            'J' => ExcelFormatoNumero::codigoColumna($pref, 2),
+            'K' => ExcelFormatoNumero::codigoColumna($pref, 2),
         ];
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function styles(Worksheet $sheet)
@@ -162,7 +184,10 @@ class CanjeMarketingListadoExport implements FromView, ShouldAutoSize, WithColum
                     ],
                 ]);
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $sheet->mergeCells('A'.$this->filaSubtituloExcel.':'.self::COL_ULTIMA.$this->filaSubtituloExcel);
+                $sheet->getStyle('A'.$this->filaSubtituloExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }

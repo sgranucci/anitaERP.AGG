@@ -3,6 +3,7 @@
 namespace App\Exports\Caja\Estacionamiento;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -25,19 +26,25 @@ class EstacionamientoFacturasDiaExport implements FromView, ShouldAutoSize, With
 
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 2;
+    private int $filaCabecerasExcel = 3;
 
-    private int $filaPrimeraDatosExcel = 3;
+    private int $filaPrimeraDatosExcel = 4;
 
     private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
     private const ULTIMA_COL = 'I';
 
+    /** Congela también Venta ID y Fecha (columnas A y B): el freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
     public function __construct(
-        private Collection $registros
+        private Collection $registros,
+        private bool $esCsv = false,
     ) {}
 
     public function view(): View
@@ -45,26 +52,25 @@ class EstacionamientoFacturasDiaExport implements FromView, ShouldAutoSize, With
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($this->registros);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
         $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+        $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+        $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
         return view('exports.caja.estacionamiento.facturas_dia_estacionamiento', [
             'registros' => $this->registros,
+            'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
     public function columnFormats(): array
     {
         return [
-            'A' => NumberFormat::FORMAT_NUMBER,
-            'B' => NumberFormat::FORMAT_TEXT,
-            'C' => NumberFormat::FORMAT_TEXT,
-            'D' => NumberFormat::FORMAT_TEXT,
-            'E' => NumberFormat::FORMAT_TEXT,
-            'F' => NumberFormat::FORMAT_TEXT,
-            'G' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
-            'H' => NumberFormat::FORMAT_NUMBER,
+            'A' => NumberFormat::FORMAT_TEXT,
+            // G = Total: número real con máscara neutra (sumable/adaptable).
+            'G' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            'H' => NumberFormat::FORMAT_TEXT,
             'I' => NumberFormat::FORMAT_TEXT,
         ];
     }
@@ -147,13 +153,24 @@ class EstacionamientoFacturasDiaExport implements FromView, ShouldAutoSize, With
                     ],
                 ]);
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $filaSub = $this->filaSubtituloExcel;
+                $sheet->mergeCells('A'.$filaSub.':'.$ult.$filaSub);
+                $sheet->getStyle('A'.$filaSub)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }
 
     public function title(): string
     {
-        return 'Facturas gastronomía del día';
+        return 'Facturas estacionamiento del día';
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 }

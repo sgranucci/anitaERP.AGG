@@ -6,6 +6,7 @@
     $vistaPorTurno = ! empty($vistaPorTurno);
     $esExcel = ! empty($esExcel);
     $reservarFilaLogoExcel = ! empty($reservarFilaLogoExcel);
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
 
     if ($vistaPorTurno) {
         $filasFuente = $rendiciones ?? collect();
@@ -141,6 +142,8 @@
                 'grupos' => $grupos ?? [],
                 'columnasMedios' => $columnasMedios,
                 'colspan' => $colspan,
+                'esExcel' => $esExcel,
+                'formatoNumero' => $formatoNumero,
             ])
         </tbody>
     </table>
@@ -182,6 +185,8 @@
                 'grupos' => $grupos ?? [],
                 'columnasMedios' => $columnasMedios,
                 'colspan' => $colspan,
+                'esExcel' => $esExcel,
+                'formatoNumero' => $formatoNumero,
             ])
         </tbody>
     </table>

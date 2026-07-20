@@ -22,6 +22,7 @@ use App\Support\Compras\RequisicionAnitaColisionSupport;
 use App\Support\Compras\RequisicionAnitaSyncEstado;
 use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
+use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -115,6 +116,16 @@ class RequisicionService
             } catch (\InvalidArgumentException $e) {
                 return ['mensaje' => 'error', 'errores' => $e->getMessage()];
             }
+        }
+
+        try {
+            MovimientoStockColorTalleExclusividadSupport::validarLineas(
+                $data['articulo_ids'] ?? [],
+                $data['colores_id'] ?? [],
+                $data['talles_id'] ?? [],
+            );
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
         $cabecera = self::armaCabecera($data);
@@ -525,6 +536,16 @@ class RequisicionService
             } catch (\InvalidArgumentException $e) {
                 return ['mensaje' => 'error', 'errores' => $e->getMessage()];
             }
+        }
+
+        try {
+            MovimientoStockColorTalleExclusividadSupport::validarLineas(
+                $data['articulo_ids'] ?? [],
+                $data['colores_id'] ?? [],
+                $data['talles_id'] ?? [],
+            );
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
         $syncAnitaActivo = config('requisicion.anita.sync_activo', true) && ! $esProvisorio;

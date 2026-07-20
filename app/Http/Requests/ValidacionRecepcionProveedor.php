@@ -12,6 +12,7 @@ use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
 use App\Support\Stock\RecepcionProveedorIntercompanySupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
+use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -94,6 +95,8 @@ class ValidacionRecepcionProveedor extends FormRequest
             'items.*.ocr_descripcion_proveedor' => 'nullable|string|max:255',
             'items.*.ocr_codigobarra' => 'nullable|string|max:50',
             'items.*.ocr_unidad_compra' => 'nullable|string|max:30',
+            'items.*.color_id' => 'nullable|integer|exists:color,id',
+            'items.*.talle_id' => 'nullable|integer|exists:talle,id',
         ];
     }
 
@@ -268,6 +271,31 @@ class ValidacionRecepcionProveedor extends FormRequest
                         'Indique el impuesto interno de la factura (hay líneas con cigarrillos recibidos).'
                     );
                 }
+            }
+
+            $articulosId = [];
+            $coloresId = [];
+            $tallesId = [];
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $articuloId = (int) ($item['articulo_id'] ?? 0);
+                if ($articuloId <= 0) {
+                    continue;
+                }
+                $articulosId[] = $articuloId;
+                $coloresId[] = (int) ($item['color_id'] ?? 0) ?: null;
+                $tallesId[] = (int) ($item['talle_id'] ?? 0) ?: null;
+            }
+            try {
+                MovimientoStockColorTalleExclusividadSupport::validarLineas(
+                    $articulosId,
+                    $coloresId,
+                    $tallesId
+                );
+            } catch (\InvalidArgumentException $e) {
+                $validator->errors()->add('items', $e->getMessage());
             }
         });
     }

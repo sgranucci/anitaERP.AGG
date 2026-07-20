@@ -16,6 +16,8 @@ use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Support\Compras\OrdencompraLineaEstados;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
+use App\Support\Stock\ArticuloStockColorTalleSupport;
+use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
@@ -93,6 +95,7 @@ class RecepcionProveedorService
                 RecepcionProveedorPrecioPendienteSupport::puedeModificarPrecioEnRecepcion()
             );
             RecepcionProveedorArticuloExtraSupport::assertItemsPermitidos($items);
+            $this->validarExclusividadColorTalleItems($items);
 
             $analisis = $this->procesarItems(
                 $oc,
@@ -106,7 +109,7 @@ class RecepcionProveedorService
             $primerItem = $items[0] ?? null;
             $requiereImpuestoInterno = RecepcionProveedorImpuestoInternoSupport::itemsRequierenImpuestoInterno($items);
 
-            $recepcion = $this->repository->create([
+            $payload = [
                 'ordencompra_id' => $oc->id,
                 'tipo' => $tipo,
                 'recepcion_referencia_id' => $data['recepcion_referencia_id'] ?? null,
@@ -135,7 +138,24 @@ class RecepcionProveedorService
                 'origen_carga' => $data['origen_carga'] ?? 'MANUAL',
                 'creousuario_id' => Auth::id(),
                 'centrocosto_id' => RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga(),
-            ]);
+            ];
+
+            // Recuperación / forzado de COM (p. ej. reclamar hueco tras confirmación fallida).
+            if (isset($data['numerorecepcion']) && (int) $data['numerorecepcion'] > 0) {
+                $payload['numerorecepcion'] = (int) $data['numerorecepcion'];
+                $payload['anita_nro'] = (int) ($data['anita_nro'] ?? $data['numerorecepcion']);
+                if (isset($data['anita_tipo'])) {
+                    $payload['anita_tipo'] = $data['anita_tipo'];
+                }
+                if (isset($data['anita_letra'])) {
+                    $payload['anita_letra'] = $data['anita_letra'];
+                }
+                if (isset($data['anita_sucursal'])) {
+                    $payload['anita_sucursal'] = (int) $data['anita_sucursal'];
+                }
+            }
+
+            $recepcion = $this->repository->create($payload);
 
             $this->reemplazarItems($recepcion, $items);
             $this->logEstado($recepcion, null, RecepcionProveedorEstados::BORRADOR, 'Alta de recepción');
@@ -170,6 +190,7 @@ class RecepcionProveedorService
                 RecepcionProveedorPrecioPendienteSupport::puedeModificarPrecioEnRecepcion()
             );
             RecepcionProveedorArticuloExtraSupport::assertItemsPermitidos($items);
+            $this->validarExclusividadColorTalleItems($items);
             $analisis = $this->procesarItems(
                 $oc,
                 $items,
@@ -338,6 +359,13 @@ class RecepcionProveedorService
 
                 return $recepcion->fresh();
             } catch (\Throwable $e) {
+                // Soltar FK recepcion_proveedor_articulo → articulo_movimiento antes de borrar el MS.
+                try {
+                    $recepcion->recepcion_proveedor_articulos()->update(['articulo_movimiento_id' => null]);
+                } catch (\Throwable $rollbackFk) {
+                    report($rollbackFk);
+                }
+
                 if ($movId) {
                     try {
                         $this->movimientoStockService->borraMovimientoStock($movId);
@@ -505,6 +533,8 @@ class RecepcionProveedorService
             );
 
             $estadoAnterior = $recepcion->estado;
+
+            $recepcion->recepcion_proveedor_articulos()->update(['articulo_movimiento_id' => null]);
 
             if ($recepcion->movimientostock_id) {
                 $this->movimientoStockService->borraMovimientoStock((int) $recepcion->movimientostock_id);
@@ -822,6 +852,7 @@ class RecepcionProveedorService
             }
 
             $ccId = $this->centrocostoIdItemOError($item, $orden);
+            [$colorId, $talleId] = $this->colorTalleDesdeItem($item);
 
             Recepcion_Proveedor_Articulo::create([
                 'recepcion_proveedor_id' => $recepcion->id,
@@ -832,6 +863,8 @@ class RecepcionProveedorService
                 'penvp_orden' => $penvpOrden,
                 'penvp_nro_interno' => $penvpNroInterno > 0 ? $penvpNroInterno : null,
                 'articulo_id' => $item['articulo_id'],
+                'color_id' => $colorId,
+                'talle_id' => $talleId,
                 'articulo_stock_id' => $item['articulo_stock_id'] ?? null,
                 'cantidad' => $cantidad,
                 'cantidad_oc' => $item['cantidad_oc'] ?? null,
@@ -907,6 +940,8 @@ class RecepcionProveedorService
             $penvpNroInterno = (int) ($datosOc['penvp_nro_interno'] ?? 0);
         }
 
+        [$colorId, $talleId] = $this->colorTalleDesdeItem($item);
+
         Recepcion_Proveedor_Articulo::create([
             'recepcion_proveedor_id' => $recepcion->id,
             'ordencompra_articulo_id' => $ocArtId,
@@ -916,6 +951,8 @@ class RecepcionProveedorService
             'penvp_orden' => $penvpOrden,
             'penvp_nro_interno' => $penvpNroInterno > 0 ? $penvpNroInterno : null,
             'articulo_id' => (int) ($item['articulo_id'] ?? 0),
+            'color_id' => $colorId,
+            'talle_id' => $talleId,
             'articulo_stock_id' => $item['articulo_stock_id'] ?? null,
             'cantidad' => 0,
             'cantidad_oc' => $item['cantidad_oc'] ?? null,
@@ -945,6 +982,43 @@ class RecepcionProveedorService
             'centrocosto_id' => $this->centrocostoIdItemOError($item, $orden),
             'lote_id' => null,
         ]);
+    }
+
+    /** @param array<string, mixed> $item
+     * @return array{0: int|null, 1: int|null}
+     */
+    private function colorTalleDesdeItem(array $item): array
+    {
+        $colorId = (int) ($item['color_id'] ?? 0);
+        $talleId = (int) ($item['talle_id'] ?? 0);
+
+        return ArticuloStockColorTalleSupport::valoresMovimiento(
+            $colorId > 0 ? $colorId : null,
+            $talleId > 0 ? $talleId : null,
+        );
+    }
+
+    /** @param list<array<string, mixed>> $items */
+    private function validarExclusividadColorTalleItems(array $items): void
+    {
+        $articulosId = [];
+        $coloresId = [];
+        $tallesId = [];
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $articuloId = (int) ($item['articulo_id'] ?? 0);
+            if ($articuloId <= 0) {
+                continue;
+            }
+            $articulosId[] = $articuloId;
+            $coloresId[] = (int) ($item['color_id'] ?? 0) ?: null;
+            $tallesId[] = (int) ($item['talle_id'] ?? 0) ?: null;
+        }
+
+        MovimientoStockColorTalleExclusividadSupport::validarLineas($articulosId, $coloresId, $tallesId);
     }
 
     /**
@@ -1024,12 +1098,19 @@ class RecepcionProveedorService
                 ? (int) $linea->articulo_stock_id
                 : (int) $linea->articulo_id;
 
+            [$colorMov, $talleMov] = ArticuloStockColorTalleSupport::valoresMovimiento(
+                $linea->color_id ? (int) $linea->color_id : null,
+                $linea->talle_id ? (int) $linea->talle_id : null,
+            );
+
             $am = Articulo_Movimiento::create([
                 'fecha' => $recepcion->fecha->format('Y-m-d'),
                 'fechajornada' => $recepcion->fecha->format('Y-m-d'),
                 'tipotransaccion_stock_id' => $tipoStock->id,
                 'movimientostock_id' => $mov->id,
                 'articulo_id' => $articuloMovimientoId,
+                'color_id' => $colorMov,
+                'talle_id' => $talleMov,
                 'concepto' => $concepto,
                 'cantidad' => $cantidadFirmada,
                 'precio' => $precioMovimiento,

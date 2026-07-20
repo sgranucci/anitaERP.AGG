@@ -43,7 +43,14 @@
             </p>
         @endif
 
-        <p class="small font-weight-bold text-muted mb-1">Cuadre general (incluye cierres agrupados)</p>
+        <p class="small font-weight-bold text-muted mb-1">Cuadre general por rubro (incluye cierres agrupados)</p>
+        @php $resumenExento = (float) ($resumen['erp_exento'] ?? 0); @endphp
+        @if (abs($resumenExento) > 0.009)
+            <p class="small text-muted mb-1">
+                <i class="fa fa-info-circle"></i>
+                Incluye {{ $formatear($resumenExento) }} exento, imputado a Ventas sin IVA (no genera d&eacute;bito fiscal).
+            </p>
+        @endif
 
         <div class="table-responsive mb-3">
             <table class="table table-sm table-bordered mb-0" style="font-size: 0.78rem;">

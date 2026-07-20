@@ -386,6 +386,16 @@
         }
     }
 
+    function normalizarFormatoExcel(formato) {
+        if (formato === 'intl') {
+            return 'intl';
+        }
+        if (formato === 'ar') {
+            return 'ar';
+        }
+        return 'auto';
+    }
+
     function actualizarFormatoExcelEnEnlaces(formato) {
         document.querySelectorAll('#mayor-concepto-exportar a').forEach(function (enlace) {
             if (! enlace || ! enlace.href) {
@@ -393,9 +403,10 @@
             }
             try {
                 var url = new URL(enlace.href, window.location.origin);
-                if (formato === 'intl') {
-                    url.searchParams.set('excel_formato_numero', 'intl');
+                if (formato === 'ar' || formato === 'intl') {
+                    url.searchParams.set('excel_formato_numero', formato);
                 } else {
+                    // auto = comportamiento por defecto: sin parámetro
                     url.searchParams.delete('excel_formato_numero');
                 }
                 enlace.href = url.toString();
@@ -406,20 +417,17 @@
     }
 
     function marcarBotonesFormatoExcel(formato) {
-        var btnAr = document.getElementById('btn-excel-formato-ar');
-        var btnIntl = document.getElementById('btn-excel-formato-intl');
-        if (btnAr) {
-            btnAr.classList.toggle('btn-secondary', formato === 'ar');
-            btnAr.classList.toggle('btn-outline-secondary', formato !== 'ar');
-        }
-        if (btnIntl) {
-            btnIntl.classList.toggle('btn-secondary', formato === 'intl');
-            btnIntl.classList.toggle('btn-outline-secondary', formato !== 'intl');
-        }
+        ['auto', 'ar', 'intl'].forEach(function (f) {
+            var btn = document.getElementById('btn-excel-formato-' + f);
+            if (btn) {
+                btn.classList.toggle('btn-secondary', formato === f);
+                btn.classList.toggle('btn-outline-secondary', formato !== f);
+            }
+        });
     }
 
     window.cambiarFormatoExcelNumero = function (formato) {
-        formato = formato === 'intl' ? 'intl' : 'ar';
+        formato = normalizarFormatoExcel(formato);
         var input = document.getElementById('excel_formato_numero');
         if (input) {
             input.value = formato;
@@ -428,8 +436,8 @@
         actualizarFormatoExcelEnEnlaces(formato);
         try {
             var urlActual = new URL(window.location.href);
-            if (formato === 'intl') {
-                urlActual.searchParams.set('excel_formato_numero', 'intl');
+            if (formato === 'ar' || formato === 'intl') {
+                urlActual.searchParams.set('excel_formato_numero', formato);
             } else {
                 urlActual.searchParams.delete('excel_formato_numero');
             }
@@ -446,31 +454,29 @@
 
     document.addEventListener('click', function (event) {
         var btn = event.target && event.target.closest
-            ? event.target.closest('#btn-excel-formato-ar, #btn-excel-formato-intl')
+            ? event.target.closest('#btn-excel-formato-auto, #btn-excel-formato-ar, #btn-excel-formato-intl')
             : null;
         if (! btn) {
             return;
         }
         event.preventDefault();
-        window.cambiarFormatoExcelNumero(btn.getAttribute('data-formato') || 'ar');
+        window.cambiarFormatoExcelNumero(btn.getAttribute('data-formato') || 'auto');
     });
 
     // Preferir query/localStorage al cargar (sin invalidar cache del reporte).
     (function initFormatoExcel() {
-        var actual = 'ar';
+        var actual = 'auto';
         var input = document.getElementById('excel_formato_numero');
         if (input && input.value) {
-            actual = input.value === 'intl' ? 'intl' : 'ar';
+            actual = normalizarFormatoExcel(input.value);
         }
         try {
             var url = new URL(window.location.href);
-            if (url.searchParams.get('excel_formato_numero') === 'intl') {
-                actual = 'intl';
-            } else if (url.searchParams.has('excel_formato_numero')) {
-                actual = 'ar';
+            if (url.searchParams.has('excel_formato_numero')) {
+                actual = normalizarFormatoExcel(url.searchParams.get('excel_formato_numero'));
             } else {
                 var ls = window.localStorage.getItem('mayor_concepto_excel_formato_numero');
-                if (ls === 'intl' || ls === 'ar') {
+                if (ls === 'intl' || ls === 'ar' || ls === 'auto') {
                     actual = ls;
                 }
             }
@@ -640,7 +646,7 @@
                     <input type="hidden" name="agrupacion_resumen" id="agrupacion_resumen"
                         value="{{ $filtros['agrupacion_resumen'] ?? 'concepto_cuenta' }}">
                     <input type="hidden" name="excel_formato_numero" id="excel_formato_numero"
-                        value="{{ \App\Support\Contable\MayorConceptoExcelFormatoNumero::normalizar($filtros['excel_formato_numero'] ?? 'ar') }}">
+                        value="{{ \App\Support\Contable\MayorConceptoExcelFormatoNumero::normalizar($filtros['excel_formato_numero'] ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal()) }}">
 
                     <div class="form-group row mb-0 mt-3">
                         <div class="col-lg-2"></div>
@@ -702,7 +708,7 @@
                             ])
                             @php
                                 $formatoExcelUi = \App\Support\Contable\MayorConceptoExcelFormatoNumero::normalizar(
-                                    $filtros['excel_formato_numero'] ?? 'ar'
+                                    $filtros['excel_formato_numero'] ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal()
                                 );
                             @endphp
                             <div class="ml-2 d-inline-flex align-items-center small text-muted"
@@ -710,17 +716,24 @@
                                 <span class="mr-1">N&uacute;m.</span>
                                 <div class="btn-group btn-group-sm" role="group" aria-label="Formato num&eacute;rico Excel">
                                     <button type="button"
+                                        id="btn-excel-formato-auto"
+                                        class="btn {{ $formatoExcelUi === 'auto' ? 'btn-secondary' : 'btn-outline-secondary' }}"
+                                        data-formato="auto"
+                                        title="Autom&aacute;tico: cada PC lo muestra seg&uacute;n su configuraci&oacute;n regional">
+                                        Auto
+                                    </button>
+                                    <button type="button"
                                         id="btn-excel-formato-ar"
                                         class="btn {{ $formatoExcelUi === 'ar' ? 'btn-secondary' : 'btn-outline-secondary' }}"
                                         data-formato="ar"
-                                        title="Argentina: 1.234,56">
+                                        title="Forzar Argentina: 1.234,56">
                                         AR
                                     </button>
                                     <button type="button"
                                         id="btn-excel-formato-intl"
                                         class="btn {{ $formatoExcelUi === 'intl' ? 'btn-secondary' : 'btn-outline-secondary' }}"
                                         data-formato="intl"
-                                        title="Internacional: 1,234.56">
+                                        title="Forzar internacional: 1,234.56">
                                         INTL
                                     </button>
                                 </div>

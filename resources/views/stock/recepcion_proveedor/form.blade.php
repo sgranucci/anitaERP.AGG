@@ -87,6 +87,12 @@
                 'articulo_stock_sku' => optional($l->articulo_stock)->sku ?? '',
                 'skualternativo' => optional($l->articulos)->skualternativo ?? '',
                 'maneja_parte_unica' => RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($l->articulos),
+                'color_id' => $l->color_id ? (int) $l->color_id : null,
+                'talle_id' => $l->talle_id ? (int) $l->talle_id : null,
+                'color_nombre' => optional($l->color)->nombre ?? '',
+                'talle_nombre' => optional($l->talle)->nombre ?? '',
+                'maneja_stock_color_talle' => (bool) (optional($l->articulos)->maneja_stock_color_talle
+                    ?? (($l->color_id || $l->talle_id) ? true : false)),
             ]);
         })->values()->all();
         $items = RecepcionProveedorFormItemsSupport::enriquecerItemsParaVista(
@@ -380,6 +386,8 @@
                 <th class="col-num">#</th>
                 <th class="col-art">Art.</th>
                 <th class="col-desc">Descripci&oacute;n</th>
+                <th class="col-color ms-col-color-talle" style="display:none;">Color</th>
+                <th class="col-talle ms-col-color-talle" style="display:none;">Talle</th>
                 <th class="col-qty text-right" title="{{ ($modoDevolucion ?? false) ? 'Cantidad recepcionada en el COM origen' : 'Cantidad pedida en la OC; si ya hubo recepciones confirmadas muestra ingresada y pendiente' }}">
                     {{ ($modoDevolucion ?? false) ? 'Recibida' : 'Cant. OC' }}
                 </th>
@@ -440,6 +448,8 @@
     #tabla-items-recepcion .col-num { width: 2.25rem; }
     #tabla-items-recepcion .col-art { width: 11rem; min-width: 9rem; }
     #tabla-items-recepcion .col-desc { min-width: 6rem; max-width: 14rem; }
+    #tabla-items-recepcion .col-color,
+    #tabla-items-recepcion .col-talle { width: 5.5rem; min-width: 4.5rem; }
     #tabla-items-recepcion .col-qty { width: 6.5rem; }
     #tabla-items-recepcion .col-conv { width: 5.75rem; min-width: 5.25rem; }
     #tabla-items-recepcion .col-precio { width: 6.25rem; min-width: 5.5rem; }
@@ -615,6 +625,12 @@
     window.recepcionProveedorDescuentoOcInicial = @json($descuentoOcCabecera);
     window.recepcionProveedorTipoarticuloCigarrilloId = @json($tipoArticuloCigarrilloId);
     window.recepcionProveedorMonedas = @json($moneda_query->map(static fn ($m) => ['id' => (int) $m->id, 'abreviatura' => (string) $m->abreviatura])->values());
+    @php
+        $rpColores = \App\Models\Stock\Color::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $rpTalles = \App\Models\Stock\Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
+    @endphp
+    window.msColoresOpciones = @json($rpColores->map(fn ($c) => ['id' => (int) $c->id, 'nombre' => $c->nombre])->values());
+    window.msTallesOpciones = @json($rpTalles->map(fn ($t) => ['id' => (int) $t->id, 'nombre' => $t->nombre])->values());
     window.recepcionProveedorPuedeConsultarOc = @json($puedeConsultarOc);
     window.recepcionProveedorPuedeModificarPrecio = @json($puedeModificarPrecio);
     window.recepcionProveedorPuedeAgregarArticuloExtra = @json($puedeAgregarArticuloExtra);

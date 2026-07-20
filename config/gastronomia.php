@@ -480,6 +480,13 @@ return [
     'cierre_totem_jornada_max_lineas_detalle' => max(100, (int) env('GASTRONOMIA_CIERRE_TOTEM_MAX_LINEAS_DETALLE', 3000)),
 
     /**
+     * Máximo de huecos de secuencia (waitry_order_id ausentes) a detectar por cierre.
+     * Los ids Waitry son globales; un id atípico o un desde muy antiguo puede generar millones
+     * de huecos y agotar la memoria. Al superar este tope se corta y se registra en el log.
+     */
+    'cierre_totem_jornada_max_huecos_secuencia' => max(1000, (int) env('GASTRONOMIA_CIERRE_TOTEM_MAX_HUECOS_SECUENCIA', 20000)),
+
+    /**
      * Obsoleto: ya no se recuperan huecos con getOrdersPOS al cerrar jornada (solo getordersdetails).
      * Los huecos quedan en ids_huecos_secuencia para auditoría del día.
      */
@@ -749,6 +756,18 @@ return [
         'usuario_id' => (int) env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_USUARIO_ID', 1),
         'moneda_id' => (int) env('GASTRONOMIA_COSTO_MENSUAL_CATALOGO_MONEDA_ID', 1),
         'sincronizar_anita' => filter_var(env('GASTRONOMIA_COSTO_MENSUAL_SINCRONIZAR_ANITA', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    /**
+     * Verificación de integridad CAEA al cerrar la jornada (además de los conciliadores de siempre).
+     * Comando: php artisan gastronomia:verificar-caea-jornada
+     * Solo lectura; loguea a laravel.log y avisa por mail si detecta errores.
+     */
+    'verificar_caea_cierre' => [
+        'habilitado' => filter_var(env('GASTRONOMIA_VERIFICAR_CAEA_CIERRE_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'cola' => env('GASTRONOMIA_VERIFICAR_CAEA_CIERRE_COLA', 'default'),
+        'mail' => filter_var(env('GASTRONOMIA_VERIFICAR_CAEA_CIERRE_MAIL', false), FILTER_VALIDATE_BOOLEAN),
+        'email' => env('GASTRONOMIA_VERIFICAR_CAEA_CIERRE_EMAIL', env('GASTRONOMIA_CONTROL_CUADRE_JORNADA_EMAIL')),
     ],
 
     'cuentacaja_efectivo_por_empresa' => (static function (): array {

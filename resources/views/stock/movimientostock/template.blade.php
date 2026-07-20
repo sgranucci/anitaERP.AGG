@@ -87,6 +87,7 @@
         </td>
         @include('stock.movimientostock.partials.fila_celda_npu_baja')
         @include('stock.movimientostock.partials.fila_saldo_origen')
+        @include('stock.movimientostock.partials.fila_color_talle')
         @include('stock.movimientostock.partials.fila_item_estandar')
         <td class="align-middle text-center">
 			<button type="button" title="Elimina esta linea" style="padding:0;" class="btn-accion-tabla eliminar tooltipsC">

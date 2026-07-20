@@ -2,108 +2,176 @@
 
 namespace App\Exports\Presupuesto;
 
+use App\Queries\Presupuesto\PartidagastoQueryInterface;
+use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
-use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\Exportable;
-use Maatwebsite\Excel\Concerns\WithHeadings;
-use PhpOffice\PhpSpreadsheet\Shared\Date;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
-use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use App\Queries\Presupuesto\PartidagastoQueryInterface;
-use Carbon\Carbon;
-use App\ApiAnita;
 
-class PartidagastoExport implements FromView, WithColumnFormatting, WithMapping, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
+class PartidagastoExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
-	use Exportable;
-	private $origen;
-	protected $dates = ['fecha'];
-	private $partidagastoQuery;
-	private $filtros;
+    use Exportable;
 
-	public function __construct(
-								PartidagastoQueryInterface $partidagastoquery,
-								)
-	{
-		$this->partidagastoQuery = $partidagastoquery;
-	}
+    private const COL_ULTIMA = 'N';
 
-	public function view(): View
-	{
-		$partidagastos = $this->partidagastoQuery->leePartidagasto($this->filtros, false);
+    private $partidagastoQuery;
 
-		return view('exports.presupuesto.partidagastoindex', ['partidagasto' => $partidagastos]);
-	}
+    private $filtros;
 
-	public function columnFormats(): array
+    private bool $esCsv = false;
+
+    private bool $hayFilaLogos = false;
+
+    private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
+
+    private int $filaCabecerasExcel = 3;
+
+    private int $filaPrimeraDatosExcel = 4;
+
+    /** @var list<string> */
+    private array $rutasLogosExcel = [];
+
+    public function __construct(PartidagastoQueryInterface $partidagastoquery)
     {
-		return [
-		];
+        $this->partidagastoQuery = $partidagastoquery;
     }
 
-	public function map($row): array
+    public function view(): View
+    {
+        $partidagastos = $this->partidagastoQuery->leePartidagasto($this->filtros, false);
+
+        $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($partidagastos);
+        $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
+        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
+        $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+        $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
+        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+
+        return view('exports.presupuesto.partidagastoindex', [
+            'partidagasto' => $partidagastos,
+            'esExcel' => true,
+            'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
+        ]);
+    }
+
+    public function title(): string
+    {
+        return 'Partidas de gasto';
+    }
+
+    public function columnWidths(): array
     {
         return [
+            'A' => 8,
+            'B' => 22,
+            'C' => 18,
+            'D' => 16,
+            'E' => 22,
+            'F' => 12,
+            'G' => 28,
+            'H' => 24,
+            'I' => 22,
+            'J' => 28,
+            'K' => 8,
+            'L' => 16,
+            'M' => 12,
+            'N' => 30,
         ];
     }
 
-    public function styles(Worksheet $sheet)
-    {
-		return [
-			2   => ['font' => ['bold' => true,
-								'color' => array('rgb' => '17202A'),
-								'size'  => 12,
-								'name'  => 'Arial'
-								],
-					'fill' => [
-								'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-								'color' => array('rgb' => '85C1E9'),
-					]
-					],
-			'B' => ['font' => ['bold' => true]],
-			'C' => ['font' => ['bold' => true]],
-			'E' => ['font' => ['bold' => true]],
-			'F' => ['font' => ['bold' => true]],
-			'K' => ['font' => ['bold' => true]],
-			'L' => ['font' => ['bold' => true]],
-		];
-    }
-
-	public function columnWidths(): array
-    {
-		return [
-			'A' => 10
-		];
-    }
-
-	public function registerEvents(): array
+    /**
+     * ID como texto; "Monto Total" (col. L) con máscara neutra: sumable y
+     * adaptable a la región de la PC que abre el archivo.
+     *
+     * @return array<string, string>
+     */
+    public function columnFormats(): array
     {
         return [
-            AfterSheet::class    => function(AfterSheet $event) {
+            'A' => NumberFormat::FORMAT_TEXT,
+            'L' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+        ];
+    }
 
-                $event->sheet->getDelegate()->freezePane('A3');
+    public function styles(Worksheet $sheet): array
+    {
+        return [];
+    }
 
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+                $col = self::COL_ULTIMA;
+
+                if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
+                    $sheet->getRowDimension(1)->setRowHeight(54);
+                    $offsetX = 6;
+                    foreach ($this->rutasLogosExcel as $ruta) {
+                        if (! is_string($ruta) || ! is_readable($ruta)) {
+                            continue;
+                        }
+                        $drawing = new Drawing;
+                        $drawing->setName('Logo');
+                        $drawing->setDescription('Logo empresa');
+                        $drawing->setPath($ruta);
+                        $drawing->setResizeProportional(true);
+                        $drawing->setHeight(46);
+                        $drawing->setCoordinates('A1');
+                        $drawing->setOffsetX($offsetX);
+                        $drawing->setOffsetY(4);
+                        $drawing->setWorksheet($sheet);
+                        $offsetX += 160;
+                    }
+                }
+
+                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.$col.$this->filaTituloExcel);
+                $sheet->mergeCells('A'.$this->filaSubtituloExcel.':'.$col.$this->filaSubtituloExcel);
+                $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setName('Arial')->setSize(16)->setBold(true)->getColor()->setRGB('17202A');
+                $sheet->getStyle('A'.$this->filaSubtituloExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+
+                $rangoCab = 'A'.$this->filaCabecerasExcel.':'.$col.$this->filaCabecerasExcel;
+                $sheet->getStyle($rangoCab)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('85C1E9');
+                $sheet->getStyle($rangoCab)->getFont()->setName('Arial')->setSize(11)->setBold(true)->getColor()->setRGB('17202A');
+                $sheet->getStyle($rangoCab)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
         ];
     }
 
-	public function title(): string
+    /**
+     * XLSX usa la preferencia global (auto adapta a la PC); CSV cae al respaldo
+     * de config('export.csv_fallback').
+     */
+    private function formatoNumeroEfectivo(): string
     {
-        return 'Reporte de Ordenes de Venta';
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
-	public function parametros($filtros)
-	{
-		$this->filtros = $filtros;
+    public function parametros($filtros, bool $esCsv = false)
+    {
+        $this->filtros = $filtros;
+        $this->esCsv = $esCsv;
 
-		return $this;
-	}
+        return $this;
+    }
 }

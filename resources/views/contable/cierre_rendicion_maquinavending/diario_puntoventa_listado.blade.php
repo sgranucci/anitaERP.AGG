@@ -21,6 +21,18 @@
         .\Carbon\Carbon::parse($resultado['fecha_hasta'] ?? now())->format('d/m/Y')
     );
     $resumen = $resultado['resumen'] ?? [];
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtNum = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -129,7 +141,7 @@
                     @foreach ($fila['valores'] ?? [] as $valor)
                         <td class="num">
                             @if ($valor !== null)
-                                {{ number_format((float) $valor, 2, ',', '.') }}
+                                {{ $fmtNum($valor) }}
                             @endif
                         </td>
                     @endforeach

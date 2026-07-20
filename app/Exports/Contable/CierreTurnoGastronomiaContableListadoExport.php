@@ -6,9 +6,11 @@ namespace App\Exports\Contable;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Contable\CierreTurnoGastronomiaContableListadoFiltros;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromView;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -19,7 +21,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class CierreTurnoGastronomiaContableListadoExport implements FromView, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class CierreTurnoGastronomiaContableListadoExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     private const COL_ULTIMA = 'J';
 
@@ -45,6 +47,7 @@ class CierreTurnoGastronomiaContableListadoExport implements FromView, WithColum
     public function __construct(
         private Collection $filas,
         private array $filtros = [],
+        private bool $esCsv = false,
     ) {
         $this->subtituloFiltros = CierreTurnoGastronomiaContableListadoFiltros::textoCabeceraExport($this->filtros);
     }
@@ -63,7 +66,19 @@ class CierreTurnoGastronomiaContableListadoExport implements FromView, WithColum
             'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'subtituloFiltros' => $this->subtituloFiltros,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
+    }
+
+    /**
+     * XLSX usa la preferencia global (auto adapta a la PC); CSV cae al respaldo
+     * de config('export.csv_fallback').
+     */
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function title(): string
@@ -84,6 +99,18 @@ class CierreTurnoGastronomiaContableListadoExport implements FromView, WithColum
             'H' => 12,
             'I' => 18,
             'J' => 14,
+        ];
+    }
+
+    /**
+     * Total (col. J) con máscara neutra: sumable y adaptable a la región de la PC.
+     *
+     * @return array<string, string>
+     */
+    public function columnFormats(): array
+    {
+        return [
+            'J' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
         ];
     }
 

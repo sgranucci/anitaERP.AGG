@@ -16,6 +16,8 @@ use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
+use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
+use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use Auth;
 use DB;
@@ -187,7 +189,13 @@ class MovimientoStockService
 				$loteids = $this->normalizarArrayLineasFormulario($data['loteids'] ?? []);
 				$medidas = $this->normalizarArrayLineasFormulario($data['medidas'] ?? []);
 				$numeropartes = $this->normalizarArrayLineasFormulario($data['numeropartes'] ?? []);
+				$colores = $this->normalizarArrayLineasFormulario($data['colores_id'] ?? []);
+				$talles = $this->normalizarArrayLineasFormulario($data['talles_id'] ?? []);
 				$fechaPrecio = ! empty($data['fecha']) ? \Carbon\Carbon::parse($data['fecha']) : \Carbon\Carbon::today();
+
+				if (! MovimientoStockFerliSupport::esCalzadosFerli()) {
+					MovimientoStockColorTalleExclusividadSupport::validarLineas($articulos, $colores, $talles);
+				}
 
 				if (
 					empty($data['omitir_validacion_saldo'])
@@ -198,6 +206,8 @@ class MovimientoStockService
 						$articulos,
 						$cantidades,
 						$this->saldoDepositoRepository,
+						$colores,
+						$talles,
 					);
 				}
 
@@ -259,6 +269,8 @@ class MovimientoStockService
 						'ordentrabajo_id' => null,
 						'lote' => $data['lote'],
 						'articulo_id' => $articulos[$i],
+						'color_id' => (($c = (int) ($colores[$i] ?? 0)) > 0) ? $c : null,
+						'talle_id' => (($t = (int) ($talles[$i] ?? 0)) > 0) ? $t : null,
 						'numeroparte' => ($np = trim((string) ($numeropartes[$i] ?? ''))) !== '' ? $np : null,
 						'sku' => $sku,
 						'combinacion_id' => $combinacion,

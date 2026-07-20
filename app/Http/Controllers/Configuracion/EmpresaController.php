@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Configuracion;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Configuracion\Empresa;
+use App\Models\Configuracion\Pais;
+use App\Models\Configuracion\Provincia;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionEmpresa;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -41,7 +43,10 @@ class EmpresaController extends Controller
     {
         can('crear-empresas');
 
-        return view('configuracion.empresa.crear');
+        $pais_query = Pais::orderBy('nombre')->get(['id', 'nombre']);
+        $provincia_query = Provincia::orderBy('nombre')->get(['id', 'nombre']);
+
+        return view('configuracion.empresa.crear', compact('pais_query', 'provincia_query'));
     }
 
     /**
@@ -69,8 +74,12 @@ class EmpresaController extends Controller
         can('editar-empresas');
 
         $data = $this->empresaRepository->findOrFail($id);
-        
-        return view('configuracion.empresa.editar', compact('data'));
+        $data->load(['pais:id,nombre', 'provincia:id,nombre', 'localidad:id,nombre,codigopostal']);
+
+        $pais_query = Pais::orderBy('nombre')->get(['id', 'nombre']);
+        $provincia_query = Provincia::orderBy('nombre')->get(['id', 'nombre']);
+
+        return view('configuracion.empresa.editar', compact('data', 'pais_query', 'provincia_query'));
     }
 
     /**

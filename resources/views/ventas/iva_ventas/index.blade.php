@@ -296,4 +296,59 @@
         </div>
     </div>
 </div>
+
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'iva-ventas-procesando-overlay',
+    'tituloId' => 'iva-ventas-procesando-titulo',
+    'subtituloId' => 'iva-ventas-procesando-subtitulo',
+    'titulo' => 'Calculando IVA ventas…',
+    'subtitulo' => 'Puede demorar según el período y la conciliación contable / ctamov. No cierre la página.',
+])
+
+<script>
+    (function () {
+        var overlay = document.getElementById('iva-ventas-procesando-overlay');
+        if (!overlay) {
+            return;
+        }
+
+        function mostrarProcesoOverlay(titulo) {
+            if (titulo) {
+                var tituloEl = document.getElementById('iva-ventas-procesando-titulo');
+                if (tituloEl) {
+                    tituloEl.textContent = titulo;
+                }
+            }
+            overlay.classList.remove('d-none');
+            overlay.style.display = 'flex';
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+
+        function ocultarProcesoOverlay() {
+            overlay.classList.add('d-none');
+            overlay.style.display = '';
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+
+        var form = document.getElementById('form-iva-ventas');
+        if (form) {
+            form.addEventListener('submit', function () {
+                if (typeof form.checkValidity === 'function' && !form.checkValidity()) {
+                    return;
+                }
+                mostrarProcesoOverlay('Calculando IVA ventas…');
+            });
+        }
+
+        // Exportaciones (PDF / Excel / CSV) tambien navegan: mostrar el aviso.
+        document.querySelectorAll('a[href*="listar-iva-ventas"]').forEach(function (a) {
+            a.addEventListener('click', function () {
+                mostrarProcesoOverlay('Generando exportaci\u00f3n…');
+            });
+        });
+
+        // Si el usuario vuelve con el boton atras (bfcache), ocultar el aviso.
+        window.addEventListener('pageshow', ocultarProcesoOverlay);
+    })();
+</script>
 @endsection

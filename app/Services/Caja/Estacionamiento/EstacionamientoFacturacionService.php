@@ -311,7 +311,20 @@ final class EstacionamientoFacturacionService
      */
     public function completarSolicitudCaePendiente(array $caePendiente): ?array
     {
-        return $this->facturacionService->completarSolicitudCaePendiente($caePendiente, false);
+        return $this->facturacionService->completarSolicitudCaePendiente(
+            $caePendiente,
+            false,
+            null,
+            ! $this->debeGrabarVencaeAnita(),
+        );
+    }
+
+    /**
+     * CAE en tabla vencae de Informix solo si estacionamiento replica la venta en Anita al facturar.
+     */
+    public function debeGrabarVencaeAnita(): bool
+    {
+        return (bool) config('estacionamiento.sincronizar_anita_al_facturar', false);
     }
 
     /**

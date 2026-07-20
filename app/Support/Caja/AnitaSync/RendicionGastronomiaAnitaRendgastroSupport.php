@@ -833,9 +833,13 @@ final class RendicionGastronomiaAnitaRendgastroSupport
      * Neto rendg por host/terminal: Z de la portadora (N→T→M) menos Σ rendg_tot_nc (+ CAEA) de todos los turnos del grupo.
      * Las NC en turno M/T deben restarse aunque la portadora sea turno N.
      *
+     * Para grupos de estacionamiento usar $incluirNcEstacionamiento = true: sus cabeceras son estac y
+     * {@see sumaNcCabeceras()} las excluye por default (regla del neto de gastronomía), lo que dejaría
+     * la NC de estacionamiento sin restar e inflaría el neto (falso DIF en el circuito FLASH estac).
+     *
      * @param  list<object>  $cabeceras
      */
-    public function netoGrupoHost(array $cabeceras): float
+    public function netoGrupoHost(array $cabeceras, bool $incluirNcEstacionamiento = false): float
     {
         if ($cabeceras === []) {
             return 0.0;
@@ -844,7 +848,7 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         $portadora = $this->elegirPortadora($cabeceras);
         $z = round((float) ($portadora->rendg_total_z ?? 0), 2);
 
-        return round($z - $this->sumaNcCabeceras($cabeceras), 2);
+        return round($z - $this->sumaNcCabeceras($cabeceras, $incluirNcEstacionamiento), 2);
     }
 
     /**
@@ -900,7 +904,7 @@ final class RendicionGastronomiaAnitaRendgastroSupport
 
         $estacionamiento = 0.0;
         foreach ($gruposEstacionamiento as $grupo) {
-            $estacionamiento += $this->netoGrupoHost($grupo);
+            $estacionamiento += $this->netoGrupoHost($grupo, true);
         }
 
         return [
@@ -919,15 +923,18 @@ final class RendicionGastronomiaAnitaRendgastroSupport
     }
 
     /**
-     * Σ rendg_tot_nc (+ CAEA) de cabeceras del host (excl. estacionamiento).
+     * Σ rendg_tot_nc (+ CAEA) de cabeceras del host.
+     *
+     * Por default excluye estacionamiento (para el neto de gastronomía no deben mezclarse las NC de estac).
+     * Con $incluirEstacionamiento = true suma también las NC de estac (neto del propio grupo de estacionamiento).
      *
      * @param  list<object>  $cabeceras
      */
-    public function sumaNcCabeceras(array $cabeceras): float
+    public function sumaNcCabeceras(array $cabeceras, bool $incluirEstacionamiento = false): float
     {
         $nc = 0.0;
         foreach ($cabeceras as $fila) {
-            if ($this->esCabeceraEstacionamiento($fila)) {
+            if (! $incluirEstacionamiento && $this->esCabeceraEstacionamiento($fila)) {
                 continue;
             }
             $nc += round((float) ($fila->rendg_tot_nc ?? 0), 2);

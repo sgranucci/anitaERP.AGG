@@ -18,6 +18,7 @@ use Maatwebsite\Excel\Events\AfterSheet;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use App\Queries\Contable\AsientoQueryInterface;
+use App\Support\Export\ExcelFormatoNumero;
 use Carbon\Carbon;
 use App\ApiAnita;
 
@@ -44,13 +45,16 @@ class AsientoExport implements FromView, WithColumnFormatting, WithMapping, Shou
 
 	public function columnFormats(): array
     {
+		// Importes como número real con máscara neutra: cada PC los muestra según su config regional.
+		$formato = ExcelFormatoNumero::preferenciaGlobal();
+
 		return [
 			'A' => NumberFormat::FORMAT_TEXT,
 			'B' => NumberFormat::FORMAT_TEXT,
-			'G' => '0.00',
-			'K' => '0.00',
-			'L' => '0.00',
-			'N' => '0.0000',
+			'G' => ExcelFormatoNumero::codigoColumna($formato, 2),
+			'K' => ExcelFormatoNumero::codigoColumna($formato, 2),
+			'L' => ExcelFormatoNumero::codigoColumna($formato, 2),
+			'N' => ExcelFormatoNumero::codigoColumna($formato, 4),
 		];
     }
 

@@ -4,6 +4,7 @@ namespace App\Exports\Solicitudpago;
 
 use App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use Illuminate\Contracts\View\View;
@@ -27,6 +28,9 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
 
     private const COL_ULTIMA = 'J';
 
+    /** Congela Código y Fecha (A y B): freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
     private SolicitudpagoRepositoryInterface $repository;
 
     /** @var array<string, mixed>|string|null */
@@ -34,13 +38,17 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
 
     private bool $flDesdeIndex = false;
 
+    private bool $esCsv = false;
+
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 2;
+    private int $filaCabecerasExcel = 3;
 
-    private int $filaPrimeraDatosExcel = 3;
+    private int $filaPrimeraDatosExcel = 4;
 
     private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
@@ -59,7 +67,8 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($datas);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
             $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-            $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+            $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+            $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
             $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
             return view('exports.solicitudpago.solicitudpagoindex', [
@@ -67,13 +76,16 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
                 'estado_enum' => SolicitudpagoEstados::opciones(),
                 'tratamiento_enum' => SolicitudpagoTratamientos::opciones(),
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
+                'esExcel' => true,
+                'formatoNumero' => $this->formatoNumeroEfectivo(),
             ]);
         }
 
         $this->hayFilaLogos = false;
         $this->filaTituloExcel = 1;
-        $this->filaCabecerasExcel = 2;
-        $this->filaPrimeraDatosExcel = 3;
+        $this->filaSubtituloExcel = 2;
+        $this->filaCabecerasExcel = 3;
+        $this->filaPrimeraDatosExcel = 4;
         $this->rutasLogosExcel = [];
 
         return view('exports.solicitudpago.solicitudpagoindex', [
@@ -81,6 +93,8 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
             'estado_enum' => SolicitudpagoEstados::opciones(),
             'tratamiento_enum' => SolicitudpagoTratamientos::opciones(),
             'reservarFilaLogoExcel' => false,
+            'esExcel' => true,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
@@ -90,12 +104,26 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
             return [];
         }
 
-        $cols = [];
-        foreach (range('A', self::COL_ULTIMA) as $c) {
-            $cols[$c] = NumberFormat::FORMAT_TEXT;
-        }
+        // Identificadores/textos como texto; E = Monto con máscara neutra (sumable/adaptable); I = cuotas (entero).
+        return [
+            'A' => NumberFormat::FORMAT_TEXT,
+            'B' => NumberFormat::FORMAT_TEXT,
+            'C' => NumberFormat::FORMAT_TEXT,
+            'D' => NumberFormat::FORMAT_TEXT,
+            'E' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            'F' => NumberFormat::FORMAT_TEXT,
+            'G' => NumberFormat::FORMAT_TEXT,
+            'H' => NumberFormat::FORMAT_TEXT,
+            'I' => NumberFormat::FORMAT_NUMBER,
+            'J' => NumberFormat::FORMAT_TEXT,
+        ];
+    }
 
-        return $cols;
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function styles(Worksheet $sheet)
@@ -187,7 +215,10 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
                     ],
                 ]);
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $sheet->mergeCells('A'.$this->filaSubtituloExcel.':'.self::COL_ULTIMA.$this->filaSubtituloExcel);
+                $sheet->getStyle('A'.$this->filaSubtituloExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }
@@ -200,9 +231,10 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
     /**
      * @param  array<string, mixed>|string|null  $filtros
      */
-    public function parametros($filtros)
+    public function parametros($filtros, bool $esCsv = false)
     {
         $this->filtros = $filtros;
+        $this->esCsv = $esCsv;
         $this->flDesdeIndex = true;
 
         return $this;

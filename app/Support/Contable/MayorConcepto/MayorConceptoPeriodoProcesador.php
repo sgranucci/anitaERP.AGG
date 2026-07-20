@@ -1026,6 +1026,18 @@ class MayorConceptoPeriodoProcesador
         // retenciones van al Haber del subdiario pero no imputan en este reporte
         // cuando el OP ya se prorrateó por facturas.
         if (! $imputoGastoDesdeFacturas) {
+            // Si el gasto/cheque ya imputó el total pagado por banco, las retenciones
+            // fueron RETENIDAS en el pago (no salieron por banco). Se siguen mostrando
+            // en su concepto (61 RETENCIONES DEPOSITADAS) pero se netean con un
+            // movimiento espejo para que el total del asiento en el mayor por concepto
+            // siga igual al movimiento de la cuenta de banco.
+            $netoGastoOp = 0.0;
+            foreach ($lineas as $lineaGasto) {
+                $netoGastoOp += (float) ($lineaGasto['debe'] ?? 0) - (float) ($lineaGasto['haber'] ?? 0);
+            }
+            $bancoCubiertoPorGasto = $totalBancoHaber > 0
+                && abs(round($netoGastoOp - $totalBancoHaber, 2)) < 0.05;
+
             foreach ($retenciones as $retencion) {
                 $monto = (float) ($retencion->axp_monto_ap ?? 0);
                 if ($monto <= 0) {
@@ -1041,11 +1053,12 @@ class MayorConceptoPeriodoProcesador
                 }
 
                 $dhRet = $this->dhImputacionRetencion($lineasOp, $cuentaRet, $monto);
+                $conceptoRet = $this->motor->conceptoImputacionCuenta($empresaId, $cuentaRet);
 
                 $lineas[] = $this->lineaReporte(
                     $lineaOrigenRet,
                     $cuentaRet,
-                    $this->motor->conceptoImputacionCuenta($empresaId, $cuentaRet),
+                    $conceptoRet,
                     $monto,
                     $dhRet,
                     $monedaConverter,
@@ -1053,6 +1066,20 @@ class MayorConceptoPeriodoProcesador
                     'Retención '.($retencion->axp_tipo_ap ?? ''),
                     $this->metaRetencionPago($empresaId, $retencion),
                 );
+
+                if ($bancoCubiertoPorGasto) {
+                    $lineas[] = $this->lineaReporte(
+                        $lineaOrigenRet,
+                        $cuentaRet,
+                        $conceptoRet,
+                        $monto,
+                        $dhRet === 'D' ? 'H' : 'D',
+                        $monedaConverter,
+                        $monedaReporteId,
+                        'Retención neteo (retenida, no sale por banco)',
+                        $this->metaRetencionPago($empresaId, $retencion),
+                    );
+                }
             }
 
             $this->agregarRemanenteContrapartidasOp(

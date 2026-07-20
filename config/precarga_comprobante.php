@@ -28,6 +28,13 @@ return [
     'anita_list_espera_ms' => (int) env('PRECARGA_ANITA_LIST_ESPERA_MS', 250),
 
     /*
+    | Reintentos al grabar precarga/precargaconc: el bridge a veces responde [] sin persistir.
+    | Tras cada insert se verifica con list; si no aparece, se reintenta el insert.
+    */
+    'anita_write_reintentos' => (int) env('PRECARGA_ANITA_WRITE_REINTENTOS', 3),
+    'anita_write_espera_ms' => (int) env('PRECARGA_ANITA_WRITE_ESPERA_MS', 300),
+
+    /*
     | URL base HTTP para el cliente Facturas_scan (sin barra final).
     | Canónica prod .210: http://10.20.30.210
     | Endpoints: POST {base}/api/comprobantes

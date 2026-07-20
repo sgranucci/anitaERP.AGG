@@ -1,6 +1,8 @@
 /**
  * Coherencia neto gravado (G) ↔ IVA liquidado (I) por alícuota — validación en pantalla.
  * Espejo de App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport.
+ *
+ * Al abrir gravados desde IVA, las diferencias se reparte entre gravados (nunca se ajusta IVA).
  */
 (function (global) {
     'use strict';
@@ -12,7 +14,9 @@
     }
 
     function tasaKey(tasa) {
-        return String(Math.round(parseFloat(tasa) * 1000) / 1000);
+        // Misma idea que PHP number_format(..., 3): evita claves "21" ambiguas.
+        var n = Math.round((parseFloat(tasa) || 0) * 1000) / 1000;
+        return n.toFixed(3);
     }
 
     function etiquetaTasa(tasa) {
@@ -62,6 +66,9 @@
         });
 
         var tasasIva = Object.keys(ivaPorTasa);
+        var netoTotal = round2(netoSinTasa + Object.keys(netoPorTasa).reduce(function (acc, k) {
+            return acc + (netoPorTasa[k] || 0);
+        }, 0));
 
         return {
             aplica: tasasIva.length > 0,
@@ -69,6 +76,7 @@
             neto_por_tasa: netoPorTasa,
             iva_por_tasa: ivaPorTasa,
             tasas_iva: tasasIva,
+            neto_total: netoTotal,
         };
     }
 
@@ -91,66 +99,106 @@
         return map;
     }
 
-    function validarDescomposicion(estado, gravadosPorTasa) {
+    function necesitaApertura(estado) {
+        var ivaPorTasa = estado.iva_por_tasa;
+        var tasasIva = estado.tasas_iva;
+        if (tasasIva.length < 2 || estado.neto_total <= 0) {
+            return false;
+        }
+
+        var buckets = (estado.neto_sin_tasa > 0 ? 1 : 0) + Object.keys(estado.neto_por_tasa).length;
+        if (buckets <= 1) {
+            return true;
+        }
+
+        for (var i = 0; i < tasasIva.length; i++) {
+            var tKey = tasasIva[i];
+            var neto = estado.neto_por_tasa[tKey] || 0;
+            if (neto <= 0) {
+                return true;
+            }
+            var esperado = round2(neto * parseFloat(tKey) / 100);
+            if (Math.abs(esperado - ivaPorTasa[tKey]) > TOLERANCIA) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function repartirDiferencia(netoTeorico, sumaTeorica, netoOriginal) {
+        var delta = round2(netoOriginal - sumaTeorica);
+        var keys = Object.keys(netoTeorico);
+        if (Math.abs(delta) < 0.005 || sumaTeorica <= 0 || keys.length === 0) {
+            return netoTeorico;
+        }
+
+        var ajustados = {};
+        var repartido = 0;
+        var ultimo = keys[keys.length - 1];
+
+        keys.forEach(function (tKey) {
+            if (tKey === ultimo) {
+                return;
+            }
+            var share = round2(delta * (netoTeorico[tKey] / sumaTeorica));
+            ajustados[tKey] = round2(netoTeorico[tKey] + share);
+            repartido = round2(repartido + share);
+        });
+        ajustados[ultimo] = round2(netoTeorico[ultimo] + (delta - repartido));
+
+        return ajustados;
+    }
+
+    function simularApertura(estado, gravadosPorTasa) {
         var errores = [];
         var advertencias = [];
-        var netoSinTasa = estado.neto_sin_tasa;
         var ivaPorTasa = estado.iva_por_tasa;
-        var netoPorTasa = estado.neto_por_tasa;
         var tasasIva = estado.tasas_iva;
+        var netoOriginal = estado.neto_total;
 
-        if (netoSinTasa <= 0 || tasasIva.length < 2) {
-            return { errores: errores, advertencias: advertencias };
-        }
+        var netoTeorico = {};
+        var sumaTeorica = 0;
 
-        if (Object.keys(netoPorTasa).length > 0) {
-            return { errores: errores, advertencias: advertencias };
-        }
-
-        var netoDescompuesto = {};
-        var sumaNeto = 0;
-
-        tasasIva.forEach(function (tasaKey) {
-            var tasa = parseFloat(tasaKey);
-            var iva = ivaPorTasa[tasaKey];
+        tasasIva.forEach(function (tKey) {
+            var tasa = parseFloat(tKey);
             if (tasa <= 0) {
                 return;
             }
-            var neto = round2(iva / (tasa / 100));
-            netoDescompuesto[tasaKey] = neto;
-            sumaNeto = round2(sumaNeto + neto);
+            var neto = round2(ivaPorTasa[tKey] / (tasa / 100));
+            netoTeorico[tKey] = neto;
+            sumaTeorica = round2(sumaTeorica + neto);
         });
 
-        var dif = Math.abs(sumaNeto - netoSinTasa);
-        if (dif > TOLERANCIA) {
-            errores.push(
-                'El neto gravado único (' + formatoNumero(netoSinTasa)
-                + ') no coincide con la suma descompuesta por alícuotas IVA ('
-                + formatoNumero(sumaNeto) + '). Diferencia '
-                + formatoNumero(dif) + ' (tolerancia $' + formatoNumero(TOLERANCIA) + ').'
-            );
-            return { errores: errores, advertencias: advertencias };
-        }
-
+        var netoDescompuesto = repartirDiferencia(netoTeorico, sumaTeorica, netoOriginal);
+        var delta = round2(netoOriginal - sumaTeorica);
         var partes = [];
-        tasasIva.forEach(function (tasaKey) {
-            if (!gravadosPorTasa[tasaKey]) {
+
+        tasasIva.forEach(function (tKey) {
+            if (!gravadosPorTasa[tKey]) {
                 errores.push(
-                    'No se encontró concepto de neto gravado para alícuota ' + etiquetaTasa(parseFloat(tasaKey)) + '.'
+                    'No se encontró concepto de neto gravado para alícuota ' + etiquetaTasa(parseFloat(tKey)) + '.'
                 );
             } else {
-                partes.push(etiquetaTasa(parseFloat(tasaKey)) + ': ' + formatoNumero(netoDescompuesto[tasaKey] || 0));
+                partes.push(etiquetaTasa(parseFloat(tKey)) + ': ' + formatoNumero(netoDescompuesto[tKey] || 0));
             }
         });
 
         if (errores.length === 0 && partes.length) {
-            advertencias.push(
-                'Al guardar se descompondrá el neto gravado único (' + formatoNumero(netoSinTasa)
-                + ') en: ' + partes.join('; ') + '.'
-            );
+            var msg = 'Al guardar se abrirá el neto gravado (' + formatoNumero(netoOriginal)
+                + ') en: ' + partes.join('; ') + '.';
+            if (Math.abs(delta) >= 0.01) {
+                msg += ' Diferencia de ' + formatoNumero(delta)
+                    + ' repartida entre los gravados (los IVA no se ajustan).';
+            }
+            advertencias.push(msg);
         }
 
-        return { errores: errores, advertencias: advertencias };
+        return {
+            errores: errores,
+            advertencias: advertencias,
+            neto_por_tasa: netoDescompuesto,
+        };
     }
 
     function validarCoherenciaIvaNeto(estado) {
@@ -161,13 +209,16 @@
         var tasasIva = estado.tasas_iva;
 
         if (netoSinTasa > 0 && tasasIva.length >= 2 && Object.keys(netoPorTasa).length === 0) {
+            errores.push(
+                'Hay neto gravado sin alícuota y múltiples tasas de IVA: no se pudo descomponer. Revise los importes.'
+            );
             return errores;
         }
 
-        tasasIva.forEach(function (tasaKey) {
-            var tasa = parseFloat(tasaKey);
-            var iva = ivaPorTasa[tasaKey];
-            var neto = netoPorTasa[tasaKey] || 0;
+        tasasIva.forEach(function (tKey) {
+            var tasa = parseFloat(tKey);
+            var iva = ivaPorTasa[tKey];
+            var neto = netoPorTasa[tKey] || 0;
 
             if (neto <= 0) {
                 errores.push(
@@ -209,21 +260,24 @@
         }
 
         var gravadosPorTasa = buildGravadosPorTasa(conceptosMeta || {});
-        var descomp = validarDescomposicion(estado, gravadosPorTasa);
-        var errores = descomp.errores.slice();
-        var advertencias = descomp.advertencias.slice();
+        var errores = [];
+        var advertencias = [];
 
-        if (descomp.errores.length === 0 && estado.neto_sin_tasa > 0 && estado.tasas_iva.length >= 2
-            && Object.keys(estado.neto_por_tasa).length === 0) {
-            var netoSimulado = {};
-            estado.tasas_iva.forEach(function (tasaKey) {
-                var tasa = parseFloat(tasaKey);
-                netoSimulado[tasaKey] = round2(estado.iva_por_tasa[tasaKey] / (tasa / 100));
-            });
-            estado = Object.assign({}, estado, { neto_por_tasa: netoSimulado, neto_sin_tasa: 0 });
+        if (necesitaApertura(estado)) {
+            var sim = simularApertura(estado, gravadosPorTasa);
+            errores = sim.errores.slice();
+            advertencias = sim.advertencias.slice();
+            if (sim.errores.length === 0) {
+                estado = Object.assign({}, estado, {
+                    neto_por_tasa: sim.neto_por_tasa,
+                    neto_sin_tasa: 0,
+                });
+            }
         }
 
-        errores = errores.concat(validarCoherenciaIvaNeto(estado));
+        if (errores.length === 0) {
+            errores = errores.concat(validarCoherenciaIvaNeto(estado));
+        }
 
         return {
             valido: errores.length === 0,

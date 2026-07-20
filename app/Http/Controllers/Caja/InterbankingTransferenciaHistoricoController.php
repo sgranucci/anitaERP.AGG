@@ -186,7 +186,7 @@ class InterbankingTransferenciaHistoricoController extends Controller
                     ->download('interbanking_transferencias_historicas.xlsx');
 
             case 'CSV':
-                return (new InterbankingTransferenciaHistoricoExport($registros))
+                return (new InterbankingTransferenciaHistoricoExport($registros, true))
                     ->download('interbanking_transferencias_historicas.csv', Excel::CSV);
 
             default:

@@ -107,7 +107,7 @@ class CanjeMarketingListadoController extends Controller
 
             case 'CSV':
                 return (new CanjeMarketingListadoExport($this->query))
-                    ->parametros($filtros)
+                    ->parametros($filtros, true)
                     ->download('listado_canje_marketing_gastronomia.csv', Excel::CSV);
         }
 

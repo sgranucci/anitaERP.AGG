@@ -1,0 +1,47 @@
+---
+description: Solapas (nav-tabs) en crear/editar con la solapa activa bien visible
+globs: resources/views/**/*.blade.php
+alwaysApply: false
+---
+
+# Solapas en formularios crear/editar: solapa activa visible
+
+Todo formulario de alta/edición con `nav nav-tabs` debe destacar la **solapa activa**
+(no dejar el estilo Bootstrap por defecto, casi indistinguible). Patrón unificado con
+el resto del sistema (celeste `#85C1E9` de los thead).
+
+## Obligatorio
+
+1. Incluir **una vez** el estilo compartido: `@include('includes.tabs-activas-estilos')`.
+2. Envolver el `<ul class="nav nav-tabs">` en un contenedor `class="tabs-activas"`.
+
+```blade
+@include('includes.tabs-activas-estilos')
+<div class="tabs-activas">
+    <ul class="nav nav-tabs" id="tabs-{recurso}" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" data-toggle="tab" href="#tab-datos" role="tab">
+                <i class="fa fa-info-circle"></i> Datos principales
+            </a>
+        </li>
+        {{-- más solapas... --}}
+    </ul>
+</div>
+<div class="tab-content pt-3"> {{-- tab-pane... --}} </div>
+```
+
+La solapa activa queda con barra superior `#2471A3`, fondo `#D6EAF8`, texto `#1B4F72`
+y `font-weight: 600`. Referencia canónica: `ventas/cliente` (partial `tabs_header`).
+
+## Prohibido
+
+- `nav-tabs` en crear/editar **sin** el wrapper `tabs-activas` (solapa activa indistinguible).
+- Duplicar el CSS de solapas por módulo: reutilizar `includes/tabs-activas-estilos.blade.php`.
+
+## Comprobación rápida
+
+```bash
+rg 'nav nav-tabs' resources/views/{modulo}/{recurso}/editar.blade.php
+rg 'tabs-activas' resources/views/{modulo}/{recurso}/editar.blade.php
+php artisan view:cache
+```

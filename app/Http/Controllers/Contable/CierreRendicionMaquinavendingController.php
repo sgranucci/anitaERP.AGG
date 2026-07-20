@@ -69,7 +69,7 @@ class CierreRendicionMaquinavendingController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new CierreRendicionMaquinavendingListadoExport($rendiciones),
+                    new CierreRendicionMaquinavendingListadoExport($rendiciones, $formato === 'CSV'),
                     'cierre_rendicion_maquinavending.'.$ext,
                     $mime,
                 );
@@ -190,7 +190,7 @@ class CierreRendicionMaquinavendingController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new CierreRendicionMaquinavendingConciliacionFlashExport($resultado),
+                    new CierreRendicionMaquinavendingConciliacionFlashExport($resultado, $formato === 'CSV'),
                     'conciliacion_flash_vending.'.$ext,
                     $mime,
                 );
@@ -308,7 +308,7 @@ class CierreRendicionMaquinavendingController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new MaquinavendingDiarioPuntoventaExport($resultado),
+                    new MaquinavendingDiarioPuntoventaExport($resultado, $formato === 'CSV'),
                     'vending_diario_puntoventa_contable.'.$ext,
                     $mime,
                 );

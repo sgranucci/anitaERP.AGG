@@ -104,7 +104,7 @@ class Cliente_Premio_UifController extends Controller
 
         case 'CSV':
             return (new Cliente_Premio_UifExport($this->cliente_premio_uifRepository))
-                        ->parametros($busqueda)
+                        ->parametros($busqueda, true)
                         ->download('cliente_premio_uif.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   

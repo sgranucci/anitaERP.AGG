@@ -1,0 +1,72 @@
+---
+description: Al actualizar/crear en un CRUD volver al index, y botón guardar en todas las solapas
+globs: app/Http/Controllers/**/*.php,resources/views/**/*.blade.php
+alwaysApply: false
+---
+
+# Guardado de CRUD: volver al index y botón en todas las solapas
+
+Al **actualizar** (y por defecto al **crear**) un registro en un CRUD, el controller
+debe **redirigir al index/listado** del recurso con `->with('mensaje', ...)`, no volver
+al `editar`. Así el operador confirma que el cambio impactó y sigue trabajando desde la lista.
+
+## Correcto
+
+```php
+public function actualizar(ValidacionX $request, $id)
+{
+    can('actualizar-x');
+    $this->repository->update($request->validated(), $id);
+
+    return redirect()->route('consultar_x')   // index del recurso
+        ->with('mensaje', 'Registro actualizado con éxito');
+}
+```
+
+## Botón "Actualizar" en todas las solapas
+
+Si el formulario de edición usa `nav-tabs` (varias solapas), el botón **Actualizar**
+del form principal debe estar disponible **en cada solapa**, no solo en la de datos.
+En las solapas que no contienen el `<form>` principal, usar el atributo HTML `form`
+apuntando al `id` del form:
+
+```blade
+{{-- form principal en la solapa de datos --}}
+<form id="form-general" method="POST" action="{{ route('actualizar_x', ['id' => $data->id]) }}">
+    @csrf @method('put')
+    ...
+    @include('includes.boton-form-editar')   {{-- botón dentro del form --}}
+</form>
+
+{{-- otra solapa: mismo botón, submit del form por id --}}
+@if ($puedeEditar)   {{-- calculado con el helper propio: can('actualizar-x', false) --}}
+    <button type="submit" form="form-general" class="btn botonsubmit btn-success">Actualizar</button>
+@endif
+```
+
+> Ojo: este proyecto usa el **helper propio `can('permiso', false)`** (devuelve bool), no
+> la directiva nativa `@can` de Laravel (que se apoya en Gates no registrados y siempre
+> daría `false`). Calculá el permiso en un `@php` y usá `@if`.
+
+Las acciones AJAX propias de otra solapa (ej. grilla de ítems, vigencias) se guardan
+por su cuenta; el botón «Actualizar» siempre persiste la **cabecera** del form principal.
+
+## Excepción: CRUD tipo borrador (permanece en el editar)
+
+Algunos CRUD justifican **quedarse en el `editar`** tras guardar, porque el alta/edición
+es un proceso incremental (se cargan ítems, lotes, líneas, etc. antes de confirmar).
+En esos casos, redirigir al `editar` (conservando query de retorno) es correcto.
+
+Referencia canónica del patrón borrador: **`RecepcionProveedorController`**
+(`actualizar` → `redirect()->route('editar_recepcion_proveedor', ...)`), donde se siguen
+cargando artículos del comprobante después de grabar la cabecera.
+
+Criterio para la excepción: el registro **no es útil/consistente** hasta terminar de
+cargar sus dependientes en la misma pantalla (recepción, transferencia con ítems,
+comprobantes con líneas). Un ABM de tabla maestra (categorías, obras sociales, etc.)
+**no** aplica la excepción → vuelve al index.
+
+## Prohibido
+
+- `actualizar` que redirija a `editar` en un ABM maestro simple sin justificación de borrador.
+- Dejar el botón «Actualizar» solo en la primera solapa cuando hay `nav-tabs`.

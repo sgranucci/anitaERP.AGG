@@ -2,6 +2,7 @@
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Jobs\Ventas\GastronomiaVerificarCaeaCierreJob;
 use App\Jobs\Ventas\GastronomiaVerificarInformeZCierreJob;
 use App\Models\Caja\RendicionGastronomiaCaja;
 use App\Services\Caja\RendicionGastronomiaAnitaSyncService;
@@ -355,6 +356,8 @@ final class GastronomiaJornadaService
             $this->programarVerificacionInformeZTransmision((int) $jornada->id);
         }
 
+        $this->programarVerificacionCaea((int) $jornada->id);
+
         // rendg_total_z en Anita: solo desde Caja (rendición turno/jornada), no aquí — las rendiciones
         // pueden cargarse después del cierre gastronómico o en otro orden.
 
@@ -377,6 +380,21 @@ final class GastronomiaJornadaService
 
         GastronomiaVerificarInformeZCierreJob::dispatch($jornadaId)
             ->delay(now()->addMinutes($delayMinutos));
+    }
+
+    /**
+     * Al cerrar la jornada: verifica integridad CAEA del día (además de los conciliadores de siempre).
+     */
+    private function programarVerificacionCaea(int $jornadaId): void
+    {
+        if ($jornadaId <= 0) {
+            return;
+        }
+        if (! filter_var(config('gastronomia.verificar_caea_cierre.habilitado', true), FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        GastronomiaVerificarCaeaCierreJob::dispatch($jornadaId);
     }
 
     /**

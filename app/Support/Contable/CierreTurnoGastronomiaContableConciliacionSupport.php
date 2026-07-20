@@ -380,8 +380,12 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
         $agregadosCaea = round((float) ($asientos['agregados_caea'] ?? 0), 2);
         $cantidadAsientos = (int) ($asientos['cantidad'] ?? 0);
 
-        // Total facturado del día = cierres de turno + facturación post-cierre Waitry (+ totem/agregados).
-        $totalFacturacion = round($totalCierres + $postCierre + $totemVentas + $agregadosCaea, 2);
+        // Total facturado del día = cierres de turno + facturación post-cierre Waitry (+ agregados CAEA).
+        // El tótem NO se suma aparte: el monto_facturacion_turno del cierre YA lo incluye. Verificado en
+        // BIYEMAS (única empresa con tótem) 16/7 y 17/7: sum(cierres) − factura_día del asiento == totem_ventas
+        // exacto. Volver a sumar $totemVentas lo contaba dos veces y generaba una DIF falsa igual al importe
+        // del tótem ($5.400 el 16/7, $5.900 el 17/7). $totemVentas se conserva solo para el detalle informativo.
+        $totalFacturacion = round($totalCierres + $postCierre + $agregadosCaea, 2);
 
         $flashAyb = round((float) ($flashPorFecha[$fechaFlash] ?? 0), 2);
         $mayorNeto = round((float) ($mayorPorFecha[$fechaJornada] ?? 0), 2);

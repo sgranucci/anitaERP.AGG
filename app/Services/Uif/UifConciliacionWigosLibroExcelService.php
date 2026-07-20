@@ -3,6 +3,7 @@
 namespace App\Services\Uif;
 
 use App\Models\Uif\UifConciliacionWigosPeriodo;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Uif\UifWigosConciliacionEmpresaSupport;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -146,6 +147,12 @@ final class UifConciliacionWigosLibroExcelService
             $row++;
         }
 
+        if ($row > 4) {
+            $sheet->getStyle('E4:E'.($row - 1))->getNumberFormat()->setFormatCode(
+                ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            );
+        }
+
         foreach (range('A', 'L') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
@@ -185,6 +192,12 @@ final class UifConciliacionWigosLibroExcelService
             $row++;
         }
 
+        if ($row > 4) {
+            $mascara = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+            $sheet->getStyle('F4:F'.($row - 1))->getNumberFormat()->setFormatCode($mascara);
+            $sheet->getStyle('G4:G'.($row - 1))->getNumberFormat()->setFormatCode($mascara);
+        }
+
         foreach (range('A', 'J') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
@@ -209,7 +222,7 @@ final class UifConciliacionWigosLibroExcelService
             $this->setFechaCelda($sheet, 'B'.$row, $u->fecha_emision);
             if ($u->monto !== null) {
                 $monto = (float) $u->monto;
-                $this->setMontoCeldaAr($sheet, 'C'.$row, $monto);
+                $this->setMontoCeldaNumero($sheet, 'C'.$row, $monto);
                 $totalMonto += $monto;
             }
             $sheet->setCellValue('D'.$row, $u->terminal);
@@ -221,7 +234,7 @@ final class UifConciliacionWigosLibroExcelService
 
         if ($totalMonto > 0 || $row > 2) {
             $sheet->setCellValue('B'.$row, 'Total premios');
-            $this->setMontoCeldaAr($sheet, 'C'.$row, $totalMonto);
+            $this->setMontoCeldaNumero($sheet, 'C'.$row, $totalMonto);
             $sheet->getStyle('B'.$row)->getFont()->setBold(true);
             $sheet->getStyle('C'.$row)->getFont()->setBold(true);
         }
@@ -236,17 +249,15 @@ final class UifConciliacionWigosLibroExcelService
         }
     }
 
-    private function formatearMontoAr(float $monto): string
+    /**
+     * Escribe el monto como número real con máscara neutra: sumable en Excel y
+     * adaptable a la configuración regional de la PC que abre el archivo.
+     */
+    private function setMontoCeldaNumero($sheet, string $coord, float $monto): void
     {
-        return '$ '.number_format($monto, 2, ',', '.');
-    }
-
-    private function setMontoCeldaAr($sheet, string $coord, float $monto): void
-    {
-        $sheet->setCellValueExplicit(
-            $coord,
-            $this->formatearMontoAr($monto),
-            \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING,
+        $sheet->setCellValue($coord, $monto);
+        $sheet->getStyle($coord)->getNumberFormat()->setFormatCode(
+            ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
         );
     }
 

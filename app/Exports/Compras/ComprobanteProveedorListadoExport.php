@@ -4,6 +4,7 @@ namespace App\Exports\Compras;
 
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -25,17 +26,24 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
 
     private const COL_ULTIMA = 'J';
 
+    /** Congela también ID y Empresa (columnas A y B): el freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
     private ?string $busqueda = null;
 
     private bool $flDesdeIndex = false;
 
+    private bool $esCsv = false;
+
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 2;
+    private int $filaCabecerasExcel = 3;
 
-    private int $filaPrimeraDatosExcel = 3;
+    private int $filaPrimeraDatosExcel = 4;
 
     private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
@@ -53,24 +61,30 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($datas);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
             $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-            $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+            $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+            $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
             $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
             return view('exports.compras.comprobante_proveedorindex', [
                 'datas' => $datas,
+                'esExcel' => true,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
+                'formatoNumero' => $this->formatoNumeroEfectivo(),
             ]);
         }
 
         $this->hayFilaLogos = false;
         $this->filaTituloExcel = 1;
-        $this->filaCabecerasExcel = 2;
-        $this->filaPrimeraDatosExcel = 3;
+        $this->filaSubtituloExcel = 2;
+        $this->filaCabecerasExcel = 3;
+        $this->filaPrimeraDatosExcel = 4;
         $this->rutasLogosExcel = [];
 
         return view('exports.compras.comprobante_proveedorindex', [
             'datas' => collect(),
+            'esExcel' => true,
             'reservarFilaLogoExcel' => false,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
@@ -80,12 +94,12 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
             return [];
         }
 
-        $cols = [];
-        foreach (range('A', self::COL_ULTIMA) as $c) {
-            $cols[$c] = NumberFormat::FORMAT_TEXT;
-        }
-
-        return $cols;
+        return [
+            'A' => NumberFormat::FORMAT_TEXT,
+            'E' => NumberFormat::FORMAT_TEXT,
+            // G = Total: número real con máscara neutra (sumable/adaptable).
+            'G' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+        ];
     }
 
     public function styles(Worksheet $sheet)
@@ -139,26 +153,39 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
                 }
 
                 $sheet = $event->sheet->getDelegate();
-                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.self::COL_ULTIMA.$this->filaTituloExcel);
-                $sheet->getStyle('A'.$this->filaTituloExcel)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setBold(true)->setSize(12);
+                $ult = self::COL_ULTIMA;
 
-                if ($this->hayFilaLogos) {
-                    $col = 'A';
+                if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
+                    $sheet->getRowDimension(1)->setRowHeight(54);
+                    $offsetX = 6;
                     foreach ($this->rutasLogosExcel as $ruta) {
-                        if (! is_file($ruta)) {
+                        if (! is_string($ruta) || ! is_readable($ruta)) {
                             continue;
                         }
                         $drawing = new Drawing();
+                        $drawing->setName('Logo');
+                        $drawing->setDescription('Logo empresa');
                         $drawing->setPath($ruta);
-                        $drawing->setHeight(48);
-                        $drawing->setCoordinates($col.'1');
+                        $drawing->setResizeProportional(true);
+                        $drawing->setHeight(46);
+                        $drawing->setCoordinates('A1');
+                        $drawing->setOffsetX($offsetX);
+                        $drawing->setOffsetY(4);
                         $drawing->setWorksheet($sheet);
-                        $col++;
+                        $offsetX += 160;
                     }
                 }
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $filaTit = $this->filaTituloExcel;
+                $sheet->mergeCells('A'.$filaTit.':'.$ult.$filaTit);
+                $sheet->getRowDimension($filaTit)->setRowHeight(28);
+                $sheet->getStyle('A'.$filaTit)->getFont()->setName('Arial')->setSize(16)->setBold(true)->getColor()->setRGB('17202A');
+
+                $filaSub = $this->filaSubtituloExcel;
+                $sheet->mergeCells('A'.$filaSub.':'.$ult.$filaSub);
+                $sheet->getStyle('A'.$filaSub)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }
@@ -168,12 +195,20 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
         return 'Comprobantes proveedor';
     }
 
-    public function parametros(?string $busqueda): self
+    public function parametros(?string $busqueda, bool $esCsv = false): self
     {
         $this->busqueda = $busqueda;
+        $this->esCsv = $esCsv;
         $this->flDesdeIndex = true;
 
         return $this;
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     /** @param \Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Collection $datas */

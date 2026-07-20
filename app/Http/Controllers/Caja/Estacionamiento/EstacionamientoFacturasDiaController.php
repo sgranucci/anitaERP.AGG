@@ -175,7 +175,7 @@ class EstacionamientoFacturasDiaController extends Controller
                     ->download('estacionamiento_facturas_dia.xlsx');
 
             case 'CSV':
-                return (new EstacionamientoFacturasDiaExport($registros))
+                return (new EstacionamientoFacturasDiaExport($registros, true))
                     ->download('estacionamiento_facturas_dia.csv', Excel::CSV);
         }
 

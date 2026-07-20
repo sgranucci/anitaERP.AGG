@@ -24,6 +24,8 @@ final class MovimientoStockFormLineasSupport
                 'articulos_movimiento.articulos.unidadesdemedidasalternativas',
                 'articulos_movimiento.combinaciones',
                 'articulos_movimiento.articulo_movimiento_talles.talles',
+                'articulos_movimiento.color',
+                'articulos_movimiento.talle',
             ]);
         }
 
@@ -123,6 +125,8 @@ final class MovimientoStockFormLineasSupport
                 'lote' => old('loteids.'.$i, 0),
                 'estado' => old('estados.'.$i, ''),
                 'articulo_movimiento_talles' => old('medidas.'.$i, ''),
+                'color_id' => old('colores_id.'.$i, ''),
+                'talle_id' => old('talles_id.'.$i, ''),
             ]);
         }
 

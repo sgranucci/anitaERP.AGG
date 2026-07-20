@@ -98,6 +98,7 @@ class CierreRendicionEstacionamientoController extends Controller
                         $grupos,
                         $vistaPorTurno,
                         $filtros,
+                        $formato === 'CSV',
                     ),
                     'cierre_rendicion_estacionamiento.'.$ext,
                     $mime,
@@ -231,7 +232,7 @@ class CierreRendicionEstacionamientoController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new CierreRendicionEstacionamientoConciliacionFlashExport($resultado),
+                    new CierreRendicionEstacionamientoConciliacionFlashExport($resultado, $formato === 'CSV'),
                     'conciliacion_flash_estacionamiento.'.$ext,
                     $mime,
                 );
@@ -361,7 +362,7 @@ class CierreRendicionEstacionamientoController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new EstacionamientoDiarioPuntoventaExport($resultado),
+                    new EstacionamientoDiarioPuntoventaExport($resultado, $formato === 'CSV'),
                     'estacionamiento_diario_puntoventa_contable.'.$ext,
                     $mime,
                 );

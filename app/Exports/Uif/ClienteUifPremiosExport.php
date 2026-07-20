@@ -4,6 +4,7 @@ namespace App\Exports\Uif;
 
 use App\Repositories\Uif\Cliente_Premio_UifRepository;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -25,6 +26,9 @@ class ClienteUifPremiosExport implements FromView, ShouldAutoSize, WithColumnFor
 
     private const COL_ULTIMA = 'H';
 
+    /** Congela ID y Fecha (A y B): freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
     private Cliente_Premio_UifRepository $clientePremioUifRepository;
 
     private ?int $clienteUifId = null;
@@ -33,13 +37,17 @@ class ClienteUifPremiosExport implements FromView, ShouldAutoSize, WithColumnFor
 
     private bool $flActivo = false;
 
+    private bool $esCsv = false;
+
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 2;
+    private int $filaCabecerasExcel = 3;
 
-    private int $filaPrimeraDatosExcel = 3;
+    private int $filaPrimeraDatosExcel = 4;
 
     private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
@@ -57,13 +65,16 @@ class ClienteUifPremiosExport implements FromView, ShouldAutoSize, WithColumnFor
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($premios);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
             $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-            $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+            $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+            $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
             $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
             return view('exports.uif.cliente_uif_premiosindex', [
                 'premios' => $premios,
                 'cliente_uif' => $this->clienteUif,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
+                'esExcel' => true,
+                'formatoNumero' => $this->formatoNumeroEfectivo(),
             ]);
         }
 
@@ -71,6 +82,8 @@ class ClienteUifPremiosExport implements FromView, ShouldAutoSize, WithColumnFor
             'premios' => collect(),
             'cliente_uif' => null,
             'reservarFilaLogoExcel' => false,
+            'esExcel' => true,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
@@ -80,12 +93,19 @@ class ClienteUifPremiosExport implements FromView, ShouldAutoSize, WithColumnFor
             return [];
         }
 
-        $cols = [];
-        foreach (range('A', self::COL_ULTIMA) as $c) {
-            $cols[$c] = NumberFormat::FORMAT_TEXT;
-        }
+        // A ID y E Nro. TITO como texto; F = Monto con máscara neutra (sumable/adaptable).
+        return [
+            'A' => NumberFormat::FORMAT_TEXT,
+            'E' => NumberFormat::FORMAT_TEXT,
+            'F' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+        ];
+    }
 
-        return $cols;
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function styles(Worksheet $sheet)
@@ -176,7 +196,10 @@ class ClienteUifPremiosExport implements FromView, ShouldAutoSize, WithColumnFor
                     ],
                 ]);
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $sheet->mergeCells('A'.$this->filaSubtituloExcel.':'.self::COL_ULTIMA.$this->filaSubtituloExcel);
+                $sheet->getStyle('A'.$this->filaSubtituloExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }
@@ -186,10 +209,11 @@ class ClienteUifPremiosExport implements FromView, ShouldAutoSize, WithColumnFor
         return 'Premios cliente UIF';
     }
 
-    public function parametros(int $clienteUifId, object $clienteUif): self
+    public function parametros(int $clienteUifId, object $clienteUif, bool $esCsv = false): self
     {
         $this->clienteUifId = $clienteUifId;
         $this->clienteUif = $clienteUif;
+        $this->esCsv = $esCsv;
         $this->flActivo = true;
 
         return $this;

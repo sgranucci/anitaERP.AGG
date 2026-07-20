@@ -137,7 +137,7 @@ class OrdenventaController extends Controller
 
         case 'CSV':
             return (new OrdenventaExport($this->ordenventaQuery))
-                        ->parametros($busqueda)
+                        ->parametros($busqueda, true)
                         ->download('ordenventa.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   

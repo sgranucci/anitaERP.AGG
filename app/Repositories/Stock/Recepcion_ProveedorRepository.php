@@ -51,6 +51,8 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
             'recepcion_proveedor_articulos.depositos',
             'recepcion_proveedor_articulos.centrocostos',
             'recepcion_proveedor_articulos.ordencompra_articulos',
+            'recepcion_proveedor_articulos.color',
+            'recepcion_proveedor_articulos.talle',
             'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
             'recepcion_proveedor_estados.usuarios',
             'recepcion_proveedor_archivos',

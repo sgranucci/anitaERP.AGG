@@ -1,0 +1,75 @@
+---
+description: Banner/overlay de espera para procesos que demoran (facturación, reportes, exportaciones)
+globs: resources/views/**/*.blade.php
+alwaysApply: false
+---
+
+# Banner de espera para procesos lentos
+
+Todo proceso que **demora** (facturación gastronomía, reportes pesados como IVA ventas / mayor por concepto, exportaciones PDF/Excel, import Waitry, conciliaciones) debe mostrar un **overlay de espera unificado**: fondo oscuro tenue semitransparente + **cajita amarilla chica centrada** con spinner. **Nunca** pintar toda la pantalla de amarillo ni inventar otro estilo.
+
+Referencias canónicas: `contable/mayor_concepto/index.blade.php`, `ventas/iva_ventas/index.blade.php`, `ventas/gastronomia/proceso_facturacion/index.blade.php`.
+
+## Obligatorio: usar el partial compartido
+
+```blade
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'mi-proceso-overlay',
+    'tituloId' => 'mi-proceso-titulo',
+    'subtituloId' => 'mi-proceso-subtitulo',
+    'titulo' => 'Calculando…',
+    'subtitulo' => 'Puede demorar según el período. No cierre la página.',
+])
+```
+
+- El partial (`resources/views/includes/proceso_overlay_aviso.blade.php`) ya trae: `position: fixed; inset:0`, backdrop `rgba(0,0,0,0.55)`, `z-index: 2050`, caja `alert alert-warning` con `fa-spinner fa-spin`.
+- Empieza oculto con clase `d-none`.
+
+## Textos: UTF-8 real, sin entidades HTML
+
+El partial escapa con `{{ }}`. Pasar acentos **UTF-8 reales**, no entidades.
+
+```blade
+{{-- ❌ Se ve literal "seg&uacute;n" --}}
+'subtitulo' => 'Puede demorar seg&uacute;n el per&iacute;odo.',
+
+{{-- ✅ --}}
+'subtitulo' => 'Puede demorar según el período.',
+```
+
+## Mostrar / ocultar (JS)
+
+```javascript
+var overlay = document.getElementById('mi-proceso-overlay');
+function mostrar(titulo) {
+    if (titulo) document.getElementById('mi-proceso-titulo').textContent = titulo;
+    overlay.classList.remove('d-none');
+    overlay.style.display = 'flex';
+    overlay.setAttribute('aria-hidden', 'false');
+}
+function ocultar() {
+    overlay.classList.add('d-none');
+    overlay.style.display = '';
+    overlay.setAttribute('aria-hidden', 'true');
+}
+```
+
+- **Formularios GET/POST que recargan**: `form.addEventListener('submit', ...)`; validar `form.checkValidity()` antes de mostrar (no tapar la pantalla si faltan campos requeridos).
+- **Exportaciones / links que navegan**: mostrar en el `click` del `<a href*="listar-...">`.
+- **AJAX**: mostrar antes de la request; `ocultar()` en `finally` / error.
+- Siempre `window.addEventListener('pageshow', ocultar)` para que el botón «atrás» (bfcache) no deje el overlay pegado.
+
+## Prohibido
+
+- Overlay con `background` amarillo a pantalla completa (toda la pantalla amarilla).
+- Copiar markup inline propio en vez de `@include('includes.proceso_overlay_aviso', …)`.
+- Entidades HTML (`&oacute;`, `&aacute;`) en `titulo` / `subtitulo`.
+- Overlay que no se oculta al volver con «atrás».
+
+## Comprobación rápida
+
+```bash
+rg "proceso_overlay_aviso" resources/views/{modulo}/   # debe existir en la pantalla del proceso lento
+rg "background:\s*#|linear-gradient.*amaril|#ffc107" resources/views/{modulo}/*.blade.php  # no overlay full amarillo
+php artisan view:clear && php artisan view:cache
+```

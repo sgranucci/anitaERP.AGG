@@ -36,6 +36,7 @@ return [
         'contable.apertura_periodo_recordatorio' => App\Services\Configuracion\Handlers\ContableAperturaPeriodoAvisoHandler::class,
         'contable.apertura_periodo_cerrada' => App\Services\Configuracion\Handlers\ContableAperturaPeriodoAvisoHandler::class,
         'uif.cliente_alta' => App\Services\Configuracion\Handlers\UifClienteAltaAvisoHandler::class,
+        'sueldos.empleado_alta_provisoria' => App\Services\Configuracion\Handlers\SueldosEmpleadoAltaProvisoriaAvisoHandler::class,
     ],
 
 ];

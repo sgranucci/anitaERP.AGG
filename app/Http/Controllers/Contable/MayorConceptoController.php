@@ -10,6 +10,7 @@ use App\Services\Contable\MayorConceptoReporteService;
 use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
 use App\Support\Contable\MayorConceptoExcelFormatoNumero;
 use App\Support\Contable\MayorConceptoListadoFiltros;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -161,7 +162,7 @@ class MayorConceptoController extends Controller
         ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
             'empresa_ids' => MayorConceptoListadoFiltros::empresaIds($filtros),
             'consolidar_empresas' => ! empty($filtros['consolidar_empresas']),
-            'excel_formato_numero' => $filtros['excel_formato_numero'] ?? 'ar',
+            'excel_formato_numero' => $filtros['excel_formato_numero'] ?? ExcelFormatoNumero::preferenciaGlobal(),
         ]);
 
         if ($request->ajax() || $request->boolean('ajax') || $request->wantsJson()) {
@@ -391,8 +392,14 @@ class MayorConceptoController extends Controller
                     ->download('mayor_por_concepto.xlsx');
 
             case 'CSV':
+                // CSV no lleva formato: "auto" no puede adaptarse, cae al respaldo (ar|intl).
+                $filtrosCsv = $filtros;
+                $filtrosCsv['excel_formato_numero'] = ExcelFormatoNumero::paraCsv(
+                    $filtros['excel_formato_numero'] ?? ExcelFormatoNumero::preferenciaGlobal()
+                );
+
                 return (new MayorConceptoExport($this->reporteService))
-                    ->parametros($filtros, $pack)
+                    ->parametros($filtrosCsv, $pack)
                     ->download('mayor_por_concepto.csv', Excel::CSV);
         }
 
@@ -553,12 +560,12 @@ class MayorConceptoController extends Controller
                 ReportePreferenciasUsuario::leerString(
                     self::PREFERENCIAS_CLAVE,
                     'excel_formato_numero',
-                    MayorConceptoExcelFormatoNumero::AR,
+                    ExcelFormatoNumero::preferenciaGlobal(),
                 )
             );
         } else {
             $filtros['excel_formato_numero'] = MayorConceptoExcelFormatoNumero::normalizar(
-                $filtros['excel_formato_numero'] ?? MayorConceptoExcelFormatoNumero::AR
+                $filtros['excel_formato_numero'] ?? ExcelFormatoNumero::preferenciaGlobal()
             );
         }
 

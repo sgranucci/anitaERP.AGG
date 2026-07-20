@@ -350,7 +350,21 @@
         }
     </style>
     @php
-        $ocColspanMetaArticulos = $soloLectura ? 13 : 14;
+        $modoStockColorTalleInicial = old('modo_stock_color_talle', '');
+        if ($modoStockColorTalleInicial === '' && isset($data) && $data && $data->ordencompra_articulos) {
+            foreach ($data->ordencompra_articulos as $linModo) {
+                if ((bool) (optional($linModo->articulos)->maneja_stock_color_talle ?? false)
+                    || (int) ($linModo->color_id ?? 0) > 0
+                    || (int) ($linModo->talle_id ?? 0) > 0) {
+                    $modoStockColorTalleInicial = '1';
+                    break;
+                }
+            }
+            if ($modoStockColorTalleInicial === '' && $data->ordencompra_articulos->count() > 0) {
+                $modoStockColorTalleInicial = '0';
+            }
+        }
+        $ocColspanMetaArticulos = $soloLectura ? 15 : 16;
         $fechaDocOc = old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d'));
         $ocMonedaPesoId = (int) (
             optional($moneda_query->firstWhere('abreviatura', '$'))->id
@@ -359,21 +373,27 @@
         );
         $prevFeEntrega = $fechaDocOc;
     @endphp
+    <div id="ms-ayuda-color-talle" class="alert alert-info py-2 small mb-2" style="display:none;">
+        Este comprobante usa stock por color y talle: todas las líneas deben tener color y talle.
+    </div>
+    <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
     <table class="table table-sm table-bordered" id="tabla-articulos-ordencompra" data-oc-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-oc-moneda-peso-id="{{ $ocMonedaPesoId }}">
         <thead>
             <tr>
-                <th style="width: 11%;">Artículo</th>
-                <th style="width: 14%;">Descripción</th>
-                <th style="width: 6%;">Cant.</th>
-                <th style="width: 6%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase)">Cant. alt.</th>
-                <th style="width: 8%;">Precio</th>
+                <th style="width: 10%;">Artículo</th>
+                <th style="width: 12%;">Descripción</th>
+                <th class="ms-col-color-talle" style="width: 6%; display:none;">Color</th>
+                <th class="ms-col-color-talle" style="width: 5%; display:none;">Talle</th>
+                <th style="width: 5%;">Cant.</th>
+                <th style="width: 5%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase)">Cant. alt.</th>
+                <th style="width: 7%;">Precio</th>
                 <th style="width: 5%;">Moneda</th>
-                <th style="width: 6%;">Cotiz.</th>
-                <th style="width: 8%;">F. entrega línea</th>
-                <th style="width: 9%;">CC destino</th>
-                <th style="width: 18%;">Partida presupuesto</th>
-                <th style="width: 16%;">CAPEX</th>
-                <th style="width: 7%;">Det. línea</th>
+                <th style="width: 5%;">Cotiz.</th>
+                <th style="width: 7%;">F. entrega línea</th>
+                <th style="width: 8%;">CC destino</th>
+                <th style="width: 15%;">Partida presupuesto</th>
+                <th style="width: 14%;">CAPEX</th>
+                <th style="width: 6%;">Det. línea</th>
                 <th style="width: 6%;" class="text-nowrap">Origen</th>
                 @if (!$soloLectura)
                     <th style="width: 4%;"></th>
@@ -426,8 +446,14 @@
                             ? rtrim(rtrim(number_format((float) $_cantAltOld, 4, '.', ''), '0'), '.')
                             : '';
                     }
+                    $_colorIdLin = (int) old('colores_id.'.$idx, $linea->color_id ?? 0);
+                    $_talleIdLin = (int) old('talles_id.'.$idx, $linea->talle_id ?? 0);
+                    $_manejaColorTalle = (bool) old(
+                        'maneja_stock_color_talle.'.$idx,
+                        optional($linea->articulos)->maneja_stock_color_talle ?? ($_colorIdLin > 0 || $_talleIdLin > 0)
+                    );
                 @endphp
-                <tr class="item-ordencompra-articulo">
+                <tr class="item-ordencompra-articulo" data-maneja-stock-color-talle="{{ $_manejaColorTalle ? '1' : '0' }}">
                     <td>
                         <input type="hidden" class="ordencompra_articulo_id" name="ordencompra_articulo_ids[]" value="{{ old('ordencompra_articulo_ids.'.$idx, $linea->id ?? '') }}">
                         <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}">
@@ -452,6 +478,11 @@
                         <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]"
                             value="{{ old('descripcionarticulos.'.$idx, optional($linea->articulos)->descripcion ?? '') }}" readonly>
                     </td>
+                    @include('stock.movimientostock.partials.fila_color_talle', [
+                        'colorId' => $_colorIdLin,
+                        'talleId' => $_talleIdLin,
+                        'manejaColorTalle' => $_manejaColorTalle,
+                    ])
                     <td>
                         <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea"
                             value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $soloLectura ? 'readonly' : '' }}>

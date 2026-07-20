@@ -133,6 +133,11 @@
             }
             msEnfocarCantidadFila($tr);
         } else {
+            if (typeof window.msAplicarExclusividadColorTalle === 'function') {
+                if (!window.msAplicarExclusividadColorTalle(dataArticulo, $tr)) {
+                    return;
+                }
+            }
             msEnriquecerUmDesdeArticulo($tr, dataArticulo);
             msResolverPrecioLinea($tr, articuloId);
             $tr.find('.cantidad-stock').val('');

@@ -79,7 +79,7 @@ class CierreTurnoGastronomiaContableController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new CierreTurnoGastronomiaContableListadoExport($filas, $filtros),
+                    new CierreTurnoGastronomiaContableListadoExport($filas, $filtros, $formato === 'CSV'),
                     'cierres_turno_gastronomia_contable.'.$ext,
                     $mime,
                 );
@@ -212,7 +212,7 @@ class CierreTurnoGastronomiaContableController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new CierreTurnoGastronomiaContableConciliacionExport($resultado),
+                    new CierreTurnoGastronomiaContableConciliacionExport($resultado, $formato === 'CSV'),
                     'conciliacion_cierres_turno_gastronomia_contable.'.$ext,
                     $mime,
                 );
@@ -342,7 +342,7 @@ class CierreTurnoGastronomiaContableController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new GastronomiaDiarioPuntoventaExport($resultado),
+                    new GastronomiaDiarioPuntoventaExport($resultado, $formato === 'CSV'),
                     'gastronomia_diario_puntoventa_contable.'.$ext,
                     $mime,
                 );

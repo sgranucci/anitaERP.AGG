@@ -366,10 +366,10 @@
                                         <td class="text-right">{{ number_format($totFlash, 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format($totRendg, 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format($totAsientos, 2, ',', '.') }}</td>
-                                        <td class="text-right {{ abs($totFact - $totFlash) > $tol ? 'text-danger' : 'text-muted' }}">
+                                        <td class="text-right {{ abs($totFlash) > $tol && abs($totFact - $totFlash) > $tol ? 'text-danger' : 'text-muted' }}">
                                             {{ number_format($totFact - $totFlash, 2, ',', '.') }}
                                         </td>
-                                        <td class="text-right {{ abs($totFact - $totRendg) > $tol ? 'text-danger' : 'text-success' }}">
+                                        <td class="text-right {{ abs($totRendg) > $tol && abs($totFact - $totRendg) > $tol ? 'text-danger' : 'text-success' }}">
                                             {{ number_format($totFact - $totRendg, 2, ',', '.') }}
                                         </td>
                                         <td class="text-right {{ abs($totVenta - $totAsientos) > $tol ? 'text-danger' : 'text-success' }}">

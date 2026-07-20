@@ -3,9 +3,11 @@
 namespace App\Exports\Contable;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -16,7 +18,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class CierreRendicionMaquinavendingConciliacionFlashExport implements FromView, ShouldAutoSize, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class CierreRendicionMaquinavendingConciliacionFlashExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     private const COL_ULTIMA = 'K';
 
@@ -36,6 +38,7 @@ class CierreRendicionMaquinavendingConciliacionFlashExport implements FromView, 
      */
     public function __construct(
         private array $resultado,
+        private bool $esCsv = false,
     ) {
     }
 
@@ -55,7 +58,19 @@ class CierreRendicionMaquinavendingConciliacionFlashExport implements FromView, 
             'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'filas' => self::aplanarFilas($this->resultado),
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
+    }
+
+    /**
+     * XLSX usa la preferencia global (auto adapta a la PC); CSV cae al respaldo
+     * de config('export.csv_fallback').
+     */
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     /**
@@ -119,6 +134,28 @@ class CierreRendicionMaquinavendingConciliacionFlashExport implements FromView, 
             'I' => 13,
             'J' => 13,
             'K' => 14,
+        ];
+    }
+
+    /**
+     * Importes con máscara neutra: en modo "auto" Excel los muestra según la
+     * configuración regional de la PC que abre el archivo.
+     *
+     * @return array<string, string>
+     */
+    public function columnFormats(): array
+    {
+        $codigo = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+
+        return [
+            'D' => $codigo,
+            'E' => $codigo,
+            'F' => $codigo,
+            'G' => $codigo,
+            'H' => $codigo,
+            'I' => $codigo,
+            'J' => $codigo,
+            'K' => $codigo,
         ];
     }
 

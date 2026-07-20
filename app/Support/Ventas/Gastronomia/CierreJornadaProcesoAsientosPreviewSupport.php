@@ -62,6 +62,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
 
             $impuestoInterno = round((float) ($mov['impuesto_interno'] ?? 0), 2);
             $importeCigarrillos = self::importeCigarrillosDesdeMov($mov, $empresaId);
+            $exento = self::exentoDesdeMov($mov, $empresaId);
 
             if ($grupo === CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_MEDIO_REAL) {
                 $medios = self::mediosPlanificadosFacturado($mov, $empresaId);
@@ -76,6 +77,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                     $cuentaVentas,
                     $cuentaIva,
                     $cuentaVentasKiosco,
+                    $exento,
                 );
             } elseif ($grupo === CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM) {
                 $n++;
@@ -89,6 +91,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                     $cuentaIva,
                     $cuentaVentasKiosco,
                     $empresaId,
+                    $exento,
                 );
                 $n++;
                 $asientos[] = self::asientoTotemPuente(
@@ -114,6 +117,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                     $cuentaIva,
                     $cuentaVentasKiosco,
                     $cuentaFondoFijo,
+                    $exento,
                 );
             }
         }
@@ -1433,10 +1437,12 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             $total = round((float) ($mov['total'] ?? 0), 2);
             $importeCigarrillos = self::importeCigarrillosDesdeMov($mov, $empresaId);
             $impuestoInterno = self::impuestoInternoDesdeMov($mov, $empresaId, $importeCigarrillos);
+            $exento = self::exentoDesdeMov($mov, $empresaId);
             $desglose = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables(
                 $total,
                 $impuestoInterno,
                 $importeCigarrillos,
+                $exento,
             );
             $totalFacturado += $total;
             $impuestoInternoTotal += $impuestoInterno;
@@ -1686,6 +1692,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         int $cuentaVentas,
         int $cuentaIva,
         int $cuentaVentasKiosco,
+        float $exento = 0.0,
     ): array {
         $lineas = [];
         foreach ($medios as $m) {
@@ -1704,6 +1711,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                 $cuentaVentas,
                 $cuentaIva,
                 $cuentaVentasKiosco,
+                $exento,
             ),
         );
 
@@ -1728,6 +1736,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         int $cuentaIva,
         int $cuentaVentasKiosco,
         int $empresaId,
+        float $exento = 0.0,
     ): array {
         $totem = GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId);
         $lineas = [
@@ -1742,6 +1751,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                 $cuentaVentas,
                 $cuentaIva,
                 $cuentaVentasKiosco,
+                $exento,
             ),
         );
 
@@ -1808,6 +1818,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         int $cuentaIva,
         int $cuentaVentasKiosco,
         int $cuentaFondoFijo,
+        float $exento = 0.0,
     ): array {
         $lineas = [];
         foreach ($medios as $m) {
@@ -1822,6 +1833,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                 $cuentaVentas,
                 $cuentaIva,
                 $cuentaVentasKiosco,
+                $exento,
             ),
         );
         if ($cuentaFondoFijo > 0) {
@@ -1853,12 +1865,14 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         int $cuentaVentas,
         int $cuentaIva,
         int $cuentaVentasKiosco,
+        float $exento = 0.0,
     ): array {
         $cuentaKiosco = $cuentaVentasKiosco > 0 ? $cuentaVentasKiosco : $cuentaVentas;
         $desglose = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables(
             $total,
             $impuestoInterno,
             $importeCigarrillos,
+            $exento,
         );
 
         return self::lineasHaberVentasConsolidado(
@@ -1899,6 +1913,21 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         return $venta !== null
             ? CierreJornadaVentasCigarrillosSupport::resolverImpuestoInternoVenta($venta, $empresaId, $importeCigarrillos)
             : $impuestoInterno;
+    }
+
+    private static function exentoDesdeMov(array $mov, int $empresaId): float
+    {
+        $exento = round((float) ($mov['exento'] ?? 0), 2);
+        if (abs($exento) > 0.0001) {
+            return $exento;
+        }
+
+        $ventaId = (int) ($mov['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return 0.0;
+        }
+
+        return CierreJornadaVentasCigarrillosSupport::resolverExentoVentaPorVentaId($ventaId);
     }
 
     /**

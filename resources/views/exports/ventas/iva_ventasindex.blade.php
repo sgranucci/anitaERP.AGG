@@ -2,19 +2,34 @@
     $filaLogo = $reservarFilaLogoExcel ?? false;
     $filaTitulo = $filaLogo ? 2 : 1;
     $filaCabecera = $filaLogo ? 4 : 3;
+    $esExcel = ! empty($esExcel);
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtMonto = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
+    $columnasFijas = empty($clasificar_por_host) ? 7 : 8;
+    $colspanTotal = $columnasFijas + count($resultado['columnas'] ?? []);
 @endphp
 <table>
     @if ($filaLogo)
         <tr>
-            <td colspan="16"></td>
+            <td colspan="{{ $colspanTotal }}"></td>
         </tr>
     @endif
     <tr>
-        <td colspan="16" style="font-weight: bold; font-size: 14px;">{{ $titulo ?? 'IVA VENTAS' }}</td>
+        <td colspan="{{ $colspanTotal }}" style="font-weight: bold; font-size: 14px;">{{ $titulo ?? 'IVA VENTAS' }}</td>
     </tr>
     @if (! empty($subtitulo))
         <tr>
-            <td colspan="16">{{ $subtitulo }}</td>
+            <td colspan="{{ $colspanTotal }}">{{ $subtitulo }}</td>
         </tr>
     @endif
     <tr>
@@ -45,7 +60,7 @@
             <td>{{ $fila['tipo'] ?? '' }}</td>
             <td>{{ $fila['comprobante'] ?? '' }}</td>
             @foreach ($resultado['columnas'] ?? [] as $col)
-                <td>{{ number_format((float) ($fila['columnas'][$col['key']] ?? 0), 2, ',', '.') }}</td>
+                <td>{{ $fmtMonto($fila['columnas'][$col['key']] ?? 0) }}</td>
             @endforeach
         </tr>
     @endforeach
@@ -53,7 +68,7 @@
         <tr>
             <td colspan="{{ empty($clasificar_por_host) ? 7 : 8 }}">TOTAL GENERAL</td>
             @foreach ($resultado['columnas'] ?? [] as $col)
-                <td>{{ number_format((float) ($resultado['totales_general'][$col['key']] ?? 0), 2, ',', '.') }}</td>
+                <td>{{ $fmtMonto($resultado['totales_general'][$col['key']] ?? 0) }}</td>
             @endforeach
         </tr>
     @endif

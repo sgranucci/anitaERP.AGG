@@ -236,6 +236,8 @@ Route::delete('configuracion/actividad_arca/{id}', 'Configuracion\Actividad_Arca
  */
 
 Route::get('configuracion/feriado', 'Configuracion\FeriadoController@index')->name('feriado');
+Route::get('configuracion/lista-feriado/{formato?}/{busqueda?}', 'Configuracion\FeriadoController@listar')->name('lista_feriado');
+Route::post('configuracion/feriado/importar', 'Configuracion\FeriadoController@importar')->name('importar_feriado');
 Route::get('configuracion/feriado/crear', 'Configuracion\FeriadoController@crear')->name('crear_feriado');
 Route::post('configuracion/feriado', 'Configuracion\FeriadoController@guardar')->name('guardar_feriado');
 Route::get('configuracion/feriado/{id}/editar', 'Configuracion\FeriadoController@editar')->name('editar_feriado');
@@ -2288,6 +2290,16 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/lista-flash-caja/{formato?}/{busqueda?}', 'Caja\Flash\FlashCajaController@listar')->name('lista_flash_caja');
     Route::get('caja/flash/reporte-historico', 'Caja\Flash\FlashCajaController@reporteHistorico')->name('flash_caja_reporte_historico');
     Route::get('caja/flash/listar-reporte-historico/{formato?}', 'Caja\Flash\FlashCajaController@exportarReporteHistorico')->name('listar_flash_caja_reporte_historico');
+
+    Route::get('caja/flash/parametro', 'Caja\Flash\FlashParametroController@index')->name('flash_parametro');
+    Route::get('caja/lista-flash-parametro/{formato?}/{busqueda?}', 'Caja\Flash\FlashParametroController@listar')->name('lista_flash_parametro');
+    Route::get('caja/flash/parametro/crear', 'Caja\Flash\FlashParametroController@crear')->name('crear_flash_parametro');
+    Route::post('caja/flash/parametro', 'Caja\Flash\FlashParametroController@guardar')->name('guardar_flash_parametro');
+    Route::get('caja/flash/parametro/api/dias-periodo', 'Caja\Flash\FlashParametroController@apiDiasPeriodo')->name('flash_parametro_api_dias');
+    Route::get('caja/flash/parametro/{id}/editar', 'Caja\Flash\FlashParametroController@editar')->name('editar_flash_parametro');
+    Route::put('caja/flash/parametro/{id}', 'Caja\Flash\FlashParametroController@actualizar')->name('actualizar_flash_parametro');
+    Route::delete('caja/flash/parametro/{id}', 'Caja\Flash\FlashParametroController@eliminar')->name('eliminar_flash_parametro');
+
     Route::get('caja/flash/crear', 'Caja\Flash\FlashCajaController@crear')->name('crear_flash_caja');
     Route::post('caja/flash', 'Caja\Flash\FlashCajaController@guardar')->name('guardar_flash_caja');
     Route::post('caja/flash/api/calcular', 'Caja\Flash\FlashCajaController@apiCalcular')->name('flash_caja_api_calcular');
@@ -3527,6 +3539,352 @@ Route::get('solicitudpago/solicitudpago/{id}/archivo/{archivoId}', 'Solicitudpag
 Route::post('solicitudpago/solicitudpago/{id}/importar-cuotas', 'Solicitudpago\SolicitudpagoController@importarCuotas')->name('importar_cuotas_solicitudpago');
 Route::post('solicitudpago/solicitudpago/{id}/marcar-pagada', 'Solicitudpago\SolicitudpagoController@marcarPagada')->name('marcar_pagada_solicitudpago');
 Route::get('solicitudpago/solicitudpago/{id}/ir-a-pago', 'Solicitudpago\SolicitudpagoController@irAPago')->name('ir_a_pago_solicitudpago');
+
+// Modulo de sueldos y jornales
+/*
+ * Nombres de bases de sueldos (Anita sueldos / nombase). Sync solo llenado inicial; CRUD vive en el ERP.
+ */
+Route::get('sueldos/nombrebase', 'Sueldos\Nombrebase_SueldosController@index')->name('consultar_nombrebase_sueldos');
+Route::post('sueldos/nombrebase/sincronizar-anita', 'Sueldos\Nombrebase_SueldosController@sincronizarAnita')->name('sincronizar_nombrebase_sueldos');
+Route::get('sueldos/nombrebase/crear', 'Sueldos\Nombrebase_SueldosController@crear')->name('crear_nombrebase_sueldos');
+Route::post('sueldos/nombrebase', 'Sueldos\Nombrebase_SueldosController@guardar')->name('guardar_nombrebase_sueldos');
+Route::get('sueldos/nombrebase/{id}/editar', 'Sueldos\Nombrebase_SueldosController@editar')->name('editar_nombrebase_sueldos');
+Route::put('sueldos/nombrebase/{id}', 'Sueldos\Nombrebase_SueldosController@actualizar')->name('actualizar_nombrebase_sueldos');
+Route::delete('sueldos/nombrebase/{id}', 'Sueldos\Nombrebase_SueldosController@eliminar')->name('eliminar_nombrebase_sueldos');
+
+/*
+ * Categorías de sueldos (Anita sueldos / categoria). Cabecera + bases de cálculo con fecha de vigencia.
+ */
+Route::get('sueldos/categoria', 'Sueldos\Categoria_SueldosController@index')->name('consultar_categoria_sueldos');
+Route::get('sueldos/listacategoria/{formato?}/{busqueda?}', 'Sueldos\Categoria_SueldosController@listar')->name('lista_categoria_sueldos');
+Route::post('sueldos/categoria/sincronizar-anita', 'Sueldos\Categoria_SueldosController@sincronizarAnita')->name('sincronizar_categoria_sueldos');
+Route::get('sueldos/categoria/crear', 'Sueldos\Categoria_SueldosController@crear')->name('crear_categoria_sueldos');
+Route::post('sueldos/categoria', 'Sueldos\Categoria_SueldosController@guardar')->name('guardar_categoria_sueldos');
+Route::get('sueldos/categoria/{id}/editar', 'Sueldos\Categoria_SueldosController@editar')->name('editar_categoria_sueldos');
+Route::put('sueldos/categoria/{id}', 'Sueldos\Categoria_SueldosController@actualizar')->name('actualizar_categoria_sueldos');
+Route::delete('sueldos/categoria/{id}', 'Sueldos\Categoria_SueldosController@eliminar')->name('eliminar_categoria_sueldos');
+Route::post('sueldos/categoria/{id}/base', 'Sueldos\Categoria_SueldosController@guardarBase')->name('guardar_base_categoria_sueldos');
+Route::post('sueldos/categoria/{id}/vigencias', 'Sueldos\Categoria_SueldosController@guardarVigenciasLote')->name('guardar_vigencias_categoria_sueldos');
+Route::put('sueldos/categoria/{id}/vigencia/{baseId}', 'Sueldos\Categoria_SueldosController@actualizarVigencia')->name('actualizar_vigencia_categoria_sueldos');
+Route::delete('sueldos/categoria/{id}/base/{baseId}', 'Sueldos\Categoria_SueldosController@eliminarBase')->name('eliminar_base_categoria_sueldos');
+Route::delete('sueldos/categoria/{id}/base-completa/{nombrebaseId}', 'Sueldos\Categoria_SueldosController@eliminarBaseCompleta')->name('eliminar_base_completa_categoria_sueldos');
+Route::get('sueldos/categoria/{id}/bases', 'Sueldos\Categoria_SueldosController@bases')->name('bases_categoria_sueldos');
+Route::get('sueldos/categoria/{id}/historial-bases', 'Sueldos\Categoria_SueldosController@historialBases')->name('historial_bases_categoria_sueldos');
+
+/*
+ * Obras sociales de sueldos (Anita sueldos / osocial). Sin imputación contable.
+ */
+Route::get('sueldos/obrasocial', 'Sueldos\Obrasocial_SueldosController@index')->name('consultar_obrasocial_sueldos');
+Route::get('sueldos/listaobrasocial/{formato?}/{busqueda?}', 'Sueldos\Obrasocial_SueldosController@listar')->name('lista_obrasocial_sueldos');
+Route::post('sueldos/obrasocial/sincronizar-anita', 'Sueldos\Obrasocial_SueldosController@sincronizarAnita')->name('sincronizar_obrasocial_sueldos');
+Route::get('sueldos/obrasocial/crear', 'Sueldos\Obrasocial_SueldosController@crear')->name('crear_obrasocial_sueldos');
+Route::post('sueldos/obrasocial', 'Sueldos\Obrasocial_SueldosController@guardar')->name('guardar_obrasocial_sueldos');
+Route::get('sueldos/obrasocial/{id}/editar', 'Sueldos\Obrasocial_SueldosController@editar')->name('editar_obrasocial_sueldos');
+Route::put('sueldos/obrasocial/{id}', 'Sueldos\Obrasocial_SueldosController@actualizar')->name('actualizar_obrasocial_sueldos');
+Route::delete('sueldos/obrasocial/{id}', 'Sueldos\Obrasocial_SueldosController@eliminar')->name('eliminar_obrasocial_sueldos');
+
+/*
+ * Sindicatos de sueldos (Anita sueldos / sindicato). Sin imputación contable.
+ */
+Route::get('sueldos/sindicato', 'Sueldos\Sindicato_SueldosController@index')->name('consultar_sindicato_sueldos');
+Route::get('sueldos/listasindicato/{formato?}/{busqueda?}', 'Sueldos\Sindicato_SueldosController@listar')->name('lista_sindicato_sueldos');
+Route::post('sueldos/sindicato/sincronizar-anita', 'Sueldos\Sindicato_SueldosController@sincronizarAnita')->name('sincronizar_sindicato_sueldos');
+Route::get('sueldos/sindicato/crear', 'Sueldos\Sindicato_SueldosController@crear')->name('crear_sindicato_sueldos');
+Route::post('sueldos/sindicato', 'Sueldos\Sindicato_SueldosController@guardar')->name('guardar_sindicato_sueldos');
+Route::get('sueldos/sindicato/{id}/editar', 'Sueldos\Sindicato_SueldosController@editar')->name('editar_sindicato_sueldos');
+Route::put('sueldos/sindicato/{id}', 'Sueldos\Sindicato_SueldosController@actualizar')->name('actualizar_sindicato_sueldos');
+Route::delete('sueldos/sindicato/{id}', 'Sueldos\Sindicato_SueldosController@eliminar')->name('eliminar_sindicato_sueldos');
+
+/*
+ * Fallos de caja de sueldos (Anita sueldos / tblfallo). Sync solo llenado inicial; CRUD vive en el ERP.
+ */
+Route::get('sueldos/fallocaja', 'Sueldos\Fallocaja_SueldosController@index')->name('consultar_fallocaja_sueldos');
+Route::get('sueldos/listafallocaja/{formato?}/{busqueda?}', 'Sueldos\Fallocaja_SueldosController@listar')->name('lista_fallocaja_sueldos');
+Route::post('sueldos/fallocaja/sincronizar-anita', 'Sueldos\Fallocaja_SueldosController@sincronizarAnita')->name('sincronizar_fallocaja_sueldos');
+Route::get('sueldos/fallocaja/crear', 'Sueldos\Fallocaja_SueldosController@crear')->name('crear_fallocaja_sueldos');
+Route::post('sueldos/fallocaja', 'Sueldos\Fallocaja_SueldosController@guardar')->name('guardar_fallocaja_sueldos');
+Route::get('sueldos/fallocaja/{id}/editar', 'Sueldos\Fallocaja_SueldosController@editar')->name('editar_fallocaja_sueldos');
+Route::put('sueldos/fallocaja/{id}', 'Sueldos\Fallocaja_SueldosController@actualizar')->name('actualizar_fallocaja_sueldos');
+Route::delete('sueldos/fallocaja/{id}', 'Sueldos\Fallocaja_SueldosController@eliminar')->name('eliminar_fallocaja_sueldos');
+
+/*
+ * Agrupamientos de sueldos (Anita sueldos / agrupamiento). CRUD pesado: paginado + filtros + export.
+ * Sync solo llenado inicial; CRUD vive en el ERP.
+ */
+Route::get('sueldos/agrupamiento', 'Sueldos\Agrupamiento_SueldosController@index')->name('consultar_agrupamiento_sueldos');
+Route::get('sueldos/listaagrupamiento/{formato?}/{busqueda?}', 'Sueldos\Agrupamiento_SueldosController@listar')->name('lista_agrupamiento_sueldos');
+Route::post('sueldos/agrupamiento/sincronizar-anita', 'Sueldos\Agrupamiento_SueldosController@sincronizarAnita')->name('sincronizar_agrupamiento_sueldos');
+Route::get('sueldos/agrupamiento/crear', 'Sueldos\Agrupamiento_SueldosController@crear')->name('crear_agrupamiento_sueldos');
+Route::post('sueldos/agrupamiento', 'Sueldos\Agrupamiento_SueldosController@guardar')->name('guardar_agrupamiento_sueldos');
+Route::get('sueldos/agrupamiento/{id}/editar', 'Sueldos\Agrupamiento_SueldosController@editar')->name('editar_agrupamiento_sueldos');
+Route::put('sueldos/agrupamiento/{id}', 'Sueldos\Agrupamiento_SueldosController@actualizar')->name('actualizar_agrupamiento_sueldos');
+Route::delete('sueldos/agrupamiento/{id}', 'Sueldos\Agrupamiento_SueldosController@eliminar')->name('eliminar_agrupamiento_sueldos');
+
+/*
+ * Dotación de indumentaria por agrupamiento y sexo (solapa AJAX en el edit de agrupamiento).
+ * Sync pull unilateral de prendxagr desde Anita.
+ */
+Route::get('sueldos/agrupamiento/{id}/dotacion', 'Sueldos\Agrupamiento_DotacionSueldosController@panel')->name('panel_dotacion_agrupamiento');
+Route::post('sueldos/agrupamiento/{id}/dotacion', 'Sueldos\Agrupamiento_DotacionSueldosController@guardar')->name('guardar_dotacion_agrupamiento');
+Route::put('sueldos/agrupamiento/dotacion/{id}', 'Sueldos\Agrupamiento_DotacionSueldosController@actualizar')->name('actualizar_dotacion_agrupamiento');
+Route::delete('sueldos/agrupamiento/dotacion/{id}', 'Sueldos\Agrupamiento_DotacionSueldosController@eliminar')->name('eliminar_dotacion_agrupamiento');
+Route::post('sueldos/agrupamiento/dotacion-sincronizar-anita', 'Sueldos\Agrupamiento_DotacionSueldosController@sincronizarAnita')->name('sincronizar_dotacion_agrupamiento');
+
+/*
+ * Lugares de trabajo de sueldos (Anita sueldos / lugartrabajo). CRUD pesado: paginado + filtros + export.
+ * Sync solo llenado inicial (código y nombre); CRUD vive en el ERP.
+ */
+Route::get('sueldos/lugartrabajo', 'Sueldos\Lugartrabajo_SueldosController@index')->name('consultar_lugartrabajo_sueldos');
+Route::get('sueldos/listalugartrabajo/{formato?}/{busqueda?}', 'Sueldos\Lugartrabajo_SueldosController@listar')->name('lista_lugartrabajo_sueldos');
+Route::post('sueldos/lugartrabajo/sincronizar-anita', 'Sueldos\Lugartrabajo_SueldosController@sincronizarAnita')->name('sincronizar_lugartrabajo_sueldos');
+Route::get('sueldos/lugartrabajo/crear', 'Sueldos\Lugartrabajo_SueldosController@crear')->name('crear_lugartrabajo_sueldos');
+Route::post('sueldos/lugartrabajo', 'Sueldos\Lugartrabajo_SueldosController@guardar')->name('guardar_lugartrabajo_sueldos');
+Route::get('sueldos/lugartrabajo/{id}/editar', 'Sueldos\Lugartrabajo_SueldosController@editar')->name('editar_lugartrabajo_sueldos');
+Route::put('sueldos/lugartrabajo/{id}', 'Sueldos\Lugartrabajo_SueldosController@actualizar')->name('actualizar_lugartrabajo_sueldos');
+Route::delete('sueldos/lugartrabajo/{id}', 'Sueldos\Lugartrabajo_SueldosController@eliminar')->name('eliminar_lugartrabajo_sueldos');
+
+/*
+ * Vacaciones de sueldos (Anita sueldos / vacmae + vacmov).
+ * Sync solo llenado inicial (cabecera + períodos); CRUD vive en el ERP, sin write-back a Anita.
+ */
+Route::get('sueldos/vacacion', 'Sueldos\Vacacion_SueldosController@index')->name('consultar_vacacion_sueldos');
+Route::get('sueldos/listavacacion/{formato?}/{busqueda?}', 'Sueldos\Vacacion_SueldosController@listar')->name('lista_vacacion_sueldos');
+Route::post('sueldos/vacacion/sincronizar-anita', 'Sueldos\Vacacion_SueldosController@sincronizarAnita')->name('sincronizar_vacacion_sueldos');
+Route::get('sueldos/vacacion/crear', 'Sueldos\Vacacion_SueldosController@crear')->name('crear_vacacion_sueldos');
+Route::post('sueldos/vacacion', 'Sueldos\Vacacion_SueldosController@guardar')->name('guardar_vacacion_sueldos');
+Route::get('sueldos/vacacion/{id}/editar', 'Sueldos\Vacacion_SueldosController@editar')->name('editar_vacacion_sueldos');
+Route::put('sueldos/vacacion/{id}', 'Sueldos\Vacacion_SueldosController@actualizar')->name('actualizar_vacacion_sueldos');
+Route::delete('sueldos/vacacion/{id}', 'Sueldos\Vacacion_SueldosController@eliminar')->name('eliminar_vacacion_sueldos');
+
+/*
+ * Conceptos de liquidación de sueldos (Anita sueldos / haberes + habformula).
+ * Todo por fórmula; el maestro vive en el ERP, sin write-back a Anita.
+ */
+Route::get('sueldos/liquidacion', 'Sueldos\Liquidacion_SueldosController@index')->name('consultar_liquidacion_sueldos');
+Route::get('sueldos/listaliquidacion/{formato?}/{busqueda?}', 'Sueldos\Liquidacion_SueldosController@listar')->name('lista_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/crear', 'Sueldos\Liquidacion_SueldosController@crear')->name('crear_liquidacion_sueldos');
+Route::post('sueldos/liquidacion', 'Sueldos\Liquidacion_SueldosController@guardar')->name('guardar_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/{id}/editar', 'Sueldos\Liquidacion_SueldosController@editar')->name('editar_liquidacion_sueldos');
+Route::put('sueldos/liquidacion/{id}', 'Sueldos\Liquidacion_SueldosController@actualizar')->name('actualizar_liquidacion_sueldos');
+Route::post('sueldos/liquidacion/{id}/estado', 'Sueldos\Liquidacion_SueldosController@estado')->name('estado_liquidacion_sueldos');
+Route::post('sueldos/liquidacion/{id}/calcular', 'Sueldos\Liquidacion_SueldosController@calcular')->name('calcular_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/{id}/resultado', 'Sueldos\Liquidacion_SueldosController@resultado')->name('resultado_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/{id}/trazar/{empleadoId}', 'Sueldos\Liquidacion_SueldosController@trazar')->name('trazar_liquidacion_sueldos');
+Route::delete('sueldos/liquidacion/{id}', 'Sueldos\Liquidacion_SueldosController@eliminar')->name('eliminar_liquidacion_sueldos');
+
+Route::get('sueldos/ganancias', 'Sueldos\Ganancias_SueldosController@index')->name('consultar_ganancias_sueldos');
+Route::post('sueldos/ganancias/simular', 'Sueldos\Ganancias_SueldosController@simular')->name('simular_ganancias_sueldos');
+
+/*
+ * ABM Ganancias: plan de líneas, escala Art. 94, deducciones Art. 30.
+ */
+Route::get('sueldos/ganancia-linea', 'Sueldos\Ganancia_Linea_SueldosController@index')->name('consultar_ganancia_linea_sueldos');
+Route::get('sueldos/ganancia-linea/crear', 'Sueldos\Ganancia_Linea_SueldosController@crear')->name('crear_ganancia_linea_sueldos');
+Route::post('sueldos/ganancia-linea', 'Sueldos\Ganancia_Linea_SueldosController@guardar')->name('guardar_ganancia_linea_sueldos');
+Route::get('sueldos/ganancia-linea/{id}/editar', 'Sueldos\Ganancia_Linea_SueldosController@editar')->name('editar_ganancia_linea_sueldos');
+Route::put('sueldos/ganancia-linea/{id}', 'Sueldos\Ganancia_Linea_SueldosController@actualizar')->name('actualizar_ganancia_linea_sueldos');
+Route::delete('sueldos/ganancia-linea/{id}', 'Sueldos\Ganancia_Linea_SueldosController@eliminar')->name('eliminar_ganancia_linea_sueldos');
+
+Route::get('sueldos/ganancia-escala', 'Sueldos\Ganancia_Escala_SueldosController@index')->name('consultar_ganancia_escala_sueldos');
+Route::get('sueldos/ganancia-escala/{anio}/{mes}/editar', 'Sueldos\Ganancia_Escala_SueldosController@editar')->name('editar_ganancia_escala_sueldos');
+Route::put('sueldos/ganancia-escala/{anio}/{mes}', 'Sueldos\Ganancia_Escala_SueldosController@actualizar')->name('actualizar_ganancia_escala_sueldos');
+
+Route::get('sueldos/ganancia-deduccion', 'Sueldos\Ganancia_Deduccion_SueldosController@index')->name('consultar_ganancia_deduccion_sueldos');
+Route::get('sueldos/ganancia-deduccion/{codigo}/editar', 'Sueldos\Ganancia_Deduccion_SueldosController@editar')->name('editar_ganancia_deduccion_sueldos');
+Route::put('sueldos/ganancia-deduccion/{codigo}', 'Sueldos\Ganancia_Deduccion_SueldosController@actualizar')->name('actualizar_ganancia_deduccion_sueldos');
+
+Route::get('sueldos/concepto', 'Sueldos\Concepto_SueldosController@index')->name('consultar_concepto_sueldos');
+Route::get('sueldos/listaconcepto/{formato?}/{busqueda?}', 'Sueldos\Concepto_SueldosController@listar')->name('lista_concepto_sueldos');
+Route::get('sueldos/concepto/crear', 'Sueldos\Concepto_SueldosController@crear')->name('crear_concepto_sueldos');
+Route::post('sueldos/concepto', 'Sueldos\Concepto_SueldosController@guardar')->name('guardar_concepto_sueldos');
+Route::get('sueldos/concepto/{id}/editar', 'Sueldos\Concepto_SueldosController@editar')->name('editar_concepto_sueldos');
+Route::put('sueldos/concepto/{id}', 'Sueldos\Concepto_SueldosController@actualizar')->name('actualizar_concepto_sueldos');
+Route::delete('sueldos/concepto/{id}', 'Sueldos\Concepto_SueldosController@eliminar')->name('eliminar_concepto_sueldos');
+
+Route::get('sueldos/parametro', 'Sueldos\Parametro_SueldosController@index')->name('consultar_parametro_sueldos');
+Route::get('sueldos/listaparametro/{formato?}/{busqueda?}', 'Sueldos\Parametro_SueldosController@listar')->name('lista_parametro_sueldos');
+Route::get('sueldos/parametro/crear', 'Sueldos\Parametro_SueldosController@crear')->name('crear_parametro_sueldos');
+Route::post('sueldos/parametro', 'Sueldos\Parametro_SueldosController@guardar')->name('guardar_parametro_sueldos');
+Route::get('sueldos/parametro/{id}/editar', 'Sueldos\Parametro_SueldosController@editar')->name('editar_parametro_sueldos');
+Route::put('sueldos/parametro/{id}', 'Sueldos\Parametro_SueldosController@actualizar')->name('actualizar_parametro_sueldos');
+Route::delete('sueldos/parametro/{id}', 'Sueldos\Parametro_SueldosController@eliminar')->name('eliminar_parametro_sueldos');
+
+/*
+ * Acumuladores de liquidación (agrupan importes por tipo de concepto).
+ */
+Route::get('sueldos/acumulador', 'Sueldos\Acumulador_SueldosController@index')->name('consultar_acumulador_sueldos');
+Route::get('sueldos/listaacumulador/{formato?}/{busqueda?}', 'Sueldos\Acumulador_SueldosController@listar')->name('lista_acumulador_sueldos');
+Route::get('sueldos/acumulador/crear', 'Sueldos\Acumulador_SueldosController@crear')->name('crear_acumulador_sueldos');
+Route::post('sueldos/acumulador', 'Sueldos\Acumulador_SueldosController@guardar')->name('guardar_acumulador_sueldos');
+Route::get('sueldos/acumulador/{id}/editar', 'Sueldos\Acumulador_SueldosController@editar')->name('editar_acumulador_sueldos');
+Route::put('sueldos/acumulador/{id}', 'Sueldos\Acumulador_SueldosController@actualizar')->name('actualizar_acumulador_sueldos');
+Route::delete('sueldos/acumulador/{id}', 'Sueldos\Acumulador_SueldosController@eliminar')->name('eliminar_acumulador_sueldos');
+
+/*
+ * Tipos de ausencia (catálogo del ledger de vacaciones/licencias/ausencias).
+ * Seed alineado a LCT art. 158 (licencias especiales pagas vigentes).
+ */
+Route::get('sueldos/tipo-ausencia', 'Sueldos\Tipo_Ausencia_SueldosController@index')->name('consultar_tipo_ausencia_sueldos');
+Route::get('sueldos/listatipoausencia/{formato?}/{busqueda?}', 'Sueldos\Tipo_Ausencia_SueldosController@listar')->name('lista_tipo_ausencia_sueldos');
+Route::get('sueldos/tipo-ausencia/crear', 'Sueldos\Tipo_Ausencia_SueldosController@crear')->name('crear_tipo_ausencia_sueldos');
+Route::post('sueldos/tipo-ausencia', 'Sueldos\Tipo_Ausencia_SueldosController@guardar')->name('guardar_tipo_ausencia_sueldos');
+Route::get('sueldos/tipo-ausencia/{id}/editar', 'Sueldos\Tipo_Ausencia_SueldosController@editar')->name('editar_tipo_ausencia_sueldos');
+Route::put('sueldos/tipo-ausencia/{id}', 'Sueldos\Tipo_Ausencia_SueldosController@actualizar')->name('actualizar_tipo_ausencia_sueldos');
+Route::delete('sueldos/tipo-ausencia/{id}', 'Sueldos\Tipo_Ausencia_SueldosController@eliminar')->name('eliminar_tipo_ausencia_sueldos');
+
+/*
+ * Reporte de saldos de vacaciones (consulta paginada + PDF/Excel/CSV).
+ * Lee el ledger (empleado_cuota_movimiento_sueldos); recalcular devenga a demanda.
+ */
+Route::get('sueldos/saldo-vacaciones', 'Sueldos\SaldoVacaciones_SueldosController@index')->name('saldo_vacaciones_sueldos');
+Route::get('sueldos/listar-saldo-vacaciones/{formato}', 'Sueldos\SaldoVacaciones_SueldosController@exportar')->name('listar_saldo_vacaciones_sueldos');
+Route::post('sueldos/saldo-vacaciones/recalcular', 'Sueldos\SaldoVacaciones_SueldosController@recalcular')->name('recalcular_saldo_vacaciones_sueldos');
+
+/*
+ * Indumentaria: ABM de prendas + matriz de variantes (color × talle → SKU).
+ * Puente con el maestro de artículos (stock) para descontar existencias en la entrega.
+ */
+Route::get('sueldos/prenda', 'Sueldos\Prenda_SueldosController@index')->name('consultar_prenda_sueldos');
+Route::get('sueldos/listaprenda/{formato?}/{busqueda?}', 'Sueldos\Prenda_SueldosController@listar')->name('lista_prenda_sueldos');
+Route::post('sueldos/prenda/sincronizar-anita', 'Sueldos\Prenda_SueldosController@sincronizarAnita')->name('sincronizar_prenda_sueldos');
+Route::get('sueldos/prenda/crear', 'Sueldos\Prenda_SueldosController@crear')->name('crear_prenda_sueldos');
+Route::post('sueldos/prenda', 'Sueldos\Prenda_SueldosController@guardar')->name('guardar_prenda_sueldos');
+Route::get('sueldos/prenda/{id}/editar', 'Sueldos\Prenda_SueldosController@editar')->name('editar_prenda_sueldos');
+Route::put('sueldos/prenda/{id}', 'Sueldos\Prenda_SueldosController@actualizar')->name('actualizar_prenda_sueldos');
+Route::delete('sueldos/prenda/{id}', 'Sueldos\Prenda_SueldosController@eliminar')->name('eliminar_prenda_sueldos');
+
+/*
+ * Indumentaria: configuración (depósito origen + tipo transacción), variantes y reporte de entregas.
+ * La entrega descuenta stock y genera asiento reutilizando el circuito de movimientos de stock.
+ */
+Route::get('sueldos/indumentaria/configuracion', 'Sueldos\Indumentaria_ConfiguracionController@editar')->name('config_indumentaria');
+Route::put('sueldos/indumentaria/configuracion', 'Sueldos\Indumentaria_ConfiguracionController@actualizar')->name('actualizar_config_indumentaria');
+Route::get('sueldos/indumentaria/prenda/{prenda}/variantes', 'Sueldos\Empleado_IndumentariaSueldosController@variantes')->name('indumentaria_prenda_variantes');
+Route::get('sueldos/entrega-prenda', 'Sueldos\Entrega_PrendaReporteController@index')->name('entrega_prenda_reporte');
+Route::get('sueldos/listar-entrega-prenda/{formato?}', 'Sueldos\Entrega_PrendaReporteController@exportar')->name('listar_entrega_prenda');
+Route::get('sueldos/entrega-prenda/{entrega}/comprobante', 'Sueldos\Entrega_PrendaReporteController@comprobante')->name('comprobante_entrega_prenda');
+Route::post('sueldos/entrega-prenda/{entrega}/anular', 'Sueldos\Empleado_IndumentariaSueldosController@anular')->name('anular_entrega_prenda_sueldos');
+Route::post('sueldos/entrega-prenda/{entrega}/tulegajo', 'Sueldos\Empleado_IndumentariaSueldosController@enviarTulegajo')->name('tulegajo_entrega_prenda_sueldos');
+
+Route::get('sueldos/indumentaria/planificacion', 'Sueldos\Indumentaria_PlanificacionController@index')->name('planificacion_indumentaria');
+Route::get('sueldos/indumentaria/listar-planificacion/{formato?}', 'Sueldos\Indumentaria_PlanificacionController@exportar')->name('listar_planificacion_indumentaria');
+
+/*
+ * Solicitudes de indumentaria: árbol de aprobación propio (opcional, por empresa/agrupamiento),
+ * bandeja de aprobación y reporte con export PDF/Excel/CSV.
+ */
+Route::get('sueldos/indumentaria/aprobacion', 'Sueldos\Aprobacion_IndumentariaController@index')->name('aprobacion_indumentaria');
+Route::post('sueldos/indumentaria/aprobacion', 'Sueldos\Aprobacion_IndumentariaController@guardar')->name('guardar_aprobacion_indumentaria');
+Route::delete('sueldos/indumentaria/aprobacion/{id}', 'Sueldos\Aprobacion_IndumentariaController@eliminar')->name('eliminar_aprobacion_indumentaria');
+
+Route::get('sueldos/indumentaria/bandeja', 'Sueldos\Solicitud_IndumentariaController@bandeja')->name('bandeja_solicitud_indumentaria');
+Route::post('sueldos/indumentaria/bandeja/{solicitud}/aprobar', 'Sueldos\Solicitud_IndumentariaController@aprobarBandeja')->name('aprobar_bandeja_solicitud_indumentaria');
+Route::post('sueldos/indumentaria/bandeja/{solicitud}/rechazar', 'Sueldos\Solicitud_IndumentariaController@rechazarBandeja')->name('rechazar_bandeja_solicitud_indumentaria');
+Route::get('sueldos/indumentaria/solicitudes', 'Sueldos\Solicitud_IndumentariaController@index')->name('reporte_solicitud_indumentaria');
+Route::get('sueldos/indumentaria/listar-solicitudes/{formato?}', 'Sueldos\Solicitud_IndumentariaController@exportar')->name('listar_solicitud_indumentaria');
+
+/*
+ * Empleados de sueldos (Anita empleado + empley + emping).
+ * Alta provisoria con aviso/autorización; baja/reincorporación con historia.
+ */
+Route::get('sueldos/empleado', 'Sueldos\Empleado_SueldosController@index')->name('consultar_empleado_sueldos');
+Route::get('sueldos/listaempleado/{formato?}/{busqueda?}', 'Sueldos\Empleado_SueldosController@listar')->name('lista_empleado_sueldos');
+Route::get('sueldos/empleado/crear', 'Sueldos\Empleado_SueldosController@crear')->name('crear_empleado_sueldos');
+Route::post('sueldos/empleado/sincronizar-anita', 'Sueldos\Empleado_SueldosController@sincronizarAnita')->name('sincronizar_empleado_sueldos_anita');
+Route::post('sueldos/empleado/vincular-domicilios', 'Sueldos\Empleado_SueldosController@vincularDomicilios')->name('vincular_empleado_sueldos_domicilios');
+Route::post('sueldos/empleado', 'Sueldos\Empleado_SueldosController@guardar')->name('guardar_empleado_sueldos');
+Route::get('sueldos/empleado/{id}/editar', 'Sueldos\Empleado_SueldosController@editar')->name('editar_empleado_sueldos');
+Route::put('sueldos/empleado/{id}', 'Sueldos\Empleado_SueldosController@actualizar')->name('actualizar_empleado_sueldos');
+Route::delete('sueldos/empleado/{id}', 'Sueldos\Empleado_SueldosController@eliminar')->name('eliminar_empleado_sueldos');
+Route::post('sueldos/empleado/{id}/autorizar', 'Sueldos\Empleado_SueldosController@autorizar')->name('autorizar_empleado_sueldos');
+Route::get('sueldos/empleado/{id}/autorizar-aviso', 'Sueldos\Empleado_SueldosController@autorizarDesdeAviso')->name('autorizar_empleado_sueldos_desde_aviso');
+Route::post('sueldos/empleado/{id}/baja', 'Sueldos\Empleado_SueldosController@darBaja')->name('baja_empleado_sueldos');
+Route::post('sueldos/empleado/{id}/reincorporar', 'Sueldos\Empleado_SueldosController@reincorporar')->name('reincorporar_empleado_sueldos');
+Route::post('sueldos/empleado/{id}/bases', 'Sueldos\Empleado_SueldosController@guardarBase')->name('guardar_base_empleado_sueldos');
+Route::post('sueldos/empleado/{id}/bases/vigencias', 'Sueldos\Empleado_SueldosController@guardarVigenciasLote')->name('guardar_vigencias_empleado_sueldos');
+Route::get('sueldos/empleado/{id}/bases', 'Sueldos\Empleado_SueldosController@bases')->name('bases_empleado_sueldos');
+Route::get('sueldos/empleado/{id}/bases/historial', 'Sueldos\Empleado_SueldosController@historialBases')->name('historial_bases_empleado_sueldos');
+Route::put('sueldos/empleado/{id}/bases/{baseId}', 'Sueldos\Empleado_SueldosController@actualizarVigencia')->name('actualizar_vigencia_empleado_sueldos');
+Route::delete('sueldos/empleado/{id}/bases/{baseId}', 'Sueldos\Empleado_SueldosController@eliminarBase')->name('eliminar_base_empleado_sueldos');
+Route::delete('sueldos/empleado/{id}/bases-completa/{nombrebaseId}', 'Sueldos\Empleado_SueldosController@eliminarBaseCompleta')->name('eliminar_base_completa_empleado_sueldos');
+
+/*
+ * Vacaciones / licencias / ausencias del empleado (ledger profesional).
+ * Devengamiento automático por antigüedad (LCT) + eventos reales (reemplaza vacempl/vacreal/vacliq).
+ */
+Route::get('sueldos/empleado/{empleado}/ausencias', 'Sueldos\Empleado_AusenciaSueldosController@panel')->name('ausencias_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/ausencias', 'Sueldos\Empleado_AusenciaSueldosController@guardar')->name('guardar_ausencia_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/ausencias/devengar', 'Sueldos\Empleado_AusenciaSueldosController@devengar')->name('devengar_ausencia_empleado_sueldos');
+Route::put('sueldos/ausencia/{id}', 'Sueldos\Empleado_AusenciaSueldosController@actualizar')->name('actualizar_ausencia_empleado_sueldos');
+Route::delete('sueldos/ausencia/{id}', 'Sueldos\Empleado_AusenciaSueldosController@eliminar')->name('eliminar_ausencia_empleado_sueldos');
+
+/*
+ * Familiares a cargo (cantidades Ganancias: CONYUGE / HIJOS / HIJOS_50 / HIJO_INCAP).
+ * Solapa AJAX en el edit del empleado; independiente de SiRADIG F572.
+ */
+Route::get('sueldos/empleado/{empleado}/familiares', 'Sueldos\Empleado_FamiliarSueldosController@panel')->name('familiares_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/familiares', 'Sueldos\Empleado_FamiliarSueldosController@guardar')->name('guardar_familiar_empleado_sueldos');
+Route::put('sueldos/familiar/{id}', 'Sueldos\Empleado_FamiliarSueldosController@actualizar')->name('actualizar_familiar_empleado_sueldos');
+Route::delete('sueldos/familiar/{id}', 'Sueldos\Empleado_FamiliarSueldosController@eliminar')->name('eliminar_familiar_empleado_sueldos');
+
+/*
+ * Préstamos / planes de cuotas del empleado (solapa): un concepto que se liquida
+ * N veces y cae solo al completarse. El contador avanza al cerrar la corrida.
+ */
+Route::get('sueldos/empleado/{empleado}/planes-cuota', 'Sueldos\Empleado_PlanCuotaSueldosController@panel')->name('planes_cuota_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/planes-cuota', 'Sueldos\Empleado_PlanCuotaSueldosController@guardar')->name('guardar_plan_cuota_empleado_sueldos');
+Route::put('sueldos/plan-cuota/{id}', 'Sueldos\Empleado_PlanCuotaSueldosController@actualizar')->name('actualizar_plan_cuota_empleado_sueldos');
+Route::delete('sueldos/plan-cuota/{id}', 'Sueldos\Empleado_PlanCuotaSueldosController@eliminar')->name('eliminar_plan_cuota_empleado_sueldos');
+
+/*
+ * Indumentaria del empleado (solapa): dotación/saldos, entrega con descuento de stock + asiento,
+ * perfil de talles e historial.
+ */
+Route::get('sueldos/empleado/{empleado}/indumentaria', 'Sueldos\Empleado_IndumentariaSueldosController@panel')->name('indumentaria_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/indumentaria/entregar', 'Sueldos\Empleado_IndumentariaSueldosController@entregar')->name('entregar_prenda_sueldos');
+Route::post('sueldos/empleado/{empleado}/indumentaria/talles', 'Sueldos\Empleado_IndumentariaSueldosController@guardarTalles')->name('talles_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/indumentaria/solicitud', 'Sueldos\Empleado_IndumentariaSueldosController@crearSolicitud')->name('crear_solicitud_prenda_sueldos');
+Route::post('sueldos/indumentaria/solicitud/{solicitud}/aprobar', 'Sueldos\Empleado_IndumentariaSueldosController@aprobarSolicitud')->name('aprobar_solicitud_prenda_sueldos');
+Route::post('sueldos/indumentaria/solicitud/{solicitud}/rechazar', 'Sueldos\Empleado_IndumentariaSueldosController@rechazarSolicitud')->name('rechazar_solicitud_prenda_sueldos');
+Route::post('sueldos/indumentaria/solicitud/{solicitud}/entregar', 'Sueldos\Empleado_IndumentariaSueldosController@entregarSolicitud')->name('entregar_solicitud_prenda_sueldos');
+Route::post('sueldos/indumentaria/solicitud/{solicitud}/anular', 'Sueldos\Empleado_IndumentariaSueldosController@anularSolicitud')->name('anular_solicitud_prenda_sueldos');
+
+/*
+ * SiRADIG (F572 Web - ARCA): importación de XML/ZIP de deducciones de Ganancias y consulta.
+ * Vinculación por CUIL con el legajo; la última presentación queda vigente por año fiscal.
+ */
+Route::get('sueldos/siradig', 'Sueldos\SiradigController@index')->name('consultar_siradig_sueldos');
+Route::get('sueldos/listasiradig/{formato?}/{busqueda?}', 'Sueldos\SiradigController@listar')->name('lista_siradig_sueldos');
+Route::post('sueldos/siradig/importar', 'Sueldos\SiradigController@importar')->name('importar_siradig_sueldos');
+Route::get('sueldos/empleado/{empleado}/siradig', 'Sueldos\SiradigController@panelEmpleado')->name('siradig_empleado_sueldos');
+Route::get('sueldos/siradig/{id}', 'Sueldos\SiradigController@ver')->name('ver_siradig_sueldos')->whereNumber('id');
+Route::delete('sueldos/siradig/{id}', 'Sueldos\SiradigController@eliminar')->name('eliminar_siradig_sueldos')->whereNumber('id');
+
+/*
+ * Motivos de egreso de sueldos (Anita sueldos / motivoegr). CRUD liviano (DataTables).
+ * Sync solo llenado inicial; CRUD vive en el ERP.
+ */
+Route::get('sueldos/motivoegreso', 'Sueldos\Motivoegreso_SueldosController@index')->name('consultar_motivoegreso_sueldos');
+Route::get('sueldos/listamotivoegreso/{formato?}/{busqueda?}', 'Sueldos\Motivoegreso_SueldosController@listar')->name('lista_motivoegreso_sueldos');
+Route::post('sueldos/motivoegreso/sincronizar-anita', 'Sueldos\Motivoegreso_SueldosController@sincronizarAnita')->name('sincronizar_motivoegreso_sueldos');
+Route::get('sueldos/motivoegreso/crear', 'Sueldos\Motivoegreso_SueldosController@crear')->name('crear_motivoegreso_sueldos');
+Route::post('sueldos/motivoegreso', 'Sueldos\Motivoegreso_SueldosController@guardar')->name('guardar_motivoegreso_sueldos');
+Route::get('sueldos/motivoegreso/{id}/editar', 'Sueldos\Motivoegreso_SueldosController@editar')->name('editar_motivoegreso_sueldos');
+Route::put('sueldos/motivoegreso/{id}', 'Sueldos\Motivoegreso_SueldosController@actualizar')->name('actualizar_motivoegreso_sueldos');
+Route::delete('sueldos/motivoegreso/{id}', 'Sueldos\Motivoegreso_SueldosController@eliminar')->name('eliminar_motivoegreso_sueldos');
+
+/*
+ * ART de sueldos (Anita sueldos / artmae). CRUD liviano (DataTables). Código alfanumérico.
+ * Sync solo llenado inicial; CRUD vive en el ERP.
+ */
+Route::get('sueldos/art', 'Sueldos\Art_SueldosController@index')->name('consultar_art_sueldos');
+Route::get('sueldos/listaart/{formato?}/{busqueda?}', 'Sueldos\Art_SueldosController@listar')->name('lista_art_sueldos');
+Route::post('sueldos/art/sincronizar-anita', 'Sueldos\Art_SueldosController@sincronizarAnita')->name('sincronizar_art_sueldos');
+Route::get('sueldos/art/crear', 'Sueldos\Art_SueldosController@crear')->name('crear_art_sueldos');
+Route::post('sueldos/art', 'Sueldos\Art_SueldosController@guardar')->name('guardar_art_sueldos');
+Route::get('sueldos/art/{id}/editar', 'Sueldos\Art_SueldosController@editar')->name('editar_art_sueldos');
+Route::put('sueldos/art/{id}', 'Sueldos\Art_SueldosController@actualizar')->name('actualizar_art_sueldos');
+Route::delete('sueldos/art/{id}', 'Sueldos\Art_SueldosController@eliminar')->name('eliminar_art_sueldos');
 
 // Bierzo
 

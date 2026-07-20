@@ -3,6 +3,7 @@
 namespace App\Exports\Caja;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -25,19 +26,25 @@ class InterbankingTransferenciaHistoricoExport implements FromView, ShouldAutoSi
 
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 2;
+    private int $filaCabecerasExcel = 3;
 
-    private int $filaPrimeraDatosExcel = 3;
+    private int $filaPrimeraDatosExcel = 4;
 
     private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
     private const ULTIMA_COL = 'K';
 
+    /** Congela también Fecha solicitud y Empresa (columnas A y B): el freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
     public function __construct(
-        private Collection $registros
+        private Collection $registros,
+        private bool $esCsv = false,
     ) {}
 
     public function view(): View
@@ -45,12 +52,15 @@ class InterbankingTransferenciaHistoricoExport implements FromView, ShouldAutoSi
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($this->registros);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
         $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+        $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+        $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
         return view('exports.caja.interbanking_transferencia_historico', [
             'registros' => $this->registros,
+            'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
@@ -62,8 +72,9 @@ class InterbankingTransferenciaHistoricoExport implements FromView, ShouldAutoSi
             'C' => NumberFormat::FORMAT_TEXT,
             'D' => NumberFormat::FORMAT_TEXT,
             'E' => NumberFormat::FORMAT_TEXT,
-            'F' => NumberFormat::FORMAT_TEXT,
-            'G' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2,
+            // F = Importe: número real con máscara neutra (sumable/adaptable).
+            'F' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            'G' => NumberFormat::FORMAT_TEXT,
             'H' => NumberFormat::FORMAT_TEXT,
             'I' => NumberFormat::FORMAT_TEXT,
             'J' => NumberFormat::FORMAT_TEXT,
@@ -151,7 +162,11 @@ class InterbankingTransferenciaHistoricoExport implements FromView, ShouldAutoSi
                     ],
                 ]);
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $filaSub = $this->filaSubtituloExcel;
+                $sheet->mergeCells('A'.$filaSub.':'.$ult.$filaSub);
+                $sheet->getStyle('A'.$filaSub)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }
@@ -159,5 +174,12 @@ class InterbankingTransferenciaHistoricoExport implements FromView, ShouldAutoSi
     public function title(): string
     {
         return 'Transferencias Interbanking';
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 }

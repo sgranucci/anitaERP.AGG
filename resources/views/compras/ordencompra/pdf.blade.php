@@ -291,7 +291,15 @@
                 <tr>
                     <td class="cen items-col-idx" style="width:3%;">{{ $i + 1 }}</td>
                     <td style="width:7%;">{{ $art->sku ?? '—' }}</td>
-                    <td style="width:44%;">{{ $art->descripcion ?? '—' }}</td>
+                    <td style="width:44%;">
+                        {{ $art->descripcion ?? '—' }}
+                        @if (optional($linea->color)->nombre)
+                            <br><span class="muted">Color: {{ $linea->color->nombre }}</span>
+                        @endif
+                        @if (optional($linea->talle)->nombre)
+                            <br><span class="muted">Talle: {{ $linea->talle->nombre }}</span>
+                        @endif
+                    </td>
                     <td class="num items-col-cant" style="width:6%;">{{ number_format((float) $linea->cantidad, 3, ',', '.') }}</td>
                     <td class="num" style="width:9%;">@if ($monAb !== '' && $monAb !== '—'){{ $monAb }} @endif{{ number_format((float) $linea->precio, 3, ',', '.') }}</td>
                     <td class="mcot cen" style="width:9%;">{{ $monAb }}<br>{{ number_format($cot, 3, ',', '.') }}</td>

@@ -141,7 +141,7 @@ class IvaVentasReporteController extends Controller
 
             case 'CSV':
                 return (new IvaVentasListadoExport($this->reporteService))
-                    ->parametros($filtros, $resultado)
+                    ->parametros($filtros, $resultado, true)
                     ->download('iva_ventas.csv', Excel::CSV);
         }
 

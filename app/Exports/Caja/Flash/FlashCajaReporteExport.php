@@ -20,7 +20,7 @@ class FlashCajaReporteExport implements FromView, ShouldAutoSize, WithEvents, Wi
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'H';
+    private const COL_ULTIMA = 'AZ';
 
     /** @var array<string, mixed> */
     private array $reporte;

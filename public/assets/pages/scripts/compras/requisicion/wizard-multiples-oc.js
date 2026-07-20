@@ -39,6 +39,8 @@
 
 	function readLineArraysFromRows($rows) {
 		var articulo_ids = [];
+		var colores_id = [];
+		var talles_id = [];
 		var cantidades = [];
 		var precios = [];
 		var moneda_linea_ids = [];
@@ -65,6 +67,8 @@
 		$rows.each(function () {
 			var $tr = $(this);
 			articulo_ids.push($tr.find('.articulo_id').val() || '');
+			colores_id.push($tr.find('select.ms-color-id').val() || '');
+			talles_id.push($tr.find('select.ms-talle-id').val() || '');
 			cantidades.push($tr.find('.cantidad-linea').val() || '');
 			precios.push($tr.find('.precio-linea').val() || '');
 			moneda_linea_ids.push($tr.find('select[name="moneda_linea_ids[]"]').val() || '');
@@ -91,6 +95,8 @@
 
 		return {
 			articulo_ids: articulo_ids,
+			colores_id: colores_id,
+			talles_id: talles_id,
 			cantidades: cantidades,
 			precios: precios,
 			moneda_linea_ids: moneda_linea_ids,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Ventas;
 
+use App\Support\Ventas\Gastronomia\CierreJornadaVentasCigarrillosSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasConciliacionCuentaSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasConciliacionModoSupport;
@@ -47,6 +48,7 @@ final class IvaVentasConciliacionContableService
 
         $statsAsiento = $this->statsAsientoPorVenta($ventaIds);
         $contableEmpresa = $this->totalesContablesEmpresa($empresaId, $filtros, $cuentas);
+        $erpRubro = $this->desgloseErpPorRubro($filas, $empresaId);
         $contableVinculadoPv = $this->totalesContablesVinculadosPorPv($empresaId, $cuentas, $ventaIds, $filtros);
 
         $porPuntoventa = $this->armarFilasPorPuntoventa(
@@ -56,7 +58,7 @@ final class IvaVentasConciliacionContableService
             $filas,
         );
 
-        $resumenEmpresa = $this->armarResumenEmpresa($totalesErp, $contableEmpresa, $statsAsiento, count($filas), $ctamov);
+        $resumenEmpresa = $this->armarResumenEmpresa($totalesErp, $contableEmpresa, $statsAsiento, count($filas), $ctamov, $erpRubro);
         $porFactura = $this->conciliarPorFacturaVinculada($empresaId, $filtros, $filas, $cuentas, $statsAsiento);
         $auditoriaDiaria = $this->auditoriaDiaria($empresaId, $filtros, $filas, $cuentas, $ctamov);
         $conciliarPorUnidad = ! empty($filtros['conciliar_por_unidad']);
@@ -909,17 +911,26 @@ final class IvaVentasConciliacionContableService
      * @param  array<string, mixed>  $ctamov
      * @return array<string, mixed>
      */
-    private function armarResumenEmpresa(array $totalesErp, array $contableEmpresa, array $statsAsiento, int $cantidadComprobantes, array $ctamov = ['habilitada' => false]): array
+    private function armarResumenEmpresa(array $totalesErp, array $contableEmpresa, array $statsAsiento, int $cantidadComprobantes, array $ctamov = ['habilitada' => false], array $erpRubro = []): array
     {
+        // ERP abierto por rubro con la MISMA imputación que el cierre de jornada:
+        //  - Alimentos/Bebidas + otros (413/415/facturación): neto gravado no-tabaco + exento
+        //  - Tabaco (414 / kiosco): neto tabaco + impuesto interno
+        // Así cada línea cuadra contra su cuenta contable y desaparece el falso descuadre
+        // por separar "neto" e "imp. interno" del tabaco (que la contabilidad junta).
+        $erpAlimentos = (float) ($erpRubro['alimentos'] ?? (float) ($totalesErp['neto_gravado'] ?? 0));
+        $erpTabaco = (float) ($erpRubro['tabaco'] ?? (float) ($totalesErp['imp_interno'] ?? 0));
+        $erpExento = (float) ($erpRubro['exento'] ?? (float) ($totalesErp['exento'] ?? 0));
+
         $lineas = [
             [
-                'concepto' => 'Neto gravado',
-                'erp' => (float) ($totalesErp['neto_gravado'] ?? 0),
+                'concepto' => 'Ventas Alimentos y Bebidas (neto + exento)',
+                'erp' => round($erpAlimentos, 2),
                 'contable' => (float) ($contableEmpresa['ventas_gravadas'] ?? 0),
             ],
             [
-                'concepto' => 'Imp. interno / kiosco',
-                'erp' => (float) ($totalesErp['imp_interno'] ?? 0),
+                'concepto' => 'Ventas Tabaco (neto + imp. interno)',
+                'erp' => round($erpTabaco, 2),
                 'contable' => (float) ($contableEmpresa['ventas_kiosco'] ?? 0),
             ],
             [
@@ -929,9 +940,12 @@ final class IvaVentasConciliacionContableService
             ],
         ];
 
+        // El ERP se reconstruye por rubro comprobante a comprobante (redondeo por fila), por lo que
+        // el roll-up del período usa la tolerancia diaria (igual que la auditoría día a día).
+        $tolResumen = IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA;
         foreach ($lineas as &$linea) {
             $linea['diferencia'] = round($linea['erp'] - $linea['contable'], 2);
-            $linea['cuadra'] = IvaVentasConciliacionCuentaSupport::cuadra($linea['erp'], $linea['contable']);
+            $linea['cuadra'] = IvaVentasConciliacionCuentaSupport::cuadra($linea['erp'], $linea['contable'], $tolResumen);
         }
         unset($linea);
 
@@ -941,6 +955,7 @@ final class IvaVentasConciliacionContableService
 
         return [
             'lineas' => $lineas,
+            'erp_exento' => round($erpExento, 2),
             'erp_total' => (float) ($totalesErp['total'] ?? 0),
             'contable_ventas_total' => (float) ($contableEmpresa['ventas_total'] ?? 0),
             'contable_iva' => (float) ($contableEmpresa['iva'] ?? 0),
@@ -956,6 +971,56 @@ final class IvaVentasConciliacionContableService
             'con_asiento' => (int) ($statsAsiento['con_asiento'] ?? 0),
             'sin_asiento' => (int) ($statsAsiento['sin_asiento'] ?? 0),
             'cuadra_global' => collect($lineas)->every(static fn (array $l) => ! empty($l['cuadra'])),
+        ];
+    }
+
+    /**
+     * Desglose de las ventas del ERP en rubros contables (Alimentos/Bebidas vs Tabaco)
+     * aplicando a cada comprobante la misma lógica de imputación del cierre de jornada.
+     *
+     * Solo se cargan las ventas con impuesto interno (tabaco) para resolver el importe de
+     * cigarrillos; el resto se imputa directo a ventas gravadas (incluye exento, sin IVA).
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return array{alimentos: float, tabaco: float, iva: float, exento: float, imp_interno: float}
+     */
+    private function desgloseErpPorRubro(array $filas, int $empresaId): array
+    {
+        $alimentos = 0.0;
+        $tabaco = 0.0;
+        $iva = 0.0;
+        $exento = 0.0;
+        $impInterno = 0.0;
+
+        foreach ($filas as $fila) {
+            $col = $fila['columnas'] ?? [];
+            $total = round((float) ($col['total'] ?? 0), 2);
+            $ii = round((float) ($col['imp_interno'] ?? 0), 2);
+            $ex = round((float) ($col['exento'] ?? 0), 2);
+
+            $importeCig = 0.0;
+            if (abs($ii) > 0.0001) {
+                $ventaId = (int) ($fila['venta_id'] ?? 0);
+                if ($ventaId > 0 && $empresaId > 0) {
+                    $importeCig = CierreJornadaVentasCigarrillosSupport::importeLineasMenuCigarrillosPorVentaId($ventaId, $empresaId);
+                }
+            }
+
+            $desg = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables($total, $ii, $importeCig, $ex);
+
+            $alimentos = round($alimentos + (float) ($desg['ventas_gravadas'] ?? 0), 2);
+            $tabaco = round($tabaco + (float) ($desg['ventas_kiosco'] ?? 0), 2);
+            $iva = round($iva + (float) ($desg['iva_normal'] ?? 0) + (float) ($desg['iva_cigarrillos'] ?? 0), 2);
+            $exento = round($exento + $ex, 2);
+            $impInterno = round($impInterno + $ii, 2);
+        }
+
+        return [
+            'alimentos' => $alimentos,
+            'tabaco' => $tabaco,
+            'iva' => $iva,
+            'exento' => $exento,
+            'imp_interno' => $impInterno,
         ];
     }
 
@@ -979,6 +1044,7 @@ final class IvaVentasConciliacionContableService
                     'label' => (string) ($fila['unidad_negocio_label'] ?? IvaVentasUnidadNegocioSupport::label($key)),
                     'neto_gravado' => 0.0,
                     'imp_interno' => 0.0,
+                    'exento' => 0.0,
                     'iva' => 0.0,
                     'total' => 0.0,
                     'cantidad' => 0,
@@ -988,6 +1054,7 @@ final class IvaVentasConciliacionContableService
             $columnas = $fila['columnas'] ?? [];
             $buckets[$key]['neto_gravado'] = round($buckets[$key]['neto_gravado'] + (float) ($columnas['neto_gravado'] ?? 0), 2);
             $buckets[$key]['imp_interno'] = round($buckets[$key]['imp_interno'] + (float) ($columnas['imp_interno'] ?? 0), 2);
+            $buckets[$key]['exento'] = round($buckets[$key]['exento'] + (float) ($columnas['exento'] ?? 0), 2);
             $buckets[$key]['iva'] = round($buckets[$key]['iva'] + (float) ($columnas['iva'] ?? 0), 2);
             $buckets[$key]['total'] = round($buckets[$key]['total'] + (float) ($columnas['total'] ?? 0), 2);
             $buckets[$key]['cantidad'] += (int) ($fila['cantidad_comprobantes'] ?? 1);
@@ -1006,9 +1073,11 @@ final class IvaVentasConciliacionContableService
 
         $totNeto = round(array_sum(array_column($unidades, 'neto_gravado')), 2);
         $totImp = round(array_sum(array_column($unidades, 'imp_interno')), 2);
+        $totExento = round(array_sum(array_column($unidades, 'exento')), 2);
         $totIva = round(array_sum(array_column($unidades, 'iva')), 2);
         $totTotal = round(array_sum(array_column($unidades, 'total')), 2);
-        $erpVentas = round($totNeto + $totImp, 2);
+        // El exento se imputa a Ventas (sin IVA), igual que en la contabilidad del cierre.
+        $erpVentas = round($totNeto + $totImp + $totExento, 2);
 
         $contVentas = round((float) ($contableEmpresa['ventas_total'] ?? 0), 2);
         $contIva = round((float) ($contableEmpresa['iva'] ?? 0), 2);
@@ -1017,15 +1086,18 @@ final class IvaVentasConciliacionContableService
         $ctamovVentas = round((float) ($ctamov['total']['ventas'] ?? 0), 2);
         $ctamovIva = round((float) ($ctamov['total']['iva'] ?? 0), 2);
 
+        // Roll-up del período: misma tolerancia que la auditoría diaria (redondeos por comprobante).
+        $tol = IvaVentasConciliacionCuentaSupport::TOLERANCIA_DIARIA;
+
         $cuadre = [
             'ventas' => [
-                'concepto' => 'Ventas (neto + kiosco)',
+                'concepto' => 'Ventas (neto + kiosco + exento)',
                 'erp' => $erpVentas,
                 'contable' => $contVentas,
                 'dif_contable' => round($erpVentas - $contVentas, 2),
                 'ctamov' => $ctamovVentas,
                 'dif_ctamov' => round($erpVentas - $ctamovVentas, 2),
-                'cuadra' => IvaVentasConciliacionCuentaSupport::cuadra($erpVentas, $contVentas),
+                'cuadra' => IvaVentasConciliacionCuentaSupport::cuadra($erpVentas, $contVentas, $tol),
             ],
             'iva' => [
                 'concepto' => 'IVA débito fiscal',
@@ -1034,7 +1106,7 @@ final class IvaVentasConciliacionContableService
                 'dif_contable' => round($totIva - $contIva, 2),
                 'ctamov' => $ctamovIva,
                 'dif_ctamov' => round($totIva - $ctamovIva, 2),
-                'cuadra' => IvaVentasConciliacionCuentaSupport::cuadra($totIva, $contIva),
+                'cuadra' => IvaVentasConciliacionCuentaSupport::cuadra($totIva, $contIva, $tol),
             ],
         ];
 
@@ -1044,6 +1116,7 @@ final class IvaVentasConciliacionContableService
             'total_erp' => [
                 'neto_gravado' => $totNeto,
                 'imp_interno' => $totImp,
+                'exento' => $totExento,
                 'iva' => $totIva,
                 'total' => $totTotal,
             ],

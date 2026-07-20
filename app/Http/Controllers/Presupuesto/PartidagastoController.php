@@ -129,7 +129,7 @@ class PartidagastoController extends Controller
 
         case 'CSV':
             return (new PartidagastoExport($this->partidagastoQuery))
-                        ->parametros($filtros)
+                        ->parametros($filtros, true)
                         ->download('partidagasto.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   

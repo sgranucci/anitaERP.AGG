@@ -869,7 +869,7 @@ class ProveedorController extends Controller
 
         case 'CSV':
             return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda)
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda, true)
                 ->download('cuentacorriente_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
             break;
 

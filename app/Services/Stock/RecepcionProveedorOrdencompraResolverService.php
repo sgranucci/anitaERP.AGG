@@ -212,6 +212,11 @@ class RecepcionProveedorOrdencompraResolverService
                 'tipo_linea' => RecepcionProveedorDiferenciaSupport::TIPO_OC,
                 'ordencompra_articulo_id' => $ocArt->id,
                 'articulo_id' => $ocArt->articulo_id,
+                'color_id' => $ocArt->color_id ? (int) $ocArt->color_id : null,
+                'talle_id' => $ocArt->talle_id ? (int) $ocArt->talle_id : null,
+                'color_nombre' => $ocArt->color ? (string) ($ocArt->color->nombre ?? '') : '',
+                'talle_nombre' => $ocArt->talle ? (string) ($ocArt->talle->nombre ?? '') : '',
+                'maneja_stock_color_talle' => (bool) ($articulo->maneja_stock_color_talle ?? false),
                 'tipoarticulo_id' => (int) ($articulo->tipoarticulo_id ?? 0) ?: null,
                 'sku' => $articulo->sku ?? '',
                 'descripcion' => $articulo->descripcion ?? ($ocArt->detalle ?? ''),
@@ -273,6 +278,7 @@ class RecepcionProveedorOrdencompraResolverService
         }
 
         $oc->load('ordencompra_articulos.articulos');
+        $oc->loadMissing(['ordencompra_articulos.color', 'ordencompra_articulos.talle']);
     }
 
     private function buscarOcConRelaciones(int $numeroOc): ?Ordencompra
@@ -282,6 +288,8 @@ class RecepcionProveedorOrdencompraResolverService
                 'empresas', 'proveedores', 'centrocostos',
                 'ordencompra_articulos' => static fn ($q) => $q->orderBy('penvp_orden')->orderBy('id'),
                 'ordencompra_articulos.articulos.unidadesdemedidas',
+                'ordencompra_articulos.color',
+                'ordencompra_articulos.talle',
                 'ordencompra_articulos.monedas',
                 'ordencompra_articulos.centrocostos_destino',
             ])

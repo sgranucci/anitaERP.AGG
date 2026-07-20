@@ -4,6 +4,7 @@ namespace App\Exports\Caja\Bingo;
 
 use App\Repositories\Caja\Bingo\BingoCartonRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -25,6 +26,9 @@ class BingoCartonListadoExport implements FromView, ShouldAutoSize, WithColumnFo
 
     private const COL_ULTIMA = 'H';
 
+    /** Congela también ID y Código (columnas A y B): el freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
     private BingoCartonRepositoryInterface $repository;
 
     /** @var array<string, mixed>|string|null */
@@ -32,13 +36,17 @@ class BingoCartonListadoExport implements FromView, ShouldAutoSize, WithColumnFo
 
     private bool $flDesdeIndex = false;
 
+    private bool $esCsv = false;
+
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 2;
+    private int $filaCabecerasExcel = 3;
 
-    private int $filaPrimeraDatosExcel = 3;
+    private int $filaPrimeraDatosExcel = 4;
 
     private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
@@ -57,24 +65,30 @@ class BingoCartonListadoExport implements FromView, ShouldAutoSize, WithColumnFo
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($datas);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
             $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-            $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+            $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+            $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
             $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
             return view('exports.caja.bingo.carton_index', [
                 'datas' => $datas,
+                'esExcel' => true,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
+                'formatoNumero' => $this->formatoNumeroEfectivo(),
             ]);
         }
 
         $this->hayFilaLogos = false;
         $this->filaTituloExcel = 1;
-        $this->filaCabecerasExcel = 2;
-        $this->filaPrimeraDatosExcel = 3;
+        $this->filaSubtituloExcel = 2;
+        $this->filaCabecerasExcel = 3;
+        $this->filaPrimeraDatosExcel = 4;
         $this->rutasLogosExcel = [];
 
         return view('exports.caja.bingo.carton_index', [
             'datas' => collect(),
+            'esExcel' => true,
             'reservarFilaLogoExcel' => false,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
@@ -84,12 +98,8 @@ class BingoCartonListadoExport implements FromView, ShouldAutoSize, WithColumnFo
             return [
                 'A' => NumberFormat::FORMAT_TEXT,
                 'B' => NumberFormat::FORMAT_TEXT,
-                'C' => NumberFormat::FORMAT_TEXT,
-                'D' => NumberFormat::FORMAT_TEXT,
-                'E' => NumberFormat::FORMAT_TEXT,
-                'F' => NumberFormat::FORMAT_TEXT,
-                'G' => NumberFormat::FORMAT_TEXT,
-                'H' => NumberFormat::FORMAT_TEXT,
+                // D = Precio: número real con máscara neutra (sumable/adaptable).
+                'D' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
             ];
         }
 
@@ -184,7 +194,11 @@ class BingoCartonListadoExport implements FromView, ShouldAutoSize, WithColumnFo
                     ],
                 ]);
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $filaSub = $this->filaSubtituloExcel;
+                $sheet->mergeCells('A'.$filaSub.':'.self::COL_ULTIMA.$filaSub);
+                $sheet->getStyle('A'.$filaSub)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
 
                 $primera = $this->filaPrimeraDatosExcel;
                 $sheet->getStyle('C'.$primera.':C'.$sheet->getHighestRow())
@@ -203,12 +217,20 @@ class BingoCartonListadoExport implements FromView, ShouldAutoSize, WithColumnFo
     /**
      * @param  array<string, mixed>|string|null  $filtros
      */
-    public function parametros($filtros): self
+    public function parametros($filtros, bool $esCsv = false): self
     {
         $this->filtros = $filtros;
+        $this->esCsv = $esCsv;
         $this->flDesdeIndex = true;
 
         return $this;
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     /**

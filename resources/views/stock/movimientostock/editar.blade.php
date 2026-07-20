@@ -11,6 +11,8 @@
     window.movimientoStockPrecioLineaUrl = @json(route('movimientostock_precio_linea'));
     window.movimientoStockResolverNpuUrl = @json(route('movimientostock_resolver_npu_baja'));
     window.movimientoStockConsultaNpuUrl = @json(route('movimientostock_consulta_npu_baja'));
+    window.msColoresOpciones = @json(($color_query ?? collect())->map(fn ($c) => ['id' => (int) $c->id, 'nombre' => $c->nombre])->values());
+    window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id' => (int) $t->id, 'nombre' => $t->nombre])->values());
     window.MS_TRANSFERENCIA_URLS = {
         destinatarios: @json(route('transferencia_mercaderia_destinatarios')),
         validarDestinatario: @json(route('transferencia_mercaderia_validar_destinatario')),
@@ -21,6 +23,7 @@
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/movimientostock/crear.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-items.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/movimientostock/form-items.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-color-talle.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/movimientostock/form-color-talle.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-asiento.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-tipo-transaccion.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/tipotransaccion_stock/consulta.js') }}" type="text/javascript"></script>

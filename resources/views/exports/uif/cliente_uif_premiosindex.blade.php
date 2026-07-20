@@ -1,10 +1,25 @@
 @php
+    $esExcel = ! empty($esExcel);
+    $premios = $premios ?? collect();
     $nombreCliente = $cliente_uif->nombre ?? '';
     $docCliente = $cliente_uif->numerodocumento ?? '';
     $subtitulo = trim($nombreCliente);
     if ($docCliente !== '') {
         $subtitulo .= ($subtitulo !== '' ? ' — ' : '').'Doc. '.$docCliente;
     }
+    $subtitulo = trim($subtitulo.' · Generado '.date('d/m/Y H:i').' — '.(is_countable($premios) ? count($premios) : 0).' registro(s)', ' ·');
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtMonto = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
 @endphp
 <table>
 	@if (!empty($reservarFilaLogoExcel))
@@ -16,12 +31,10 @@
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="8">
-				<h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Premios del cliente UIF</h2>
-				@if ($subtitulo !== '')
-					<div style="font-size: 11pt; margin-top: 4px;">{{ $subtitulo }}</div>
-				@endif
-			</td>
+			<td colspan="8"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Premios del cliente UIF</h2></td>
+		</tr>
+		<tr>
+			<td colspan="8"><strong>{{ $subtitulo }}</strong></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -48,7 +61,7 @@
 				<td>{{ $data->nombresala }}</td>
 				<td>{{ $data->nombrejuego }}</td>
 				<td>{{ $data->numerotito ?? '' }}</td>
-				<td>{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}</td>
+				<td>{{ $fmtMonto($data->monto ?? 0) }}</td>
 				<td>{{ $data->posicion ?? '' }}</td>
 				<td>{{ $data->nombreformapago }}</td>
 			</tr>

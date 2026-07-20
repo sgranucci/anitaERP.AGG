@@ -4,6 +4,10 @@
     $conciliacion = $conciliacion ?? [];
     $esExcel = ! empty($esExcel);
     $mostrarConciliacion = ! empty($conciliacion['habilitada']) && ! empty($conciliacion['items']);
+    // Excel: importes como número real (cada PC los muestra según su config regional).
+    $fmtMontoExcel = \App\Support\Export\ExcelFormatoNumero::formateadorMonto(
+        \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal()
+    );
 @endphp
 
 @if ($mostrarConciliacion)
@@ -25,9 +29,9 @@
             <tr>
                 <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
                 <td colspan="2">{{ $item['nombre'] ?? '' }}</td>
-                <td style="text-align:right;">{{ number_format((float) ($item['total_sicore'] ?? 0), 2, ',', '.') }}</td>
-                <td style="text-align:right;">{{ number_format((float) ($item['total_mayor'] ?? 0), 2, ',', '.') }}</td>
-                <td style="text-align:right;">{{ number_format((float) ($item['diferencia'] ?? 0), 2, ',', '.') }}</td>
+                <td style="text-align:right;">{{ $fmtMontoExcel($item['total_sicore'] ?? 0) }}</td>
+                <td style="text-align:right;">{{ $fmtMontoExcel($item['total_mayor'] ?? 0) }}</td>
+                <td style="text-align:right;">{{ $fmtMontoExcel($item['diferencia'] ?? 0) }}</td>
                 <td>
                     @if (! empty($item['cuadra']))
                         Cuadra
@@ -100,8 +104,8 @@
             <td>{{ $reg['nro_documento'] ?? '' }}</td>
             <td>{{ $reg['razon_social'] ?? '' }}</td>
             <td>{{ $reg['fecha_retencion'] ?? '' }}</td>
-            <td style="text-align:right;">{{ number_format((float) ($reg['base_calculo'] ?? 0), 2, ',', '.') }}</td>
-            <td style="text-align:right;">{{ number_format((float) ($reg['importe'] ?? 0), 2, ',', '.') }}</td>
+            <td style="text-align:right;">{{ $fmtMontoExcel($reg['base_calculo'] ?? 0) }}</td>
+            <td style="text-align:right;">{{ $fmtMontoExcel($reg['importe'] ?? 0) }}</td>
             <td>{{ $reg['referencia'] ?? '' }}</td>
         </tr>
     @empty
@@ -112,8 +116,8 @@
     @if (($totales['registros'] ?? 0) > 0)
         <tr>
             <td colspan="6"><strong>Totales ({{ $totales['registros'] }} reg.)</strong></td>
-            <td style="text-align:right;"><strong>{{ number_format((float) ($totales['base_calculo'] ?? 0), 2, ',', '.') }}</strong></td>
-            <td style="text-align:right;"><strong>{{ number_format((float) ($totales['importe'] ?? 0), 2, ',', '.') }}</strong></td>
+            <td style="text-align:right;"><strong>{{ $fmtMontoExcel($totales['base_calculo'] ?? 0) }}</strong></td>
+            <td style="text-align:right;"><strong>{{ $fmtMontoExcel($totales['importe'] ?? 0) }}</strong></td>
             <td></td>
         </tr>
     @endif

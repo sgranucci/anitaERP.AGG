@@ -107,6 +107,21 @@ Defaults globales opcionales: `GASTRONOMIA_CIERRE_JORNADA_CUENTA_*`.
 - Limitar enriquecimiento individual `getOrdersPOS`: `GASTRONOMIA_CIERRE_TOTEM_ENRIQUECER_PAYMENT_INDIVIDUAL_MAX=0` (default producción).
 - Benchmark referencia post-fix: ~12 s / 465 filas día actual.
 
+## Numerador Waitry no monótono (order_id) — tope por fecha/hora
+
+Waitry puede **cambiar/reiniciar el numerador** de `order_id` (incidente 17/07/2026: salto de la serie ~18,1M a **1.000.000.000** de ~13:13 a ~15:28 en las 3 empresas, y luego volvió). Reglas al tocar el tope/piso de tramo:
+
+- **`waitry_order_id_hasta` (watermark) se elige por fecha/hora (`placed_at`)**, no por `max(order_id)`: `GastronomiaCierreTotemJornadaService::topeUltimaOrdenPorFecha()`. El máximo numérico puede ser una orden de la banda anómala y contaminaría el piso de la jornada siguiente.
+- **El acotado de la jornada filtra "por los dos"** (`filtrarOrdenesActivasPorTopeHasta` y re-análisis de snapshot): una orden entra si `order_id <= hasta` **o** `placed_at <= instante del tope`. En operación normal (id monótono con la hora) ambas coinciden; solo en el salto recupera las órdenes 1e9 que quedan dentro de la jornada.
+- **La continuidad de la jornada siguiente sigue por número** (`order_id > hasta`); en teoría vuelve a ser secuencial.
+- **Monitor**: `Log::warning('gastronomia.cierre_totem.numerador_waitry_anomalo', …)` cuando el gap entre el mayor `order_id` y el último por fecha/hora supera `GAP_NUMERADOR_ALERTA` (1.000.000). También `gastronomia.cierre_totem.huecos_secuencia_excedidos` protege la detección de huecos de agotar memoria (`GASTRONOMIA_CIERRE_TOTEM_MAX_HUECOS_SECUENCIA`).
+- **Órdenes de la banda anómala facturadas y cobradas en cuenta operativa Anita** quedan del lado «Facturado Anita», **no** en la columna Sistema del Informe Z (comportamiento correcto; no son pérdida).
+
+```bash
+rg "numerador_waitry_anomalo|huecos_secuencia_excedidos" storage/logs/laravel.log
+rg "topeUltimaOrdenPorFecha|filtrarOrdenesActivasPorTopeHasta" app/Services/Ventas/Gastronomia/GastronomiaCierreTotemJornadaService.php
+```
+
 ## Prohibido
 
 - Facturación masiva o grabado de asientos sin implementación explícita y permisos.

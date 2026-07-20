@@ -27,6 +27,7 @@ use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
+use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -104,6 +105,8 @@ class OrdencompraGestionService
             'requisicion_articulos.centrocostos_destino',
             'requisicion_articulos.partidagastos.articulos',
             'requisicion_articulos.capexs',
+            'requisicion_articulos.color',
+            'requisicion_articulos.talle',
         ])->find($requisicionId);
         if (! $req) {
             throw new \InvalidArgumentException('La requisición no existe.');
@@ -135,6 +138,11 @@ class OrdencompraGestionService
                 'articulo_id' => $lin->articulo_id,
                 'sku' => $art ? (string) ($art->sku ?? '') : '',
                 'descripcion_articulo' => $art ? (string) ($art->descripcion ?? '') : '',
+                'color_id' => $lin->color_id ? (int) $lin->color_id : null,
+                'talle_id' => $lin->talle_id ? (int) $lin->talle_id : null,
+                'color_nombre' => $lin->color ? (string) ($lin->color->nombre ?? '') : '',
+                'talle_nombre' => $lin->talle ? (string) ($lin->talle->nombre ?? '') : '',
+                'maneja_stock_color_talle' => (bool) ($art->maneja_stock_color_talle ?? false),
                 'cantidad' => $lin->cantidad,
                 'precio' => $lin->precio,
                 'moneda_id' => $lin->moneda_id,
@@ -362,6 +370,16 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
+        try {
+            MovimientoStockColorTalleExclusividadSupport::validarLineas(
+                $payload['articulo_ids'] ?? [],
+                $payload['colores_id'] ?? [],
+                $payload['talles_id'] ?? [],
+            );
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
         $sectorId = $this->idSectorCompras();
         $uid = Auth::user()->id;
 
@@ -486,6 +504,16 @@ class OrdencompraGestionService
             } catch (\InvalidArgumentException $e) {
                 return ['mensaje' => 'error', 'errores' => $e->getMessage()];
             }
+        }
+
+        try {
+            MovimientoStockColorTalleExclusividadSupport::validarLineas(
+                $payload['articulo_ids'] ?? [],
+                $payload['colores_id'] ?? [],
+                $payload['talles_id'] ?? [],
+            );
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
         DB::beginTransaction();

@@ -2,163 +2,178 @@
 
 namespace App\Exports\Caja;
 
+use App\Repositories\Caja\VoucherRepositoryInterface;
+use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
-use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\Exportable;
-use Maatwebsite\Excel\Concerns\WithHeadings;
-use PhpOffice\PhpSpreadsheet\Shared\Date;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
-use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use App\Repositories\Caja\VoucherRepositoryInterface;
-use Carbon\Carbon;
-use App\ApiAnita;
 
-class VoucherExport implements FromView, WithColumnFormatting, WithMapping, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
+class VoucherExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
-	use Exportable;
-	private $desdefecha, $hastafecha;
-	private $origen;
-	protected $dates = ['fecha'];
-	private $voucherRepository;
-	private $flDesdeIndex;
+    use Exportable;
 
-	public function __construct(
-								VoucherRepositoryInterface $voucherrepository
-								)
-	{
-		$this->voucherRepository = $voucherrepository;
-	}
+    private const COL_ULTIMA = 'L';
 
-	public function view(): View
-	{
-		if ($this->flDesdeIndex)
-		{
-			$vouchers = $this->voucherRepository->leeVoucher($this->busqueda, false);
+    /** Congela también ID y Número (columnas A y B): el freeze arranca en C. */
+    private const COL_FREEZE = 'C';
 
-			return view('exports.caja.voucherindex', ['vouchers' => $vouchers]);
-		}
-		else
-		{
-		}
-	}
+    private $voucherRepository;
 
-	public function columnFormats(): array
+    private $busqueda;
+
+    private bool $esCsv = false;
+
+    private bool $hayFilaLogos = false;
+
+    private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
+
+    private int $filaCabecerasExcel = 3;
+
+    private int $filaPrimeraDatosExcel = 4;
+
+    /** @var list<string> */
+    private array $rutasLogosExcel = [];
+
+    public function __construct(VoucherRepositoryInterface $voucherrepository)
     {
-		if ($this->flDesdeIndex)
-			return [
-				'A' => NumberFormat::FORMAT_TEXT,
-				'B' => NumberFormat::FORMAT_TEXT,
-				'E' => NumberFormat::FORMAT_GENERAL,
-			];
+        $this->voucherRepository = $voucherrepository;
     }
 
-	public function map($row): array
+    public function view(): View
     {
-        return [
-        ];
+        $vouchers = $this->voucherRepository->leeVoucher($this->busqueda, false);
+
+        foreach ($vouchers as $row) {
+            $row->nombreempresa = $row->nombreempresa ?? '';
+        }
+
+        $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($vouchers);
+        $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
+        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
+        $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+        $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
+        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+
+        return view('exports.caja.voucherindex', [
+            'vouchers' => $vouchers,
+            'esExcel' => true,
+            'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
+        ]);
     }
 
-    public function styles(Worksheet $sheet)
-    {
-		if ($this->flDesdeIndex)
-			return [
-				2   => ['font' => ['bold' => true,
-									'color' => array('rgb' => '17202A'),
-									'size'  => 12,
-									'name'  => 'Arial'
-									],
-						'fill' => [
-									'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-									'color' => array('rgb' => '85C1E9'),
-						]
-						],
-				'B' => ['font' => ['bold' => true]],
-				'C' => ['font' => ['bold' => true]],
-				'E' => ['font' => ['bold' => true]],
-				'F' => ['font' => ['bold' => true]],
-			];
-		else
-			return [
-				2   => ['font' => ['bold' => true,
-									'color' => array('rgb' => '17202A'),
-									'size'  => 12,
-									'name'  => 'Arial'
-									],
-						],
-				3   => ['font' => ['bold' => true,
-									'color' => array('rgb' => '17202A'),
-									'size'  => 12,
-									'name'  => 'Arial'
-									],
-						'fill' => [
-									'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-									'color' => array('rgb' => '85C1E9'),
-						]
-						],
-				'B' => ['font' => ['bold' => true]],
-				'G' => ['font' => ['bold' => true]],
-				'H' => ['font' => ['bold' => true]],
-				'J' => ['font' => ['bold' => true]],
-				'M' => ['font' => ['bold' => true]],
-			];		
-    }
-
-	public function columnWidths(): array
-    {
-		if ($this->flDesdeIndex)
-			return [
-				'A' => 8,
-				'C' => 40,
-				'D' => 10,
-				'E' => 10,
-			];
-		else
-			return [
-				'A' => 10,
-				'C' => 15,
-				'D' => 10,
-				'E' => 15,
-			];
-    }
-
-	public function registerEvents(): array
-    {
-        return [
-            AfterSheet::class    => function(AfterSheet $event) {
-
-                $event->sheet->getDelegate()->freezePane('A3');
-
-            },
-        ];
-    }
-
-	public function title(): string
+    public function title(): string
     {
         return 'Reporte de Vouchers';
     }
 
-	public function rangoFecha($desdefecha, $hastafecha)
-	{
-		$this->desdefecha = $desdefecha;
-		$this->hastafecha = $hastafecha;
-		$this->flDesdeIndex = false;
+    public function columnWidths(): array
+    {
+        return [
+            'A' => 8,
+            'B' => 14,
+            'C' => 12,
+            'D' => 28,
+            'E' => 20,
+            'F' => 14,
+            'G' => 10,
+            'H' => 22,
+            'I' => 22,
+            'J' => 16,
+            'K' => 16,
+            'L' => 40,
+        ];
+    }
 
-		return $this;
-	}
+    /**
+     * ID y Número como texto; Monto Voucher (K) numérico con máscara neutra.
+     *
+     * @return array<string, string>
+     */
+    public function columnFormats(): array
+    {
+        return [
+            'A' => NumberFormat::FORMAT_TEXT,
+            'B' => NumberFormat::FORMAT_TEXT,
+            'K' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+        ];
+    }
 
-	public function parametros($busqueda)
-	{
-		$this->busqueda = $busqueda;
-		$this->flDesdeIndex = true;
+    public function styles(Worksheet $sheet): array
+    {
+        return [];
+    }
 
-		return $this;
-	}
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+                $col = self::COL_ULTIMA;
+
+                if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
+                    $sheet->getRowDimension(1)->setRowHeight(54);
+                    $offsetX = 6;
+                    foreach ($this->rutasLogosExcel as $ruta) {
+                        if (! is_string($ruta) || ! is_readable($ruta)) {
+                            continue;
+                        }
+                        $drawing = new Drawing;
+                        $drawing->setName('Logo');
+                        $drawing->setDescription('Logo empresa');
+                        $drawing->setPath($ruta);
+                        $drawing->setResizeProportional(true);
+                        $drawing->setHeight(46);
+                        $drawing->setCoordinates('A1');
+                        $drawing->setOffsetX($offsetX);
+                        $drawing->setOffsetY(4);
+                        $drawing->setWorksheet($sheet);
+                        $offsetX += 160;
+                    }
+                }
+
+                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.$col.$this->filaTituloExcel);
+                $sheet->mergeCells('A'.$this->filaSubtituloExcel.':'.$col.$this->filaSubtituloExcel);
+                $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setName('Arial')->setSize(16)->setBold(true)->getColor()->setRGB('17202A');
+                $sheet->getStyle('A'.$this->filaSubtituloExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+
+                $rangoCab = 'A'.$this->filaCabecerasExcel.':'.$col.$this->filaCabecerasExcel;
+                $sheet->getStyle($rangoCab)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('85C1E9');
+                $sheet->getStyle($rangoCab)->getFont()->setName('Arial')->setSize(11)->setBold(true)->getColor()->setRGB('17202A');
+                $sheet->getStyle($rangoCab)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
+            },
+        ];
+    }
+
+    public function parametros($busqueda, bool $esCsv = false)
+    {
+        $this->busqueda = $busqueda;
+        $this->esCsv = $esCsv;
+
+        return $this;
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
+    }
 }

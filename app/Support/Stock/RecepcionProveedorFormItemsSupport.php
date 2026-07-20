@@ -294,6 +294,8 @@ class RecepcionProveedorFormItemsSupport
             'recepcion_proveedor_articulos.articulo_stock',
             'recepcion_proveedor_articulos.depositos',
             'recepcion_proveedor_articulos.ordencompra_articulos',
+            'recepcion_proveedor_articulos.color',
+            'recepcion_proveedor_articulos.talle',
             'ordencompras',
         ]);
 
@@ -391,6 +393,12 @@ class RecepcionProveedorFormItemsSupport
             'articulo_stock_sku' => optional($linea->articulo_stock)->sku ?? '',
             'skualternativo' => optional($linea->articulos)->skualternativo ?? '',
             'maneja_parte_unica' => RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($linea->articulos),
+            'color_id' => $linea->color_id ? (int) $linea->color_id : null,
+            'talle_id' => $linea->talle_id ? (int) $linea->talle_id : null,
+            'color_nombre' => optional($linea->color)->nombre ?? '',
+            'talle_nombre' => optional($linea->talle)->nombre ?? '',
+            'maneja_stock_color_talle' => (bool) (optional($linea->articulos)->maneja_stock_color_talle
+                ?? (($linea->color_id || $linea->talle_id) ? true : false)),
             'accion_linea_oc' => $accion,
             'fl_cerrar_linea_oc' => (bool) ($linea->fl_cerrar_linea_oc ?? false),
             'comentario_diferencia' => $linea->comentario_diferencia ?? '',

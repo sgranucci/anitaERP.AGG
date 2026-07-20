@@ -3,9 +3,11 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\Venta;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
+use App\Support\Ventas\FacturaListadoFiltros;
 use Auth;
 use App\ApiAnita;
 
@@ -31,47 +33,52 @@ class VentaRepository implements VentaRepositoryInterface
         return $this->model->get();
     }
 
-    public function leeSinPaginar($busqueda)
+    public function leeSinPaginar($filtros)
     {
-        $data = $this->model->whereHas('clientes', function ($query) use ($busqueda) {
-                                $query->where('nombre', 'like', '%'.$busqueda.'%');
-                            })
-                            ->orWhereHas('tipotransacciones', function ($query) use ($busqueda) {
-                                $query->where('nombre', 'like', '%'.$busqueda.'%');
-                            })
-                            ->orWhereHas('puntoventas', function ($query) use ($busqueda) {
-                                $query->where('codigo', 'like', '%'.$busqueda.'%');
-                            })
-                            ->orWhere('numerocomprobante', $busqueda)
-                            ->orderBy('id','desc')->get();
-        return $data;
+        return $this->construyeQueryListado($filtros)->get();
     }
 
-    public function leePaginando($busqueda)
+    public function leePaginando($filtros)
     {
-        // Trae empresas para filtrar
-        $empresas = $this->empresaRepository->traeEmpresasAsignadas();
+        return $this->construyeQueryListado($filtros)->paginate(12);
+    }
 
-        $data = $this->model->whereHas('puntoventas', function ($query) use ($busqueda, $empresas) {
-                                    $query->whereIn('empresa_id', $empresas);
-                                    //$query->orwhereHas('empresas', function ($query) use ($busqueda) {
-                                    //    $query->where('nombre', 'like', '%'.$busqueda.'%');
-                                    //})->with('empresas');
-                            })->with('puntoventas')
-                            ->whereHas('clientes', function ($query) use ($busqueda) {
-                                $query->orwhere('nombre', 'like', '%'.$busqueda.'%');
-                            })
-                            ->WhereHas('tipotransacciones', function ($query) use ($busqueda) {
-                                $query->orwhere('nombre', 'like', '%'.$busqueda.'%');
-                            })
-                            ->WhereHas('puntoventas', function ($query) use ($busqueda) {
-                                    $query->whereHas('empresas', function ($query) use ($busqueda) {
-                                        $query->where('nombre', 'like', '%'.$busqueda.'%');
-                                    })->with('empresas');
-                            })
-                            ->orWhere('numerocomprobante', $busqueda)
-                            ->orderBy('id','desc')->paginate(12);
-        return $data;
+    /**
+     * Query base del listado de comprobantes de venta.
+     *
+     * Restringe siempre a las empresas asignadas al usuario (vía punto de venta)
+     * y aplica los filtros inteligentes de texto, empresa y rango de fechas.
+     *
+     * @param  array<string, mixed>|string|null  $filtros  Array de filtros o búsqueda legacy (string).
+     * @return Builder<Venta>
+     */
+    private function construyeQueryListado($filtros): Builder
+    {
+        // Compatibilidad con llamadas legacy que pasaban una cadena de búsqueda.
+        if (! is_array($filtros)) {
+            $legacy = FacturaListadoFiltros::filtrosVacios();
+            $legacy['valor'] = trim((string) $filtros);
+            $legacy['busqueda'] = $legacy['valor'];
+            // Las exportaciones legacy no acotan por rango de fechas.
+            $legacy['fecha_desde'] = '';
+            $legacy['fecha_hasta'] = '';
+            $filtros = $legacy;
+        }
+
+        $query = $this->model->newQuery()
+            ->with(['puntoventas.empresas', 'clientes.condicionivas', 'tipotransacciones']);
+
+        // Restricción por empresas asignadas al usuario (acceso a los comprobantes).
+        $empresas = $this->empresaRepository->traeEmpresasAsignadas();
+        if (count($empresas) >= 1) {
+            $query->whereHas('puntoventas', static function ($q) use ($empresas): void {
+                $q->whereIn('empresa_id', $empresas);
+            });
+        }
+
+        FacturaListadoFiltros::aplicar($query, $filtros);
+
+        return $query->orderBy('venta.id', 'desc');
     }
 
     public function create(array $data)

@@ -1094,19 +1094,14 @@
 
 <iframe id="gastro-iframe-impresion-factura" title="Impresión factura" aria-hidden="true"></iframe>
 
-{{-- Overlay de proceso (facturación / import Waitry): mismo patrón que notas de crédito en facturas del día --}}
-<div id="gastro-facturacion-procesando-overlay"
-     class="d-none"
-     role="status"
-     aria-live="assertive"
-     aria-hidden="true"
-     style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2050; display: flex; align-items: center; justify-content: center; padding: 1rem;">
-    <div class="bg-white rounded shadow text-center px-4 py-3" style="max-width: 92vw; min-width: 18rem;">
-        <i class="fa fa-spinner fa-spin fa-2x text-warning mb-2" aria-hidden="true"></i>
-        <div><strong id="gastro-facturacion-procesando-titulo">Procesando…</strong></div>
-        <div class="small text-muted mt-1" id="gastro-facturacion-procesando-subtitulo">Por favor espere. No cierre ni recargue la página.</div>
-    </div>
-</div>
+{{-- Overlay de proceso (facturación / import Waitry): patrón unificado includes.proceso_overlay_aviso --}}
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'gastro-facturacion-procesando-overlay',
+    'tituloId' => 'gastro-facturacion-procesando-titulo',
+    'subtituloId' => 'gastro-facturacion-procesando-subtitulo',
+    'titulo' => 'Procesando…',
+    'subtitulo' => 'Por favor espere. No cierre ni recargue la página.',
+])
 
 <!-- Modal apertura cuenta (cubiertos / mozo) -->
 <div class="modal fade" id="modal-abrir-cuenta" tabindex="-1" data-backdrop="static">

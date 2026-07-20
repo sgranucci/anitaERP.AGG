@@ -116,7 +116,7 @@ class VoucherController extends Controller
 
         case 'CSV':
             return (new VoucherExport($this->voucherRepository))
-                        ->parametros($busqueda)
+                        ->parametros($busqueda, true)
                         ->download('voucher.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   

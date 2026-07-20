@@ -197,13 +197,16 @@ class MovimientoStockController extends Controller
         $movimientoStockModoFerli = \App\Support\Stock\MovimientoStockFerliSupport::esCalzadosFerli();
         $bienesUsoActivos = $this->bienesUsoActivosParaTransferencia();
         $transferenciaVinculada = null;
+        $color_query = \App\Models\Stock\Color::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $talle_query = \App\Models\Stock\Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
         return view('stock.movimientostock.crear', compact(
             'mventa_query', 'articulo_query', 'modulo_query', 'listaprecio_query', 
             'articuloall_query', 'articuloxsku_query', 
             'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query',
             'empresa_query', 'empresa_id', 'centrocosto_query', 'movimientostock',
-            'asientoPreview', 'mostrarSolapaAsiento', 'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada'));
+            'asientoPreview', 'mostrarSolapaAsiento', 'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
+            'color_query', 'talle_query'));
     }
 
     public function guardar(ValidacionMovimientoStock $request)
@@ -288,6 +291,8 @@ class MovimientoStockController extends Controller
 
         $puedeModificarVentana = MovimientoStockEdicionVentanaSupport::puedeModificar($movimientostock);
         $controlVentanaActivo = MovimientoStockEdicionVentanaSupport::controlActivo();
+        $color_query = \App\Models\Stock\Color::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $talle_query = \App\Models\Stock\Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
         return view('stock.movimientostock.editar', compact('movimientostock', 
 			'mventa_query', 'articulo_query', 'modulo_query', 
@@ -295,7 +300,8 @@ class MovimientoStockController extends Controller
 			'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query',
             'empresa_query', 'empresa_id', 'centrocosto_query', 'asientoPreview', 'mostrarSolapaAsiento',
             'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
-            'puedeModificarVentana', 'controlVentanaActivo'));
+            'puedeModificarVentana', 'controlVentanaActivo',
+            'color_query', 'talle_query'));
     }
 
     public function actualizar(ValidacionMovimientoStock $request, $id)
@@ -453,6 +459,8 @@ class MovimientoStockController extends Controller
 
         $articuloId = (int) $request->query('articulo_id', 0);
         $depositoId = (int) $request->query('deposito_id', 0);
+        $colorId = (int) $request->query('color_id', 0);
+        $talleId = (int) $request->query('talle_id', 0);
         if ($articuloId <= 0 || $depositoId <= 0) {
             return response()->json(['saldo' => null]);
         }
@@ -468,8 +476,27 @@ class MovimientoStockController extends Controller
             return response()->json(['error' => 'No tiene permiso para operar sobre este depósito.'], 403);
         }
 
+        $saldo = ($colorId > 0 || $talleId > 0)
+            ? $this->saldoDepositoRepository->saldoVariante(
+                $articuloId,
+                $depositoId,
+                $colorId > 0 ? $colorId : null,
+                $talleId > 0 ? $talleId : null,
+            )
+            : $this->saldoDepositoRepository->saldo($articuloId, $depositoId);
+
+        // Artículo con flag: sin color/talle aún → saldo de variante 0/0 (no el total sumado).
+        if ($colorId <= 0 && $talleId <= 0) {
+            $maneja = (bool) (\App\Models\Stock\Articulo::query()
+                ->whereKey($articuloId)
+                ->value('maneja_stock_color_talle') ?? false);
+            if ($maneja) {
+                $saldo = $this->saldoDepositoRepository->saldoVariante($articuloId, $depositoId, null, null);
+            }
+        }
+
         return response()->json([
-            'saldo' => $this->saldoDepositoRepository->saldo($articuloId, $depositoId),
+            'saldo' => $saldo,
         ]);
     }
 

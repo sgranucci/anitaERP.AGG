@@ -16,6 +16,13 @@ class ValidacionArticulo extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation()
+    {
+        $this->merge([
+            'maneja_stock_color_talle' => $this->boolean('maneja_stock_color_talle'),
+        ]);
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -41,6 +48,7 @@ class ValidacionArticulo extends FormRequest
             'rubro_sifab' => 'nullable|max:20',
             'clasematerial' => 'nullable|max:20',
             'gestioncompra' => 'nullable|max:20',
+            'maneja_stock_color_talle' => 'nullable|boolean',
         ];
     }
 }

@@ -44,6 +44,8 @@ class RequisicionRepository implements RequisicionRepositoryInterface
             $data['monto'],
             $data['moneda_id'],
             $data['articulo_ids'],
+            $data['colores_id'],
+            $data['talles_id'],
             $data['cantidades'],
             $data['precios'],
             $data['moneda_linea_ids'],
@@ -55,6 +57,7 @@ class RequisicionRepository implements RequisicionRepositoryInterface
             $data['motivoahorros'],
             $data['partidagasto_ids'],
             $data['capex_ids'],
+            $data['modo_stock_color_talle'],
             $data['fechas'],
             $data['estados'],
             $data['usuario_ids'],
@@ -82,6 +85,7 @@ class RequisicionRepository implements RequisicionRepositoryInterface
             'empresas', 'centrocostos', 'oficinacompras', 'proveedores.condicionpagos', 'formapagos', 'usuarios',
         ])->with(['requisicion_articulos.articulos.unidadesdemedidasalternativas', 'requisicion_articulos.monedas',
             'requisicion_articulos.partidagastos', 'requisicion_articulos.capexs',
+            'requisicion_articulos.color', 'requisicion_articulos.talle',
         ])->find($id)) {
             throw new ModelNotFoundException('Registro no encontrado');
         }

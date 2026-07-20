@@ -26,6 +26,7 @@ use App\Support\Ventas\Waitry\WaitryTableAccesoSupport;
 use App\Support\Ventas\Waitry\WaitryTotemJornadaResumenSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -37,6 +38,13 @@ use RuntimeException;
  */
 final class GastronomiaCierreTotemJornadaService
 {
+    /**
+     * Salto de order_id (entre la última orden por fecha/hora y el mayor order_id de la jornada) a
+     * partir del cual se considera que Waitry cambió/reinició el numerador. Un día normal el span es
+     * de ~15.000; un salto a la serie 1.000.000.000 lo dispara. Sirve de monitor (log de aviso).
+     */
+    private const GAP_NUMERADOR_ALERTA = 1_000_000;
+
     public function __construct(
         private readonly WaitryAnalyticsOrdenesService $analyticsOrdenesService,
         private readonly WaitryOrdenesExternasService $ordenesExternasService,
@@ -246,9 +254,30 @@ final class GastronomiaCierreTotemJornadaService
         $anterior = (int) $cierre->waitry_order_id_anterior;
         $desdeRegistro = $cierre->waitry_order_id_desde !== null ? (int) $cierre->waitry_order_id_desde : null;
 
+        $instanteTope = null;
+        foreach ($cargado['lineas'] as $l) {
+            if ($this->waitryOrderIdDeLinea($l) === $hasta) {
+                $instanteTope = $this->parsearInstanteOrden($l);
+
+                break;
+            }
+        }
+
         $lineas = array_values(array_filter(
             $cargado['lineas'],
-            fn (array $l) => $this->waitryOrderIdDeLinea($l) <= $hasta,
+            function (array $l) use ($hasta, $instanteTope) {
+                $id = $this->waitryOrderIdDeLinea($l);
+                if ($id <= $hasta) {
+                    return true;
+                }
+                if ($instanteTope !== null) {
+                    $instante = $this->parsearInstanteOrden($l);
+
+                    return $instante !== null && $instante->lessThanOrEqualTo($instanteTope);
+                }
+
+                return false;
+            },
         ));
 
         $ids = [];
@@ -403,8 +432,13 @@ final class GastronomiaCierreTotemJornadaService
         $ventana = $listado['ventana'];
         $filtroOrdenes = WaitryOrdenEstadoSupport::filtrarOrdenesActivas($listado['ordenes']);
         $ordenesParaInformeZ = $filtroOrdenes['activas'];
-        $topeHastaId = $this->resolverTopeWaitryOrderIdHasta($jornada, $ordenesParaInformeZ);
-        $ordenesParaInformeZ = $this->filtrarOrdenesActivasPorTopeHasta($ordenesParaInformeZ, $topeHastaId);
+        $tope = $this->resolverTopeConInstante($jornada, $ordenesParaInformeZ);
+        $topeHastaId = $tope['id'];
+        $ordenesParaInformeZ = $this->filtrarOrdenesActivasPorTopeHasta(
+            $ordenesParaInformeZ,
+            $topeHastaId,
+            $tope['instante'],
+        );
         $cantidadCanceladasExcluidas = $filtroOrdenes['cantidad_excluidas'];
 
         $lineasCompletas = $this->armarLineasConEstadoErp(
@@ -874,26 +908,129 @@ final class GastronomiaCierreTotemJornadaService
      */
     private function resolverTopeWaitryOrderIdHasta(JornadaGastronomia $jornada, array $ordenesActivas): int
     {
+        return $this->resolverTopeConInstante($jornada, $ordenesActivas)['id'];
+    }
+
+    /**
+     * Tope de la jornada: order_id de la ÚLTIMA orden real por fecha/hora (placed_at) e instante.
+     *
+     * El watermark se elige por fecha/hora y no por mayor order_id: si Waitry reinicia/cambia el
+     * numerador (p. ej. salto a la serie 1.000.000.000) el máximo numérico no es la última orden
+     * real y contaminaría el piso de la próxima jornada. La continuidad de la jornada siguiente
+     * sigue siendo por número (order_id > hasta), que en operación normal es secuencial.
+     *
+     * @param  array<int|string, array<string, mixed>>  $ordenesActivas
+     * @return array{id: int, instante: ?Carbon}
+     */
+    private function resolverTopeConInstante(JornadaGastronomia $jornada, array $ordenesActivas): array
+    {
         $cierre = CierreTotemJornadaGastronomia::query()
             ->where('jornada_gastronomia_id', (int) $jornada->id)
             ->first();
 
         if ($cierre !== null && (int) $cierre->waitry_order_id_hasta > 0) {
-            return (int) $cierre->waitry_order_id_hasta;
+            $hastaId = (int) $cierre->waitry_order_id_hasta;
+
+            return ['id' => $hastaId, 'instante' => $this->instanteOrdenPorId($ordenesActivas, $hastaId)];
         }
 
-        $max = 0;
-        foreach ($ordenesActivas as $orden) {
+        return $this->topeUltimaOrdenPorFecha(
+            $ordenesActivas,
+            (int) $jornada->empresa_id,
+            $jornada->fecha_jornada?->format('Y-m-d') ?? '',
+        );
+    }
+
+    /**
+     * Última orden por fecha/hora (placed_at). Devuelve su order_id e instante.
+     * Si ninguna orden tiene fecha parseable, cae al mayor order_id (comportamiento previo).
+     * Monitor: si el mayor order_id se aleja del último por fecha/hora más allá de
+     * {@see self::GAP_NUMERADOR_ALERTA}, registra un aviso (Waitry cambió el numerador).
+     *
+     * @param  array<int|string, array<string, mixed>>  $ordenes
+     * @return array{id: int, instante: ?Carbon}
+     */
+    private function topeUltimaOrdenPorFecha(array $ordenes, int $empresaId = 0, string $fechaJornada = ''): array
+    {
+        $idPorFecha = 0;
+        $instanteTope = null;
+        $maxId = 0;
+        foreach ($ordenes as $orden) {
             if (! is_array($orden)) {
                 continue;
             }
             $id = (int) ($orden['orderId'] ?? $orden['id'] ?? 0);
-            if ($id > $max) {
-                $max = $id;
+            if ($id <= 0) {
+                continue;
+            }
+            if ($id > $maxId) {
+                $maxId = $id;
+            }
+            $instante = $this->parsearInstanteOrden($orden);
+            if ($instante === null) {
+                continue;
+            }
+            if ($instanteTope === null
+                || $instante->greaterThan($instanteTope)
+                || ($instante->equalTo($instanteTope) && $id > $idPorFecha)
+            ) {
+                $instanteTope = $instante;
+                $idPorFecha = $id;
             }
         }
 
-        return $max;
+        $topeId = $idPorFecha > 0 ? $idPorFecha : $maxId;
+
+        if ($topeId > 0 && $maxId - $topeId > self::GAP_NUMERADOR_ALERTA) {
+            Log::warning('gastronomia.cierre_totem.numerador_waitry_anomalo', [
+                'empresa_id' => $empresaId,
+                'fecha_jornada' => $fechaJornada,
+                'tope_por_fecha' => $topeId,
+                'tope_instante' => $instanteTope?->format('Y-m-d H:i:s'),
+                'max_order_id' => $maxId,
+                'gap' => $maxId - $topeId,
+                'nota' => 'Waitry parece haber cambiado el numerador de order_id; el tope se toma por fecha/hora, no por número.',
+            ]);
+        }
+
+        return ['id' => $topeId, 'instante' => $instanteTope];
+    }
+
+    /**
+     * @param  array<int|string, array<string, mixed>>  $ordenes
+     */
+    private function instanteOrdenPorId(array $ordenes, int $orderId): ?Carbon
+    {
+        foreach ($ordenes as $orden) {
+            if (! is_array($orden)) {
+                continue;
+            }
+            if ((int) ($orden['orderId'] ?? $orden['id'] ?? 0) === $orderId) {
+                return $this->parsearInstanteOrden($orden);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $orden
+     */
+    private function parsearInstanteOrden(array $orden): ?Carbon
+    {
+        $placedAt = $orden['placed_at'] ?? null;
+        if (($placedAt === null || $placedAt === '') && isset($orden['timestamp']['date'])) {
+            $placedAt = $orden['timestamp']['date'];
+        }
+        if (! is_string($placedAt) || trim($placedAt) === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($placedAt);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function origenTopeWaitryOrderIdHasta(JornadaGastronomia $jornada): string
@@ -910,24 +1047,41 @@ final class GastronomiaCierreTotemJornadaService
     }
 
     /**
+     * Acota las órdenes al tope de la jornada. Filtra "por los dos": una orden queda dentro si su
+     * order_id es &lt;= al hasta (número, operación secuencial normal) O si su fecha/hora (placed_at)
+     * es &lt;= al instante del tope. La condición temporal solo agrega órdenes que el número dejaría
+     * fuera cuando Waitry cambió el numerador (serie 1.000.000.000 dentro de la jornada); en
+     * operación normal (id monótono con la hora) ambas condiciones coinciden y no cambia nada.
+     *
      * @param  array<int|string, array<string, mixed>>  $ordenes
      * @return array<int|string, array<string, mixed>>
      */
-    private function filtrarOrdenesActivasPorTopeHasta(array $ordenes, int $hastaInclusive): array
+    private function filtrarOrdenesActivasPorTopeHasta(array $ordenes, int $hastaInclusive, ?Carbon $instanteTope = null): array
     {
-        if ($hastaInclusive <= 0) {
+        if ($hastaInclusive <= 0 && $instanteTope === null) {
             return $ordenes;
         }
 
         return array_filter(
             $ordenes,
-            static function ($orden) use ($hastaInclusive) {
+            function ($orden) use ($hastaInclusive, $instanteTope) {
                 if (! is_array($orden)) {
                     return false;
                 }
                 $id = (int) ($orden['orderId'] ?? $orden['id'] ?? 0);
+                if ($id <= 0) {
+                    return false;
+                }
+                if ($hastaInclusive > 0 && $id <= $hastaInclusive) {
+                    return true;
+                }
+                if ($instanteTope !== null) {
+                    $instante = $this->parsearInstanteOrden($orden);
 
-                return $id > 0 && $id <= $hastaInclusive;
+                    return $instante !== null && $instante->lessThanOrEqualTo($instanteTope);
+                }
+
+                return false;
             },
             ARRAY_FILTER_USE_BOTH,
         );
@@ -1038,7 +1192,7 @@ final class GastronomiaCierreTotemJornadaService
             $cierreEn,
         )['ordenes'];
 
-        $idsHuecos = $this->detectarHuecosSecuenciales($desdeExclusive, $porId);
+        $idsHuecos = $this->detectarHuecosSecuenciales($desdeExclusive, $porId, $empresaId, $fechaJornada);
 
         if (count($porId) > $limite) {
             throw new InvalidArgumentException(
@@ -1098,11 +1252,21 @@ final class GastronomiaCierreTotemJornadaService
      * IDs Waitry ausentes entre el último cierre y el máximo visto en getordersdetails.
      * No consulta Waitry: quedan como discrepancia para auditoría del día (proceso posterior).
      *
+     * Protección de memoria: los waitry_order_id son globales de Waitry (se intercalan con
+     * órdenes de otras cuentas) y el ERP puede suplementar ids muy antiguos. Un rango con un
+     * id atípico (min muy chico o max enorme) generaría millones de "huecos" y agotaría la
+     * memoria (bytes exhausted en el cierre de jornada). Se acota la cantidad de huecos y las
+     * iteraciones; al superarse, se corta y se registra la anomalía para auditoría del día.
+     *
      * @param  array<int, array<string, mixed>>  $porId
      * @return list<int>
      */
-    private function detectarHuecosSecuenciales(int $desdeExclusive, array $porId): array
-    {
+    private function detectarHuecosSecuenciales(
+        int $desdeExclusive,
+        array $porId,
+        int $empresaId = 0,
+        string $fechaJornada = '',
+    ): array {
         if ($porId === []) {
             return [];
         }
@@ -1111,11 +1275,42 @@ final class GastronomiaCierreTotemJornadaService
         $maxId = (int) max($ids);
         $minId = (int) min($ids);
         $inicio = max($desdeExclusive + 1, $minId);
+
+        $maxHuecos = max(1000, (int) config('gastronomia.cierre_totem_jornada_max_huecos_secuencia', 20000));
+        $maxIteraciones = $maxHuecos * 50;
+
         $huecos = [];
+        $iteraciones = 0;
+        $cortadoPorLimite = false;
         for ($id = $inicio; $id <= $maxId; $id++) {
+            if (++$iteraciones > $maxIteraciones) {
+                $cortadoPorLimite = true;
+
+                break;
+            }
             if (! isset($porId[$id])) {
                 $huecos[] = $id;
+                if (count($huecos) >= $maxHuecos) {
+                    $cortadoPorLimite = true;
+
+                    break;
+                }
             }
+        }
+
+        if ($cortadoPorLimite) {
+            Log::warning('gastronomia.cierre_totem.huecos_secuencia_excedidos', [
+                'empresa_id' => $empresaId,
+                'fecha_jornada' => $fechaJornada,
+                'desde_exclusive' => $desdeExclusive,
+                'min_id' => $minId,
+                'max_id' => $maxId,
+                'inicio' => $inicio,
+                'span' => $maxId - $inicio,
+                'ordenes_en_ventana' => count($porId),
+                'huecos_detectados' => count($huecos),
+                'max_huecos' => $maxHuecos,
+            ]);
         }
 
         return $huecos;

@@ -52,6 +52,36 @@ class Color extends Model
         }
     }
 
+    /**
+     * Sync idempotente por código (col_color): importa los colores de Anita que falten.
+     *
+     * @return int cantidad importada
+     */
+    public function sincronizarCatalogoAnita(): int
+    {
+        $apiAnita = new ApiAnita();
+        $data = ['acc' => 'list', 'campos' => 'col_color, col_desc', 'tabla' => $this->table, 'sistema' => 'sueldos'];
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+        $existentes = self::query()->pluck('codigo')->filter()->map(fn ($c) => (int) $c)->all();
+
+        $importados = 0;
+        foreach ($dataAnita as $value) {
+            $codigo = (int) ($value->col_color ?? 0);
+            if ($codigo === 0 || in_array($codigo, $existentes, true)) {
+                continue;
+            }
+            self::create([
+                'nombre' => trim((string) ($value->col_desc ?? '')),
+                'codigo' => $codigo,
+            ]);
+            $existentes[] = $codigo;
+            $importados++;
+        }
+
+        return $importados;
+    }
+
 	public function guardarAnita($request) {
         $apiAnita = new ApiAnita();
 

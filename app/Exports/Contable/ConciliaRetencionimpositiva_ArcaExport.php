@@ -17,6 +17,7 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use App\Support\Export\ExcelFormatoNumero;
 
 class ConciliaRetencionimpositiva_ArcaExport implements FromView, WithColumnFormatting, WithMapping, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
 {
@@ -36,10 +37,14 @@ class ConciliaRetencionimpositiva_ArcaExport implements FromView, WithColumnForm
 
 	public function columnFormats(): array
     {
+		$formato = ExcelFormatoNumero::preferenciaGlobal();
+
 		return [
 				'A' => NumberFormat::FORMAT_TEXT,
 				'B' => NumberFormat::FORMAT_TEXT,
-				'E' => NumberFormat::FORMAT_GENERAL,
+				// Monto según ARCA / según Sistema como número real (adapta a cada PC).
+				'E' => ExcelFormatoNumero::codigoColumna($formato, 2),
+				'F' => ExcelFormatoNumero::codigoColumna($formato, 2),
 			];
     }
 

@@ -4,7 +4,8 @@
     // Resumen: Concepto/Cuenta + Nombre + Cuenta/Concepto + Desc + Líneas + Debe + Haber = 7 cols
     $colSpanResumenMedio = max(0, $colSpanExcel - 7);
     $formatoExcel = \App\Support\Contable\MayorConceptoExcelFormatoNumero::normalizar(
-        $excel_formato_numero ?? ($filtros['excel_formato_numero'] ?? 'ar')
+        $excel_formato_numero
+            ?? ($filtros['excel_formato_numero'] ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal())
     );
     $formatearMontoExcel = \App\Support\Contable\MayorConceptoExcelFormatoNumero::formateadorMonto($formatoExcel);
     $formatearCotizacionExcel = \App\Support\Contable\MayorConceptoExcelFormatoNumero::formateadorMonto($formatoExcel, 4);

@@ -163,7 +163,29 @@ class RecepcionProveedorAnitaBridgeService
             ]);
         }
 
-        if (! empty($estado['cabecera_nueva'])) {
+        // Anular cabecera si fue insertada en este intento, o si quedó ERP vacía de esta recepción
+        // (evita fantasma COM sin líneas tras rollback fallido de stock/asiento).
+        $anularCabecera = ! empty($estado['cabecera_nueva']);
+        if (! $anularCabecera) {
+            try {
+                $cabecera = RecepcionProveedorAnitaColisionSupport::leerRecepmaeProveedorClave($codigoProveedor, $clave);
+                if (
+                    $cabecera !== null
+                    && trim((string) ($cabecera->recm_terminal ?? '')) === RecepcionProveedorAnitaWhereSupport::TERMINAL_ERP
+                    && (int) ($cabecera->recm_documentoid ?? 0) === (int) $recepcion->id
+                    && ! RecepcionProveedorAnitaColisionSupport::tieneRecepmovOStkmov($codigoProveedor, $clave)
+                ) {
+                    $anularCabecera = true;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('RecepcionProveedorAnitaBridge: rollback evaluar recepmae', [
+                    'recepcion_id' => $recepcion->id,
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($anularCabecera) {
             try {
                 $this->marcarRecepmaeAnulada($codigoProveedor, $clave);
             } catch (\Throwable $e) {

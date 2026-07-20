@@ -324,6 +324,26 @@
             <strong>Baja de NPU:</strong> ingrese un NPU por l&iacute;nea (escanee o tipee + Enter).
             El sistema completa el art&iacute;culo y fija cantidad 1. Puede agregar varias l&iacute;neas para dar de baja varios NPU en el mismo comprobante.
         </div>
+        <div id="ms-ayuda-color-talle" class="alert alert-info py-2 small mb-2" style="display:none;">
+            <strong>Stock por color y talle:</strong> este comprobante solo admite art&iacute;culos con esa gesti&oacute;n.
+            Indique color y talle en cada l&iacute;nea. El mismo art&iacute;culo puede repetirse con distinta variante.
+        </div>
+        @php
+            $modoStockColorTalleInicial = old('modo_stock_color_talle', '');
+            if ($modoStockColorTalleInicial === '' && isset($lineasFormulario)) {
+                foreach ($lineasFormulario as $linModo) {
+                    if ((int) ($linModo->articulo_id ?? 0) <= 0) {
+                        continue;
+                    }
+                    $manejaLin = (bool) (optional($linModo->articulos)->maneja_stock_color_talle
+                        || (int) ($linModo->color_id ?? 0) > 0
+                        || (int) ($linModo->talle_id ?? 0) > 0);
+                    $modoStockColorTalleInicial = $manejaLin ? '1' : '0';
+                    break;
+                }
+            }
+        @endphp
+        <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
         <div class="table-responsive">
     	<table class="table table-sm table-bordered table-hover table-ms-items-compact" id="tabla-items-movimientostock">
     		<thead class="thead-light">
@@ -341,6 +361,8 @@
 					<th class="col-flag" title="Todos los art&iacute;culos">A</th>
     				<th class="col-flag" title="Todas las combinaciones">C</th>
                     @else
+                    <th class="col-color ms-col-color-talle" style="display:none;">Color</th>
+                    <th class="col-talle ms-col-color-talle" style="display:none;">Talle</th>
                     <th class="col-umd text-center" title="Unidad de medida del art&iacute;culo de la l&iacute;nea">UM</th>
                     <th class="col-qty text-right">Cantidad</th>
                     <th class="col-umd text-center" title="Unidad de medida alternativa del art&iacute;culo (p. ej. envase)">UM alt.</th>
@@ -404,7 +426,18 @@
                                 if ($cantAlt == 0 && $uxenv > 0 && $cantStock > 0) {
                                     $cantAlt = $cantStock * $uxenv;
                                 }
+                                $colorIdLinea = (int) old('colores_id.'.$loop->index, $pedidoitem->color_id ?? 0);
+                                $talleIdLinea = (int) old('talles_id.'.$loop->index, $pedidoitem->talle_id ?? 0);
+                                $manejaColorTalleLinea = (bool) old(
+                                    'maneja_stock_color_talle.'.$loop->index,
+                                    $art->maneja_stock_color_talle ?? false
+                                );
                             @endphp
+                            @include('stock.movimientostock.partials.fila_color_talle', [
+                                'colorId' => $colorIdLinea,
+                                'talleId' => $talleIdLinea,
+                                'manejaColorTalle' => $manejaColorTalleLinea,
+                            ])
                             @include('stock.movimientostock.partials.fila_item_estandar', [
                                 'abrevUmd' => optional($art->unidadesdemedidas)->abreviatura ?? '',
                                 'abrevUmdAlter' => optional($art->unidadesdemedidasalternativas)->abreviatura ?? '',

@@ -191,6 +191,21 @@
                     </div>
                 @endif
                 <div class="form-group row">
+                    <label for="maneja_stock_color_talle" class="col-lg-4 col-form-label">Stock por color y talle</label>
+                    <div class="col-lg-8">
+                        <div class="form-check mt-2">
+                            <input type="hidden" name="maneja_stock_color_talle" value="0">
+                            <input type="checkbox" class="form-check-input" name="maneja_stock_color_talle" id="maneja_stock_color_talle" value="1"
+                                @if (old('maneja_stock_color_talle', $producto->maneja_stock_color_talle ?? false))
+                                    checked
+                                @endif>
+                            <label class="form-check-label" for="maneja_stock_color_talle">
+                                El stock de este art&iacute;culo se controla por color y talle (indumentaria / EPP)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
     				<label for="mventa_id" class="col-lg-4 col-form-label">Marca</label>
 					<div class="col-lg-8">
 					<select id="mventa_id" name="mventa_id" class="form-control">

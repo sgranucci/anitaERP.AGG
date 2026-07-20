@@ -1,0 +1,184 @@
+<?php use App\Support\Sueldos\ConceptoTipo; ?>
+<div class="row">
+    <div class="col-lg-6">
+        <div class="form-group row">
+            <label for="codigo" class="col-lg-4 col-form-label">C&oacute;digo</label>
+            <div class="col-lg-4">
+                @if (isset($data))
+                    <input type="text" id="codigo" class="form-control" value="{{ $data->codigo }}" readonly/>
+                @else
+                    <input type="number" name="codigo" id="codigo" class="form-control" min="1"
+                           value="{{ old('codigo') }}"
+                           placeholder="Autom&aacute;tico si se deja vac&iacute;o"/>
+                @endif
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="descripcion" class="col-lg-4 col-form-label requerido">Descripci&oacute;n</label>
+            <div class="col-lg-8">
+                <input type="text" name="descripcion" id="descripcion" class="form-control" maxlength="60" required
+                       value="{{ old('descripcion', $data->descripcion ?? '') }}"/>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="tipo" class="col-lg-4 col-form-label requerido">Tipo de concepto</label>
+            <div class="col-lg-8">
+                <select name="tipo" id="tipo" class="form-control" required>
+                    @foreach (ConceptoTipo::TIPOS as $val => $label)
+                        <option value="{{ $val }}" {{ old('tipo', $data->tipo ?? ConceptoTipo::TIPO_DEFAULT) === $val ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="suma_a" class="col-lg-4 col-form-label">Base / acumulador</label>
+            <div class="col-lg-8">
+                <select name="suma_a" id="suma_a" class="form-control">
+                    <option value="">— No acumula —</option>
+                    @foreach (ConceptoTipo::BASES as $val => $label)
+                        <option value="{{ $val }}" {{ old('suma_a', $data->suma_a ?? '') === $val ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
+                <small class="form-text text-muted">Base sobre la que suma para c&aacute;lculos (bruto, descuentos, neto).</small>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="momento" class="col-lg-4 col-form-label requerido">Momento de liquidaci&oacute;n</label>
+            <div class="col-lg-8">
+                <select name="momento" id="momento" class="form-control" required>
+                    @foreach (ConceptoTipo::MOMENTOS as $val => $label)
+                        <option value="{{ $val }}" {{ old('momento', $data->momento ?? ConceptoTipo::MOMENTO_DEFAULT) === $val ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="form-group row">
+            <label for="factor" class="col-lg-4 col-form-label">Factor</label>
+            <div class="col-lg-4">
+                <input type="number" step="0.0001" name="factor" id="factor" class="form-control"
+                       value="{{ old('factor', $data->factor ?? '') }}"/>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="mes_retroactivo" class="col-lg-4 col-form-label">Mes retroactivo</label>
+            <div class="col-lg-4">
+                <input type="number" name="mes_retroactivo" id="mes_retroactivo" class="form-control" min="-99" max="12"
+                       value="{{ old('mes_retroactivo', $data->mes_retroactivo ?? 0) }}"/>
+                <small class="form-text text-muted">0 = no es; -99 = variable.</small>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="concepto_afip" class="col-lg-4 col-form-label">Concepto AFIP</label>
+            <div class="col-lg-4">
+                <input type="text" name="concepto_afip" id="concepto_afip" class="form-control" maxlength="6"
+                       value="{{ old('concepto_afip', $data->concepto_afip ?? '') }}"/>
+                <small class="form-text text-muted">Mapeo Libro de Sueldos Digital (opcional, etapa LSD).</small>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="orden" class="col-lg-4 col-form-label">Orden</label>
+            <div class="col-lg-4">
+                <input type="number" name="orden" id="orden" class="form-control" min="0"
+                       value="{{ old('orden', $data->orden ?? 0) }}"/>
+            </div>
+        </div>
+        <div class="form-group row">
+            <div class="col-lg-4 col-form-label">Opciones</div>
+            <div class="col-lg-8">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input" name="va_recibo" id="va_recibo" value="1"
+                           {{ old('va_recibo', $data->va_recibo ?? true) ? 'checked' : '' }}>
+                    <label class="custom-control-label" for="va_recibo">Va al recibo</label>
+                </div>
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input" name="activo" id="activo" value="1"
+                           {{ old('activo', $data->activo ?? true) ? 'checked' : '' }}>
+                    <label class="custom-control-label" for="activo">Activo</label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<hr>
+<h5 class="mb-2">F&oacute;rmulas de c&aacute;lculo</h5>
+<p class="text-muted small">Se eval&uacute;an con el parser de sueldos (variables como <code>SUELDO</code>, <code>ANTIG</code>, <code>CANTVAC</code>, <code>Bn</code>, <code>Iconcepto</code>). La <em>f&oacute;rmula</em> es el importe final; opcionalmente separe <em>cantidad</em> y <em>valor unitario</em>.</p>
+<div class="form-group row">
+    <label for="formula" class="col-lg-2 col-form-label">F&oacute;rmula (importe)</label>
+    <div class="col-lg-10">
+        <textarea name="formula" id="formula" class="form-control" rows="2" maxlength="2000">{{ old('formula', $data->formula ?? '') }}</textarea>
+    </div>
+</div>
+<div class="form-group row">
+    <label for="formula_cantidad" class="col-lg-2 col-form-label">F&oacute;rmula cantidad</label>
+    <div class="col-lg-10">
+        <textarea name="formula_cantidad" id="formula_cantidad" class="form-control" rows="2" maxlength="2000">{{ old('formula_cantidad', $data->formula_cantidad ?? '') }}</textarea>
+    </div>
+</div>
+<div class="form-group row">
+    <label for="formula_valor" class="col-lg-2 col-form-label">F&oacute;rmula valor</label>
+    <div class="col-lg-10">
+        <textarea name="formula_valor" id="formula_valor" class="form-control" rows="2" maxlength="2000">{{ old('formula_valor', $data->formula_valor ?? '') }}</textarea>
+    </div>
+</div>
+<div class="form-group row">
+    <label for="leyenda_recibo" class="col-lg-2 col-form-label">Leyenda recibo</label>
+    <div class="col-lg-10">
+        <textarea name="leyenda_recibo" id="leyenda_recibo" class="form-control" rows="2" maxlength="2000">{{ old('leyenda_recibo', $data->leyenda_recibo ?? '') }}</textarea>
+    </div>
+</div>
+
+<hr>
+<h5 class="mb-2">Override concepto &harr; acumuladores</h5>
+<p class="text-muted small mb-2">
+    Por defecto el concepto alimenta los acumuladores seg&uacute;n su <em>tipo</em>.
+    Ac&aacute; puede <strong>incluir</strong> o <strong>excluir</strong> acumuladores concretos
+    (ej. remunerativo que no entra en base SAC). Deje en &laquo;Autom&aacute;tico&raquo; si no hay excepci&oacute;n.
+</p>
+@php
+    $ovOld = old('acumuladores_override', $overridesMap ?? []);
+@endphp
+@if (($acumuladores ?? collect())->isEmpty())
+    <div class="alert alert-light border">No hay acumuladores activos. Cree acumuladores en <em>Sueldos &rarr; Acumuladores</em>.</div>
+@else
+<div class="table-responsive">
+    <table class="table table-sm table-bordered">
+        <thead style="background-color:#85C1E9;color:#17202A;">
+            <tr>
+                <th style="width:90px">C&oacute;digo</th>
+                <th>Descripci&oacute;n</th>
+                <th style="width:160px">Acci&oacute;n</th>
+                <th style="width:110px">Signo</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($acumuladores as $ac)
+                @php
+                    $ov = $ovOld[$ac->id] ?? ['accion' => 'auto', 'signo' => 1];
+                    $accion = $ov['accion'] ?? 'auto';
+                    $signo = (int) ($ov['signo'] ?? 1);
+                @endphp
+                <tr>
+                    <td><code>{{ $ac->codigo }}</code></td>
+                    <td>{{ $ac->descripcion }}</td>
+                    <td>
+                        <select name="acumuladores_override[{{ $ac->id }}][accion]" class="form-control form-control-sm">
+                            <option value="auto" {{ $accion === 'auto' ? 'selected' : '' }}>Autom&aacute;tico (por tipo)</option>
+                            <option value="incluir" {{ $accion === 'incluir' ? 'selected' : '' }}>Incluir siempre</option>
+                            <option value="excluir" {{ $accion === 'excluir' ? 'selected' : '' }}>Excluir siempre</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select name="acumuladores_override[{{ $ac->id }}][signo]" class="form-control form-control-sm">
+                            <option value="1" {{ $signo === 1 ? 'selected' : '' }}>+ Suma</option>
+                            <option value="-1" {{ $signo === -1 ? 'selected' : '' }}>&minus; Resta</option>
+                        </select>
+                    </td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+</div>
+@endif

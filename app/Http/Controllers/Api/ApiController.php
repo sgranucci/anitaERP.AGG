@@ -14,7 +14,9 @@ use App\Services\Compras\OrdencompraService;
 use App\Services\Compras\ComprobanteService;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Support\Compras\ApiPrecargaProveedorLogger;
+use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use DB;
 use Illuminate\Validation\ValidationException;
 
@@ -57,6 +59,18 @@ class ApiController extends Controller
     public function listaConcepto($cuitProveedor, $numeroOc, $tipoComprobante)
     {
         $log = ApiPrecargaProveedorLogger::trace();
+        try {
+            $numeroOc = app(PrecargaProveedorNumeroOcSupport::class)->normalizar($numeroOc);
+        } catch (\RuntimeException $e) {
+            $log->warning('lista_concepto.numero_oc_invalido', [
+                'numero_oc' => $numeroOc,
+                'message' => $e->getMessage(),
+                'status' => 422,
+            ]);
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
         $log->info('lista_concepto.inicio', [
             'cuit_proveedor' => $cuitProveedor,
             'numero_oc' => $numeroOc,
@@ -321,6 +335,19 @@ class ApiController extends Controller
         $log->info('recibe_comprobante.validacion_ok');
 
         $numeroOc = trim((string) $request->input('numero_oc', ''));
+        if ($numeroOc !== '') {
+            try {
+                $numeroOc = app(PrecargaProveedorNumeroOcSupport::class)->normalizar($numeroOc);
+            } catch (\RuntimeException $e) {
+                $log->warning('recibe_comprobante.numero_oc_invalido', [
+                    'numero_oc' => $request->input('numero_oc'),
+                    'message' => $e->getMessage(),
+                    'status' => 422,
+                ]);
+
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
         try {
             $resueltoProveedor = $numeroOc !== ''
                 ? $this->resolverProveedorDesdeOrdenCompra($request->cuit_proveedor, $numeroOc)
@@ -462,6 +489,19 @@ class ApiController extends Controller
             ];
         }
 
+        try {
+            $lineasConcepto = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
+                ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineasConcepto)
+            );
+        } catch (\RuntimeException $e) {
+            $log->warning('recibe_comprobante.coherencia_iva_error', [
+                'message' => $e->getMessage(),
+                'status' => 422,
+            ]);
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
         $log->info('recibe_comprobante.conceptos_ok', [
             'cantidad' => count($lineasConcepto),
             'lineas' => $lineasConcepto,
@@ -498,7 +538,7 @@ class ApiController extends Controller
             'fecharecepcionemail' => $request->fecha_recepcion_email,
             'fechavencimientocaicae' => $fechaVtoCaiCae,
             'numerocae' => $numeroCae,
-            'numeroordencompra' => $request->numero_oc,
+            'numeroordencompra' => $numeroOc,
             'rutaalmacenamiento' => $request->ruta_almacenamiento,
             'pararevisar' => $request->para_revisar,
             'subtotal' => $request->subtotal,

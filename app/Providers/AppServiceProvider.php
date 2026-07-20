@@ -434,6 +434,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Caja\Flash\FlashParametroRepositoryInterface',
+            'App\Repositories\Caja\Flash\FlashParametroRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepositoryInterface',
             'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepository',
         );
@@ -1748,6 +1753,97 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface',
             'App\Repositories\Solicitudpago\SolicitudpagoRepository',
+        );
+
+        // Modulo sueldos y jornales
+        $this->app->bind(
+            'App\Repositories\Sueldos\Nombrebase_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Nombrebase_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Categoria_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Categoria_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Obrasocial_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Obrasocial_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Sindicato_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Sindicato_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Fallocaja_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Fallocaja_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Agrupamiento_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Agrupamiento_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Lugartrabajo_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Lugartrabajo_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Motivoegreso_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Motivoegreso_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Art_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Art_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Vacacion_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Vacacion_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Concepto_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Concepto_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Parametro_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Parametro_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Acumulador_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Acumulador_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Ganancia_Linea_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Ganancia_Linea_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Liquidacion_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Liquidacion_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Tipo_Ausencia_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Tipo_Ausencia_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Prenda_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Prenda_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Empleado_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Empleado_SueldosRepository',
         );
 
         // Bierzo

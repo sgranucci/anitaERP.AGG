@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaProveedor\ComprobanteProveedorPdfIaConceptoMatcherSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosListaSupport;
@@ -166,6 +167,10 @@ final class ComprobanteProveedorPdfIaService
             ];
         }
 
+        $lineasConcepto = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
+            ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineasConcepto)
+        );
+
         $letra = (string) ($resuelto['letra'] ?? 'A');
         $sucursal = $this->normalizarEntero($resuelto['sucursal'] ?? null);
         $numeroFactura = $this->normalizarEntero($resuelto['numero_factura'] ?? null);
@@ -282,6 +287,7 @@ final class ComprobanteProveedorPdfIaService
         }
 
         $conceptosAsignados = $this->conceptoMatcher->matchear($listaConceptos['conceptos'], $lineasIa);
+        $conceptosAsignados = $this->aplicarCoherenciaIvaAConceptosAsignados($conceptosAsignados);
 
         $totalAsignado = round(array_sum(array_column($conceptosAsignados, 'importe')), 2);
         $totalFactura = round((float) ($extraido['total'] ?? 0), 2);
@@ -388,6 +394,55 @@ final class ComprobanteProveedorPdfIaService
             'EUROS', 'EUR' => 3,
             default => 1,
         };
+    }
+
+    /**
+     * Abre gravados por alícuota y valida IVA↔neto sobre los conceptos matcheados por IA.
+     *
+     * @param  list<array{id_concepto: int|string, importe: float, descripcion_ia?: string, concepto_nombre?: string}>  $conceptosAsignados
+     * @return list<array{id_concepto: int|string, importe: float, descripcion_ia: string, concepto_nombre: string}>
+     */
+    private function aplicarCoherenciaIvaAConceptosAsignados(array $conceptosAsignados): array
+    {
+        $lineas = [];
+        foreach ($conceptosAsignados as $linea) {
+            $codigoAnita = $linea['id_concepto'] ?? null;
+            $concepto = $this->conceptoIvacompraRepository->findPorCodigo($codigoAnita);
+            if (! $concepto) {
+                $normalizado = ltrim((string) $codigoAnita, '0');
+                if ($normalizado !== '') {
+                    $concepto = $this->conceptoIvacompraRepository->findPorCodigo($normalizado);
+                }
+            }
+            if (! $concepto) {
+                throw new RuntimeException('Concepto IVA compra código «'.$codigoAnita.'» inexistente en ERP.');
+            }
+            $lineas[] = [
+                'concepto_ivacompra_id' => (int) $concepto->id,
+                'codigo_concepto_anita' => $concepto->codigo,
+                'monto' => (float) ($linea['importe'] ?? 0),
+            ];
+        }
+
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
+            ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas)
+        );
+
+        $resultado = [];
+        foreach ($lineas as $linea) {
+            $concepto = $this->conceptoIvacompraRepository->find((int) $linea['concepto_ivacompra_id']);
+            if (! $concepto) {
+                continue;
+            }
+            $resultado[] = [
+                'id_concepto' => $concepto->codigo,
+                'importe' => round((float) $linea['monto'], 2),
+                'descripcion_ia' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
+                'concepto_nombre' => (string) $concepto->nombre,
+            ];
+        }
+
+        return $resultado;
     }
 
     private function debeSolicitarOcManual(string $mensaje): bool

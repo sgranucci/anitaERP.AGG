@@ -24,7 +24,8 @@ class ValidacionTalle extends FormRequest
     public function rules()
     {
         return [
-            'nombre' => 'required|max:50|unique:horma,nombre,' . $this->route('id'),
+            'nombre' => 'required|max:50|unique:talle,nombre,' . $this->route('id'),
+            'codigo' => 'nullable|integer|unique:talle,codigo,' . $this->route('id'),
         ];
     }
 }

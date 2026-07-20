@@ -1,64 +1,50 @@
+@php
+    use App\Support\Caja\Flash\FlashCajaLFlashFormatoSupport as F;
+    $fn = [F::class, 'nExcel'];
+    $fp = [F::class, 'pctExcel'];
+    $colCount = 52;
+    $budget = $reporte['budget_mes'] ?? [];
+@endphp
 <table>
     @if(!empty($reservarFilaLogoExcel))
-        <tr><td colspan="6" style="height: 52px;"></td></tr>
+        <tr><td colspan="{{ $colCount }}" style="height: 52px;"></td></tr>
     @endif
-    <tr><td colspan="6"><strong style="font-size: 16px;">{{ !empty($historico) ? 'Flash Report (histórico)' : 'Flash Report' }}</strong></td></tr>
-    <tr><td colspan="6">{{ $reporte['empresa']->nombre ?? '' }} &mdash; {{ $reporte['fecha'] ?? '' }}</td></tr>
-    <tr><td colspan="6">Generado {{ date('d/m/Y H:i') }}</td></tr>
-    <tr><td colspan="6"></td></tr>
+    <tr><td colspan="{{ $colCount }}"><strong style="font-size: 16px;">{{ $reporte['titulo'] ?? 'Consolidated Income' }}</strong></td></tr>
     <tr>
-        <th>Sección</th>
-        <th>Coin in</th>
-        <th>Drop</th>
-        <th>Win</th>
-        <th>Cantidad</th>
-        <th>Win OL</th>
-    </tr>
-    @php $f = $reporte['flash']; @endphp
-    <tr>
-        <td>Slots</td>
-        <td>{{ number_format((float) $f->slot_coin_in, 2, '.', '') }}</td>
-        <td>{{ number_format($reporte['slot_drop'], 2, '.', '') }}</td>
-        <td>{{ number_format($reporte['slot_win'], 2, '.', '') }}</td>
-        <td>{{ $f->cant_slots }}</td>
-        <td>{{ number_format((float) $f->win_ol_slot, 2, '.', '') }}</td>
+        <td colspan="{{ $colCount }}">
+            {{ $reporte['empresa']->nombre ?? '' }}
+            &mdash; {{ $reporte['fecha'] ?? '' }}
+            &mdash; Generado {{ date('d/m/Y H:i') }}
+        </td>
     </tr>
     <tr>
-        <td>Ruleta electr.</td>
-        <td>{{ number_format((float) $f->rul_coin_in, 2, '.', '') }}</td>
-        <td>{{ number_format($reporte['rul_drop'], 2, '.', '') }}</td>
-        <td>{{ number_format($reporte['rul_win'], 2, '.', '') }}</td>
-        <td>{{ $f->cant_rul }}</td>
-        <td>{{ number_format((float) $f->win_ol_rul, 2, '.', '') }}</td>
-    </tr>
-    <tr><td colspan="6"></td></tr>
-    <tr>
-        <th>Bingo cart.</th>
-        <th>Bingo venta</th>
-        <th>Bingo res.</th>
-        <th>AyB</th>
-        <th>Estac.</th>
-        <th>Vehículos</th>
+        <td colspan="{{ $colCount }}">
+            Budget pos {{ F::entero($budget['budget_pos'] ?? 0) }}
+            | Total {{ $fn($budget['budget_total'] ?? 0) }}
+            | Elec {{ $fn($budget['budget_electronic'] ?? 0) }}
+            | Bingo {{ $fn($budget['budget_bingo'] ?? 0) }}
+            | F&B {{ $fn($budget['budget_ayb'] ?? 0) }}
+            | Park {{ $fn($budget['budget_estac'] ?? 0) }}
+        </td>
     </tr>
     <tr>
-        <td>{{ $f->bingo_cant_carton }}</td>
-        <td>{{ number_format($reporte['bingo_venta'], 2, '.', '') }}</td>
-        <td>{{ number_format($reporte['bingo_win'], 2, '.', '') }}</td>
-        <td>{{ number_format((float) $f->ayb, 2, '.', '') }}</td>
-        <td>{{ number_format((float) $f->estac, 2, '.', '') }}</td>
-        <td>{{ $f->cant_vehic }}</td>
+        <th>Day</th><th>Fecha</th><th>Custom</th>
+        <th>Slot Units</th><th>Slot Coin in</th><th>Slot Drop</th><th>Slot OL Win</th><th>Slot %Coin</th><th>Slot %Drop</th><th>Slot /Cust</th><th>Slot /Unit</th>
+        <th>Rul Seats</th><th>Rul Coin in</th><th>Rul Drop</th><th>Rul OL Win</th><th>Rul %Coin</th><th>Rul %Drop</th><th>Rul /Cust</th><th>Rul /Seat</th>
+        <th>Win /Stand</th><th>El Pos</th>
+        <th>Win Online</th><th>Win Financial</th><th>Diff</th>
+        <th>Bingo Cards</th><th>Bingo Sales</th><th>Bingo Win</th><th>Bingo /Cust</th>
+        <th>Gaming</th>
+        <th>F&B</th><th>F&B /Cust</th>
+        <th>Parking</th><th>Park /Cust</th>
+        <th>Otros</th>
+        <th>Net Revenues</th><th>Rev /Cust</th>
+        <th>Pos OL</th><th>Pos vs Budg</th><th>Cust Budg</th><th>Cust Dev%</th>
+        <th>Seas Tot%</th><th>Seas Elec%</th><th>Seas Bingo%</th><th>Seas F&B%</th><th>Seas Park%</th>
+        <th>NoSeas Tot%</th><th>NoSeas Elec%</th><th>NoSeas Bingo%</th><th>NoSeas F&B%</th><th>NoSeas Park%</th>
+        <th>Vehicles</th><th>Veh Budget</th>
     </tr>
-    <tr><td colspan="6"></td></tr>
-    <tr>
-        <td colspan="3"><strong>Total gaming</strong></td>
-        <td colspan="3">{{ number_format($reporte['total_gaming'], 2, '.', '') }}</td>
-    </tr>
-    <tr>
-        <td colspan="3"><strong>Total revenues</strong></td>
-        <td colspan="3">{{ number_format($reporte['total_revenues'], 2, '.', '') }}</td>
-    </tr>
-    <tr>
-        <td colspan="3"><strong>Asistencia</strong></td>
-        <td colspan="3">{{ $reporte['attendance'] ?? '' }}</td>
-    </tr>
+    @foreach($reporte['filas_diarias'] ?? [] as $dia)
+        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $dia, 'fn' => $fn, 'fp' => $fp])
+    @endforeach
 </table>

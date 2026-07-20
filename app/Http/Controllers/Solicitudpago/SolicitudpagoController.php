@@ -79,7 +79,7 @@ class SolicitudpagoController extends Controller
                     ->download('solicitudpago.xlsx');
             case 'CSV':
                 return (new SolicitudpagoListadoExport($this->repository))
-                    ->parametros($filtros)
+                    ->parametros($filtros, true)
                     ->download('solicitudpago.csv', \Maatwebsite\Excel\Excel::CSV);
             default:
                 return redirect()->route('consultar_solicitudpago', SolicitudpagoListadoFiltros::paraQueryString($filtros));

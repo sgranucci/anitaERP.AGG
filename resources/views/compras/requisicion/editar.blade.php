@@ -13,8 +13,11 @@ Requisiciones
 window.requisicionLineasConfig = window.requisicionLineasConfig || {};
 window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_precio_ultima_compra_articulo'));
 window.requisicionLineasConfig.urlCalcularTotales = @json(route('requisicion_calcular_totales'));
+window.msColoresOpciones = @json(($color_query ?? collect())->map(fn ($c) => ['id' => (int) $c->id, 'nombre' => $c->nombre])->values());
+window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id' => (int) $t->id, 'nombre' => $t->nombre])->values());
 </script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/lineas.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/compras/form-color-talle.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/consulta-listasprecio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/presupuestos.js")}}" type="text/javascript"></script>

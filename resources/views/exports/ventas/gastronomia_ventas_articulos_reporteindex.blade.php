@@ -1,20 +1,35 @@
 @php
     $filas = $resultado['filas'] ?? [];
     $totales = $resultado['totales'] ?? [];
-    $fmtCant = static function ($v) {
+    $esExcel = ! empty($esExcel);
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    // Cero → celda vacía (igual que el PDF). Excel auto: número crudo; CSV/forzado: texto formateado.
+    $fmtCant = static function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
         $v = (float) $v;
         if (abs($v) <= 0.0001) {
             return '';
         }
-
-        return number_format($v, abs($v - round($v)) <= 0.0001 ? 0 : 2, ',', '.');
+        $dec = abs($v - round($v)) <= 0.0001 ? 0 : 2;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($v, $dec, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($v, $formatoNumero, $dec);
+        }
+        return number_format($v, $dec, ',', '.');
     };
-    $fmtImp = static function ($v) {
+    $fmtImp = static function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
         $v = (float) $v;
         if (abs($v) <= 0.0001) {
             return '';
         }
-
+        if ($esExcel && $autoExcelNum) {
+            return number_format($v, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($v, $formatoNumero, 2);
+        }
         return number_format($v, 2, ',', '.');
     };
 @endphp

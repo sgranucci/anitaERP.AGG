@@ -12,6 +12,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
+use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use Illuminate\Http\Request;
@@ -330,24 +331,30 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
     private function guardarConceptosPrecarga(Request $request, int $precargaId): void
     {
-        $conceptoIds = $request->input('concepto_ivacompra_ids', []);
-        $montos = $request->input('montos', []);
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
+            $request->input('concepto_ivacompra_ids', []),
+            $request->input('montos', []),
+        );
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
+            ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas)
+        );
 
-        for ($i = 0; $i < count($conceptoIds); $i++) {
-            if ((int) $conceptoIds[$i] <= 0) {
+        foreach ($lineas as $linea) {
+            $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            if ($conceptoId <= 0) {
                 continue;
             }
 
-            $concepto = $this->concepto_ivacompraRepository->find((int) $conceptoIds[$i]);
+            $concepto = $this->concepto_ivacompraRepository->find($conceptoId);
             if (! $concepto) {
-                throw new RuntimeException('Concepto IVA compra id «'.$conceptoIds[$i].'» inexistente.');
+                throw new RuntimeException('Concepto IVA compra id «'.$conceptoId.'» inexistente.');
             }
 
             $this->precarga_comprobante_proveedor_conceptoRepository->create([
                 'precarga_comprobante_proveedor_id' => $precargaId,
                 'concepto_ivacompra_id' => $concepto->id,
-                'codigo_concepto_anita' => $concepto->codigo,
-                'monto' => $montos[$i] ?? 0,
+                'codigo_concepto_anita' => $linea['codigo_concepto_anita'] ?? $concepto->codigo,
+                'monto' => $linea['monto'] ?? 0,
             ]);
         }
     }

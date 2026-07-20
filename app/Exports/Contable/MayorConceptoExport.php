@@ -6,6 +6,7 @@ use App\Services\Contable\MayorConceptoReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Contable\MayorConceptoExcelFormatoNumero;
 use App\Support\Contable\MayorConceptoListadoFiltros;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -78,6 +79,14 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
     private function esMultiempresa(): bool
     {
         return MayorConceptoListadoFiltros::esMultiempresa($this->filtros);
+    }
+
+    /** Formato numérico efectivo (auto|ar|intl), con default en la preferencia global. */
+    private function formatoNumero(): string
+    {
+        return ExcelFormatoNumero::normalizar(
+            $this->filtros['excel_formato_numero'] ?? ExcelFormatoNumero::preferenciaGlobal()
+        );
     }
 
     private function colUltima(): string
@@ -155,9 +164,7 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
             'agrupacionResumen' => $agrupacionResumen,
             'auditoriaPanel' => $auditoriaPanel,
             'filtros' => $this->filtros,
-            'excel_formato_numero' => MayorConceptoExcelFormatoNumero::normalizar(
-                $this->filtros['excel_formato_numero'] ?? MayorConceptoExcelFormatoNumero::AR
-            ),
+            'excel_formato_numero' => $this->formatoNumero(),
             'totales' => $totalesReporte,
             'titulo' => 'Mayor por concepto',
             'subtitulo' => $this->reporteService->formatearEmpresasTexto($this->filtros)
@@ -220,11 +227,10 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
 
     public function columnFormats(): array
     {
-        // Montos van preformateados (AR/INTL) como texto para no pelear con la locale de Excel.
-        $fmt = [];
-        foreach (array_merge(['A'], $this->columnasImportes()) as $col) {
-            $fmt[$col] = NumberFormat::FORMAT_TEXT;
-        }
+        $formato = $this->formatoNumero();
+
+        // Columnas de texto (fecha/códigos): siempre texto.
+        $fmt = ['A' => NumberFormat::FORMAT_TEXT];
         if ($this->esMultiempresa()) {
             $fmt['B'] = NumberFormat::FORMAT_TEXT;
             $fmt['F'] = NumberFormat::FORMAT_TEXT;
@@ -232,6 +238,15 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
         } else {
             $fmt['E'] = NumberFormat::FORMAT_TEXT;
             $fmt['F'] = NumberFormat::FORMAT_TEXT;
+        }
+
+        // Importes: en modo "auto" van como número real con máscara neutra (#,##0.00),
+        // así cada PC los muestra según su config regional. En ar/intl van como texto.
+        $importes = $this->columnasImportes(); // [cotización, debe, haber]
+        $colCotiz = $importes[0];
+        $fmt[$colCotiz] = ExcelFormatoNumero::codigoColumna($formato, 4);
+        foreach ($this->columnasDebeHaber() as $col) {
+            $fmt[$col] = ExcelFormatoNumero::codigoColumna($formato, 2);
         }
 
         return $fmt;

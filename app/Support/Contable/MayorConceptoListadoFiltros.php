@@ -2,6 +2,7 @@
 
 namespace App\Support\Contable;
 
+use App\Support\Export\ExcelFormatoNumero;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -80,7 +81,7 @@ class MayorConceptoListadoFiltros
             'solo_moneda_origen' => $request->boolean('solo_moneda_origen'),
             'agrupacion_resumen' => $agrupacion,
             'excel_formato_numero' => MayorConceptoExcelFormatoNumero::normalizar(
-                $request->input('excel_formato_numero', MayorConceptoExcelFormatoNumero::AR)
+                $request->input('excel_formato_numero', ExcelFormatoNumero::preferenciaGlobal())
             ),
             'filtro_nro_asiento' => trim((string) $request->input('filtro_nro_asiento', '')),
             'filtro_cuenta' => trim((string) $request->input('filtro_cuenta', '')),
@@ -585,10 +586,11 @@ class MayorConceptoListadoFiltros
         }
 
         $formatoExcel = MayorConceptoExcelFormatoNumero::normalizar(
-            $filtros['excel_formato_numero'] ?? MayorConceptoExcelFormatoNumero::AR
+            $filtros['excel_formato_numero'] ?? ExcelFormatoNumero::preferenciaGlobal()
         );
-        if ($formatoExcel === MayorConceptoExcelFormatoNumero::INTL) {
-            $out['excel_formato_numero'] = MayorConceptoExcelFormatoNumero::INTL;
+        // "auto" es el default: solo se propaga en query string cuando se fuerza ar/intl.
+        if ($formatoExcel !== ExcelFormatoNumero::AUTO) {
+            $out['excel_formato_numero'] = $formatoExcel;
         }
 
         foreach (self::CAMPOS_FILTRO_DETALLE as $campo) {

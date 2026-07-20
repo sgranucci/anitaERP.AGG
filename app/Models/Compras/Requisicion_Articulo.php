@@ -7,6 +7,8 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Presupuesto\Capex;
 use App\Models\Presupuesto\Partidagasto;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Color;
+use App\Models\Stock\Talle;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -15,7 +17,7 @@ class Requisicion_Articulo extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [
-        'requisicion_id', 'fechaentrega', 'articulo_id', 'cantidad', 'cantidadentregada', 'precio', 'moneda_id', 'cantidadalternativa',
+        'requisicion_id', 'fechaentrega', 'articulo_id', 'color_id', 'talle_id', 'cantidad', 'cantidadentregada', 'precio', 'moneda_id', 'cantidadalternativa',
         'detalle', 'centrocostodestino_id', 'preciooriginal', 'motivoahorro', 'partidagasto_id', 'capex_id',
         'precio_origen_etiqueta',
         'anita_nro_interno', 'anita_nro_orden',
@@ -31,6 +33,16 @@ class Requisicion_Articulo extends Model implements Auditable
     public function articulos()
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
+    }
+
+    public function color()
+    {
+        return $this->belongsTo(Color::class, 'color_id');
+    }
+
+    public function talle()
+    {
+        return $this->belongsTo(Talle::class, 'talle_id');
     }
 
     public function cambiosArticulo()

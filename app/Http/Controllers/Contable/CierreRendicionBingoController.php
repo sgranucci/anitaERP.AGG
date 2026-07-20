@@ -66,7 +66,7 @@ class CierreRendicionBingoController extends Controller
                 $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
 
                 return \Maatwebsite\Excel\Facades\Excel::download(
-                    new CierreRendicionBingoListadoExport($rendiciones),
+                    new CierreRendicionBingoListadoExport($rendiciones, $formato === 'CSV'),
                     'cierre_rendicion_bingo.'.$ext,
                     $mime,
                 );

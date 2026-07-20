@@ -7,13 +7,16 @@ use Illuminate\Http\Request;
 class FlashCajaHistoricoFiltros
 {
     /**
-     * @return array{empresa_id: int, fecha_desde: string, fecha_hasta: string}
+     * @return array{empresa_id: int, fecha_desde: string, fecha_hasta: string, con_season: int}
      */
     public static function resolverDesdeRequest(Request $request): array
     {
         $empresaId = (int) $request->input('empresa_id', 0);
         $fechaDesde = trim((string) $request->input('fecha_desde', ''));
         $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $conSeason = $request->has('con_season')
+            ? ((int) $request->input('con_season') === 1 ? 1 : 0)
+            : 1;
 
         if ($fechaDesde !== '' && $fechaHasta !== '' && $fechaDesde > $fechaHasta) {
             [$fechaDesde, $fechaHasta] = [$fechaHasta, $fechaDesde];
@@ -23,6 +26,7 @@ class FlashCajaHistoricoFiltros
             'empresa_id' => $empresaId,
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
+            'con_season' => $conSeason,
         ];
     }
 
@@ -52,6 +56,7 @@ class FlashCajaHistoricoFiltros
         if (! empty($filtros['fecha_hasta'])) {
             $params['fecha_hasta'] = (string) $filtros['fecha_hasta'];
         }
+        $params['con_season'] = (int) ($filtros['con_season'] ?? 1);
 
         return $params;
     }
@@ -71,6 +76,9 @@ class FlashCajaHistoricoFiltros
                 (string) $filtros['fecha_hasta'],
             );
         }
+        $partes[] = ((int) ($filtros['con_season'] ?? 1) === 1)
+            ? 'Con season index'
+            : 'Sin season index';
 
         return implode(' &mdash; ', $partes);
     }

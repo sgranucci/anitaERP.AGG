@@ -29,6 +29,8 @@ use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\FacturaExport;
 use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
+use App\Support\Ventas\FacturaListadoFiltros;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 
 class FacturacionController extends Controller
 {
@@ -43,6 +45,7 @@ class FacturacionController extends Controller
     private $monedaRepository;
     private $actividad_arcaRepository;
     private $descuentoventaRepository;
+    private $empresaRepository;
 
     public function __construct(FacturacionService $facturacionservice,
                                 LoteRepositoryInterface $loterepository,
@@ -54,7 +57,8 @@ class FacturacionController extends Controller
                                 TransporteRepositoryInterface $transporterepository,
                                 MonedaRepositoryInterface $monedarepository,
                                 Actividad_ArcaRepositoryInterface $actividad_arcarepository,
-                                DescuentoventaRepositoryInterface $descuentoventarepository)
+                                DescuentoventaRepositoryInterface $descuentoventarepository,
+                                EmpresaRepositoryInterface $empresarepository)
     {
         $this->middleware('auth');
 
@@ -69,6 +73,7 @@ class FacturacionController extends Controller
         $this->monedaRepository = $monedarepository;
         $this->actividad_arcaRepository = $actividad_arcarepository;
         $this->descuentoventaRepository = $descuentoventarepository;
+        $this->empresaRepository = $empresarepository;
     }
 
     /**
@@ -80,34 +85,45 @@ class FacturacionController extends Controller
     {
         can('listar-factura');
 
-        $busqueda = $request->busqueda;
-        
-		$ventas = $this->facturacionService->leePaginando($busqueda);
+        $filtros = FacturaListadoFiltros::resolverDesdeRequest($request);
 
-        $datas = ['ventas' => $ventas, 'busqueda' => $busqueda];
+		$ventas = $this->facturacionService->leePaginando($filtros);
+
+        $datas = [
+            'ventas' => $ventas,
+            'busqueda' => $filtros['busqueda'],
+            'filtros' => $filtros,
+            'filtrosQuery' => FacturaListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => FacturaListadoFiltros::CAMPOS,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+        ];
 
         return view('ventas.factura.index', $datas);
     }
 
-    public function listar($formato = null, $busqueda = null)
+    public function listar(Request $request, $formato = null, $busqueda = null)
     {
         can('listar-factura'); 
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-		$ventas = $this->facturacionService->leeSinPaginar($busqueda);
+        $filtros = FacturaListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
+		$ventas = $this->facturacionService->leeSinPaginar($filtros);
 
         switch($formato)
         {
         case 'PDF':
-            $view =  \View::make('ventas.factura.listado', compact('ventas'))
-                        ->render();
+            $view =  \View::make('ventas.factura.listado', [
+                        'ventas' => $ventas,
+                        'filtros' => $filtros,
+                    ])->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_factura';
 
             $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','portrait');
+            $pdf->setPaper('legal','landscape');
             $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
@@ -115,20 +131,18 @@ class FacturacionController extends Controller
 
         case 'EXCEL':
             return (new FacturaExport($this->facturacionService))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('factura.xlsx');
             break;
 
         case 'CSV':
             return (new FacturaExport($this->facturacionService))
-                        ->parametros($busqueda)
+                        ->parametros($filtros, true)
                         ->download('factura.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   
 
-        $datas = ['ventas' => $ventas, 'busqueda' => $busqueda];
-
-        return view('ventas.factura.index', $datas);       
+        return redirect()->route('factura', FacturaListadoFiltros::paraQueryString($filtros));
     }
 
     /**

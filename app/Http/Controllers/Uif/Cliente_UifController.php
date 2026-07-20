@@ -463,7 +463,7 @@ class Cliente_UifController extends Controller
                     ->download($nombreBase.'.xlsx');
             case 'CSV':
                 return (new ClienteUifPremiosExport($this->clientePremioUifRepository))
-                    ->parametros((int) $id, $cliente_uif)
+                    ->parametros((int) $id, $cliente_uif, true)
                     ->download($nombreBase.'.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 

@@ -14,7 +14,8 @@ final class PrecargaProveedorNumeroOcSupport
 
     /**
      * Normaliza a exactamente 6 dígitos (relleno con ceros a la izquierda).
-     * Acepta "214482", "00214482", "0000-00214482" o entero.
+     * Acepta "214482", "00214482", "0000-00214482", "X0000-00221480" o entero.
+     * Con sucursal-número (guión), usa solo el número (parte derecha).
      */
     public function normalizar(mixed $valor): string
     {
@@ -23,7 +24,8 @@ final class PrecargaProveedorNumeroOcSupport
             throw new RuntimeException('Falta número de orden de compra.');
         }
 
-        if (preg_match('/^(\d+)-(\d+)$/', $texto, $matches)) {
+        // "0000-00221480", "X0000-00221480" → 221480
+        if (preg_match('/^[A-Za-z]*(\d+)-(\d+)$/', $texto, $matches)) {
             $nro = (int) $matches[2];
             if ($nro <= 0) {
                 throw new RuntimeException('Número de OC inválido: '.$texto);

@@ -52,5 +52,6 @@
         'saldoAnterior' => 0,
         'para_pdf' => true,
         'para_excel' => true,
+        'formato_numero_excel' => $formatoNumeroExcel ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal(),
     ])
 </table>

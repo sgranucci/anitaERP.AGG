@@ -4,10 +4,12 @@ namespace App\Exports\Ventas;
 
 use App\Services\Ventas\GastronomiaVentasArticulosReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -19,9 +21,12 @@ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class GastronomiaVentasArticulosReporteExport implements FromView, ShouldAutoSize, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class GastronomiaVentasArticulosReporteExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
+
+    /** Congela Artículo y Descripción (A y B): freeze arranca en C. */
+    private const COL_FREEZE = 'C';
 
     /** @var array<string, mixed> */
     private array $filtros = [];
@@ -31,6 +36,8 @@ class GastronomiaVentasArticulosReporteExport implements FromView, ShouldAutoSiz
     private string $subtitulo = '';
 
     private string $empresaNombre = '';
+
+    private bool $esCsv = false;
 
     private bool $hayFilaLogos = false;
 
@@ -55,12 +62,13 @@ class GastronomiaVentasArticulosReporteExport implements FromView, ShouldAutoSiz
     /**
      * @param  array<string, mixed>  $filtros
      */
-    public function parametros(array $filtros, string $titulo, string $subtitulo, string $empresaNombre = ''): self
+    public function parametros(array $filtros, string $titulo, string $subtitulo, string $empresaNombre = '', bool $esCsv = false): self
     {
         $this->filtros = $filtros;
         $this->titulo = $titulo;
         $this->subtitulo = $subtitulo;
         $this->empresaNombre = trim($empresaNombre);
+        $this->esCsv = $esCsv;
 
         return $this;
     }
@@ -88,7 +96,29 @@ class GastronomiaVentasArticulosReporteExport implements FromView, ShouldAutoSiz
             'titulo' => $this->titulo,
             'subtitulo' => $this->subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'esExcel' => true,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
+    }
+
+    public function columnFormats(): array
+    {
+        // C–L son numéricas (costos, precios, cantidades e importes): máscara neutra sumable/adaptable.
+        $codigo = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+
+        return [
+            'A' => NumberFormat::FORMAT_TEXT,
+            'C' => $codigo, 'D' => $codigo, 'E' => $codigo, 'F' => $codigo,
+            'G' => $codigo, 'H' => $codigo, 'I' => $codigo, 'J' => $codigo,
+            'K' => $codigo, 'L' => $codigo,
+        ];
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function columnWidths(): array
@@ -176,7 +206,7 @@ class GastronomiaVentasArticulosReporteExport implements FromView, ShouldAutoSiz
                 }
 
                 $sheet->getStyle('A')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }

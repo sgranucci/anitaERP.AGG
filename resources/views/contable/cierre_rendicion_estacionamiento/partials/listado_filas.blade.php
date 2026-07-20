@@ -5,6 +5,20 @@
     $vistaPorTurno = ! empty($vistaPorTurno);
     $columnasMedios = $columnasMedios ?? [];
     $colspan = (int) ($colspan ?? 1);
+
+    $esExcel = ! empty($esExcel);
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtNum = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+        return number_format($n, 2, ',', '.');
+    };
 @endphp
 @if ($vistaPorTurno)
     @forelse ($rendiciones ?? [] as $row)
@@ -35,10 +49,10 @@
             @endif
         </td>
         <td>{{ $row->asiento?->numeroasiento ?? '—' }}</td>
-            <td class="num" style="text-align:right;">{{ number_format($neta, 2, ',', '.') }}</td>
-        <td class="num" style="text-align:right;">{{ number_format($nc, 2, ',', '.') }}</td>
-        <td class="num" style="text-align:right;">{{ number_format($bruta, 2, ',', '.') }}</td>
-        <td class="num" style="text-align:right;">{{ number_format((float) $row->totalinvitacion, 2, ',', '.') }}</td>
+            <td class="num" style="text-align:right;">{{ $fmtNum($neta) }}</td>
+        <td class="num" style="text-align:right;">{{ $fmtNum($nc) }}</td>
+        <td class="num" style="text-align:right;">{{ $fmtNum($bruta) }}</td>
+        <td class="num" style="text-align:right;">{{ $fmtNum((float) $row->totalinvitacion) }}</td>
         @foreach ($columnasMedios as $medioCol)
             @php
                 $montoMedio = CierreRendicionEstacionamientoMediosCobroSupport::montoDe(
@@ -46,9 +60,9 @@
                     (int) ($medioCol['cuentacaja_id'] ?? 0),
                 );
             @endphp
-            <td class="num" style="text-align:right;">{{ $montoMedio > 0.009 ? number_format($montoMedio, 2, ',', '.') : '—' }}</td>
+            <td class="num" style="text-align:right;">{{ $montoMedio > 0.009 ? $fmtNum($montoMedio) : '—' }}</td>
         @endforeach
-        <td class="num" style="text-align:right;">{{ number_format((float) $row->totalcobrado, 2, ',', '.') }}</td>
+        <td class="num" style="text-align:right;">{{ $fmtNum((float) $row->totalcobrado) }}</td>
     </tr>
     @empty
     <tr>
@@ -74,10 +88,10 @@
         <td>{{ $grupo['empresa_nombre'] ?? '—' }}</td>
         <td>{{ $grupo['puntoventa_label'] ?? '—' }}</td>
         <td class="num" style="text-align:right;">{{ $grupo['cantidad_rendiciones'] ?? 0 }}</td>
-        <td class="num" style="text-align:right;">{{ number_format((float) ($grupo['total_ventas'] ?? 0), 2, ',', '.') }}</td>
-        <td class="num" style="text-align:right;">{{ number_format((float) ($grupo['total_notas_credito'] ?? 0), 2, ',', '.') }}</td>
-        <td class="num" style="text-align:right;">{{ number_format((float) ($grupo['total_ventas_brutas'] ?? 0), 2, ',', '.') }}</td>
-        <td class="num" style="text-align:right;">{{ number_format((float) ($grupo['total_invitaciones'] ?? 0), 2, ',', '.') }}</td>
+        <td class="num" style="text-align:right;">{{ $fmtNum((float) ($grupo['total_ventas'] ?? 0)) }}</td>
+        <td class="num" style="text-align:right;">{{ $fmtNum((float) ($grupo['total_notas_credito'] ?? 0)) }}</td>
+        <td class="num" style="text-align:right;">{{ $fmtNum((float) ($grupo['total_ventas_brutas'] ?? 0)) }}</td>
+        <td class="num" style="text-align:right;">{{ $fmtNum((float) ($grupo['total_invitaciones'] ?? 0)) }}</td>
         @foreach ($columnasMedios as $medioCol)
             @php
                 $montoMedio = CierreRendicionEstacionamientoMediosCobroSupport::montoDe(
@@ -85,9 +99,9 @@
                     (int) ($medioCol['cuentacaja_id'] ?? 0),
                 );
             @endphp
-            <td class="num" style="text-align:right;">{{ $montoMedio > 0.009 ? number_format($montoMedio, 2, ',', '.') : '—' }}</td>
+            <td class="num" style="text-align:right;">{{ $montoMedio > 0.009 ? $fmtNum($montoMedio) : '—' }}</td>
         @endforeach
-        <td class="num" style="text-align:right;">{{ number_format((float) ($grupo['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
+        <td class="num" style="text-align:right;">{{ $fmtNum((float) ($grupo['total_cobrado'] ?? 0)) }}</td>
         <td>{{ $estadoTxt }}</td>
         <td>
             @if (($grupo['asiento_ids_distintos'] ?? 0) > 1)

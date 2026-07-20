@@ -134,7 +134,7 @@ class GastronomiaVentasArticulosReporteController extends Controller
 
             case 'CSV':
                 return (new GastronomiaVentasArticulosReporteExport($this->reporteService))
-                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto)
+                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto, true)
                     ->download('ventas_articulos_gastronomia.csv', Excel::CSV);
         }
 

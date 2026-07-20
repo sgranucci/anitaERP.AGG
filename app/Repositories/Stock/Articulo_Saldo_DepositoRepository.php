@@ -3,15 +3,31 @@
 namespace App\Repositories\Stock;
 
 use App\Models\Stock\Articulo_Saldo_Deposito;
+use App\Support\Stock\ArticuloStockColorTalleSupport;
 use Illuminate\Support\Facades\DB;
 
 class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoRepositoryInterface
 {
     public function saldo(int $articuloId, int $depositoId): float
     {
+        // Total del artículo en el depósito (suma todas las variantes).
+        $total = Articulo_Saldo_Deposito::query()
+            ->where('articulo_id', $articuloId)
+            ->where('deposito_id', $depositoId)
+            ->sum('cantidad');
+
+        return (float) ($total ?? 0);
+    }
+
+    public function saldoVariante(int $articuloId, int $depositoId, ?int $colorId, ?int $talleId): float
+    {
+        [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo($colorId, $talleId);
+
         $row = Articulo_Saldo_Deposito::query()
             ->where('articulo_id', $articuloId)
             ->where('deposito_id', $depositoId)
+            ->where('color_id', $colorKey)
+            ->where('talle_id', $talleKey)
             ->first();
 
         return $row ? (float) $row->cantidad : 0.0;
@@ -27,6 +43,40 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
             ->sum('cantidad');
 
         return (float) ($total ?? 0);
+    }
+
+    public function saldoVarianteAFecha(
+        int $articuloId,
+        int $depositoId,
+        string $fecha,
+        ?int $colorId,
+        ?int $talleId
+    ): float {
+        [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo($colorId, $talleId);
+
+        $query = DB::table('articulo_movimiento')
+            ->where('articulo_id', $articuloId)
+            ->where('deposito_id', $depositoId)
+            ->whereNull('deleted_at')
+            ->where('fecha', '<=', $fecha);
+
+        if ($colorKey === ArticuloStockColorTalleSupport::SIN_VARIANTE) {
+            $query->where(function ($q) {
+                $q->whereNull('color_id')->orWhere('color_id', 0);
+            });
+        } else {
+            $query->where('color_id', $colorKey);
+        }
+
+        if ($talleKey === ArticuloStockColorTalleSupport::SIN_VARIANTE) {
+            $query->where(function ($q) {
+                $q->whereNull('talle_id')->orWhere('talle_id', 0);
+            });
+        } else {
+            $query->where('talle_id', $talleKey);
+        }
+
+        return (float) ($query->sum('cantidad') ?? 0);
     }
 
     public function saldosArticuloPorDeposito(int $articuloId, array $depositoIds = []): array
@@ -47,7 +97,8 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
             }
         }
         foreach ($rows as $row) {
-            $resultado[(int) $row->deposito_id] = (float) $row->cantidad;
+            $depId = (int) $row->deposito_id;
+            $resultado[$depId] = ($resultado[$depId] ?? 0.0) + (float) $row->cantidad;
         }
 
         return $resultado;
@@ -59,6 +110,8 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
             ->with(['articulos:id,sku,descripcion'])
             ->where('deposito_id', $depositoId)
             ->orderBy('articulo_id')
+            ->orderBy('color_id')
+            ->orderBy('talle_id')
             ->get();
     }
 
@@ -66,27 +119,34 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
     {
         $registros = 0;
         DB::transaction(function () use ($depositoId, &$registros) {
+            $colorExpr = 'IFNULL(NULLIF(color_id, 0), 0)';
+            $talleExpr = 'IFNULL(NULLIF(talle_id, 0), 0)';
+
             if ($depositoId) {
                 Articulo_Saldo_Deposito::where('deposito_id', $depositoId)->delete();
                 $rows = DB::table('articulo_movimiento')
-                    ->selectRaw('articulo_id, deposito_id,
+                    ->selectRaw("articulo_id, deposito_id,
+                        {$colorExpr} AS color_id,
+                        {$talleExpr} AS talle_id,
                         SUM(cantidad) AS total,
-                        MAX(fecha) AS ultima')
+                        MAX(fecha) AS ultima")
                     ->whereNotNull('articulo_id')
                     ->where('deposito_id', $depositoId)
                     ->whereNull('deleted_at')
-                    ->groupBy('articulo_id', 'deposito_id')
+                    ->groupByRaw("articulo_id, deposito_id, {$colorExpr}, {$talleExpr}")
                     ->get();
             } else {
                 Articulo_Saldo_Deposito::query()->delete();
                 $rows = DB::table('articulo_movimiento')
-                    ->selectRaw('articulo_id, deposito_id,
+                    ->selectRaw("articulo_id, deposito_id,
+                        {$colorExpr} AS color_id,
+                        {$talleExpr} AS talle_id,
                         SUM(cantidad) AS total,
-                        MAX(fecha) AS ultima')
+                        MAX(fecha) AS ultima")
                     ->whereNotNull('articulo_id')
                     ->whereNotNull('deposito_id')
                     ->whereNull('deleted_at')
-                    ->groupBy('articulo_id', 'deposito_id')
+                    ->groupByRaw("articulo_id, deposito_id, {$colorExpr}, {$talleExpr}")
                     ->get();
             }
 
@@ -96,6 +156,8 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
                 $batch[] = [
                     'articulo_id' => (int) $row->articulo_id,
                     'deposito_id' => (int) $row->deposito_id,
+                    'color_id' => (int) $row->color_id,
+                    'talle_id' => (int) $row->talle_id,
                     'cantidad' => (float) $row->total,
                     'fecha_ult_movimiento' => $row->ultima ? (string) $row->ultima.' 00:00:00' : null,
                     'created_at' => $now,

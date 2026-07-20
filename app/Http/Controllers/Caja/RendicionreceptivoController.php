@@ -115,7 +115,7 @@ class RendicionreceptivoController extends Controller
 
         case 'CSV':
             return (new RendicionreceptivoExport($this->rendicionreceptivoRepository))
-                        ->parametros($busqueda)
+                        ->parametros($busqueda, true)
                         ->download('rendicionreceptivo.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   

@@ -284,6 +284,18 @@ final class RecepcionProveedorAnitaColisionSupport
             }
 
             if ($terminal === RecepcionProveedorAnitaWhereSupport::TERMINAL_ERP && self::esRecepmaeErpHuerfano($cabeceraClave)) {
+                // Cabecera ERP vacía (sin recepmov/stkmov) del mismo proveedor: reclamar en confirmación.
+                $proveedorCabeceraHuerfano = RecepcionProveedorAnitaReferenciaSupport::proveedorAnita6(
+                    trim((string) ($cabeceraClave->recm_proveedor ?? ''))
+                );
+                $proveedorAnitaHuerfano = RecepcionProveedorAnitaReferenciaSupport::proveedorAnita6($codigoProveedor);
+                if (
+                    $proveedorCabeceraHuerfano === $proveedorAnitaHuerfano
+                    && ! self::tieneRecepmovOStkmov($codigoProveedor, $clave)
+                ) {
+                    return;
+                }
+
                 throw new \RuntimeException(self::mensajeColision(
                     $clave,
                     'tiene cabecera ERP huérfana en Anita (recm_terminal=ERP). Limpie o renumeré antes de confirmar.'

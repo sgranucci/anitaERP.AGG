@@ -72,7 +72,7 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                             <th>Total</th>
                             <th>Estado</th>
                             <th>Origen</th>
-                            <th class="width80" data-orderable="false"></th>
+                            <th class="text-nowrap" style="width:150px" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -89,7 +89,7 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                             <td>{{$data->total}}</td>
                             <td>{{$data->estado}}</td>
                             <td><small>{{ \App\Support\Compras\PrecargaComprobanteOrigenEntrada::etiqueta($data->origen_entrada ?? null) }}</small></td>
-                            <td>
+                            <td class="text-nowrap">
                                 @if (filled($data->rutaalmacenamiento) && puedeVerPrecargaFacturaPdf())
                                 <a href="{{ urlAppCarpeta('compras/precarga_comprobante_proveedor/'.$data->id.'/factura-pdf?inline=1') }}"
                                    class="btn-accion-tabla tooltipsC"

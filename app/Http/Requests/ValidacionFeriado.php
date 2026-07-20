@@ -26,6 +26,7 @@ class ValidacionFeriado extends FormRequest
         return [
             'nombre' => 'required|max:255|unique:feriado,nombre,' . $this->route('id'),
             'fecha' => 'required|date|unique:feriado,fecha,' . $this->route('id'),
+            'tipo' => 'nullable|string|max:50',
         ];
     }
 }

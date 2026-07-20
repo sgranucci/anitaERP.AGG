@@ -2,109 +2,167 @@
 
 namespace App\Exports\Ventas;
 
+use App\Services\Ventas\FacturacionService;
+use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
-use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\Exportable;
-use Maatwebsite\Excel\Concerns\WithHeadings;
-use PhpOffice\PhpSpreadsheet\Shared\Date;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
-use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use App\Services\Ventas\FacturacionService;
-use Carbon\Carbon;
-use App\ApiAnita;
 
-class FacturaExport implements FromView, WithColumnFormatting, WithMapping, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
+class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
-	use Exportable;
-	private $busqueda;
+    use Exportable;
+
+    private const COL_ULTIMA = 'E';
+
+    /** Congela también ID y Fecha (columnas A y B): el freeze arranca en C. */
+    private const COL_FREEZE = 'C';
+
+    /** @var array<string, mixed>|string|null */
+    private $filtros;
+
+    private bool $esCsv = false;
+
     private $facturacionService;
+
+    private bool $hayFilaLogos = false;
+
+    private int $filaTituloExcel = 1;
+
+    private int $filaSubtituloExcel = 2;
+
+    private int $filaCabecerasExcel = 3;
+
+    private int $filaPrimeraDatosExcel = 4;
+
+    /** @var list<string> */
+    private array $rutasLogosExcel = [];
 
     public function __construct(FacturacionService $facturacionservice)
     {
         $this->facturacionService = $facturacionservice;
     }
 
-	public function view(): View
-	{
-        $ventas = $this->facturacionService->leeSinPaginar($this->busqueda);
+    public function view(): View
+    {
+        $ventas = $this->facturacionService->leeSinPaginar($this->filtros);
 
-		return view('exports.ventas.factura', ['ventas' => $ventas]);
-	}
+        foreach ($ventas as $row) {
+            $row->nombreempresa = $row->nombreempresa ?? ($row->puntoventas->empresas->nombre ?? '');
+        }
 
-	public function columnFormats(): array
+        $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($ventas);
+        $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
+        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
+        $this->filaSubtituloExcel = $this->filaTituloExcel + 1;
+        $this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
+        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+
+        return view('exports.ventas.factura', [
+            'ventas' => $ventas,
+            'esExcel' => true,
+            'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
+        ]);
+    }
+
+    public function columnFormats(): array
     {
         return [
             'A' => NumberFormat::FORMAT_TEXT,
-            'F' => NumberFormat::FORMAT_GENERAL,
-            'G' => NumberFormat::FORMAT_GENERAL,
-            'H' => NumberFormat::FORMAT_GENERAL,
-            'I' => NumberFormat::FORMAT_GENERAL,
-            'J' => NumberFormat::FORMAT_GENERAL,
-            'K' => NumberFormat::FORMAT_GENERAL,
-            'L' => NumberFormat::FORMAT_GENERAL,
+            // E = Total: número real con máscara neutra (sumable/adaptable).
+            'E' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
         ];
     }
 
-	public function map($row): array
+    public function styles(Worksheet $sheet): array
     {
-        return [
-        ];
+        return [];
     }
 
-    public function styles(Worksheet $sheet)
-    {
-        return [
-            2   => ['font' => ['bold' => true,
-        						'color' => array('rgb' => '17202A'),
-        						'size'  => 12,
-        						'name'  => 'Arial'
-								],
-					'fill' => [
-                    			'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-        						'color' => array('rgb' => '85C1E9'),
-					]
-					],
-            'F' => ['font' => ['bold' => true]],
-            'G' => ['font' => ['bold' => true]],
-            'J' => ['font' => ['bold' => true]],
-        ];
-    }
-
-	public function columnWidths(): array
+    public function columnWidths(): array
     {
         return [
             'A' => 10,
+            'B' => 14,
+            'C' => 32,
+            'D' => 32,
+            'E' => 16,
         ];
     }
 
-	public function registerEvents(): array
+    public function registerEvents(): array
     {
         return [
-            AfterSheet::class    => function(AfterSheet $event) {
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+                $col = self::COL_ULTIMA;
 
-                $event->sheet->getDelegate()->freezePane('A3');
+                if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
+                    $sheet->getRowDimension(1)->setRowHeight(54);
+                    $offsetX = 6;
+                    foreach ($this->rutasLogosExcel as $ruta) {
+                        if (! is_string($ruta) || ! is_readable($ruta)) {
+                            continue;
+                        }
+                        $drawing = new Drawing;
+                        $drawing->setName('Logo');
+                        $drawing->setDescription('Logo empresa');
+                        $drawing->setPath($ruta);
+                        $drawing->setResizeProportional(true);
+                        $drawing->setHeight(46);
+                        $drawing->setCoordinates('A1');
+                        $drawing->setOffsetX($offsetX);
+                        $drawing->setOffsetY(4);
+                        $drawing->setWorksheet($sheet);
+                        $offsetX += 160;
+                    }
+                }
 
+                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.$col.$this->filaTituloExcel);
+                $sheet->mergeCells('A'.$this->filaSubtituloExcel.':'.$col.$this->filaSubtituloExcel);
+                $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setName('Arial')->setSize(16)->setBold(true)->getColor()->setRGB('17202A');
+                $sheet->getStyle('A'.$this->filaSubtituloExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+
+                $rangoCab = 'A'.$this->filaCabecerasExcel.':'.$col.$this->filaCabecerasExcel;
+                $sheet->getStyle($rangoCab)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('85C1E9');
+                $sheet->getStyle($rangoCab)->getFont()->setName('Arial')->setSize(11)->setBold(true)->getColor()->setRGB('17202A');
+                $sheet->getStyle($rangoCab)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+                $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
             },
         ];
     }
 
-	public function title(): string
+    public function title(): string
     {
         return 'Reporte de Comprobantes de Ventas';
     }
 
-	public function parametros($busqueda)
-	{
-		$this->busqueda = $busqueda;
+    public function parametros($filtros, bool $esCsv = false)
+    {
+        $this->filtros = $filtros;
+        $this->esCsv = $esCsv;
 
-		return $this;
-	}
+        return $this;
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
+    }
 }

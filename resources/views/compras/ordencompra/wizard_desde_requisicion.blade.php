@@ -209,18 +209,20 @@ jQuery(function ($) {
                             <table class="table table-sm table-bordered wizard-oc-tabla" id="wizard-oc-tabla-articulos">
                                 <thead class="thead-light">
                                     <tr>
-                                        <th style="width: 4%;">#</th>
-                                        <th style="width: 9%;">Artículo</th>
-                                        <th style="width: 14%;">Descripción</th>
+                                        <th style="width: 3%;">#</th>
+                                        <th style="width: 8%;">Artículo</th>
+                                        <th style="width: 12%;">Descripción</th>
+                                        <th style="width: 6%;">Color</th>
+                                        <th style="width: 5%;">Talle</th>
                                         <th style="width: 6%;">Cant.</th>
-                                        <th style="width: 8%;">Precio</th>
+                                        <th style="width: 7%;">Precio</th>
                                         <th style="width: 5%;">Mon.</th>
-                                        <th style="width: 6%;">Cotiz.</th>
-                                        <th style="width: 8%;">F. entrega</th>
+                                        <th style="width: 5%;">Cotiz.</th>
+                                        <th style="width: 7%;">F. entrega</th>
                                         <th style="width: 8%;">CC destino</th>
-                                        <th style="width: 11%;">Partida presup.</th>
-                                        <th style="width: 9%;">CAPEX</th>
-                                        <th style="width: 12%;">Origen / Proveedor</th>
+                                        <th style="width: 10%;">Partida presup.</th>
+                                        <th style="width: 8%;">CAPEX</th>
+                                        <th style="width: 10%;">Origen / Proveedor</th>
                                     </tr>
                                 </thead>
                                 <tbody id="wizard-oc-tabla-articulos-body" data-wz-ssr="1">

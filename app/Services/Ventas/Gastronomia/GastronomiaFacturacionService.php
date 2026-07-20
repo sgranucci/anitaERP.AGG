@@ -11,6 +11,7 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 use InvalidArgumentException;
@@ -119,12 +120,22 @@ final class GastronomiaFacturacionService
             return;
         }
 
+        // El mínimo lleva el signo de la tipotransacción: una NOTA DE CRÉDITO de cortesía
+        // (signo resta, -1) debe quedar en -$0,01, no +$0,01. Si no, se contabiliza como venta
+        // positiva y descuadra facturación/asientos/mayor contra el flash (que sí la netea).
+        $signoTipo = (int) DB::table('tipotransaccion')
+            ->where('id', (int) $venta->tipotransaccion_id)
+            ->value('signo');
+        $minimo = $signoTipo < 0
+            ? -self::IMPORTE_MINIMO_FACTURA
+            : self::IMPORTE_MINIMO_FACTURA;
+
         $totalActual = round((float) $venta->total, 2);
-        $necesitaPatchErp = abs($totalActual - self::IMPORTE_MINIMO_FACTURA) > 0.001;
+        $necesitaPatchErp = abs($totalActual - $minimo) > 0.001;
 
         if ($necesitaPatchErp) {
-            $delta = round(self::IMPORTE_MINIMO_FACTURA - $totalActual, 2);
-            $motivo = $delta > 0.
+            $delta = round($minimo - $totalActual, 2);
+            $motivo = abs($totalActual) < abs($minimo)
                 ? 'Netos exentos por renglón redondearon a $0 con descuento de pie ≈100 % '
                     .'(Total en ImpuestoService quedó en $0).'
                 : 'Redondeo por línea en ImpuestoService::calculaNetoItem '
@@ -133,12 +144,13 @@ final class GastronomiaFacturacionService
             Log::warning('gastronomia.factura.cortesia_total_normalizado', [
                 'venta_id' => $ventaId,
                 'total_calculado' => $totalActual,
-                'total_normalizado' => self::IMPORTE_MINIMO_FACTURA,
+                'total_normalizado' => $minimo,
                 'delta_centavos' => $delta,
+                'es_nota_credito' => $signoTipo < 0,
                 'motivo' => $motivo,
             ]);
 
-            $venta->total = self::IMPORTE_MINIMO_FACTURA;
+            $venta->total = $minimo;
             $venta->save();
 
             $exento = Venta_Impuesto::query()
@@ -146,7 +158,10 @@ final class GastronomiaFacturacionService
                 ->where('concepto', 'Exento')
                 ->first();
             if ($exento instanceof Venta_Impuesto) {
-                $exento->importe = round(max(0., (float) $exento->importe + $delta), 2);
+                // Cortesía: el exento es el total completo. En NC queda negativo.
+                $exento->importe = $minimo < 0
+                    ? $minimo
+                    : round(max(0., (float) $exento->importe + $delta), 2);
                 $exento->save();
             } else {
                 Venta_Impuesto::query()->create([
@@ -154,10 +169,23 @@ final class GastronomiaFacturacionService
                     'concepto' => 'Exento',
                     'baseimponible' => 0.,
                     'tasa' => 0.,
-                    'importe' => self::IMPORTE_MINIMO_FACTURA,
+                    'importe' => $minimo,
                     'provincia_id' => null,
                     'impuesto_id' => null,
                 ]);
+            }
+
+            // El concepto "Total" de venta_impuesto se calculó antes de normalizar y queda en el
+            // total viejo (p. ej. $0,02 por redondeo por línea con descuento de pie ≈100 %). Alinearlo
+            // con venta.total para que los reportes que leen ese renglón (Diario PV, Libro IVA) no
+            // hereden el centavo de más.
+            $totalConcepto = Venta_Impuesto::query()
+                ->where('venta_id', $ventaId)
+                ->where('concepto', 'Total')
+                ->first();
+            if ($totalConcepto instanceof Venta_Impuesto) {
+                $totalConcepto->importe = $minimo;
+                $totalConcepto->save();
             }
         }
 

@@ -2,28 +2,39 @@
 
 namespace App\Support\Contable;
 
+use App\Support\Export\ExcelFormatoNumero;
+
 /**
  * Formato numérico del Excel/CSV de mayor por concepto.
  *
- * - ar:   1.234,56 (Argentina)
- * - intl: 1,234.56 (internacional)
+ * Delega en {@see ExcelFormatoNumero} (helper global). Se mantiene por compatibilidad
+ * con las llamadas existentes de este reporte.
+ *
+ * - auto: xlsx con números reales; cada PC lo muestra según su config regional (default)
+ * - ar:   1.234,56 (Argentina, texto)
+ * - intl: 1,234.56 (internacional, texto)
  */
 class MayorConceptoExcelFormatoNumero
 {
-    public const AR = 'ar';
+    public const AUTO = ExcelFormatoNumero::AUTO;
 
-    public const INTL = 'intl';
+    public const AR = ExcelFormatoNumero::AR;
+
+    public const INTL = ExcelFormatoNumero::INTL;
 
     public static function normalizar(mixed $valor): string
     {
-        $v = strtolower(trim((string) $valor));
+        return ExcelFormatoNumero::normalizar($valor);
+    }
 
-        return $v === self::INTL ? self::INTL : self::AR;
+    public static function esAuto(string $formato): bool
+    {
+        return ExcelFormatoNumero::esAuto($formato);
     }
 
     public static function esInternacional(string $formato): bool
     {
-        return self::normalizar($formato) === self::INTL;
+        return ExcelFormatoNumero::esInternacional($formato);
     }
 
     /**
@@ -31,30 +42,34 @@ class MayorConceptoExcelFormatoNumero
      */
     public static function formateadorMonto(string $formato, int $decimales = 2): callable
     {
-        $formato = self::normalizar($formato);
-
-        return static function ($valor) use ($formato, $decimales): string {
-            if ($valor === null || $valor === '' || (float) $valor === 0.0) {
-                return '';
-            }
-
-            return self::formatear((float) $valor, $formato, $decimales);
-        };
+        return ExcelFormatoNumero::formateadorMonto($formato, $decimales);
     }
 
+    /**
+     * Formatea a texto legible. En modo "auto" (que en xlsx va como número real) se usa
+     * el formato Argentina para los textos inline (subtítulos, porcentajes de conciliación).
+     */
     public static function formatear(float $valor, string $formato, int $decimales = 2): string
     {
-        if (self::esInternacional($formato)) {
-            return number_format($valor, $decimales, '.', ',');
+        $formato = ExcelFormatoNumero::normalizar($formato);
+
+        if ($formato === ExcelFormatoNumero::AUTO) {
+            $formato = ExcelFormatoNumero::AR;
         }
 
-        return number_format($valor, $decimales, ',', '.');
+        return ExcelFormatoNumero::formatearTexto($valor, $formato, $decimales);
+    }
+
+    /**
+     * Código de formato de columna para WithColumnFormatting.
+     */
+    public static function codigoColumna(string $formato, int $decimales = 2): string
+    {
+        return ExcelFormatoNumero::codigoColumna($formato, $decimales);
     }
 
     public static function etiqueta(string $formato): string
     {
-        return self::esInternacional($formato)
-            ? 'Internacional (1,234.56)'
-            : 'Argentina (1.234,56)';
+        return ExcelFormatoNumero::etiqueta($formato);
     }
 }

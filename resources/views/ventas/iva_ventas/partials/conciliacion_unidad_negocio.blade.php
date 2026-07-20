@@ -2,7 +2,7 @@
     $un = $resultado['conciliacion_contable']['por_unidad_negocio'] ?? ['habilitada' => false];
     $formatear = static fn ($v) => number_format((float) $v, 2, ',', '.');
     $unidades = $un['unidades'] ?? [];
-    $totalErp = $un['total_erp'] ?? ['neto_gravado' => 0, 'imp_interno' => 0, 'iva' => 0, 'total' => 0];
+    $totalErp = $un['total_erp'] ?? ['neto_gravado' => 0, 'imp_interno' => 0, 'exento' => 0, 'iva' => 0, 'total' => 0];
     $cuadre = $un['cuadre'] ?? [];
     $ctamovHabil = ! empty($un['ctamov_habilitado']);
     $colspanCuadre = $ctamovHabil ? 6 : 4;
@@ -23,6 +23,7 @@
                         <th class="text-center">Comp.</th>
                         <th class="text-right">Neto gravado</th>
                         <th class="text-right">Imp. interno / kiosco</th>
+                        <th class="text-right">Exento</th>
                         <th class="text-right">IVA</th>
                         <th class="text-right">Total</th>
                     </tr>
@@ -34,6 +35,7 @@
                             <td class="text-center">{{ (int) ($unidad['cantidad'] ?? 0) }}</td>
                             <td class="text-right">{{ $formatear($unidad['neto_gravado'] ?? 0) }}</td>
                             <td class="text-right">{{ $formatear($unidad['imp_interno'] ?? 0) }}</td>
+                            <td class="text-right">{{ $formatear($unidad['exento'] ?? 0) }}</td>
                             <td class="text-right">{{ $formatear($unidad['iva'] ?? 0) }}</td>
                             <td class="text-right">{{ $formatear($unidad['total'] ?? 0) }}</td>
                         </tr>
@@ -45,6 +47,7 @@
                         <td></td>
                         <td class="text-right">{{ $formatear($totalErp['neto_gravado'] ?? 0) }}</td>
                         <td class="text-right">{{ $formatear($totalErp['imp_interno'] ?? 0) }}</td>
+                        <td class="text-right">{{ $formatear($totalErp['exento'] ?? 0) }}</td>
                         <td class="text-right">{{ $formatear($totalErp['iva'] ?? 0) }}</td>
                         <td class="text-right">{{ $formatear($totalErp['total'] ?? 0) }}</td>
                     </tr>

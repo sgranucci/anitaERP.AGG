@@ -5,6 +5,7 @@ namespace App\Exports\Compras;
 use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -39,6 +40,8 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
     private float $saldoCuentaCorriente = 0.0;
 
     private float $totalDeuda = 0.0;
+
+    private bool $esCsv = false;
 
     private bool $hayFilaLogos = false;
 
@@ -90,16 +93,20 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
             'totalDeuda' => $this->totalDeuda,
             'totalFilas' => $filas->count(),
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'formatoNumeroExcel' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
     public function columnFormats(): array
     {
+        // Debe/Haber/Saldo (G–I) con máscara neutra: sumables y adaptables a la región.
+        $codigo = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+
         return [
             'A' => NumberFormat::FORMAT_TEXT,
-            'G' => NumberFormat::FORMAT_NUMBER_00,
-            'H' => NumberFormat::FORMAT_NUMBER_00,
-            'I' => NumberFormat::FORMAT_NUMBER_00,
+            'G' => $codigo,
+            'H' => $codigo,
+            'I' => $codigo,
         ];
     }
 
@@ -226,6 +233,7 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
         string $nombreProveedor,
         float $saldoCuentaCorriente,
         float $totalDeuda,
+        bool $esCsv = false,
     ): self {
         $this->busqueda = $busqueda;
         $this->proveedorId = $proveedorId;
@@ -233,8 +241,16 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
         $this->nombreProveedor = $nombreProveedor;
         $this->saldoCuentaCorriente = $saldoCuentaCorriente;
         $this->totalDeuda = $totalDeuda;
+        $this->esCsv = $esCsv;
 
         return $this;
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     /**

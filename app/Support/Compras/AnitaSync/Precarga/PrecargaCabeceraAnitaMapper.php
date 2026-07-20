@@ -2,6 +2,8 @@
 
 namespace App\Support\Compras\AnitaSync\Precarga;
 
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
+
 /**
  * Mapeo ERP → tabla Informix precarga (módulo compras).
  */
@@ -39,9 +41,23 @@ final class PrecargaCabeceraAnitaMapper
         return (int) ($payload['numerocomprobante'] ?? 0);
     }
 
+    /**
+     * Solo el número de OC (6 dígitos). Ej. "X0000-00221480" → "221480".
+     */
     public static function numeroOrdenCompra(array $payload): string
     {
-        return substr(trim((string) ($payload['numeroordencompra'] ?? '')), 0, 50);
+        $raw = trim((string) ($payload['numeroordencompra'] ?? ''));
+        if ($raw === '') {
+            return '';
+        }
+
+        try {
+            return app(PrecargaProveedorNumeroOcSupport::class)->normalizar($raw);
+        } catch (\RuntimeException) {
+            $digitos = preg_replace('/\D/', '', $raw) ?? '';
+
+            return $digitos === '' ? substr($raw, 0, 50) : (string) ((int) $digitos);
+        }
     }
 
     public static function decimal(mixed $valor): string

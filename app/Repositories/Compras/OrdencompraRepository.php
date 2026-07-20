@@ -61,6 +61,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             'condicioncompras', 'condicionentregas', 'condicionpagos', 'transportes',
             'ordencompra_articulos.articulos.unidadesdemedidasalternativas', 'ordencompra_articulos.monedas', 'ordencompra_articulos.centrocostos_destino',
             'ordencompra_articulos.partidagastos.articulos', 'ordencompra_articulos.capexs',
+            'ordencompra_articulos.color', 'ordencompra_articulos.talle',
             'ordencompra_comprobantes.monedas', 'ordencompra_comprobantes.condicionpagos',
             'ordencompra_comprobantes.ordencompra_comprobante_cuotas.monedas',
             'ordencompra_comprobantes.ordencompra_comprobante_cuotas.formapagos',
@@ -115,6 +116,8 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
                 'ordencompra_articulos.centrocostos_destino',
                 'ordencompra_articulos.partidagastos.articulos',
                 'ordencompra_articulos.capexs',
+                'ordencompra_articulos.color',
+                'ordencompra_articulos.talle',
             ])
             ->get();
 
@@ -265,6 +268,8 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
     {
         unset(
             $data['articulo_ids'],
+            $data['colores_id'],
+            $data['talles_id'],
             $data['cantidades'],
             $data['precios'],
             $data['moneda_linea_ids'],
@@ -275,6 +280,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             $data['partidagasto_ids'],
             $data['capex_ids'],
             $data['ordencompra_articulo_ids'],
+            $data['modo_stock_color_talle'],
             $data['fechas'],
             $data['estados'],
             $data['usuario_ids'],
