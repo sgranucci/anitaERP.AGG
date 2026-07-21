@@ -50,6 +50,7 @@
         $.ajax({
             url: window.flashCalcularUrl || '/caja/flash/api/calcular',
             method: 'POST',
+            timeout: 300000,
             data: {
                 _token: $('meta[name="csrf-token"]').attr('content'),
                 empresa_id: empresaId,
@@ -58,8 +59,11 @@
         }).done(function (resp) {
             if (resp && resp.ok && resp.datos) {
                 aplicarDatos(resp.datos);
+                if (resp.datos.advertencias_wigos && resp.datos.advertencias_wigos.length) {
+                    alert('Flash calculado con advertencias Wigos:\n' + resp.datos.advertencias_wigos.join('\n'));
+                }
             } else {
-                alert('No se recibieron datos de c\u00e1lculo.');
+                alert((resp && resp.message) ? resp.message : 'No se recibieron datos de c\u00e1lculo.');
             }
         }).fail(function (xhr) {
             var msg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Error al calcular flash.';

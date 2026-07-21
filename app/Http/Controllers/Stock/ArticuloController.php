@@ -48,6 +48,7 @@ use App\Services\Stock\ArticuloParteUnicaService;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
 use App\Support\Stock\ArticuloSaldosDepositoSupport;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
+use App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuRangoSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuSupport;
 use App\Support\Stock\ArticuloEtiquetaZplSupport;
@@ -232,6 +233,63 @@ class ArticuloController extends Controller
 
         try {
             $datos = ArticuloSaldosDepositoSupport::listadoPorArticulo($articuloId, $empresaId);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        return response()->json($datos);
+    }
+
+    public function apiPreviewRecalcularTransferenciasFormula(Request $request, $id): \Illuminate\Http\JsonResponse
+    {
+        if (! TransferenciaMercaderiaRepararCostosSupport::puedeRecalcularDesdeArticulo()) {
+            abort(403, 'No tiene permisos para recalcular transferencias a fórmulas.');
+        }
+
+        $articuloId = (int) $id;
+        if ($articuloId <= 0) {
+            return response()->json(['error' => 'Artículo inválido.'], 422);
+        }
+
+        try {
+            $datos = TransferenciaMercaderiaRepararCostosSupport::previewPorArticulo($articuloId, [
+                'modo' => (string) $request->input('modo', 'ultima'),
+                'fecha_desde' => $request->input('fecha_desde'),
+                'fecha_hasta' => $request->input('fecha_hasta'),
+                'coeficiente' => $request->input('coeficiente'),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        return response()->json($datos);
+    }
+
+    public function apiAplicarRecalcularTransferenciasFormula(Request $request, $id): \Illuminate\Http\JsonResponse
+    {
+        if (! TransferenciaMercaderiaRepararCostosSupport::puedeRecalcularDesdeArticulo()) {
+            abort(403, 'No tiene permisos para recalcular transferencias a fórmulas.');
+        }
+
+        $articuloId = (int) $id;
+        if ($articuloId <= 0) {
+            return response()->json(['error' => 'Artículo inválido.'], 422);
+        }
+
+        $lineaIds = $request->input('linea_ids', []);
+        if (! is_array($lineaIds)) {
+            $lineaIds = [];
+        }
+
+        try {
+            $datos = TransferenciaMercaderiaRepararCostosSupport::aplicarPorArticulo($articuloId, [
+                'modo' => (string) $request->input('modo', 'ultima'),
+                'fecha_desde' => $request->input('fecha_desde'),
+                'fecha_hasta' => $request->input('fecha_hasta'),
+                'coeficiente' => $request->input('coeficiente'),
+                'linea_ids' => $lineaIds,
+                'solo_con_cambio' => filter_var($request->input('solo_con_cambio', true), FILTER_VALIDATE_BOOLEAN),
+            ]);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }

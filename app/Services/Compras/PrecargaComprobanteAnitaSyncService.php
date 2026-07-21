@@ -7,6 +7,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Configuracion\Empresa;
+use App\Models\Configuracion\Moneda;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\AnitaSync\Precarga\PrecargaCabeceraAnitaMapper;
 use App\Support\Compras\AnitaSync\Precarga\PrecargaConceptoAnitaMapper;
@@ -58,7 +59,9 @@ class PrecargaComprobanteAnitaSyncService
                 prec_numero,
                 prec_ordencompra,
                 prec_subtotal,
-                prec_total
+                prec_total,
+                prec_cod_mon,
+                prec_cotizacion
 				',
                     'valores' => PrecargaCabeceraAnitaMapper::valoresInsert($precargaId, $payload),
                 ], 'precarga insert');
@@ -125,6 +128,21 @@ class PrecargaComprobanteAnitaSyncService
 
         $payload['subtotal'] = $this->normalizarDecimal($payload['subtotal'] ?? 0);
         $payload['total'] = $this->normalizarDecimal($payload['total'] ?? 0);
+        $payload['cotizacion'] = $this->normalizarDecimal($payload['cotizacion'] ?? 1);
+        if ($payload['cotizacion'] <= 0) {
+            $payload['cotizacion'] = 1.0;
+        }
+
+        $monedaId = (int) ($payload['moneda_id'] ?? 0);
+        if ($monedaId > 0) {
+            $codigoMoneda = Moneda::query()->whereKey($monedaId)->value('codigo');
+            if ($codigoMoneda !== null && (string) $codigoMoneda !== '') {
+                $payload['codigo_moneda_anita'] = (string) $codigoMoneda;
+            }
+        }
+        if (empty($payload['codigo_moneda_anita'])) {
+            $payload['codigo_moneda_anita'] = PrecargaCabeceraAnitaMapper::codigoMoneda($payload);
+        }
 
         if (! empty($payload['numeroordencompra'])) {
             try {

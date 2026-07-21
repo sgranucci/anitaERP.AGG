@@ -26,6 +26,11 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                     <a href="{{ route('comprobante_proveedor_opciones_carga') }}" class="btn btn-outline-success btn-sm mr-1">
                         <i class="fa fa-file-text-o"></i> Cargar factura
                     </a>
+                    @if (can('listar-precarga-proveedores', false))
+                    <a href="{{ route('precarga_comprobante_recepcion_error') }}" class="btn btn-outline-danger btn-sm mr-1" title="Errores de la API / PDF+IA">
+                        <i class="fa fa-exclamation-triangle"></i> Errores recepción
+                    </a>
+                    @endif
                     @if (!empty($pdfIaHabilitado) && can('crear-precarga-proveedores', false))
                     <button type="button" class="btn btn-info btn-sm mr-1" data-toggle="modal" data-target="#modal-precarga-pdf-ia">
                         <i class="fa fa-magic"></i> PDF (IA)

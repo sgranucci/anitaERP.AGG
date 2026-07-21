@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras\AnitaSync\Precarga;
 
+use App\Models\Configuracion\Moneda;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 
 /**
@@ -60,6 +61,41 @@ final class PrecargaCabeceraAnitaMapper
         }
     }
 
+    /**
+     * Código moneda Anita (char 1): 1=pesos, 2=dólares, 3=euros, …
+     */
+    public static function codigoMoneda(array $payload): string
+    {
+        if (isset($payload['codigo_moneda_anita']) && (string) $payload['codigo_moneda_anita'] !== '') {
+            return substr((string) $payload['codigo_moneda_anita'], 0, 1);
+        }
+
+        $monedaId = (int) ($payload['moneda_id'] ?? 0);
+        if ($monedaId > 0) {
+            $codigo = Moneda::query()->whereKey($monedaId)->value('codigo');
+            if ($codigo !== null && (string) $codigo !== '') {
+                return substr((string) $codigo, 0, 1);
+            }
+        }
+
+        $nombre = strtoupper(trim((string) ($payload['moneda'] ?? '')));
+        return match (true) {
+            str_contains($nombre, 'DOL') => '2',
+            str_contains($nombre, 'EUR') => '3',
+            default => '1',
+        };
+    }
+
+    public static function cotizacion(array $payload): string
+    {
+        $cotizacion = (float) ($payload['cotizacion'] ?? 1);
+        if ($cotizacion <= 0) {
+            $cotizacion = 1.0;
+        }
+
+        return self::decimal($cotizacion);
+    }
+
     public static function decimal(mixed $valor): string
     {
         return number_format((float) $valor, 4, '.', '');
@@ -77,7 +113,9 @@ final class PrecargaCabeceraAnitaMapper
                 '".self::numeroComprobante($payload)."', 
                 '".self::numeroOrdenCompra($payload)."', 
                 '".self::decimal($payload['subtotal'] ?? 0)."',
-                '".self::decimal($payload['total'] ?? 0)."' ";
+                '".self::decimal($payload['total'] ?? 0)."',
+                '".self::codigoMoneda($payload)."',
+                '".self::cotizacion($payload)."' ";
     }
 
     public static function valoresUpdate(array $payload): string
@@ -91,6 +129,8 @@ final class PrecargaCabeceraAnitaMapper
                         prec_numero 	               	= '".self::numeroComprobante($payload)."',
                         prec_ordencompra 	               	= '".self::numeroOrdenCompra($payload)."',
                         prec_subtotal 	               	= '".self::decimal($payload['subtotal'] ?? 0)."',
-                        prec_total 	               	= '".self::decimal($payload['total'] ?? 0)."' ";
+                        prec_total 	               	= '".self::decimal($payload['total'] ?? 0)."',
+                        prec_cod_mon 	               	= '".self::codigoMoneda($payload)."',
+                        prec_cotizacion 	               	= '".self::cotizacion($payload)."' ";
     }
 }

@@ -38,6 +38,9 @@ window.consultaFormulaArticuloConfig = {
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/formula-modal.js') }}" type="text/javascript"></script>
 @endif
+@if (\App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport::puedeRecalcularDesdeArticulo())
+<script src="{{ asset('assets/pages/scripts/stock/articulo/recalcular-transferencias-formula.js') }}?v=20260720b" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')
@@ -214,5 +217,10 @@ window.consultaFormulaArticuloConfig = {
 @if (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false))
 @include('stock.formula_articulo.partials.modal_articulos_compra_insumo')
 <input type="hidden" id="articulos-compra-por-insumo-url" value="{{ route('articulos_compra_por_insumo_formula', ['articulo_id' => 0]) }}">
+@endif
+@if (\App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport::puedeRecalcularDesdeArticulo())
+@include('stock.articulo.partials.modal_recalcular_transferencias_formula')
+<input type="hidden" id="articulo-preview-recalcular-tra-formula-url" value="{{ route('articulo_preview_recalcular_transferencias_formula', ['id' => $producto->id ?? 0]) }}">
+<input type="hidden" id="articulo-aplicar-recalcular-tra-formula-url" value="{{ route('articulo_aplicar_recalcular_transferencias_formula', ['id' => $producto->id ?? 0]) }}">
 @endif
 @endsection

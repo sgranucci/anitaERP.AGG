@@ -33,6 +33,7 @@ final class ApiPrecargaProveedorLogger
     public function warning(string $event, array $context = []): void
     {
         $this->write('warning', $event, $context);
+        $this->persistirSiErrorHttp($event, $context);
     }
 
     public function error(string $event, array $context = [], ?\Throwable $exception = null): void
@@ -43,11 +44,20 @@ final class ApiPrecargaProveedorLogger
         }
 
         $this->write('error', $event, $context);
+        $this->persistirSiErrorHttp($event, $context);
     }
 
     public function requestPayload(Request $request): array
     {
         return $request->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function persistirSiErrorHttp(string $event, array $context): void
+    {
+        PrecargaRecepcionErrorRegistrar::desdeApiLogger($event, $context, $this->traceId);
     }
 
     private function write(string $level, string $event, array $context): void

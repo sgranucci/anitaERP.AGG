@@ -36,5 +36,5 @@
             </tfoot>
         </table>
     </div>
-    <p class="saldos-articulo-vacio small text-muted d-none mb-0">Sin saldo en dep&oacute;sitos autorizados.</p>
+    <p class="saldos-articulo-vacio small text-muted d-none mb-0">Sin movimientos en dep&oacute;sitos autorizados.</p>
 </div>

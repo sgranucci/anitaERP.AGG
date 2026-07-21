@@ -1042,6 +1042,8 @@ Route::get('stock/leerunarticuloporsku/{sku}', 'Stock\ArticuloController@leeUnAr
 
 Route::post('stock/articulo/consultaarticulo', 'Stock\ArticuloController@consultaArticulo')->name('consulta_articulo');
 Route::get('stock/articulo/api/saldos-deposito', 'Stock\ArticuloController@apiSaldosDeposito')->name('articulo_saldos_deposito');
+Route::get('stock/articulo/{id}/api/preview-recalcular-transferencias-formula', 'Stock\ArticuloController@apiPreviewRecalcularTransferenciasFormula')->name('articulo_preview_recalcular_transferencias_formula');
+Route::post('stock/articulo/{id}/api/aplicar-recalcular-transferencias-formula', 'Stock\ArticuloController@apiAplicarRecalcularTransferenciasFormula')->name('articulo_aplicar_recalcular_transferencias_formula');
 Route::get('stock/listaarticulo/{formato?}/{busqueda?}', 'Stock\ArticuloController@listar')->name('lista_articulo');
 
 Route::get('stock/formula-articulo', 'Stock\FormulaArticuloController@index')->name('consultar_formula_articulo');
@@ -2735,6 +2737,8 @@ Route::get('compras/proveedor/leercuentacorrienteaplicacion/{id}', 'Compras\Prov
  */
 
 Route::get('compras/precarga_comprobante_proveedor', 'Compras\Precarga_Comprobante_ProveedorController@index')->name('precarga_comprobante_proveedor');
+Route::get('compras/precarga_comprobante_recepcion_error', 'Compras\Precarga_Comprobante_Recepcion_ErrorController@index')->name('precarga_comprobante_recepcion_error');
+Route::get('compras/lista_precarga_comprobante_recepcion_error/{formato?}/{busqueda?}', 'Compras\Precarga_Comprobante_Recepcion_ErrorController@listar')->name('lista_precarga_comprobante_recepcion_error');
 Route::post('compras/precarga_comprobante_proveedor/pdf-ia/preview', 'Compras\Precarga_Comprobante_ProveedorController@previewPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_preview');
 Route::post('compras/precarga_comprobante_proveedor/pdf-ia/resolver-oc', 'Compras\Precarga_Comprobante_ProveedorController@resolverOcPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_resolver_oc');
 Route::post('compras/precarga_comprobante_proveedor/pdf-ia/confirmar', 'Compras\Precarga_Comprobante_ProveedorController@confirmarPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_confirmar');

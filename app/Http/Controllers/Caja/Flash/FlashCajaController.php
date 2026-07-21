@@ -154,6 +154,9 @@ class FlashCajaController extends Controller
             abort(403);
         }
 
+        ini_set('max_execution_time', '300');
+        ini_set('memory_limit', '512M');
+
         $request->validate([
             'empresa_id' => ['required', 'integer', 'min:1'],
             'fecha' => ['required', 'date'],
@@ -163,7 +166,15 @@ class FlashCajaController extends Controller
         $this->assertAccesoEmpresa($empresaId);
 
         $fecha = (string) $request->input('fecha');
-        $calculado = $this->calculoService->calcular($empresaId, $fecha);
+
+        try {
+            $calculado = $this->calculoService->calcular($empresaId, $fecha);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
 
         return response()->json([
             'ok' => true,

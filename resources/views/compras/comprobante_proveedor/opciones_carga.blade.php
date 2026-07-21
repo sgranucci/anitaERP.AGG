@@ -46,6 +46,9 @@
                                 <a href="{{ route('precarga_comprobante_proveedor') }}" class="btn btn-info btn-sm mt-auto">
                                     Ir al listado de precargas
                                 </a>
+                                <a href="{{ route('precarga_comprobante_recepcion_error') }}" class="btn btn-outline-danger btn-sm mt-2">
+                                    <i class="fa fa-exclamation-triangle"></i> Ver errores de recepción
+                                </a>
                             </div>
                         </div>
                     </div>

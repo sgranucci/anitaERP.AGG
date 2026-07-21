@@ -12,6 +12,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
+use App\Support\Compras\PrecargaRecepcionErrorRegistrar;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
@@ -91,11 +92,39 @@ class Precarga_Comprobante_ProveedorController extends Controller
                 $request->input('numero_oc')
             );
 
+            if (! ($preview['ok'] ?? false)) {
+                PrecargaRecepcionErrorRegistrar::desdePdfIa(
+                    'preview',
+                    (string) ($preview['message'] ?? 'Error en preview PDF+IA'),
+                    422,
+                    [
+                        'numero_oc' => $request->input('numero_oc'),
+                        'oc_requerida' => $preview['oc_requerida'] ?? false,
+                    ],
+                    $request->file('pdf')?->getClientOriginalName()
+                );
+            }
+
             return response()->json($preview, ($preview['ok'] ?? false) ? 200 : 422);
         } catch (RuntimeException $e) {
+            PrecargaRecepcionErrorRegistrar::desdePdfIa(
+                'preview',
+                $e->getMessage(),
+                422,
+                ['numero_oc' => $request->input('numero_oc')],
+                $request->file('pdf')?->getClientOriginalName()
+            );
+
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             report($e);
+            PrecargaRecepcionErrorRegistrar::desdePdfIa(
+                'preview',
+                'Error al procesar PDF con IA: '.$e->getMessage(),
+                500,
+                ['numero_oc' => $request->input('numero_oc')],
+                $request->file('pdf')?->getClientOriginalName()
+            );
 
             return response()->json(['ok' => false, 'message' => 'Error al procesar PDF con IA.'], 500);
         }
@@ -123,6 +152,17 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
             return response()->json($preview);
         } catch (RuntimeException $e) {
+            PrecargaRecepcionErrorRegistrar::desdePdfIa(
+                'resolver_oc',
+                $e->getMessage(),
+                422,
+                [
+                    'numero_oc' => $request->input('numero_oc'),
+                    'cuit_proveedor' => $extraccion['cuit_proveedor'] ?? null,
+                    'cuit_empresa' => $extraccion['cuit_empresa'] ?? null,
+                ]
+            );
+
             return response()->json([
                 'ok' => false,
                 'oc_requerida' => true,
@@ -131,6 +171,12 @@ class Precarga_Comprobante_ProveedorController extends Controller
             ], 422);
         } catch (\Throwable $e) {
             report($e);
+            PrecargaRecepcionErrorRegistrar::desdePdfIa(
+                'resolver_oc',
+                'Error al resolver con OC: '.$e->getMessage(),
+                500,
+                ['numero_oc' => $request->input('numero_oc')]
+            );
 
             return response()->json(['ok' => false, 'message' => 'Error al resolver con OC.'], 500);
         }
@@ -160,9 +206,31 @@ class Precarga_Comprobante_ProveedorController extends Controller
                 'redirect' => route('editar_precarga_comprobante_proveedor', ['id' => $resultado['precarga_id']]),
             ]);
         } catch (RuntimeException $e) {
+            PrecargaRecepcionErrorRegistrar::desdePdfIa(
+                'confirmar',
+                $e->getMessage(),
+                422,
+                [
+                    'numero_oc' => $payload['numero_oc'] ?? $payload['numeroordencompra'] ?? null,
+                    'cuit_proveedor' => $payload['cuit_proveedor'] ?? null,
+                    'cuit_empresa' => $payload['cuit_empresa'] ?? null,
+                    'tipo' => $payload['tipo_abreviatura'] ?? $payload['tipo'] ?? null,
+                ],
+                $request->file('pdf')?->getClientOriginalName()
+            );
+
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             report($e);
+            PrecargaRecepcionErrorRegistrar::desdePdfIa(
+                'confirmar',
+                'Error al grabar precarga desde PDF+IA: '.$e->getMessage(),
+                500,
+                [
+                    'numero_oc' => $payload['numero_oc'] ?? $payload['numeroordencompra'] ?? null,
+                ],
+                $request->file('pdf')?->getClientOriginalName()
+            );
 
             return response()->json(['ok' => false, 'message' => 'Error al grabar precarga desde PDF+IA.'], 500);
         }

@@ -50,14 +50,16 @@ final class WigosSqlServerProcess
     public static function ejecutarCalcDatosFlashTurno(string $fechaYmd, string $turno, int $empresaId = 0): array
     {
         $alias = WigosConfigResolver::currWigos($empresaId);
+        $timeoutFlash = (int) config('wigos.flash_process_timeout', 90);
         try {
             $decoded = self::ejecutar($alias, [
                 'action' => 'calcDatosFlashTurno',
                 'fecha' => $fechaYmd,
                 'turno' => strtoupper($turno),
-            ], $empresaId);
+            ], $empresaId, $timeoutFlash);
         } catch (RuntimeException $e) {
-            if (! self::debeIntentarServidorWigosSecundario($e)) {
+            // Timeout de SP flash no reintenta B: suele ser el mismo volumen y B (Biyemas) sin wgdb_000.
+            if (! self::debeIntentarServidorWigosSecundario($e) || self::esTimeoutEjecucionSubproceso($e)) {
                 throw $e;
             }
             $secundario = $alias === 'A' ? 'B' : 'A';
@@ -68,7 +70,7 @@ final class WigosSqlServerProcess
                 'action' => 'calcDatosFlashTurno',
                 'fecha' => $fechaYmd,
                 'turno' => strtoupper($turno),
-            ], $empresaId);
+            ], $empresaId, $timeoutFlash);
         }
 
         $datos = $decoded['datos'] ?? [];
@@ -83,7 +85,7 @@ final class WigosSqlServerProcess
      * @param  array<string, mixed>  $extra
      * @return array<string, mixed>
      */
-    private static function ejecutar(string $alias, array $extra, int $empresaId = 0): array
+    private static function ejecutar(string $alias, array $extra, int $empresaId = 0, ?int $processTimeout = null): array
     {
         $cfg = WigosConfigResolver::conexion($alias, $empresaId);
         $host = trim((string) ($cfg['host'] ?? ''));
@@ -116,7 +118,7 @@ final class WigosSqlServerProcess
             $env['OPENSSL_CONF'] = $opensslConf;
         }
 
-        $timeout = (int) $payload['login_timeout'] + 15;
+        $timeout = $processTimeout ?? ((int) $payload['login_timeout'] + 15);
         $process = new Process(
             [self::resolverBinarioPhp(), $script, base64_encode(json_encode($payload, JSON_THROW_ON_ERROR))],
             base_path(),
@@ -129,8 +131,7 @@ final class WigosSqlServerProcess
             $process->run();
         } catch (ProcessTimedOutException $e) {
             throw new RuntimeException(
-                'Wigos '.$alias.': no responde (login timeout) — verificar red/firewall hacia '
-                .'el SQL Server, puerto y servicio activo.',
+                'Wigos '.$alias.': timeout de ejecución del subproceso SQL ('.$timeout.'s).',
                 0,
                 $e
             );
@@ -209,12 +210,16 @@ final class WigosSqlServerProcess
     {
         $mensaje = mb_strtolower($e->getMessage());
 
-        return str_contains($mensaje, 'no responde')
-            || str_contains($mensaje, 'login timeout')
+        return str_contains($mensaje, 'login timeout expired')
             || str_contains($mensaje, 'tcp provider')
             || str_contains($mensaje, 'could not connect')
             || str_contains($mensaje, 'connection refused')
             || str_contains($mensaje, 'host vacío')
             || str_contains($mensaje, 'conexión no configurada');
+    }
+
+    private static function esTimeoutEjecucionSubproceso(RuntimeException $e): bool
+    {
+        return str_contains(mb_strtolower($e->getMessage()), 'timeout de ejecución del subproceso');
     }
 }

@@ -41,16 +41,26 @@ final class FlashCajaCalculoService
             ->where('codigo', '!=', '')
             ->get(['id', 'codigo']);
 
+        $erroresWigos = [];
+        $salasOk = 0;
         foreach ($salas as $sala) {
             try {
                 $salaFlash = $this->calcularPorSala((int) $sala->codigo, $fechaYmd, $empresaId);
                 $acumulado = $this->sumarFlash($acumulado, $salaFlash);
+                $salasOk++;
             } catch (Throwable $e) {
+                $erroresWigos[] = 'sala '.$sala->codigo.': '.$e->getMessage();
                 Log::warning('Flash Wigos sala '.$sala->codigo.': '.$e->getMessage(), [
                     'empresa_id' => $empresaId,
                     'fecha' => $fechaSql,
                 ]);
             }
+        }
+
+        if ($salas->isNotEmpty() && $salasOk === 0) {
+            throw new \RuntimeException(
+                'No se pudo obtener gaming de Wigos. '.implode(' | ', $erroresWigos)
+            );
         }
 
         $erp = $this->totalesAyBEstacBingo($empresaId, $fechaSql);
@@ -62,6 +72,9 @@ final class FlashCajaCalculoService
         $acumulado['bingo_total_venta'] = $erp['bingo_total_venta'];
         $acumulado['bingo_resultado'] = $erp['bingo_resultado'];
         $acumulado['calculado_en'] = now()->toDateTimeString();
+        if ($erroresWigos !== []) {
+            $acumulado['advertencias_wigos'] = $erroresWigos;
+        }
 
         return $acumulado;
     }

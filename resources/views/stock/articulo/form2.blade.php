@@ -131,8 +131,18 @@
                 <div class="form-group row">
     				<label for="coeficienteconversion" class="col-lg-4 col-form-label">Coeficiente de Conversión</label>
     				<div class="col-lg-2">
-    					<input type="number" name="coeficienteconversion" id="coeficienteconversion" class="form-control" value="{{old('coeficienteconversion', $producto->coeficienteconversion ?? '')}}"/>
+    					<input type="number" name="coeficienteconversion" id="coeficienteconversion" class="form-control" value="{{old('coeficienteconversion', $producto->coeficienteconversion ?? '')}}" step="any" min="0"/>
                 	</div>
+                    @if (isset($producto) && (int) ($producto->id ?? 0) > 0 && \App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport::puedeRecalcularDesdeArticulo())
+                    <div class="col-lg-6 d-flex align-items-center">
+                        <button type="button"
+                            id="btn-recalcular-transferencias-formula"
+                            class="btn btn-outline-warning btn-sm tooltipsC"
+                            title="Recalcula cantidad y costo destino de TRA a depósito fórmulas con el coeficiente actual">
+                            <i class="fa fa-sync"></i> Recalcular TRA fórmulas
+                        </button>
+                    </div>
+                    @endif
                 </div>    
                 <div class="form-group row">
     				<label for="formula" class="col-lg-4 col-form-label">Fórmula (id Anita / ERP)</label>

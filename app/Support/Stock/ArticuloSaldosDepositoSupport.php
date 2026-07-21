@@ -14,6 +14,9 @@ final class ArticuloSaldosDepositoSupport
     }
 
     /**
+     * Lista depósitos autorizados donde el artículo tuvo movimientos (aunque el saldo sea 0).
+     * No incluye depósitos sin movimiento.
+     *
      * @return array{
      *     articulo: array{id: int, sku: string, descripcion: string, unidad_medida: string, unidad_medida_abreviatura: string, unidad_medida_nombre: string},
      *     filas: list<array{deposito_id: int, codigo: string, nombre: string, empresa_id: int, empresa_nombre: string, saldo: float, saldo_fmt: string}>,
@@ -35,6 +38,14 @@ final class ArticuloSaldosDepositoSupport
             ->select('id', 'codigo', 'nombre', 'empresa_id')
             ->with('empresas:id,nombre')
             ->paraUsuarioAutorizado()
+            ->whereIn('id', function ($q) use ($articuloId) {
+                $q->select('deposito_id')
+                    ->from('articulo_movimiento')
+                    ->where('articulo_id', $articuloId)
+                    ->whereNotNull('deposito_id')
+                    ->whereNull('deleted_at')
+                    ->groupBy('deposito_id');
+            })
             ->orderBy('codigo');
 
         $empresaId = (int) ($empresaId ?? 0);
@@ -59,10 +70,6 @@ final class ArticuloSaldosDepositoSupport
             $depId = (int) $dep->id;
             $saldo = (float) ($saldosMap[$depId] ?? 0.0);
             $total += $saldo;
-
-            if (abs($saldo) < 0.0000001) {
-                continue;
-            }
 
             $filas[] = [
                 'deposito_id' => $depId,
