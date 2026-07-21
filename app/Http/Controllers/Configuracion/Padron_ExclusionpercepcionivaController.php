@@ -4,14 +4,11 @@ namespace App\Http\Controllers\Configuracion;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Storage;
-use Maatwebsite\Excel\Facades\Excel;
-use Maatwebsite\Excel\HeadingRowImport;
-use App\Imports\Configuracion\Padron_ExclusionpercepcionivaImport;
 use App\Http\Requests\ValidacionPadron_Exclusionpercepcioniva;
 use App\Repositories\Configuracion\Padron_ExclusionpercepcionivaRepositoryInterface;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
-use DB;
+use App\Services\Configuracion\PadronExclusionPercepcionIvaImportadorService;
+use App\Support\Configuracion\ExclusionPercepcionIvaSupport;
 
 class Padron_ExclusionpercepcionivaController extends Controller
 {
@@ -33,7 +30,7 @@ class Padron_ExclusionpercepcionivaController extends Controller
 
     public function index(Request $request)
     {
-        can('listar-padron-mipyme');
+        can('listar-padron-exclusion-percepcion-iva');
 
         $busqueda = $request->busqueda;
 
@@ -46,7 +43,7 @@ class Padron_ExclusionpercepcionivaController extends Controller
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-padron-mipyme'); 
+        can('listar-padron-exclusion-percepcion-iva');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
@@ -93,7 +90,7 @@ class Padron_ExclusionpercepcionivaController extends Controller
      */
     public function crear()
     {
-        can('crear-padron-mipyme');
+        can('crear-padron-exclusion-percepcion-iva');
 
         return view('configuracion.padron_exclusionpercepcioniva.crear');
     }
@@ -108,6 +105,8 @@ class Padron_ExclusionpercepcionivaController extends Controller
     {
 		$this->repository->create($request->all());
 
+        ExclusionPercepcionIvaSupport::resetCache();
+
         return redirect('configuracion/padron_exclusionpercepcioniva')->with('mensaje', 'Padrón Exclusionpercepcioniva creado con éxito');
     }
 
@@ -120,7 +119,7 @@ class Padron_ExclusionpercepcionivaController extends Controller
      */
     public function editar($id)
     {
-        can('editar-padron-mipyme');
+        can('editar-padron-exclusion-percepcion-iva');
         $data = $this->repository->findOrFail($id);
 
         return view('configuracion.padron_exclusionpercepcioniva.editar', compact('data'));
@@ -135,8 +134,10 @@ class Padron_ExclusionpercepcionivaController extends Controller
      */
     public function actualizar(ValidacionPadron_Exclusionpercepcioniva $request, $id)
     {
-        can('actualizar-padron-mipyme');
+        can('actualizar-padron-exclusion-percepcion-iva');
         $this->repository->update($request->all(), $id);
+
+        ExclusionPercepcionIvaSupport::resetCache();
 
         return redirect('configuracion/padron_exclusionpercepcioniva')->with('mensaje', 'Padrón Exclusion percepcion iva actualizado con éxito');
     }
@@ -149,10 +150,12 @@ class Padron_ExclusionpercepcionivaController extends Controller
      */
     public function eliminar(Request $request, $id)
     {
-        can('borrar-padron-mipyme');
+        can('borrar-padron-exclusion-percepcion-iva');
 
         if ($request->ajax()) {
         	if ($this->repository->delete($id)) {
+                ExclusionPercepcionIvaSupport::resetCache();
+
                 return response()->json(['mensaje' => 'ok']);
             } else {
                 return response()->json(['mensaje' => 'ng']);
@@ -162,42 +165,31 @@ class Padron_ExclusionpercepcionivaController extends Controller
         }
     }
 
-    // Importar clientes congelados desde excel
-
     public function crearImportacionPadron_Exclusionpercepcioniva()
     {
-        can('importar-cliente-congelado-uif');
+        can('importar-padron-exclusion-percepcion-iva');
 		
         return view('configuracion.padron_exclusionpercepcioniva.crearimportacion');
     }
 
-	public function importarPadron_Exclusionpercepcioniva(Request $request)
-    {
-        $this->validate(request(), [
-            'file' => 'mimes:csv,txt'
+	public function importarPadron_Exclusionpercepcioniva(
+        Request $request,
+        PadronExclusionPercepcionIvaImportadorService $importador
+    ) {
+        can('importar-padron-exclusion-percepcion-iva');
+
+        $this->validate($request, [
+            'file' => 'required|file|mimes:csv,txt',
         ]);
 
-        try {
-            set_time_limit(0);
+        ini_set('memory_limit', '-1');
+        set_time_limit(0);
 
-            DB::beginTransaction();
+        $resultado = $importador->importarDesdeArchivo($request->file('file'));
 
-            // Borra todo el padron
-            DB::table('padron_exclusionpercepcioniva')->delete();
+        ExclusionPercepcionIvaSupport::resetCache();
 
-            // Importa csv
-            Excel::import(new Padron_ExclusionpercepcionivaImport, request("file"));
-
-            DB::commit();
-
-            return back()
-                ->with('mensaje', 'Padrón Exclusion percepcion iva importado correctamente');
-        } catch (\Exception $exception) {
-            DB::rollBack();
-            
-            return back()
-                ->with('mensaje', $exception->getMessage());
-        }
+        return back()->with('mensaje', $resultado['mensaje']);
     }
 
 }

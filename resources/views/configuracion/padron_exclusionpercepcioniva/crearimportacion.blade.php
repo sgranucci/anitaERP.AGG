@@ -5,6 +5,36 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script>
+(function () {
+    var form = document.getElementById('form-general');
+    var overlay = document.getElementById('padron-exclusion-iva-import-overlay');
+    if (!form || !overlay) {
+        return;
+    }
+
+    function mostrar() {
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function ocultar() {
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    form.addEventListener('submit', function (e) {
+        if (!form.checkValidity()) {
+            return;
+        }
+        mostrar();
+    });
+
+    window.addEventListener('pageshow', ocultar);
+})();
+</script>
 @endsection
 
 @section('contenido')
@@ -25,6 +55,15 @@
                 @csrf
                 <div class="card-body">
                     @include('configuracion.padron_exclusionpercepcioniva.formimportar')
+                    <div class="form-group row">
+                        <div class="col-lg-3"></div>
+                        <div class="col-lg-8">
+                            <p class="text-muted small mb-0">
+                                CSV AFIP de sujetos no alcanzados (separador <code>;</code>):
+                                CUIT;DENOMINACION;FECHA_DESDE;FECHA_HASTA. Reemplaza el padrón completo.
+                            </p>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer">
                     <div class="row">
@@ -38,4 +77,12 @@
         </div>
     </div>
 </div>
+
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'padron-exclusion-iva-import-overlay',
+    'tituloId' => 'padron-exclusion-iva-import-titulo',
+    'subtituloId' => 'padron-exclusion-iva-import-subtitulo',
+    'titulo' => 'Importando padrón…',
+    'subtitulo' => 'Puede demorar según el tamaño del archivo. No cierre la página.',
+])
 @endsection

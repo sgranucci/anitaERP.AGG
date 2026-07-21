@@ -12,6 +12,7 @@ use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Repositories\Ventas\Cliente_Cm05RepositoryInterface;
 use App\Repositories\Ventas\AbastoRepositoryInterface;
 use App\Services\Ventas\FacturacionService;
+use App\Support\Configuracion\ExclusionPercepcionIvaSupport;
 use App\Support\Stock\FormulaArticuloFactorCosto;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -132,9 +133,15 @@ class ImpuestoService extends FacturacionService
 		foreach($dataItem as $item)
 			$totalBrutoAuxiliar += ($item['cantidad'] * $item['precio']);
 
+		$tasaPercepcionIva = (float) config('anita.tasa_percepcion_iva', 0);
+		$aplicaPercepcionIva = ! $omitirPercepciones
+			&& config('anita.agente_percepcion_iva') == 'si'
+			&& $retieneIva != 'S'
+			&& ! ExclusionPercepcionIvaSupport::estaExcluidoEnFecha($nroInscripcion, $fechaFactura ?? null);
+
 		// Calcula las tasas de percepcion para agregar a la tasa de detraccion
-        if (! $omitirPercepciones && env('ANITA_AGENTE_PERCEPCION_IVA') == 'si' && $retieneIva != 'S' && config('facturacion.USA_DETRACCION') == 'S')
-			$tasaDetraccion += env('ANITA_TASA_PERCEPCION_IVA');
+        if ($aplicaPercepcionIva && config('facturacion.USA_DETRACCION') == 'S')
+			$tasaDetraccion += $tasaPercepcionIva;
 
 		// Agrega impuestos provinciales (también en tasa de detracción si aplica)
 		$percepcionesIIBB = [];
@@ -335,25 +342,25 @@ class ImpuestoService extends FacturacionService
 			}
 		}
 
-		// Agrega percepcion de iva si es agente de percepcion y el cliente no lo es
-        if (! $omitirPercepciones && env('ANITA_AGENTE_PERCEPCION_IVA') == 'si' && $retieneIva != 'S' && !$flGrabaComprobanteDividido)
+		// Agrega percepcion de iva si es agente de percepcion, el cliente no lo es y no está excluido en el padrón AFIP
+        if ($aplicaPercepcionIva && !$flGrabaComprobanteDividido)
 		{
 			$importeNeto = $importePercepcion = 0.;
 			for ($i = 0; $i < count($netos); $i++)
 			{
-				if(env('ANITA_TASA_PERCEPCION_IVA') != 0.)
+				if($tasaPercepcionIva != 0.)
 				{
 					if($netos[$i]['tasa'] != 0.) // Solo trae los importes gravados
 					{
 						$importeNeto += $netos[$i]['importe'];
-						$importePercepcion += round($netos[$i]['importe'] * env('ANITA_TASA_PERCEPCION_IVA') / 100., 2);
+						$importePercepcion += round($netos[$i]['importe'] * $tasaPercepcionIva / 100., 2);
 					}
 				}
 			}			
-			$detalle = "Percepcion IVA ".env('ANITA_TASA_PERCEPCION_IVA')."%";
+			$detalle = "Percepcion IVA ".$tasaPercepcionIva."%";
 			$impuestos[] = ["concepto"=>$detalle,
 						"baseimponible" => $importeNeto,
-						"tasa"=>env('ANITA_TASA_PERCEPCION_IVA'),
+						"tasa"=>$tasaPercepcionIva,
 						"importe"=>$importePercepcion
 					];			
 		}
