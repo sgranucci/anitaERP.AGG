@@ -436,6 +436,33 @@ Route::get('stock/centroemisor/{id}/editar', 'Stock\CentroemisorController@edita
 Route::put('stock/centroemisor/{id}', 'Stock\CentroemisorController@actualizar')->name('actualizar_centroemisor');
 Route::delete('stock/centroemisor/{id}', 'Stock\CentroemisorController@eliminar')->name('eliminar_centroemisor');
 
+Route::get('stock/clasematerial', 'Stock\ClasematerialController@index')->name('clasematerial');
+Route::get('stock/listaclasematerial/{formato?}/{busqueda?}', 'Stock\ClasematerialController@listar')->name('lista_clasematerial');
+Route::get('stock/clasematerial/crear', 'Stock\ClasematerialController@crear')->name('crear_clasematerial');
+Route::post('stock/clasematerial', 'Stock\ClasematerialController@guardar')->name('guardar_clasematerial');
+Route::get('stock/clasematerial/{id}/editar', 'Stock\ClasematerialController@editar')->name('editar_clasematerial');
+Route::put('stock/clasematerial/{id}', 'Stock\ClasematerialController@actualizar')->name('actualizar_clasematerial');
+Route::delete('stock/clasematerial/{id}', 'Stock\ClasematerialController@eliminar')->name('eliminar_clasematerial');
+
+Route::get('stock/lineamaterial', 'Stock\LineamaterialController@index')->name('lineamaterial');
+Route::get('stock/listalineamaterial/{formato?}/{busqueda?}', 'Stock\LineamaterialController@listar')->name('lista_lineamaterial');
+Route::get('stock/lineamaterial/crear', 'Stock\LineamaterialController@crear')->name('crear_lineamaterial');
+Route::post('stock/lineamaterial', 'Stock\LineamaterialController@guardar')->name('guardar_lineamaterial');
+Route::get('stock/lineamaterial/{id}/editar', 'Stock\LineamaterialController@editar')->name('editar_lineamaterial');
+Route::put('stock/lineamaterial/{id}', 'Stock\LineamaterialController@actualizar')->name('actualizar_lineamaterial');
+Route::delete('stock/lineamaterial/{id}', 'Stock\LineamaterialController@eliminar')->name('eliminar_lineamaterial');
+
+Route::get('stock/gestioncompra', 'Stock\GestioncompraController@index')->name('gestioncompra');
+Route::get('stock/listagestioncompra/{formato?}/{busqueda?}', 'Stock\GestioncompraController@listar')->name('lista_gestioncompra');
+Route::get('stock/gestioncompra/crear', 'Stock\GestioncompraController@crear')->name('crear_gestioncompra');
+Route::post('stock/gestioncompra', 'Stock\GestioncompraController@guardar')->name('guardar_gestioncompra');
+Route::get('stock/gestioncompra/{id}/editar', 'Stock\GestioncompraController@editar')->name('editar_gestioncompra');
+Route::put('stock/gestioncompra/{id}', 'Stock\GestioncompraController@actualizar')->name('actualizar_gestioncompra');
+Route::delete('stock/gestioncompra/{id}', 'Stock\GestioncompraController@eliminar')->name('eliminar_gestioncompra');
+
+Route::post('stock/sifab-maestro/{recurso}/consulta', 'Stock\SifabMaestroConsultaController@consulta')->name('consulta_sifab_maestro');
+Route::get('stock/sifab-maestro/{recurso}/resolver/{codigo}', 'Stock\SifabMaestroConsultaController@resolver')->name('resolver_sifab_maestro')->where('codigo', '.*');
+
 /*
  * Ubicaciones de stock (INTERFORMING / Anita ubicacion)
  */
@@ -1870,6 +1897,8 @@ Route::get('ventas/cliente/{cliente_id}/suitecrm-notas', 'Ventas\ClienteSuitecrm
 Route::post('ventas/cliente/{cliente_id}/suitecrm-notas', 'Ventas\ClienteSuitecrmNotaController@store')->name('guardar_cliente_suitecrm_nota');
 Route::put('ventas/cliente/{cliente_id}/suitecrm-notas/{nota_id}', 'Ventas\ClienteSuitecrmNotaController@update')->name('actualizar_cliente_suitecrm_nota');
 Route::delete('ventas/cliente/{cliente_id}/suitecrm-notas/{nota_id}', 'Ventas\ClienteSuitecrmNotaController@destroy')->name('eliminar_cliente_suitecrm_nota');
+Route::get('ventas/auditoria-notas-suitecrm', 'Ventas\SuitecrmNotaAuditoriaController@index')->name('auditoria_notas_suitecrm')->middleware('modo.consulta');
+Route::get('ventas/listar-auditoria-notas-suitecrm/{formato?}', 'Ventas\SuitecrmNotaAuditoriaController@exportar')->name('listar_auditoria_notas_suitecrm');
 Route::put('ventas/cliente/{id}', 'Ventas\ClienteController@actualizar')->name('actualizar_cliente');
 Route::delete('ventas/cliente/{id}', 'Ventas\ClienteController@eliminar')->name('eliminar_cliente');
 Route::get('ventas/leercliente_entrega/{cliente_id}', 'Ventas\ClienteController@leerCliente_Entrega')->name('leer_cliente_entrega');

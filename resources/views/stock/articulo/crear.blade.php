@@ -13,6 +13,9 @@
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/proveedores.js') }}?v=20260607c" type="text/javascript"></script>
 @endif
+@if (config('app.empresa') == 'INTERFORMING')
+<script src="{{ asset('assets/pages/scripts/stock/sifab_maestro/consulta.js') }}?v=20260727" type="text/javascript"></script>
+@endif
 @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
 <script>
 window.consultaFormulaArticuloConfig = {
@@ -107,5 +110,8 @@ window.consultaFormulaArticuloConfig = {
 @include('stock.formula_articulo.partials.modal_ver_formula_articulo')
 @if (can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false))
 @include('includes.compras.modalconsultaproveedor')
+@endif
+@if (config('app.empresa') == 'INTERFORMING')
+@include('includes.stock.modalconsultasifabmaestro')
 @endif
 @endsection

@@ -1085,6 +1085,21 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Stock\ClasematerialRepositoryInterface',
+            'App\Repositories\Stock\ClasematerialRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\LineamaterialRepositoryInterface',
+            'App\Repositories\Stock\LineamaterialRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Stock\GestioncompraRepositoryInterface',
+            'App\Repositories\Stock\GestioncompraRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Stock\MaterialcapelladaRepositoryInterface',
             'App\Repositories\Stock\MaterialcapelladaRepository',
         );

@@ -65,7 +65,7 @@ class ImportarMaestrosSifabInterformingCommand extends Command
             $this->info("Centros emisores: {$n}");
         }
 
-        $this->warn('Excel aún faltantes para el import de materiales: UnidadMedida, GestionCompra, LineaMaterial, ClaseMaterial.');
+        $this->info('Clase/Línea/Gestión/U.M.: usar seed JSON (migración) o stock:importar-maestros-sifab-sql.');
 
         return self::SUCCESS;
     }

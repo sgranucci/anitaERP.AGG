@@ -1,0 +1,418 @@
+{
+  "lineamaterial": [
+    {
+      "codigoInternoItem": 2,
+      "codigoItem": "07-001",
+      "descripcion": "SEMI - E LAM REFRIGERACION",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 3,
+      "codigoItem": "07-002",
+      "descripcion": "SEMI - E LAM AGROPECUARIO",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 4,
+      "codigoItem": "07-003",
+      "descripcion": "SEMI - E LAM AUTOMOTRIZ",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 5,
+      "codigoItem": "07-004",
+      "descripcion": "SEMI - E LAM SANITARIOS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 6,
+      "codigoItem": "07-005",
+      "descripcion": "SEMI - E LAM LOGISTICA",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 7,
+      "codigoItem": "07-006",
+      "descripcion": "SEMI - E LAM BAÑOS Y CABINAS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 8,
+      "codigoItem": "07-007",
+      "descripcion": "SEMI - E LAM OTROS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 9,
+      "codigoItem": "07-008",
+      "descripcion": "SEMI - E LAM PUBLICIDAD - CARTELERIA",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 10,
+      "codigoItem": "07-009",
+      "descripcion": "SEMI - E LAM ALIMENTACION",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 11,
+      "codigoItem": "07-010",
+      "descripcion": "SEMI - E LAM ORTOPEDIA / CALZADO",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 12,
+      "codigoItem": "08-001",
+      "descripcion": "SEMI - E TER REFRIGERACION",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 13,
+      "codigoItem": "08-002",
+      "descripcion": "SEMI - E TER AGROPECUARIO",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 14,
+      "codigoItem": "08-003",
+      "descripcion": "SEMI - E TER AUTOMOTRIZ",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 15,
+      "codigoItem": "08-004",
+      "descripcion": "SEMI - E TER SANITARIOS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 16,
+      "codigoItem": "08-005",
+      "descripcion": "SEMI - E TER LOGISTICA",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 17,
+      "codigoItem": "08-006",
+      "descripcion": "SEMI - E TER BAÑOS Y CABINAS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 18,
+      "codigoItem": "08-007",
+      "descripcion": "SEMI - E TER OTROS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 19,
+      "codigoItem": "09-001",
+      "descripcion": "LAM - REFRIGERACION",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 20,
+      "codigoItem": "09-002",
+      "descripcion": "LAM - AGROPECUARIO",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 21,
+      "codigoItem": "09-003",
+      "descripcion": "LAM - AUTOMOTRIZ",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 22,
+      "codigoItem": "09-004",
+      "descripcion": "LAM - SANITARIOS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 23,
+      "codigoItem": "09-005",
+      "descripcion": "LAM - LOGISTICA",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 24,
+      "codigoItem": "09-006",
+      "descripcion": "LAM - BAÑOS Y CABINAS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 25,
+      "codigoItem": "09-007",
+      "descripcion": "LAM - OTROS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 26,
+      "codigoItem": "09-008",
+      "descripcion": "LAM - PUBLICIDAD - CARTELERIA",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 27,
+      "codigoItem": "09-009",
+      "descripcion": "LAM - ALIMENTACION",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 28,
+      "codigoItem": "09-010",
+      "descripcion": "LAM - ORTOPEDIA Y CALZADO",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 29,
+      "codigoItem": "10-001",
+      "descripcion": "TERM - REFRIGERACION",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 30,
+      "codigoItem": "10-002",
+      "descripcion": "TERM - AGROPECUARIO",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 31,
+      "codigoItem": "10-003",
+      "descripcion": "TERM - AUTOMOTRIZ",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 32,
+      "codigoItem": "10-004",
+      "descripcion": "TERM - SANITARIOS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 33,
+      "codigoItem": "10-005",
+      "descripcion": "TERM - LOGISTICA",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 34,
+      "codigoItem": "10-006",
+      "descripcion": "TERM - BAÑOS Y CABINAS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 35,
+      "codigoItem": "10-007",
+      "descripcion": "TERM - OTROS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 36,
+      "codigoItem": "11-000",
+      "descripcion": "MOLIDO CONTAMINADO",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 37,
+      "codigoItem": "11-001",
+      "descripcion": "MOLIDO PAI",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 38,
+      "codigoItem": "11-002",
+      "descripcion": "MOLIDO ABS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 39,
+      "codigoItem": "11-003",
+      "descripcion": "MOLIDO PE",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 40,
+      "codigoItem": "11-004",
+      "descripcion": "MOLIDO PP",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 41,
+      "codigoItem": "11-005",
+      "descripcion": "MOLIDO INGENIERIA",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 42,
+      "codigoItem": "12-000",
+      "descripcion": "RECORTE CONTAMINADO",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 43,
+      "codigoItem": "12-001",
+      "descripcion": "RECORTE PAI",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 44,
+      "codigoItem": "12-002",
+      "descripcion": "RECORTE ABS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 45,
+      "codigoItem": "12-003",
+      "descripcion": "RECORTE PE",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 46,
+      "codigoItem": "12-004",
+      "descripcion": "RECORTE PP",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 47,
+      "codigoItem": "12-005",
+      "descripcion": "RECORTE INGENIERIA",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 48,
+      "codigoItem": "13-000",
+      "descripcion": "PELLETIZADO CONTAMINADO",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 49,
+      "codigoItem": "13-001",
+      "descripcion": "PELLETIZADO PAI",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 50,
+      "codigoItem": "13-002",
+      "descripcion": "PELLETIZADO ABS",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 51,
+      "codigoItem": "13-003",
+      "descripcion": "PELLETIZADO PE",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 52,
+      "codigoItem": "13-004",
+      "descripcion": "PELLETIZADO PP",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": 53,
+      "codigoItem": "13-005",
+      "descripcion": "PELLETIZADO INGENIERIA",
+      "habilitado": true
+    }
+  ],
+  "clasematerial": [
+    {
+      "codigoInternoItem": -183,
+      "codigoItem": "AUXILIAR",
+      "descripcion": "AUXILIAR",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": -164,
+      "codigoItem": "AUXILIAR PRODUCTIVO",
+      "descripcion": "AuxiliarProductivo",
+      "habilitado": true
+    },
+    {
+      "codigoInternoItem": -163,
+      "codigoItem": "PRODUCTIVO",
+      "descripcion": "Productivo",
+      "habilitado": true
+    }
+  ],
+  "gestioncompra": [
+    {
+      "codigoItem": 57,
+      "descripcionItem": "Nacional",
+      "descripcionItemCorta": "Nac",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 58,
+      "descripcionItem": "Importado",
+      "descripcionItemCorta": "Imp",
+      "habilitado": true
+    }
+  ],
+  "unidadmedida": [
+    {
+      "codigoItem": 1132,
+      "descripcionItem": "Minutos",
+      "descripcionItemCorta": "Minutos",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1329,
+      "descripcionItem": "M3",
+      "descripcionItemCorta": "M3",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1330,
+      "descripcionItem": "KG",
+      "descripcionItemCorta": "KG",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1331,
+      "descripcionItem": "GR",
+      "descripcionItemCorta": "GR",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1332,
+      "descripcionItem": "LT",
+      "descripcionItemCorta": "LT",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1333,
+      "descripcionItem": "UN",
+      "descripcionItemCorta": "UN",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1334,
+      "descripcionItem": "TN",
+      "descripcionItemCorta": "TN",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1335,
+      "descripcionItem": "MT",
+      "descripcionItemCorta": "MT",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1336,
+      "descripcionItem": "HS",
+      "descripcionItemCorta": "Horas",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1693,
+      "descripcionItem": "Minuto",
+      "descripcionItemCorta": "Minuto",
+      "habilitado": true
+    },
+    {
+      "codigoItem": 1694,
+      "descripcionItem": "Hora",
+      "descripcionItemCorta": "Hora",
+      "habilitado": true
+    }
+  ]
+}

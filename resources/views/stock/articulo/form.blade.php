@@ -238,6 +238,20 @@
             </div>
         </div>
         @if (config('app.empresa') == 'INTERFORMING')
+        @php
+            $sifabCampos = [
+                'rubro' => old('rubro_sifab', $producto->rubro_sifab ?? ''),
+                'subrubro' => old('subrubro', $producto->subrubro ?? ''),
+                'lineamaterial' => old('lineamaterial', $producto->lineamaterial ?? ''),
+                'grupoproducto' => old('grupoproducto', $producto->grupoproducto ?? ''),
+                'clasematerial' => old('clasematerial', $producto->clasematerial ?? ''),
+                'gestioncompra' => old('gestioncompra', $producto->gestioncompra ?? ''),
+            ];
+            $sifabEtiquetas = [];
+            foreach ($sifabCampos as $recursoKey => $valorCodigo) {
+                $sifabEtiquetas[$recursoKey] = \App\Support\Stock\SifabMaestroConsultaCatalogo::etiquetar($recursoKey, $valorCodigo);
+            }
+        @endphp
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
@@ -247,50 +261,56 @@
                             value="{{ old('codigo_interno_sifab', $producto->codigo_interno_sifab ?? '') }}"/>
                     </div>
                 </div>
-                <div class="form-group row">
-                    <label for="rubro_sifab" class="col-lg-4 col-form-label">Rubro SIFAB</label>
-                    <div class="col-lg-5">
-                        <input type="text" name="rubro_sifab" id="rubro_sifab" class="form-control" maxlength="20"
-                            value="{{ old('rubro_sifab', $producto->rubro_sifab ?? '') }}"/>
-                    </div>
-                </div>
-                <div class="form-group row">
-                    <label for="subrubro" class="col-lg-4 col-form-label">Subrubro (SIFAB)</label>
-                    <div class="col-lg-5">
-                        <input type="text" name="subrubro" id="subrubro" class="form-control" maxlength="50"
-                            value="{{ old('subrubro', $producto->subrubro ?? '') }}"/>
-                    </div>
-                </div>
-                <div class="form-group row">
-                    <label for="lineamaterial" class="col-lg-4 col-form-label">L&iacute;nea material (SIFAB)</label>
-                    <div class="col-lg-5">
-                        <input type="text" name="lineamaterial" id="lineamaterial" class="form-control" maxlength="50"
-                            value="{{ old('lineamaterial', $producto->lineamaterial ?? '') }}"/>
-                    </div>
-                </div>
+                @include('stock.partials.campo_consulta_sifab_maestro', [
+                    'recurso' => 'rubro',
+                    'codigoInterno' => $sifabCampos['rubro'],
+                    'nombre' => $sifabEtiquetas['rubro']['etiqueta'] ?? ($sifabEtiquetas['rubro']['nombre'] ?? ''),
+                    'maestroId' => $sifabEtiquetas['rubro']['id'] ?? 0,
+                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_input' => 'col-lg-8',
+                ])
+                @include('stock.partials.campo_consulta_sifab_maestro', [
+                    'recurso' => 'subrubro',
+                    'codigoInterno' => $sifabCampos['subrubro'],
+                    'nombre' => $sifabEtiquetas['subrubro']['etiqueta'] ?? ($sifabEtiquetas['subrubro']['nombre'] ?? ''),
+                    'maestroId' => $sifabEtiquetas['subrubro']['id'] ?? 0,
+                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_input' => 'col-lg-8',
+                ])
+                @include('stock.partials.campo_consulta_sifab_maestro', [
+                    'recurso' => 'lineamaterial',
+                    'codigoInterno' => $sifabCampos['lineamaterial'],
+                    'nombre' => $sifabEtiquetas['lineamaterial']['etiqueta'] ?? ($sifabEtiquetas['lineamaterial']['nombre'] ?? ''),
+                    'maestroId' => $sifabEtiquetas['lineamaterial']['id'] ?? 0,
+                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_input' => 'col-lg-8',
+                ])
             </div>
             <div class="col-sm-6">
-                <div class="form-group row">
-                    <label for="grupoproducto" class="col-lg-4 col-form-label">Grupo producto (SIFAB)</label>
-                    <div class="col-lg-5">
-                        <input type="text" name="grupoproducto" id="grupoproducto" class="form-control" maxlength="50"
-                            value="{{ old('grupoproducto', $producto->grupoproducto ?? '') }}"/>
-                    </div>
-                </div>
-                <div class="form-group row">
-                    <label for="clasematerial" class="col-lg-4 col-form-label">Clase material (SIFAB)</label>
-                    <div class="col-lg-5">
-                        <input type="text" name="clasematerial" id="clasematerial" class="form-control" maxlength="20"
-                            value="{{ old('clasematerial', $producto->clasematerial ?? '') }}"/>
-                    </div>
-                </div>
-                <div class="form-group row">
-                    <label for="gestioncompra" class="col-lg-4 col-form-label">Gesti&oacute;n compra (SIFAB)</label>
-                    <div class="col-lg-5">
-                        <input type="text" name="gestioncompra" id="gestioncompra" class="form-control" maxlength="20"
-                            value="{{ old('gestioncompra', $producto->gestioncompra ?? '') }}"/>
-                    </div>
-                </div>
+                @include('stock.partials.campo_consulta_sifab_maestro', [
+                    'recurso' => 'grupoproducto',
+                    'codigoInterno' => $sifabCampos['grupoproducto'],
+                    'nombre' => $sifabEtiquetas['grupoproducto']['etiqueta'] ?? ($sifabEtiquetas['grupoproducto']['nombre'] ?? ''),
+                    'maestroId' => $sifabEtiquetas['grupoproducto']['id'] ?? 0,
+                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_input' => 'col-lg-8',
+                ])
+                @include('stock.partials.campo_consulta_sifab_maestro', [
+                    'recurso' => 'clasematerial',
+                    'codigoInterno' => $sifabCampos['clasematerial'],
+                    'nombre' => $sifabEtiquetas['clasematerial']['etiqueta'] ?? ($sifabEtiquetas['clasematerial']['nombre'] ?? ''),
+                    'maestroId' => $sifabEtiquetas['clasematerial']['id'] ?? 0,
+                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_input' => 'col-lg-8',
+                ])
+                @include('stock.partials.campo_consulta_sifab_maestro', [
+                    'recurso' => 'gestioncompra',
+                    'codigoInterno' => $sifabCampos['gestioncompra'],
+                    'nombre' => $sifabEtiquetas['gestioncompra']['etiqueta'] ?? ($sifabEtiquetas['gestioncompra']['nombre'] ?? ''),
+                    'maestroId' => $sifabEtiquetas['gestioncompra']['id'] ?? 0,
+                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_input' => 'col-lg-8',
+                ])
             </div>
         </div>
         @endif

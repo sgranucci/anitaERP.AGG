@@ -23,7 +23,8 @@ return new class extends Migration
         $cajaDefaultId = (int) DB::table('caja')->orderBy('id')->value('id');
         if ($cajaDefaultId <= 0) {
             $cajaDefaultId = 1;
-            if (! DB::table('caja')->whereKey(1)->exists()) {
+            // Query Builder: whereKey() se interpreta como where('key', …); usar id explícito.
+            if (! DB::table('caja')->where('id', 1)->exists()) {
                 DB::table('caja')->insert([
                     'id' => 1,
                     'nombre' => 'Caja 1',
