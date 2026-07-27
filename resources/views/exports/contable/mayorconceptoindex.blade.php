@@ -9,28 +9,64 @@
     );
     $formatearMontoExcel = \App\Support\Contable\MayorConceptoExcelFormatoNumero::formateadorMonto($formatoExcel);
     $formatearCotizacionExcel = \App\Support\Contable\MayorConceptoExcelFormatoNumero::formateadorMonto($formatoExcel, 4);
+    $totales = is_array($totales ?? null) ? $totales : [];
+    $cantidadLineas = (int) ($totales['cantidad_filas'] ?? 0);
 @endphp
 <table>
-    @if (!empty($reservarFilaLogoExcel))
+    @if (! empty($reservarFilaLogoExcel))
+        <tr>
+            <td colspan="{{ $colSpanExcel }}" style="height: 52px;">&#160;</td>
+        </tr>
+    @endif
+    <tr>
+        <td colspan="{{ $colSpanExcel }}"><strong>{{ $titulo ?? 'Mayor por concepto' }}</strong></td>
+    </tr>
+    <tr>
+        <td colspan="{{ $colSpanExcel }}">Generado {{ date('d/m/Y H:i') }}</td>
+    </tr>
+    @if (! empty($subtitulo))
+        <tr>
+            <td colspan="{{ $colSpanExcel }}">{{ $subtitulo }}</td>
+        </tr>
+    @endif
+    <tr>
+        <td colspan="{{ $colSpanExcel }}">
+            Formato n&uacute;meros: {{ \App\Support\Contable\MayorConceptoExcelFormatoNumero::etiqueta($formatoExcel) }}
+        </td>
+    </tr>
+    @if ($cantidadLineas > 0)
+        <tr>
+            <td colspan="{{ $colSpanExcel }}">
+                {{ number_format($cantidadLineas, 0, ',', '.') }} movimiento(s)
+                &middot; Debe {{ number_format((float) ($totales['total_debe'] ?? 0), 2, ',', '.') }}
+                &middot; Haber {{ number_format((float) ($totales['total_haber'] ?? 0), 2, ',', '.') }}
+                @if (! empty($totales['filtrado']))
+                    &middot; (filtrado)
+                @endif
+            </td>
+        </tr>
+    @endif
+
+    {{-- Detalle primero: permite congelar el thead sin arrastrar el resumen --}}
+    @include('contable.mayor_concepto.partials.tabla_datos', [
+        'filas' => $filas,
+        'multiempresa' => $multiempresa ?? false,
+        'puede_ver_asiento' => false,
+        'puede_ver_cuenta' => false,
+        'puede_ver_concepto' => false,
+        'puede_ver_ordencompra' => false,
+        'formatearMonto' => $formatearMontoExcel,
+        'formatearCotizacion' => $formatearCotizacionExcel,
+    ])
+    @if (! empty($totales) && $cantidadLineas > 0)
         <tbody>
-            <tr>
-                <td colspan="{{ $colSpanExcel }}" style="height: 52px;">&#160;</td>
+            <tr style="background-color: #adb5bd; font-weight: bold; border-top: 2px solid #495057;">
+                <td colspan="{{ $colSpanTotalesExcel }}" style="background-color: #adb5bd;"><strong>Totales</strong></td>
+                <td style="text-align: right; background-color: #adb5bd;">{{ $formatearMontoExcel($totales['total_debe'] ?? 0) }}</td>
+                <td style="text-align: right; background-color: #adb5bd;">{{ $formatearMontoExcel($totales['total_haber'] ?? 0) }}</td>
             </tr>
         </tbody>
     @endif
-    <tbody>
-        <tr>
-            <td colspan="{{ $colSpanExcel }}">
-                <h2 style="margin: 0; font-size: 18pt; font-weight: bold;">{{ $titulo }}</h2>
-                @if (!empty($subtitulo))
-                    <div style="font-size: 10pt; color: #555;">{{ $subtitulo }}</div>
-                @endif
-                <div style="font-size: 9pt; color: #777;">
-                    Formato n&uacute;meros: {{ \App\Support\Contable\MayorConceptoExcelFormatoNumero::etiqueta($formatoExcel) }}
-                </div>
-            </td>
-        </tr>
-    </tbody>
     @if (! empty($resumen) || ! empty($resumenPorCuenta))
         @php
             $agrupacionResumen = $agrupacionResumen ?? 'concepto_cuenta';
@@ -42,6 +78,9 @@
                 : 'Totales por concepto y cuenta';
         @endphp
         <tbody>
+            <tr>
+                <td colspan="{{ $colSpanExcel }}">&#160;</td>
+            </tr>
             <tr>
                 <td colspan="{{ $colSpanExcel }}"><strong>{{ $tituloResumenExcel }}</strong></td>
             </tr>
@@ -79,9 +118,6 @@
                 'colspan_medio' => $colSpanResumenMedio,
                 'formatearMonto' => $formatearMontoExcel,
             ])
-            <tr>
-                <td colspan="{{ $colSpanExcel }}">&#160;</td>
-            </tr>
             @php
                 $panelAudExcel = $auditoriaPanel ?? null;
             @endphp
@@ -108,28 +144,6 @@
                     </tr>
                 @endif
             @endif
-            <tr>
-                <td colspan="{{ $colSpanExcel }}"><strong>Detalle de movimientos</strong></td>
-            </tr>
-        </tbody>
-    @endif
-    @include('contable.mayor_concepto.partials.tabla_datos', [
-        'filas' => $filas,
-        'multiempresa' => $multiempresa ?? false,
-        'puede_ver_asiento' => $puede_ver_asiento ?? false,
-        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
-        'puede_ver_concepto' => $puede_ver_concepto ?? false,
-        'puede_ver_ordencompra' => $puede_ver_ordencompra ?? false,
-        'formatearMonto' => $formatearMontoExcel,
-        'formatearCotizacion' => $formatearCotizacionExcel,
-    ])
-    @if (! empty($totales))
-        <tbody>
-            <tr style="background-color: #adb5bd; font-weight: bold; border-top: 2px solid #495057;">
-                <td colspan="{{ $colSpanTotalesExcel }}" style="background-color: #adb5bd;"><strong>Totales</strong></td>
-                <td style="text-align: right; background-color: #adb5bd;">{{ $formatearMontoExcel($totales['total_debe'] ?? 0) }}</td>
-                <td style="text-align: right; background-color: #adb5bd;">{{ $formatearMontoExcel($totales['total_haber'] ?? 0) }}</td>
-            </tr>
         </tbody>
     @endif
 </table>

@@ -18,7 +18,7 @@ class Sicore_ConfigRepository implements Sicore_ConfigRepositoryInterface
     public function all(): Collection
     {
         return $this->model->newQuery()
-            ->with(['cuentas.cuentacontable'])
+            ->with(['cuentas.cuentacontable', 'cuentas.empresa'])
             ->orderBy('codigo_impuesto')
             ->orderBy('criterio')
             ->get();
@@ -28,7 +28,7 @@ class Sicore_ConfigRepository implements Sicore_ConfigRepositoryInterface
     {
         return $this->model->newQuery()
             ->where('activo', true)
-            ->with(['cuentas.cuentacontable'])
+            ->with(['cuentas.cuentacontable', 'cuentas.empresa'])
             ->orderBy('codigo_impuesto')
             ->orderBy('criterio')
             ->get();
@@ -42,7 +42,7 @@ class Sicore_ConfigRepository implements Sicore_ConfigRepositoryInterface
         return $this->model->newQuery()
             ->where('activo', true)
             ->whereIn('criterio', $criterios)
-            ->with(['cuentas.cuentacontable'])
+            ->with(['cuentas.cuentacontable', 'cuentas.empresa'])
             ->orderBy('codigo_impuesto')
             ->orderBy('criterio')
             ->get();
@@ -70,7 +70,7 @@ class Sicore_ConfigRepository implements Sicore_ConfigRepositoryInterface
 
     public function findOrFail(int $id): Sicore_Config
     {
-        $row = $this->model->with(['cuentas.cuentacontable'])->find($id);
+        $row = $this->model->with(['cuentas.cuentacontable', 'cuentas.empresa'])->find($id);
         if ($row === null) {
             throw new ModelNotFoundException('Configuración SICORE no encontrada');
         }

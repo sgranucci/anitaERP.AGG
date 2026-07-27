@@ -55,6 +55,7 @@ use App\Support\Stock\ArticuloEtiquetaZplSupport;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\ArticuloProveedorMatchSupport;
+use App\Support\Compras\ArticuloProveedorOperativoSupport;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\ArticuloProveedorLineasSupport;
 use App\Support\Stock\ArticuloUltimoCreatePrefill;
@@ -1246,6 +1247,44 @@ class ArticuloController extends Controller
         }
 
         return response()->json(array_merge($match, ['encontrado' => true]));
+    }
+
+    /**
+     * Catálogo articulo_proveedor para grillas RQ/OC/recepción.
+     * GET stock/articulo/{articulo_id}/proveedores-compra?proveedor_id=&restrictivo=1
+     */
+    public function proveedoresCompraArticulo(int $articulo_id, Request $request)
+    {
+        if (! can('editar-articulos', false)
+            && ! can('listar-articulos', false)
+            && ! can('editar-compras-articulos', false)
+            && ! can('actualizar-compras-articulos', false)
+            && ! can('listar-requisicion', false)
+            && ! can('crear-requisicion', false)
+            && ! can('editar-requisicion', false)
+            && ! can('crear-ordencompra', false)
+            && ! can('editar-ordencompra', false)
+            && ! can('listar-ordencompra', false)
+            && ! can('crear-recepcion-proveedor', false)
+            && ! can('editar-recepcion-proveedor', false)
+            && ! can('listar-recepcion-proveedor', false)) {
+            abort(403);
+        }
+
+        $proveedorId = (int) $request->query('proveedor_id', 0);
+        $restrictivo = filter_var($request->query('restrictivo'), FILTER_VALIDATE_BOOLEAN);
+        $decision = ArticuloProveedorOperativoSupport::decidirSeleccion(
+            $articulo_id,
+            $proveedorId > 0 ? $proveedorId : null,
+            $restrictivo
+        );
+
+        return response()->json([
+            'articulo_id' => $articulo_id,
+            'opcion' => $decision['opcion'],
+            'proveedores' => $decision['items'],
+            'elegido' => $decision['elegido'],
+        ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function leeUnArticuloPorSku($sku, Request $request)

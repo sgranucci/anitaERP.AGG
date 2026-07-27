@@ -60,10 +60,11 @@
                         'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,
                         'reporte_clave' => 'mayor_plano_cuenta',
                         'id_prefix' => 'mpc',
+                        'col_label' => 'col-lg-2 text-right',
                     ])
 
                     <div class="form-group row">
-                        <label class="col-lg-2 control-label requerido">Período</label>
+                        <label class="col-lg-2 control-label text-right requerido">Período</label>
                         <div class="col-lg-9">
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="modo_periodo" id="modo_mes" value="mes"
@@ -79,7 +80,7 @@
                     </div>
 
                     <div id="panel-mes" class="form-group row">
-                        <label class="col-lg-2 control-label requerido">Mes / Año</label>
+                        <label class="col-lg-2 control-label text-right requerido">Mes / Año</label>
                         <div class="col-lg-9">
                             <div class="row">
                                 <div class="col-md-3">
@@ -100,7 +101,7 @@
                     </div>
 
                     <div id="panel-rango" class="form-group row" style="display:none;">
-                        <label class="col-lg-2 control-label requerido">Desde / Hasta</label>
+                        <label class="col-lg-2 control-label text-right requerido">Desde / Hasta</label>
                         <div class="col-lg-9">
                             <div class="row">
                                 <div class="col-md-3">
@@ -116,7 +117,7 @@
                     </div>
 
                     <div class="form-group row">
-                        <label for="moneda_id" class="col-lg-2 control-label requerido">Expresar en</label>
+                        <label for="moneda_id" class="col-lg-2 control-label text-right requerido">Expresar en</label>
                         <div class="col-lg-4">
                             <select name="moneda_id" id="moneda_id" class="form-control" required>
                                 @foreach ($moneda_query as $mon)
@@ -136,7 +137,7 @@
                     ])
 
                     <div class="form-group row">
-                        <label for="modo_inclusion_asientos" class="col-lg-2 control-label">Asientos cierre</label>
+                        <label for="modo_inclusion_asientos" class="col-lg-2 control-label text-right">Asientos cierre</label>
                         <div class="col-lg-4">
                             <select name="modo_inclusion_asientos" id="modo_inclusion_asientos" class="form-control">
                                 <option value="sin_cierre_ni_inflacion" @selected(($filtros['modo_inclusion_asientos'] ?? '') === 'sin_cierre_ni_inflacion')>
@@ -150,7 +151,7 @@
                     </div>
 
                     <div class="form-group row mb-0">
-                        <label class="col-lg-2 control-label">Opciones</label>
+                        <label class="col-lg-2 control-label text-right">Opciones</label>
                         <div class="col-lg-9">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="solo_moneda_origen" id="solo_moneda_origen" value="1"
@@ -297,6 +298,8 @@
                                 'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                                 'puede_ver_ordencompra' => $puede_ver_ordencompra ?? false,
                                 'puede_ver_proveedor' => $puede_ver_proveedor ?? false,
+                                'puede_ver_comprobante_proveedor' => $puede_ver_comprobante_proveedor ?? false,
+                                'puede_ver_factura' => $puede_ver_factura ?? false,
                                 'multiempresa' => $multiempresa ?? false,
                             ])
                         </table>

@@ -10,7 +10,13 @@
 
         return $sign.$n;
     };
-    $pctDto = ($data->descuento ?? null) !== null ? (float) $data->descuento : null;
+    $dtoValor = ($data->descuento ?? null) !== null ? (float) $data->descuento : null;
+    $dtoTipo = \App\Support\Compras\OrdencompraDescuentoSupport::normalizarTipo($data->descuento_tipo ?? null);
+    $dtoEsImporte = $dtoTipo === \App\Support\Compras\OrdencompraDescuentoSupport::TIPO_IMPORTE;
+    $pctEfectivo = (float) ($totalesOc['descuento_porcentaje_efectivo'] ?? 0);
+    if ($pctEfectivo <= 0 && $dtoValor !== null && $dtoValor > 0 && ! $dtoEsImporte) {
+        $pctEfectivo = (float) $dtoValor;
+    }
 @endphp
 <table class="pdf-totales">
     <tbody>
@@ -19,10 +25,27 @@
             <td class="num">{{ $impMon((float) ($totalesOc['subtotal_bruto_sin_iva'] ?? 0), $mon) }}</td>
         </tr>
         <tr>
-            <td>Porcentaje descuento (cabecera OC)</td>
-            <td class="num">{{ $pctDto !== null ? number_format($pctDto, 2, ',', '.').' %' : '—' }}</td>
+            <td>
+                @if ($dtoEsImporte)
+                    Descuento cabecera (monto)
+                @else
+                    Descuento cabecera (%)
+                @endif
+            </td>
+            <td class="num">
+                @if ($dtoValor === null || $dtoValor <= 0)
+                    —
+                @elseif ($dtoEsImporte)
+                    {{ $impMon($dtoValor, $mon) }}
+                    @if ($pctEfectivo > 0)
+                        <span class="text-muted">({{ number_format($pctEfectivo, 2, ',', '.') }} %)</span>
+                    @endif
+                @else
+                    {{ number_format($dtoValor, 2, ',', '.') }} %
+                @endif
+            </td>
         </tr>
-        @if (abs((float) ($totalesOc['importe_descuento'] ?? 0)) > 0.0005 || ($pctDto !== null && $pctDto > 0))
+        @if (abs((float) ($totalesOc['importe_descuento'] ?? 0)) > 0.0005 || ($dtoValor !== null && $dtoValor > 0))
             <tr>
                 <td>Importe descuento (sobre subtotal ítems)</td>
                 <td class="num">{{ $impMon(abs((float) ($totalesOc['importe_descuento'] ?? 0)), $mon, true) }}</td>

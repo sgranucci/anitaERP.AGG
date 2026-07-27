@@ -65,24 +65,59 @@ label.requerido:after{
     padding-left:40px !important;
 }
 
-/* Menú-Rol: fondos opacos al scroll (cabecera sticky + columna menú fija) */
+/* Menú-Rol: scroll sticky (cabecera + columna menú) y columnas de rol compactas */
+.menu-rol-filtros .form-group label {
+    display: block;
+}
+.menu-rol-tabla-wrap {
+    overflow: auto;
+    max-height: calc(100vh - 16.5rem);
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    border-top: 1px solid #dee2e6;
+    scrollbar-gutter: stable;
+}
+.menu-rol-tabla-wrap.menu-rol-scrolled-x .tabla-menu-rol .menu-rol-col-menu {
+    box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.18);
+}
+.menu-rol-tabla-wrap.menu-rol-scrolled-y .tabla-menu-rol thead th {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
 .tabla-menu-rol {
     border-collapse: separate;
     border-spacing: 0;
+    width: max-content;
+    min-width: 100%;
+    margin-bottom: 0;
 }
 .tabla-menu-rol thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
     background-color: #85c1e9 !important;
     color: #17202a;
     font-weight: 600;
     border-color: #7fb3d5;
-    white-space: nowrap;
+    vertical-align: bottom;
 }
-.tabla-menu-rol thead.tableFloatingHeaderOriginal {
-    background-color: #85c1e9;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+.tabla-menu-rol .menu-rol-col-menu {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    min-width: 15rem;
+    max-width: 22rem;
+    width: 18rem;
+    background-clip: padding-box;
+    box-shadow: 2px 0 6px -2px rgba(0, 0, 0, 0.12);
 }
-.tabla-menu-rol thead.tableFloatingHeaderOriginal th {
+.tabla-menu-rol thead th.menu-rol-col-menu {
+    z-index: 6;
     background-color: #85c1e9 !important;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.tabla-menu-rol tbody td.menu-rol-col-menu {
+    z-index: 2;
 }
 .tabla-menu-rol tbody tr:nth-of-type(odd) > td {
     background-color: #f5f5f5 !important;
@@ -95,25 +130,36 @@ label.requerido:after{
 .tabla-menu-rol.table-hover tbody tr:hover > td {
     background-color: #ececec !important;
 }
-.tabla-menu-rol thead th:first-child,
-.tabla-menu-rol tbody td:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 2;
-    min-width: 16rem;
-    max-width: 22rem;
-    box-shadow: 2px 0 6px -2px rgba(0, 0, 0, 0.12);
-    background-clip: padding-box;
+.tabla-menu-rol .menu-rol-col-rol {
+    min-width: 2.4rem;
+    max-width: 2.75rem;
+    width: 2.5rem;
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
 }
-.tabla-menu-rol thead th:first-child {
-    z-index: 6;
+.tabla-menu-rol thead th.menu-rol-col-rol {
+    height: 9.5rem;
+    padding: 0.35rem 0.15rem 0.45rem;
 }
-.tabla-menu-rol thead.tableFloatingHeaderOriginal th:first-child {
-    z-index: 7;
+.tabla-menu-rol .menu-rol-th-rol {
+    display: inline-block;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    white-space: nowrap;
+    max-height: 8.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.78rem;
+    line-height: 1.1;
+    font-weight: 600;
 }
-.menu-rol-tabla-wrap {
-    overflow: auto;
-    max-height: calc(100vh - 14rem);
+.tabla-menu-rol tbody td.menu-rol-col-rol {
+    vertical-align: middle;
+}
+.tabla-menu-rol tbody td.menu-rol-col-rol input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+    transform: scale(1.15);
 }
 
 /* Menú-Rol: resaltar módulos de nivel 1 (raíz del árbol) */
@@ -135,6 +181,69 @@ label.requerido:after{
 .tabla-menu-rol tr.menu-rol-fila-modulo > td.menu-rol-celda-modulo {
     padding-top: 0.65rem;
     padding-bottom: 0.65rem;
+}
+
+/* Modal permisos: mismo patrón de scroll ancho */
+.menu-rol-modal-tabla-wrap {
+    overflow: auto;
+    max-height: min(70vh, 32rem);
+    -webkit-overflow-scrolling: touch;
+}
+.menu-rol-modal-tabla-wrap .tabla-menu-rol-modal {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: max-content;
+    min-width: 100%;
+    margin-bottom: 0;
+}
+.menu-rol-modal-tabla-wrap .tabla-menu-rol-modal thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background-color: #85c1e9 !important;
+    color: #17202a;
+    font-weight: 600;
+}
+.menu-rol-modal-tabla-wrap .tabla-menu-rol-modal .menu-rol-col-menu {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    min-width: 14rem;
+    max-width: 20rem;
+    background-clip: padding-box;
+    box-shadow: 2px 0 6px -2px rgba(0, 0, 0, 0.12);
+}
+.menu-rol-modal-tabla-wrap .tabla-menu-rol-modal thead th.menu-rol-col-menu {
+    z-index: 6;
+}
+.menu-rol-modal-tabla-wrap .tabla-menu-rol-modal tbody tr:nth-of-type(odd) > td {
+    background-color: #f5f5f5 !important;
+}
+.menu-rol-modal-tabla-wrap .tabla-menu-rol-modal tbody tr:nth-of-type(even) > td {
+    background-color: #fff !important;
+}
+.menu-rol-modal-tabla-wrap .tabla-menu-rol-modal .menu-rol-col-rol {
+    min-width: 2.4rem;
+    max-width: 2.75rem;
+    width: 2.5rem;
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
+}
+.menu-rol-modal-tabla-wrap .tabla-menu-rol-modal thead th.menu-rol-col-rol {
+    height: 8.5rem;
+    padding: 0.35rem 0.15rem 0.45rem;
+    vertical-align: bottom;
+}
+.menu-rol-modal-tabla-wrap .tabla-menu-rol-modal .menu-rol-th-rol {
+    display: inline-block;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    white-space: nowrap;
+    max-height: 7.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.75rem;
+    line-height: 1.1;
 }
 .pl-50{
     padding-left:50px !important;

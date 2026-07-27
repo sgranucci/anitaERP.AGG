@@ -15,13 +15,14 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Aperturas programadas</h3>
-                @if ($puede_solicitar)
-                    <div class="card-tools">
+                <div class="card-tools">
+                    @include('includes.contable.boton-manual')
+                    @if ($puede_solicitar)
                         <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#modal-solicitar-apertura">
                             <i class="fa fa-unlock"></i> Solicitar apertura
                         </button>
-                    </div>
-                @endif
+                    @endif
+                </div>
             </div>
             <div class="card-body">
                 <div class="alert alert-info">

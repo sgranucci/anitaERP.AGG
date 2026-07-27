@@ -195,8 +195,26 @@ class IngresoEgresoController extends Controller
         }
 
         $data = new \App\Models\Caja\Caja_Movimiento();
+        $solicitudpagoOrigen = null;
         if ($request->filled('solicitudpago_id')) {
-            $data->solicitudpago_id = (int) $request->input('solicitudpago_id');
+            $spId = (int) $request->input('solicitudpago_id');
+            $data->solicitudpago_id = $spId;
+            $solicitudpagoOrigen = \App\Models\Solicitudpago\Solicitudpago::query()
+                ->with('proveedores')
+                ->find($spId);
+            if ($solicitudpagoOrigen) {
+                if (! $request->filled('empresa_id') && $solicitudpagoOrigen->empresa_id) {
+                    $data->empresa_id = (int) $solicitudpagoOrigen->empresa_id;
+                    session(['empresa_id' => $data->empresa_id]);
+                }
+                if (! $request->filled('proveedor_id') && $solicitudpagoOrigen->proveedor_id) {
+                    $data->proveedor_id = (int) $solicitudpagoOrigen->proveedor_id;
+                }
+                if (! $request->filled('detalle')) {
+                    $data->detalle = 'Pago SP '.$solicitudpagoOrigen->codigo
+                        .($solicitudpagoOrigen->detalle ? ' — '.$solicitudpagoOrigen->detalle : '');
+                }
+            }
         }
         if ($request->filled('empresa_id')) {
             $data->empresa_id = (int) $request->input('empresa_id');
@@ -208,13 +226,21 @@ class IngresoEgresoController extends Controller
         if ($request->filled('detalle')) {
             $data->detalle = (string) $request->input('detalle');
         }
+        if ($data->proveedor_id && $solicitudpagoOrigen && $solicitudpagoOrigen->proveedores) {
+            $data->setRelation('proveedores', $solicitudpagoOrigen->proveedores);
+        } elseif ($data->proveedor_id) {
+            $prov = \App\Models\Compras\Proveedor::query()->find($data->proveedor_id);
+            if ($prov) {
+                $data->setRelation('proveedores', $prov);
+            }
+        }
 
         return view('caja.ingresoegreso.crear', array_merge(
             compact('tipotransaccion_caja_query', 'moneda_query',
                 'conceptogasto_query',
                 'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
                 'centrocosto_query', 'chequera_query', 'caracter_enum',
-                'caja_id', 'nombreCaja', 'origen', 'data'),
+                'caja_id', 'nombreCaja', 'origen', 'data', 'solicitudpagoOrigen'),
             $this->datosComprobantesIva(null),
         ));
     }
@@ -499,7 +525,7 @@ class IngresoEgresoController extends Controller
     /** @return array<string, mixed> */
     private function datosComprobantesIva(?int $cajaMovimientoId): array
     {
-        $tipotransaccion_compra_query = $this->tipotransaccionCompraRepository->all();
+        $tipotransaccion_compra_query = $this->tipotransaccionCompraRepository->all('*');
         $concepto_ivacompra_query = $this->conceptoIvacompraRepository->all();
         $condicioniva_query = $this->condicionivaRepository->all();
         $tipos_tesoreria = ComprobanteProveedorTipoTesoreria::todos();

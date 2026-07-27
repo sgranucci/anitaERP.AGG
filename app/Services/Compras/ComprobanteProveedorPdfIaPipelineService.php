@@ -7,6 +7,7 @@ use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorConceptos
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorExtraccionFusionSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorNombreArchivoParserSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorOllamaStructurerSupport;
+use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorPieTotalesSupport;
 use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrTextoExtractor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +26,7 @@ final class ComprobanteProveedorPdfIaPipelineService
         private FacturaProveedorOllamaStructurerSupport $ollamaStructurer,
         private FacturaProveedorExtraccionFusionSupport $fusion,
         private FacturaProveedorNombreArchivoParserSupport $nombreArchivoParser,
+        private FacturaProveedorPieTotalesSupport $pieTotales,
     ) {}
 
     /**
@@ -50,6 +52,11 @@ final class ComprobanteProveedorPdfIaPipelineService
             $cabecera = $this->enriquecerDesdeNombreArchivo($cabecera, $pdf->getClientOriginalName());
             $conceptos = $this->conceptosHeuristica->extraer($textoOcr, $cabecera['total'] ?? null);
 
+            // Pie AFIP en tabla (rótulos / importes): fuente de verdad de subtotal/total/conceptos.
+            $pie = $this->pieTotales->extraer($textoOcr);
+            $cabecera = $this->aplicarPieACabecera($cabecera, $pie);
+            $conceptos = $this->aplicarPieAConceptos($conceptos, $pie);
+
             $heuristica = array_merge($cabecera, ['lineas' => $conceptos]);
 
             $ollama = null;
@@ -58,6 +65,11 @@ final class ComprobanteProveedorPdfIaPipelineService
             }
 
             $resultado = $this->fusion->fusionar($heuristica, $ollama);
+            // El nombre del agente (FGA-A-00003-01377643.pdf) manda sobre OCR/Ollama:
+            // un PV mal leído dispara obs ARCA 104 (CAE no corresponde al punto de venta).
+            $resultado = $this->aplicarCamposAutoridadArchivo($resultado, $pdf->getClientOriginalName());
+            $resultado = $this->aplicarPieAResultado($resultado, $pie);
+            $resultado = $this->sanearCuitsYOc($resultado);
             $resultado['_meta']['ocr_chars'] = $chars;
             $resultado['_meta']['ocr_muestra'] = mb_substr(preg_replace('/\s+/', ' ', $textoOcr) ?? '', 0, 400);
 
@@ -66,6 +78,11 @@ final class ComprobanteProveedorPdfIaPipelineService
                 'lineas' => count($resultado['lineas'] ?? []),
                 'fuentes' => $resultado['_meta']['fuentes'] ?? [],
                 'numero_oc' => $resultado['numero_oc'] ?? null,
+                'cuit_proveedor' => $resultado['cuit_proveedor'] ?? null,
+                'cuit_destinatario' => $resultado['cuit_destinatario'] ?? null,
+                'tipo_comprobante' => $resultado['tipo_comprobante'] ?? null,
+                'sucursal' => $resultado['sucursal'] ?? null,
+                'numero_factura' => $resultado['numero_factura'] ?? null,
             ]);
 
             return $this->sinMetaInterna($resultado);
@@ -78,23 +95,163 @@ final class ComprobanteProveedorPdfIaPipelineService
     private function enriquecerDesdeNombreArchivo(array $cabecera, string $nombreArchivo): array
     {
         $meta = $this->nombreArchivoParser->parsear($nombreArchivo);
-
-        if (empty($cabecera['cuit_proveedor']) && ! empty($meta['cuit_proveedor'])) {
-            $cabecera['cuit_proveedor'] = $meta['cuit_proveedor'];
-        }
-        if (empty($cabecera['letra']) && ! empty($meta['letra'])) {
-            $cabecera['letra'] = $meta['letra'];
-        }
-        if (empty($cabecera['sucursal']) && ! empty($meta['sucursal'])) {
-            $cabecera['sucursal'] = $meta['sucursal'];
-        }
-        if (empty($cabecera['numero_factura']) && ! empty($meta['numero_factura'])) {
-            $cabecera['numero_factura'] = $meta['numero_factura'];
-        }
-
         $cabecera['_archivo'] = $meta;
 
+        return $this->aplicarCamposAutoridadArchivo($cabecera, $nombreArchivo);
+    }
+
+    /**
+     * Cuando el PDF sigue el naming del agente externo (TIPO-LETRA-PV-NUMERO.pdf),
+     * esos campos son más confiables que OCR/Ollama.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function aplicarCamposAutoridadArchivo(array $data, string $nombreArchivo): array
+    {
+        $meta = is_array($data['_archivo'] ?? null)
+            ? $data['_archivo']
+            : $this->nombreArchivoParser->parsear($nombreArchivo);
+
+        $data['_archivo'] = $meta;
+
+        if (! empty($meta['cuit_proveedor'])) {
+            $data['cuit_proveedor'] = $meta['cuit_proveedor'];
+        }
+        if (! empty($meta['letra'])) {
+            $data['letra'] = $meta['letra'];
+        }
+        if (! empty($meta['sucursal'])) {
+            $data['sucursal'] = $meta['sucursal'];
+        }
+        if (! empty($meta['numero_factura'])) {
+            $data['numero_factura'] = $meta['numero_factura'];
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $cabecera
+     * @param  array<string, mixed>  $pie
+     * @return array<string, mixed>
+     */
+    private function aplicarPieACabecera(array $cabecera, array $pie): array
+    {
+        if (! empty($pie['subtotal'])) {
+            $cabecera['subtotal'] = $pie['subtotal'];
+        }
+        if (! empty($pie['total'])) {
+            $cabecera['total'] = $pie['total'];
+            $cabecera['total_origen'] = $pie['origen'] ?? 'pie';
+        }
+
         return $cabecera;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $conceptos
+     * @param  array<string, mixed>  $pie
+     * @return list<array<string, mixed>>
+     */
+    private function aplicarPieAConceptos(array $conceptos, array $pie): array
+    {
+        $lineasPie = is_array($pie['lineas'] ?? null) ? $pie['lineas'] : [];
+        if ($lineasPie === []) {
+            return $conceptos;
+        }
+
+        $sumaPie = round(array_sum(array_column($lineasPie, 'importe')), 2);
+        $sumaOld = round(array_sum(array_column($conceptos, 'importe')), 2);
+        $total = (float) ($pie['total'] ?? 0);
+
+        if ($total > 0 && abs($sumaPie - $total) <= 0.05) {
+            return $lineasPie;
+        }
+        if ($sumaPie > $sumaOld + 0.05) {
+            return $lineasPie;
+        }
+
+        return $conceptos;
+    }
+
+    /**
+     * Tras fusionar con Ollama, el pie sigue mandando en total/subtotal/líneas de conceptos.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $pie
+     * @return array<string, mixed>
+     */
+    private function aplicarPieAResultado(array $resultado, array $pie): array
+    {
+        if (! empty($pie['subtotal'])) {
+            $resultado['subtotal'] = $pie['subtotal'];
+        }
+
+        $totalPie = isset($pie['total']) ? (float) $pie['total'] : 0.0;
+        $totalActual = isset($resultado['total']) ? (float) $resultado['total'] : 0.0;
+        $subtotal = isset($resultado['subtotal']) ? (float) $resultado['subtotal'] : (float) ($pie['subtotal'] ?? 0);
+
+        if ($totalPie > 0) {
+            $resultado['total'] = $totalPie;
+            $resultado['_meta']['total_origen'] = $pie['origen'] ?? 'pie';
+        } elseif ($subtotal > 0 && $totalActual > 0 && abs($totalActual - $subtotal) <= 0.05) {
+            // Total == subtotal: Ollama/heurística tomaron el neto. Reconstruir si hay líneas.
+            $lineas = is_array($resultado['lineas'] ?? null) ? $resultado['lineas'] : [];
+            $suma = round(array_sum(array_map(
+                static fn ($l): float => abs((float) ($l['importe'] ?? 0)),
+                $lineas
+            )), 2);
+            if ($suma > $totalActual + 0.05) {
+                $resultado['total'] = $suma;
+                $resultado['_meta']['total_origen'] = 'suma_conceptos';
+            }
+        }
+
+        $lineasPie = is_array($pie['lineas'] ?? null) ? $pie['lineas'] : [];
+        if ($lineasPie !== [] && $totalPie > 0) {
+            $sumaPie = round(array_sum(array_column($lineasPie, 'importe')), 2);
+            if (abs($sumaPie - $totalPie) <= 0.05) {
+                $resultado['lineas'] = $lineasPie;
+                $resultado['_meta']['lineas_origen'] = $pie['origen'] ?? 'pie';
+            }
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Evita errores típicos de OCR: CUIT receptor = emisor, u OC = número de factura.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function sanearCuitsYOc(array $data): array
+    {
+        $prov = preg_replace('/\D/', '', (string) ($data['cuit_proveedor'] ?? '')) ?? '';
+        $dest = preg_replace('/\D/', '', (string) ($data['cuit_destinatario'] ?? '')) ?? '';
+        if ($prov !== '' && $dest !== '' && $prov === $dest) {
+            $data['cuit_destinatario'] = null;
+            $data['cuit_destinatario_origen'] = 'descartado_igual_proveedor';
+            $fuentes = $data['_meta']['fuentes'] ?? [];
+            if (is_array($fuentes)) {
+                $data['_meta']['fuentes'] = $fuentes;
+            }
+            $data['_meta']['cuit_destinatario_descartado'] = true;
+        }
+
+        $ocDigitos = preg_replace('/\D/', '', (string) ($data['numero_oc'] ?? '')) ?? '';
+        $nroFactura = (string) (int) ($data['numero_factura'] ?? 0);
+        if ($ocDigitos !== '' && $nroFactura !== '0') {
+            $ocSinCeros = (string) (int) $ocDigitos;
+            if ($ocSinCeros === $nroFactura || $ocDigitos === str_pad($nroFactura, strlen($ocDigitos), '0', STR_PAD_LEFT)) {
+                $data['numero_oc'] = null;
+                $data['numero_oc_origen'] = 'descartado_igual_factura';
+                $data['_meta']['numero_oc_descartado'] = $ocDigitos;
+            }
+        }
+
+        return $data;
     }
 
     private function extraerTexto(string $rutaAbsoluta, string $mime): string

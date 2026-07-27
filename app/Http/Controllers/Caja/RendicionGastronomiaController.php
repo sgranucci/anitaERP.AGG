@@ -4,8 +4,6 @@ namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRendicionGastronomiaCaja;
-use App\Models\Caja\Caja;
-use App\Queries\Caja\Caja_AsignacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\RendicionGastronomiaCajaService;
 use App\Support\Caja\RendicionGastronomiaCajaListadoFiltros;
@@ -13,8 +11,6 @@ use App\Support\Caja\RendicionGastronomiaCajaPermiso;
 use App\Support\Caja\RendicionGastronomiaPdfPermiso;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
-use Auth;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
 
@@ -22,7 +18,6 @@ class RendicionGastronomiaController extends Controller
 {
     public function __construct(
         private RendicionGastronomiaCajaService $service,
-        private Caja_AsignacionQueryInterface $cajaAsignacionQuery,
         private EmpresaRepositoryInterface $empresaRepository,
     ) {
     }
@@ -122,7 +117,9 @@ class RendicionGastronomiaController extends Controller
         if ($cajaId <= 0) {
             return redirect()
                 ->route('rendiciongastronomia')
-                ->with('errores', ['No tiene caja asignada para hoy. Debe ingresar desde Movimientos de caja o solicitar asignación de cajero.']);
+                ->with('errores', [\App\Support\Caja\CajaRecepcionPcSupport::requiereAsignacion()
+                    ? 'No tiene caja asignada para hoy. Debe ingresar desde Movimientos de caja o solicitar asignación de cajero.'
+                    : 'No se pudo determinar la caja de recepción. Configure la caja en el punto de venta de esta PC o verifique CAJA_DEFAULT_ID.']);
         }
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
@@ -443,25 +440,7 @@ class RendicionGastronomiaController extends Controller
      */
     private function resolverCaja(?int $cajaParam): array
     {
-        if ($cajaParam !== null && $cajaParam > 0) {
-            $caja = Caja::query()->find($cajaParam);
-            if ($caja !== null) {
-                return [(int) $caja->id, (string) $caja->nombre];
-            }
-        }
-
-        $asignacion = $this->cajaAsignacionQuery->leeAsignacionPorUsuario((int) Auth::id(), Carbon::now());
-        if ($asignacion && (int) $asignacion->caja_id > 0) {
-            $cajaId = (int) $asignacion->caja_id;
-            $nombre = (string) ($asignacion->cajas->nombre ?? '');
-            if ($nombre === '') {
-                $nombre = (string) (Caja::query()->whereKey($cajaId)->value('nombre') ?? '');
-            }
-
-            return [$cajaId, $nombre];
-        }
-
-        return [0, ''];
+        return \App\Support\Caja\CajaRecepcionPcSupport::resolver($cajaParam, request());
     }
 
     /**

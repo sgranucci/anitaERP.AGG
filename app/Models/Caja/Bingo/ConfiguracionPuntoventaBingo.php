@@ -2,6 +2,7 @@
 
 namespace App\Models\Caja\Bingo;
 
+use App\Models\Caja\Caja;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\Model;
@@ -17,12 +18,18 @@ class ConfiguracionPuntoventaBingo extends Model implements Auditable
         'identificador_pc',
         'descripcion',
         'empresa_id',
+        'caja_id',
         'cuentacaja_id',
     ];
 
     public function empresa()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function caja()
+    {
+        return $this->belongsTo(Caja::class, 'caja_id');
     }
 
     public function cuentacaja()

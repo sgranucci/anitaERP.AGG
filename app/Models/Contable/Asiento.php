@@ -8,6 +8,7 @@ use OwenIt\Auditing\Contracts\Auditable;
 use Illuminate\Support\Str;
 use App\Models\Configuracion\Empresa;
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Compras\Ordencompra;
 use App\Models\Ventas\Venta;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Caja\Cobranza;
@@ -64,7 +65,12 @@ class Asiento extends Model implements Auditable
 
     public function ventas()
     {
-        return $this->belongsTo(Ventas::class, 'venta_id');
+        return $this->belongsTo(Venta::class, 'venta_id');
+    }
+
+    public function ordencompras()
+    {
+        return $this->belongsTo(Ordencompra::class, 'ordencompra_id');
     }
 
     public function movimientostocks()

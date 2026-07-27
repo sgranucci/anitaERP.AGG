@@ -5,7 +5,13 @@
 
 @section('scripts')
 @include('ventas.arca_caea.partials.detalle_script')
-<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}"></script>
+<script>
+    document.body.setAttribute(
+        'data-arca-caea-estado-url-template',
+        @json(url('ventas/arca-caea/__ID__/estado-informe'))
+    );
+</script>
+<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}?v=20260722c"></script>
 @endsection
 
 @section('contenido')
@@ -23,7 +29,8 @@
                 <p class="text-muted small mb-3">
                     <i class="fa fa-info-circle"></i>
                     El ícono <i class="fa fa-paper-plane text-primary"></i> encola la presentación de comprobantes pendientes o con error en ARCA (segundo plano).
-                    Solo está activo cuando falta informar comprobantes de la quincena.
+                    Solo está activo cuando falta informar comprobantes de la quincena y no hay otro proceso de esa quincena en cola.
+                    Mientras corre, el avión se deshabilita y verás <i class="fa fa-spinner fa-spin text-warning"></i>.
                     Al terminar el proceso recibirás un mail con el resultado.
                     Use <i class="fa fa-calculator text-secondary"></i> para refrescar contadores consultando ARCA sin enviar comprobantes.
                 </p>
@@ -126,7 +133,13 @@
                                     $badge = $meta['badge'] ?? ($r->informe_estado ?? 'pendiente');
                                     $leyenda = $meta['leyenda'] ?? '';
                                     $puedePresentar = (bool) ($meta['puede_presentar'] ?? false);
+                                    $procesoActivo = (bool) ($meta['proceso_activo'] ?? false);
                                     $tituloOverlay = $meta['titulo_overlay'] ?? 'Presentando comprobantes CAEA…';
+                                    $tituloAvion = $procesoActivo
+                                        ? 'Presentación en segundo plano; no se puede encolar otra hasta que termine'
+                                        : ($puedePresentar
+                                            ? 'Encolar presentación CAEA (segundo plano + mail)'
+                                            : 'Sin comprobantes informables ahora en esta quincena');
                                 @endphp
                                 <tr>
                                     <td>{{ $r->empresa->nombre ?? '—' }}</td>
@@ -155,7 +168,14 @@
                                     </td>
                                     <td class="small">
                                         @if ($r->estaAutorizado())
-                                            @if ($badge === 'ok')
+                                            @if ($procesoActivo || $badge === 'procesando')
+                                                <span class="js-arca-caea-badge" data-arca-caea-id="{{ $r->id }}">
+                                                    <span class="badge badge-warning">
+                                                        <i class="fa fa-spinner fa-spin"></i> Procesando
+                                                    </span>
+                                                </span>
+                                            @elseif ($badge === 'ok')
+                                                <span class="js-arca-caea-badge" data-arca-caea-id="{{ $r->id }}">
                                                 <span class="badge badge-success">
                                                     @if ((int) ($resInf['total'] ?? 0) === 0)
                                                         Sin comprobantes
@@ -163,16 +183,17 @@
                                                         Informado
                                                     @endif
                                                 </span>
+                                                </span>
                                             @elseif ($badge === 'observacion')
-                                                <span class="badge badge-warning">Con obs.</span>
+                                                <span class="js-arca-caea-badge" data-arca-caea-id="{{ $r->id }}"><span class="badge badge-warning">Con obs.</span></span>
                                             @elseif ($badge === 'parcial')
-                                                <span class="badge badge-info">Parcial</span>
+                                                <span class="js-arca-caea-badge" data-arca-caea-id="{{ $r->id }}"><span class="badge badge-info">Parcial</span></span>
                                             @elseif ($badge === 'error')
-                                                <span class="badge badge-danger">Error</span>
+                                                <span class="js-arca-caea-badge" data-arca-caea-id="{{ $r->id }}"><span class="badge badge-danger">Error</span></span>
                                             @else
-                                                <span class="badge badge-secondary">Pendiente</span>
+                                                <span class="js-arca-caea-badge" data-arca-caea-id="{{ $r->id }}"><span class="badge badge-secondary">Pendiente</span></span>
                                             @endif
-                                            <div class="text-muted mt-1" style="font-size:0.78rem;">
+                                            <div class="text-muted mt-1 js-arca-caea-leyenda" data-arca-caea-id="{{ $r->id }}" style="font-size:0.78rem;">
                                                 {{ $leyenda !== '' ? $leyenda : '—' }}
                                             </div>
                                         @else
@@ -237,10 +258,16 @@
                                                 @csrf
                                                 @include('ventas.arca_caea.partials.filtros_index_hidden', ['filtrosQuery' => $filtrosQuery ?? []])
                                                 <button type="submit"
-                                                    class="btn-accion-tabla tooltipsC"
-                                                    title="{{ $puedePresentar ? 'Encolar presentación CAEA (segundo plano + mail)' : 'Sin comprobantes informables ahora en esta quincena' }}"
+                                                    class="btn-accion-tabla tooltipsC js-arca-caea-informar-btn"
+                                                    data-arca-caea-id="{{ $r->id }}"
+                                                    data-proceso-activo="{{ $procesoActivo ? '1' : '0' }}"
+                                                    title="{{ $tituloAvion }}"
                                                     @disabled(! $puedePresentar)>
-                                                    <i class="fa fa-paper-plane {{ $puedePresentar ? 'text-primary' : 'text-muted' }}"></i>
+                                                    @if ($procesoActivo)
+                                                        <i class="fa fa-spinner fa-spin text-warning"></i>
+                                                    @else
+                                                        <i class="fa fa-paper-plane {{ $puedePresentar ? 'text-primary' : 'text-muted' }}"></i>
+                                                    @endif
                                                 </button>
                                             </form>
                                         @endif

@@ -196,55 +196,92 @@ class Cliente_UifService
 
 	public function guardaCliente_Premio_Uif($request)
 	{
-		$data = $request->all();
-
 		DB::beginTransaction();
 		try
 		{
-			$cliente_premio_uif = $this->cliente_premio_uifRepository->createUnique($request->all());
+			$data = $this->normalizarDatosPremio($request->all());
+			$cliente_premio_uif = $this->cliente_premio_uifRepository->createUnique($data);
 
-			if ($cliente_premio_uif == 'Error')
+			if ($cliente_premio_uif == 'Error' || ! $cliente_premio_uif) {
 				throw new Exception('Error en grabacion');
+			}
 
-			// Guarda tablas asociadas
-			if ($cliente_premio_uif)
-				$this->cliente_premio_archivo_uifRepository->create($request, $cliente_premio_uif->id);
+			$this->cliente_premio_archivo_uifRepository->create($request, $cliente_premio_uif->id);
 
 			DB::commit();
 		} catch (\Exception $e) {
 			DB::rollback();
-
-			// Borra el asiento creado
+			Log::error('UIF guardaCliente_Premio_Uif: '.$e->getMessage(), [
+				'cliente_uif_id' => $request->input('cliente_uif_id'),
+				'exception' => $e,
+			]);
 
 			return ['errores' => $e->getMessage()];
 		}
-        return ['mensaje' => 'ok'];
+
+		return ['mensaje' => 'ok', 'cliente_premio_uif_id' => $cliente_premio_uif->id ?? null];
 	}
 
     public function actualizaCliente_Premio_Uif($request, $id)
     {
-		$data = $request->all();
-
 		DB::beginTransaction();
 		try
 		{
+			$data = $this->normalizarDatosPremio($request->all());
 			$cliente_premio_uif = $this->cliente_premio_uifRepository->updateUnique($data, $id);
 
-			if ($cliente_premio_uif == 'Error')
+			if ($cliente_premio_uif == 'Error') {
 				throw new Exception('Error en grabacion');
+			}
 
 			$this->cliente_premio_archivo_uifRepository->update($request, $id);
 
 			DB::commit();
 		} catch (\Exception $e) {
 			DB::rollback();
+			Log::error('UIF actualizaCliente_Premio_Uif: '.$e->getMessage(), [
+				'cliente_premio_uif_id' => $id,
+				'exception' => $e,
+			]);
 
-			dd($e->getMessage());
-			
 			return ['errores' => $e->getMessage()];
 		}
-        return ['mensaje' => 'ok'];
+
+		return ['mensaje' => 'ok'];
     }
+
+	/**
+	 * Prepara atributos del premio para create/update (fillable + fechas).
+	 */
+	private function normalizarDatosPremio(array $data): array
+	{
+		foreach (['fechaentrega', 'fechatito'] as $campo) {
+			$valor = $data[$campo] ?? null;
+			if ($valor === null || $valor === '') {
+				$data[$campo] = null;
+				continue;
+			}
+			try {
+				$data[$campo] = Carbon::parse(str_replace('T', ' ', (string) $valor))->format('Y-m-d H:i:s');
+			} catch (\Throwable $e) {
+				$data[$campo] = null;
+			}
+		}
+
+		if (empty($data['fechaentrega'])) {
+			throw new Exception('La fecha de entrega del premio es obligatoria.');
+		}
+
+		$fillable = (new Cliente_Premio_Uif())->getFillable();
+		$normalizado = [];
+		foreach ($fillable as $campo) {
+			if (array_key_exists($campo, $data)) {
+				$normalizado[$campo] = $data[$campo];
+			}
+		}
+
+		return $normalizado;
+	}
 
 	public function calculaRiesgo($cliente_uif_id, $periodo, $inusualidad_uif_id)
 	{

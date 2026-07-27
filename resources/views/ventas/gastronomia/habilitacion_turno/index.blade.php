@@ -113,6 +113,7 @@
      data-api-cerrar="{{ url('ventas/gastronomia/habilitacion-turno/api/cerrar') }}"
      data-api-anular-cierre="{{ route('gastronomia_habilitacion_turno_api_anular_cierre') }}"
      data-api-conciliacion-turno="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-turno') }}"
+     data-api-explicar-diferencias-conciliacion="{{ route('gastronomia_habilitacion_turno_api_explicar_diferencias') }}"
      data-api-conciliacion-medio="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-medio') }}"
      data-api-conciliacion-notas-credito="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-notas-credito') }}"
      data-api-conciliacion-invitaciones="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-invitaciones') }}"
@@ -317,11 +318,15 @@
                                                 <button type="button" class="btn btn-sm btn-outline-primary mr-2 js-refrescar-grilla-conciliacion" data-grilla-target="grilla-conciliacion-parcial">
                                                     <i class="fa fa-table"></i> Ver comprobantes del turno
                                                 </button>
-                                                <label class="mb-0 small">
-                                                    <input type="checkbox" id="filtro-solo-diferencias-parcial" class="js-filtro-solo-diferencias" data-grilla-target="grilla-conciliacion-parcial"/>
-                                                    Solo comprobantes con diferencia
-                                                </label>
-                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-info mr-2 js-explicar-diferencias-conciliacion" data-panel-target="panel-ia-conciliacion-parcial">
+                                                <i class="fa fa-magic"></i> Explicar diferencias (IA)
+                                            </button>
+                                            <label class="mb-0 small">
+                                                <input type="checkbox" id="filtro-solo-diferencias-parcial" class="js-filtro-solo-diferencias" data-grilla-target="grilla-conciliacion-parcial"/>
+                                                Solo comprobantes con diferencia
+                                            </label>
+                                        </div>
+                                        <div id="panel-ia-conciliacion-parcial" class="d-none mb-2"></div>
                                             <div id="grilla-conciliacion-parcial" class="gastro-grilla-conciliacion-wrap">
                                                 <p class="text-muted p-3 mb-0 small"><i class="fa fa-spinner fa-spin"></i> Cargando resumen…</p>
                                             </div>
@@ -370,11 +375,15 @@
                                             <button type="button" class="btn btn-sm btn-outline-primary mr-2 js-refrescar-grilla-conciliacion" data-grilla-target="grilla-conciliacion-turno">
                                                 <i class="fa fa-table"></i> Ver comprobantes del turno
                                             </button>
+                                            <button type="button" class="btn btn-sm btn-outline-info mr-2 js-explicar-diferencias-conciliacion" data-panel-target="panel-ia-conciliacion-turno">
+                                                <i class="fa fa-magic"></i> Explicar diferencias (IA)
+                                            </button>
                                             <label class="mb-0 small">
                                                 <input type="checkbox" id="filtro-solo-diferencias-definitivo" class="js-filtro-solo-diferencias" data-grilla-target="grilla-conciliacion-turno"/>
                                                 Solo comprobantes con diferencia
                                             </label>
                                         </div>
+                                        <div id="panel-ia-conciliacion-turno" class="d-none mb-2"></div>
                                         <div id="grilla-conciliacion-turno" class="gastro-grilla-conciliacion-wrap">
                                             <p class="text-muted p-3 mb-0 small"><i class="fa fa-spinner fa-spin"></i> Cargando resumen…</p>
                                         </div>

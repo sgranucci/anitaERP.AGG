@@ -204,7 +204,8 @@ final class WigosSqlServerProcess
     }
 
     /**
-     * Fallback A↔B solo ante fallo de conexión al SQL Server primario (no errores de SP/datos).
+     * Fallback A↔B ante fallo de conexión o base inaccesible en el primario
+     * (espejo RESTORING / login a DB), no ante errores de SP/datos.
      */
     private static function debeIntentarServidorWigosSecundario(RuntimeException $e): bool
     {
@@ -215,7 +216,11 @@ final class WigosSqlServerProcess
             || str_contains($mensaje, 'could not connect')
             || str_contains($mensaje, 'connection refused')
             || str_contains($mensaje, 'host vacío')
-            || str_contains($mensaje, 'conexión no configurada');
+            || str_contains($mensaje, 'conexión no configurada')
+            || str_contains($mensaje, 'cannot open database')
+            || str_contains($mensaje, 'the login failed')
+            || str_contains($mensaje, 'acting as a mirror database')
+            || str_contains($mensaje, 'is restoring');
     }
 
     private static function esTimeoutEjecucionSubproceso(RuntimeException $e): bool

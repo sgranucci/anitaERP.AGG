@@ -1,13 +1,18 @@
 @php
+    use App\Support\Stock\ArticuloConsultaDesdeModal;
+
     $variantesExistentes = old('variantes');
     if ($variantesExistentes === null && isset($data)) {
         $variantesExistentes = $data->variantes->map(fn ($v) => [
             'color_id' => $v->color_id,
             'talle_id' => $v->talle_id,
             'sku' => $v->sku,
+            'articulo_id' => $v->articulo_id,
+            'descripcion' => $v->articulo->descripcion ?? '',
         ])->values()->all();
     }
     $variantesExistentes = $variantesExistentes ?: [];
+    $puedeConsultarArticulo = ArticuloConsultaDesdeModal::puedeConsultar();
 @endphp
 <div class="row">
     <div class="col-lg-6">
@@ -69,7 +74,7 @@
             </div>
         </div>
         <div class="form-group row">
-            <div class="col-lg-4 col-form-label">Opciones</div>
+            <label class="col-lg-4 col-form-label">Opciones</label>
             <div class="col-lg-8">
                 <div class="custom-control custom-checkbox">
                     <input type="checkbox" class="custom-control-input" name="es_seguridad" id="es_seguridad" value="1"
@@ -98,72 +103,48 @@
         <i class="fa fa-plus"></i> Agregar variante
     </button>
 </div>
-<p class="text-muted small">Cada combinaci&oacute;n de color y talle se mapea a un SKU del maestro de art&iacute;culos para descontar stock en la entrega.</p>
+<p class="text-muted small">Cada combinaci&oacute;n de color y talle se mapea a un SKU del maestro de art&iacute;culos para descontar stock en la entrega. Use la lupa o F1 sobre el SKU para consultar.</p>
 
 <div class="table-responsive">
     <table class="table table-sm table-bordered" id="tabla-variantes">
         <thead>
             <tr>
-                <th style="width:32%">Color</th>
-                <th style="width:28%">Talle</th>
-                <th style="width:30%">SKU art&iacute;culo</th>
+                <th style="width:22%">Color</th>
+                <th style="width:18%">Talle</th>
+                <th style="width:50%">Art&iacute;culo (SKU)</th>
                 <th style="width:10%" class="text-center">Quitar</th>
             </tr>
         </thead>
         <tbody id="tbody-variantes">
             @foreach ($variantesExistentes as $i => $v)
-            <tr class="variante-row">
-                <td>
-                    <select name="variantes[{{ $i }}][color_id]" class="form-control form-control-sm">
-                        <option value="">— Color —</option>
-                        @foreach ($colores as $color)
-                            <option value="{{ $color->id }}" {{ (int) ($v['color_id'] ?? 0) === (int) $color->id ? 'selected' : '' }}>{{ $color->codigo }} - {{ $color->nombre }}</option>
-                        @endforeach
-                    </select>
-                </td>
-                <td>
-                    <select name="variantes[{{ $i }}][talle_id]" class="form-control form-control-sm">
-                        <option value="">— Talle —</option>
-                        @foreach ($talles as $talle)
-                            <option value="{{ $talle->id }}" {{ (int) ($v['talle_id'] ?? 0) === (int) $talle->id ? 'selected' : '' }}>{{ $talle->nombre }}</option>
-                        @endforeach
-                    </select>
-                </td>
-                <td>
-                    <input type="text" name="variantes[{{ $i }}][sku]" class="form-control form-control-sm" maxlength="20" value="{{ $v['sku'] ?? '' }}" placeholder="SKU">
-                </td>
-                <td class="text-center align-middle">
-                    <button type="button" class="btn btn-sm btn-link text-danger btn-quitar-variante"><i class="fa fa-times-circle"></i></button>
-                </td>
-            </tr>
+            @include('sueldos.prenda.partials.fila_variante_articulo', [
+                'idx' => $i,
+                'colorId' => $v['color_id'] ?? null,
+                'talleId' => $v['talle_id'] ?? null,
+                'sku' => $v['sku'] ?? '',
+                'articuloId' => $v['articulo_id'] ?? null,
+                'descripcionArticulo' => $v['descripcion'] ?? '',
+                'colores' => $colores,
+                'talles' => $talles,
+                'puedeConsultarArticulo' => $puedeConsultarArticulo,
+            ])
             @endforeach
         </tbody>
     </table>
 </div>
 
 <template id="tpl-variante-row">
-    <tr class="variante-row">
-        <td>
-            <select name="variantes[__IDX__][color_id]" class="form-control form-control-sm">
-                <option value="">— Color —</option>
-                @foreach ($colores as $color)
-                    <option value="{{ $color->id }}">{{ $color->codigo }} - {{ $color->nombre }}</option>
-                @endforeach
-            </select>
-        </td>
-        <td>
-            <select name="variantes[__IDX__][talle_id]" class="form-control form-control-sm">
-                <option value="">— Talle —</option>
-                @foreach ($talles as $talle)
-                    <option value="{{ $talle->id }}">{{ $talle->nombre }}</option>
-                @endforeach
-            </select>
-        </td>
-        <td>
-            <input type="text" name="variantes[__IDX__][sku]" class="form-control form-control-sm" maxlength="20" placeholder="SKU">
-        </td>
-        <td class="text-center align-middle">
-            <button type="button" class="btn btn-sm btn-link text-danger btn-quitar-variante"><i class="fa fa-times-circle"></i></button>
-        </td>
-    </tr>
+@include('sueldos.prenda.partials.fila_variante_articulo', [
+    'idx' => '__IDX__',
+    'colorId' => null,
+    'talleId' => null,
+    'sku' => '',
+    'articuloId' => null,
+    'descripcionArticulo' => '',
+    'colores' => $colores,
+    'talles' => $talles,
+    'puedeConsultarArticulo' => $puedeConsultarArticulo,
+])
 </template>
+
+@include('includes.stock.modalconsultaarticulo')

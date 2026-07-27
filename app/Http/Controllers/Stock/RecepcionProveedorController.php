@@ -19,6 +19,7 @@ use App\Services\Stock\RecepcionProveedorOcrService;
 use App\Services\Stock\RecepcionProveedorOrdencompraResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorService;
+use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
 use App\Support\Pdf\DompdfPaperSupport;
@@ -231,7 +232,7 @@ class RecepcionProveedorController extends Controller
             'proveedor_nombre' => optional($oc->proveedores)->nombre,
             'empresa_nombre' => optional($oc->empresas)->nombre,
             'tratamiento' => $oc->tratamiento,
-            'descuento_ordencompra' => (float) ($oc->descuento ?? 0),
+            'descuento_ordencompra' => OrdencompraDescuentoSupport::porcentajeEfectivoDesdeOrdencompra($oc),
             'lineas' => $data['lineas'],
         ]);
     }

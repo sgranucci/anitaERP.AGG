@@ -28,8 +28,30 @@ final class CapexMesExcedidoEvaluator implements OcArbolTriggerEvaluatorInterfac
 
     public function aplica(Ordencompra $ordencompra, Arbolaprobacion_OcTrigger $trigger): bool
     {
+        return $this->detalleExcesos($ordencompra) !== [];
+    }
+
+    /**
+     * Detalle de líneas CAPEX que superan el asignado del mes (para explicación IA / portal).
+     *
+     * @return list<array{
+     *   capex_id: int,
+     *   capex_nombre: string|null,
+     *   periodo: string,
+     *   asignado: float,
+     *   comprometido: float,
+     *   monto_linea: float,
+     *   proyectado: float,
+     *   excedente: float,
+     *   ordencompra_articulo_id: int|null
+     * }>
+     */
+    public function detalleExcesos(Ordencompra $ordencompra): array
+    {
         $ordencompra->loadMissing('ordencompra_articulos');
         $periodo = Carbon::parse($ordencompra->fecha)->format('Y-m');
+        $excesos = [];
+        $vistos = [];
 
         foreach ($ordencompra->ordencompra_articulos as $linea) {
             if (empty($linea->capex_id) || (float) $linea->cantidad <= 0) {
@@ -47,13 +69,39 @@ final class CapexMesExcedidoEvaluator implements OcArbolTriggerEvaluatorInterfac
 
             $comprometido = $this->montoComprometidoCapexMes($capexId, $periodo, (int) $ordencompra->id);
             $montoLinea = $this->montoLinea($linea);
+            $proyectado = round($comprometido + $montoLinea, 4);
 
-            if ($comprometido + $montoLinea > $asignado + 0.0001) {
-                return true;
+            if ($proyectado <= $asignado + 0.0001) {
+                continue;
             }
+
+            $clave = $capexId.'|'.((int) ($linea->id ?? 0));
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+
+            $excesos[] = [
+                'capex_id' => $capexId,
+                'capex_nombre' => $this->nombreCapex($capexId),
+                'periodo' => $periodo,
+                'asignado' => round($asignado, 2),
+                'comprometido' => round($comprometido, 2),
+                'monto_linea' => round($montoLinea, 2),
+                'proyectado' => round($proyectado, 2),
+                'excedente' => round($proyectado - $asignado, 2),
+                'ordencompra_articulo_id' => isset($linea->id) ? (int) $linea->id : null,
+            ];
         }
 
-        return false;
+        return $excesos;
+    }
+
+    private function nombreCapex(int $capexId): ?string
+    {
+        $nombre = DB::table('capex')->where('id', $capexId)->value('nombre');
+
+        return is_string($nombre) && $nombre !== '' ? $nombre : null;
     }
 
     private function montoLinea(Ordencompra_Articulo $linea): float

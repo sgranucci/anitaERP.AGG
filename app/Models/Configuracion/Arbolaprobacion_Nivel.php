@@ -15,7 +15,7 @@ class Arbolaprobacion_Nivel extends Model implements Auditable
     use SoftDeletes;
     
     protected $fillable = [
-                            'arbolaprobacion_id', 'nivel', 'centrocosto_id', 'usuario_id', 'desdemonto', 'hastamonto', 'moneda_id',
+                            'arbolaprobacion_id', 'nivel', 'centrocosto_id', 'usuario_id', 'usuario_orig_id', 'desdemonto', 'hastamonto', 'moneda_id',
                             'documento_estado_al_aprobar',
                         ];
     protected $table = 'arbolaprobacion_nivel';
@@ -33,6 +33,11 @@ class Arbolaprobacion_Nivel extends Model implements Auditable
     public function usuarios()
 	{
     	return $this->belongsTo(Usuario::class, 'usuario_id');
+	}
+
+    public function usuarios_orig()
+	{
+    	return $this->belongsTo(Usuario::class, 'usuario_orig_id');
 	}
 
     public function moneda_ids()

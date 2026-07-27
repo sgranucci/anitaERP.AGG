@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Exports\Ventas\GastronomiaControlContableCigarrillosExport;
 use App\Exports\Ventas\GastronomiaInsumosTipoarticuloReporteExport;
 use App\Http\Controllers\Controller;
 use App\Models\Stock\Tipoarticulo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Ventas\GastronomiaControlContableCigarrillosService;
 use App\Services\Ventas\GastronomiaInsumosTipoarticuloReporteService;
 use App\Support\Ventas\GastronomiaInsumosTipoarticuloReporteFiltros;
 use Carbon\Carbon;
@@ -16,6 +18,7 @@ class GastronomiaInsumosTipoarticuloReporteController extends Controller
 {
     public function __construct(
         private readonly GastronomiaInsumosTipoarticuloReporteService $reporteService,
+        private readonly GastronomiaControlContableCigarrillosService $controlContableService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {
         $this->middleware('auth');
@@ -36,6 +39,9 @@ class GastronomiaInsumosTipoarticuloReporteController extends Controller
         $resultado = null;
         $filas = null;
         $filasVista = [];
+        $controlContable = null;
+        $tipoSeleccionado = $this->tipoarticuloSeleccionado((int) ($filtros['tipoarticulo_id'] ?? 0));
+        $usaControlContable = (bool) ($tipoSeleccionado?->usa_control_contable_cigarrillos);
 
         if ($consultado) {
             $resultado = $this->reporteService->generar($filtros);
@@ -46,6 +52,10 @@ class GastronomiaInsumosTipoarticuloReporteController extends Controller
                 max(1, (int) $request->input('page', 1)),
             );
             $filasVista = $filas->items();
+
+            if ($usaControlContable) {
+                $controlContable = $this->controlContableService->generar($filtros);
+            }
         }
 
         $filtrosQuery = GastronomiaInsumosTipoarticuloReporteFiltros::paraQueryString($filtros);
@@ -58,7 +68,9 @@ class GastronomiaInsumosTipoarticuloReporteController extends Controller
 
         return view('ventas.gastronomia.insumos_tipoarticulo_reporte.index', [
             'empresa_query' => $empresaQuery,
-            'tipoarticulo_query' => Tipoarticulo::query()->orderBy('nombre')->get(['id', 'nombre']),
+            'tipoarticulo_query' => Tipoarticulo::query()
+                ->orderBy('nombre')
+                ->get(['id', 'nombre', 'usa_control_contable_cigarrillos']),
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'consultado' => $consultado,
@@ -66,9 +78,13 @@ class GastronomiaInsumosTipoarticuloReporteController extends Controller
             'filas' => $filas,
             'filasVista' => $filasVista,
             'periodo_texto' => GastronomiaInsumosTipoarticuloReporteFiltros::formatearPeriodoTexto($filtros),
-            'tipoarticulo_etiqueta' => $this->etiquetaTipoarticulo((int) ($filtros['tipoarticulo_id'] ?? 0)),
+            'tipoarticulo_etiqueta' => $tipoSeleccionado
+                ? trim((string) $tipoSeleccionado->nombre)
+                : $this->etiquetaTipoarticulo((int) ($filtros['tipoarticulo_id'] ?? 0)),
             'empresa_texto' => $this->etiquetaEmpresa((int) ($filtros['empresa_id'] ?? 0), $empresaQuery),
             'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
+            'usa_control_contable_cigarrillos' => $usaControlContable,
+            'control_contable' => $controlContable,
         ]);
     }
 
@@ -122,6 +138,62 @@ class GastronomiaInsumosTipoarticuloReporteController extends Controller
             'gastronomia_insumos_tipoarticulo_reporte',
             GastronomiaInsumosTipoarticuloReporteFiltros::paraQueryString($filtros),
         );
+    }
+
+    public function exportarControlContable(Request $request, string $formato)
+    {
+        can('listar-insumos-tipoarticulo-gastronomia');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $filtros = GastronomiaInsumosTipoarticuloReporteFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarDefaultsFiltros($filtros, $empresaQuery);
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+
+        $tipo = $this->tipoarticuloSeleccionado((int) ($filtros['tipoarticulo_id'] ?? 0));
+        if ($tipo === null || ! $tipo->usa_control_contable_cigarrillos) {
+            return redirect()
+                ->route('gastronomia_insumos_tipoarticulo_reporte', GastronomiaInsumosTipoarticuloReporteFiltros::paraQueryString($filtros))
+                ->with('error', 'El tipo de artículo seleccionado no tiene habilitado el control contable de cigarrillos.');
+        }
+
+        if (! GastronomiaInsumosTipoarticuloReporteFiltros::tieneCriteriosAplicados($filtros)) {
+            return redirect()->route('gastronomia_insumos_tipoarticulo_reporte');
+        }
+
+        $titulo = 'Control contable cigarrillos';
+        $empresaTexto = $this->etiquetaEmpresa((int) ($filtros['empresa_id'] ?? 0), $empresaQuery);
+        $subtitulo = 'Tipo: '.trim((string) $tipo->nombre)
+            .' · Empresa: '.$empresaTexto
+            .' · Período: '.GastronomiaInsumosTipoarticuloReporteFiltros::formatearPeriodoTexto($filtros);
+
+        switch (strtoupper($formato)) {
+            case 'EXCEL':
+                return (new GastronomiaControlContableCigarrillosExport($this->controlContableService))
+                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto, false)
+                    ->download('control_contable_cigarrillos.xlsx');
+
+            case 'CSV':
+                return (new GastronomiaControlContableCigarrillosExport($this->controlContableService))
+                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto, true)
+                    ->download('control_contable_cigarrillos.csv', Excel::CSV);
+        }
+
+        return redirect()->route(
+            'gastronomia_insumos_tipoarticulo_reporte',
+            GastronomiaInsumosTipoarticuloReporteFiltros::paraQueryString($filtros),
+        );
+    }
+
+    private function tipoarticuloSeleccionado(int $tipoarticuloId): ?Tipoarticulo
+    {
+        if ($tipoarticuloId <= 0) {
+            return null;
+        }
+
+        return Tipoarticulo::query()->find($tipoarticuloId);
     }
 
     /**

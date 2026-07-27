@@ -184,22 +184,38 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
     private static function necesitaAperturaGravados(array $estado): bool
     {
         $ivaPorTasa = (array) ($estado['iva_por_tasa'] ?? []);
-        if (count($ivaPorTasa) < 2) {
+        if ($ivaPorTasa === []) {
             return false;
         }
 
         $netoTotal = (float) ($estado['neto_total'] ?? 0);
-        if ($netoTotal <= 0) {
-            return false;
-        }
-
         $netoSinTasa = (float) ($estado['neto_sin_tasa'] ?? 0);
         $netoPorTasa = (array) ($estado['neto_por_tasa'] ?? []);
         $buckets = ($netoSinTasa > 0 ? 1 : 0) + count($netoPorTasa);
 
-        // Un solo gravado (sin tasa o una sola alícuota) con 2+ IVA → abrir.
-        if ($buckets <= 1) {
+        // Sin neto: abrir gravados desde IVA (1 o más tasas) por división inversa.
+        if ($netoTotal <= 0) {
             return true;
+        }
+
+        // Un solo gravado (sin tasa o una sola alícuota) con 2+ IVA → abrir.
+        if (count($ivaPorTasa) >= 2 && $buckets <= 1) {
+            return true;
+        }
+
+        // Una sola tasa: si el neto no cierra con IVA/(tasa/100), reabrir desde IVA.
+        if (count($ivaPorTasa) === 1) {
+            $tasaKey = (string) array_key_first($ivaPorTasa);
+            $iva = (float) $ivaPorTasa[$tasaKey];
+            $tasa = (float) $tasaKey;
+            $netoEsperado = $tasa > 0 ? round($iva / ($tasa / 100.), 2) : 0.0;
+            $netoActual = (float) ($netoPorTasa[$tasaKey] ?? 0);
+            if ($netoActual <= 0 && $netoSinTasa > 0) {
+                $netoActual = $netoSinTasa;
+            }
+            if ($netoActual <= 0 || abs($netoActual - $netoEsperado) > self::TOLERANCIA) {
+                return true;
+            }
         }
 
         // Varios gravados pero faltan tasas o no cierran con el IVA.

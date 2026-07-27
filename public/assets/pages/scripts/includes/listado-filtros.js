@@ -139,14 +139,25 @@
                 $hidden.val(debeUsarBusquedaRapida(submitter, document.activeElement) ? '1' : '');
             }
 
-            if (typeof $form[0].requestSubmit === 'function') {
-                if (submitter) {
-                    $form[0].requestSubmit(submitter);
-                } else {
+            // Preferir click nativo del botón (mismo camino que la lupa). requestSubmit
+            // con botones fuera del <form> vía form= puede fallar en algunos navegadores
+            // y dejar el Enter sin efecto tras preventDefault.
+            if (submitter && typeof submitter.click === 'function') {
+                submitter.click();
+                return;
+            }
+
+            try {
+                if (typeof $form[0].requestSubmit === 'function') {
                     $form[0].requestSubmit();
+                    return;
                 }
-            } else {
-                $form.trigger('submit');
+            } catch (err) {
+                // fallback abajo
+            }
+
+            if ($form[0] && typeof $form[0].submit === 'function') {
+                $form[0].submit();
             }
         }
 

@@ -80,7 +80,7 @@ class AperturaPeriodoContableService
             throw new InvalidArgumentException('Debe indicar el usuario a habilitar.');
         }
 
-        $cierre = PeriodoContableCierreSupport::fechaCierreVigente($empresaId);
+        $cierre = PeriodoContableCierreSupport::fechaCierreVigente($empresaId, $alcance);
         if ($cierre === null) {
             throw new InvalidArgumentException('No hay cierre contable vigente para esta empresa. No requiere apertura.');
         }

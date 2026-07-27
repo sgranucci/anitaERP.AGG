@@ -74,8 +74,8 @@ final class TicketCanjeCajaEmisionService
                 : null,
             'turno_habilitado' => $activo !== null,
             'turno_operativo_id' => $activo?->id,
-            'cajero_id' => $activo?->usuario_habilitado_id ? (int) $activo->usuario_habilitado_id : null,
-            'cajero_nombre' => $activo?->usuarioHabilitado?->nombre,
+            'cajero_id' => Auth::id() ? (int) Auth::id() : null,
+            'cajero_nombre' => Auth::user()?->nombre,
             'porcentaje_ticket' => (float) config('caja.ticket_canje_porcentaje', 5),
             'cfg_pv' => $cfg !== null,
         ];

@@ -233,25 +233,54 @@ function leeUnProveedor(proveedorId, codigoproveedor) {
     });
 }
 
-// Enter en input: no dispara submit accidental, salvo formulario OC y código de proveedor.
+// Enter en input: no dispara submit accidental, salvo formulario OC y códigos de consulta.
 $(document).off('keydown.ocNoEnterSubmitProveedor', 'input').on('keydown.ocNoEnterSubmitProveedor', 'input', function (e) {
-    if (e.which !== 13) {
+    if (e.which !== 13 && e.key !== 'Enter') {
         return;
     }
     if ($(this).closest('#form-ordencompra-general').length) {
         return;
     }
-    if ($(this).hasClass('codigoproveedor') || $(this).is('#codigoproveedor')) {
+    if (
+        $(this).hasClass('codigoproveedor') || $(this).is('#codigoproveedor') ||
+        $(this).hasClass('codigoconcepto_solicitudpago') || $(this).is('#concepto_solicitudpago_id_codigo') ||
+        $(this).hasClass('codigodeposito') ||
+        $(this).hasClass('sku') || $(this).hasClass('codigoarticulo')
+    ) {
         return;
     }
     e.preventDefault();
     return false;
 });
 
+// Enter en código proveedor: capture para ganar a bloqueos globales ($("input").keydown).
+document.addEventListener('keydown', function (e) {
+    if (!(e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13)) {
+        return;
+    }
+    var target = e.target;
+    if (!target || target.readOnly || target.disabled) {
+        return;
+    }
+    if (!target.classList.contains('codigoproveedor') && target.id !== 'codigoproveedor') {
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    $(target).data('cp-enter-procesado', 1);
+    aceptarCodigoProveedorDesdeInput($(target));
+}, true);
+
 $(document)
     .off('keydown.cpCodigoProveedorEnter', '.codigoproveedor, #codigoproveedor')
     .on('keydown.cpCodigoProveedorEnter', '.codigoproveedor, #codigoproveedor', function (e) {
-        if (e.which !== 13) {
+        if (e.which !== 13 && e.key !== 'Enter') {
+            return;
+        }
+        // Si el capture ya lo procesó, no duplicar.
+        if ($(this).data('cp-enter-procesado')) {
+            e.preventDefault();
+            e.stopPropagation();
             return;
         }
         $(this).data('cp-enter-procesado', 1);

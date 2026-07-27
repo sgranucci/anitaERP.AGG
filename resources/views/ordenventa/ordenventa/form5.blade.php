@@ -1,6 +1,7 @@
 <div class="card form5" style="display: none">
     <h3>Arbol aprobación</h3>
     <div class="card-body">
+        <div id="ordenventa-panel-ia-arbol" class="d-none mb-3"></div>
         <table class="table" id="ordenventa-arbol-table">
             <thead>
                 <tr>

@@ -3,16 +3,12 @@
 namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
-use App\Models\Caja\Caja;
 use App\Models\Caja\Bingo\RendicionBingoCaja;
-use App\Queries\Caja\Caja_AsignacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\Bingo\RendicionBingoCajaService;
 use App\Support\Caja\Bingo\RendicionBingoCajaListadoFiltros;
 use App\Support\Caja\Bingo\RendicionBingoCajaPermiso;
 use App\Support\Listado\FiltrosListadoRequest;
-use Auth;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -21,7 +17,6 @@ class RendicionBingoController extends Controller
 {
     public function __construct(
         private readonly RendicionBingoCajaService $service,
-        private readonly Caja_AsignacionQueryInterface $cajaAsignacionQuery,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
@@ -119,7 +114,9 @@ class RendicionBingoController extends Controller
         if ($cajaId <= 0) {
             return redirect()
                 ->route('rendicionbingo')
-                ->with('errores', ['No tiene caja asignada para hoy. Debe ingresar desde Movimientos de caja o solicitar asignación de cajero.']);
+                ->with('errores', [\App\Support\Caja\CajaRecepcionPcSupport::requiereAsignacion()
+                    ? 'No tiene caja asignada para hoy. Debe ingresar desde Movimientos de caja o solicitar asignación de cajero.'
+                    : 'No se pudo determinar la caja de recepción. Configure la caja en el punto de venta de esta PC o verifique CAJA_DEFAULT_ID.']);
         }
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
@@ -275,21 +272,7 @@ class RendicionBingoController extends Controller
      */
     private function resolverCaja(?int $cajaParam): array
     {
-        if ($cajaParam !== null && $cajaParam > 0) {
-            $caja = Caja::query()->find($cajaParam);
-
-            return [(int) $cajaParam, (string) ($caja->nombre ?? 'Caja #'.$cajaParam)];
-        }
-
-        $asignacion = $this->cajaAsignacionQuery->leeAsignacionPorUsuario((int) Auth::id(), Carbon::now());
-        if ($asignacion && (int) $asignacion->caja_id > 0) {
-            $cajaId = (int) $asignacion->caja_id;
-            $nombre = (string) ($asignacion->cajas->nombre ?? Caja::query()->whereKey($cajaId)->value('nombre') ?? '');
-
-            return [$cajaId, $nombre];
-        }
-
-        return [0, ''];
+        return \App\Support\Caja\CajaRecepcionPcSupport::resolver($cajaParam, request());
     }
 
     private function assertEmpresaPermitida(int $empresaId): void

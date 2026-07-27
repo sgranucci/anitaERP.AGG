@@ -27,12 +27,12 @@
             <div class="form-group row" id="div-proveedor" style="display: none">
                 <label for="proveedor" class="col-lg-2 col-form-label">Proveedor</label>
                 <input type="text" class="col-lg-2 proveedor_id" id="proveedor_id" name="proveedor_id" value="{{$data->proveedor_id ?? ''}}" >
-                <input type="text" class="col-lg-6 proveedor" id="proveedor" name="proveedor" value="{{$data->proveedores->nombre ?? ''}}" readonly>
+                <input type="text" class="col-lg-6 proveedor" id="proveedor" name="proveedor" value="{{ optional($data->proveedores)->nombre ?? '' }}" readonly>
                 <button type="button" title="Consulta proveedores" style="padding:1;" class="btn-accion-tabla consultaproveedor tooltipsC">
                     <i class="fa fa-search text-primary"></i>
                 </button>
                 <input type="hidden" class="proveedor_id" id="proveedor_id" name="proveedor_id" value="{{$data->proveedor_id ?? ''}}" >
-                <input type="hidden" name="nombreproveedor" id="nombreproveedor" class="form-control" value="{{old('nombreproveedor', $data->proveedores->nombre ?? '')}}">
+                <input type="hidden" name="nombreproveedor" id="nombreproveedor" class="form-control" value="{{old('nombreproveedor', optional($data->proveedores)->nombre ?? '')}}">
             </div>
         </div>
         <div class="col-sm-6">

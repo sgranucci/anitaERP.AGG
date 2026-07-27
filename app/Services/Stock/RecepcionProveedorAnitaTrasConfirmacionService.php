@@ -127,6 +127,12 @@ final class RecepcionProveedorAnitaTrasConfirmacionService
             $problemas[] = 'Falta cabecera recepmae en Anita para la clave COM.';
         }
 
+        $detalle = $this->anitaBridge->diagnosticoDetalleComAnita($recepcion);
+        if ($detalle['incompleto'] ?? false) {
+            $requiereReparacion = true;
+            $problemas[] = (string) ($detalle['mensaje'] ?? 'Detalle Anita incompleto (recepmov/stkmov).');
+        }
+
         $ctamov = null;
         if (
             $this->asientoService->debeGenerarAsiento((int) $recepcion->empresa_id)
@@ -168,24 +174,35 @@ final class RecepcionProveedorAnitaTrasConfirmacionService
 
     public function reparar(Recepcion_Proveedor $recepcion): void
     {
+        $relacionesDetalle = [
+            'proveedores', 'empresas', 'ordencompras',
+            'recepcion_proveedor_articulos.articulos.categorias',
+            'recepcion_proveedor_articulos.articulos.impuestos',
+            'recepcion_proveedor_articulos.centrocostos',
+        ];
+
         if ($this->resincronizacionErpService->requiereResincronizacion($recepcion)) {
             $this->resincronizacionErpService->repararRecepcionConfirmada((int) $recepcion->id);
-            $recepcion = $recepcion->fresh([
-                'asientos',
-                'empresas',
-                'proveedores',
-                'ordencompras',
-                'recepcion_proveedor_articulos.articulos.categorias',
-                'recepcion_proveedor_articulos.articulos.impuestos',
-                'recepcion_proveedor_articulos.centrocostos',
-            ]) ?? $recepcion;
+            $recepcion = $recepcion->fresh(array_merge(['asientos'], $relacionesDetalle)) ?? $recepcion;
         } elseif ($this->anitaBridge->listarRecepmaePorClaveAuditoria($recepcion) === []) {
-            $this->anitaBridge->sincronizarRecepcion($recepcion->fresh([
-                'proveedores', 'empresas', 'ordencompras',
-                'recepcion_proveedor_articulos.articulos.categorias',
-                'recepcion_proveedor_articulos.articulos.impuestos',
-                'recepcion_proveedor_articulos.centrocostos',
-            ]));
+            $this->anitaBridge->sincronizarRecepcion($recepcion->fresh($relacionesDetalle));
+            $recepcion = $recepcion->fresh(array_merge(['asientos'], $relacionesDetalle)) ?? $recepcion;
+        } elseif ($this->resincronizacionErpService->requiereReparacionDetalleIncompleto($recepcion)
+            || $this->anitaBridge->detalleComIncompletoEnAnita($recepcion)
+        ) {
+            if ($this->resincronizacionErpService->requiereReparacionDetalleIncompleto($recepcion)) {
+                $this->anitaBridge->repararDetallePreservandoCabecera($recepcion->fresh($relacionesDetalle));
+            } else {
+                // Cabecera por clave sin vínculo usable: -pendmovp y resync completo.
+                if ($this->anitaBridge->tieneDetalleComEnAnita($recepcion)) {
+                    $this->anitaBridge->ajustarPendmovpRecepcion($recepcion->fresh([
+                        'ordencompras',
+                        'recepcion_proveedor_articulos.articulos',
+                    ]), -1);
+                }
+                $this->anitaBridge->sincronizarRecepcion($recepcion->fresh($relacionesDetalle));
+            }
+            $recepcion = $recepcion->fresh(array_merge(['asientos'], $relacionesDetalle)) ?? $recepcion;
         }
 
         if (

@@ -9,6 +9,8 @@ interface Precarga_Comprobante_ProveedorRepositoryInterface extends RepositoryIn
 
     public function all();
 
+    public function listarPortalProveedor(int $proveedorId, bool $paginar = true);
+
     public function findDuplicadoPrecarga(
         int $empresaId,
         int $proveedorId,

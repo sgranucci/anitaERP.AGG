@@ -12,6 +12,7 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Jurosh\PDFMerge\PDFMerger;
 use Maatwebsite\Excel\Excel;
@@ -109,6 +110,8 @@ class MayorPlanoCuentaController extends Controller
             'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
             'puede_ver_ordencompra' => can('listar-ordencompra', false) || can('editar-ordencompra', false),
             'puede_ver_proveedor' => can('listar-proveedor', false) || can('editar-proveedor', false),
+            'puede_ver_comprobante_proveedor' => can('listar-comprobante-proveedor', false) || can('editar-comprobante-proveedor', false),
+            'puede_ver_factura' => can('listar-factura', false) || can('editar-factura', false),
             'multiempresa' => count($filtros['empresa_ids'] ?? []) > 1
                 || empty($filtros['consolidar_empresas']),
         ]);
@@ -127,7 +130,8 @@ class MayorPlanoCuentaController extends Controller
             return redirect()->route('mayor_plano_cuenta');
         }
 
-        $resultado = $this->reporteService->generarDesdeFiltros($filtros);
+        // Reutilizar resultado de pantalla (evita regenerar Anita al exportar).
+        $resultado = $this->obtenerResultado($filtros);
         $filas = $this->reporteService->aplanarFilas($resultado, $filtros, true);
         $resumen = $this->reporteService->resumenPorCuenta($resultado);
         $totales = $this->armarTotalesDesdeResultado($resultado);
@@ -137,7 +141,7 @@ class MayorPlanoCuentaController extends Controller
         switch (strtoupper($formato)) {
             case 'PDF':
                 if (count($filtros['empresa_ids'] ?? []) > 1 && empty($filtros['consolidar_empresas'])) {
-                    return $this->descargarPdfPorEmpresa($filtros);
+                    return $this->descargarPdfPorEmpresa($filtros, $resultado);
                 }
 
                 $view = \View::make('contable.mayor_plano_cuenta.listado', compact(
@@ -149,17 +153,22 @@ class MayorPlanoCuentaController extends Controller
                     'subtitulo',
                 ))->render();
 
-                return $this->descargarPdf($view, 'mayor_plano_cuenta', 'legal', 'landscape');
+                return $this->descargarPdf(
+                    $view,
+                    $this->armarNombreArchivoExport($filtros, ''),
+                    'legal',
+                    'landscape',
+                );
 
             case 'EXCEL':
                 return (new MayorPlanoCuentaExport($this->reporteService))
-                    ->parametros($filtros)
-                    ->download('mayor_plano_cuenta.xlsx');
+                    ->parametros($filtros, $resultado)
+                    ->download($this->armarNombreArchivoExport($filtros, 'xlsx'));
 
             case 'CSV':
                 return (new MayorPlanoCuentaExport($this->reporteService))
-                    ->parametros($filtros)
-                    ->download('mayor_plano_cuenta.csv', Excel::CSV);
+                    ->parametros($filtros, $resultado)
+                    ->download($this->armarNombreArchivoExport($filtros, 'csv'), Excel::CSV);
         }
 
         return redirect()->route('mayor_plano_cuenta', array_merge(
@@ -172,17 +181,47 @@ class MayorPlanoCuentaController extends Controller
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
+    private function obtenerResultado(array $filtros): array
+    {
+        $resultado = $this->leerCache($filtros);
+        if ($resultado !== null) {
+            return $resultado;
+        }
+
+        return $this->generarYCachear($filtros);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
     private function generarYCachear(array $filtros): array
     {
         $resultado = $this->reporteService->generarDesdeFiltros($filtros);
-        session([
-            self::SESSION_CACHE_KEY => [
-                'firma' => MayorPlanoCuentaListadoFiltros::firma($filtros),
-                'resultado' => $resultado,
-            ],
-        ]);
+        $this->persistirCache($resultado, $filtros);
 
         return $resultado;
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     */
+    private function persistirCache(array $resultado, array $filtros): void
+    {
+        $firma = MayorPlanoCuentaListadoFiltros::firma($filtros);
+        Cache::store('file')->put($this->cacheKey($filtros), [
+            'firma' => $firma,
+            'resultado' => $resultado,
+        ], now()->addHours(4));
+
+        // Solo marca de firma en sesión (el payload grande va a file cache).
+        session()->forget(self::SESSION_CACHE_KEY);
+        session([
+            self::SESSION_CACHE_KEY => [
+                'firma' => $firma,
+            ],
+        ]);
     }
 
     /**
@@ -191,16 +230,45 @@ class MayorPlanoCuentaController extends Controller
      */
     private function leerCache(array $filtros): ?array
     {
-        $cache = session(self::SESSION_CACHE_KEY);
-        if (! is_array($cache)) {
+        $firma = MayorPlanoCuentaListadoFiltros::firma($filtros);
+        $pack = Cache::store('file')->get($this->cacheKey($filtros));
+
+        if (is_array($pack) && isset($pack['resultado']) && is_array($pack['resultado'])) {
+            if (($pack['firma'] ?? '') === $firma) {
+                return $pack['resultado'];
+            }
+
             return null;
         }
 
-        if (($cache['firma'] ?? '') !== MayorPlanoCuentaListadoFiltros::firma($filtros)) {
-            return null;
+        // Migrar cache legacy en sesión (payload completo) → file cache.
+        $legacy = session(self::SESSION_CACHE_KEY);
+        if (is_array($legacy)
+            && isset($legacy['resultado'])
+            && is_array($legacy['resultado'])
+            && ($legacy['firma'] ?? '') === $firma
+        ) {
+            $this->persistirCache($legacy['resultado'], $filtros);
+
+            return $legacy['resultado'];
         }
 
-        return is_array($cache['resultado'] ?? null) ? $cache['resultado'] : null;
+        if (is_array($legacy) && isset($legacy['resultado'])) {
+            session()->forget(self::SESSION_CACHE_KEY);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function cacheKey(array $filtros): string
+    {
+        $userId = (int) (auth()->id() ?? 0);
+
+        // v2: Mon.Referencia con conversión explícita + export desde cache.
+        return 'mayor_plano_cuenta_v2_'.$userId.'_'.MayorPlanoCuentaListadoFiltros::firma($filtros);
     }
 
     /**
@@ -354,8 +422,9 @@ class MayorPlanoCuentaController extends Controller
 
     /**
      * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|null  $resultadoCompleto  Cache multiempresa desconsolidado
      */
-    private function descargarPdfPorEmpresa(array $filtros)
+    private function descargarPdfPorEmpresa(array $filtros, ?array $resultadoCompleto = null)
     {
         $dir = storage_path('pdf/listados');
         if (! is_dir($dir)) {
@@ -364,15 +433,49 @@ class MayorPlanoCuentaController extends Controller
 
         $temporales = [];
         $titulo = 'Mayor analítico por cuenta contable';
+        $resultadoCompleto ??= $this->obtenerResultado($filtros);
 
         try {
             foreach ($filtros['empresa_ids'] ?? [] as $empresaId) {
+                $empresaId = (int) $empresaId;
                 $filtrosEmpresa = array_merge($filtros, [
-                    'empresa_ids' => [(int) $empresaId],
+                    'empresa_ids' => [$empresaId],
                     'consolidar_empresas' => true,
                 ]);
 
-                $resultado = $this->reporteService->generarDesdeFiltros($filtrosEmpresa);
+                // Partir secciones del resultado en cache (sin volver a Anita).
+                $seccionesEmpresa = array_values(array_filter(
+                    $resultadoCompleto['secciones'] ?? [],
+                    fn (array $s) => (int) ($s['empresa_id'] ?? 0) === $empresaId,
+                ));
+                if ($seccionesEmpresa === []) {
+                    $resultado = $this->reporteService->generarDesdeFiltros($filtrosEmpresa);
+                } else {
+                    $totalDebe = 0.0;
+                    $totalHaber = 0.0;
+                    $totalLineas = 0;
+                    foreach ($seccionesEmpresa as $sec) {
+                        $totalDebe += (float) ($sec['total_debe'] ?? 0);
+                        $totalHaber += (float) ($sec['total_haber'] ?? 0);
+                        $totalLineas += (int) ($sec['cantidad_lineas'] ?? 0);
+                    }
+                    $resultado = [
+                        'parametros' => array_merge($resultadoCompleto['parametros'] ?? [], [
+                            'empresa_ids' => [$empresaId],
+                            'consolidar_empresas' => true,
+                        ]),
+                        'secciones' => $seccionesEmpresa,
+                        'totales' => [
+                            'debe' => round($totalDebe, 2),
+                            'haber' => round($totalHaber, 2),
+                            'lineas' => $totalLineas,
+                            'cuentas' => count($seccionesEmpresa),
+                        ],
+                        'errores_bridge' => $resultadoCompleto['errores_bridge'] ?? [],
+                        'stats' => $resultadoCompleto['stats'] ?? [],
+                    ];
+                }
+
                 $filas = $this->reporteService->aplanarFilas($resultado, $filtrosEmpresa, true);
                 $resumen = $this->reporteService->resumenPorCuenta($resultado);
                 $totales = $this->armarTotalesDesdeResultado($resultado);
@@ -394,11 +497,12 @@ class MayorPlanoCuentaController extends Controller
                 $temporales[] = $temp;
             }
 
-            $nombrePdf = 'mayor_plano_cuenta_'.date('Ymd_His');
-            $destino = $dir.'/'.$nombrePdf.'.pdf';
+            $nombreBase = $this->armarNombreArchivoExport($filtros, '');
+            $destino = $dir.'/'.$nombreBase.'.pdf';
 
             if (count($temporales) === 1) {
                 rename($temporales[0], $destino);
+                $temporales = [];
             } else {
                 $merger = new PDFMerger;
                 foreach ($temporales as $ruta) {
@@ -407,7 +511,8 @@ class MayorPlanoCuentaController extends Controller
                 $merger->merge('file', $destino);
             }
 
-            return response()->download($destino);
+            // Descarga al PC del usuario y borra el PDF del servidor (no acumula disco).
+            return response()->download($destino, $nombreBase.'.pdf')->deleteFileAfterSend(true);
         } finally {
             foreach ($temporales as $ruta) {
                 if (is_file($ruta)) {
@@ -424,11 +529,62 @@ class MayorPlanoCuentaController extends Controller
             mkdir($path, 0775, true);
         }
 
-        $nombrePdf = $nombreBase.'_'.date('Ymd_His');
+        $nombrePdf = $nombreBase !== ''
+            ? $nombreBase
+            : 'mayor_analitico_cuenta_'.date('Ymd_His');
+        $ruta = $path.'/'.$nombrePdf.'.pdf';
         $pdf = \App::make('dompdf.wrapper');
         $pdf->setPaper($paper, $orientation);
-        $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombrePdf.'.pdf');
+        $pdf->loadHTML($view, 'UTF-8')->save($ruta);
 
-        return response()->download($path.'/'.$nombrePdf.'.pdf');
+        return response()->download($ruta, $nombrePdf.'.pdf')->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Nombre de descarga: período del reporte + empresas + HHMMSS
+     * (el sufijo horario evita pisar exports anteriores el mismo día).
+     * Excel/CSV se streaman; PDF se borra tras enviar.
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    private function armarNombreArchivoExport(array $filtros, string $extension): string
+    {
+        $periodo = '';
+        if (($filtros['modo_periodo'] ?? 'mes') === 'mes') {
+            $anio = (int) ($filtros['anio'] ?? 0);
+            $mes = (int) ($filtros['mes'] ?? 0);
+            if ($anio > 0 && $mes > 0) {
+                $periodo = sprintf('%04d-%02d', $anio, $mes);
+            }
+        } else {
+            $desde = preg_replace('/\D/', '', (string) ($filtros['fecha_desde'] ?? '')) ?? '';
+            $hasta = preg_replace('/\D/', '', (string) ($filtros['fecha_hasta'] ?? '')) ?? '';
+            $desde = strlen($desde) >= 8 ? substr($desde, 0, 8) : '';
+            $hasta = strlen($hasta) >= 8 ? substr($hasta, 0, 8) : '';
+            if ($desde !== '' && $hasta !== '') {
+                // Un solo día → una sola fecha (no 20260714_20260714).
+                $periodo = $desde === $hasta ? $desde : $desde.'_'.$hasta;
+            } elseif ($desde !== '') {
+                $periodo = $desde;
+            }
+        }
+
+        $empresas = array_values(array_filter(array_map('intval', $filtros['empresa_ids'] ?? [])));
+        $empPart = $empresas === [] ? '' : 'emp'.implode('-', array_slice($empresas, 0, 4));
+        if (count($empresas) > 4) {
+            $empPart .= 'y'.(count($empresas) - 4);
+        }
+
+        $partes = array_filter([
+            'mayor_analitico_cuenta',
+            $periodo,
+            $empPart,
+            date('His'),
+        ], fn ($p) => $p !== '' && $p !== null);
+
+        $base = implode('_', $partes);
+        $base = preg_replace('/[^A-Za-z0-9_\-]/', '', $base) ?? $base;
+
+        return $extension !== '' ? $base.'.'.$extension : $base;
     }
 }

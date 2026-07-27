@@ -59,6 +59,8 @@
 
         if (tipo === 'entero') {
             setPlaceholderValor('Número entero');
+        } else if (tipo === 'cuenta_imputacion') {
+            setPlaceholderValor('Código o nombre de cuenta');
         } else {
             setPlaceholderValor('Texto o número');
         }

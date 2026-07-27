@@ -1,7 +1,3 @@
-var ticketTarea_id;
-var nombreTareaTicket;
-var ptrAbreNovedad;
-
 	$(function () {
 		$('#agrega_renglon_tarea_ticket').on('click', agregaRenglonTarea_Ticket);
         $(document).on('click', '.eliminar_tarea_ticket', borraRenglonTarea_Ticket);
@@ -9,9 +5,8 @@ var ptrAbreNovedad;
         $(document).on('click', '.eliminar_ticket_articulo', borraRenglonTicket_Articulo);
 		$('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
-		$('#agrega_renglon_tarea_novedad').on('click', agregaRenglonTareaNovedad);
-        $(document).on('click', '.eliminar_tarea_novedad', borraRenglonTareaNovedad);
 		$(document).on('click', '.btn-agregar-comentario-tarea', guardarComentarioInline);
+		$(document).on('change', '.estadotarea', cambiarEstadoTarea);
 
 		$(document).on('show.bs.collapse hide.bs.collapse', '.panel-comentarios-tarea', function (event) {
 			let $panel = $(this);
@@ -66,69 +61,6 @@ var ptrAbreNovedad;
 		$( ".botonsubmit" ).click(function() {
 			$( "#form-general" ).submit();
 		});
-
-		$('#carga_tarea_novedad_Modal').on('shown.bs.modal', function () {
-		})
-
-		$('#aceptacarga_tarea_novedadModal').on('click', function () {
-			let datosNovedades=[];
-
-			$('#carga_tarea_novedad_Modal').modal('hide');
-
-			// Graba las novedades
-			$.ajaxSetup({
-				headers: {
-					'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-				}
-			});
-		
-			let url = carpetaBase+"/ticket/guardar_ticket_tarea_novedad";
-
-			// Arma tabla de novedades para grabar
-			$("#table-tarea-novedad .item-tarea-novedad").each(function() {
-				ticket_tarea_id = ticketTarea_id;
-				tarea_novedad = $(this).find(".iitarea_novedad").val();
-				ticket_tarea_novedad_id = $(this).find(".ticket_tarea_novedad_id").val();
-				desdefecha = $(this).find(".desdefecha").val();
-				hastafecha = $(this).find(".hastafecha").val();
-				comentario = $(this).find(".comentario").val();
-				estado = $(this).find(".estado").val();
-				usuario_id = $(this).find(".usuario_id").val();
-
-				datosNovedades.push({
-					ticket_tarea_id,
-					ticket_tarea_novedad_id,
-					tarea_novedad,
-					desdefecha,
-					hastafecha,
-					comentario,
-					estado,  
-					usuario_id  
-					});
-			});
-			datosNovedades = JSON.stringify(datosNovedades);
-
-			$.ajax({
-				type: "POST",
-				url: url,
-				data: {
-					datosNovedades: datosNovedades,
-				},
-				success: function (data) {
-					if (data.mensaje == 'ok')
-					{
-						alert("Novedades grabadas con éxito");
-
-						// Leer estados
-						leeEstadoTarea();
-					}
-				},
-				error: function (r) {
-					alert("Error en grabación de las novedades");
-				}
-			});
-		});
-
     });
 
 	function activa_eventos(flInicio)
@@ -136,7 +68,6 @@ var ptrAbreNovedad;
 		// Si esta agregando items desactiva los eventos
 		if (!flInicio)
 		{
-			$('.abrenovedad').off('click');
 			$('.finalizatarea').off('click');
 			$('.tiempoinsumido').off('change');
 			$('.nombretecnico_ticket').off('change');
@@ -155,23 +86,6 @@ var ptrAbreNovedad;
 			let tecnicoTicket_id = $(this).parents("tr").find(".tecnico_ticket_id").val();
 		});
 
-		$('.abrenovedad').on('click', function (event) {
-			let tareaTicket_id = $(this).parents("tr").find(".tarea_ticket_id").val();
-			ticketTarea_id = $(this).parents("tr").find(".ticket_tarea_id").val();
-			nombreTareaTicket = $(this).parents("tr").find(".nombretarea_ticket").val();
-			ptrAbreNovedad = $(this).parents("tr").find(".abrenovedad");
-			
-			llenaModal();
-
-			setTimeout(() => {
-			}, 300);
-
-			// Abre modal de consulta
-			$("#carga_tarea_novedad_Modal").modal('show');
-
-			$("#novedad_nombre").val("Id "+tareaTicket_id+" - "+nombreTareaTicket);
-		});
-
 		$('.finalizatarea').on('click', function (event) {
 			let fechaFinalizacion = $(this).parents("tr").find(".fechafinalizacion").val();
 
@@ -181,13 +95,6 @@ var ptrAbreNovedad;
 			$(this).parents("tr").find(".tiempoinsumido").attr('readonly', false);
 			$(this).parents("tr").find(".tiempoinsumido").attr('required', 'required');
 			$(this).parents("tr").find(".tiempoinsumido").focus();
-		});
-
-		// Previene Enter en comentario de novedades
-		$( ".comentario" ).on( "keydown", function( event ) {
-			if ( event.key === "Enter" ) {
-				event.preventDefault();
-			}
 		});
 
 		$(document).on('change', '.tiempoinsumido', function (event) {
@@ -201,14 +108,16 @@ var ptrAbreNovedad;
 			else
 				var formateada = year + '-' + month + '-' + day;
 
-			$(this).parents("tr").find(".fechafinalizacion").val(formateada);			
+			$(this).parents("tr").find(".fechafinalizacion").val(formateada);
 			let ticket_tarea_id = $(this).parents("tr").find(".ticket_tarea_id").val();
 			let fechafinalizacion = $(this).parents("tr").find(".fechafinalizacion").val();
 			let tiempoinsumido = $(this).parents("tr").find(".tiempoinsumido").val();
+			let $estado = $(this).parents("tr").find(".estadotarea");
 
 			if (tiempoinsumido > 0)
 			{
-				$(this).parents("tr").find(".estadotarea").val("Finalizada");
+				$estado.val("Finalizada");
+				$estado.attr('data-estado-previo', 'Finalizada');
 
 				let url = carpetaBase+'/ticket/finalizar_tarea/'+ticket_tarea_id+'/'+fechafinalizacion+'/'+tiempoinsumido;
 
@@ -218,7 +127,7 @@ var ptrAbreNovedad;
 						calculaEstadoTicket();
 						alert('Tarea finalizada con éxito')
 					}
-					else	
+					else
 						alert('Ha ocurrido un error finalizando la tarea')
 				});
 			}
@@ -257,41 +166,6 @@ var ptrAbreNovedad;
     	var item = 1;
 
     	$("#tbody-tarea-ticket-table .iitarea_ticket").each(function() {
-    		$(this).val(item++);
-    	});
-    }
-
-	function agregaRenglonTareaNovedad(event){
-    	event.preventDefault();
-
-		agregaUnRenglonTareaNovedad();
-	}
-
-	function agregaUnRenglonTareaNovedad()
-	{
-    	let renglon = $('#template-renglon-tarea-novedad').html();
-
-    	$("#tbody-tarea-novedad-table").append(renglon);
-    	actualizaRenglonesTareaNovedad();
-
-		// Hace focus sobre el primer elemento de la tabla
-		let ptrUltimoRenglon = $("#tbody-tarea-novedad-table tr:last");
-		$(ptrUltimoRenglon).find('.desdefecha').focus();
-
-		activa_eventos(false);
-    }
-
-	function borraRenglonTareaNovedad(event) {
-    	event.preventDefault();
-		$(this).parents('tr').find('.eliminar_tarea_novedad').attr('title','sss');
-    	$(this).parents('tr').remove();
-    	actualizaRenglonesTareaNovedad();
-    }
-
-    function actualizaRenglonesTareaNovedad() {
-    	var item = 1;
-
-    	$("#tbody-tarea-novedad-table .iitarea_novedad").each(function() {
     		$(this).val(item++);
     	});
     }
@@ -349,81 +223,65 @@ var ptrAbreNovedad;
 		$(elem).parents("tr").find(".nombresanteriores").val(filename);
 	}
 
-	function llenaModal() {
-		var wrapper = $(".container-novedad");
+	function cambiarEstadoTarea() {
+		let $select = $(this);
+		let $tr = $select.closest('tr.item-tarea-ticket');
+		let ticketTareaId = $tr.find('.ticket_tarea_id').val();
+		let estado = $.trim($select.val());
+		let estadoPrevio = $select.attr('data-estado-previo') || 'Pendiente';
+		let urlBase = $('#url_cambia_estado_tarea').val();
 
-		ticket_tarea_id = ticketTarea_id;
-		let url = carpetaBase+'/ticket/leer_ticket_tarea_novedad/'+ticket_tarea_id;
-	
-		$.get(url, function(novedades){
+		if (!estado) {
+			$select.val(estadoPrevio);
+			return;
+		}
 
-			$(wrapper).empty();
-			let offset = 0;
+		if (!ticketTareaId || ticketTareaId === 'undefined') {
+			alert('Guarde el ticket antes de cambiar el estado de la tarea.');
+			$select.val(estadoPrevio);
+			return;
+		}
 
-			var nov = $.map(novedades, function(value, index){
-				return [value];
-			});
-			$.each(nov, function(index,value){
-				desdeFecha = value.desdefecha;
-				hastaFecha = value.hastafecha;
-				offset = offset + 1;
+		if (estado === estadoPrevio) {
+			return;
+		}
 
-				$(wrapper).append('<tr class="item-tarea-novedad">'+
-									'<td>'+
-										'<input type="hidden" name="tarea_novedad[]" class="form-control iitarea_novedad" value="'+offset+'">'+
-										'<input type="hidden" name="ticket_tarea_ids[]" class="ticket_tarea_id" value="'+value.ticket_tarea_id+'">'+
-										'<input type="hidden" name="ids[]" class="ticket_tarea_novedad_id" value="'+value.id+'">'+
-										'<input type="date" name="desdefechas[]" class="desdefecha" value="'+desdeFecha.substring(0,10)+'">'+
-									'</td>'+
-									'<td>'+
-										'<input type="date" name="hastafechas[]" class="hastafecha" value="'+hastaFecha.substring(0,10)+'">'+
-									'</td>'+
-									'<td>'+
-										'<input type="text" style="WIDTH: 450px;HEIGHT: 29px" name="comentarios[]" class="comentario" value="'+value.comentario+'">'+
-									'</td>	'+	
-									'<td>'+
-										'<input type="hidden" name="estadohidden[]" class="estadohidden" value="'+value.estado+'">'+
-										'<div class="form-group row">'+
-											'<select name="estados[]" style="WIDTH: 170px;HEIGHT: 29px" class="estado" required>'+
-												'<option value="">-- Elija estado --</option>'+
-											'</select>'+
-										'</div>'+
-									'</td>'+	
-									'<td>'+
-										'<input type="text" style="WIDTH: 80px;HEIGHT: 29px" name="nombreusuarios[]" class="nombreusuario" value="'+value.usuarios.usuario+'" readonly>'+
-									'</td>'+																			
-									'<td>'+
-										//'<button style="width: 6%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_tarea_novedad tooltipsC">'+
-										//	'<i class="fa fa-times-circle text-danger"></i>'+
-										//'</button>'+
-										'<input type="hidden" name="usuario_ids[]" class="form-control usuario_id" value="'+value.usuario_id+'" />'+
-									'</td>'+
-								'</tr>'
-							);
-			});
+		if (!urlBase) {
+			alert('No se pudo determinar la URL para cambiar el estado.');
+			$select.val(estadoPrevio);
+			return;
+		}
 
-			// Rellena select de estado
-			$("#table-tarea-novedad .item-tarea-novedad").each(function() {
-				armaSelectEstado(this);
-			});
+		$select.prop('disabled', true);
 
-		});
-	}
+		$.ajax({
+			url: urlBase + '/' + ticketTareaId,
+			method: 'POST',
+			data: {
+				_token: $('#csrf_token').val(),
+				estado: estado
+			},
+			success: function (resp) {
+				if (resp.mensaje !== 'ok') {
+					alert(resp.error || 'No se pudo cambiar el estado.');
+					$select.val(estadoPrevio);
+					return;
+				}
 
-	function armaSelectEstado(ptrrenglon)
-	{
-		var select = $(ptrrenglon).find('.estado');
-		var estado = $(ptrrenglon).find('.estadohidden').val();
-		var estadoEnum = JSON.parse($("#estado_novedad_enum").val());
-	
-		select.empty();
-		select.append('<option value="">-- Seleccionar Estado --</option>');
-
-		estadoEnum.forEach(function(est, indice, array) {
-			if (est.nombre != estado)
-				select.append('<option value="'+est.nombre+'">'+est.nombre+'</option>');
-			else
-				select.append('<option value="'+est.nombre+'" selected>'+est.nombre+'</option>');
+				$select.attr('data-estado-previo', estado);
+				calculaEstadoTicket();
+			},
+			error: function (xhr) {
+				let msg = 'No se pudo cambiar el estado.';
+				if (xhr.responseJSON && xhr.responseJSON.error) {
+					msg = xhr.responseJSON.error;
+				}
+				alert(msg);
+				$select.val(estadoPrevio);
+			},
+			complete: function () {
+				$select.prop('disabled', false);
+			}
 		});
 	}
 
@@ -466,26 +324,28 @@ var ptrAbreNovedad;
 	{
 		let url = '';
 
-		// Rellena select de estado
 		$("#tarea-ticket-table .item-tarea-ticket").each(function() {
 			let ticket_tarea_id = $(this).find(".ticket_tarea_id").val();
 			let ptrTarea = this;
-			let ultimoEstado = '';
+			let $estado = $(ptrTarea).find(".estadotarea");
 
-			// Busca estado de la tarea con la ultima novedad
+			if (!ticket_tarea_id || ticket_tarea_id === 'undefined') {
+				return;
+			}
+
 			url = carpetaBase+'/ticket/leer_ticket_tarea_novedad/'+ticket_tarea_id;
 
 			$.get(url, function(novedades){
-
 				var nov = $.map(novedades, function(value, index){
 					return [value];
 				});
-				ultimoEstado = "Pendiente";
+				let ultimoEstado = "Pendiente";
 				$.each(nov, function(index,value){
 					ultimoEstado = value.estado;
 				});
 
-				$(ptrTarea).find(".estadotarea").val(ultimoEstado);
+				$estado.val(ultimoEstado);
+				$estado.attr('data-estado-previo', ultimoEstado);
 			});
 		});
 	}
@@ -497,7 +357,7 @@ var ptrAbreNovedad;
 		$.get(url, function(data, textStatus){
 			if (textStatus == 'success')
 				alert('Técnico reasignado')
-			else	
+			else
 				alert('Ha ocurrido un error reasignando el técnico')
 		});
 	}
@@ -523,7 +383,7 @@ var ptrAbreNovedad;
 
 				if (estadotarea != 'Finalizada')
 					estadoTicket = 'Pendiente';
-			});		
+			});
 			$('#estado_ticket').val(estadoTicket);
 		}
 	}
@@ -595,12 +455,12 @@ var ptrAbreNovedad;
 				let $lista = $panel.find('.lista-comentarios-tarea[data-ticket-tarea-id="' + ticketTareaId + '"]');
 				$lista.find('.sin-comentarios').remove();
 
-				let html = '<div class="comentario-item small border rounded bg-white p-2 mb-1">' +
+				let html = '<div class="comentario-item border rounded bg-white p-2 mb-1">' +
 					'<div class="d-flex justify-content-between flex-wrap">' +
 						'<strong>' + $('<div>').text(resp.comentario.usuario || '').html() + '</strong>' +
 						'<span class="text-muted">' + (resp.comentario.fecha || '') + '</span>' +
 					'</div>' +
-					'<div class="mt-1" style="white-space: pre-wrap;">' +
+					'<div class="comentario-texto">' +
 						$('<div>').text(resp.comentario.comentario || '').html() +
 					'</div>' +
 				'</div>';
@@ -623,6 +483,3 @@ var ptrAbreNovedad;
 			}
 		});
 	}
-
-
-

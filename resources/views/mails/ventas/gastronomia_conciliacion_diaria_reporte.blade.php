@@ -24,7 +24,7 @@
             'total_vending' => 'TOTAL VENDING',
             'control_gastro_total' => 'Control día (neto)',
             'control_flash' => 'Control flash (caja)',
-            'control_flash_gastro' => 'Flash gastro (AyB vs rendg)',
+            'control_flash_gastro' => 'Flash gastro (AyB+vending Anita vs ERP/Rendg)',
             'control_flash_estacionamiento' => 'Flash estac. (vs rendg)',
             default => (string) ($fila['tipo_pv'] ?? $fila['tipo_fila'] ?? '—'),
         };
@@ -55,7 +55,7 @@
 @endif
 
 <p style="margin:16px 0 8px 0;">
-    Adjunto Excel (y CSV) por circuito: <strong>GASTRO</strong> (sal&oacute;n), <strong>ESTACIONAMIENTO</strong> (PV ERP vs rendgastro), <strong>VENDING</strong> (rendiciones ERP vs rendgastro), <strong>FLASH</strong> (caja Informix: flash_ayb / flash_estac vs rendgastro por unidad de negocio; jornada anterior a la auditada).
+    Adjunto Excel (y CSV) por circuito: <strong>GASTRO</strong> (sal&oacute;n), <strong>ESTACIONAMIENTO</strong> (PV ERP vs rendgastro), <strong>VENDING</strong> (rendiciones ERP vs rendgastro), <strong>FLASH</strong> (caja Informix: flash_ayb incluye vending mientras Anita no lo discrimine; flash_estac vs rendgastro; jornada anterior a la auditada).
 </p>
 
 @foreach ($informe['empresas'] ?? [] as $empresa)

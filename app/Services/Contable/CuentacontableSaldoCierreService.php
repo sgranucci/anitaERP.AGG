@@ -6,6 +6,7 @@ use App\Models\Contable\Cuentacontable_Saldo_Cierre;
 use App\Models\Contable\Cuentacontable_Saldo_Mes;
 use App\Models\Contable\PeriodoCierreContable;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -97,6 +98,7 @@ class CuentacontableSaldoCierreService
     ): ?float {
         $cierre = PeriodoCierreContable::query()
             ->where('empresa_id', $empresaId)
+            ->where('alcance', PeriodoContableCierreSupport::ALCANCE_GENERAL)
             ->whereRaw('(YEAR(fecha_hasta) * 100 + MONTH(fecha_hasta)) = ?', [$anioMesHasta])
             ->orderByDesc('id')
             ->first();

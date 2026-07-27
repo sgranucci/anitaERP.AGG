@@ -7,6 +7,8 @@ namespace App\Services\Ventas\Gastronomia;
 use App\Mail\Ventas\GastronomiaInformeZTransmisionFaltante;
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
+use App\Support\Ai\AiAgenteEventoDispatcherSupport;
+use App\Support\Ai\AiAgenteOperativoSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZTransmisionFaltanteSupport;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -98,6 +100,33 @@ final class GastronomiaInformeZTransmisionFaltanteService
             'total_faltante' => $analisis['total_faltante'] ?? 0,
             'cantidad_comandas' => $analisis['cantidad_comandas'] ?? 0,
         ]);
+
+        if (! empty($analisis['tiene_diferencias'])) {
+            AiAgenteEventoDispatcherSupport::registrar([
+                'evento' => AiAgenteOperativoSupport::EVENTO_Z_TRANSMISION_FALTANTE,
+                'origen' => 'gastronomia.informe_z_transmision_faltante',
+                'severidad' => 'alta',
+                'entidad_tipo' => 'jornada_operativa_gastronomia',
+                'entidad_id' => $jornadaId,
+                'empresa_id' => (int) ($analisis['empresa_id'] ?? 0) ?: null,
+                'resumen' => sprintf(
+                    'Z transmisión faltante jornada #%d (%s): total %s / %d comanda(s)',
+                    $jornadaId,
+                    (string) ($analisis['fecha_jornada_fmt'] ?? ''),
+                    number_format((float) ($analisis['total_faltante'] ?? 0), 2, ',', '.'),
+                    (int) ($analisis['cantidad_comandas'] ?? 0)
+                ),
+                'payload' => [
+                    'total_faltante' => $analisis['total_faltante'] ?? 0,
+                    'cantidad_comandas' => $analisis['cantidad_comandas'] ?? 0,
+                    'cierre_totem_id' => $analisis['cierre_totem_id'] ?? null,
+                ],
+                'plan_params' => [
+                    'jornada_id' => $jornadaId,
+                    'entidad_id' => $jornadaId,
+                ],
+            ]);
+        }
 
         return ['ok' => true, 'analisis' => $analisis];
     }

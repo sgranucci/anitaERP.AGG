@@ -88,6 +88,7 @@ Obligatorio antes de facturar (cuando exista el paso de emisión).
 - PV debe pertenecer a la empresa.
 - `modofacturacion` ≠ `M` (manual).
 - Al emitir: `POST …/api/proceso/emitir-factura` con `puntoventa_id`, `fecha_factura`; PV default vía `CierreJornadaProcesoPuntoventaSupport::resolverOError($empresaId)`.
+- **CAEA — correlatividad de fecha (ARCA 704):** `CaeaEmisionFechaCorrelatividadSupport`. `fechajornada` = `jornada.fecha_jornada` (la que se trabaja/cierra). Default de `fecha_factura` = calendario del cierre (`cierre_en`). Si el PV es CAEA y la última factura del mismo PV+tipo tiene fecha mayor, solo se eleva `fechafactura`. Mismo control en POS gastronomía y estacionamiento vía `aplicarFechasAlPayload`.
 
 **BSA (empresa_id = 1):** código PV `00003` (ej. «FCE BSA Chungo»).
 

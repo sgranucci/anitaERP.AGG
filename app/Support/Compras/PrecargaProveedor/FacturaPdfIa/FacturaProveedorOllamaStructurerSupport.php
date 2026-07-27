@@ -2,18 +2,23 @@
 
 namespace App\Support\Compras\PrecargaProveedor\FacturaPdfIa;
 
+use App\Services\Ai\AiGateway;
+use App\Services\Ai\AiPrompt;
 use App\Services\Compras\FacturaProveedorCorpusAprendizajeService;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Estructuración vía Ollama (opcional). Refuerza heurísticas cuando el servicio está disponible.
+ * La llamada al modelo pasa por AiGateway (punto único); el feature flag propio del módulo
+ * (comprobante_proveedor_pdf_ia.ollama.*) decide si se intenta o no.
  */
 final class FacturaProveedorOllamaStructurerSupport
 {
     public function __construct(
         private FacturaProveedorCorpusAprendizajeService $corpusService,
+        private AiGateway $aiGateway,
     ) {}
+
     /**
      * @param  array<string, mixed>  $heuristica
      * @return ?array<string, mixed>
@@ -24,59 +29,56 @@ final class FacturaProveedorOllamaStructurerSupport
             return null;
         }
 
-        $url = rtrim((string) config('comprobante_proveedor_pdf_ia.ollama.url', 'http://127.0.0.1:11434'), '/');
-        $model = (string) config('comprobante_proveedor_pdf_ia.ollama.model', 'qwen2.5:14b-instruct');
-        $timeout = (int) config('comprobante_proveedor_pdf_ia.ollama.timeout', 180);
+        $model = (string) config('comprobante_proveedor_pdf_ia.ollama.model', 'factura-proveedor-anita');
+        $prompt = new AiPrompt(
+            prompt: $this->armarPrompt($textoOcr, $heuristica),
+            esperaJson: true,
+            driver: 'ollama',
+            model: $model,
+            temperature: (float) config('comprobante_proveedor_pdf_ia.ollama.temperature', 0.05),
+            maxTokens: (int) config('comprobante_proveedor_pdf_ia.ollama.max_tokens', 1024),
+            timeout: (int) config('comprobante_proveedor_pdf_ia.ollama.timeout', 240),
+            meta: [
+                'origen' => 'factura_proveedor_pdf_ia',
+                'cuit_proveedor' => $heuristica['cuit_proveedor'] ?? null,
+            ],
+        );
 
-        $prompt = $this->armarPrompt($textoOcr, $heuristica);
+        $resultado = $this->aiGateway->generar($prompt);
 
-        try {
-            $response = Http::timeout($timeout)
-                ->post($url.'/api/generate', [
-                    'model' => $model,
-                    'prompt' => $prompt,
-                    'stream' => false,
-                    'format' => 'json',
-                    'options' => [
-                        'temperature' => (float) config('comprobante_proveedor_pdf_ia.ollama.temperature', 0.05),
-                        'num_predict' => (int) config('comprobante_proveedor_pdf_ia.ollama.max_tokens', 4096),
-                    ],
-                ]);
-
-            if (! $response->successful()) {
-                Log::channel($this->logChannel())->warning('pdf_ia.ollama_error', [
-                    'status' => $response->status(),
-                    'body' => mb_substr($response->body(), 0, 500),
-                ]);
-
-                return null;
-            }
-
-            $body = $response->json();
-            $raw = (string) ($body['response'] ?? '');
-            $parsed = json_decode($raw, true);
-
-            if (! is_array($parsed)) {
-                if (preg_match('/\{[\s\S]*\}/', $raw, $m)) {
-                    $parsed = json_decode($m[0], true);
-                }
-            }
-
-            return is_array($parsed) ? $parsed : null;
-        } catch (\Throwable $e) {
+        if (! $resultado->ok) {
             Log::channel($this->logChannel())->info('pdf_ia.ollama_no_disponible', [
-                'message' => $e->getMessage(),
+                'message' => $resultado->error,
+                'driver' => $resultado->driver,
+                'model' => $resultado->model,
+                'latencia_ms' => $resultado->latenciaMs,
             ]);
 
             return null;
         }
+
+        if (! is_array($resultado->json)) {
+            Log::channel($this->logChannel())->warning('pdf_ia.ollama_json_invalido', [
+                'model' => $resultado->model,
+                'latencia_ms' => $resultado->latenciaMs,
+                'muestra' => mb_substr($resultado->texto, 0, 300),
+            ]);
+
+            return null;
+        }
+
+        return $resultado->json;
     }
 
     /** @param  array<string, mixed>  $heuristica */
     private function armarPrompt(string $textoOcr, array $heuristica): string
     {
         $hints = json_encode($heuristica, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        $textoRecortado = mb_substr($textoOcr, 0, (int) config('comprobante_proveedor_pdf_ia.ollama.max_chars_ocr', 12000));
+        $textoRecortado = FacturaProveedorOcrRecorteSupport::cabeceraYPie(
+            $textoOcr,
+            (int) config('comprobante_proveedor_pdf_ia.ollama.max_chars_ocr', 12000),
+            (float) config('comprobante_proveedor_pdf_ia.ollama.cabecera_ratio', 0.4),
+        );
 
         $cuitProv = (string) ($heuristica['cuit_proveedor'] ?? '');
         $ejemplos = $this->corpusService->ejemplosParaCuit(
@@ -109,8 +111,14 @@ PROMPT;
 Sos un extractor experto de facturas de compra argentinas (AFIP). NO extraigas líneas de artículos/SKU/cantidades.
 Solo conceptos impositivos y totales de pie de factura: netos gravados por alícuota, IVA, exentos, no gravado, percepciones IVA/IIBB/ganancias, impuestos internos, otros tributos.
 
-IMPORTANTE: El tipo exacto de comprobante contable (FGA, FIA, FIB, FNB, etc.) NO lo deduzcas del nombre de archivo.
-Ese tipo lo resuelve el ERP con la OC y el centro de costo vía API listaConcepto. En JSON usá tipo_comprobante "FC" genérico.
+IMPORTANTE: El tipo contable fino (FGA, FIA, CGA, DIB, etc.) NO lo deduzcas del nombre de archivo:
+el ERP lo arma con la OC + centro de costo (listaConcepto).
+En JSON usá solo el tipo GENÉRICO AFIP:
+- "FC" = Factura
+- "ND" = Nota de débito (texto "Nota de Débito", N/D, código 002/007/012…)
+- "NC" = Nota de crédito (texto "Nota de Crédito", N/C, código 003/008/013…)
+- "REC" / "REM" solo si es claramente recibo/remito.
+Si dudás entre FC/ND/NC, preferí el que diga el título/código del comprobante.
 
 numero_oc: SIEMPRE 6 dígitos (penmp_nro Anita). Si no hay OC en el texto, null.
 

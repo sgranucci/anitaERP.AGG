@@ -1,0 +1,56 @@
+---
+description: Migraciones nuevas neutrales al motor (MySQL/MariaDB/Postgres)
+globs: database/migrations/**/*.php
+alwaysApply: false
+---
+
+# Migraciones portables (motor-agnósticas)
+
+Aplica a **migraciones nuevas** desde 2026-07-27. No reescribir históricas salvo que el PR las toque. Ver `docs/arquitectura/portabilidad-base-datos.md`.
+
+## Obligatorio
+
+1. Usar **Schema Builder** (`Schema::create` / `table` / `hasTable` / `hasColumn`).
+2. **No** fijar charset/collation en el Blueprint (`$table->charset`, `$table->collation`).
+3. **No** SQL MySQL-only: `information_schema` + `DATABASE()`, `SHOW INDEX`, `ENGINE=`, `utf8mb4_spanish_ci`, `ON DUPLICATE KEY`, etc.
+4. Comprobar FKs/índices con `Schema` / try-catch al dropear, no introspección MySQL cruda.
+5. Seeds/updates de datos: Query Builder (`DB::table`) sin funciones de fecha/casteo dialectales.
+
+## Preferir
+
+| En lugar de | Usar |
+|---|---|
+| `$table->charset` / `collation` | Defaults de conexión (`DB_CHARSET` / `DB_COLLATION` → hoy `utf8mb4` + `utf8mb4_spanish_ci`) |
+| `DB::select("… information_schema …")` | `Schema::hasColumn` / `hasTable`; drop FK en try-catch |
+| `DB::statement` dialectal | Schema Builder; si es inevitable → `if (Schema::getConnection()->getDriverName() === 'pgsql')` / `mysql` |
+| `enum()` de negocio complejo | `string` + validación app (enums PG ≠ MySQL) |
+
+## Permitido (Laravel lo traduce)
+
+- `unsignedBigInteger`, `foreign()`, `unique()`, `index()`, `nullable()`, `default()`
+- `->after('col')` (solo afecta orden en MySQL; en PG se ignora — OK)
+
+## Prohibido en migraciones nuevas
+
+```php
+// ❌
+$table->charset = 'utf8mb4';
+$table->collation = 'utf8mb4_spanish_ci';
+DB::select("SELECT … FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE()");
+```
+
+```php
+// ✅
+Schema::create('ejemplo', function (Blueprint $table) {
+    $table->bigIncrements('id');
+    $table->unsignedBigInteger('usuario_id');
+    $table->foreign('usuario_id')->references('id')->on('usuario')->cascadeOnDelete();
+});
+```
+
+## Comprobación rápida
+
+```bash
+rg "charset|collation|information_schema|utf8mb4_spanish|DATABASE\(\)" database/migrations/ARCHIVO_NUEVO.php
+# debe estar vacío en migraciones nuevas
+```

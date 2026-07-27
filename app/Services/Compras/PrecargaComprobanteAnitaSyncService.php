@@ -3,6 +3,7 @@
 namespace App\Services\Compras;
 
 use App\ApiAnita;
+use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tipotransaccion_Compra;
@@ -12,6 +13,7 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\AnitaSync\Precarga\PrecargaCabeceraAnitaMapper;
 use App\Support\Compras\AnitaSync\Precarga\PrecargaConceptoAnitaMapper;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -61,7 +63,8 @@ class PrecargaComprobanteAnitaSyncService
                 prec_subtotal,
                 prec_total,
                 prec_cod_mon,
-                prec_cotizacion
+                prec_cotizacion,
+                prec_fecha
 				',
                     'valores' => PrecargaCabeceraAnitaMapper::valoresInsert($precargaId, $payload),
                 ], 'precarga insert');
@@ -98,6 +101,108 @@ class PrecargaComprobanteAnitaSyncService
         } else {
             $this->insertCabecera($precargaId, $payload);
         }
+    }
+
+    /**
+     * Inserta o actualiza un concepto ERP en Anita.
+     */
+    public function syncConcepto(Precarga_Comprobante_Proveedor_Concepto $linea, array $payload = []): void
+    {
+        $preccId = (int) $linea->id;
+        $precargaId = (int) $linea->precarga_comprobante_proveedor_id;
+        $payload = array_merge([
+            'concepto_ivacompra_id' => $linea->concepto_ivacompra_id,
+            'monto' => $linea->monto,
+        ], $payload);
+
+        if ($this->existsConceptoEnAnita($preccId)) {
+            $this->updateConcepto($preccId, $precargaId, $payload);
+        } else {
+            $this->insertConcepto($linea, $payload);
+        }
+    }
+
+    /**
+     * Payload Anita desde el modelo ERP (cabecera).
+     *
+     * @return array<string, mixed>
+     */
+    public function payloadDesdeModelo(Precarga_Comprobante_Proveedor $precarga): array
+    {
+        return $this->enriquecerPayloadParaAnita([
+            'empresa_id' => $precarga->empresa_id,
+            'proveedor_id' => $precarga->proveedor_id,
+            'tipotransaccion_compra_id' => $precarga->tipotransaccion_compra_id,
+            'letra' => $precarga->letra,
+            'sucursal' => $precarga->sucursal,
+            'numerocomprobante' => $precarga->numerocomprobante,
+            'fechafactura' => $precarga->fechafactura,
+            'numeroordencompra' => $precarga->numeroordencompra,
+            'subtotal' => $precarga->subtotal,
+            'total' => $precarga->total,
+            'moneda_id' => $precarga->moneda_id,
+            'moneda' => $precarga->moneda,
+            'cotizacion' => $precarga->cotizacion,
+        ]);
+    }
+
+    public function contarResincronizacionErp(?int $precargaId = null): int
+    {
+        return $this->queryResincronizacionErp($precargaId)->count();
+    }
+
+    /**
+     * Re-sincroniza precargas ERP → Anita (cabecera + conceptos; incluye prec_fecha).
+     *
+     * @return array{procesadas: int, resincronizadas: int, conceptos: int, errores: int}
+     */
+    public function resincronizarErpEnAnita(?int $precargaId = null, ?callable $onError = null): array
+    {
+        $stats = [
+            'procesadas' => 0,
+            'resincronizadas' => 0,
+            'conceptos' => 0,
+            'errores' => 0,
+        ];
+
+        foreach ($this->queryResincronizacionErp($precargaId)->cursor() as $precarga) {
+            $stats['procesadas']++;
+            try {
+                $payload = $this->payloadDesdeModelo($precarga);
+                $this->syncCabecera((int) $precarga->id, $payload);
+
+                foreach ($precarga->precarga_comprobante_proveedor_conceptos as $linea) {
+                    $this->syncConcepto($linea);
+                    $stats['conceptos']++;
+                }
+
+                $stats['resincronizadas']++;
+            } catch (\Throwable $e) {
+                $stats['errores']++;
+                Log::warning('precarga.anita_sync.resincronizacion_fallida', [
+                    'precarga_id' => $precarga->id,
+                    'error' => $e->getMessage(),
+                ]);
+                if ($onError !== null) {
+                    $onError($precarga, $e);
+                }
+            }
+        }
+
+        return $stats;
+    }
+
+    private function queryResincronizacionErp(?int $precargaId = null): Builder
+    {
+        $query = Precarga_Comprobante_Proveedor::query()
+            ->with('precarga_comprobante_proveedor_conceptos')
+            ->orderBy('id');
+
+        if ($precargaId !== null && $precargaId > 0) {
+            $query->whereKey($precargaId);
+        }
+
+        return $query;
     }
 
     /**

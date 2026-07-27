@@ -28,6 +28,7 @@
                         <tr>
                             <th class="width20">C&oacute;digo</th>
                             <th>Nombre</th>
+                            <th>Centro de costo</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -36,6 +37,11 @@
                         <tr>
                             <td>{{ $data->codigo }}</td>
                             <td>{{ $data->nombre }}</td>
+                            <td>
+                                @if ($data->centrocostos)
+                                    {{ $data->centrocostos->codigo }}-{{ $data->centrocostos->nombre }}
+                                @endif
+                            </td>
                             <td>
                                 @if (can('editar-sector-solicitud-pago', false))
                                     <a href="{{route('editar_sector_solicitudpago', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

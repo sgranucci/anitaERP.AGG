@@ -79,4 +79,43 @@ class GastronomiaInsumosTipoarticuloReporteQuery
             ->orderBy('sku')
             ->get(['id', 'sku', 'descripcion']);
     }
+
+    /**
+     * Etiqueta de unidad de medida predominante entre los artículos procesados.
+     * Si hay una sola (o una dominante), usa su nombre; si no hay datos, "unidades".
+     *
+     * @param  list<int>  $articuloIds
+     */
+    public function etiquetaUnidadMedida(array $articuloIds): string
+    {
+        $articuloIds = array_values(array_unique(array_filter(
+            array_map('intval', $articuloIds),
+            static fn (int $id) => $id > 0,
+        )));
+
+        if ($articuloIds === []) {
+            return 'unidades';
+        }
+
+        $top = DB::table('articulo as a')
+            ->leftJoin('unidadmedida as u', 'u.id', '=', 'a.unidadmedida_id')
+            ->whereIn('a.id', $articuloIds)
+            ->selectRaw('u.nombre, u.abreviatura, COUNT(*) as n')
+            ->groupBy('u.nombre', 'u.abreviatura')
+            ->orderByDesc('n')
+            ->first();
+
+        if ($top === null) {
+            return 'unidades';
+        }
+
+        $nombre = trim((string) ($top->nombre ?? ''));
+        if ($nombre !== '') {
+            return mb_strtoupper($nombre) === 'UNIDADES' ? 'unidades' : $nombre;
+        }
+
+        $abreviatura = trim((string) ($top->abreviatura ?? ''));
+
+        return $abreviatura !== '' ? $abreviatura : 'unidades';
+    }
 }

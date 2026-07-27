@@ -1101,7 +1101,8 @@ class FacturacionService
 					Self::grabaAsientoContable($asientoContable, $empresa_id, $fechaFactura, $vta->id, $detalleContable, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
 											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
-											$puntoventa->modofacturacion ?? null);
+											$puntoventa->modofacturacion ?? null,
+											isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null);
 					
 					// Remito ERP (solo facturación administrativa Bierzo; no gastronomía/estacionamiento)
 					if ($this->facturandoDesdeRemitoId) {
@@ -1652,7 +1653,8 @@ class FacturacionService
 											$detalleContable, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
 											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
-											$puntoventa->modofacturacion ?? null);
+											$puntoventa->modofacturacion ?? null,
+											isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null);
 
 					// Marca Orden de venta como facturada
 					$ordenventa_cuota_id = 0;
@@ -2984,9 +2986,10 @@ class FacturacionService
 			else
 				$tipoAnita = $tipotransaccion->abreviatura;
 
+			// Prioridad: opciones_emision (gastronomía/proceso cierre) → no pisar con fechafactura CAEA.
 			$fechaJornada = $fechaFactura;
 			if (is_array($opcionesEmision) && ! empty($opcionesEmision['fechajornada'])) {
-				$fechaJornada = $opcionesEmision['fechajornada'];
+				$fechaJornada = (string) $opcionesEmision['fechajornada'];
 			}
 
 			$venta = ['fecha' => $fechaFactura,
@@ -3237,7 +3240,8 @@ class FacturacionService
 									$detalleContable, $centrocosto_id,
 									$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
 									substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
-									$puntoventa->modofacturacion ?? null);
+									$puntoventa->modofacturacion ?? null,
+									isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null);
 			}
 
 			$ret = [
@@ -5615,14 +5619,19 @@ class FacturacionService
 
 	private function grabaAsientoContable($asientocontable, $empresa_id, $fecha, $venta_id, $observacion, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $contrapartida_id, $tipo, $letra, $sucursal, $nro,
-											?string $modoFacturacionPv = null)
+											?string $modoFacturacionPv = null, ?string $fechaJornada = null)
 	{
+		$opcionesCierre = ['modofacturacion_pv' => $modoFacturacionPv];
+		if ($fechaJornada !== null && trim($fechaJornada) !== '') {
+			$opcionesCierre['fechajornada'] = $fechaJornada;
+		}
+
 		PeriodoContableCierreSupport::assertOperacionPermitida(
 			(int) $empresa_id,
 			(string) $fecha,
 			PeriodoContableCierreSupport::ALCANCE_FACTURACION,
 			null,
-			['modofacturacion_pv' => $modoFacturacionPv]
+			$opcionesCierre
 		);
 
 		// Busca tipo de asiento de ventas
@@ -5642,6 +5651,11 @@ class FacturacionService
 		$data['letra'] = $letra;
 		$data['sucursal'] = $sucursal;
 		$data['nro'] = $nro;
+		$data['modofacturacion_pv'] = $modoFacturacionPv;
+		$data['alcance_cierre_contable'] = PeriodoContableCierreSupport::ALCANCE_FACTURACION;
+		if ($fechaJornada !== null && trim($fechaJornada) !== '') {
+			$data['fechajornada'] = $fechaJornada;
+		}
 
 		// Arma tablas para grabar en anita
 		$centrocosto_ids = [];

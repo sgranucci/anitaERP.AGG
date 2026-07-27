@@ -178,6 +178,20 @@ class TicketController extends Controller
     {
         can('actualizar-ticket');
 
+        // Una vez creado el ticket, el usuario no puede cambiar sala/sector/área/título/comentario
+        // ni la categoría/subcategoría que asignó el área técnica.
+        $ticket = $this->ticketRepository->find($id);
+        $request->merge([
+            'sala_id' => $ticket->sala_id,
+            'sector_id' => $ticket->sector_id,
+            'areadestino_id' => $ticket->areadestino_id,
+            'titulo' => $ticket->titulo,
+            'comentario' => $ticket->comentario,
+            'subcategoria_ticket_id' => $ticket->subcategoria_ticket_id,
+            'categoria_ticket_id' => $ticket->subcategoria_tickets?->categoria_ticket_id
+                ?? $request->input('categoria_ticket_id'),
+        ]);
+
         $this->ticketService->actualizaTicket($request, $id);
 
         return redirect('ticket/ticket')->with('mensaje', 'Ticket actualizado con éxito');

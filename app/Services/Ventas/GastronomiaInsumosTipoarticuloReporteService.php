@@ -20,7 +20,8 @@ class GastronomiaInsumosTipoarticuloReporteService
      *   filas: list<array<string, mixed>>,
      *   totales_por_dia: array<string, float>,
      *   total_general: float,
-     *   cantidad_articulos: int
+     *   cantidad_articulos: int,
+     *   unidad_medida_etiqueta: string
      * }
      */
     public function generar(array $filtros): array
@@ -107,12 +108,18 @@ class GastronomiaInsumosTipoarticuloReporteService
 
         usort($filas, fn ($a, $b) => strcmp((string) $a['sku'], (string) $b['sku']));
 
+        $articuloIdsConVenta = array_map(
+            static fn (array $fila): int => (int) ($fila['articulo_id'] ?? 0),
+            $filas,
+        );
+
         return [
             'columnas_dias' => $columnasDias,
             'filas' => $filas,
             'totales_por_dia' => $totalesPorDia,
             'total_general' => $totalGeneral,
             'cantidad_articulos' => count($filas),
+            'unidad_medida_etiqueta' => $this->query->etiquetaUnidadMedida($articuloIdsConVenta),
         ];
     }
 

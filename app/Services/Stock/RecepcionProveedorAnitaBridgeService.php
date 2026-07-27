@@ -4,9 +4,12 @@ namespace App\Services\Stock;
 
 use App\ApiAnita;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use App\Services\Compras\OrdencompraAnitaSyncService;
+use App\Models\Contable\Asiento_Movimiento;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorAnitaColisionSupport;
+use App\Support\Stock\RecepcionProveedorAsientoAnitaCtamovSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaOrdenLineaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
@@ -312,11 +315,11 @@ class RecepcionProveedorAnitaBridgeService
     }
 
     /**
-     * recepmae existente en Anita vinculada a esta recepción ERP (p. ej. REF tras cambio de referencia).
+     * recepmae existente en Anita vinculada a esta recepción ERP (documentoid o correspondencia OC/proveedor/fecha).
      */
     public function cabeceraRecepmaeVinculadaDocumento(Recepcion_Proveedor $recepcion): ?object
     {
-        $recepcion->loadMissing(['proveedores', 'empresas']);
+        $recepcion->loadMissing(['proveedores', 'empresas', 'ordencompras', 'asientos']);
 
         $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
         if ((int) ($clave['nro'] ?? 0) <= 0) {
@@ -329,11 +332,16 @@ class RecepcionProveedorAnitaBridgeService
             return null;
         }
 
-        if ((int) ($cabecera->recm_documentoid ?? 0) !== (int) $recepcion->id) {
-            return null;
+        if ((int) ($cabecera->recm_documentoid ?? 0) === (int) $recepcion->id) {
+            return $cabecera;
         }
 
-        return $cabecera;
+        // documentoid huérfano / desfasado: misma COM por OC + proveedor + fecha.
+        if (RecepcionProveedorAnitaColisionSupport::esMismaRecepcionEnAnita($recepcion, $cabecera)) {
+            return $cabecera;
+        }
+
+        return null;
     }
 
     public function contarRecepmovPorClave(array $clave): int
@@ -371,30 +379,60 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function detalleComIncompletoEnAnita(Recepcion_Proveedor $recepcion): bool
     {
+        return (bool) ($this->diagnosticoDetalleComAnita($recepcion)['incompleto'] ?? false);
+    }
+
+    /**
+     * @return array{
+     *   lineas_erp: int,
+     *   recepmov: int,
+     *   stkmov: int|null,
+     *   incompleto: bool,
+     *   mensaje: string|null
+     * }
+     */
+    public function diagnosticoDetalleComAnita(Recepcion_Proveedor $recepcion): array
+    {
         $recepcion->loadMissing(['empresas', 'recepcion_proveedor_articulos']);
 
         $lineasErp = $recepcion->recepcion_proveedor_articulos->count();
-        if ($lineasErp <= 0) {
-            return false;
-        }
-
         $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
-        if ((int) ($clave['nro'] ?? 0) <= 0) {
-            return true;
+        $recepmov = (int) ($clave['nro'] ?? 0) > 0 ? $this->contarRecepmovPorClave($clave) : 0;
+        $stkmov = null;
+        $incompleto = false;
+
+        if ($lineasErp > 0) {
+            if ((int) ($clave['nro'] ?? 0) <= 0) {
+                $incompleto = true;
+            } elseif ($recepmov < $lineasErp) {
+                $incompleto = true;
+            } elseif (RecepcionProveedorStkmovAnitaSupport::habilitado()) {
+                $stkmov = $this->contarStkmovPorClave($clave, (int) $recepcion->empresa_id);
+                $incompleto = $stkmov < $lineasErp;
+            }
         }
 
-        $recepmov = $this->contarRecepmovPorClave($clave);
-        if ($recepmov < $lineasErp) {
-            return true;
+        if ($stkmov === null && RecepcionProveedorStkmovAnitaSupport::habilitado() && (int) ($clave['nro'] ?? 0) > 0) {
+            $stkmov = $this->contarStkmovPorClave($clave, (int) $recepcion->empresa_id);
         }
 
-        if (! RecepcionProveedorStkmovAnitaSupport::habilitado()) {
-            return false;
+        $mensaje = null;
+        if ($incompleto) {
+            $mensaje = sprintf(
+                'Detalle Anita incompleto: ERP %d ítem(s), recepmov %d%s.',
+                $lineasErp,
+                $recepmov,
+                $stkmov !== null ? ', stkmov '.$stkmov : '',
+            );
         }
 
-        $stkmov = $this->contarStkmovPorClave($clave, (int) $recepcion->empresa_id);
-
-        return $stkmov < $lineasErp;
+        return [
+            'lineas_erp' => $lineasErp,
+            'recepmov' => $recepmov,
+            'stkmov' => $stkmov,
+            'incompleto' => $incompleto,
+            'mensaje' => $mensaje,
+        ];
     }
 
     /**
@@ -576,6 +614,7 @@ class RecepcionProveedorAnitaBridgeService
     /**
      * Actualiza únicamente recv_cotizacion de las líneas recepmov de la COM (sin tocar cantidades,
      * precios ni stkmov/pendmovp). Se usa al cambiar la cotización de una recepción confirmada.
+     * Exige filas afectadas en el bridge y relee recepmov para confirmar el valor.
      */
     public function actualizarCotizacionRecepmov(Recepcion_Proveedor $recepcion, float $nuevaCotizacion): void
     {
@@ -591,17 +630,348 @@ class RecepcionProveedorAnitaBridgeService
         }
 
         $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+        $sistema = (string) config('recepcion_proveedor.anita.sistema_compras');
+        $tabla = (string) config('recepcion_proveedor.anita.tablas.recepcion_linea');
+        $where = RecepcionProveedorAnitaWhereSupport::recepmovProveedorCabecera($codigoProveedor, $clave);
 
         $api = new ApiAnita;
         $api->apiCallEscritura([
             'acc' => 'update',
-            'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
-            'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_linea'),
+            'sistema' => $sistema,
+            'tabla' => $tabla,
             'valores' => RecepcionProveedorAnitaEscrituraSupport::updateSet([
                 'recv_cotizacion' => RecepcionProveedorAnitaEscrituraSupport::decimalSql($nuevaCotizacion),
             ]),
+            'whereArmado' => $where,
+        ], 'recepcion recepmov update cotizacion', 'anita_bridge.fallo', true);
+
+        $this->assertCotizacionRecepmov($api, $sistema, $tabla, $where, $nuevaCotizacion, $clave);
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function assertCotizacionRecepmov(
+        ApiAnita $api,
+        string $sistema,
+        string $tabla,
+        string $where,
+        float $nuevaCotizacion,
+        array $clave,
+    ): void {
+        $raw = (string) $api->apiCall([
+            'acc' => 'list',
+            'sistema' => $sistema,
+            'tabla' => $tabla,
+            'campos' => 'recv_cotizacion,recv_articulo,recv_orden',
+            'whereArmado' => $where,
+        ]);
+        $parsed = ApiAnita::parsearRespuestaLista($raw);
+        if ($parsed['error_lectura'] !== null) {
+            throw new \RuntimeException(
+                'No se pudo verificar recv_cotizacion en Anita tras el UPDATE: '.$parsed['error_lectura']
+            );
+        }
+
+        $filas = $parsed['filas'];
+        if ($filas === []) {
+            throw new \RuntimeException(sprintf(
+                'UPDATE recepmov cotización: no hay líneas COM %s/%s/%d/%d en Anita para verificar.',
+                $clave['tipo'],
+                $clave['letra'],
+                (int) $clave['sucursal'],
+                (int) $clave['nro']
+            ));
+        }
+
+        foreach ($filas as $fila) {
+            $actual = (float) ($fila->recv_cotizacion ?? 0);
+            if (abs($actual - $nuevaCotizacion) > 0.0005) {
+                throw new \RuntimeException(sprintf(
+                    'recv_cotizacion en Anita quedó en %s (esperado %s) para artículo %s orden %s.',
+                    rtrim(rtrim(number_format($actual, 6, '.', ''), '0'), '.') ?: '0',
+                    rtrim(rtrim(number_format($nuevaCotizacion, 6, '.', ''), '0'), '.') ?: '0',
+                    (string) ($fila->recv_articulo ?? '?'),
+                    (string) ($fila->recv_orden ?? '?')
+                ));
+            }
+        }
+    }
+
+    /**
+     * Repara solo recepmae + recepmov (adopta cabecera desktop/huérfana y regraba líneas).
+     * No toca stkmov, aplicped ni pendmovp. Pensado para COM importadas (ANITA_IMPORT)
+     * donde el sync borró recepmov y no adoptó la cabecera.
+     *
+     * @return array{
+     *     lineas_erp: int,
+     *     lineas_recepmov: int,
+     *     recepmae_estado: string,
+     *     recepmae_documentoid: int,
+     *     ctamov_debe: float,
+     *     ctamov_haber: float,
+     *     ctamov_lineas: int,
+     *     subdiario_lineas: int
+     * }
+     */
+    public function repararRecepmaeYRecepmovSinStkmov(Recepcion_Proveedor $recepcion): array
+    {
+        if ((int) $recepcion->numerorecepcion <= 0) {
+            throw new \RuntimeException('La recepción debe tener numerorecepcion asignado.');
+        }
+
+        if ($recepcion->estado !== RecepcionProveedorEstados::CONFIRMADA) {
+            throw new \RuntimeException('Solo se repara recepmae/recepmov de recepciones CONFIRMADA.');
+        }
+
+        $cotizacionCabecera = (float) ($recepcion->cotizacion ?: 1);
+        // Homogeneiza líneas ERP con cabecera (import dejaba 1500 en líneas y 1 en cabecera).
+        Recepcion_Proveedor_Articulo::query()
+            ->where('recepcion_proveedor_id', $recepcion->id)
+            ->where(function ($q) use ($cotizacionCabecera) {
+                $q->whereNull('cotizacion')
+                    ->orWhere('cotizacion', '!=', $cotizacionCabecera);
+            })
+            ->update(['cotizacion' => $cotizacionCabecera]);
+
+        $recepcion->loadMissing([
+            'proveedores', 'empresas', 'ordencompras',
+            'recepcion_proveedor_articulos.articulos.categorias',
+            'recepcion_proveedor_articulos.articulos.impuestos',
+            'recepcion_proveedor_articulos.centrocostos',
+        ]);
+
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        RecepcionProveedorAnitaClaveSupport::asignarEnRecepcion($recepcion, $clave);
+
+        $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+        $fechaAnita = (int) str_replace('-', '', $recepcion->fecha->format('Y-m-d'));
+        $usuario = substr((string) (Auth::user()->usuario ?? Auth::user()->name ?? 'ERP'), 0, 8);
+        $empresaCodigo = (int) ($recepcion->empresas->codigo ?? $recepcion->empresa_id);
+        $cfg = config('recepcion_proveedor.anita');
+        $estadoConfirmada = (string) ($cfg['recepcion_estado_confirmada'] ?? '2');
+        $ocFac = $this->claveOcFacDesdeRecepcion($recepcion);
+        $refFac = RecepcionProveedorAnitaReferenciaSupport::referenciaFacturaRemitoDesdeRecepcion($recepcion);
+
+        $empresaId = (int) $recepcion->empresa_id;
+        $stkmovAntes = $this->contarStkmovAnita($clave, $empresaId);
+
+        $api = new ApiAnita;
+        $valoresRecepmae = RecepcionProveedorAnitaEscrituraSupport::recepmaeUpdateSet(
+            $fechaAnita,
+            $estadoConfirmada,
+            $usuario,
+            substr((string) ($recepcion->observacion ?? ''), 0, 40),
+            $empresaCodigo,
+            $ocFac,
+            $refFac,
+            (int) $recepcion->id,
+        );
+        $valoresRecepmae .= ', recm_terminal = '.RecepcionProveedorAnitaEscrituraSupport::textoSql(
+            RecepcionProveedorAnitaWhereSupport::TERMINAL_ERP,
+            8
+        );
+
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'sistema' => $cfg['sistema_compras'],
+            'tabla' => $cfg['tablas']['recepcion_cabecera'],
+            'valores' => $valoresRecepmae,
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave),
+        ], 'recepcion recepmae adoptar sin stkmov', 'anita_bridge.fallo', true);
+
+        $this->eliminarRecepmov($clave, $codigoProveedor);
+        $ordenesAnita = RecepcionProveedorAnitaOrdenLineaSupport::ordenRecepmovPorLineaId($recepcion);
+        $this->grabarRecepmov($recepcion, $codigoProveedor, $clave, $fechaAnita, $empresaCodigo, $ordenesAnita);
+
+        $stkmovDespues = $this->contarStkmovAnita($clave, $empresaId);
+        if ($stkmovAntes !== $stkmovDespues) {
+            throw new \RuntimeException(sprintf(
+                'Reparación abortada: stkmov cambió de %d a %d líneas (no debía tocarse).',
+                $stkmovAntes,
+                $stkmovDespues
+            ));
+        }
+
+        $lineasErp = $recepcion->recepcion_proveedor_articulos->count();
+        $rawMov = (string) $api->apiCall([
+            'acc' => 'list',
+            'sistema' => $cfg['sistema_compras'],
+            'tabla' => $cfg['tablas']['recepcion_linea'],
+            'campos' => 'recv_articulo,recv_cotizacion,recv_cantidad,recv_precio,recv_orden',
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmovProveedorCabecera($codigoProveedor, $clave),
-        ], 'recepcion recepmov update cotizacion');
+        ]);
+        $filasMov = ApiAnita::decodificarListaFilas($rawMov);
+        if (count($filasMov) < $lineasErp) {
+            throw new \RuntimeException(sprintf(
+                'Tras reparar, recepmov tiene %d líneas y ERP %d (COM %d).',
+                count($filasMov),
+                $lineasErp,
+                (int) $recepcion->numerorecepcion
+            ));
+        }
+
+        foreach ($filasMov as $fila) {
+            $cot = (float) ($fila->recv_cotizacion ?? 0);
+            if (abs($cot - $cotizacionCabecera) > 0.0005) {
+                throw new \RuntimeException(sprintf(
+                    'recv_cotizacion=%s distinta de cabecera ERP=%s (artículo %s).',
+                    (string) ($fila->recv_cotizacion ?? ''),
+                    (string) $cotizacionCabecera,
+                    (string) ($fila->recv_articulo ?? '?')
+                ));
+            }
+        }
+
+        $rawMae = (string) $api->apiCall([
+            'acc' => 'list',
+            'sistema' => $cfg['sistema_compras'],
+            'tabla' => $cfg['tablas']['recepcion_cabecera'],
+            'campos' => 'recm_estado,recm_documentoid,recm_terminal',
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave),
+            'limit' => 'FIRST 1',
+        ]);
+        $mae = ApiAnita::primeraFilaLista($rawMae);
+        if ($mae === null) {
+            throw new \RuntimeException('No se pudo releer recepmae tras la reparación.');
+        }
+
+        $docId = (int) ($mae->recm_documentoid ?? 0);
+        $estadoMae = trim((string) ($mae->recm_estado ?? ''));
+        $terminalMae = trim((string) ($mae->recm_terminal ?? ''));
+        if ($docId !== (int) $recepcion->id || $estadoMae !== $estadoConfirmada) {
+            throw new \RuntimeException(sprintf(
+                'recepmae no adoptada: documentoid=%d estado=%s (esperado doc=%d estado=%s).',
+                $docId,
+                $estadoMae,
+                (int) $recepcion->id,
+                $estadoConfirmada
+            ));
+        }
+
+        $contable = $this->assertContabilidadAnitaSinDobleSubdiario($recepcion, $clave);
+
+        Log::info('RecepcionProveedorAnitaBridge: reparar recepmae+recepmov sin stkmov', [
+            'recepcion_id' => $recepcion->id,
+            'com' => (int) $recepcion->numerorecepcion,
+            'lineas_erp' => $lineasErp,
+            'lineas_recepmov' => count($filasMov),
+            'stkmov_intactas' => $stkmovDespues,
+            'recm_terminal' => $terminalMae,
+            'ctamov' => $contable,
+        ]);
+
+        return [
+            'lineas_erp' => $lineasErp,
+            'lineas_recepmov' => count($filasMov),
+            'recepmae_estado' => $estadoMae,
+            'recepmae_documentoid' => $docId,
+            'ctamov_debe' => $contable['ctamov_debe'],
+            'ctamov_haber' => $contable['ctamov_haber'],
+            'ctamov_lineas' => $contable['ctamov_lineas'],
+            'subdiario_lineas' => $contable['subdiario_lineas'],
+        ];
+    }
+
+    /**
+     * COM nativa Anita suele ir a subdiario; el sync ERP escribe ctamov.
+     * Ambos a la vez = doble en el mayor. Exige ctamov alineado al asiento ERP y subdiario vacío.
+     *
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @return array{ctamov_debe: float, ctamov_haber: float, ctamov_lineas: int, subdiario_lineas: int, erp_debe: float}
+     */
+    public function assertContabilidadAnitaSinDobleSubdiario(Recepcion_Proveedor $recepcion, ?array $clave = null): array
+    {
+        $clave ??= RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        $tipo = trim((string) ($clave['tipo'] ?? ''));
+        $letra = trim((string) ($clave['letra'] ?? ''));
+        $sucursal = (int) ($clave['sucursal'] ?? 0);
+        $nro = (int) ($clave['nro'] ?? 0);
+
+        if ($tipo === '' || $nro <= 0) {
+            throw new \RuntimeException('Clave Anita inválida para controlar ctamov/subdiario.');
+        }
+
+        $erpDebe = $this->totalDebeAsientoErp($recepcion);
+        $totalesCtamov = RecepcionProveedorAsientoAnitaCtamovSupport::totalesCtamovRecepcion($recepcion);
+        if ($totalesCtamov === null) {
+            throw new \RuntimeException(sprintf(
+                'COM %d sin ctamov en Anita (esperado asiento ERP debe=%.2f).',
+                $nro,
+                $erpDebe
+            ));
+        }
+
+        if (abs($totalesCtamov['debe'] - $erpDebe) > 0.05 || abs($totalesCtamov['haber'] - $erpDebe) > 0.05) {
+            throw new \RuntimeException(sprintf(
+                'ctamov COM %d descuadrado vs asiento ERP: ctamov D=%.2f H=%.2f / ERP=%.2f.',
+                $nro,
+                $totalesCtamov['debe'],
+                $totalesCtamov['haber'],
+                $erpDebe
+            ));
+        }
+
+        $api = new ApiAnita;
+        $rawSub = (string) $api->apiCall([
+            'acc' => 'list',
+            'sistema' => (string) config('recepcion_proveedor.anita.sistema_contab', 'contab'),
+            'tabla' => (string) config('recepcion_proveedor.anita.tablas.subdiario', 'subdiario'),
+            'campos' => 'subd_cuenta,subd_contrapartida,subd_importe,subd_tipo_mov,subd_fecha',
+            'whereArmado' => " WHERE subd_tipo='".addslashes($tipo)."'"
+                ." AND subd_letra='".addslashes($letra)."'"
+                .' AND subd_sucursal='.$sucursal
+                .' AND subd_nro='.$nro,
+        ]);
+        $filasSub = ApiAnita::decodificarListaFilas($rawSub);
+        if ($filasSub !== []) {
+            throw new \RuntimeException(sprintf(
+                'COM %d tiene %d línea(s) en subdiario y también ctamov (doble imputación nativa Anita + sync ERP).',
+                $nro,
+                count($filasSub)
+            ));
+        }
+
+        return [
+            'ctamov_debe' => $totalesCtamov['debe'],
+            'ctamov_haber' => $totalesCtamov['haber'],
+            'ctamov_lineas' => $totalesCtamov['lineas'],
+            'subdiario_lineas' => 0,
+            'erp_debe' => $erpDebe,
+        ];
+    }
+
+    private function totalDebeAsientoErp(Recepcion_Proveedor $recepcion): float
+    {
+        $asientoId = (int) ($recepcion->asiento_id ?? 0);
+        if ($asientoId <= 0) {
+            throw new \RuntimeException('La recepción no tiene asiento ERP para controlar ctamov.');
+        }
+
+        $debe = (float) Asiento_Movimiento::query()
+            ->where('asiento_id', $asientoId)
+            ->whereNull('deleted_at')
+            ->where('monto', '>', 0)
+            ->sum('monto');
+
+        return round($debe, 2);
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function contarStkmovAnita(array $clave, int $empresaId): int
+    {
+        $api = new ApiAnita;
+        $raw = (string) $api->apiCall(StockAnitaBridgeSupport::mergePayload([
+            'acc' => 'list',
+            'sistema' => config('recepcion_proveedor.anita.sistema_ventas'),
+            'tabla' => config('recepcion_proveedor.anita.tablas.stock_movimiento'),
+            'campos' => 'stkv_articulo',
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::stkmovCabecera($clave),
+        ], max(1, $empresaId)));
+
+        return count(ApiAnita::decodificarListaFilas($raw));
     }
 
     /**

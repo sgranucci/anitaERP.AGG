@@ -28,6 +28,8 @@ class AsientoExport implements FromView, WithColumnFormatting, WithMapping, Shou
 	private $origen;
 	protected $dates = ['fecha'];
 	private $asientoQuery;
+	private $busqueda;
+	private $empresaId = 0;
 
 	public function __construct(
 								AsientoQueryInterface $asientoquery
@@ -38,7 +40,7 @@ class AsientoExport implements FromView, WithColumnFormatting, WithMapping, Shou
 
 	public function view(): View
 	{
-		$asientos = $this->asientoQuery->leeAsiento($this->busqueda, false);
+		$asientos = $this->asientoQuery->leeAsiento($this->busqueda, false, $this->empresaId);
 
 		return view('exports.contable.asientoindex', ['asientos' => $asientos]);
 	}
@@ -114,9 +116,10 @@ class AsientoExport implements FromView, WithColumnFormatting, WithMapping, Shou
         return 'Reporte de Asientos';
     }
 
-	public function parametros($busqueda)
+	public function parametros($busqueda, $empresaId = 0)
 	{
 		$this->busqueda = $busqueda;
+		$this->empresaId = (int) $empresaId;
 
 		return $this;
 	}

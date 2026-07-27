@@ -27,6 +27,11 @@ use App\Repositories\Ordenventa\OrdenventaRepositoryInterface;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\RequisicionTotalesCabecera;
+use App\Services\Ai\AiPolicy;
+use App\Services\Ai\Skills\AiSkillContext;
+use App\Services\Ai\Skills\AiSkillRegistry;
+use App\Services\Configuracion\Ai\ExplicarContextoArbolAprobacionSkill;
+use App\Support\Configuracion\ArbolAprobacionContextoSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Configuracion\OcArbolTriggerCatalog;
 use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioDeferred;
@@ -94,6 +99,22 @@ class ArbolaprobacionService
     {
         $arrayReplace = ArbolAprobacionEnlaceSupport::CARACTERES_REEMPLAZO;
         $tipoarbol = Arbolaprobacion::$enumTipoArbol[array_search($tipocomprobante, array_column(Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
+
+        // SP: el árbol vive en el concepto (concepto_solicitudpago_usuario), no en el ABM global.
+        if ($tipocomprobante === 'SP') {
+            if (! \App\Models\Solicitudpago\Solicitudpago::query()->whereKey($comprobante_id)->exists()) {
+                return 0;
+            }
+
+            return app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)->procesaArbol(
+                (int) $comprobante_id,
+                $operacion,
+                fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
+                fn (...$args) => $this->buscaProximoNivel(...$args),
+                fn (...$args) => $this->enviaCorreo(...$args),
+            );
+        }
+
         if ($tipocomprobante === 'RE') {
             $requisicionPre = $this->requisicionRepository->find($comprobante_id);
             if (! $requisicionPre) {
@@ -112,18 +133,10 @@ class ArbolaprobacionService
                 return 0;
             }
             $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($tipoarbol, (int) $ocPre->empresa_id);
-        } elseif ($tipocomprobante === 'SP') {
-            $spPre = \App\Models\Solicitudpago\Solicitudpago::query()->find($comprobante_id);
-            if (! $spPre) {
-                return 0;
-            }
-            $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($tipoarbol, (int) $spPre->empresa_id);
-            if (! $arbolaprobacion || ! $arbolaprobacion->count()) {
-                $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbol($tipoarbol);
-            }
         } else {
             $arbolaprobacion = $this->arbolaprobacionRepository->findPorTipoArbol($tipoarbol);
         }
+
         if (! $arbolaprobacion || ! $arbolaprobacion->count()) {
             return 0;
         }
@@ -146,14 +159,6 @@ class ArbolaprobacionService
                 );
             case 'PE':
                 return app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)->procesaArbol(
-                    (int) $comprobante_id,
-                    $operacion,
-                    fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
-                    fn (...$args) => $this->buscaProximoNivel(...$args),
-                    fn (...$args) => $this->enviaCorreo(...$args),
-                );
-            case 'SP':
-                return app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)->procesaArbol(
                     (int) $comprobante_id,
                     $operacion,
                     fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
@@ -1872,9 +1877,19 @@ class ArbolaprobacionService
             }
         }
 
+        $panelIa = null;
+        if ($req) {
+            $movPendiente = $this->movimientoPendientePorTipo('RE', $requisicionId);
+            $estadoTras = $movPendiente
+                ? $this->estadoTrasAprobarSegunMovimientoRequisicion($req, $movPendiente)
+                : null;
+            $panelIa = $this->panelIaContextoArbol('RE', $req, $movPendiente, $estadoTras);
+        }
+
         return [
             'movimientos' => $enriquecidos->values()->all(),
             'aviso_grabacion_pendiente' => $aviso,
+            'ai_contexto_arbol' => $panelIa,
         ];
     }
 
@@ -2041,6 +2056,7 @@ class ArbolaprobacionService
             'estado_tras_aprobar' => $estadoTrasAprobar,
             'monto_items' => (float) ($totales['monto'] ?? 0),
             'moneda_abrev_items' => (string) ($totales['monedacabecera_abreviatura'] ?? '—'),
+            'ai_contexto_arbol' => $this->panelIaContextoArbol('RE', $requisicion, $mov, $estadoTrasAprobar),
         ];
     }
 
@@ -2325,7 +2341,309 @@ class ArbolaprobacionService
             'estado_tras_aprobar' => $estadoTrasAprobar,
             'monto_items' => (float) ($totales['monto'] ?? 0),
             'moneda_abrev_items' => (string) ($totales['monedacabecera_abreviatura'] ?? '—'),
+            'ai_contexto_arbol' => $this->panelIaContextoArbol('OC', $ordencompra, $mov, $estadoTrasAprobar),
         ];
+    }
+
+    /**
+     * Contexto IA de solo lectura para cualquier tipocomprobante del árbol.
+     * Permiso de skill vacío: seguridad = hash del portal o permiso del ABM que llama al AJAX.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function panelIaContextoArbol(
+        string $tipocomprobante,
+        object $documento,
+        ?Arbolaprobacion_Movimiento $movimientoPendiente = null,
+        ?string $estadoTrasAprobar = null,
+    ): ?array {
+        $skill = ExplicarContextoArbolAprobacionSkill::NOMBRE;
+        /** @var AiSkillRegistry $registry */
+        $registry = app(AiSkillRegistry::class);
+        /** @var AiPolicy $policy */
+        $policy = app(AiPolicy::class);
+
+        if (! $registry->tiene($skill) || ! $policy->skillHabilitada($skill)) {
+            return null;
+        }
+        if (auth()->check() && ! $policy->puedeEjecutar($skill)) {
+            return null;
+        }
+
+        $snapshot = $this->snapshotDocumentoArbol($tipocomprobante, $documento);
+        if ($snapshot === null) {
+            return null;
+        }
+
+        $result = $registry->ejecutar($skill, new AiSkillContext(
+            entradas: [
+                'snapshot' => $snapshot,
+                'movimiento' => $movimientoPendiente,
+                'estado_tras_aprobar' => $estadoTrasAprobar,
+            ],
+            empresaId: $snapshot['empresa_id'] ?? null,
+            entidadTipo: ArbolAprobacionContextoSupport::entidadTipoAi($tipocomprobante),
+            entidadId: (int) ($snapshot['documento_id'] ?? 0),
+        ));
+
+        if (! $result->ok) {
+            return [
+                'ai_score' => null,
+                'ai_decision_id' => null,
+                'ai_parrafos' => [],
+                'ai_advertencias' => [$result->error ?? 'No se pudo armar el contexto IA.'],
+                'contexto' => null,
+            ];
+        }
+
+        return [
+            'ai_score' => $result->score,
+            'ai_decision_id' => $result->decisionId,
+            'ai_parrafos' => $result->datos['parrafos'] ?? $result->advertencias,
+            'ai_advertencias' => [],
+            'contexto' => $result->datos,
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    public function snapshotDocumentoArbol(string $tipocomprobante, object $documento): ?array
+    {
+        $tipo = strtoupper(trim($tipocomprobante));
+        $etiqueta = ArbolAprobacionContextoSupport::etiquetaTipo($tipo);
+
+        return match ($tipo) {
+            'OC' => (function () use ($documento, $etiqueta) {
+                if (! $documento instanceof Ordencompra) {
+                    return null;
+                }
+                $totales = OrdencompraTotalesCabecera::desdeModelo($documento, $this->cotizacionQuery);
+
+                return [
+                    'tipocomprobante' => 'OC',
+                    'documento_id' => (int) $documento->id,
+                    'numero' => $documento->numeroordencompra ?? null,
+                    'empresa_id' => isset($documento->empresa_id) ? (int) $documento->empresa_id : null,
+                    'centrocosto_id' => $this->centroCostoParaArbolAprobacionDesdeOrdencompra($documento),
+                    'fecha' => $documento->fecha,
+                    'monto' => (float) ($totales['monto'] ?? 0),
+                    'moneda_id' => (int) ($totales['moneda_id'] ?? 0),
+                    'etiqueta_tipo' => $etiqueta,
+                    'documento' => $documento,
+                ];
+            })(),
+            'RE' => (function () use ($documento, $etiqueta) {
+                if (! $documento instanceof Requisicion) {
+                    return null;
+                }
+                $totales = RequisicionTotalesCabecera::desdeModelo($documento, $this->cotizacionQuery);
+
+                return [
+                    'tipocomprobante' => 'RE',
+                    'documento_id' => (int) $documento->id,
+                    'numero' => $documento->numerorequisicion ?? null,
+                    'empresa_id' => isset($documento->empresa_id) ? (int) $documento->empresa_id : null,
+                    'centrocosto_id' => $this->centroCostoParaArbolAprobacionDesdeModelo($documento),
+                    'fecha' => $documento->fecha,
+                    'monto' => (float) ($totales['monto'] ?? 0),
+                    'moneda_id' => (int) ($totales['moneda_id'] ?? 0),
+                    'etiqueta_tipo' => $etiqueta,
+                    'documento' => $documento,
+                ];
+            })(),
+            'RS' => (function () use ($documento, $etiqueta) {
+                if (! $documento instanceof \App\Models\Sala\RequisicionSala) {
+                    return null;
+                }
+                $totales = \App\Support\Sala\RequisicionSalaTotalesCabecera::desdeModelo($documento);
+
+                return [
+                    'tipocomprobante' => 'RS',
+                    'documento_id' => (int) $documento->id,
+                    'numero' => $documento->numerorequisicion ?? null,
+                    'empresa_id' => isset($documento->empresa_id) ? (int) $documento->empresa_id : null,
+                    'centrocosto_id' => (int) ($documento->centrocosto_id ?? 0),
+                    'fecha' => $documento->fecha,
+                    'monto' => (float) ($totales['monto'] ?? 0),
+                    'moneda_id' => (int) ($totales['moneda_id'] ?? 0),
+                    'etiqueta_tipo' => $etiqueta,
+                    'documento' => $documento,
+                ];
+            })(),
+            'OV' => (function () use ($documento, $etiqueta) {
+                return [
+                    'tipocomprobante' => 'OV',
+                    'documento_id' => (int) $documento->id,
+                    'numero' => $documento->numeroordenventa ?? null,
+                    'empresa_id' => isset($documento->empresa_id) ? (int) $documento->empresa_id : null,
+                    'centrocosto_id' => (int) ($documento->centrocosto_id ?? 0),
+                    'fecha' => $documento->fecha,
+                    'monto' => (float) ($documento->monto ?? 0),
+                    'moneda_id' => (int) ($documento->moneda_id ?? 0),
+                    'etiqueta_tipo' => $etiqueta,
+                    'documento' => $documento,
+                ];
+            })(),
+            'SP' => (function () use ($documento, $etiqueta) {
+                return [
+                    'tipocomprobante' => 'SP',
+                    'documento_id' => (int) $documento->id,
+                    'numero' => $documento->codigo ?? null,
+                    'empresa_id' => isset($documento->empresa_id) ? (int) $documento->empresa_id : null,
+                    'centrocosto_id' => (int) ($documento->centrocosto_id ?? 0),
+                    'fecha' => $documento->fecha,
+                    'monto' => (float) ($documento->monto ?? 0),
+                    'moneda_id' => (int) ($documento->moneda_id ?? 0),
+                    'etiqueta_tipo' => $etiqueta,
+                    'documento' => $documento,
+                ];
+            })(),
+            'PE' => (function () use ($documento, $etiqueta) {
+                $monto = (float) app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)
+                    ->montoPedidoPublico($documento);
+
+                return [
+                    'tipocomprobante' => 'PE',
+                    'documento_id' => (int) $documento->id,
+                    'numero' => $documento->numero_comprobante ?? null,
+                    'empresa_id' => isset($documento->empresa_id) ? (int) $documento->empresa_id : null,
+                    'centrocosto_id' => 0,
+                    'fecha' => $documento->fecha,
+                    'monto' => $monto > 0 ? $monto : (float) ($documento->monto ?? 0),
+                    'moneda_id' => (int) ($documento->moneda_id ?? 0),
+                    'etiqueta_tipo' => $etiqueta,
+                    'documento' => $documento,
+                ];
+            })(),
+            default => null,
+        };
+    }
+
+    public function movimientoPendientePorTipo(string $tipocomprobante, int $comprobanteId): ?Arbolaprobacion_Movimiento
+    {
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $movimientos = $this->coleccionMovimientosPorTipo($tipocomprobante, $comprobanteId);
+        foreach ($movimientos as $movimiento) {
+            if ($movimiento->estado === $nombrePendiente) {
+                return $movimiento;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Arbolaprobacion_Movimiento>
+     */
+    public function coleccionMovimientosPorTipo(string $tipocomprobante, int $comprobanteId)
+    {
+        return match (strtoupper($tipocomprobante)) {
+            'OV' => $this->arbolaprobacion_movimientoRepository->findPorOrdenVenta($comprobanteId),
+            'RE' => $this->arbolaprobacion_movimientoRepository->findPorRequisicion($comprobanteId),
+            'OC' => $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobanteId),
+            'RS' => app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)
+                ->findPorRequisicionSala($comprobanteId),
+            'SP' => app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
+                ->findPorSolicitudpago($comprobanteId),
+            'PE' => app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)
+                ->findPorPedido($comprobanteId),
+            default => collect(),
+        };
+    }
+
+    public function movimientoPendientePorHashTipo(string $tipocomprobante, int $comprobanteId, string $hash, string $modo): ?Arbolaprobacion_Movimiento
+    {
+        $hash = ArbolAprobacionEnlaceSupport::normalizarHashRecibido($hash);
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        foreach ($this->coleccionMovimientosPorTipo($tipocomprobante, $comprobanteId) as $movimiento) {
+            if ($movimiento->estado !== $nombrePendiente) {
+                continue;
+            }
+            if ($modo === 'aprobacion' && ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, (string) $movimiento->hashaprobacion)) {
+                return $movimiento;
+            }
+            if ($modo === 'rechazo' && ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, (string) $movimiento->hashrechazo)) {
+                return $movimiento;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Portal genérico (OV / SP / PE) con resumen + ayuda IA.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function portalDatosComprobantePorHash(string $tipocomprobante, int $comprobanteId, string $hash, string $modo): ?array
+    {
+        $tipo = strtoupper(trim($tipocomprobante));
+        if (! in_array($tipo, ['OV', 'SP', 'PE'], true)) {
+            return null;
+        }
+        $mov = $this->movimientoPendientePorHashTipo($tipo, $comprobanteId, $hash, $modo);
+        if (! $mov) {
+            return null;
+        }
+        $documento = $this->cargarDocumentoArbol($tipo, $comprobanteId);
+        if (! $documento) {
+            return null;
+        }
+        $snapshot = $this->snapshotDocumentoArbol($tipo, $documento);
+        $estadoTras = null;
+        if ($modo === 'aprobacion' && $snapshot) {
+            $estadoTras = $this->estadoTrasAprobarDesdeSnapshot($mov, $snapshot);
+        }
+
+        return [
+            'tipocomprobante' => $tipo,
+            'documento' => $documento,
+            'movimiento' => $mov,
+            'estado_tras_aprobar' => $estadoTras,
+            'monto_items' => (float) ($snapshot['monto'] ?? 0),
+            'etiqueta_tipo' => $snapshot['etiqueta_tipo'] ?? ArbolAprobacionContextoSupport::etiquetaTipo($tipo),
+            'numero_comprobante' => $snapshot['numero'] ?? null,
+            'ai_contexto_arbol' => $this->panelIaContextoArbol($tipo, $documento, $mov, $estadoTras),
+        ];
+    }
+
+    public function cargarDocumentoArbol(string $tipocomprobante, int $comprobanteId): ?object
+    {
+        return match (strtoupper($tipocomprobante)) {
+            'OV' => $this->ordenventaRepository->find($comprobanteId),
+            'RE' => $this->requisicionRepository->find($comprobanteId),
+            'OC' => $this->ordencompraRepository->find($comprobanteId),
+            'RS' => app(\App\Repositories\Sala\RequisicionSalaRepositoryInterface::class)->find($comprobanteId),
+            'SP' => app(\App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface::class)->find($comprobanteId),
+            'PE' => \App\Models\Ventas\PedidoInterforming::query()->with(['pedido_articulos', 'clientes', 'moneda'])->find($comprobanteId),
+            default => null,
+        };
+    }
+
+    /**
+     * @param  array<string,mixed>  $snapshot
+     */
+    public function estadoTrasAprobarDesdeSnapshot(Arbolaprobacion_Movimiento $mov, array $snapshot): ?string
+    {
+        $arbol = $this->arbolaprobacionRepository->find($mov->arbolaprobacion_id);
+        if (! $arbol) {
+            return null;
+        }
+        $nivelCfg = $this->encuentraNivelCoincidente(
+            $arbol,
+            (int) ($snapshot['centrocosto_id'] ?? 0),
+            $mov->nivel,
+            $snapshot['fecha'] ?? null,
+            $snapshot['monto'] ?? 0,
+            (int) ($snapshot['moneda_id'] ?? 0),
+        );
+        if ($nivelCfg === null) {
+            return null;
+        }
+        $s = trim((string) ($nivelCfg->documento_estado_al_aprobar ?? ''));
+
+        return $s !== '' ? $s : null;
     }
 
     public function estadoTrasAprobarSegunMovimientoOrdencompra(Ordencompra $ordencompra, Arbolaprobacion_Movimiento $mov): ?string
@@ -2401,9 +2719,19 @@ class ArbolaprobacionService
             }
         }
 
+        $panelIa = null;
+        if ($oc) {
+            $movPendiente = $this->movimientoPendientePorTipo('OC', $ordencompraId);
+            $estadoTras = $movPendiente
+                ? $this->estadoTrasAprobarSegunMovimientoOrdencompra($oc, $movPendiente)
+                : null;
+            $panelIa = $this->panelIaContextoArbol('OC', $oc, $movPendiente, $estadoTras);
+        }
+
         return [
             'movimientos' => $enriquecidos->values()->all(),
             'aviso_grabacion_pendiente' => $aviso,
+            'ai_contexto_arbol' => $panelIa,
         ];
     }
 
@@ -2521,6 +2849,9 @@ class ArbolaprobacionService
                 ? \App\Support\Sala\RequisicionSalaLineasLaboratorioSupport::etiquetaDepositoLaboratorio()
                 : '',
             'transferencia_laboratorio_preflight' => $preflightTm,
+            'ai_contexto_arbol' => $requisicionSala
+                ? $this->panelIaContextoArbol('RS', $requisicionSala, $mov, $estadoTrasAprobar)
+                : null,
         ];
     }
 

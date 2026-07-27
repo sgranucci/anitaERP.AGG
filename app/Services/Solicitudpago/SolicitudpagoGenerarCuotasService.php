@@ -130,6 +130,7 @@ class SolicitudpagoGenerarCuotasService
                 'observacion' => $madre->observacion,
                 'estado' => SolicitudpagoEstados::AUTORIZADA,
                 'sector_solicitudpago_id' => $madre->sector_solicitudpago_id,
+                'centrocosto_id' => $madre->centrocosto_id,
                 'detalle' => $detalle,
                 'solicitudpago_madre_id' => $madre->id,
                 'empresa_ids' => $empresaIds,

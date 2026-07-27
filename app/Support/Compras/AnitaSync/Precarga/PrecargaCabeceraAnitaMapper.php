@@ -4,6 +4,7 @@ namespace App\Support\Compras\AnitaSync\Precarga;
 
 use App\Models\Configuracion\Moneda;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
+use Carbon\Carbon;
 
 /**
  * Mapeo ERP → tabla Informix precarga (módulo compras).
@@ -96,6 +97,28 @@ final class PrecargaCabeceraAnitaMapper
         return self::decimal($cotizacion);
     }
 
+    /**
+     * Fecha de factura Anita (integer YYYYMMDD).
+     */
+    public static function fechaFactura(array $payload): int
+    {
+        $fecha = $payload['fechafactura'] ?? $payload['fecha_factura'] ?? null;
+        if ($fecha === null || trim((string) $fecha) === '') {
+            return 0;
+        }
+
+        $texto = trim((string) $fecha);
+        if (preg_match('/^\d{8}$/', $texto)) {
+            return (int) $texto;
+        }
+
+        try {
+            return (int) Carbon::parse($texto)->format('Ymd');
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
     public static function decimal(mixed $valor): string
     {
         return number_format((float) $valor, 4, '.', '');
@@ -115,7 +138,8 @@ final class PrecargaCabeceraAnitaMapper
                 '".self::decimal($payload['subtotal'] ?? 0)."',
                 '".self::decimal($payload['total'] ?? 0)."',
                 '".self::codigoMoneda($payload)."',
-                '".self::cotizacion($payload)."' ";
+                '".self::cotizacion($payload)."',
+                '".self::fechaFactura($payload)."' ";
     }
 
     public static function valoresUpdate(array $payload): string
@@ -131,6 +155,7 @@ final class PrecargaCabeceraAnitaMapper
                         prec_subtotal 	               	= '".self::decimal($payload['subtotal'] ?? 0)."',
                         prec_total 	               	= '".self::decimal($payload['total'] ?? 0)."',
                         prec_cod_mon 	               	= '".self::codigoMoneda($payload)."',
-                        prec_cotizacion 	               	= '".self::cotizacion($payload)."' ";
+                        prec_cotizacion 	               	= '".self::cotizacion($payload)."',
+                        prec_fecha 	               	= '".self::fechaFactura($payload)."' ";
     }
 }

@@ -1,7 +1,8 @@
 <div class="modal fade" id="modal-ie-comprobante-iva" tabindex="-1" role="dialog" aria-hidden="true"
      data-preview-url="{{ route('ingresoegreso_comprobante_iva_preview_asiento') }}"
      data-pdf-ia-url="{{ route('ingresoegreso_comprobante_iva_pdf_ia_preview') }}"
-     data-duplicado-url="{{ route('ingresoegreso_comprobante_iva_validar_duplicado') }}">
+     data-duplicado-url="{{ route('ingresoegreso_comprobante_iva_validar_duplicado') }}"
+     data-descartar-url="{{ route('descartar_ai_decision') }}">
     <div class="modal-dialog modal-xl" role="document" style="max-width: 95%;">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">

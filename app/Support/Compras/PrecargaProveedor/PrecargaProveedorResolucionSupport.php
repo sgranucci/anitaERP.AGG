@@ -18,8 +18,15 @@ final class PrecargaProveedorResolucionSupport
 
     /**
      * Biyemas / Rebisco / Kandiko: empresa operativa con codigo &lt; 5.
+     * Si el CUIT OCR no matchea exacto, tolera 1 dígito erróneo (ej. 36-68240367-1 → 30-68240367-1).
      *
-     * @return array{empresa_id: int, codigo: string, nombre: string}
+     * @return array{
+     *   empresa_id: int,
+     *   codigo: string,
+     *   nombre: string,
+     *   cuit_corregido?: string,
+     *   cuit_leido?: string
+     * }
      */
     public function resolverEmpresaPorCuit(string $cuit): array
     {
@@ -40,7 +47,94 @@ final class PrecargaProveedorResolucionSupport
             }
         }
 
+        $aproximada = $this->resolverEmpresaPorCuitOcrTolerante($cuit);
+        if ($aproximada !== null) {
+            return $aproximada;
+        }
+
         throw new RuntimeException('No se encontró empresa destinatario (Biyemas/Rebisco/Kandiko) para CUIT «'.$cuit.'»');
+    }
+
+    /**
+     * Corrige CUITs mal leídos por OCR contra las empresas operativas conocidas.
+     * Solo acepta un único candidato a distancia de Hamming ≤ 1 (11 dígitos).
+     *
+     * @return array{
+     *   empresa_id: int,
+     *   codigo: string,
+     *   nombre: string,
+     *   cuit_corregido: string,
+     *   cuit_leido: string
+     * }|null
+     */
+    private function resolverEmpresaPorCuitOcrTolerante(string $cuit): ?array
+    {
+        $leido = preg_replace('/\D/', '', $cuit) ?? '';
+        if (strlen($leido) !== 11 || ! ctype_digit($leido)) {
+            return null;
+        }
+
+        $candidatos = [];
+        foreach ($this->empresasOperativasConCuit() as $empresa) {
+            $conocido = preg_replace('/\D/', '', (string) $empresa->nroinscripcion) ?? '';
+            if (strlen($conocido) !== 11 || ! ctype_digit($conocido)) {
+                continue;
+            }
+
+            $distancia = $this->distanciaHammingDigitos($leido, $conocido);
+            if ($distancia === 1) {
+                $candidatos[] = [
+                    'empresa' => $empresa,
+                    'cuit' => $conocido,
+                    'distancia' => $distancia,
+                ];
+            }
+        }
+
+        if (count($candidatos) !== 1) {
+            return null;
+        }
+
+        $mejor = $candidatos[0];
+        $empresa = $mejor['empresa'];
+        $cuitCorregido = substr($mejor['cuit'], 0, 2).'-'.substr($mejor['cuit'], 2, 8).'-'.substr($mejor['cuit'], 10, 1);
+        $cuitLeido = substr($leido, 0, 2).'-'.substr($leido, 2, 8).'-'.substr($leido, 10, 1);
+
+        return [
+            'empresa_id' => (int) $empresa->id,
+            'codigo' => (string) $empresa->codigo,
+            'nombre' => (string) $empresa->nombre,
+            'cuit_corregido' => $cuitCorregido,
+            'cuit_leido' => $cuitLeido,
+        ];
+    }
+
+    /** @return \Illuminate\Support\Collection<int, object> */
+    private function empresasOperativasConCuit()
+    {
+        return collect($this->empresaRepository->all() ?? [])
+            ->filter(function ($empresa) {
+                return (string) ($empresa->codigo ?? '9') < '5'
+                    && filled($empresa->nroinscripcion ?? null);
+            })
+            ->values();
+    }
+
+    private function distanciaHammingDigitos(string $a, string $b): int
+    {
+        if (strlen($a) !== strlen($b)) {
+            return PHP_INT_MAX;
+        }
+
+        $dist = 0;
+        $len = strlen($a);
+        for ($i = 0; $i < $len; $i++) {
+            if ($a[$i] !== $b[$i]) {
+                $dist++;
+            }
+        }
+
+        return $dist;
     }
 
     /**

@@ -344,8 +344,15 @@ class RecepcionProveedorDepositoSupport
         ];
     }
 
-    public static function coeficienteProveedor(int $articuloId, int $proveedorId): float
-    {
-        return RecepcionProveedorConversionSupport::resolverCoeficiente($articuloId, $proveedorId);
+    public static function coeficienteProveedor(
+        int $articuloId,
+        int $proveedorId,
+        ?string $codigoArticuloProveedor = null,
+    ): float {
+        return RecepcionProveedorConversionSupport::resolverCoeficiente(
+            $articuloId,
+            $proveedorId,
+            $codigoArticuloProveedor
+        );
     }
 }

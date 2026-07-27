@@ -16,7 +16,13 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>{{ $tituloReporte }}</title>
     <style>
-        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
+        @page { margin: 10mm 8mm; }
+        body {
+            font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
+            font-size: 7.5px;
+            color: #1a1a1a;
+            margin: 0;
+        }
         table.data {
             font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
             border-collapse: collapse;
@@ -26,21 +32,25 @@
         table.data td, table.data th {
             border: 1px solid #cccccc;
             text-align: left;
-            padding: 3px 4px;
+            padding: 2px 3px;
             vertical-align: top;
             word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         table.data tr:nth-child(even) { background-color: #f5f5f5; }
         table.data thead tr { background-color: #85C1E9; }
         table.data th {
-            font-size: 7.5px;
+            font-size: 7px;
             font-weight: bold;
             color: #17202A;
         }
-        .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 6px; }
+        table.tabla-conciliacion { font-size: 7px; }
+        table.tabla-detalle { font-size: 7.5px; }
+        .listado-header { width: 100%; margin-bottom: 6px; border-bottom: 2px solid #333; padding-bottom: 4px; }
         .listado-header td { vertical-align: middle; border: none; }
-        .meta { font-size: 7px; color: #444; margin-top: 3px; }
-        .num { text-align: right; white-space: nowrap; }
+        .meta { font-size: 7px; color: #444; margin-top: 2px; }
+        /* Sin nowrap: DomPDF ensancha la tabla y corta el borde derecho */
+        .num { text-align: right; }
     </style>
 </head>
 <body>

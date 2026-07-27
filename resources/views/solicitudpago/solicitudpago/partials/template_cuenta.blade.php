@@ -4,6 +4,7 @@
             @include('includes.form-empresa-asignada-control', [
                 'empresa_query' => $empresa_query,
                 'name' => 'empresa_ids[]',
+                'id' => '',
                 'select_class' => 'empresa',
                 'permite_vacio' => true,
                 'opcion_vacia' => '-- Empresa --',
@@ -11,9 +12,10 @@
             ])
         </td>
         <td>
-            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;" id="cuenta">
+            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
                 <input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="">
                 <input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="">
+                <input type="hidden" class="monto_cuenta" name="montos_cuenta[]" value="0">
                 <button type="button" title="Consulta cuentas" style="padding:1; flex: 0 0 auto;"
                         class="btn-accion-tabla consultacuentacontable tooltipsC">
                     <i class="fa fa-search text-primary"></i>
@@ -34,13 +36,18 @@
             </select>
         </td>
         <td>
-            <select name="debe_haberes[]" class="form-control debe_haber">
-                <option value="D" selected>Debe</option>
-                <option value="H">Haber</option>
+            <select name="debe_haberes[]" class="form-control debe_haber text-center" title="Debe / Haber">
+                <option value="D" selected>D</option>
+                <option value="H">H</option>
             </select>
         </td>
         <td>
-            <input type="number" step="0.01" name="montos_cuenta[]" class="form-control" value="0">
+            <input type="number" step="0.01" min="0" name="montos_debe[]"
+                   class="form-control text-right monto-debe" value="" placeholder="0">
+        </td>
+        <td>
+            <input type="number" step="0.01" min="0" name="montos_haber[]"
+                   class="form-control text-right monto-haber bg-light" value="" placeholder="0" readonly>
         </td>
         <td class="text-center">
             <button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar_sp_cuenta tooltipsC">

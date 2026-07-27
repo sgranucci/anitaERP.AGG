@@ -74,6 +74,8 @@ class Requisicion_ArticuloRepository implements Requisicion_ArticuloRepositoryIn
                 'motivoahorro' => $data['motivoahorros'][$i] ?? '',
                 'partidagasto_id' => ! empty($data['partidagasto_ids'][$i]) ? $data['partidagasto_ids'][$i] : null,
                 'capex_id' => ! empty($data['capex_ids'][$i]) ? $data['capex_ids'][$i] : null,
+                'proveedor_id' => ! empty($data['linea_proveedor_ids'][$i]) ? (int) $data['linea_proveedor_ids'][$i] : null,
+                'articulo_proveedor_id' => ! empty($data['articulo_proveedor_ids'][$i]) ? (int) $data['articulo_proveedor_ids'][$i] : null,
             ];
 
             $idCandidato = $idsEntrantes[$i] ?? null;

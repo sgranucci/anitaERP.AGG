@@ -41,4 +41,16 @@ final class ApiAnitaParsearListaTest extends TestCase
         $this->assertSame([], $parsed['filas']);
         $this->assertNotNull($parsed['error_lectura']);
     }
+
+    public function test_extraer_filas_afectadas_y_exito_escritura(): void
+    {
+        $this->assertSame(1, ApiAnita::extraerFilasAfectadas("1 row(s) updated.\n"));
+        $this->assertSame(0, ApiAnita::extraerFilasAfectadas('0 row(s) updated.'));
+        $this->assertNull(ApiAnita::extraerFilasAfectadas('[]'));
+        $this->assertNull(ApiAnita::extraerFilasAfectadas(''));
+
+        $this->assertTrue(ApiAnita::respuestaBridgeEscrituraExitosa('1 row(s) updated.'));
+        $this->assertFalse(ApiAnita::respuestaBridgeEscrituraExitosa('0 row(s) updated.'));
+        $this->assertFalse(ApiAnita::respuestaBridgeEscrituraExitosa('[]'));
+    }
 }

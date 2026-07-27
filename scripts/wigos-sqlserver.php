@@ -137,6 +137,23 @@ function wigos_calc_datos_flash_turno(PDO $pdo, string $fechaYmd, string $turno)
     $hfecha = (new DateTimeImmutable($dfecha))->modify('+1 day')->format('Ymd');
     $hfechaSql = substr($hfecha, 0, 4).'-'.substr($hfecha, 4, 2).'-'.substr($hfecha, 6, 2);
 
+    // QR — igual que calc_datos_wigos.pru.php (SP_TransferenciasExternasAnita, MontoTotal/Impuesto).
+    // Solo turno M: a-flash aplica tickets/QR una vez (T/N quedan en 0).
+    $montoQr = 0.0;
+    $montoNetoQr = 0.0;
+    $impuestoQr = 0.0;
+    if ($turno === 'M') {
+        $stmtQr = $pdo->prepare('EXEC SP_TransferenciasExternasAnita @pFechaIni = ?, @pfechaFin = ?');
+        $stmtQr->execute([$dfecha, $hfechaSql]);
+        wigos_consumir_rowsets($stmtQr, static function (array $row) use (&$montoQr, &$montoNetoQr, &$impuestoQr): void {
+            $total = (float) ($row['MontoTotal'] ?? 0);
+            $impuesto = (float) ($row['Impuesto'] ?? 0);
+            $montoQr += $total;
+            $montoNetoQr += ($total - $impuesto);
+            $impuestoQr += $impuesto;
+        });
+    }
+
     $ventaSlots = 0.0;
     $ventaRuletas = 0.0;
     $pagosManuales = 0.0;
@@ -281,6 +298,9 @@ function wigos_calc_datos_flash_turno(PDO $pdo, string $fechaYmd, string $turno)
         'pagos_caja' => round($pagosCaja, 2),
         'pagos_slots' => round($pagosSlots, 2),
         'pagos_ruletas' => round($pagosRuletas, 2),
+        'monto_qr' => round($montoQr, 2),
+        'monto_neto_qr' => round($montoNetoQr, 2),
+        'impuesto_qr' => round($impuestoQr, 2),
         'venta_poker' => 0.0,
         'pagos_manuales_poker' => 0.0,
         'llenados_poker' => 0.0,

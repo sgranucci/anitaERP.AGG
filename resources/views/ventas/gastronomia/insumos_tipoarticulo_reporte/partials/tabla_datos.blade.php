@@ -3,6 +3,10 @@
     $filasTabla = $filas ?? ($resultado['filas'] ?? []);
     $totalesPorDia = $resultado['totales_por_dia'] ?? [];
     $totalGeneral = (float) ($resultado['total_general'] ?? 0);
+    $unidadMedidaEtiqueta = trim((string) ($resultado['unidad_medida_etiqueta'] ?? 'unidades'));
+    if ($unidadMedidaEtiqueta === '') {
+        $unidadMedidaEtiqueta = 'unidades';
+    }
     $mostrarTotales = $mostrar_totales ?? true;
 @endphp
 <thead>
@@ -52,7 +56,7 @@
             @foreach ($columnasDias as $col)
                 <td class="text-right">{{ number_format((float) ($totalesPorDia[$col['ymd']] ?? 0), 3, ',', '.') }}</td>
             @endforeach
-            <td class="text-right">{{ number_format($totalGeneral, 3, ',', '.') }}</td>
+            <td class="text-right"><small class="text-muted font-weight-normal">{{ $unidadMedidaEtiqueta }}</small> {{ number_format($totalGeneral, 3, ',', '.') }}</td>
         </tr>
     </tfoot>
 @endif

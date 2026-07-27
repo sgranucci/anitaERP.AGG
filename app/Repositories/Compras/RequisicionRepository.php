@@ -86,6 +86,9 @@ class RequisicionRepository implements RequisicionRepositoryInterface
         ])->with(['requisicion_articulos.articulos.unidadesdemedidasalternativas', 'requisicion_articulos.monedas',
             'requisicion_articulos.partidagastos', 'requisicion_articulos.capexs',
             'requisicion_articulos.color', 'requisicion_articulos.talle',
+            'requisicion_articulos.proveedores',
+            'requisicion_articulos.articulo_proveedor.unidadesmedidacompra',
+            'requisicion_articulos.articulo_proveedor.proveedores',
         ])->find($id)) {
             throw new ModelNotFoundException('Registro no encontrado');
         }

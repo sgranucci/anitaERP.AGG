@@ -4,9 +4,11 @@ namespace App\Console\Commands;
 
 use App\Models\Compras\Proveedor;
 use App\Models\Ventas\Cliente;
+use App\Services\Compras\ProveedorFacturasApocrifasNotificacionService;
+use App\Support\Ai\AiAgenteEventoDispatcherSupport;
+use App\Support\Ai\AiAgenteOperativoSupport;
 use App\Support\Compras\ProveedorFacturasApocrifasSupport;
 use App\Support\Ventas\ClienteFacturasApocrifasSupport;
-use App\Services\Compras\ProveedorFacturasApocrifasNotificacionService;
 use App\Traits\Compras\ProveedorTrait;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -103,6 +105,7 @@ class AuditarProveedoresFacturasApocrifasCommand extends Command
 
         $this->informarResumenNovedades($resultado, $desde, $hasta);
         $this->enviarMailSuspensiones($notificacion, $resultado);
+        $this->registrarEventoIaApocrifas($resultado);
 
         return self::SUCCESS;
     }
@@ -245,7 +248,7 @@ class AuditarProveedoresFacturasApocrifasCommand extends Command
         $this->info($resumen);
         Log::info('arca:auditar-proveedores-facturas-apocrifas — '.$resumen);
 
-        $this->enviarMailSuspensiones($notificacion, [
+        $informeCompleto = [
             'modo' => 'completo',
             'desde' => now()->format('d/m/Y'),
             'hasta' => now()->format('d/m/Y'),
@@ -258,7 +261,9 @@ class AuditarProveedoresFacturasApocrifasCommand extends Command
             'errores' => $errores,
             'proveedores_suspendidos' => $proveedoresSuspendidos,
             'clientes_suspendidos' => $clientesSuspendidos,
-        ]);
+        ];
+        $this->enviarMailSuspensiones($notificacion, $informeCompleto);
+        $this->registrarEventoIaApocrifas($informeCompleto);
 
         return self::SUCCESS;
     }
@@ -342,6 +347,52 @@ class AuditarProveedoresFacturasApocrifasCommand extends Command
 
         if ($motivo === 'error_envio') {
             $this->error('Fallo al enviar correo: '.($mail['error'] ?? ''));
+        }
+    }
+
+    /**
+     * Puente HITL: si hubo apócrifos/suspensiones, deja plan en ai_agente_evento.
+     *
+     * @param  array<string, mixed>  $informe
+     */
+    private function registrarEventoIaApocrifas(array $informe): void
+    {
+        $apocrifos = (int) ($informe['apocrifos'] ?? 0);
+        $suspendidos = (int) ($informe['suspendidos'] ?? 0);
+        if ($apocrifos <= 0 && $suspendidos <= 0) {
+            return;
+        }
+
+        $codigoEjemplo = null;
+        $prov = $informe['proveedores_suspendidos'][0] ?? null;
+        if (is_array($prov)) {
+            $codigoEjemplo = $prov['codigo'] ?? $prov['proveedor_codigo'] ?? null;
+        }
+
+        $evento = AiAgenteEventoDispatcherSupport::registrar([
+            'evento' => AiAgenteOperativoSupport::EVENTO_FACTURA_APOCRIFA,
+            'origen' => 'arca:auditar-proveedores-facturas-apocrifas',
+            'severidad' => $suspendidos > 0 ? 'alta' : 'media',
+            'resumen' => sprintf(
+                'WSAPOC %s: apócrifos=%d suspendidos=%d',
+                (string) ($informe['modo'] ?? 'novedades'),
+                $apocrifos,
+                $suspendidos
+            ),
+            'payload' => [
+                'modo' => $informe['modo'] ?? null,
+                'apocrifos' => $apocrifos,
+                'suspendidos' => $suspendidos,
+                'errores' => (int) ($informe['errores'] ?? 0),
+            ],
+            'plan_params' => [
+                'codigo' => $codigoEjemplo,
+                'valor' => $codigoEjemplo,
+            ],
+        ]);
+
+        if ($evento) {
+            $this->comment('Evento IA HITL #'.$evento->id.' registrado (factura_apocrifa).');
         }
     }
 }

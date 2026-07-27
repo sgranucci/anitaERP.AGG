@@ -9,6 +9,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Exports\Stock\DepmaeListadoExport;
 use App\Http\Requests\ValidacionDepmae;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\DepmaeListadoFiltros;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
@@ -259,7 +260,7 @@ class DepmaeController extends Controller
         }
 
         if ($intercompany || $empresaIds !== [] || $empresaId > 0) {
-            $query->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->orderBy('nombre');
+            $query->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->orderBy('nombre');
         } else {
             $query->orderBy('nombre');
         }

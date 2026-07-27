@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Solicitudpago;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionSector_Solicitudpago;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Solicitudpago\Sector_SolicitudpagoRepositoryInterface;
 use Illuminate\Http\Request;
 
@@ -11,9 +12,14 @@ class Sector_SolicitudpagoController extends Controller
 {
     private Sector_SolicitudpagoRepositoryInterface $repository;
 
-    public function __construct(Sector_SolicitudpagoRepositoryInterface $repository)
-    {
+    private CentrocostoRepositoryInterface $centrocostoRepository;
+
+    public function __construct(
+        Sector_SolicitudpagoRepositoryInterface $repository,
+        CentrocostoRepositoryInterface $centrocostoRepository
+    ) {
         $this->repository = $repository;
+        $this->centrocostoRepository = $centrocostoRepository;
     }
 
     public function index()
@@ -27,8 +33,9 @@ class Sector_SolicitudpagoController extends Controller
     public function crear()
     {
         can('crear-sector-solicitud-pago');
+        $centrocosto_query = $this->centrocostoRepository->all();
 
-        return view('solicitudpago.sector_solicitudpago.crear');
+        return view('solicitudpago.sector_solicitudpago.crear', compact('centrocosto_query'));
     }
 
     public function guardar(ValidacionSector_Solicitudpago $request)
@@ -43,8 +50,9 @@ class Sector_SolicitudpagoController extends Controller
     {
         can('editar-sector-solicitud-pago');
         $data = $this->repository->findOrFail($id);
+        $centrocosto_query = $this->centrocostoRepository->all();
 
-        return view('solicitudpago.sector_solicitudpago.editar', compact('data'));
+        return view('solicitudpago.sector_solicitudpago.editar', compact('data', 'centrocosto_query'));
     }
 
     public function actualizar(ValidacionSector_Solicitudpago $request, $id)

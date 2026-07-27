@@ -72,8 +72,10 @@
                 <label class="small mb-1" for="madre_hija">Madre / Hija</label>
                 <select name="madre_hija" id="madre_hija" class="form-control form-control-sm">
                     <option value="">— Todas —</option>
-                    <option value="madres" @selected(($f['madre_hija'] ?? '') === 'madres')>Solo madres</option>
+                    <option value="madres" @selected(($f['madre_hija'] ?? '') === 'madres')>Solo madres (sin vínculo)</option>
                     <option value="hijas" @selected(($f['madre_hija'] ?? '') === 'hijas')>Solo hijas</option>
+                    <option value="madres_con_plan" @selected(($f['madre_hija'] ?? '') === 'madres_con_plan')>Madres con plan / cuotas</option>
+                    <option value="familia" @selected(($f['madre_hija'] ?? '') === 'familia')>Familia (madres e hijas)</option>
                 </select>
             </div>
             <div class="form-group col-md-2 col-sm-6 mb-2">

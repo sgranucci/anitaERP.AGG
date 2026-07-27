@@ -4,14 +4,7 @@ Menú - Rol
 @endsection
 
 @section("scripts")
-<script src="{{asset("assets/pages/scripts/admin/menu-rol/index.js")}}" type="text/javascript"></script>
-<script src="https://unpkg.com/sticky-table-headers"></script>
-<script>
-    $('#tabla-menu-rol-data').stickyTableHeaders({
-        scrollableArea: $('.menu-rol-tabla-wrap'),
-        cacheHeaderHeight: true
-    });
-</script>
+<script src="{{ asset('assets/pages/scripts/admin/menu-rol/index.js') }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -19,42 +12,89 @@ Menú - Rol
     data-permisos-url="{{ route('menu_rol_permisos') }}"
     data-guardar-menu-rol-url="{{ route('guardar_menu_rol') }}"
     data-guardar-permiso-rol-url="{{ route('guardar_permiso_rol') }}"
-    data-centrocosto="{{ e(request('centrocosto', '')) }}">
+    data-centrocosto-id="{{ e($centrocostoId) }}">
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-success">
             <div class="card-header">
                 <h3 class="card-title">Menús y permisos por rol</h3>
-                <div class="d-md-flex justify-content-md-end flex-wrap">
-					<form action="{{ route('menu_rol') }}" method="GET" class="mr-2 mb-2">
-						<div class="btn-group">
-							<input type="text" name="centrocosto" class="form-control" placeholder="Filtra C.Costo (código o nombre)…" value="{{ old('centrocosto', request('centrocosto')) }}">
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
-                    <div class="btn-group mb-2">
-                        <input type="text" id="filtro-nombre-menu" class="form-control" placeholder="Buscar menú (ej. estacionamiento)…" autocomplete="off">
-                    </div>
-                </div>
             </div>
-            <div class="card-body pb-0">
-                <p class="text-muted small mb-2">
-                    Use el ícono <i class="fa fa-key"></i> junto a cada menú para abrir los permisos vinculados a esa opción.
-                    Las columnas de roles respetan el filtro por centro de costo (si no filtra, se listan todos los roles).
-                    Las filas resaltadas en azul marcan el inicio de cada módulo del sistema; el borde inferior indica dónde termina ese bloque.
+            <div class="card-body pb-2 pt-3">
+                <form action="{{ route('menu_rol') }}" method="GET" id="form-filtro-menu-rol" class="menu-rol-filtros">
+                    <div class="form-row align-items-end">
+                        <div class="form-group col-md-4 col-lg-3 mb-2">
+                            <label for="centrocosto_id" class="mb-1 small font-weight-bold">Centro de costo</label>
+                            <select name="centrocosto_id" id="centrocosto_id" class="form-control form-control-sm">
+                                <option value="">Todos los roles ({{ $totalRolesSistema }})</option>
+                                @if ($hayRolesSinCentrocosto)
+                                    <option value="sin" @selected($centrocostoId === 'sin')>Sin centro de costo</option>
+                                @endif
+                                @foreach ($centrocostosFiltro as $cc)
+                                    <option value="{{ $cc->id }}" @selected((string) $centrocostoId === (string) $cc->id)>
+                                        {{ trim(($cc->codigo ?? '').' — '.($cc->nombre ?? '')) }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4 col-lg-3 mb-2">
+                            <label for="filtro-modulo-menu" class="mb-1 small font-weight-bold">Módulo / opción</label>
+                            <select id="filtro-modulo-menu" class="form-control form-control-sm" autocomplete="off">
+                                <option value="">Todos los módulos</option>
+                                @foreach ($modulosMenu as $modulo)
+                                    <option value="{{ $modulo['id'] }}">{{ $modulo['nombre'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4 col-lg-2 mb-2">
+                            <label for="filtro-nombre-menu" class="mb-1 small font-weight-bold">Buscar opción</label>
+                            <input type="text" id="filtro-nombre-menu" class="form-control form-control-sm"
+                                placeholder="Nombre de menú…" autocomplete="off">
+                        </div>
+                        <div class="form-group col-md-4 col-lg-2 mb-2">
+                            <label for="filtro-nombre-rol" class="mb-1 small font-weight-bold">Buscar rol</label>
+                            <input type="text" id="filtro-nombre-rol" class="form-control form-control-sm"
+                                placeholder="Ocultar columnas…" autocomplete="off"
+                                title="Filtra columnas de roles sin recargar (ej. Enc-compras)">
+                        </div>
+                        <div class="form-group col-md-8 col-lg-2 mb-2">
+                            <button type="submit" class="btn btn-sm btn-primary mr-1">
+                                <i class="fa fa-filter"></i> Aplicar C.Costo
+                            </button>
+                            @if ($centrocostoId !== '')
+                                <a href="{{ route('menu_rol') }}" class="btn btn-sm btn-outline-secondary" title="Quitar filtro de centro de costo">
+                                    Limpiar
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+                </form>
+                <p class="text-muted small mb-2 mb-md-0">
+                    Mostrando <strong>{{ count($rols) }}</strong> rol(es)
+                    @if ($centrocostoId !== '')
+                        (filtrados por centro de costo)
+                    @else
+                        de {{ $totalRolesSistema }}
+                    @endif.
+                    Use <i class="fa fa-key"></i> para permisos de cada opción.
+                    Las filas azules marcan el inicio de cada módulo.
+                    Desplace horizontalmente para ver más roles; la columna Menú permanece fija.
                 </p>
             </div>
-            <div class="card-body table-responsive p-0 menu-rol-tabla-wrap">
+            <div class="card-body table-responsive p-0 menu-rol-tabla-wrap" id="menu-rol-tabla-wrap">
                 @csrf
+                <style id="menu-rol-col-filter-style"></style>
                 <table class="table table-striped table-bordered table-hover tabla-menu-rol" id="tabla-menu-rol-data">
                     <thead>
                         <tr>
-                            <th>Menú</th>
+                            <th class="menu-rol-col-menu">Menú</th>
                             @foreach ($rols as $id => $nombre)
-                            <th class="text-center">{{$nombre}}</th>
+                            <th class="text-center menu-rol-col-rol col-rol-{{ $id }}"
+                                data-rol-id="{{ $id }}"
+                                data-rol-nombre="{{ e(mb_strtolower($nombre)) }}"
+                                title="{{ $nombre }}">
+                                <span class="menu-rol-th-rol">{{ $nombre }}</span>
+                            </th>
                             @endforeach
                         </tr>
                     </thead>
@@ -68,10 +108,16 @@ Menú - Rol
                                 'rols' => $rols,
                                 'menusRols' => $menusRols,
                                 'nivel' => 0,
+                                'moduloId' => (int) $menu['id'],
+                                'parentId' => 0,
                             ])
                         @endforeach
                     </tbody>
                 </table>
+            </div>
+            <div class="card-footer py-2 small text-muted d-flex flex-wrap justify-content-between">
+                <span id="menu-rol-filas-visibles"></span>
+                <span id="menu-rol-cols-visibles">Columnas de roles visibles: <strong>{{ count($rols) }}</strong></span>
             </div>
         </div>
     </div>
@@ -92,7 +138,7 @@ Menú - Rol
                     Cargando permisos…
                 </div>
                 <div id="modalPermisosMenuError" class="alert alert-danger" style="display: none;"></div>
-                <div id="modalPermisosMenuContenedor" class="table-responsive"></div>
+                <div id="modalPermisosMenuContenedor" class="menu-rol-modal-tabla-wrap"></div>
                 <div id="modalPermisosMenuSinRoles" class="alert alert-warning" style="display: none;">
                     No hay roles que coincidan con el filtro de centro de costo. Ajuste el filtro y vuelva a intentar.
                 </div>

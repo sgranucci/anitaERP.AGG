@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Compras\Ordencompra_Comprobante;
 use App\Models\Compras\Ordencompra_Comprobante_Cuota;
+use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 
 /**
@@ -96,7 +97,9 @@ final class OrdencompraAnitaEscrituraSupport
             'penmp_cond_entrega' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoCondicionentrega((int) ($oc->condicionentrega_id ?? 0))),
             'penmp_cond_pago' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->condicionpagoCabecera($oc)),
             'penmp_entrega' => RecepcionProveedorAnitaEscrituraSupport::textoSql($lugarentrega !== '' ? $lugarentrega : ' ', 40),
-            'penmp_dto' => RecepcionProveedorAnitaEscrituraSupport::decimalSql((float) ($oc->descuento ?? 0)),
+            'penmp_dto' => RecepcionProveedorAnitaEscrituraSupport::decimalSql(
+                OrdencompraDescuentoSupport::porcentajeEfectivoDesdeOrdencompra($oc)
+            ),
             'penmp_expreso' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoTransporte((int) ($oc->transporte_id ?? 0))),
             'penmp_cod_mon' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoMonedaAnita($ctx->monedaCabeceraId($oc))),
             'penmp_cotizacion' => RecepcionProveedorAnitaEscrituraSupport::decimalSql($cotizacion),

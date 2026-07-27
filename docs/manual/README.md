@@ -13,6 +13,8 @@ Cada manual del ERP sigue el mismo patrón para incluir **capturas reales** de l
 | Ventas (pedidos) | `config/manual_ventas.php` | `public/docs/manual-ventas/img/` | `php artisan manual:capturar-ventas-interno` |
 | Canjes marketing | `config/manual_canjes_marketing.php` | `public/docs/manual-canjes-marketing/img/` | `php artisan manual:capturar-canjes-marketing-interno` |
 | Vending | `config/manual_vending.php` | `public/docs/manual-vending/img/` | `php artisan manual:capturar-vending-interno` |
+| Solicitudes de pago | `config/manual_solicitudpago.php` | `public/docs/manual-solicitudpago/img/` | `php artisan manual:capturar-solicitudpago-interno` |
+| Contable (cierres/aperturas) | `config/manual_contable.php` | `public/docs/manual-contable/img/` | `php artisan manual:capturar-contable-interno` |
 
 ## Cómo vincular una captura a un capítulo
 
@@ -50,6 +52,15 @@ php docs/manual-gastronomia/generar.php
 php docs/manual-canjes-marketing/generar.php
 php docs/manual-vending/generar.php
 php docs/manual-recepcion-movstock/generar.php
+php docs/manual-solicitudpago/generar.php
+php docs/manual-contable/generar.php
+```
+
+Capturas Contable:
+
+```bash
+php artisan manual:capturar-contable-interno --usuario=admin
+php docs/manual-contable/generar.php
 ```
 
 Alternativa Compras/Stock con navegador: `python3 docs/manual-compras/capturar_playwright.py` (requiere Chromium).

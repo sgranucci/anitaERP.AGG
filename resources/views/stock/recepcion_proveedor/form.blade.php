@@ -345,7 +345,12 @@
            title="Suba remito o factura (PDF/JPG/PNG). Detecta la OC si es legible; si no, cargue primero la OC y el OCR aplicará cantidades sobre los ítems ya cargados."></i>
     </label>
     <div class="col-lg-9">
-        <input type="file" id="archivo_ocr" accept=".pdf,.jpg,.jpeg,.png" class="form-control-file">
+        <input type="file" id="archivo_ocr" accept=".pdf,.jpg,.jpeg,.png" class="form-control-file"
+               data-descartar-url="{{ route('descartar_ai_decision') }}">
+        <input type="hidden" name="ai_decision_id" id="ai_decision_id" value="">
+        <input type="hidden" name="ai_sugerencia_hash" id="ai_sugerencia_hash" value="">
+        <input type="hidden" name="origen_carga" id="origen_carga" value="{{ old('origen_carga', optional($recepcion)->origen_carga ?? 'MANUAL') }}">
+        <div id="ocr-ai-score" class="small text-muted mt-1 d-none"></div>
         <div id="ocr-debug-wrap" class="mt-2 d-none">
             <div class="card border-secondary">
                 <div class="card-header py-1 px-2 bg-light">
@@ -397,7 +402,7 @@
                 @if(!($modoDevolucion ?? false))
                 <th class="col-qty" title="Cantidad rechazada en la misma unidad de compra">Rechaz.</th>
                 @endif
-                <th class="col-conv text-right" title="Unidad de compra del remito, coeficiente y cantidad equivalente en unidad de stock ERP">Conversi&oacute;n</th>
+                <th class="col-conv text-right" title="Si el artículo tiene articulo_proveedor: UM compra del catálogo × coeficiente → cantidad en UM stock. Sin catálogo, coef = 1.">Conversi&oacute;n</th>
                 <th class="col-precio text-right" title="Precio unitario seg&uacute;n remito/factura">Precio rec.</th>
                 <th class="col-importe text-right" title="Cantidad recibida &times; precio recepci&oacute;n">Total l&iacute;nea</th>
                 <th class="col-mon" title="Moneda / cotizaci&oacute;n">Mon./Cot.</th>
@@ -654,3 +659,4 @@
 @include('stock.recepcion_proveedor.partials.modal_confirmar_diferencias')
 @endif
 @include('includes.stock.modalconsultaarticulo')
+@include('includes.compras.modal_elegir_articulo_proveedor')

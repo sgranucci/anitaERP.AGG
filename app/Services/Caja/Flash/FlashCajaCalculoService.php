@@ -80,40 +80,52 @@ final class FlashCajaCalculoService
     }
 
     /**
+     * Gaming por sala — misma secuencia que calc_datos_wigos.pru.php + on_line.fc + a-flash.c:
+     *
+     * 1) Turno M: bill (spDropDiarioPorTerminal), coin/win (SP_QlickView_Win_per_EGM),
+     *    tickets (spTicketsDrop venta/pago). QR se lee en el .pru pero a-flash.c no lo suma.
+     * 2) Turnos T/N: solo pagos_manuales y tito de sesión; bill/tickets en 0.
+     * 3) Fórmulas (a-flash.c sin modificar):
+     *    slot_d = Bill + VentasSlots + VentasCaja
+     *    slot_r = Bill + VentasSlots + VentasCaja − PagosSlots − PagosCaja − PagosManuales
+     *    rul_d  = BillRul + VentasRuletas
+     *    rul_r  = BillRul + VentasRuletas − PagosRuletas
+     *
      * @return array<string, float|int>
      */
     private function calcularPorSala(int $salaCodigo, string $fechaYmd, int $empresaId): array
     {
         $flash = $this->estructuraVacia();
 
-        $baseline = null;
+        // Como a-flash: baseline de mañana (bill/coin/win/tickets) y luego acumula M+T+N.
+        $baseline = WigosSqlServerProcess::ejecutarCalcDatosFlashTurno($fechaYmd, 'M', $empresaId);
+
+        $flash['cant_rul'] = (int) ($baseline['units_rul'] ?? 0);
+        $flash['cant_slots'] = max(0, (int) ($baseline['units_slots'] ?? 0) - (int) ($baseline['units_poker'] ?? 0));
+
         foreach (['M', 'T', 'N'] as $turno) {
-            $datos = WigosSqlServerProcess::ejecutarCalcDatosFlashTurno($fechaYmd, $turno, $empresaId);
+            $datos = $turno === 'M'
+                ? $baseline
+                : WigosSqlServerProcess::ejecutarCalcDatosFlashTurno($fechaYmd, $turno, $empresaId);
 
-            if ($turno === 'M') {
-                $baseline = $datos;
-            }
+            $esManiana = $turno === 'M';
 
-            $billSlots = $turno === 'M' ? (float) ($baseline['bill_slots'] ?? 0) : 0.0;
-            $billRul = $turno === 'M' ? (float) ($baseline['bill_rul'] ?? 0) : 0.0;
-            $billPoker = $turno === 'M' ? (float) ($baseline['bill_poker'] ?? 0) : 0.0;
-            $winSlots = $turno === 'M' ? (float) ($baseline['win_slots'] ?? 0) : 0.0;
-            $winRul = $turno === 'M' ? (float) ($baseline['win_rul'] ?? 0) : 0.0;
-            $coinInSlots = $turno === 'M' ? (float) ($baseline['coin_in_slots'] ?? 0) : 0.0;
-            $coinInRul = $turno === 'M' ? (float) ($baseline['coin_in_rul'] ?? 0) : 0.0;
-            $coinInPoker = $turno === 'M' ? (float) ($baseline['coin_in_poker'] ?? 0) : 0.0;
+            $billSlots = $esManiana ? (float) ($baseline['bill_slots'] ?? 0) : 0.0;
+            $billRul = $esManiana ? (float) ($baseline['bill_rul'] ?? 0) : 0.0;
+            $billPoker = $esManiana ? (float) ($baseline['bill_poker'] ?? 0) : 0.0;
+            $winSlots = $esManiana ? (float) ($baseline['win_slots'] ?? 0) : 0.0;
+            $winRul = $esManiana ? (float) ($baseline['win_rul'] ?? 0) : 0.0;
+            $coinInSlots = $esManiana ? (float) ($baseline['coin_in_slots'] ?? 0) : 0.0;
+            $coinInRul = $esManiana ? (float) ($baseline['coin_in_rul'] ?? 0) : 0.0;
+            $coinInPoker = $esManiana ? (float) ($baseline['coin_in_poker'] ?? 0) : 0.0;
 
-            if ($turno === 'M') {
-                $flash['cant_rul'] = (int) ($datos['units_rul'] ?? 0);
-                $flash['cant_slots'] = max(0, (int) ($datos['units_slots'] ?? 0) - (int) ($datos['units_poker'] ?? 0));
-            }
+            $ventasCaja = $esManiana ? (float) ($baseline['ventas_caja'] ?? 0) : 0.0;
+            $ventasSlots = $esManiana ? (float) ($baseline['ventas_slots'] ?? 0) : 0.0;
+            $ventasRuletas = $esManiana ? (float) ($baseline['ventas_ruletas'] ?? 0) : 0.0;
+            $pagosCaja = $esManiana ? (float) ($baseline['pagos_caja'] ?? 0) : 0.0;
+            $pagosSlots = $esManiana ? (float) ($baseline['pagos_slots'] ?? 0) : 0.0;
+            $pagosRuletas = $esManiana ? (float) ($baseline['pagos_ruletas'] ?? 0) : 0.0;
 
-            $ventasCaja = $turno === 'M' ? (float) ($datos['ventas_caja'] ?? 0) : 0.0;
-            $ventasSlots = $turno === 'M' ? (float) ($datos['ventas_slots'] ?? 0) : (float) ($datos['venta_slots'] ?? 0);
-            $ventasRuletas = $turno === 'M' ? (float) ($datos['ventas_ruletas'] ?? 0) : (float) ($datos['venta_ruletas'] ?? 0);
-            $pagosCaja = $turno === 'M' ? (float) ($datos['pagos_caja'] ?? 0) : 0.0;
-            $pagosSlots = $turno === 'M' ? (float) ($datos['pagos_slots'] ?? 0) : (float) ($datos['tito_slots'] ?? 0);
-            $pagosRuletas = $turno === 'M' ? (float) ($datos['pagos_ruletas'] ?? 0) : 0.0;
             $pagosManuales = (float) ($datos['pagos_manuales'] ?? 0);
             $titoSlots = (float) ($datos['tito_slots'] ?? 0);
             $titoRul = (float) ($datos['tito_rul'] ?? 0);

@@ -221,8 +221,16 @@ class PedidoInterformingArbolIntegracionService
         ]);
     }
 
+    public function montoPedidoPublico(object $pedido): float
+    {
+        return $this->montoPedido($pedido instanceof PedidoInterforming
+            ? $pedido
+            : PedidoInterforming::query()->with('pedido_articulos')->findOrFail((int) $pedido->id));
+    }
+
     private function montoPedido(PedidoInterforming $pedido): float
     {
+        $pedido->loadMissing('pedido_articulos');
         $total = 0.0;
         foreach ($pedido->pedido_articulos as $item) {
             $cant = (float) ($item->cantidad ?? 0);

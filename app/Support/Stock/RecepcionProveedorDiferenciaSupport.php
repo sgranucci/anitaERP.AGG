@@ -4,6 +4,7 @@ namespace App\Support\Stock;
 
 use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Articulo;
+use App\Support\Compras\OrdencompraDescuentoSupport;
 
 class RecepcionProveedorDiferenciaSupport
 {
@@ -36,6 +37,7 @@ class RecepcionProveedorDiferenciaSupport
 
         $ocPorId = $oc->ordencompra_articulos->keyBy('id');
         $recibidosConfirmadosOc = RecepcionProveedorOcPendienteSupport::cantidadesRecibidasPorLineaOc((int) $oc->id);
+        $descuentoCabeceraOc = OrdencompraDescuentoSupport::porcentajeEfectivoDesdeOrdencompra($oc);
         $recibidosPorOcArt = [];
         $pendientesPorOcArt = [];
         $cerrarPorOcArt = [];
@@ -95,7 +97,7 @@ class RecepcionProveedorDiferenciaSupport
                 $precioOc = RecepcionProveedorConversionSupport::precioUnitarioNetoDesdeLineaOc(
                     (float) ($ocArt->precio ?? 0),
                     (float) ($ocArt->descuento ?? 0),
-                    (float) ($oc->descuento ?? 0),
+                    $descuentoCabeceraOc,
                 );
             }
             if ($precioOc <= 0) {

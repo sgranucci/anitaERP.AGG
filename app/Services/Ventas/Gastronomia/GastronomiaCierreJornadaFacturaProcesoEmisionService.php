@@ -25,6 +25,8 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaRecuperacionSuppor
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoInsumoAjusteSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
+use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaFechajornadaSupport;
 use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
@@ -128,7 +130,11 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
 
         $empresaId = (int) $jornada->empresa_id;
         $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? '';
-        $fechaFactura = trim($fechaFactura) !== '' ? $fechaFactura : $fechaJornada;
+        $fechaCierre = CaeaEmisionFechaCorrelatividadSupport::fechaCalendarioCierre(
+            $jornada->cierre_en,
+            $jornada->fecha_jornada,
+        );
+        $fechaFactura = trim($fechaFactura) !== '' ? $fechaFactura : $fechaCierre;
 
         $pv = $this->validarPuntoventa($puntoventaId, $empresaId);
         $cfg = $this->resolverCfgOperativa($empresaId);
@@ -181,6 +187,15 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $puntoventaModel = Puntoventa::query()->findOrFail($puntoventaEmisionId);
         $letraComprobante = $this->letraComprobanteDesdeReceptor($receptor);
         $emisionCaea = ($puntoventaModel->modofacturacion ?? '') === 'A';
+        $fechaFactura = $this->resolverFechaFacturaCaeaCorrelatividad(
+            $puntoventaModel,
+            $tipo,
+            $letraComprobante,
+            $fechaFactura,
+            $fechaJornada,
+            $emisionCaea,
+            $empresaId,
+        );
 
         $lockPv = null;
         try {
@@ -290,6 +305,8 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                     if (! $venta) {
                         throw new RuntimeException('No se recuperó la venta tras emitir el lote '.$numeroLote.'.');
                     }
+
+                    CierreJornadaProcesoFacturaFechajornadaSupport::asegurarEnVenta($venta, $fechaJornada);
 
                     $cobRes = $this->cobranzaGastronomiaService->registrarCobranzaPos(
                         $venta->fresh(),
@@ -503,7 +520,11 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         );
         $empresaId = (int) $jornada->empresa_id;
         $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? '';
-        $fechaFactura = trim($fechaFactura) !== '' ? $fechaFactura : $fechaJornada;
+        $fechaCierre = CaeaEmisionFechaCorrelatividadSupport::fechaCalendarioCierre(
+            $jornada->cierre_en,
+            $jornada->fecha_jornada,
+        );
+        $fechaFactura = trim($fechaFactura) !== '' ? $fechaFactura : $fechaCierre;
 
         $pv = $this->validarPuntoventa($puntoventaId, $empresaId);
         $cfg = $this->resolverCfgOperativa($empresaId);
@@ -525,6 +546,15 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $puntoventaModel = Puntoventa::query()->findOrFail($puntoventaEmisionId);
         $letraComprobante = $this->letraComprobanteDesdeReceptor($receptor);
         $emisionCaea = ($puntoventaModel->modofacturacion ?? '') === 'A';
+        $fechaFactura = $this->resolverFechaFacturaCaeaCorrelatividad(
+            $puntoventaModel,
+            $tipo,
+            $letraComprobante,
+            $fechaFactura,
+            $fechaJornada,
+            $emisionCaea,
+            $empresaId,
+        );
 
         $ajustePrevio = is_array($recuperacion['ajuste_insumos'] ?? null) ? $recuperacion['ajuste_insumos'] : null;
         $ajusteMovId = (int) ($ajustePrevio['movimientostock_id'] ?? 0);
@@ -633,6 +663,8 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                     if (! $venta) {
                         throw new RuntimeException('No se recuperó la venta tras re-emitir el lote '.$numeroLote.'.');
                     }
+
+                    CierreJornadaProcesoFacturaFechajornadaSupport::asegurarEnVenta($venta, $fechaJornada);
 
                     $cobRes = $this->cobranzaGastronomiaService->registrarCobranzaPos(
                         $venta->fresh(),
@@ -1201,6 +1233,48 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                 throw new InvalidArgumentException($errorNumeracion);
             }
         }
+    }
+
+    /**
+     * PV CAEA: si la última factura del mismo PV+tipo tiene fecha mayor a la propuesta,
+     * eleva solo fechafactura (ARCA 704). fechajornada no se modifica.
+     */
+    private function resolverFechaFacturaCaeaCorrelatividad(
+        Puntoventa $puntoventa,
+        ?Tipotransaccion $tipo,
+        string $letraComprobante,
+        string $fechaFactura,
+        string $fechaJornada,
+        bool $emisionCaea,
+        int $empresaId,
+    ): string {
+        if (! $emisionCaea || $tipo === null) {
+            return $fechaFactura;
+        }
+
+        $resuelto = CaeaEmisionFechaCorrelatividadSupport::resolverFechas(
+            $puntoventa,
+            $fechaFactura,
+            $fechaJornada,
+            $tipo,
+            $letraComprobante,
+            $empresaId > 0 ? $empresaId : null,
+            null,
+            null,
+        );
+
+        if ($resuelto['ajustada']) {
+            Log::info('cierre_jornada_waitry.caea_fecha_correlatividad', [
+                'puntoventa_id' => (int) $puntoventa->id,
+                'fecha_factura_pedida' => $fechaFactura,
+                'fecha_jornada' => $fechaJornada,
+                'fecha_factura' => $resuelto['fechafactura'],
+                'ultima_fecha' => $resuelto['ultima_fecha'],
+                'ultimo_numero' => $resuelto['ultimo_numero'],
+            ]);
+        }
+
+        return $resuelto['fechafactura'];
     }
 
     /**

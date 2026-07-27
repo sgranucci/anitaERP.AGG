@@ -30,4 +30,12 @@ return [
         'memory_limit' => env('MAYOR_PLANO_CUENTA_MEMORY_LIMIT', '1024M'),
         'max_execution_time' => (int) env('MAYOR_PLANO_CUENTA_MAX_EXECUTION_TIME', 900),
     ],
+
+    /*
+    | Balance de sumas y saldos (l-sumsal). Períodos → cuentacontable_saldo_mes; rango → asientos.
+    */
+    'sumas_saldos' => [
+        'memory_limit' => env('SUMAS_SALDOS_MEMORY_LIMIT', '1024M'),
+        'max_execution_time' => (int) env('SUMAS_SALDOS_MAX_EXECUTION_TIME', 600),
+    ],
 ];

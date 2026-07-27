@@ -11,6 +11,7 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosGrabacionSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosPreviewSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionMedioPagoSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -62,7 +63,15 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
 
         $empresaId = (int) $jornada->empresa_id;
         $fechaJornada = $jornada->fecha_jornada?->format('Y-m-d') ?? '';
-        $fecha = trim((string) ($fechaAsiento ?? '')) !== '' ? (string) $fechaAsiento : $fechaJornada;
+        // Siempre fecha de la jornada del cierre (alineado con FAC proceso / IVA por fechajornada).
+        $fecha = $fechaJornada;
+        if (trim((string) ($fechaAsiento ?? '')) !== '' && (string) $fechaAsiento !== $fechaJornada) {
+            Log::warning('cierre_jornada_waitry.fecha_asiento_ignorada', [
+                'jornada_id' => $jornadaId,
+                'fecha_asiento_pedida' => (string) $fechaAsiento,
+                'fecha_jornada' => $fechaJornada,
+            ]);
+        }
 
         $clasificacion = $this->procesoService->clasificacionActual($jornadaId, $porcentaje);
         $datosAsientos = $this->procesoService->prepararDatosAsientosProceso($jornada, $clasificacion);
@@ -174,6 +183,10 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
             );
         }
 
+        // Guardrail: validar que lo grabado por medio de cobro coincida con el Informe Z.
+        // Si queda un residual (asiento MP != Z), se avisa (log + payload); no bloquea el cierre.
+        $guardrail = $this->guardrailMediosZ($empresaId, $fechaJornada);
+
         return [
             'ok' => true,
             'mensaje' => 'Se grabaron '.count($grabados).' asiento(s) contable(s) del proceso'
@@ -183,7 +196,54 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
             'cantidad_asientos' => count($grabados),
             'asientos' => $grabados,
             'rendicion_anita' => $rendicionAnita,
+            'guardrail_medios_z' => $guardrail,
         ];
+    }
+
+    /**
+     * Guardrail post-grabación: concilia lo contabilizado por medio de cobro contra el Informe Z.
+     * Devuelve el resumen y, si hay diferencia (residual asiento MP != Z), registra un aviso.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function guardrailMediosZ(int $empresaId, string $fechaJornada): ?array
+    {
+        if ($fechaJornada === '') {
+            return null;
+        }
+
+        try {
+            $conc = app(GastronomiaConciliacionMedioPagoSupport::class)
+                ->conciliarJornada($empresaId, $fechaJornada);
+        } catch (Throwable $e) {
+            Log::warning('Cierre jornada gastro: guardrail medios/Z no pudo ejecutarse', [
+                'empresa_id' => $empresaId,
+                'fecha_jornada' => $fechaJornada,
+                'mensaje' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if (($conc['estado'] ?? 'OK') === 'DIF') {
+            $mediosDif = array_values(array_filter(
+                $conc['medios'] ?? [],
+                static fn (array $m): bool => ($m['estado'] ?? '') === 'DIF',
+            ));
+            Log::warning('Cierre jornada gastro: residual asiento vs Z por medio de cobro', [
+                'empresa_id' => $empresaId,
+                'fecha_jornada' => $fechaJornada,
+                'diff_total' => $conc['diff_total'] ?? null,
+                'medios_dif' => array_map(static fn (array $m): array => [
+                    'cuenta' => $m['cuenta_codigo'] ?? '',
+                    'z' => $m['z'] ?? 0,
+                    'contabilizado' => $m['contabilizado'] ?? 0,
+                    'diff' => $m['diff'] ?? 0,
+                ], $mediosDif),
+            ]);
+        }
+
+        return $conc;
     }
 
     /**

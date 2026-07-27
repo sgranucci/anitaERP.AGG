@@ -92,9 +92,11 @@ return [
             }
         }
 
+        // Kandiko: principal ONLINE es B (ksab); A (ksaa) es espejo RESTORING.
+        // Biyemas/Rebisco: principal ONLINE es A.
         return [
             2 => [
-                'curr_wigos' => 'A',
+                'curr_wigos' => 'B',
                 'connections' => [
                     'A' => ['host' => 'serverwigosksaa'],
                     'B' => ['host' => 'serverwigosksab'],

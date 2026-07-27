@@ -5,6 +5,7 @@ namespace App\Models\Solicitudpago;
 use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
+use App\Models\Contable\Centrocosto;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
@@ -32,6 +33,7 @@ class Solicitudpago extends Model implements Auditable
         'observacion',
         'estado',
         'sector_solicitudpago_id',
+        'centrocosto_id',
         'detalle',
         'solicitudpago_madre_id',
         'usuario_umod_id',
@@ -49,6 +51,7 @@ class Solicitudpago extends Model implements Auditable
         'formapagosol_id' => 'integer',
         'moneda_id' => 'integer',
         'sector_solicitudpago_id' => 'integer',
+        'centrocosto_id' => 'integer',
         'solicitudpago_madre_id' => 'integer',
         'usuario_umod_id' => 'integer',
     ];
@@ -81,6 +84,11 @@ class Solicitudpago extends Model implements Auditable
     public function sectores()
     {
         return $this->belongsTo(Sector_Solicitudpago::class, 'sector_solicitudpago_id');
+    }
+
+    public function centrocostos()
+    {
+        return $this->belongsTo(Centrocosto::class, 'centrocosto_id');
     }
 
     public function madre()

@@ -150,7 +150,7 @@
                                     <div class="col-md-4">
                                         <span class="text-muted d-block">Habilitación</span>
                                         <strong>{{ $d['habilitacion_en'] ?? '—' }}</strong>
-                                        <span class="text-muted"> — {{ $d['usuario_habilita'] ?? '' }} → {{ $d['usuario_habilitado'] ?? '' }}</span>
+                                        <span class="text-muted"> — Abierto por {{ $d['usuario_habilita'] ?? $d['usuario_habilitado'] ?? '' }}</span>
                                     </div>
                                     <div class="col-md-4">
                                         <span class="text-muted d-block">Cierre</span>

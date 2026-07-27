@@ -334,11 +334,19 @@ jQuery(function ($) {
                                     </div>
                                 </div>
                                 <div class="form-group row mb-2">
-                                    <label class="col-lg-3 col-form-label">Descuento general (%)</label>
-                                    <div class="col-lg-3">
-                                        <input type="number" step="0.01" min="0" id="wz_descuento" class="form-control form-control-sm" placeholder="0.00">
+                                    <label class="col-lg-3 col-form-label">Descuento general</label>
+                                    <div class="col-lg-5">
+                                        <div class="input-group input-group-sm">
+                                            <div class="input-group-prepend">
+                                                <select id="wz_descuento_tipo" class="custom-select" style="max-width: 6.5rem;">
+                                                    <option value="porcentaje" selected>%</option>
+                                                    <option value="importe">Monto</option>
+                                                </select>
+                                            </div>
+                                            <input type="number" step="0.01" min="0" id="wz_descuento" class="form-control" placeholder="0.00">
+                                        </div>
                                     </div>
-                                    <small class="form-text text-muted col-lg-6">Se aplica al neto antes del IVA por OC.</small>
+                                    <small class="form-text text-muted col-lg-4" id="wz_descuento_ayuda">Porcentaje sobre el neto antes del IVA por OC.</small>
                                 </div>
                             </div>
                         </div>
@@ -428,7 +436,7 @@ jQuery(function ($) {
 
                     <div class="row mt-1 mb-2">
                         <div class="col-12">
-                            <div class="wz-grupo-totales-line border-top pt-1 text-muted" title="Estimado según ítems de esta OC, fecha de documento y % de descuento general (datos compartidos).">
+                            <div class="wz-grupo-totales-line border-top pt-1 text-muted" title="Estimado según ítems de esta OC, fecha de documento y descuento general (datos compartidos).">
                                 <span class="wz-grupo-totales-text">—</span>
                             </div>
                         </div>

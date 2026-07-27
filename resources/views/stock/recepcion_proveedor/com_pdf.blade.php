@@ -86,6 +86,7 @@
             <th>Descripción</th>
             <th class="num">Cant. OC</th>
             <th class="num">Cant. rec.</th>
+            <th class="num" title="Cantidad en UM stock = cantidad remito × coeficiente (articulo_proveedor si existe)">Stock equiv.</th>
             <th class="num">Precio OC</th>
             <th class="num">Precio rec.</th>
             <th class="num">Importe</th>
@@ -96,14 +97,29 @@
         @php
             $rowClass = ($linea->fl_precio_diferencia || $linea->fl_cantidad_diferencia || $linea->fl_articulo_distinto) ? 'warn' : '';
             $importe = (float)$linea->cantidad * (float)$linea->precio;
+            $coefPdf = (float) ($linea->coeficienteconversion ?? 1);
+            if ($coefPdf <= 0) {
+                $coefPdf = 1.0;
+            }
+            $cantStockPdf = round((float) $linea->cantidad * $coefPdf, 6);
+            $umCompraPdf = trim((string) ($linea->ocr_unidad_compra ?? ''));
         @endphp
         <tr class="{{ $rowClass }}">
             <td>{{ $linea->orden }}</td>
             <td><span class="badge">{{ $linea->tipo_linea }}</span></td>
             <td>{{ optional($linea->articulos)->sku }}</td>
-            <td>{{ optional($linea->articulos)->descripcion }}</td>
+            <td>
+                {{ optional($linea->articulos)->descripcion }}
+                @if ($umCompraPdf !== '' || $coefPdf != 1.0)
+                    <br><span style="font-size:7px;color:#555;">
+                        Conv.: {{ $umCompraPdf !== '' ? $umCompraPdf.' ' : '' }}×{{ rtrim(rtrim(number_format($coefPdf, 6, '.', ''), '0'), '.') }}
+                        → stock {{ number_format($cantStockPdf, 4, ',', '.') }}
+                    </span>
+                @endif
+            </td>
             <td class="num">{{ $linea->cantidad_oc !== null ? number_format((float)$linea->cantidad_oc, 4, ',', '.') : '—' }}</td>
             <td class="num">{{ number_format((float)$linea->cantidad, 4, ',', '.') }}</td>
+            <td class="num">{{ number_format($cantStockPdf, 4, ',', '.') }}</td>
             <td class="num">{{ $linea->precio_ordencompra !== null ? number_format((float)$linea->precio_ordencompra, 4, ',', '.') : '—' }}</td>
             <td class="num">{{ number_format((float)$linea->precio, 4, ',', '.') }}</td>
             <td class="num">{{ number_format($importe, 2, ',', '.') }}</td>

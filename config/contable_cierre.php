@@ -17,4 +17,9 @@ return [
     */
     'apertura_link_habilitacion_dias' => (int) env('CONTABLE_CIERRE_APERTURA_LINK_DIAS', 7),
 
+    /*
+    | Hora (HH:MM) a partir de la cual, el día de fecha_ejecucion, el job aplica el cierre programado.
+    */
+    'hora_fin_dia' => (string) env('CONTABLE_CIERRE_HORA_FIN_DIA', '23:50'),
+
 ];

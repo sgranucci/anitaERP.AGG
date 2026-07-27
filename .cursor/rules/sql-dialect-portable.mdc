@@ -1,0 +1,31 @@
+---
+description: SQL crudo portable vía SqlDialectSupport (MySQL/Postgres)
+globs: app/**/*.php
+alwaysApply: false
+---
+
+# SQL dialecto portable
+
+Raw SQL nuevo en `app/` debe ser portable. Ver `docs/arquitectura/portabilidad-base-datos.md` y `App\Support\Database\SqlDialectSupport`.
+
+## Obligatorio en código nuevo o al tocar un hotspot
+
+1. Preferir Query Builder / Eloquent sin raw.
+2. Si hace falta expresión dialectal → **solo** `SqlDialectSupport` (cast entero, orden código, hora, anioMes, lower).
+3. No escribir `CAST(… AS UNSIGNED)`, `HOUR(`, `YEAR(…)*100+MONTH` sueltos en PRs nuevos.
+
+## Ejemplo
+
+```php
+use App\Support\Database\SqlDialectSupport;
+
+// ❌
+->orderByRaw('CAST(codigo AS UNSIGNED) ASC')
+
+// ✅
+->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
+```
+
+## Migraciones
+
+Charset/collation/`information_schema`: regla `migraciones-portables-motor.mdc` (no este helper).

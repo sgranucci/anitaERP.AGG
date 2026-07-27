@@ -7,7 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Admin\Menu;
 use App\Models\Admin\Permiso;
 use App\Models\Admin\Rol;
+use App\Models\Contable\Centrocosto;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use Illuminate\Support\Collection;
 
 class MenuRolController extends Controller
 {
@@ -29,7 +31,22 @@ class MenuRolController extends Controller
         $menus = Menu::getMenu(false, 1);
         $menusRols = Menu::with('roles')->get()->pluck('roles', 'id')->toArray();
 
-        return view('admin.menu-rol.index', compact('rols', 'menus', 'menusRols'));
+        $centrocostosFiltro = $this->obtenerCentrocostosConRoles();
+        $modulosMenu = $this->obtenerModulosMenu($menus);
+        $centrocostoId = (string) $request->input('centrocosto_id', '');
+        $totalRolesSistema = Rol::query()->count();
+        $hayRolesSinCentrocosto = Rol::query()->whereNull('centrocosto_id')->exists();
+
+        return view('admin.menu-rol.index', compact(
+            'rols',
+            'menus',
+            'menusRols',
+            'centrocostosFiltro',
+            'modulosMenu',
+            'centrocostoId',
+            'totalRolesSistema',
+            'hayRolesSinCentrocosto'
+        ));
     }
 
     /**
@@ -92,32 +109,104 @@ class MenuRolController extends Controller
     }
 
     /**
+     * Centros de costo que tienen al menos un rol asignado (para el select de filtro).
+     *
+     * @return Collection<int, Centrocosto>
+     */
+    private function obtenerCentrocostosConRoles(): Collection
+    {
+        $ids = Rol::query()
+            ->whereNotNull('centrocosto_id')
+            ->distinct()
+            ->orderBy('centrocosto_id')
+            ->pluck('centrocosto_id');
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return Centrocosto::query()
+            ->whereIn('id', $ids)
+            ->orderBy('nombre')
+            ->get(['id', 'codigo', 'nombre']);
+    }
+
+    /**
+     * Módulos raíz del menú (nivel 1) para filtrar opciones en cliente.
+     *
+     * @param  array<int, array<string, mixed>>  $menus
+     * @return list<array{id: int, nombre: string}>
+     */
+    private function obtenerModulosMenu(array $menus): array
+    {
+        $modulos = [];
+
+        foreach ($menus as $menu) {
+            if ((int) ($menu['menu_id'] ?? 0) !== 0) {
+                break;
+            }
+            $modulos[] = [
+                'id' => (int) $menu['id'],
+                'nombre' => (string) ($menu['nombre'] ?? ''),
+            ];
+        }
+
+        return $modulos;
+    }
+
+    /**
      * @return array<int, string> id => nombre
      */
     private function obtenerRolsFiltrados(Request $request): array
     {
-        if (! isset($request->centrocosto) || $request->centrocosto === '') {
-            return Rol::orderBy('id')->pluck('nombre', 'id')->toArray();
+        $query = Rol::query()->orderBy('nombre');
+
+        $centrocostoId = $request->input('centrocosto_id');
+
+        // Compatibilidad con filtro texto legacy ?centrocosto=
+        if (($centrocostoId === null || $centrocostoId === '') && $request->filled('centrocosto')) {
+            return $this->obtenerRolsPorTextoLegacy((string) $request->input('centrocosto'));
         }
 
-        $centrocosto = $request->centrocosto;
+        if ($centrocostoId === 'sin') {
+            return $query->whereNull('centrocosto_id')->pluck('nombre', 'id')->toArray();
+        }
 
+        if ($centrocostoId !== null && $centrocostoId !== '') {
+            return $query->where('centrocosto_id', (int) $centrocostoId)->pluck('nombre', 'id')->toArray();
+        }
+
+        return $query->pluck('nombre', 'id')->toArray();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function obtenerRolsPorTextoLegacy(string $centrocosto): array
+    {
         if (is_numeric($centrocosto)) {
             $centrocostos = $this->centrocostoRepository->findPorCodigo($centrocosto);
             if ($centrocostos === null) {
                 return [];
             }
 
-            return Rol::where('centrocosto_id', $centrocostos->id)->orderBy('id')->pluck('nombre', 'id')->toArray();
+            return Rol::query()
+                ->where('centrocosto_id', $centrocostos->id)
+                ->orderBy('nombre')
+                ->pluck('nombre', 'id')
+                ->toArray();
         }
 
-        $centrocostos = $this->centrocostoRepository->findPorNombre($centrocosto);
-
-        if (count($centrocostos) === 0) {
+        $ids = $this->centrocostoRepository->findPorNombre($centrocosto);
+        if (count($ids) === 0) {
             return [];
         }
 
-        return Rol::whereIn('centrocosto_id', $centrocostos)->orderBy('id')->pluck('nombre', 'id')->toArray();
+        return Rol::query()
+            ->whereIn('centrocosto_id', $ids)
+            ->orderBy('nombre')
+            ->pluck('nombre', 'id')
+            ->toArray();
     }
 
     /**

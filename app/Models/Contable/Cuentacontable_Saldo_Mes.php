@@ -20,12 +20,20 @@ class Cuentacontable_Saldo_Mes extends Model
         'centrocosto_id',
         'anio_mes',
         'moneda_id',
+        'debe',
+        'haber',
+        'debe_local',
+        'haber_local',
         'monto',
         'monto_local',
     ];
 
     protected $casts = [
         'anio_mes' => 'integer',
+        'debe' => 'decimal:4',
+        'haber' => 'decimal:4',
+        'debe_local' => 'decimal:4',
+        'haber_local' => 'decimal:4',
         'monto' => 'decimal:4',
         'monto_local' => 'decimal:4',
     ];

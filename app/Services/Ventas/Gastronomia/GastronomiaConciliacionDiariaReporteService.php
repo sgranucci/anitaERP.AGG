@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Ventas\Gastronomia;
 
 use App\Exports\Ventas\GastronomiaConciliacionDiariaReporteExport;
+use App\Mail\Ventas\GastronomiaAuditoriaMediosMensual;
 use App\Mail\Ventas\GastronomiaConciliacionDiariaReporte;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
@@ -12,6 +13,7 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaMesCacheSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionEstacionamientoSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionFlashSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionMedioPagoSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPostCierreCaeaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionGastroTotalDiaSupport;
@@ -40,6 +42,7 @@ final class GastronomiaConciliacionDiariaReporteService
         private readonly GastronomiaConciliacionVendingRendgSupport $vendingRendgSupport,
         private readonly GastronomiaAuditoriaHuecosNumeracionService $huecosNumeracionService,
         private readonly GastronomiaConciliacionFlashSupport $flashSupport,
+        private readonly GastronomiaConciliacionMedioPagoSupport $medioPagoSupport,
     ) {
     }
 
@@ -177,6 +180,207 @@ final class GastronomiaConciliacionDiariaReporteService
     }
 
     /**
+     * Control mensual por medio SIN el cache pesado de Anita (venta/huecos): computa directo por jornada
+     * venta ERP, contabilidad global, flash (rendgastro) y conciliación por medio (Z vs contabilizado).
+     *
+     * @param  list<int>  $empresasIds
+     * @return list<array<string, mixed>>
+     */
+    public function resumenMensualMediosDirecto(
+        string $fechaDesde,
+        string $fechaHasta,
+        array $empresasIds,
+        float $tolerancia = 0.02,
+    ): array {
+        $desde = Carbon::parse($fechaDesde)->toDateString();
+        $hasta = Carbon::parse($fechaHasta)->toDateString();
+        $flashOffset = $this->controlFlashJornadaOffsetDias();
+
+        $out = [];
+        foreach ($empresasIds as $empresaId) {
+            $empresaId = (int) $empresaId;
+            if ($empresaId <= 0) {
+                continue;
+            }
+            $empresa = Empresa::query()->find($empresaId);
+            $empresaCodigo = (int) ($empresa->codigo ?? $empresaId);
+
+            $flashDesde = Carbon::parse($desde)->subDays($flashOffset)->toDateString();
+            $flashHasta = Carbon::parse($hasta)->subDays($flashOffset)->toDateString();
+            $flashDesglose = $this->cargarFlashDesgloseEmpresa($empresaCodigo, $flashDesde, $flashHasta);
+
+            $dias = [];
+            foreach (CarbonPeriod::create($desde, $hasta) as $dia) {
+                $fechaJornada = $dia->toDateString();
+                if ($this->esJornadaPreMigracion($empresaId, $fechaJornada)) {
+                    continue;
+                }
+                if ($this->jornadaAbierta($empresaId, $fechaJornada)) {
+                    continue;
+                }
+
+                $ventaErpNeto = round((float) ($this->gastroTotalDiaSupport->totalesDiaEmpresa($empresaId, $fechaJornada)['neto'] ?? 0), 2);
+                $contabilidad = round((float) ($this->rendgAsientosDiaSupport->auditarAsientosFacturacionJornada($empresaId, $fechaJornada)['total'] ?? 0), 2);
+                $fechaFlash = $flashOffset > 0 ? Carbon::parse($fechaJornada)->subDays($flashOffset)->toDateString() : $fechaJornada;
+                $flashDia = round((float) ($flashDesglose[$fechaFlash]['total_flash'] ?? 0), 2);
+                $conc = $this->medioPagoSupport->conciliarJornada($empresaId, $fechaJornada, $tolerancia);
+
+                $dias[] = [
+                    'fecha_jornada' => $fechaJornada,
+                    'jornada_abierta' => false,
+                    'control_gastro_total' => ['ventas_erp' => $ventaErpNeto],
+                    'control_rendg_asientos' => ['asientos_total' => $contabilidad],
+                    'control_flash' => [['total_flash' => $flashDia, 'es_control_flash' => true]],
+                    'conciliacion_medios' => $conc,
+                ];
+            }
+
+            $out[] = [
+                'empresa_id' => $empresaId,
+                'empresa_nombre' => (string) ($empresa->nombre ?? 'Empresa '.$empresaId),
+                'dias' => $dias,
+            ];
+        }
+
+        return $this->resumenMensualMedios(['empresas' => $out], $tolerancia);
+    }
+
+    /**
+     * Control mensual por empresa: venta ERP, contabilidad global, flash, y por medio de pago
+     * (Z vs contabilizado), agregando las jornadas del rango.
+     *
+     * @param  array<string, mixed>  $informe  salida de {@see generar()}
+     * @return list<array<string, mixed>>
+     */
+    public function resumenMensualMedios(array $informe, float $tolerancia = 0.02): array
+    {
+        $out = [];
+        foreach ($informe['empresas'] ?? [] as $empresa) {
+            $ventaErp = 0.0;
+            $contabilidadGlobal = 0.0;
+            $flash = 0.0;
+            $zPorMedio = [];
+            $contabPorMedio = [];
+            $jornadas = 0;
+            $jornadasDif = [];
+            $porDia = [];
+
+            foreach ($empresa['dias'] ?? [] as $dia) {
+                if (($dia['jornada_abierta'] ?? false) === true) {
+                    continue;
+                }
+                $jornadas++;
+
+                $ctrlGastro = $dia['control_gastro_total'] ?? null;
+                if (is_array($ctrlGastro)) {
+                    $ventaErp = round($ventaErp + (float) ($ctrlGastro['ventas_erp'] ?? 0), 2);
+                }
+                $ctrlAs = $dia['control_rendg_asientos'] ?? null;
+                if (is_array($ctrlAs)) {
+                    $contabilidadGlobal = round($contabilidadGlobal + (float) ($ctrlAs['asientos_total'] ?? 0), 2);
+                }
+                foreach ($this->filasControlFlash($dia) as $filaFlash) {
+                    $flash = round($flash + (float) ($filaFlash['total_flash'] ?? 0), 2);
+                }
+
+                $conc = $dia['conciliacion_medios'] ?? null;
+                $mediosDia = [];
+                $totalZDia = 0.0;
+                $totalContabDia = 0.0;
+                if (is_array($conc)) {
+                    foreach ($conc['medios'] ?? [] as $m) {
+                        $cod = (string) ($m['cuenta_codigo'] ?? '');
+                        if ($cod === '') {
+                            continue;
+                        }
+                        $nombre = (string) ($m['cuenta_nombre'] ?? '');
+                        $zMonto = (float) ($m['z'] ?? 0);
+                        $cMonto = (float) ($m['contabilizado'] ?? 0);
+                        $diff = $m['diff'] ?? round($zMonto - $cMonto, 2);
+                        $estadoMedio = (string) ($m['estado'] ?? 'OK');
+                        $fuente = (string) ($m['fuente_z'] ?? '');
+
+                        if (! isset($zPorMedio[$cod])) {
+                            $zPorMedio[$cod] = ['cuenta_codigo' => $cod, 'cuenta_nombre' => $nombre, 'total' => 0.0, 'fuente' => $fuente];
+                        }
+                        if (! isset($contabPorMedio[$cod])) {
+                            $contabPorMedio[$cod] = ['cuenta_codigo' => $cod, 'cuenta_nombre' => $nombre, 'total' => 0.0];
+                        }
+                        $zPorMedio[$cod]['total'] = round($zPorMedio[$cod]['total'] + $zMonto, 2);
+                        if ($fuente !== '' && ($zPorMedio[$cod]['fuente'] ?? '') === '') {
+                            $zPorMedio[$cod]['fuente'] = $fuente;
+                        }
+                        $contabPorMedio[$cod]['total'] = round($contabPorMedio[$cod]['total'] + $cMonto, 2);
+
+                        $totalZDia = round($totalZDia + $zMonto, 2);
+                        $totalContabDia = round($totalContabDia + $cMonto, 2);
+                        $mediosDia[] = [
+                            'cuenta_codigo' => $cod,
+                            'cuenta_nombre' => $nombre,
+                            'fuente_z' => $fuente,
+                            'z' => $zMonto,
+                            'contabilizado' => $cMonto,
+                            'diff' => (float) $diff,
+                            'estado' => $estadoMedio,
+                        ];
+                    }
+                    if (($conc['estado'] ?? '') === 'DIF') {
+                        $mediosDif = [];
+                        foreach ($conc['medios'] ?? [] as $m) {
+                            if (($m['estado'] ?? '') === 'DIF') {
+                                $mediosDif[] = [
+                                    'cuenta_codigo' => $m['cuenta_codigo'] ?? '',
+                                    'cuenta_nombre' => $m['cuenta_nombre'] ?? '',
+                                    'fuente_z' => $m['fuente_z'] ?? '',
+                                    'z' => (float) ($m['z'] ?? 0),
+                                    'contabilizado' => (float) ($m['contabilizado'] ?? 0),
+                                    'diff' => (float) ($m['diff'] ?? 0),
+                                ];
+                            }
+                        }
+                        $jornadasDif[] = [
+                            'fecha_jornada' => (string) ($dia['fecha_jornada'] ?? ''),
+                            'diff_total' => (float) ($conc['diff_total'] ?? 0),
+                            'medios' => $mediosDif,
+                        ];
+                    }
+                }
+
+                $porDia[] = [
+                    'fecha_jornada' => (string) ($dia['fecha_jornada'] ?? ''),
+                    'medios' => $mediosDia,
+                    'total_z' => $totalZDia,
+                    'total_contabilizado' => $totalContabDia,
+                    'diff_total' => round($totalZDia - $totalContabDia, 2),
+                    'estado' => (string) ($conc['estado'] ?? 'OK'),
+                ];
+            }
+
+            ksort($zPorMedio);
+            ksort($contabPorMedio);
+
+            $out[] = [
+                'empresa_id' => (int) ($empresa['empresa_id'] ?? 0),
+                'empresa_nombre' => (string) ($empresa['empresa_nombre'] ?? ''),
+                'jornadas' => $jornadas,
+                'venta_erp' => $ventaErp,
+                'contabilidad_global' => $contabilidadGlobal,
+                'diff_erp_contabilidad' => round($ventaErp - $contabilidadGlobal, 2),
+                'flash' => $flash,
+                'z_por_medio' => array_values($zPorMedio),
+                'contabilizado_por_medio' => array_values($contabPorMedio),
+                'total_z' => round(array_sum(array_column($zPorMedio, 'total')), 2),
+                'total_contabilizado' => round(array_sum(array_column($contabPorMedio, 'total')), 2),
+                'por_dia' => $porDia,
+                'jornadas_dif_medio' => $jornadasDif,
+                'estado' => $jornadasDif === [] ? 'OK' : 'DIF',
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  array<string, mixed>  $informe
      * @return list<array<int|string|float|null>>
      */
@@ -197,7 +401,44 @@ final class GastronomiaConciliacionDiariaReporteService
                 foreach ($this->filasControlFlash($dia) as $filaFlash) {
                     $filas[] = $this->filaCsvDesdeReporte($empresa, $dia, $filaFlash);
                 }
+                foreach ($this->filasMedioPago($dia) as $filaMedio) {
+                    $filas[] = $this->filaCsvDesdeReporte($empresa, $dia, $filaMedio);
+                }
             }
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Filas «medio de pago» (conciliación Z ↔ contabilizado por cuenta) para CSV/consola.
+     *
+     * @param  array<string, mixed>  $dia
+     * @return list<array<string, mixed>>
+     */
+    public function filasMedioPago(array $dia): array
+    {
+        $conc = $dia['conciliacion_medios'] ?? null;
+        if (! is_array($conc) || ($conc['medios'] ?? []) === []) {
+            return [];
+        }
+
+        $filas = [];
+        foreach ($conc['medios'] as $m) {
+            $filas[] = [
+                'tipo_fila' => 'medio_pago',
+                'circuito' => 'GASTRO',
+                'identificador_pc' => 'MEDIO',
+                'tipo_pv' => 'MEDIO',
+                'pv_codigo' => (string) ($m['cuenta_codigo'] ?? ''),
+                'descripcion_pc' => (string) ($m['cuenta_nombre'] ?? ''),
+                'ventas_erp' => (float) ($m['contabilizado'] ?? 0),
+                'ventas_anita' => (float) ($m['contabilizado'] ?? 0),
+                'rendgastro_z' => (float) ($m['z'] ?? 0),
+                'diff_erp_rendg' => $m['diff'] ?? null,
+                'estado' => (string) ($m['estado'] ?? ''),
+                'es_medio_pago' => true,
+            ];
         }
 
         return $filas;
@@ -273,6 +514,10 @@ final class GastronomiaConciliacionDiariaReporteService
                 }
                 $ctrlAsientos = $dia['control_rendg_asientos'] ?? null;
                 if (is_array($ctrlAsientos) && ($ctrlAsientos['estado'] ?? '') === 'DIF') {
+                    return true;
+                }
+                $concMedios = $dia['conciliacion_medios'] ?? null;
+                if (is_array($concMedios) && ($concMedios['estado'] ?? '') === 'DIF') {
                     return true;
                 }
                 foreach ($this->filasControlFlash($dia) as $ctrlFlash) {
@@ -359,6 +604,154 @@ final class GastronomiaConciliacionDiariaReporteService
         if (file_put_contents($ruta, $contenido) === false) {
             throw new \RuntimeException('No se pudo escribir CSV: '.$ruta);
         }
+    }
+
+    /**
+     * Envía por correo la auditoría mensual por medio de cobro (Z ↔ contabilizado, ERP sin ctamov).
+     *
+     * @param  list<array<string, mixed>>  $resumen  salida de {@see resumenMensualMediosDirecto()}
+     * @return array{enviado: bool, destino?: string, error?: string, hay_diferencias?: bool}
+     */
+    public function enviarCorreoAuditoriaMediosMensual(
+        array $resumen,
+        string $fechaDesde,
+        string $fechaHasta,
+        float $tolerancia,
+    ): array {
+        $configMensual = config('gastronomia.auditoria_medios_mensual', []);
+        $destino = trim((string) ($configMensual['email']
+            ?? config('gastronomia.conciliacion_diaria_reporte.email', '')));
+        if ($destino === '') {
+            return ['enviado' => false, 'error' => 'Sin destino de correo configurado'];
+        }
+
+        $hayDiferencias = false;
+        foreach ($resumen as $emp) {
+            if ((string) ($emp['estado'] ?? 'OK') === 'DIF') {
+                $hayDiferencias = true;
+                break;
+            }
+        }
+
+        $csv = $this->construirCsvMediosMensual($resumen, $fechaDesde, $fechaHasta);
+        $nombreCsv = 'auditoria_medios_'.$fechaDesde.'_'.$fechaHasta.'.csv';
+        $destinatarios = array_values(array_filter(array_map('trim', explode(',', $destino))));
+
+        try {
+            Mail::to($destinatarios)->send(new GastronomiaAuditoriaMediosMensual(
+                $resumen,
+                $fechaDesde,
+                $fechaHasta,
+                $tolerancia,
+                $hayDiferencias,
+                $csv,
+                $nombreCsv,
+            ));
+            Log::info('gastronomia.auditoria_medios_mensual.mail_ok', [
+                'destino' => $destino,
+                'fecha_desde' => $fechaDesde,
+                'fecha_hasta' => $fechaHasta,
+                'hay_diferencias' => $hayDiferencias,
+            ]);
+
+            return ['enviado' => true, 'destino' => $destino, 'hay_diferencias' => $hayDiferencias];
+        } catch (\Throwable $e) {
+            Log::error('gastronomia.auditoria_medios_mensual.mail_fallo', [
+                'destino' => $destino,
+                'msg' => $e->getMessage(),
+            ]);
+
+            return ['enviado' => false, 'destino' => $destino, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * CSV: totales del mes + detalle día × medio por empresa.
+     *
+     * @param  list<array<string, mixed>>  $resumen
+     */
+    public function construirCsvMediosMensual(array $resumen, string $fechaDesde, string $fechaHasta): string
+    {
+        $handle = fopen('php://temp', 'r+');
+        fputcsv($handle, [
+            'tipo', 'empresa_id', 'empresa_nombre', 'fecha_desde', 'fecha_hasta', 'fecha_jornada',
+            'cuenta_codigo', 'cuenta_nombre', 'fuente_z', 'z', 'contabilizado', 'diff', 'estado',
+        ], ';');
+
+        foreach ($resumen as $emp) {
+            $empresaId = (int) ($emp['empresa_id'] ?? 0);
+            $empresaNombre = (string) ($emp['empresa_nombre'] ?? '');
+
+            $porCuenta = [];
+            foreach ($emp['z_por_medio'] ?? [] as $m) {
+                $cod = (string) ($m['cuenta_codigo'] ?? '');
+                if ($cod === '') {
+                    continue;
+                }
+                $porCuenta[$cod] = [
+                    'nombre' => (string) ($m['cuenta_nombre'] ?? ''),
+                    'fuente' => (string) ($m['fuente'] ?? ''),
+                    'z' => (float) ($m['total'] ?? 0),
+                    'contab' => 0.0,
+                ];
+            }
+            foreach ($emp['contabilizado_por_medio'] ?? [] as $m) {
+                $cod = (string) ($m['cuenta_codigo'] ?? '');
+                if ($cod === '') {
+                    continue;
+                }
+                if (! isset($porCuenta[$cod])) {
+                    $porCuenta[$cod] = ['nombre' => (string) ($m['cuenta_nombre'] ?? ''), 'fuente' => '', 'z' => 0.0, 'contab' => 0.0];
+                }
+                $porCuenta[$cod]['contab'] = (float) ($m['total'] ?? 0);
+            }
+            ksort($porCuenta);
+            foreach ($porCuenta as $cod => $c) {
+                $diff = round($c['z'] - $c['contab'], 2);
+                fputcsv($handle, [
+                    'mes',
+                    $empresaId,
+                    $empresaNombre,
+                    $fechaDesde,
+                    $fechaHasta,
+                    '',
+                    $cod,
+                    $c['nombre'],
+                    $c['fuente'],
+                    number_format($c['z'], 2, '.', ''),
+                    number_format($c['contab'], 2, '.', ''),
+                    number_format($diff, 2, '.', ''),
+                    abs($diff) > 0.02 ? 'DIF' : 'OK',
+                ], ';');
+            }
+
+            foreach ($emp['por_dia'] ?? [] as $dia) {
+                $fechaJornada = (string) ($dia['fecha_jornada'] ?? '');
+                foreach ($dia['medios'] ?? [] as $m) {
+                    fputcsv($handle, [
+                        'dia',
+                        $empresaId,
+                        $empresaNombre,
+                        $fechaDesde,
+                        $fechaHasta,
+                        $fechaJornada,
+                        (string) ($m['cuenta_codigo'] ?? ''),
+                        (string) ($m['cuenta_nombre'] ?? ''),
+                        (string) ($m['fuente_z'] ?? ''),
+                        number_format((float) ($m['z'] ?? 0), 2, '.', ''),
+                        number_format((float) ($m['contabilizado'] ?? 0), 2, '.', ''),
+                        number_format((float) ($m['diff'] ?? 0), 2, '.', ''),
+                        (string) ($m['estado'] ?? ''),
+                    ], ';');
+                }
+            }
+        }
+
+        rewind($handle);
+        $contenido = (string) stream_get_contents($handle);
+        fclose($handle);
+
+        return $contenido;
     }
 
     /**
@@ -486,6 +879,10 @@ final class GastronomiaConciliacionDiariaReporteService
             $flashDesglosePorJornada,
         );
 
+        $conciliacionMedios = ! $jornadaAbierta
+            ? $this->medioPagoSupport->conciliarJornada($empresaId, $fechaJornada, $tolerancia)
+            : null;
+
         return [
             'fecha_jornada' => $fechaJornada,
             'jornada_abierta' => $jornadaAbierta,
@@ -498,12 +895,14 @@ final class GastronomiaConciliacionDiariaReporteService
             'control_gastro_total' => $controlGastro,
             'control_rendg_asientos' => $controlRendgAsientos,
             'control_flash' => $controlFlash,
+            'conciliacion_medios' => $conciliacionMedios,
             'huecos_numeracion' => $this->huecosNumeracionService->resumenJornadaEmpresa($empresaId, $fechaJornada),
         ];
     }
 
     /**
      * Cuadro FLASH: Informix flash_ayb/estac vs rendg/ERP de la jornada offset (default: día anterior).
+     * Con control_flash_ayb_incluye_vending, flash_ayb se compara a gastro+vending (Anita no discrimina).
      *
      * @param  array<string, array{flash_ayb: float, flash_estac: float, total_flash: float}>  $flashDesglosePorJornada
      * @return list<array<string, mixed>>

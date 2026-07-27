@@ -113,7 +113,30 @@
                     @endif
                 </td>
                 <td>{{ $fila['tipo_comp'] ?? '' }}</td>
-                <td>{{ $fila['comprobante'] ?? '' }}</td>
+                <td>
+                    @php
+                        $textoComprobante = $fila['comprobante'] ?? '';
+                        $cpIdFila = (int) ($fila['comprobante_proveedor_id'] ?? 0);
+                        $ventaIdFila = (int) ($fila['venta_id'] ?? 0);
+                        $puedeVerCp = $puede_ver_comprobante_proveedor ?? false;
+                        $puedeVerFactura = $puede_ver_factura ?? false;
+                    @endphp
+                    @if ($textoComprobante !== '')
+                        @if ($puedeVerCp && $cpIdFila > 0)
+                            <a href="{{ route('editar_comprobante_proveedor', ['id' => $cpIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                               target="_blank" rel="noopener" class="text-primary">
+                                {{ $textoComprobante }}
+                            </a>
+                        @elseif ($puedeVerFactura && $ventaIdFila > 0)
+                            <a href="{{ route('editar_factura', ['id' => $ventaIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                               target="_blank" rel="noopener" class="text-primary">
+                                {{ $textoComprobante }}
+                            </a>
+                        @else
+                            {{ $textoComprobante }}
+                        @endif
+                    @endif
+                </td>
                 <td>
                     @if ($puedeVerProveedor && (int) ($fila['proveedor_id'] ?? 0) > 0)
                         <a href="{{ route('editar_proveedor', ['id' => $fila['proveedor_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"

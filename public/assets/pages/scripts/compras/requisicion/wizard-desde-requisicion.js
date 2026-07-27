@@ -217,6 +217,8 @@
 			codigocapex: '',
 			descripcioncapex: '',
 			detalle: '',
+			proveedor_id: parseInt($tr.attr('data-proveedor-id'), 10) || 0,
+			articulo_proveedor_id: parseInt($tr.attr('data-articulo-proveedor-id'), 10) || 0,
 			origen: null,
 		};
 	}
@@ -325,7 +327,9 @@
 		if (precioLineaNumerico(lin) <= 0) {
 			return null;
 		}
-		var prov = requisicionProveedorId > 0 ? requisicionProveedorId : 0;
+		var prov = normId(lin.proveedor_id) > 0
+			? normId(lin.proveedor_id)
+			: (requisicionProveedorId > 0 ? requisicionProveedorId : 0);
 		return {
 			tipo: 'REQUISICION',
 			ref_id: lin.requisicion_articulo_id,
@@ -565,6 +569,9 @@
 				return;
 			}
 			var prov = normId(lin.origen.proveedor_id);
+			if (prov <= 0) {
+				prov = normId(lin.proveedor_id);
+			}
 			var cc = normId(lin.origen.condicioncompra_id);
 			var ce = normId(lin.origen.condicionentrega_id);
 			var cp = normId(lin.origen.condicionpago_id);
@@ -757,7 +764,9 @@
 				requisicion_articulo_id: a.requisicion_articulo_id,
 				articulo_id: a.articulo_id,
 				sku: a.sku || '',
-				descripcion: a.descripcion_articulo || '',
+				descripcion: (a.nombre_articulo_proveedor && String(a.nombre_articulo_proveedor).trim())
+					? a.nombre_articulo_proveedor
+					: (a.descripcion_articulo || ''),
 				color_id: a.color_id || 0,
 				talle_id: a.talle_id || 0,
 				color_nombre: a.color_nombre || '',
@@ -775,6 +784,8 @@
 				codigocapex: a.codigocapex || '',
 				descripcioncapex: a.descripcioncapex || '',
 				detalle: a.detalle || '',
+				proveedor_id: parseInt(a.proveedor_id || 0, 10) || 0,
+				articulo_proveedor_id: parseInt(a.articulo_proveedor_id || 0, 10) || 0,
 				origen: null,
 			};
 		});
@@ -1363,6 +1374,7 @@
 			_token: META.csrf,
 			fecha: $('#wz_fecha').val() || '',
 			descuento: $('#wz_descuento').val() || '',
+			descuento_tipo: $('#wz_descuento_tipo').val() || 'porcentaje',
 			articulo_ids: articulo_ids,
 			cantidades: cantidades,
 			precios: precios,
@@ -1684,6 +1696,7 @@
 			tratamiento: $('#wz_tratamiento').val(),
 			detalle: $('#wz_detalle').val() || '',
 			descuento: $('#wz_descuento').val() || '',
+			descuento_tipo: $('#wz_descuento_tipo').val() || 'porcentaje',
 			comentario: g.comentario || $('#wz_comentario').val() || '',
 			requisicion_id: String(META.requisicion_id),
 			proveedor_id: g.proveedor_id ? String(g.proveedor_id) : '',
@@ -1713,6 +1726,7 @@
 			descripcioncapexs: liDel.map(function (l) { return l.descripcioncapex; }),
 			detalle_articulos: liDel.map(function (l) { return l.detalle || ''; }),
 			requisicion_articulo_ids: liDel.map(function (l) { return l.requisicion_articulo_id; }),
+			articulo_proveedor_ids: liDel.map(function (l) { return l.articulo_proveedor_id || ''; }),
 			precio_origen_tipos: liDel.map(function (l) { return l.origen ? l.origen.tipo : ''; }),
 			precio_origen_ref_ids: liDel.map(function (l) { return l.origen && l.origen.ref_id != null ? l.origen.ref_id : ''; }),
 			precio_origen_etiquetas: liDel.map(function (l) { return l.origen ? l.origen.etiqueta : ''; }),
@@ -1954,6 +1968,25 @@
 	$(function () {
 		bootOrdencompraWizard();
 		precargarHandlersConsultaProveedor();
+
+		function wzActualizarAyudaDescuento() {
+			var tipo = $('#wz_descuento_tipo').val() || 'porcentaje';
+			var $ayuda = $('#wz_descuento_ayuda');
+			if (!$ayuda.length) {
+				return;
+			}
+			if (tipo === 'importe') {
+				$ayuda.text('Monto fijo sobre el neto antes del IVA por OC.');
+			} else {
+				$ayuda.text('Porcentaje sobre el neto antes del IVA por OC.');
+			}
+		}
+
+		$('#wz_descuento_tipo').on('change', function () {
+			wzActualizarAyudaDescuento();
+			wzScheduleRefrescarTotalesCabeceras();
+		});
+		wzActualizarAyudaDescuento();
 
 		$('#wz_descuento, #wz_fecha').on('change input', function () {
 			wzScheduleRefrescarTotalesCabeceras();

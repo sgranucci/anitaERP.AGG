@@ -106,6 +106,7 @@ final class GastronomiaCierreTurnoReporteSupport
             'turnoOperativo.turno',
             'turnoOperativo.jornada',
             'turnoOperativo.empresa',
+            'turnoOperativo.configuracionPuntoventa.puntoventaCae',
             'turnoOperativo.usuarioHabilitado',
             'turnoOperativo.usuarioHabilitacion',
             'usuario',
@@ -157,6 +158,7 @@ final class GastronomiaCierreTurnoReporteSupport
             'turno',
             'jornada',
             'empresa',
+            'configuracionPuntoventa.puntoventaCae',
             'usuarioHabilitado',
             'usuarioHabilitacion',
         ]);
@@ -200,6 +202,7 @@ final class GastronomiaCierreTurnoReporteSupport
             'turno',
             'jornada',
             'empresa',
+            'configuracionPuntoventa.puntoventaCae',
             'usuarioHabilitado',
             'usuarioHabilitacion',
             'usuarioCierre',
@@ -396,6 +399,23 @@ final class GastronomiaCierreTurnoReporteSupport
         return implode(' / ', array_filter($partes));
     }
 
+    /**
+     * Punto de venta principal (CAE) de la configuración del turno.
+     */
+    public static function etiquetaPuntoventaCaeDesdeConfiguracion(?ConfiguracionPuntoventaGastronomia $cfg): string
+    {
+        if ($cfg === null) {
+            return '';
+        }
+
+        $cae = $cfg->puntoventaCae;
+        if ($cae === null) {
+            return '';
+        }
+
+        return self::etiquetaPuntoventa($cae->codigo ?? '', $cae->nombre ?? '');
+    }
+
     private static function etiquetaPuntoventa(string $codigo, string $nombre): string
     {
         $codigo = trim($codigo);
@@ -499,12 +519,17 @@ final class GastronomiaCierreTurnoReporteSupport
         $cuentacajaEfectivoId = $turno !== null
             ? (int) (GastronomiaCuentacajaEfectivo::idParaEmpresa((int) $turno->empresa_id) ?? 0)
             : 0;
+        $turno?->loadMissing(['configuracionPuntoventa.puntoventaCae']);
+        $puntoventaCaeEtiqueta = self::etiquetaPuntoventaCaeDesdeConfiguracion(
+            $turno?->configuracionPuntoventa
+        );
 
         return [
             'tipo' => $tipo,
             'solo_totales_mozo' => $soloTotalesMozo,
             'titulo' => $titulo,
             'subtitulo' => $subtitulo,
+            'puntoventa_cae_etiqueta' => $puntoventaCaeEtiqueta,
             'logo' => $logo,
             'empresa_nombre' => $empresaNombre,
             'identificador_pc' => $turno?->identificador_pc ?? '',

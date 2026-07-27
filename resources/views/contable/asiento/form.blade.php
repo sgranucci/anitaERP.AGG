@@ -1,45 +1,59 @@
 <div class="card form1">
-    <div class="row">
-        <div class="col-sm-6">
-            @include('includes.form-empresa-asignada', [
-                'empresa_query' => $empresa_query,
-                'empresa_id' => $data->empresa_id ?? session('empresa_id'),
-                'mostrar_id' => true,
-                'col_input' => 'col-lg-7',
-            ])
-            <div class="form-group row">
-                <label for="tipoasiento" class="col-lg-3 col-form-label">Tipo de asiento</label>
-                <select name="tipoasiento_id" id="tipoasiento_id" data-placeholder="Tipo de asiento" class="col-lg-7 form-control required" data-fouc>
-                    <option value="">-- Seleccionar --</option>
-                    @foreach($tipoasiento_query as $key => $value)
-                        @if( (int) $value->id == (int) old('tipoasiento_id', $data->tipoasiento_id ?? session('tipoasiento_id')))
-                            <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-                        @else
-                            <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-                        @endif
-                    @endforeach
-                </select>
+    <div class="asiento-datos-card mb-3">
+        <h5 class="asiento-datos-card-title mb-3">
+            <i class="fa fa-book mr-1"></i> Datos del asiento
+        </h5>
+        <div class="row">
+            <div class="col-sm-6">
+                @include('includes.form-empresa-asignada', [
+                    'empresa_query' => $empresa_query,
+                    'empresa_id' => $data->empresa_id ?? session('empresa_id'),
+                    'mostrar_id' => true,
+                    'col_input' => 'col-lg-7',
+                ])
+                <div class="form-group row">
+                    <label for="tipoasiento" class="col-lg-3 col-form-label">Tipo de asiento</label>
+                    <select name="tipoasiento_id" id="tipoasiento_id" data-placeholder="Tipo de asiento" class="col-lg-7 form-control required" data-fouc>
+                        <option value="">-- Seleccionar --</option>
+                        @foreach($tipoasiento_query as $key => $value)
+                            @if( (int) $value->id == (int) old('tipoasiento_id', $data->tipoasiento_id ?? session('tipoasiento_id')))
+                                <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+                            @else
+                                <option value="{{ $value->id }}">{{ $value->nombre }}</option>
+                            @endif
+                        @endforeach
+                    </select>
+                </div>
             </div>
-        </div>
-        <div class="col-sm-6">
-            <div class="form-group row">
-                <label for="fecha" class="col-lg-3 col-form-label">Fecha</label>
-                <div class="col-lg-3">
-                    <input type="date" name="fecha" id="fecha" class="form-control" value="{{old('fecha', $data->fecha ?? date('Y-m-d'))}}">
+            <div class="col-sm-6">
+                <div class="form-group row">
+                    <label for="fecha" class="col-lg-3 col-form-label">Fecha</label>
+                    <div class="col-lg-5">
+                        <input type="date" name="fecha" id="fecha" class="form-control" value="{{old('fecha', $data->fecha ?? date('Y-m-d'))}}">
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-    <div class="form-group row">
-        <label for="observacion" class="col-lg-3 col-form-label">Observaciones</label>
-        <div class="col-lg-8">
-            <input type="text" name="observacion" id="observacion" class="form-control" value="{{old('observacion', $data->observacion ?? '')}}">
+        <div class="form-group row mb-0">
+            <label for="observacion" class="col-lg-3 col-form-label">Observaciones</label>
+            <div class="col-lg-8">
+                <input type="text" name="observacion" id="observacion" class="form-control" value="{{old('observacion', $data->observacion ?? '')}}">
+            </div>
         </div>
     </div>
+
+    @include('contable.asiento.partials.referencias')
+
     <input type="hidden" id="numeroasiento" name="numeroasiento" value="{{ $data->numeroasiento ?? '' }}" />
     <input type="hidden" id="id" name="id" value="{{ $data->id ?? '' }}" />
-    <h2 id="loading"style="display:none">Guardando asiento ...</h2>
-    <h3>Cuentas</h3>
+    @include('includes.proceso_overlay_aviso', [
+        'overlayId' => 'asiento-guardando-overlay',
+        'tituloId' => 'asiento-guardando-titulo',
+        'subtituloId' => 'asiento-guardando-subtitulo',
+        'titulo' => 'Guardando asiento…',
+        'subtitulo' => 'Por favor espere. No cierre la página.',
+    ])
+    <h3 class="asiento-seccion-cuentas">Cuentas</h3>
     @php
         $totalDebeAsientoForm = 0.0;
         $totalHaberAsientoForm = 0.0;
@@ -93,24 +107,45 @@
                 @foreach (old('cuenta', $data->asiento_movimientos->count() ? $data->asiento_movimientos : ['']) as $cuenta)
                     <tr class="item-cuenta">
                         <td>
-                            <div class="form-group row" id="cuenta">
+                            @php
+                                $ctaIdLinea = (int) ($cuenta->cuentacontable_id ?? 0);
+                            @endphp
+                            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;" id="cuenta">
                                 <input type="hidden" name="cuenta[]" class="form-control iicuenta" readonly value="{{ $loop->index+1 }}" />
                                 <input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="{{$cuenta->cuentacontable_id ?? ''}}" >
                                 <input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="{{$cuenta->cuentacontable_id ?? ''}}" >
-                                <button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">
-                                        <i class="fa fa-search text-primary"></i>
+                                <button type="button" title="Consulta cuentas contables (F1)" style="padding:1; flex: 0 0 auto;"
+                                        class="btn-accion-tabla consultacuentacontable tooltipsC">
+                                    <i class="fa fa-search text-primary"></i>
                                 </button>
-                                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" >
+                                @if (can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false))
+                                    <a href="{{ $ctaIdLinea > 0 ? route('editar_cuentacontable', ['id' => $ctaIdLinea, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+                                       target="_blank" rel="noopener"
+                                       class="btn-accion-tabla btn-link-editar-cuentacontable tooltipsC flex-shrink-0 {{ $ctaIdLinea > 0 ? '' : 'd-none' }}"
+                                       title="Consultar cuenta contable en ABM">
+                                        <i class="fa fa-edit"></i>
+                                    </a>
+                                @endif
+                                <input type="text" style="flex: 0 0 100px; width: 100px; height: 38px;"
+                                       class="codigocuentacontable form-control" name="codigos[]"
+                                       value="{{$cuenta->cuentacontables->codigo ?? ''}}"
+                                       placeholder="C&oacute;d." autocomplete="off">
                                 <input type="hidden" class="codigo_previo" name="codigo_previos[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" >
                             </div>
-                        </td>							
-                        <td>
-                            <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombre form-control" name="nombres[]" value="{{$cuenta->cuentacontables->nombre ?? ''}}" readonly>
                         </td>
                         <td>
+                            <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombrecuentacontable form-control" name="nombres[]"
+                                   value="{{$cuenta->cuentacontables->nombre ?? ''}}" readonly placeholder="Descripci&oacute;n">
+                        </td>
+                        <td>
+                            @php
+                                $ccIdLinea = old('centrocosto_ids.'.$loop->index, $cuenta->centrocosto_id ?? 0);
+                            @endphp
+                            {{-- Siempre al menos una opción: un <select> vacío no viaja en el POST y desalinea índices --}}
                             <select name="centrocosto_ids[]" data-placeholder="Centro de costo" class="centrocosto form-control" data-fouc>
+                                <option value="{{ $ccIdLinea }}" selected>{{ ((int) $ccIdLinea > 0) ? $ccIdLinea : 'Sin CC' }}</option>
                             </select>
-                            <input type="hidden" class="centrocosto_id_previo" name="centrocosto_id_previo[]" value="{{old('centrocosto_ids', $cuenta->centrocosto_id ?? '')}}" >
+                            <input type="hidden" class="centrocosto_id_previo" name="centrocosto_id_previo[]" value="{{ $ccIdLinea }}" >
                         </td>
                         <td>
                             <select name="moneda_ids[]" data-placeholder="Moneda" class="moneda form-control required" required data-fouc>
@@ -177,6 +212,9 @@
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 @include('includes.contable.modalconsultacuentacontable')
+@include('includes.contable.modalconsulta_asiento_ordencompra')
+@include('includes.contable.modalconsulta_asiento_comprobante')
+@include('includes.contable.modalconsulta_asiento_venta')
 @include('contable.asiento.copiarasientomodal')
 @include('contable.asiento.revertirasientomodal')
 

@@ -34,6 +34,7 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             ],
             'descripcion' => 'nullable|max:255',
             'empresa_id' => 'required|exists:empresa,id',
+            'caja_id' => 'required|exists:caja,id',
             'puntoventa_cae_id' => [
                 'required',
                 Rule::exists('puntoventa', 'id')->where(function ($query) use ($empresaId) {
@@ -79,6 +80,7 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
     {
         return [
             'identificador_pc' => 'identificador de PC',
+            'caja_id' => 'caja de recepción',
             'puntoventa_cae_id' => 'punto de venta CAE',
             'puntoventa_caea_id' => 'punto de venta CAEA',
             'ubicacion_id' => 'ubicación',

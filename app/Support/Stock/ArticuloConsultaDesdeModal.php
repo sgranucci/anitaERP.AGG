@@ -48,7 +48,11 @@ class ArticuloConsultaDesdeModal
             || can('actualizar-prestamo', false)
             || can('listar-prestamo', false)
             || can('cumplir-requisicion-compra', false)
-            || can('cambiar-articulo-cumplir-requisicion-compra', false);
+            || can('cambiar-articulo-cumplir-requisicion-compra', false)
+            || can('listar-prenda-sueldos', false)
+            || can('crear-prenda-sueldos', false)
+            || can('editar-prenda-sueldos', false)
+            || can('actualizar-prenda-sueldos', false);
     }
 
     public static function urlEditar(int $id): string

@@ -3,6 +3,7 @@
 namespace App\Repositories\Contable;
 
 use App\Models\Contable\Asiento;
+use App\Models\Ventas\Venta;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
@@ -257,6 +258,9 @@ class AsientoRepository implements AsientoRepositoryInterface
 									->with("tipoasientos")
 									->with("empresas")
 									->with("usuarios")
+									->with(['ordencompras.proveedores:id,nombre'])
+									->with(['comprobante_proveedores.proveedores:id,nombre', 'comprobante_proveedores.tipotransaccion_compras:id,abreviatura', 'comprobante_proveedores.ordencompras:id,numeroordencompra'])
+									->with(['ventas.clientes:id,nombre', 'ventas.tipotransacciones:id,abreviatura', 'ventas.puntoventas:id,codigo'])
 									->find($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
@@ -608,13 +612,14 @@ class AsientoRepository implements AsientoRepositoryInterface
 		{
 			$apiAnita = new ApiAnita();
 
-			$centrocostos = $request['centrocosto_ids'];
-			$debes = $request['debes'];
-			$haberes = $request['haberes'];
-			$cuentacontables = $request['cuentacontable_ids'];
-			$observaciones = $request['observaciones'];
-			$moneda_ids = $request['moneda_ids'];
-			$cotizaciones = $request['cotizaciones'];
+			$centrocostos = $request['centrocosto_ids'] ?? [];
+			$centrocostosPrev = $request['centrocosto_id_previo'] ?? [];
+			$debes = $request['debes'] ?? [];
+			$haberes = $request['haberes'] ?? [];
+			$cuentacontables = $request['cuentacontable_ids'] ?? [];
+			$observaciones = $request['observaciones'] ?? [];
+			$moneda_ids = $request['moneda_ids'] ?? [];
+			$cotizaciones = $request['cotizaciones'] ?? [];
 			
 			$fecha = Carbon::createFromFormat( 'Y-m-d', $request['fecha'])->format('Ymd');
 
@@ -654,27 +659,29 @@ class AsientoRepository implements AsientoRepositoryInterface
 				$sucursal = $nro = 0;
 			}
 
-			if ($cuentacontables[0] != null)
-				$qMovimiento = count($debes);
+			if (($cuentacontables[0] ?? null) != null)
+				$qMovimiento = count($cuentacontables);
 			else
 				$qMovimiento = 0;
 			for ($i_movimiento=0; $i_movimiento < $qMovimiento; $i_movimiento++) 
 			{
-				$observacion = preg_replace('([^A-Za-z0-9 ])', '', $observaciones[$i_movimiento]);
+				$observacion = preg_replace('([^A-Za-z0-9 ])', '', (string) ($observaciones[$i_movimiento] ?? ''));
 
 				$d_h = null;
 				$monto = 0;
+				$debeLin = $debes[$i_movimiento] ?? '';
+				$haberLin = $haberes[$i_movimiento] ?? '';
 
-				if ($debes[$i_movimiento] > 0 && $debes[$i_movimiento] != '')
+				if ($debeLin > 0 && $debeLin != '')
 				{
 					$d_h = 'D';
-					$monto = $debes[$i_movimiento];
+					$monto = $debeLin;
 				}
 
-				if (($haberes[$i_movimiento] != 0 || $debes[$i_movimiento] < 0) && $haberes[$i_movimiento] != '')
+				if (($haberLin != 0 || $debeLin < 0) && $haberLin != '')
 				{
 					$d_h = 'H';
-					$monto = abs(floatval($haberes[$i_movimiento])+floatval($debes[$i_movimiento]));
+					$monto = abs(floatval($haberLin)+floatval($debeLin));
 				}
 
 				// Línea sin importe: no grabar ctamov (evita ctav_d_h indefinido; no altera líneas con debe/haber válidos).
@@ -682,23 +689,26 @@ class AsientoRepository implements AsientoRepositoryInterface
 					continue;
 				}
 
-				$cuenta = $this->cuentacontableRepository->findPorId($cuentacontables[$i_movimiento]);
+				$cuenta = $this->cuentacontableRepository->findPorId($cuentacontables[$i_movimiento] ?? null);
 				if ($cuenta)
 					$cuentacontable = $cuenta->codigo;
 				else
 					$cuentacontable = NULL;
 
+				// Select CC vacío no viaja en el POST: usar hidden centrocosto_id_previo.
+				$centrocostoIdLin = $centrocostos[$i_movimiento] ?? $centrocostosPrev[$i_movimiento] ?? 0;
+
 				$codigoCentroCosto = 0;
-				if ($centrocostos[$i_movimiento])
+				if ($centrocostoIdLin)
 				{
-					$centrocosto = $this->centrocostoRepository->findPorId($centrocostos[$i_movimiento]);
+					$centrocosto = $this->centrocostoRepository->findPorId($centrocostoIdLin);
 					if ($centrocosto)
 						$codigoCentroCosto = $centrocosto->codigo;
 					else
 						$codigoCentroCosto = 0;
 				}
 
-				$moneda = $this->monedaRepository->findPorCodigo($moneda_ids[$i_movimiento]);
+				$moneda = $this->monedaRepository->findPorCodigo($moneda_ids[$i_movimiento] ?? null);
 				if ($moneda)
 					$codigoMoneda = $moneda->codigo;
 				else
@@ -745,7 +755,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 						'".$nro."',
 						'".abs($monto)."',
 						'".$observacion."',
-						'".$cotizaciones[$i_movimiento]."',
+						'".($cotizaciones[$i_movimiento] ?? 0)."',
 						'".$codigoMoneda."',
 						'".$sistema."',
 						'".'S'."',
@@ -909,6 +919,16 @@ class AsientoRepository implements AsientoRepositoryInterface
 
 		if ($alcance === PeriodoContableCierreSupport::ALCANCE_FACTURACION) {
 			$opciones['modofacturacion_pv'] = $data['modofacturacion_pv'] ?? null;
+			if (! empty($data['fechajornada'])) {
+				$opciones['fechajornada'] = (string) $data['fechajornada'];
+			} elseif (! empty($data['venta_id'])) {
+				$fechajornadaVenta = Venta::query()
+					->whereKey((int) $data['venta_id'])
+					->value('fechajornada');
+				if ($fechajornadaVenta) {
+					$opciones['fechajornada'] = (string) $fechajornadaVenta;
+				}
+			}
 		}
 
 		PeriodoContableCierreSupport::assertOperacionPermitida(

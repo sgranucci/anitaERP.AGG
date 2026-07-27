@@ -657,7 +657,7 @@ class MayorConceptoAnitaBridgeReader
             $where .= ' AND subd_empresa='.$empresaId;
         }
 
-        return $this->listar(
+        $filas = $this->listar(
             'contab',
             'subdiario',
             $this->camposSubdiarioFacturaCompras(),
@@ -665,6 +665,73 @@ class MayorConceptoAnitaBridgeReader
             $errores,
             'subdiario-com'
         );
+
+        if ($filas !== []) {
+            return $filas;
+        }
+
+        // Período cerrado: Anita mueve el comprobante a subhist (lee_subd → Amksubhist4).
+        return $this->cargarComSubhist($empresaId, $tipo, $letra, $sucursal, $nro, $errores);
+    }
+
+    /**
+     * COM en subhist (período cerrado). Columnas nativas subh_*; se remapean a subd_* para el motor.
+     *
+     * @return list<object>
+     */
+    public function cargarComSubhist(int $empresaId, string $tipo, string $letra, int $sucursal, int $nro, array &$errores): array
+    {
+        $tipo = trim($tipo);
+        if ($tipo === '' || $nro <= 0) {
+            return [];
+        }
+
+        $where = ' WHERE subh_tipo="'.addslashes($tipo).'"'
+            .' AND subh_letra='.$this->sqlChar($letra)
+            .' AND subh_sucursal='.$sucursal
+            .' AND subh_nro='.$nro;
+        if ($empresaId > 0) {
+            $where .= ' AND subh_empresa='.$empresaId;
+        }
+
+        $filas = $this->listar(
+            'contab',
+            'subhist',
+            $this->camposSubhistFacturaCompras(),
+            $where,
+            $errores,
+            'subhist-com'
+        );
+
+        return array_map(fn ($fila) => $this->remapearSubhistComoSubdiario($fila), $filas);
+    }
+
+    private function camposSubhistFacturaCompras(): string
+    {
+        return 'subh_empresa,subh_sistema,subh_fecha,subh_tipo,subh_letra,subh_sucursal,subh_nro,subh_emisor,subh_tipo_mov,subh_cuenta,subh_contrapartida,subh_importe,subh_desc_mov,subh_nro_operacion,subh_nro_interno,subh_cod_mon,subh_cotizacion,subh_nro_asiento';
+    }
+
+    /**
+     * @return object
+     */
+    private function remapearSubhistComoSubdiario(object $fila): object
+    {
+        $out = [];
+        foreach ((array) $fila as $clave => $valor) {
+            if (str_starts_with($clave, 'subh_')) {
+                $out['subd_'.substr($clave, 5)] = $valor;
+            } else {
+                $out[$clave] = $valor;
+            }
+        }
+
+        $out['subd_ref_tipo'] = $out['subd_ref_tipo'] ?? '';
+        $out['subd_ref_letra'] = $out['subd_ref_letra'] ?? ' ';
+        $out['subd_ref_sucursal'] = $out['subd_ref_sucursal'] ?? 0;
+        $out['subd_ref_nro'] = $out['subd_ref_nro'] ?? 0;
+        $out['subd_origen_subhist'] = true;
+
+        return (object) $out;
     }
 
     /**
@@ -1172,6 +1239,10 @@ class MayorConceptoAnitaBridgeReader
         }
 
         $porClave = [];
+        foreach ($clavesCom as $clave) {
+            $porClave[$clave] = [];
+        }
+
         $campos = 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe,subd_desc_mov,subd_nro_operacion,subd_cod_mon,subd_cotizacion';
 
         foreach (array_chunk($clavesCom, 40) as $lote) {
@@ -1213,6 +1284,85 @@ class MayorConceptoAnitaBridgeReader
                     continue;
                 }
                 $porClave[$clave][] = $fila;
+            }
+        }
+
+        $faltantes = array_values(array_filter(
+            $clavesCom,
+            fn ($clave) => ($porClave[$clave] ?? []) === [],
+        ));
+
+        if ($faltantes !== []) {
+            foreach ($this->cargarComSubhistLote($empresaId, $faltantes, $errores) as $clave => $lineas) {
+                if ($lineas !== []) {
+                    $porClave[$clave] = $lineas;
+                }
+            }
+        }
+
+        return $porClave;
+    }
+
+    /**
+     * Fallback masivo a subhist para COM de períodos cerrados.
+     *
+     * @param  list<string>  $clavesCom
+     * @return array<string, list<object>>
+     */
+    public function cargarComSubhistLote(int $empresaId, array $clavesCom, array &$errores): array
+    {
+        $clavesCom = array_values(array_unique(array_filter($clavesCom, fn ($c) => trim($c) !== '')));
+        if ($clavesCom === []) {
+            return [];
+        }
+
+        $porClave = [];
+        foreach ($clavesCom as $clave) {
+            $porClave[$clave] = [];
+        }
+
+        $campos = $this->camposSubhistFacturaCompras();
+
+        foreach (array_chunk($clavesCom, 40) as $lote) {
+            $condiciones = [];
+            foreach ($lote as $clave) {
+                [$tipo, $letra, $suc, $nro] = array_pad(explode('|', $clave, 4), 4, '');
+                $tipo = trim($tipo);
+                if ($tipo === '' || (int) $nro <= 0) {
+                    continue;
+                }
+                $condiciones[] = '(subh_tipo="'.$tipo.'" AND subh_letra='.$this->sqlChar($letra)
+                    .' AND subh_sucursal='.(int) $suc.' AND subh_nro='.(int) $nro.')';
+            }
+
+            if ($condiciones === []) {
+                continue;
+            }
+
+            $where = ' WHERE ('.implode(' OR ', $condiciones).')';
+            if ($empresaId > 0) {
+                $where .= ' AND subh_empresa='.$empresaId;
+            }
+
+            $filas = $this->listar(
+                'contab',
+                'subhist',
+                $campos,
+                $where,
+                $errores,
+                'subhist-com-bulk',
+            );
+
+            foreach ($filas as $fila) {
+                $remap = $this->remapearSubhistComoSubdiario($fila);
+                if ($empresaId > 0 && (int) ($remap->subd_empresa ?? 0) !== $empresaId) {
+                    continue;
+                }
+                $clave = $this->claveComDesdeSubdiario($remap);
+                if ($clave === '' || ! isset($porClave[$clave])) {
+                    continue;
+                }
+                $porClave[$clave][] = $remap;
             }
         }
 

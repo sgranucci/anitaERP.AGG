@@ -143,13 +143,6 @@ class GastronomiaInsumosTipoarticuloReporteFiltros
 
     public static function tipoarticuloDefaultId(): ?int
     {
-        $nombre = strtoupper((string) config('facturacion.IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE', 'CIGARRILLO'));
-        if ($nombre === '') {
-            return null;
-        }
-
-        $id = Tipoarticulo::query()->whereRaw('UPPER(TRIM(nombre)) = ?', [$nombre])->value('id');
-
-        return $id !== null ? (int) $id : null;
+        return Tipoarticulo::idControlContableCigarrillos();
     }
 }

@@ -263,6 +263,25 @@ class Administracion_TicketController extends Controller
         return $this->ticketService->finalizarTarea($ticket_tarea_id, $fechafinalizacion, $tiempoinsumido);
     }
 
+    public function cambiarEstadoTarea(Request $request, $ticket_tarea_id)
+    {
+        $request->validate([
+            'estado' => 'required|string|max:50',
+        ]);
+
+        try {
+            return response()->json(
+                $this->ticketService->cambiarEstadoTarea((int) $ticket_tarea_id, (string) $request->input('estado'))
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 422);
+        } catch (Exception $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'No se pudo cambiar el estado de la tarea.'], 500);
+        }
+    }
+
     public function limpiafiltro(Request $request) {
         return redirect()->route('consulta_administracion_ticket');
 	}

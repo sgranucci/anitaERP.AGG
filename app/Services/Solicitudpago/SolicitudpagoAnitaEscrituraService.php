@@ -6,6 +6,7 @@ use App\ApiAnita;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Support\Compras\AnitaSync\AnitaUsuarioBridgeSupport;
 use App\Support\Solicitudpago\SolicitudpagoAnitaFechaSupport;
+use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use App\Traits\AnitaBridgeEscritura;
@@ -146,7 +147,7 @@ class SolicitudpagoAnitaEscrituraService
         }
 
         foreach ($sp->archivos as $arch) {
-            $nombre = $this->escapar(basename((string) ($arch->nombre_original ?: $arch->archivo)));
+            $nombre = $this->escapar(SolicitudpagoArchivoStorageSupport::nombreParaAnita($arch));
             $logname = $this->escapar(trim((string) (optional($arch->usuarios)->usuario ?? Auth::user()->usuario ?? '')));
             $this->apiCallAnitaEscritura($api, [
                 'acc' => 'insert',

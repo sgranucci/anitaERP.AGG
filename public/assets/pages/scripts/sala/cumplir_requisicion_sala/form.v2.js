@@ -15,6 +15,37 @@
     var tecnicosCache = {};
     var indiceLinea = $('#tbody-lineas-cumple tr.fila-cumple-linea').length;
 
+    function crsModoIntercompanyActivo() {
+        return $('#crs_modo_intercompany').val() === '1';
+    }
+
+    function actualizarUiModoIntercompanyCrs() {
+        var activo = crsModoIntercompanyActivo();
+        var $btn = $('#crs_btn_intercompany');
+        if (!$btn.length) {
+            return;
+        }
+        $btn.toggleClass('btn-outline-secondary', !activo);
+        $btn.toggleClass('btn-warning', activo);
+        $btn.html(
+            activo
+                ? '<i class="fa fa-building"></i> Mostrando dep&oacute;sitos de todas las empresas'
+                : '<i class="fa fa-building"></i> Ver dep&oacute;sitos de otras empresas'
+        );
+    }
+
+    /**
+     * Con modo intercompany: todos los depósitos de todas las empresas
+     * (mismo payload que movimientos de stock / transferencia mercadería).
+     */
+    window.payloadExtraConsultaDeposito = function () {
+        if (crsModoIntercompanyActivo()) {
+            return { intercompany: 1, omitir_filtro_usuario: 1 };
+        }
+
+        return {};
+    };
+
     function escapeHtml(text) {
         return $('<div/>').text(text || '').html();
     }
@@ -541,6 +572,17 @@
         if (typeof activa_eventos_consultadeposito === 'function') {
             activa_eventos_consultadeposito();
         }
+
+        actualizarUiModoIntercompanyCrs();
+
+        $(document).on('click', '#crs_btn_intercompany', function () {
+            var activo = crsModoIntercompanyActivo();
+            $('#crs_modo_intercompany').val(activo ? '0' : '1');
+            actualizarUiModoIntercompanyCrs();
+            if ($('#consultadepositoModal').hasClass('show') && typeof buscar_datos_deposito === 'function') {
+                buscar_datos_deposito($('#consultadeposito').val());
+            }
+        });
 
         if (cfg.modoNpu) {
             renderCabecera(null, $('#tbody-lineas-cumple tr').length === 0);

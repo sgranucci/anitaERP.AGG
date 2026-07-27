@@ -2281,6 +2281,33 @@
         $tr.find('.item-deposito-texto').html(depositoLineaTexto(item));
     }
 
+    function aplicarCatalogoApAItemExtra(item, itemAp, dataArticulo) {
+        if (!item) {
+            return;
+        }
+        if (!itemAp) {
+            // Sin filas en articulo_proveedor: se mantienen datos del maestro.
+            return;
+        }
+        if (itemAp.nombre_articulo_proveedor) {
+            item.descripcion = itemAp.nombre_articulo_proveedor;
+        } else if (dataArticulo && (dataArticulo.descripcion || dataArticulo.nombre)) {
+            item.descripcion = dataArticulo.descripcion || dataArticulo.nombre;
+        }
+        if (itemAp.um_compra_abreviatura) {
+            item.um_compra = itemAp.um_compra_abreviatura;
+        }
+        var coef = parseFloat(itemAp.coeficiente_conversion);
+        if (isFinite(coef) && coef > 0) {
+            item.coeficiente_proveedor = coef;
+            item.coeficienteconversion = coef;
+        }
+        if (itemAp.codigo_articulo_proveedor) {
+            item.codigo_proveedor = itemAp.codigo_articulo_proveedor;
+        }
+        item.articulo_proveedor_id = itemAp.articulo_proveedor_id || null;
+    }
+
     function agregarLineaExtra() {
         if (!puedeAgregarArticuloExtraRecepcion()) {
             alert('No tiene permiso para agregar artículos fuera de la orden de compra.');
@@ -2347,6 +2374,31 @@
                 || dataArticulo.unidadesdemedidas.nombre
                 || item.um_stock
                 || 'UN';
+        }
+        // Solo si hay filas en articulo_proveedor para el proveedor de la cabecera.
+        var provCabRec = parseInt($('#proveedor_id').val(), 10) || 0;
+        if (provCabRec > 0 && window.ArticuloProveedorOperativo) {
+            window.ArticuloProveedorOperativo.fetch({
+                articuloId: dataArticulo.id,
+                proveedorId: provCabRec,
+                restrictivo: true
+            }).done(function (resp) {
+                var elegido = (resp && resp.elegido) || ((resp && resp.proveedores && resp.proveedores.length === 1)
+                    ? resp.proveedores[0]
+                    : null);
+                if (resp && resp.opcion === 'modal' && resp.proveedores && resp.proveedores.length) {
+                    window.ArticuloProveedorOperativo.abrirModal(resp.proveedores, {
+                        titulo: 'Elegir código del proveedor',
+                        subtitulo: 'El artículo tiene datos en articulo_proveedor. Elija el código de compra.'
+                    }).done(function (itemAp) {
+                        aplicarCatalogoApAItemExtra(item, itemAp, dataArticulo);
+                        renderItems(itemsActuales);
+                    });
+                    return;
+                }
+                aplicarCatalogoApAItemExtra(item, elegido, dataArticulo);
+                renderItems(itemsActuales);
+            });
         }
         item.maneja_parte_unica = String(dataArticulo.numeroparte || '0') === '1';
         var manejaCt = !!(dataArticulo.maneja_stock_color_talle === true
@@ -2848,8 +2900,56 @@
                 .addClass('fa-chevron-right');
         });
 
+        function csrfRecepcion() {
+            return $('input[name=_token]').val()
+                || $('meta[name="csrf-token"]').attr('content')
+                || '';
+        }
+
+        function descartarDecisionOcrPendiente() {
+            var decisionId = parseInt($('#ai_decision_id').val() || '0', 10);
+            var url = $('#archivo_ocr').data('descartar-url');
+            if (!decisionId || !url || window.recepcionOcrGuardando) {
+                return;
+            }
+            $('#ai_decision_id').val('');
+            $('#ai_sugerencia_hash').val('');
+            try {
+                $.ajax({
+                    url: url,
+                    method: 'POST',
+                    data: { _token: csrfRecepcion(), decision_id: decisionId },
+                    dataType: 'json',
+                    async: true,
+                });
+            } catch (e) {
+                // ignore
+            }
+        }
+
         function aplicarResultadoOcr(res) {
+            // Nueva lectura: descarta la sugerencia previa si el usuario no llegó a guardar.
+            if ($('#ai_decision_id').val() && String($('#ai_decision_id').val()) !== String(res.ai_decision_id || '')) {
+                descartarDecisionOcrPendiente();
+            }
             mostrarPanelOcrDebug(res);
+            if (res.ai_decision_id) {
+                $('#ai_decision_id').val(res.ai_decision_id);
+            }
+            if (res.ai_sugerencia_hash) {
+                $('#ai_sugerencia_hash').val(res.ai_sugerencia_hash);
+            }
+            $('#origen_carga').val('OCR');
+            var $score = $('#ocr-ai-score');
+            if (res.ai_score != null) {
+                var pct = Math.round(parseFloat(res.ai_score) * 100);
+                var adv = (res.advertencias || []).join(' · ');
+                $score.removeClass('d-none').text(
+                    'Confianza OCR/match: ' + pct + '%' + (adv ? ' — ' + adv : '')
+                );
+            } else {
+                $score.addClass('d-none').empty();
+            }
             if (res.numero_oc_detectado) {
                 $('#numero_oc_buscar').val(res.numero_oc_detectado);
                 ultimoNumeroOcCargado = res.numero_oc_detectado;
@@ -2940,6 +3040,16 @@
                 }
                 enviarArchivoOcr($input, file);
             });
+        });
+
+        $('#form-recepcion-proveedor').on('submit', function () {
+            window.recepcionOcrGuardando = true;
+        });
+
+        window.addEventListener('pagehide', function () {
+            if (!window.recepcionOcrGuardando) {
+                descartarDecisionOcrPendiente();
+            }
         });
 
         function rpMostrarSolapa(sel, btnId) {

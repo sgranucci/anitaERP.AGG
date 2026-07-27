@@ -1,3 +1,13 @@
+# Subida de PDF para precarga/portal de proveedores: el ERP valida hasta 20 MB,
+# pero el php.ini de Apache limita a 2 MB (upload) / 8 MB (POST). Si el POST supera
+# post_max_size, PHP descarta todo el body (incluido el CSRF) y la respuesta es un 419
+# en HTML, que en AJAX aparece como "Error al comunicarse con el servidor".
+<IfModule mod_php.c>
+    php_value upload_max_filesize 25M
+    php_value post_max_size 30M
+    php_value memory_limit 512M
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

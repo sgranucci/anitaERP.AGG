@@ -82,7 +82,7 @@
                         <div class="alert alert-success py-2 mb-3">
                             <strong>Turno activo</strong> en <code>{{ $filtros['identificador_pc'] ?? $identificador_pc_default }}</code>:
                             <strong>{{ $turno_operativo['turno_nombre'] ?? '' }}</strong>
-                            — {{ $turno_operativo['usuario_habilitado'] ?? '' }}
+                            — Abierto por {{ $turno_operativo['usuario_apertura'] ?? $turno_operativo['usuario_habilitado'] ?? '' }}
                             — Jornada <strong>{{ $turno_operativo['fecha_jornada_fmt'] ?? ($turno_operativo['fecha_jornada'] ?? '') }}</strong>
                             — Habilitado {{ $turno_operativo['habilitacion_en_fmt'] ?? ($turno_operativo['habilitacion_en'] ?? '') }}
                             — Monto ${{ number_format((float) ($turno_operativo['monto_habilitacion'] ?? 0), 2, ',', '.') }}

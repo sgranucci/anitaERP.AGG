@@ -18,6 +18,14 @@ final class SolicitudpagoEstados
 
     public const TERMINADA = 'TERMINADA';
 
+    /** Estados en los que se puede reenviar al árbol (todo menos PAGADA). */
+    public static function puedeReenviarAlArbol(?string $estado): bool
+    {
+        $estado = strtoupper(trim((string) $estado));
+
+        return $estado !== '' && $estado !== self::PAGADA;
+    }
+
     /** @var array<string, string> */
     private const ANITA_A_ERP = [
         'E' => self::EMITIDA,
@@ -69,5 +77,32 @@ final class SolicitudpagoEstados
             ['valor' => self::RECHAZADA, 'nombre' => 'Rechazada'],
             ['valor' => self::TERMINADA, 'nombre' => 'Terminada'],
         ];
+    }
+
+    public static function label(?string $estado): string
+    {
+        $estado = strtoupper(trim((string) $estado));
+        foreach (self::opciones() as $opcion) {
+            if ($opcion['valor'] === $estado) {
+                return $opcion['nombre'];
+            }
+        }
+
+        return $estado !== '' ? $estado : '—';
+    }
+
+    /** Clases Bootstrap badge para listados. */
+    public static function badgeClass(?string $estado): string
+    {
+        return match (strtoupper(trim((string) $estado))) {
+            self::EMITIDA => 'badge badge-info',
+            self::CONTROLADA => 'badge badge-primary',
+            self::AUTORIZADA => 'badge badge-success',
+            self::PAGADA => 'badge badge-dark',
+            self::SUSPENDIDA => 'badge badge-warning text-dark',
+            self::RECHAZADA => 'badge badge-danger',
+            self::TERMINADA => 'badge badge-secondary',
+            default => 'badge badge-light',
+        };
     }
 }

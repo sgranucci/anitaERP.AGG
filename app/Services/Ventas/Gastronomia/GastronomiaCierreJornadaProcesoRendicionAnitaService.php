@@ -4,7 +4,6 @@ namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
-use App\Queries\Caja\Caja_AsignacionQueryInterface;
 use App\Services\Caja\RendicionGastronomiaAnitaSyncService;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use App\Support\Caja\RendicionGastronomiaNroOperPisoSupport;
@@ -13,7 +12,6 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRendicionAnitaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPostCierreCaeaSupport;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -28,7 +26,6 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
     public function __construct(
         private readonly RendicionGastronomiaAnitaSyncService $anitaSyncService,
         private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroSupport,
-        private readonly Caja_AsignacionQueryInterface $cajaAsignacionQuery,
     ) {
     }
 
@@ -394,11 +391,8 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
      */
     private function resolverCajaId(): array
     {
-        $asignacion = $this->cajaAsignacionQuery->leeAsignacionPorUsuario((int) Auth::id(), Carbon::now());
-        if ($asignacion !== null && (int) ($asignacion->caja_id ?? 0) > 0) {
-            return [(int) $asignacion->caja_id];
-        }
+        [$cajaId] = \App\Support\Caja\CajaRecepcionPcSupport::resolver(null, request());
 
-        return [0];
+        return [$cajaId > 0 ? $cajaId : 0];
     }
 }

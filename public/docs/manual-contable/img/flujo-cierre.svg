@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="420" viewBox="0 0 920 420">
+  <rect width="920" height="420" fill="#f8fafc"/>
+  <text x="40" y="48" font-family="DejaVu Sans,Arial" font-size="22" fill="#1F4E79" font-weight="700">Cierre contable por módulo</text>
+  <rect x="40" y="80" width="200" height="70" rx="8" fill="#D6EAF8" stroke="#85C1E9"/>
+  <text x="60" y="122" font-family="DejaVu Sans,Arial" font-size="14" fill="#1B4F72">1. Agenda del mes</text>
+  <path d="M250 115 H310" stroke="#2E75B6" stroke-width="3" marker-end="url(#a)"/>
+  <rect x="320" y="80" width="220" height="70" rx="8" fill="#FCF3CF" stroke="#F4D03F"/>
+  <text x="340" y="122" font-family="DejaVu Sans,Arial" font-size="14" fill="#7D6608">2. Ejecución (fecha+hora)</text>
+  <path d="M550 115 H610" stroke="#2E75B6" stroke-width="3" marker-end="url(#a)"/>
+  <rect x="620" y="80" width="240" height="70" rx="8" fill="#D5F5E3" stroke="#58D68D"/>
+  <text x="640" y="122" font-family="DejaVu Sans,Arial" font-size="14" fill="#196F3D">3. Bloqueo por alcance</text>
+  <rect x="40" y="200" width="840" height="170" rx="10" fill="#fff" stroke="#ccd6e0"/>
+  <text x="60" y="240" font-family="DejaVu Sans,Arial" font-size="15" fill="#34495E">Por módulo: fecha ejecución · hora (24:00 = fin de día) · fecha cierre editable</text>
+  <text x="60" y="280" font-family="DejaVu Sans,Arial" font-size="15" fill="#34495E">Cierre general: bloquea todos + snapshot de saldos</text>
+  <text x="60" y="320" font-family="DejaVu Sans,Arial" font-size="15" fill="#34495E">Excepción: apertura programada o permiso operar-periodo-cerrado</text>
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2E75B6"/></marker></defs>
+</svg>

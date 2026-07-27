@@ -9,12 +9,26 @@ use Illuminate\Http\Request;
 
 /**
  * Filtros del listado de artículos (index / exportaciones).
+ *
+ * El estado (activo/inactivo) es filtro externo principal; el panel inteligente
+ * aplica sobre el subconjunto ya filtrado por estado.
  */
 class ArticuloListadoFiltros
 {
     public const MODO_TODOS = 'todos';
 
     public const MODO_CAMPO = 'campo';
+
+    public const ESTADO_ACTIVO = 'ACTIVO';
+
+    public const ESTADO_INACTIVO = 'INACTIVO';
+
+    /** Tipos de imputación de articulo_cuentacontable (venta / compra / gasto). */
+    private const TIPOS_IMPUTACION_FILTRO = [
+        'cuentaventa' => 'VENTAS',
+        'cuentacompra' => 'COMPRAS',
+        'cuentagasto' => 'GASTOS',
+    ];
 
     /** @var array<string, array{column: string, type: string, label: string}> */
     public const CAMPOS = [
@@ -28,8 +42,10 @@ class ArticuloListadoFiltros
         'usoarticulo' => ['column' => 'usoarticulo.nombre', 'type' => 'texto', 'label' => 'Uso'],
         'numeroparte' => ['column' => 'articulo.numeroparte', 'type' => 'texto', 'label' => 'Nro. parte'],
         'ubicacionparte' => ['column' => 'articulo.ubicacionparte', 'type' => 'texto', 'label' => 'Ubic. parte'],
+        'cuentaventa' => ['column' => 'cuentacontable.codigo', 'type' => 'cuenta_imputacion', 'label' => 'Cta. contable venta'],
+        'cuentacompra' => ['column' => 'cuentacontable.codigo', 'type' => 'cuenta_imputacion', 'label' => 'Cta. contable compra'],
+        'cuentagasto' => ['column' => 'cuentacontable.codigo', 'type' => 'cuenta_imputacion', 'label' => 'Cta. contable gasto'],
         'nofactura' => ['column' => 'articulo.nofactura', 'type' => 'texto', 'label' => 'Facturable (0/1)'],
-        'estado' => ['column' => 'articulo.estado', 'type' => 'texto', 'label' => 'Estado'],
     ];
 
     /** @var array<string, string> */
@@ -57,6 +73,8 @@ class ArticuloListadoFiltros
         'categoria.nombre',
         'tipoarticulo.nombre',
         'usoarticulo.nombre',
+        'cuentacontable.nombre',
+        'cuentacontable.codigo',
     ];
 
     /** @var array<string, string> */
@@ -68,8 +86,12 @@ class ArticuloListadoFiltros
 
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
     {
+        $estado = self::resolverEstadoExterno($request);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'estado' => $estado,
+            ]);
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -102,10 +124,44 @@ class ArticuloListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
+            'estado' => $estado,
         ];
     }
 
+    /**
+     * Filtro externo principal: estado del artículo (default Activo).
+     * Marcador para expandir: filtro_estado=TODOS.
+     */
+    private static function resolverEstadoExterno(Request $request): string
+    {
+        $estadoInput = $request->input('filtro_estado', null);
+        if ($estadoInput === 'TODOS' || $request->boolean('estado_todos')) {
+            return '';
+        }
+        if (in_array($estadoInput, [self::ESTADO_ACTIVO, self::ESTADO_INACTIVO], true)) {
+            return (string) $estadoInput;
+        }
+
+        return self::ESTADO_ACTIVO;
+    }
+
     public static function tieneCriteriosAplicados(array $filtros): bool
+    {
+        if (self::tieneCriteriosTexto($filtros)) {
+            return true;
+        }
+
+        if (($filtros['estado'] ?? self::ESTADO_ACTIVO) !== self::ESTADO_ACTIVO) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Criterios del panel inteligente (sin el filtro externo de estado).
+     */
+    public static function tieneCriteriosTexto(array $filtros): bool
     {
         if (($filtros['operador'] ?? '') === 'vacio') {
             return true;
@@ -131,7 +187,7 @@ class ArticuloListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, estado: string}
      */
     public static function filtrosVacios(): array
     {
@@ -142,6 +198,7 @@ class ArticuloListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'busqueda' => '',
+            'estado' => self::ESTADO_ACTIVO,
         ];
     }
 
@@ -166,6 +223,12 @@ class ArticuloListadoFiltros
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
+        $estado = $filtros['estado'] ?? self::ESTADO_ACTIVO;
+        if ($estado === '') {
+            $params['filtro_estado'] = 'TODOS';
+        } elseif ($estado !== self::ESTADO_ACTIVO) {
+            $params['filtro_estado'] = $estado;
+        }
 
         return $params;
     }
@@ -175,6 +238,11 @@ class ArticuloListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
+        $estado = $filtros['estado'] ?? self::ESTADO_ACTIVO;
+        if ($estado !== '') {
+            $query->where('articulo.estado', $estado);
+        }
+
         $valor = trim((string) ($filtros['valor'] ?? ''));
         if ($valor === '' && ($filtros['operador'] ?? '') !== 'vacio') {
             return;
@@ -199,7 +267,7 @@ class ArticuloListadoFiltros
     {
         if ($operador === 'vacio') {
             $query->where(function ($q) {
-                foreach (['articulo.sku', 'articulo.descripcion', 'articulo.estado'] as $col) {
+                foreach (['articulo.sku', 'articulo.descripcion'] as $col) {
                     $q->where(function ($w) use ($col) {
                         $w->whereNull($col)->orWhere($col, '');
                     });
@@ -231,7 +299,6 @@ class ArticuloListadoFiltros
                 'tipoarticulo.nombre',
                 'usoarticulo.nombre',
                 'articulo.nofactura',
-                'articulo.estado',
             ];
             foreach ($textCols as $col) {
                 $q->orWhereRaw(self::expresionTextoMinusculas($col).' LIKE ?', [self::normalizarTextoBusqueda($like)]);
@@ -244,6 +311,11 @@ class ArticuloListadoFiltros
                         CoincidenciaFlexibleTexto::LONGITUD_MINIMA_ARTICULO
                     );
                 }
+            }
+            foreach (array_values(self::TIPOS_IMPUTACION_FILTRO) as $tipoImputacion) {
+                $q->orWhere(function ($sub) use ($tipoImputacion, $operador, $valor) {
+                    self::aplicarCuentaImputacion($sub, $tipoImputacion, $operador, $valor);
+                });
             }
         });
     }
@@ -267,7 +339,59 @@ class ArticuloListadoFiltros
             return;
         }
 
+        if ($type === 'cuenta_imputacion') {
+            $tipoImputacion = self::TIPOS_IMPUTACION_FILTRO[$campoKey] ?? 'VENTAS';
+            self::aplicarCuentaImputacion($query, $tipoImputacion, $operador, $valor);
+
+            return;
+        }
+
         self::aplicarTexto($query, (string) $def['column'], $operador, $valor);
+    }
+
+    /**
+     * Filtra por código o nombre de cuenta contable del tipo de imputación (VENTAS/COMPRAS/GASTOS).
+     *
+     * @param  Builder<\App\Models\Stock\Articulo>  $query
+     */
+    private static function aplicarCuentaImputacion(Builder $query, string $tipoImputacion, string $operador, string $valor): void
+    {
+        if ($operador === 'vacio') {
+            $query->whereDoesntHave('articulo_cuentacontables', function ($q) use ($tipoImputacion) {
+                $q->where('tipoimputacion', $tipoImputacion)
+                    ->whereNotNull('cuentacontable_id')
+                    ->where('cuentacontable_id', '>', 0);
+            });
+
+            return;
+        }
+
+        if ($valor === '') {
+            return;
+        }
+
+        $query->whereHas('articulo_cuentacontables', function ($q) use ($tipoImputacion, $operador, $valor) {
+            $q->where('tipoimputacion', $tipoImputacion)
+                ->whereHas('cuentacontables', function ($c) use ($operador, $valor) {
+                    if ($operador === 'distinto') {
+                        // Ningún campo debe coincidir con el valor.
+                        $c->where(function ($w) use ($operador, $valor) {
+                            self::aplicarTexto($w, 'cuentacontable.codigo', $operador, $valor);
+                        })->where(function ($w) use ($operador, $valor) {
+                            self::aplicarTexto($w, 'cuentacontable.nombre', $operador, $valor);
+                        });
+
+                        return;
+                    }
+
+                    $c->where(function ($w) use ($operador, $valor) {
+                        self::aplicarTexto($w, 'cuentacontable.codigo', $operador, $valor);
+                        $w->orWhere(function ($nombre) use ($operador, $valor) {
+                            self::aplicarTexto($nombre, 'cuentacontable.nombre', $operador, $valor);
+                        });
+                    });
+                });
+        });
     }
 
     /**
@@ -382,6 +506,7 @@ class ArticuloListadoFiltros
         $type = self::CAMPOS[$campoKey]['type'] ?? 'texto';
         $permitidos = match ($type) {
             'entero' => array_keys(self::OPERADORES_ENTERO),
+            'cuenta_imputacion' => array_keys(self::OPERADORES_TEXTO),
             default => array_keys(self::OPERADORES_TEXTO),
         };
 
@@ -401,6 +526,7 @@ class ArticuloListadoFiltros
 
         return match ($type) {
             'entero' => self::OPERADORES_ENTERO,
+            'cuenta_imputacion' => self::OPERADORES_TEXTO,
             default => self::OPERADORES_TEXTO,
         };
     }

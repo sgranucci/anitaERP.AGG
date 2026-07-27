@@ -128,6 +128,8 @@
                         </div>
                     </div>
 
+                    @include('contable.conciliacion_bancaria.partials.panel_ia_anomalias', ['resultado' => $resultado])
+
                     <ul class="nav nav-tabs mt-3" role="tablist">
                         <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tab-pendientes">Pendientes contables</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-saldo-banco">Saldo banco (codificado)</a></li>

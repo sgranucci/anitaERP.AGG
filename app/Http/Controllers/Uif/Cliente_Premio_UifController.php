@@ -160,15 +160,28 @@ class Cliente_Premio_UifController extends Controller
      */
     public function guardar(ValidacionCliente_Premio_Uif $request)
     {
-        session(['empresa_id' => $request->empresa_id]);
+        can('crear-cliente-premio-uif');
 
-        if ($foto = Cliente_Premio_Uif::setFoto($request->foto_up))
+        if ($request->filled('empresa_id')) {
+            session(['empresa_id' => $request->empresa_id]);
+        }
+
+        if ($foto = Cliente_Premio_Uif::setFoto($request->foto_up)) {
             $request->request->add(['foto' => $foto]);
+        }
 
-        $this->cliente_uifService->guardaCliente_Premio_Uif($request);
+        $result = $this->cliente_uifService->guardaCliente_Premio_Uif($request);
 
-        if (str_contains($request->referer, 'cliente_uif'))
+        if (isset($result['errores'])) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['errores' => $result['errores']])
+                ->with('mensaje-error', 'No se pudo grabar el premio: '.$result['errores']);
+        }
+
+        if (str_contains((string) $request->referer, 'cliente_uif')) {
             return redirect($request->referer)->with('mensaje', 'Premio creado con éxito');
+        }
 
         return redirect('uif/premio_uif')->with('mensaje', 'Premio creado con éxito');
 	}
@@ -223,19 +236,30 @@ class Cliente_Premio_UifController extends Controller
 
         $cliente_premio_uif = $this->cliente_premio_uifRepository->find($id);
 
-        session(['empresa_id' => $request->empresa_id]);
-        if ($foto = Cliente_Premio_Uif::setFoto($request->foto_up, $cliente_premio_uif->foto))
+        if ($request->filled('empresa_id')) {
+            session(['empresa_id' => $request->empresa_id]);
+        }
+        if ($foto = Cliente_Premio_Uif::setFoto($request->foto_up, $cliente_premio_uif->foto)) {
             $request->request->add(['foto' => $foto]);
+        }
 
-        $this->cliente_uifService->actualizaCliente_Premio_Uif($request, $id);
+        $result = $this->cliente_uifService->actualizaCliente_Premio_Uif($request, $id);
 
-        if (str_contains($request->referer, 'cliente_uif'))
+        if (isset($result['errores'])) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['errores' => $result['errores']])
+                ->with('mensaje-error', 'No se pudo actualizar el premio: '.$result['errores']);
+        }
+
+        if (str_contains((string) $request->referer, 'cliente_uif')) {
             return redirect($request->referer)->with('mensaje', 'Premio actualizado con éxito');
+        }
 
-        if (str_contains($request->referer, 'exportaoperacion'))
-        {
+        if (str_contains((string) $request->referer, 'exportaoperacion')) {
+            $fechaEntrega = (string) $request->fechaentrega;
             $periodo = normalizarPeriodoParaUrl(
-                substr($request->fechaentrega, 5, 2).'-'.substr($request->fechaentrega, 0, 4)
+                substr($fechaEntrega, 5, 2).'-'.substr($fechaEntrega, 0, 4)
             );
             $limiteinformeuif = config('uif.LIMITE_INFORME_UIF');
             $premioModel = $this->cliente_premio_uifRepository->find($id);

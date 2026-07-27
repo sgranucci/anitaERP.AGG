@@ -13,6 +13,8 @@ use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaFacturaProcesoEmisio
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosPreviewSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
+use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
+use App\Models\Ventas\JornadaGastronomia;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
 use Throwable;
@@ -368,10 +370,20 @@ class WaitryCierreJornadaController extends Controller
         $emisionService = app(GastronomiaCierreJornadaFacturaProcesoEmisionService::class);
         $pvDefault = CierreJornadaProcesoPuntoventaSupport::resolverParaEmpresa($empresaId);
 
+        $jornada = JornadaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', $fechaJornada)
+            ->orderByDesc('id')
+            ->first();
+        $fechaFacturaDefault = CaeaEmisionFechaCorrelatividadSupport::fechaCalendarioCierre(
+            $jornada?->cierre_en,
+            $jornada?->fecha_jornada ?? (new \DateTimeImmutable($fechaJornada)),
+        );
+
         return response()->json([
             'ok' => true,
             'fecha_jornada' => $fechaJornada,
-            'fecha_factura_default' => $fechaJornada,
+            'fecha_factura_default' => $fechaFacturaDefault,
             'puntoventa_default' => $pvDefault,
             'puntoventas' => $emisionService->listarPuntosVentaElectronicos($empresaId),
         ]);

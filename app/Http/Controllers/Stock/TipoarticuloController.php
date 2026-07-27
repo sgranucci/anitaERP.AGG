@@ -43,7 +43,7 @@ class TipoarticuloController extends Controller
      */
     public function guardar(ValidacionTipoarticulo $request)
     {
-        $tipoarticulo = Tipoarticulo::create($request->all());
+        Tipoarticulo::create($request->validated());
 
         return redirect('stock/tipoarticulo')->with('mensaje', 'Tipo de articulo creado con exito');
     }
@@ -73,7 +73,7 @@ class TipoarticuloController extends Controller
     public function actualizar(ValidacionTipoarticulo $request, $id)
     {
         can('actualizar-tipo-articulo');
-        Tipoarticulo::findOrFail($id)->update($request->all());
+        Tipoarticulo::findOrFail($id)->update($request->validated());
 
         return redirect('stock/tipoarticulo')->with('mensaje', 'Tipo de articulo actualizado con exito');
     }

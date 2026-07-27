@@ -295,6 +295,11 @@
 
 <div id="oc-solapa-articulos" class="oc-solapa" style="display:none;">
     <h5>Artículos</h5>
+    <p class="text-muted small mb-2">
+        Requiere proveedor en cabecera. Si el art&iacute;culo tiene cat&aacute;logo <code>articulo_proveedor</code> para ese proveedor,
+        se completan nombre, precio de lista, UM de compra y coeficiente (conversi&oacute;n a stock al recibir).
+        Sin cat&aacute;logo, se usan datos del maestro.
+    </p>
     <style>
         #tabla-articulos-ordencompra tr.item-ordencompra-articulo-sub td {
             border-top: none !important;
@@ -364,7 +369,7 @@
                 $modoStockColorTalleInicial = '0';
             }
         }
-        $ocColspanMetaArticulos = $soloLectura ? 15 : 16;
+        $ocColspanMetaArticulos = $soloLectura ? 16 : 17;
         $fechaDocOc = old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d'));
         $ocMonedaPesoId = (int) (
             optional($moneda_query->firstWhere('abreviatura', '$'))->id
@@ -380,12 +385,13 @@
     <table class="table table-sm table-bordered" id="tabla-articulos-ordencompra" data-oc-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-oc-moneda-peso-id="{{ $ocMonedaPesoId }}">
         <thead>
             <tr>
-                <th style="width: 10%;">Artículo</th>
-                <th style="width: 12%;">Descripción</th>
+                <th style="width: 9%;">Artículo</th>
+                <th style="width: 11%;">Descripción</th>
+                <th style="width: 6%;" class="text-nowrap" title="Solo si el artículo tiene filas en articulo_proveedor: UM compra y coef. del catálogo">Prov./UM</th>
                 <th class="ms-col-color-talle" style="width: 6%; display:none;">Color</th>
                 <th class="ms-col-color-talle" style="width: 5%; display:none;">Talle</th>
                 <th style="width: 5%;">Cant.</th>
-                <th style="width: 5%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase)">Cant. alt.</th>
+                <th style="width: 5%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase) o conversión UM compra → stock">Cant. alt.</th>
                 <th style="width: 7%;">Precio</th>
                 <th style="width: 5%;">Moneda</th>
                 <th style="width: 5%;">Cotiz.</th>
@@ -452,6 +458,25 @@
                         'maneja_stock_color_talle.'.$idx,
                         optional($linea->articulos)->maneja_stock_color_talle ?? ($_colorIdLin > 0 || $_talleIdLin > 0)
                     );
+                    $_ap = $linea->articulo_proveedor;
+                    $_apId = (int) old('articulo_proveedor_ids.'.$idx, $linea->articulo_proveedor_id ?? 0);
+                    $_apCodigo = old('linea_codigo_articulo_proveedor.'.$idx, optional($_ap)->codigo_articulo_proveedor ?? '');
+                    $_apCoef = old('linea_coef_conversion.'.$idx, optional($_ap)->coeficiente_conversion ?? '');
+                    $_apUm = old('linea_um_compra_abrev.'.$idx, optional(optional($_ap)->unidadesmedidacompra)->abreviatura ?? '');
+                    $_provEtiq = '';
+                    if ($_apId > 0 && $_ap) {
+                        $_p = $_ap->proveedores;
+                        $_provEtiq = trim((string) (optional($_p)->codigo ?? '').' '.(optional($_p)->nombre ?? ''));
+                        if ($_apUm !== '') {
+                            $_provEtiq = trim($_provEtiq.' · '.$_apUm);
+                        }
+                    }
+                    $_descLineaOc = old('descripcionarticulos.'.$idx);
+                    if ($_descLineaOc === null || $_descLineaOc === '') {
+                        $_descLineaOc = trim((string) (optional($_ap)->nombre_articulo_proveedor ?? '')) !== ''
+                            ? (string) $_ap->nombre_articulo_proveedor
+                            : (optional($linea->articulos)->descripcion ?? '');
+                    }
                 @endphp
                 <tr class="item-ordencompra-articulo" data-maneja-stock-color-talle="{{ $_manejaColorTalle ? '1' : '0' }}">
                     <td>
@@ -461,22 +486,34 @@
                         <input type="hidden" class="oc-precio-origen-tipo" name="precio_origen_tipos[]" value="{{ $_poTipo }}">
                         <input type="hidden" class="oc-precio-origen-ref-id" name="precio_origen_ref_ids[]" value="{{ $_poRef }}">
                         <input type="hidden" class="oc-precio-origen-etiqueta" name="precio_origen_etiquetas[]" value="{{ $_poEtiq }}">
+                        <input type="hidden" class="linea-articulo-proveedor-id" name="articulo_proveedor_ids[]" value="{{ $_apId > 0 ? $_apId : '' }}">
+                        <input type="hidden" class="linea-codigo-articulo-proveedor" name="linea_codigo_articulo_proveedor[]" value="{{ $_apCodigo }}">
+                        <input type="hidden" class="linea-coef-conversion" value="{{ $_apCoef !== '' && $_apCoef !== null ? $_apCoef : '' }}">
+                        <input type="hidden" class="linea-um-compra-abrev" value="{{ $_apUm }}">
                         <input type="hidden" name="descuentos_linea[]" value="{{ old('descuentos_linea.'.$idx, $linea->descuento ?? '') }}">
                         <input type="hidden" name="cantidadalternativas[]" class="oc-cantidadalternativa" value="{{ $_cantAltShow }}">
                         <textarea name="detalle_articulos[]" class="d-none oc-ta-detalle-linea" aria-hidden="true">{{ old('detalle_articulos.'.$idx, $linea->detalle ?? '') }}</textarea>
-                        <div class="d-flex align-items-center flex-nowrap">
+                        <div class="form-group row celda-articulo-ordencompra mb-0 d-flex align-items-center flex-nowrap">
                             @if (!$soloLectura)
-                                <button type="button" title="Consulta artículos" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
+                                <button type="button" title="Consulta art&iacute;culos (F1)" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
                                     <i class="fa fa-search text-primary"></i>
                                 </button>
                             @endif
-                            <input type="text" class="codigoarticulo form-control flex-shrink-0 ml-1" style="width: 140px; max-width: 15vw; height: 38px;"
+                            <input type="text" class="codigoarticulo form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;"
                                 name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ $soloLectura ? 'readonly' : '' }}>
                         </div>
                     </td>
                     <td>
                         <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]"
-                            value="{{ old('descripcionarticulos.'.$idx, optional($linea->articulos)->descripcion ?? '') }}" readonly>
+                            value="{{ $_descLineaOc }}" readonly>
+                    </td>
+                    <td class="align-middle px-1">
+                        <small class="linea-proveedor-etiqueta text-muted d-block text-truncate" style="max-width: 6.5rem;" title="{{ e($_provEtiq) }}">{{ $_provEtiq !== '' ? $_provEtiq : '—' }}</small>
+                        <div class="linea-conversion-hint{{ ($_apUm !== '' && (float) $_apCoef > 0) ? '' : ' d-none' }}">
+                            @if ($_apUm !== '' && (float) $_apCoef > 0)
+                                <small class="text-muted" title="Al recibir: stock = cantidad compra × coef">{{ $_apUm }} ×{{ rtrim(rtrim(number_format((float) $_apCoef, 6, '.', ''), '0'), '.') }} → stock</small>
+                            @endif
+                        </div>
                     </td>
                     @include('stock.movimientostock.partials.fila_color_talle', [
                         'colorId' => $_colorIdLin,
@@ -536,7 +573,7 @@
                         <div class="celda-partidagasto d-flex align-items-center flex-nowrap">
                             <input type="hidden" class="partidagasto_id" name="partidagasto_ids[]" value="{{ old('partidagasto_ids.'.$idx, $linea->partidagasto_id ?? '') }}">
                             @if (!$soloLectura)
-                                <button type="button" title="Consulta partidas (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC flex-shrink-0">
+                                <button type="button" title="Consulta partidas (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC flex-shrink-0">
                                     <i class="fa fa-search text-primary"></i>
                                 </button>
                             @endif
@@ -550,7 +587,7 @@
                         <div class="celda-capex d-flex align-items-center flex-nowrap">
                             <input type="hidden" class="capex_id" name="capex_ids[]" value="{{ old('capex_ids.'.$idx, $linea->capex_id ?? '') }}">
                             @if (!$soloLectura)
-                                <button type="button" title="Consulta CAPEX (último presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC flex-shrink-0">
+                                <button type="button" title="Consulta CAPEX (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC flex-shrink-0">
                                     <i class="fa fa-search text-primary"></i>
                                 </button>
                             @endif
@@ -661,10 +698,40 @@
         <div class="card-body py-3">
             <div class="row">
                 <div class="col-lg-4 mb-3 mb-lg-0">
-                    <label for="descuento" class="d-block font-weight-bold">Descuento general (%)</label>
-                    <input type="number" step="0.01" min="0" name="descuento" id="descuento" class="form-control"
-                        value="{{ old('descuento', (isset($data) && $data) ? ($data->descuento ?? '') : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
-                    <small class="text-muted">Se aplica sobre el neto de ítems antes del IVA.</small>
+                    @php
+                        $ocDtoTipo = old(
+                            'descuento_tipo',
+                            (isset($data) && $data)
+                                ? ($data->descuento_tipo ?? \App\Support\Compras\OrdencompraDescuentoSupport::TIPO_PORCENTAJE)
+                                : \App\Support\Compras\OrdencompraDescuentoSupport::TIPO_PORCENTAJE
+                        );
+                        $ocDtoTipo = \App\Support\Compras\OrdencompraDescuentoSupport::normalizarTipo($ocDtoTipo);
+                        $ocDtoEsImporte = $ocDtoTipo === \App\Support\Compras\OrdencompraDescuentoSupport::TIPO_IMPORTE;
+                    @endphp
+                    <label for="descuento" class="d-block font-weight-bold">Descuento general</label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <select name="descuento_tipo" id="descuento_tipo" class="custom-select"
+                                style="max-width: 7.5rem;" {{ $soloLectura ? 'disabled' : '' }}>
+                                <option value="porcentaje" {{ $ocDtoTipo === 'porcentaje' ? 'selected' : '' }}>%</option>
+                                <option value="importe" {{ $ocDtoTipo === 'importe' ? 'selected' : '' }}>Monto</option>
+                            </select>
+                            @if ($soloLectura)
+                                <input type="hidden" name="descuento_tipo" value="{{ $ocDtoTipo }}">
+                            @endif
+                        </div>
+                        <input type="number" step="0.01" min="0" name="descuento" id="descuento" class="form-control"
+                            value="{{ old('descuento', (isset($data) && $data) ? ($data->descuento ?? '') : '') }}"
+                            {{ $soloLectura ? 'readonly' : '' }}
+                            placeholder="{{ $ocDtoEsImporte ? '0.00' : '0' }}">
+                    </div>
+                    <small class="text-muted" id="descuento_ayuda">
+                        @if ($ocDtoEsImporte)
+                            Monto fijo sobre el neto de ítems antes del IVA (en moneda del 1.er ítem).
+                        @else
+                            Porcentaje sobre el neto de ítems antes del IVA.
+                        @endif
+                    </small>
                 </div>
                 <div class="col-lg-8">
                     <table class="table table-sm table-borderless mb-0 oc-tabla-resumen-totales">
@@ -825,6 +892,7 @@
 
     <div id="oc-solapa-arbol" class="oc-solapa" style="display:none;">
         <div id="oc-aviso-arbol" class="alert alert-warning d-none"></div>
+        <div id="oc-panel-ia-arbol-solapa" class="d-none mb-3"></div>
         <h5>Movimientos árbol de aprobación</h5>
         <table class="table table-bordered table-sm" id="tabla-movimientos-arbol">
             <thead><tr><th>Nivel</th><th>Estado mov.</th><th>Indicación OC</th></tr></thead>

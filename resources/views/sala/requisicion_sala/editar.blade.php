@@ -18,14 +18,35 @@ Requisición de sala
     $modoConsulta = request()->input('vista') === 'consulta';
     $soloConsulta = $accesoPorHash || ! empty($soloConsulta) || $modoConsulta || ! empty($visualizar);
     $ocultarVolver = $accesoPorHash || ! empty($ocultarVolver) || $soloConsulta;
-    $soloLectura = ! empty($visualizar) || ($soloConsulta && empty($puedeActualizarRequisicionSala));
+    $modoEdicionCompleta = empty($visualizar)
+        && ! empty($puedeActualizarRequisicionSala)
+        && ! empty($edicion_completa);
+    $modoEdicionMenor = empty($visualizar)
+        && ! empty($puedeActualizarRequisicionSala)
+        && ! empty($edicion_menor)
+        && empty($edicion_completa);
+    $puedeGrabar = $modoEdicionCompleta || $modoEdicionMenor;
+    $soloLectura = ! $puedeGrabar;
+    $bloqueoEstructural = $modoEdicionMenor;
+    $mostrarReabrir = empty($visualizar)
+        && ! empty($puedeReabrirRequisicionSala)
+        && ! empty($puede_reabrir);
+    $formAction = $modoEdicionMenor
+        ? route('actualizar_datos_menores_requisicion_sala', ['id' => $data->id])
+        : route('actualizar_requisicion_sala', ['id' => $data->id]);
 @endphp
 <div class="row" id="editar">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
         @include('sala.requisicion_sala.partials.cumplimientos_sala', ['data' => $data, 'cumplimientos_sala' => $cumplimientos_sala ?? []])
-        @if(!empty($tiene_transferencia_laboratorio) && !empty($puedeActualizarRequisicionSala))
+        @if($modoEdicionMenor)
+        <div class="alert alert-warning mx-0 mb-0 rounded-0 border-left-0 border-right-0">
+            <strong>Edición menor (aprobación vigente).</strong>
+            Podés corregir comentario, detalle, zona, prioridad, fecha de entrega, leyenda, UID y Nº parte única.
+            Para cambiar artículo, cantidad, destino o depósito usá <strong>Reabrir / desaprobar</strong>.
+        </div>
+        @elseif(!empty($tiene_transferencia_laboratorio) && $modoEdicionCompleta)
         <div class="alert alert-info mx-0 mb-0 rounded-0 border-left-0 border-right-0">
             <strong>Transferencia al laboratorio asociada.</strong>
             No puede cambiar el artículo ni eliminar líneas reparación/devolución incluidas en la TM.
@@ -38,6 +59,8 @@ Requisición de sala
                 <h3 class="card-title">
                     @if ($soloLectura)
                         Consultar requisición de sala #{{ $data->numerorequisicion }}
+                    @elseif ($modoEdicionMenor)
+                        Requisición de sala #{{ $data->numerorequisicion }} — datos menores
                     @else
                         Requisición de sala #{{ $data->numerorequisicion }}
                     @endif
@@ -51,6 +74,11 @@ Requisición de sala
                         <i class="fa fa-clipboard-check"></i> Cumplimientos
                     </a>
                     @endif
+                    @if($mostrarReabrir)
+                    <button type="button" class="btn btn-outline-warning btn-sm" data-toggle="modal" data-target="#modal-reabrir-requisicion-sala" title="Volver a PENDIENTE para cambio de negocio">
+                        <i class="fa fa-undo"></i> Reabrir / desaprobar
+                    </button>
+                    @endif
                     @if(empty($ocultarVolver))
                     <a href="{{ route('consultar_requisicion_sala') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -58,9 +86,10 @@ Requisición de sala
                     @endif
                 </div>
             </div>
-            <form action="{{ route('actualizar_requisicion_sala', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
+            <form action="{{ $formAction }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
                 data-url-npu="{{ route('requisicion_sala_consulta_npu') }}"
                 data-tiene-transferencia-laboratorio="{{ !empty($tiene_transferencia_laboratorio) ? '1' : '0' }}"
+                data-edicion-menor="{{ $modoEdicionMenor ? '1' : '0' }}"
                 @if($soloLectura) onsubmit="return false;" @endif>
                 @csrf
                 @method('PUT')
@@ -72,7 +101,10 @@ Requisición de sala
                     <button type="button" id="botonform4" class="btn btn-info btn-sm">Archivos</button>
                 </div>
                 <div class="card-body @if($soloLectura) pe-none @endif" @if($soloLectura) style="opacity:.92" @endif>
-                    @include('sala.requisicion_sala.form')
+                    @include('sala.requisicion_sala.form', [
+                        'bloqueoEstructural' => $bloqueoEstructural,
+                        'modoEdicionMenor' => $modoEdicionMenor,
+                    ])
                     <div class="form4" id="requisicion-sala-solapa-archivos" style="display:none;">
                         <p class="text-muted small mb-2">Archivos actuales</p>
                         @include('sala.requisicion_sala.partials.archivos_adjuntos', [
@@ -90,13 +122,27 @@ Requisición de sala
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6 text-center">
                             @if ($soloConsulta)
-                                @if (! $soloLectura && ! empty($puedeActualizarRequisicionSala))
-                                    <button type="button" id="botonform0" class="btn btn-success"><i class="fa fa-save"></i> Actualizar</button>
+                                @if ($puedeGrabar)
+                                    <button type="button" id="botonform0" class="btn btn-success">
+                                        <i class="fa fa-save"></i>
+                                        @if ($modoEdicionMenor)
+                                            Guardar datos menores
+                                        @else
+                                            Actualizar
+                                        @endif
+                                    </button>
                                 @endif
-                                <button type="button" class="btn btn-secondary @if(! $soloLectura && ! empty($puedeActualizarRequisicionSala)) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>
+                                <button type="button" class="btn btn-secondary @if($puedeGrabar) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>
                             @else
-                                @if (!empty($puedeActualizarRequisicionSala))
-                                <button type="button" id="botonform0" class="btn btn-success"><i class="fa fa-save"></i> Actualizar</button>
+                                @if ($puedeGrabar)
+                                <button type="button" id="botonform0" class="btn btn-success">
+                                    <i class="fa fa-save"></i>
+                                    @if ($modoEdicionMenor)
+                                        Guardar datos menores
+                                    @else
+                                        Actualizar
+                                    @endif
+                                </button>
                                 @endif
                             @endif
                         </div>
@@ -105,7 +151,7 @@ Requisición de sala
             </form>
             @if(empty($visualizar) && ($data->estado ?? '') === ($estado_en_laboratorio ?? ''))
                 @if (can('enviar-arbol-requisicion-sala', false))
-                <form action="{{ route('enviar_arbol_requisicion_sala', ['id' => $data->id]) }}" method="POST" class="d-inline mt-3"
+                <form action="{{ route('enviar_arbol_requisicion_sala', ['id' => $data->id]) }}" method="POST" class="d-inline mt-3 ml-3 mb-3"
                       onsubmit="return confirm('¿Enviar al árbol de aprobación?');">
                     @csrf
                     <button type="submit" class="btn btn-warning btn-sm">Enviar al árbol de aprobación</button>
@@ -115,6 +161,56 @@ Requisición de sala
         </div>
     </div>
 </div>
+
+@if($mostrarReabrir)
+@php
+    $reabrirBloqueadoPorCumplimientos = (int) ($cumplimientos_activos ?? 0) > 0;
+@endphp
+<div class="modal fade" id="modal-reabrir-requisicion-sala" tabindex="-1" role="dialog" aria-labelledby="modal-reabrir-requisicion-sala-label" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <form method="POST" action="{{ route('reabrir_requisicion_sala', ['id' => $data->id]) }}" id="form-reabrir-requisicion-sala">
+            @csrf
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title" id="modal-reabrir-requisicion-sala-label">Reabrir / desaprobar requisición</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    @if($reabrirBloqueadoPorCumplimientos)
+                    <div class="alert alert-danger small mb-3">
+                        Hay <strong>{{ (int) $cumplimientos_activos }}</strong> cumplimiento(s) activo(s).
+                        Primero revertí los cumplimientos y después podrás reabrir.
+                    </div>
+                    @else
+                    <p class="small mb-2">
+                        La requisición volverá a <strong>PENDIENTE</strong>. Se limpiará el árbol de aprobación
+                        y, si hay transferencia automática al laboratorio confirmada, se revertirá.
+                    </p>
+                    <p class="small text-danger mb-3">
+                        Después deberás corregir los datos y <strong>guardar</strong> para reenviar al árbol.
+                    </p>
+                    <div class="form-group mb-0">
+                        <label for="motivo_reabrir_rs" class="requerido">Motivo</label>
+                        <textarea name="motivo" id="motivo_reabrir_rs" class="form-control" rows="3" required minlength="5" maxlength="500"
+                            placeholder="Ej.: se cargó mal el artículo / cantidad / depósito…"></textarea>
+                    </div>
+                    @endif
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+                    @if(!$reabrirBloqueadoPorCumplimientos)
+                    <button type="submit" class="btn btn-warning btn-sm"
+                        onclick="return confirm('¿Confirmás reabrir la requisición #{{ $data->numerorequisicion }}?');">
+                        <i class="fa fa-undo"></i> Reabrir
+                    </button>
+                    @endif
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+@endif
+
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultadeposito')
 @include('sala.requisicion_sala.partials.banner_grabando_styles')

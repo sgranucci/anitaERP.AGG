@@ -1,7 +1,10 @@
 @php
     use App\Support\Caja\Flash\FlashCajaLFlashFormatoSupport as F;
-    $fn = [F::class, 'nExcel'];
-    $fp = [F::class, 'pctExcel'];
+    use App\Support\Export\ExcelFormatoNumero;
+    $formatoNumero = $formatoNumero ?? ExcelFormatoNumero::preferenciaGlobal();
+    $fn = fn ($v, int $dec = 2) => F::nExcelFormato($v, $formatoNumero, $dec);
+    $fp = fn ($v, int $dec = 2) => F::pctExcelFormato($v, $formatoNumero, $dec);
+    $fe = fn ($v) => F::enteroExcelFormato($v, $formatoNumero);
     $filas = $reporte['filas_diarias'] ?? [];
     $budget = $reporte['budget_mes'] ?? [];
     $colCount = 52;
@@ -11,6 +14,7 @@
         <tr><td colspan="{{ $colCount }}" style="height: 52px;"></td></tr>
     @endif
     <tr><td colspan="{{ $colCount }}"><strong style="font-size: 16px;">{{ $reporte['titulo'] ?? 'Consolidated Income' }}</strong></td></tr>
+    <tr><td colspan="{{ $colCount }}">Generado {{ date('d/m/Y H:i') }}</td></tr>
     <tr>
         <td colspan="{{ $colCount }}">
             {{ $reporte['empresa']->nombre ?? '' }}
@@ -18,18 +22,17 @@
             @if(!empty($reporte['through_day']))
                 &mdash; Through day: {{ $reporte['through_day'] }}
             @endif
-            &mdash; Generado {{ date('d/m/Y H:i') }}
             &mdash; {{ $reporte['cantidad_dias'] ?? 0 }} día(s)
             &mdash; Season: {{ !empty($reporte['con_season']) ? 'Sí' : 'No' }}
         </td>
     </tr>
     <tr>
         <td colspan="{{ $colCount }}">
-            Budget pos {{ F::entero($budget['budget_pos'] ?? 0) }}
+            Budget pos {{ $fe($budget['budget_pos'] ?? 0) }}
             | Total {{ $fn($budget['budget_total'] ?? 0) }}
             | Elec {{ $fn($budget['budget_electronic'] ?? 0) }}
             | Bingo {{ $fn($budget['budget_bingo'] ?? 0) }}
-            | F&B {{ $fn($budget['budget_ayb'] ?? 0) }}
+            | F&amp;B {{ $fn($budget['budget_ayb'] ?? 0) }}
             | Park {{ $fn($budget['budget_estac'] ?? 0) }}
         </td>
     </tr>
@@ -41,23 +44,23 @@
         <th>Win Online</th><th>Win Financial</th><th>Diff</th>
         <th>Bingo Cards</th><th>Bingo Sales</th><th>Bingo Win</th><th>Bingo /Cust</th>
         <th>Gaming</th>
-        <th>F&B</th><th>F&B /Cust</th>
+        <th>F&amp;B</th><th>F&amp;B /Cust</th>
         <th>Parking</th><th>Park /Cust</th>
         <th>Otros</th>
         <th>Net Revenues</th><th>Rev /Cust</th>
         <th>Pos OL</th><th>Pos vs Budg</th><th>Cust Budg</th><th>Cust Dev%</th>
-        <th>Seas Tot%</th><th>Seas Elec%</th><th>Seas Bingo%</th><th>Seas F&B%</th><th>Seas Park%</th>
-        <th>NoSeas Tot%</th><th>NoSeas Elec%</th><th>NoSeas Bingo%</th><th>NoSeas F&B%</th><th>NoSeas Park%</th>
+        <th>Seas Tot%</th><th>Seas Elec%</th><th>Seas Bingo%</th><th>Seas F&amp;B%</th><th>Seas Park%</th>
+        <th>NoSeas Tot%</th><th>NoSeas Elec%</th><th>NoSeas Bingo%</th><th>NoSeas F&amp;B%</th><th>NoSeas Park%</th>
         <th>Vehicles</th><th>Veh Budget</th>
     </tr>
     @foreach($filas as $dia)
-        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $dia, 'fn' => $fn, 'fp' => $fp])
+        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $dia, 'fn' => $fn, 'fp' => $fp, 'fe' => $fe])
     @endforeach
     @if(!empty($reporte['total_final']) && ($reporte['cantidad_dias'] ?? 0) > 0)
-        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $reporte['total_final'], 'fn' => $fn, 'fp' => $fp])
+        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $reporte['total_final'], 'fn' => $fn, 'fp' => $fp, 'fe' => $fe])
     @endif
     @if(!empty($reporte['mtd_average']) && ($reporte['cantidad_dias'] ?? 0) > 0)
-        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $reporte['mtd_average'], 'fn' => $fn, 'fp' => $fp])
+        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $reporte['mtd_average'], 'fn' => $fn, 'fp' => $fp, 'fe' => $fe])
     @endif
     @if(!empty($reporte['mtd_resta_season']))
     <tr>
@@ -80,15 +83,15 @@
     @if(!empty($compMes) && ($compMes['cantidad_dias'] ?? 0) > 0)
         <tr><td colspan="{{ $colCount }}"></td></tr>
         <tr><td colspan="{{ $colCount }}"><strong>Comparativo mes anterior {{ $compMes['periodo_label'] ?? '' }}</strong></td></tr>
-        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $compMes['total_final'] ?? [], 'fn' => $fn, 'fp' => $fp])
-        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $compMes['mtd_average'] ?? [], 'fn' => $fn, 'fp' => $fp])
+        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $compMes['total_final'] ?? [], 'fn' => $fn, 'fp' => $fp, 'fe' => $fe])
+        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $compMes['mtd_average'] ?? [], 'fn' => $fn, 'fp' => $fp, 'fe' => $fe])
     @endif
 
     @php $compAnio = $reporte['comparativo_anio_ant'] ?? null; @endphp
     @if(!empty($compAnio) && ($compAnio['cantidad_dias'] ?? 0) > 0)
         <tr><td colspan="{{ $colCount }}"></td></tr>
         <tr><td colspan="{{ $colCount }}"><strong>Comparativo año anterior {{ $compAnio['periodo_label'] ?? '' }}</strong></td></tr>
-        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $compAnio['total_final'] ?? [], 'fn' => $fn, 'fp' => $fp])
-        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $compAnio['mtd_average'] ?? [], 'fn' => $fn, 'fp' => $fp])
+        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $compAnio['total_final'] ?? [], 'fn' => $fn, 'fp' => $fp, 'fe' => $fe])
+        @include('exports.caja.flash.partials.fila_lflash_excel', ['m' => $compAnio['mtd_average'] ?? [], 'fn' => $fn, 'fp' => $fp, 'fe' => $fe])
     @endif
 </table>

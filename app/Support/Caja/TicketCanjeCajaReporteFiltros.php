@@ -5,7 +5,7 @@ namespace App\Support\Caja;
 use Illuminate\Http\Request;
 
 /**
- * Filtros del informe de tickets canje caja (empresa, rango fechas, estado).
+ * Filtros del informe de tickets canje caja (empresa, rango fechas, estado, usuario emisor).
  */
 final class TicketCanjeCajaReporteFiltros
 {
@@ -27,6 +27,8 @@ final class TicketCanjeCajaReporteFiltros
             'fecha_desde' => null,
             'fecha_hasta' => null,
             'estado' => self::ESTADO_TODOS,
+            'usuario_id' => null,
+            'usuario_nombre' => null,
             'consultar' => false,
         ];
     }
@@ -49,6 +51,8 @@ final class TicketCanjeCajaReporteFiltros
         ], true)
             ? $estado
             : self::ESTADO_TODOS;
+        $usuarioId = (int) $request->input('usuario_id', 0);
+        $filtros['usuario_id'] = $usuarioId > 0 ? $usuarioId : null;
         $filtros['consultar'] = $request->boolean('consultar') || $request->input('consultar') == '1';
 
         return $filtros;
@@ -72,6 +76,9 @@ final class TicketCanjeCajaReporteFiltros
         }
         if (($filtros['estado'] ?? '') !== '') {
             $out['estado'] = (string) $filtros['estado'];
+        }
+        if (! empty($filtros['usuario_id'])) {
+            $out['usuario_id'] = (int) $filtros['usuario_id'];
         }
         if (! empty($filtros['consultar'])) {
             $out['consultar'] = 1;
@@ -106,6 +113,10 @@ final class TicketCanjeCajaReporteFiltros
             self::ESTADO_VIP => 'Estado: VIP',
             default => 'Estado: Todos',
         };
+        if (! empty($filtros['usuario_id'])) {
+            $nombre = trim((string) ($filtros['usuario_nombre'] ?? ''));
+            $partes[] = 'Usuario emisor: '.($nombre !== '' ? $nombre : '#'.(int) $filtros['usuario_id']);
+        }
 
         return implode(' · ', $partes);
     }

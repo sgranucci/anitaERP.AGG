@@ -61,7 +61,7 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
                             <th class="width10">C&oacute;d.</th>
                             <th>Estado</th>
                             <th class="width10">APOC</th>
-                            <th class="width40" data-orderable="false"></th>
+                            <th class="width100" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -89,7 +89,7 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
                                     <span class="text-muted">—</span>
                                 @endif
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                        			@if (can('editar-proveedor', false))
                                 	<a href="{{route('editar_proveedor', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>

@@ -23,6 +23,7 @@ use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
+use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\RequisicionLineasOcSupport;
@@ -107,6 +108,7 @@ class OrdencompraGestionService
             'requisicion_articulos.capexs',
             'requisicion_articulos.color',
             'requisicion_articulos.talle',
+            'requisicion_articulos.articulo_proveedor',
         ])->find($requisicionId);
         if (! $req) {
             throw new \InvalidArgumentException('La requisición no existe.');
@@ -160,6 +162,11 @@ class OrdencompraGestionService
                 'descripcioncapex' => $cpx ? (string) ($cpx->nombre ?? '') : '',
                 'cotizacion' => 1,
                 'requisicion_articulo_id' => (int) $lin->id,
+                'proveedor_id' => $lin->proveedor_id ? (int) $lin->proveedor_id : null,
+                'articulo_proveedor_id' => $lin->articulo_proveedor_id ? (int) $lin->articulo_proveedor_id : null,
+                'nombre_articulo_proveedor' => $lin->articulo_proveedor
+                    ? (string) ($lin->articulo_proveedor->nombre_articulo_proveedor ?? '')
+                    : '',
             ];
         }
 
@@ -807,7 +814,12 @@ class OrdencompraGestionService
             'condicioncompra_id' => ! empty($payload['condicioncompra_id']) ? (int) $payload['condicioncompra_id'] : null,
             'condicionentrega_id' => ! empty($payload['condicionentrega_id']) ? (int) $payload['condicionentrega_id'] : null,
             'condicionpago_id' => ! empty($payload['condicionpago_id']) ? (int) $payload['condicionpago_id'] : null,
-            'descuento' => isset($payload['descuento']) ? (float) $payload['descuento'] : null,
+            'descuento' => isset($payload['descuento']) && $payload['descuento'] !== ''
+                ? (float) $payload['descuento']
+                : null,
+            'descuento_tipo' => OrdencompraDescuentoSupport::normalizarTipo(
+                $payload['descuento_tipo'] ?? null
+            ),
             'estadoordencompra' => $estado,
             'sector_legajocompra_id' => $sectorId,
             'creousuario_id' => $creoUsuarioId,
@@ -828,12 +840,13 @@ class OrdencompraGestionService
             'detalle' => 'required|string',
             'tratamiento' => ['required', 'string', 'max:50', Rule::in(array_column(Ordencompra::$enumTratamientoCompra, 'nombre'))],
             'requisicion_id' => 'nullable|integer|exists:requisicion,id',
-            'proveedor_id' => 'nullable|integer|exists:proveedor,id',
+            'proveedor_id' => 'required|integer|exists:proveedor,id',
             'transporte_id' => 'nullable|integer|exists:transporte,id',
             'condicioncompra_id' => 'nullable|integer|exists:condicioncompra,id',
             'condicionentrega_id' => 'nullable|integer|exists:condicionentrega,id',
             'condicionpago_id' => 'nullable|integer|exists:condicionpago,id',
-            'descuento' => 'nullable|numeric',
+            'descuento' => 'nullable|numeric|min:0',
+            'descuento_tipo' => 'nullable|string|in:porcentaje,importe',
             'lugarentrega' => 'nullable|string|max:255',
         ];
     }

@@ -90,6 +90,7 @@
         <tr>
             <th>SKU</th>
             <th>Descripción</th>
+            <th>Leyenda</th>
             <th class="num">Cantidad</th>
             <th class="cen">Fuera serv.</th>
             <th>UID</th>
@@ -104,10 +105,16 @@
             $destinoLinea = RequisicionSalaArticulo::destinoNombrePorValor(trim((string) ($linea->destino ?? '')));
             $estadoLinea = RequisicionSalaArticulo::estadoLineaNombrePorValor(trim((string) ($linea->estado ?? ' ')) ?: ' ');
             $motivoParcial = RequisicionSalaArticulo::estadoParcialNombrePorValor($linea->estadoparcial ?? null);
+            $leyendaLinea = trim((string) ($linea->detalle ?? ''));
+            $descripcionLinea = trim((string) (optional($linea->articulos)->descripcion ?? ''));
+            if ($descripcionLinea === '') {
+                $descripcionLinea = trim((string) (optional($linea->articulos)->detalle ?? ''));
+            }
         @endphp
         <tr>
             <td>{{ optional($linea->articulos)->sku ?? '—' }}</td>
-            <td>{{ $linea->detalle ?: (optional($linea->articulos)->descripcion ?? '—') }}</td>
+            <td>{{ $descripcionLinea !== '' ? $descripcionLinea : '—' }}</td>
+            <td>{{ $leyendaLinea !== '' ? $leyendaLinea : '—' }}</td>
             <td class="num">{{ rtrim(rtrim(number_format((float) $linea->cantidad, 4, '.', ''), '0'), '.') }}</td>
             <td class="cen">{{ $linea->fueradeservicio ? 'Sí' : 'No' }}</td>
             <td>{{ $linea->uid ?: '—' }}</td>
@@ -121,7 +128,7 @@
             </td>
         </tr>
         @empty
-        <tr><td colspan="8">Sin ítems.</td></tr>
+        <tr><td colspan="9">Sin ítems.</td></tr>
         @endforelse
     </tbody>
 </table>

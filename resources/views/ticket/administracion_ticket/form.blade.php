@@ -161,17 +161,29 @@
                             <input type="text" style="font-size: 12px;" name="tiempoinsumidos[]" class="form-control tiempoinsumido" value="{{old('tiempoinsumido', $tarea->tiempoinsumido ?? '')}}" readonly>
                         </td>   
                         <td>
-                            <input type="text" name="estadotareas[]" class="form-control estadotarea" value="" readonly>
+                            @php
+                                $estadoActual = $tarea->estadoVisual();
+                            @endphp
+                            <select name="estadotareas[]"
+                                    class="form-control estadotarea"
+                                    style="font-size: 12px;"
+                                    data-estado-previo="{{ $estadoActual }}">
+                                <option value="">-- Seleccionar Estado --</option>
+                                @foreach ($estado_novedad_enum as $estadoOpt)
+                                    <option value="{{ $estadoOpt['nombre'] }}"
+                                        @if ($estadoOpt['nombre'] === $estadoActual)
+                                            selected
+                                        @endif
+                                    >{{ $estadoOpt['nombre'] }}</option>
+                                @endforeach
+                            </select>
                         </td>
                         <td>
                             @if ($tarea->fechafinalizacion < "2000-01-01")
                                 <button type="button" title="Finaliza tarea" class="btn-accion-tabla finalizatarea tooltipsC">
                                     <i class="text-danger">Finaliza</i>
-                                </button>     
-                            @endif                       
-                            <button type="button" title="Abre novedades" class="btn-accion-tabla abrenovedad tooltipsC">
-                                <i class="text-primary">Novedades</i>
-                            </button>
+                                </button>
+                            @endif
                             @if ($tarea->fechafinalizacion < "2000-01-01")
                                 <button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_tarea_ticket tooltipsC">
                                     <i class="fa fa-times-circle text-danger"></i>
@@ -194,8 +206,8 @@
     </div>
     <input type="hidden" id="id" name="id" value="{{ $data->id ?? '' }}" />
     <input type="hidden" id="usuario_id" name="usuario_id" value="{{ $data->usuario_id ?? '' }}" />
-    <input type="hidden" id="estado_novedad_enum" name="estado_novedad_enum" value="{{ $estado_novedad_json ?? '' }}" />
     <input type="hidden" id="permiso_usuario" name="permiso_usuario" value="{{ can('supervisor-ticket', false) }}" />
+    <input type="hidden" id="url_cambia_estado_tarea" value="{{ url('ticket/cambiar_estado_tarea') }}" />
     @if (! empty($data->id))
         <input type="hidden" id="url_guarda_comentario_tarea_admin" value="{{ url('ticket/ticket/'.$data->id.'/tarea') }}" />
         @include('ticket.partials.comentario_enviando_overlay', [
@@ -211,6 +223,5 @@
 @include('includes.ticket.modalconsultatecnico_ticket')
 @include('includes.ticket.modalconsultasubcategoria')
 @include('includes.stock.modalconsultaarticulo')
-@include('ticket.administracion_ticket.modalcargatarea_novedad')
 
 

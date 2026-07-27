@@ -199,6 +199,10 @@ final class CierreJornadaProcesoRedistribucionSupport
                 ? (string) $planificados[0]['clave']
                 : 'mixto';
             $mov['medios_pago_planificados'] = $planificados;
+            // Marca durable: este movimiento lleva una compensación efectivo->QR/MP de la
+            // redistribución. El overlay se apoya en esta bandera (no en medio_anita_clave,
+            // que clasificar() re-deriva desde la cuentacaja real y podría borrar el 'efectivo').
+            $mov['anita_compensacion_redistribucion'] = true;
 
             foreach ($compensadoEnFactura as $medio => $monto) {
                 $compensadoPorMedio[$medio] = self::pesos(($compensadoPorMedio[$medio] ?? 0.0) + $monto);
@@ -585,6 +589,9 @@ final class CierreJornadaProcesoRedistribucionSupport
             $movimientos[$idx]['medio_pago_planificado'] = $anita['medio_pago_planificado'] ?? null;
             $movimientos[$idx]['medios_pago_planificados'] = $anita['medios_pago_planificados'];
             $movimientos[$idx]['medio_anita_clave'] = CierreJornadaProcesoMedioSupport::CLAVE_EFECTIVO;
+            // La compensación quedó fusionada sobre este movimiento: propagar la marca durable
+            // para que el overlay la aplique aunque clasificar() cambie luego medio_anita_clave.
+            $movimientos[$idx]['anita_compensacion_redistribucion'] = true;
         }
 
         foreach ($anitaCompensacion as $mov) {

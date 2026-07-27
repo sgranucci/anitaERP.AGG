@@ -236,6 +236,13 @@
 </div>
 
 @if ($puedeInformar ?? false)
+    @if ($procesoActivo ?? false)
+        <div class="alert alert-warning py-2 mt-3 mb-2 small">
+            <i class="fa fa-spinner fa-spin"></i>
+            {{ $leyendaInforme !== '' ? $leyendaInforme : 'Presentación en segundo plano…' }}
+            No se puede encolar otra hasta que termine (recibirás un mail).
+        </div>
+    @endif
     <form method="post"
         action="{{ route('arca_caea_informar', $registro->id) }}"
         class="mt-3 mb-0 d-inline js-arca-caea-informar-form"
@@ -245,7 +252,11 @@
         @csrf
         @include('ventas.arca_caea.partials.filtros_index_hidden', ['filtrosQuery' => $filtrosQuery ?? []])
         <button type="submit" class="btn btn-primary btn-sm" @disabled(! ($puedePresentar ?? false))>
-            <i class="fa fa-paper-plane"></i> Informar comprobantes pendientes
+            @if ($procesoActivo ?? false)
+                <i class="fa fa-spinner fa-spin"></i> Procesando en segundo plano…
+            @else
+                <i class="fa fa-paper-plane"></i> Informar comprobantes pendientes
+            @endif
         </button>
     </form>
     @if (($resumenInforme['errores'] ?? 0) > 0)
@@ -258,7 +269,7 @@
             @csrf
             @include('ventas.arca_caea.partials.filtros_index_hidden', ['filtrosQuery' => $filtrosQuery ?? []])
             <input type="hidden" name="solo_errores" value="1">
-            <button type="submit" class="btn btn-outline-danger btn-sm">
+            <button type="submit" class="btn btn-outline-danger btn-sm" @disabled($procesoActivo ?? false)>
                 <i class="fa fa-refresh"></i> Reintentar solo errores ({{ (int) ($resumenInforme['errores'] ?? 0) }})
             </button>
         </form>

@@ -50,6 +50,17 @@ class Kernel extends ConsoleKernel
         $schedule->command('padron-iibb-arba:purge')->monthlyOn(10, '03:05');
         $schedule->command('padron-iibb-caba:purge')->monthlyOn(10, '03:10');
 
+        $schedule->command('bitacora-acceso:purge')
+            ->dailyAt('03:20')
+            ->withoutOverlapping(60)
+            ->when(fn () => (bool) config('bitacora_acceso.habilitado', false));
+
+        $schedule->command('gastronomia:purge-anita-caches')
+            ->dailyAt((string) config('gastronomia.anita_storage_cache_purge.hora', '03:40'))
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/purge-anita-caches-schedule.log'))
+            ->when(fn () => (bool) config('gastronomia.anita_storage_cache_purge.habilitado', true));
+
         $schedule->command('arca:solicitar-caea-quincenal')
             ->dailyAt('06:30')
             ->when(fn () => config('arca.caea.pedido_automatico', true));
@@ -107,6 +118,36 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/conciliacion-diaria-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.conciliacion_diaria_reporte.habilitada', true));
 
+        // Auto-sanado del Informe Z desde el proceso (idempotente): regenera solo las jornadas cuyo
+        // recomputo desde las órdenes del proceso coincide con lo contabilizado (Z desactualizado por
+        // órdenes tardías). Corre antes de la conciliación para que el mail de la mañana ya esté sano.
+        $diasAtrasZ = max(1, (int) config('gastronomia.regenerar_z_desde_proceso.dias_atras', 2));
+        $schedule->command('gastronomia:regenerar-z-desde-proceso', [
+            '--fecha-desde' => Carbon::today()->subDays($diasAtrasZ)->toDateString(),
+            '--fecha-hasta' => Carbon::yesterday()->toDateString(),
+            '--aplicar',
+        ])
+            ->dailyAt((string) config('gastronomia.regenerar_z_desde_proceso.hora', '07:45'))
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/regenerar-z-desde-proceso-schedule.log'))
+            ->when(fn () => (bool) config('gastronomia.regenerar_z_desde_proceso.habilitado', true));
+
+        // Auditoría mensual por medio de cobro (Z ↔ contabilizado, ERP sin ctamov): mes a la fecha, mail diario.
+        // fecha-hasta = hoy − dias_atras (default 2): a las 09:15 el día de ayer aún no tiene asiento cerrado.
+        $diasAtrasMedios = max(1, (int) config('gastronomia.auditoria_medios_mensual.dias_atras', 2));
+        $fechaHastaMedios = Carbon::today()->subDays($diasAtrasMedios);
+        $fechaDesdeMedios = $fechaHastaMedios->copy()->startOfMonth();
+        $schedule->command('gastronomia:control-mensual-medios', [
+            '--fecha-desde' => $fechaDesdeMedios->toDateString(),
+            '--fecha-hasta' => $fechaHastaMedios->toDateString(),
+            '--empresas' => implode(',', (array) config('gastronomia.auditoria_medios_mensual.empresas_ids', [1, 2, 3])),
+            '--enviar-mail',
+        ])
+            ->dailyAt((string) config('gastronomia.auditoria_medios_mensual.hora', '09:15'))
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/auditoria-medios-mensual-schedule.log'))
+            ->when(fn () => (bool) config('gastronomia.auditoria_medios_mensual.habilitada', true));
+
         $schedule->command('gastronomia:cierre-jornada-waitry-automatico', ['--enviar-mail'])
             ->dailyAt((string) config('gastronomia.cierre_jornada_automatico.hora', '09:00'))
             ->runInBackground()
@@ -118,6 +159,26 @@ class Kernel extends ConsoleKernel
         $schedule->command('contable:procesar-aperturas-periodo')
             ->cron('*/'.$intervaloMin.' * * * *')
             ->withoutOverlapping(10);
+
+        $schedule->command('contable:procesar-cierres-periodo')
+            ->cron('*/'.$intervaloMin.' * * * *')
+            ->withoutOverlapping(10);
+
+        $intervaloMailFacturas = max(1, (int) config('precarga_comprobante_mail.intervalo_minutos', 5));
+        $schedule->command('compras:ingestar-facturas-mail')
+            ->cron('*/'.$intervaloMailFacturas.' * * * *')
+            ->withoutOverlapping(30)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/ingesta-facturas-mail-schedule.log'))
+            ->when(fn () => (bool) config('precarga_comprobante_mail.habilitada', false));
+
+        $intervaloBatchFacturas = max(1, (int) config('precarga_comprobante_batch_ia.intervalo_minutos', 5));
+        $schedule->command('compras:ingestar-facturas-batch-ia')
+            ->cron('*/'.$intervaloBatchFacturas.' * * * *')
+            ->withoutOverlapping(30)
+            ->runInBackground()
+            ->appendOutputTo(storage_path('logs/ingesta-facturas-batch-ia-schedule.log'))
+            ->when(fn () => (bool) config('precarga_comprobante_batch_ia.habilitada', false));
 
         $schedule->command('queue:verificar-pico')
             ->everyFiveMinutes()

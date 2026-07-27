@@ -1,0 +1,83 @@
+{
+    "generado": "2026-07-22T00:16:06-03:00",
+    "casos": [
+        {
+            "empresa_id": 1,
+            "fecha": "2026-07-06",
+            "numeroasiento": 349687,
+            "asiento_id": 38435,
+            "mp_mov_id": 40405,
+            "mp_monto_old": 805473,
+            "mp_monto_new": 807573,
+            "caja_mov_id": 40402,
+            "caja_monto_old": 2744907,
+            "caja_monto_new": 2742807,
+            "delta": 2100
+        },
+        {
+            "empresa_id": 1,
+            "fecha": "2026-07-09",
+            "numeroasiento": 349830,
+            "asiento_id": 38706,
+            "mp_mov_id": 41152,
+            "mp_monto_old": 1492266,
+            "mp_monto_new": 1497066,
+            "caja_mov_id": 41149,
+            "caja_monto_old": 3971654,
+            "caja_monto_new": 3966854,
+            "delta": 4800
+        },
+        {
+            "empresa_id": 1,
+            "fecha": "2026-07-10",
+            "numeroasiento": 349802,
+            "asiento_id": 38647,
+            "mp_mov_id": 40945,
+            "mp_monto_old": 1825692,
+            "mp_monto_new": 1817892,
+            "caja_mov_id": 40942,
+            "caja_monto_old": 3694828,
+            "caja_monto_new": 3702628,
+            "delta": -7800
+        },
+        {
+            "empresa_id": 1,
+            "fecha": "2026-07-16",
+            "numeroasiento": 350113,
+            "asiento_id": 38966,
+            "mp_mov_id": 41934,
+            "mp_monto_old": 902261,
+            "mp_monto_new": 902761,
+            "caja_mov_id": 41931,
+            "caja_monto_old": 2314679,
+            "caja_monto_new": 2314179,
+            "delta": 500
+        },
+        {
+            "empresa_id": 2,
+            "fecha": "2026-07-02",
+            "numeroasiento": 222211,
+            "asiento_id": 38296,
+            "mp_mov_id": 40006,
+            "mp_monto_old": 171376,
+            "mp_monto_new": 173376,
+            "caja_mov_id": 40004,
+            "caja_monto_old": 692424,
+            "caja_monto_new": 690424,
+            "delta": 2000
+        },
+        {
+            "empresa_id": 2,
+            "fecha": "2026-07-16",
+            "numeroasiento": 229011,
+            "asiento_id": 38971,
+            "mp_mov_id": 41953,
+            "mp_monto_old": 714762,
+            "mp_monto_new": 691262,
+            "caja_mov_id": 41951,
+            "caja_monto_old": 1552838,
+            "caja_monto_new": 1576338,
+            "delta": -23500
+        }
+    ]
+}

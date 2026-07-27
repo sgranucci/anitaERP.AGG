@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 280" width="960" height="280">
+  <defs>
+    <marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#495057"/></marker>
+  </defs>
+  <rect width="960" height="280" fill="#f8fafc"/>
+  <text x="480" y="34" text-anchor="middle" fill="#1F4E79" font-family="Segoe UI,sans-serif" font-size="17" font-weight="600">Estados de una solicitud de pago</text>
+
+  <rect x="30" y="90" width="110" height="48" rx="8" fill="#17a2b8"/>
+  <text x="85" y="119" text-anchor="middle" fill="#fff" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600">Emitida</text>
+  <line x1="140" y1="114" x2="170" y2="114" stroke="#495057" marker-end="url(#a2)"/>
+
+  <rect x="170" y="90" width="120" height="48" rx="8" fill="#2E75B6"/>
+  <text x="230" y="119" text-anchor="middle" fill="#fff" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600">Controlada</text>
+  <line x1="290" y1="114" x2="320" y2="114" stroke="#495057" marker-end="url(#a2)"/>
+
+  <rect x="320" y="90" width="120" height="48" rx="8" fill="#28a745"/>
+  <text x="380" y="119" text-anchor="middle" fill="#fff" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600">Autorizada</text>
+  <line x1="440" y1="114" x2="470" y2="114" stroke="#495057" marker-end="url(#a2)"/>
+
+  <rect x="470" y="90" width="110" height="48" rx="8" fill="#343a40"/>
+  <text x="525" y="119" text-anchor="middle" fill="#fff" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600">Pagada</text>
+
+  <rect x="640" y="70" width="120" height="40" rx="8" fill="#ffc107"/>
+  <text x="700" y="95" text-anchor="middle" fill="#212529" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600">Suspendida</text>
+  <rect x="780" y="70" width="120" height="40" rx="8" fill="#dc3545"/>
+  <text x="840" y="95" text-anchor="middle" fill="#fff" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600">Rechazada</text>
+  <rect x="710" y="130" width="120" height="40" rx="8" fill="#6c757d"/>
+  <text x="770" y="155" text-anchor="middle" fill="#fff" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600">Terminada</text>
+
+  <text x="480" y="210" text-anchor="middle" fill="#6c757d" font-family="Segoe UI,sans-serif" font-size="12">Desde Autorizada: Pagar (IE) o Marcar pagada. Suspendida / Rechazada / Terminada salen del circuito habitual.</text>
+  <text x="480" y="235" text-anchor="middle" fill="#6c757d" font-family="Segoe UI,sans-serif" font-size="12">Reenviar al árbol / Reenviar correo: disponibles mientras no esté Pagada.</text>
+</svg>

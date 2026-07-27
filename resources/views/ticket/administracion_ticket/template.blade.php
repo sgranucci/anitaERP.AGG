@@ -44,8 +44,17 @@
             <input type="text" name="tiempoinsumidos[]" class="form-control tiempoinsumido" value="">
         </td> 
         <td>
-            <input type="text" name="estadotareas[]" class="form-control estadotarea" value="" readonly>
-        </td>  
+            <select name="estadotareas[]" class="form-control estadotarea" style="font-size: 12px;" data-estado-previo="Pendiente">
+                <option value="">-- Seleccionar Estado --</option>
+                @foreach ($estado_novedad_enum as $estadoOpt)
+                    <option value="{{ $estadoOpt['nombre'] }}"
+                        @if ($estadoOpt['nombre'] === 'Pendiente')
+                            selected
+                        @endif
+                    >{{ $estadoOpt['nombre'] }}</option>
+                @endforeach
+            </select>
+        </td>
         <td>
             <button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_tarea_ticket tooltipsC">
                 <i class="fa fa-times-circle text-danger"></i>

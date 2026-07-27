@@ -72,13 +72,18 @@
 
         html += '<hr class="my-2">';
         html += '<div class="row text-center small">';
-        html += '<div class="col-6 col-md-6 border-right">';
-        html += '<span class="text-muted d-block">Esperado en caja <em>(final − invitaciones)</em></span>';
-        html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(t.total_ventas_cobrables) + '</span>';
-        html += '</div>';
-        html += '<div class="col-6 col-md-6">';
-        html += '<span class="text-muted d-block">Cobrado neto <em>(cobranzas − devoluciones NC)</em></span>';
+        html += '<div class="col-6 col-md-4 border-right">';
+        html += '<span class="text-muted d-block">Cobrado neto <em>(incluye TOTEM)</em></span>';
         html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(t.total_cobrado) + '</span>';
+        html += '</div>';
+        html += '<div class="col-6 col-md-4 border-right">';
+        html += '<span class="text-muted d-block">A rendir en caja <em>(sin TOTEM)</em></span>';
+        html += '<span class="gastro-totales-monto font-weight-bold">$'
+            + fmt(t.total_cobrado_a_rendir != null ? t.total_cobrado_a_rendir : t.total_cobrado) + '</span>';
+        html += '</div>';
+        html += '<div class="col-12 col-md-4 mt-2 mt-md-0">';
+        html += '<span class="text-muted d-block">Esperado sistema <em>(final − invitaciones)</em></span>';
+        html += '<span class="gastro-totales-monto font-weight-bold">$' + fmt(t.total_ventas_cobrables) + '</span>';
         html += '</div>';
         html += '</div>';
 
@@ -113,7 +118,12 @@
             && (ccEfectivoId > 0 || arqueoSoloLectura || opcionesArqueo.forzar));
         var totalFinal = totalCobradoRef != null ? Number(totalCobradoRef) : 0;
         if (totalCobradoRef == null) {
-            (medios || []).forEach(function (p) { totalFinal += Number(p.total || 0); });
+            (medios || []).forEach(function (p) {
+                if (arqueoActivo && (p.excluido_arqueo || p.es_facturacion_totem)) {
+                    return;
+                }
+                totalFinal += Number(p.total || 0);
+            });
             if (hayNc) {
                 totalFinal += ncTotal;
             }
@@ -137,6 +147,9 @@
         }
         html += '</tr></thead><tbody>';
         (medios || []).forEach(function (p) {
+            if (arqueoActivo && (p.excluido_arqueo || p.es_facturacion_totem)) {
+                return;
+            }
             var ccId = parseInt(p.cuentacaja_id, 10) || 0;
             var montoEsperado = Number(p.esperado != null ? p.esperado : p.total || 0);
             var montoContado = p.contado != null ? Number(p.contado) : montoEsperado;
@@ -145,6 +158,9 @@
             html += '<tr' + trClass + '><td>' + esc(p.nombre || p.codigo || '—');
             if (esEfectivo) {
                 html += ' <span class="badge badge-info badge-sm">Efectivo</span>';
+            }
+            if (!arqueoActivo && (p.excluido_arqueo || p.es_facturacion_totem)) {
+                html += ' <span class="badge badge-secondary badge-sm">TOTEM — no entregar</span>';
             }
             html += '</td>';
             if (arqueoActivo) {
@@ -235,7 +251,7 @@
         html += '</tbody>';
         if (conTotalFinal) {
             html += '<tfoot class="thead-light"><tr>';
-            html += '<th class="text-right">Total cobrado neto</th>';
+            html += '<th class="text-right">' + (arqueoActivo ? 'Total a rendir' : 'Total cobrado neto') + '</th>';
             if (arqueoActivo) {
                 html += '<th></th>';
             }
@@ -251,7 +267,8 @@
         }
         if (arqueoActivo && conTotalFinal) {
             html += '<p class="small text-muted mb-0 mt-1 pl-1">Compare el <strong>esperado sistema</strong> de cada medio con el monto contado. ';
-            html += 'Las diferencias se compensan automáticamente en <strong>sobrante / faltante</strong> del formulario de cierre.</p>';
+            html += 'Las diferencias se compensan automáticamente en <strong>sobrante / faltante</strong> del formulario de cierre. ';
+            html += 'TOTEM no figura aquí: se informa aparte y <strong>no se entrega en caja</strong>.</p>';
         }
         return html;
     }
@@ -335,6 +352,36 @@
         return list;
     }
 
+    function renderFacturacionTotemHtml(totales, opcionesConciliar) {
+        var bloque = totales && totales.facturacion_totem ? totales.facturacion_totem : null;
+        var total = bloque ? Number(bloque.total || 0) : Number(totales && totales.total_facturacion_totem || 0);
+        if (!bloque && Math.abs(total) < 0.005) {
+            return '';
+        }
+        var ccId = bloque ? (parseInt(bloque.cuentacaja_id, 10) || 0) : 0;
+        var nombre = bloque ? (bloque.nombre || bloque.codigo || 'TOTEM') : 'TOTEM';
+        var leyenda = bloque && bloque.leyenda
+            ? bloque.leyenda
+            : 'Comandas Waitry ya cobradas en el tótem/kiosco. Integran la facturación, pero no se entregan en caja.';
+        var html = '<div class="mt-3 border rounded p-3 mb-0" style="background:#eef7fb; border-color:#85C1E9 !important;">';
+        html += '<div class="d-flex flex-wrap justify-content-between align-items-start">';
+        html += '<div>';
+        html += '<h6 class="font-weight-bold mb-1">Facturación TOTEM <span class="badge badge-secondary">no entregar en caja</span></h6>';
+        html += '<p class="small text-muted mb-0" style="max-width:640px;">' + esc(leyenda) + '</p>';
+        html += '</div>';
+        html += '<div class="text-right mt-2 mt-md-0">';
+        html += '<span class="text-muted small d-block">' + esc(nombre) + '</span>';
+        html += '<span class="h5 mb-0 font-weight-bold">$' + fmt(total) + '</span>';
+        if (opcionesConciliar && opcionesConciliar.habilitar && ccId > 0) {
+            html += '<div class="mt-1">';
+            html += '<button type="button" class="btn btn-xs btn-outline-info js-conciliar-medio" data-cuentacaja-id="' + ccId + '" ';
+            html += 'data-medio-nombre="' + esc(nombre) + '" title="Ver facturas TOTEM del turno">';
+            html += '<i class="fa fa-search"></i> Facturas</button></div>';
+        }
+        html += '</div></div></div>';
+        return html;
+    }
+
     function renderTotalMediosPagoFinalHtml(totales, opcionesConciliar, opcionesRender) {
         var medios = totales.por_medio_pago || [];
         var nc = {
@@ -347,7 +394,8 @@
         };
         var hayNc = nc.cantidad > 0 || Math.abs(nc.total) >= 0.005;
         var hayInv = inv.cantidad > 0 || Math.abs(inv.total) >= 0.005;
-        if (!medios.length && !hayNc && !hayInv) {
+        var hayTotem = !!(totales.facturacion_totem) || Number(totales.total_facturacion_totem || 0) > 0.005;
+        if (!medios.length && !hayNc && !hayInv && !hayTotem) {
             return '';
         }
         var arqueo = null;
@@ -360,19 +408,25 @@
                 forzar: !!(opcionesRender.arqueoMediosCierre || totales.arqueo_medios_cierre),
             };
         }
+        var totalArqueo = totales.total_cobrado_a_rendir != null
+            ? Number(totales.total_cobrado_a_rendir)
+            : Number(totales.total_cobrado || 0);
         var html = '<div class="mt-3 pt-3 border-top gastro-totales-medios-final">';
-        html += '<h6 class="font-weight-bold mb-2">Total final por medio de pago</h6>';
+        html += '<h6 class="font-weight-bold mb-2">Medios a rendir en caja</h6>';
+        html += '<p class="small text-muted mb-2">Solo medios que el cajero debe entregar o declarar. '
+            + 'La facturación TOTEM se muestra aparte (ya cobrada en el kiosco).</p>';
         html += renderMediosPagoTabla(
             medios,
-            'Sin cobranzas en comprobantes del turno.',
+            'Sin cobranzas a rendir en comprobantes del turno.',
             true,
-            totales.total_cobrado,
+            totalArqueo,
             opcionesConciliar,
             hayNc ? nc : null,
             null,
             hayInv ? inv : null,
             arqueo
         );
+        html += renderFacturacionTotemHtml(totales, opcionesConciliar);
         html += '</div>';
         return html;
     }

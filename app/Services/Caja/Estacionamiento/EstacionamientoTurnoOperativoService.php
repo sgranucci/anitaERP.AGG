@@ -121,6 +121,8 @@ final class EstacionamientoTurnoOperativoService
             'turno_operativo_id' => $activo?->id,
             'turno_nombre' => $activo?->turno?->nombre,
             'usuario_habilitado' => $activo?->usuarioHabilitado?->nombre,
+            'usuario_apertura' => $activo?->usuarioHabilitacion?->nombre
+                ?? $activo?->usuarioHabilitado?->nombre,
             'monto_habilitacion' => $activo !== null ? (float) $activo->monto_habilitacion : null,
             'habilitacion_en' => $activo?->habilitacion_en?->format('Y-m-d H:i:s'),
             'habilitacion_en_fmt' => $activo?->habilitacion_en?->format('d/m/Y H:i') ?? null,
@@ -401,7 +403,6 @@ final class EstacionamientoTurnoOperativoService
         string $identificadorPc,
         int $turnoEstacionamientoId,
         float $montoHabilitacion,
-        int $usuarioHabilitadoId,
         ?string $observacion = null,
     ): TurnoOperativoEstacionamiento {
         if (! self::requiereHabilitacionTurno()) {
@@ -429,13 +430,12 @@ final class EstacionamientoTurnoOperativoService
             throw new InvalidArgumentException('El turno seleccionado no existe o no está activo para esta empresa.');
         }
 
-        if ($usuarioHabilitadoId <= 0) {
-            throw new InvalidArgumentException('Debe indicar el usuario al que se habilita el turno.');
-        }
-
         if (Auth::id() === null) {
             throw new InvalidArgumentException('No hay usuario autenticado.');
         }
+
+        // D1 B: no se asigna cajero a la caja; se guarda quien habilita (auditoría).
+        $usuarioHabilitacionId = (int) Auth::id();
 
         if ($montoHabilitacion < 0) {
             throw new InvalidArgumentException('El monto de habilitación no puede ser negativo.');
@@ -479,8 +479,8 @@ final class EstacionamientoTurnoOperativoService
             'configuracion_puntoventa_estacionamiento_id' => (int) $cfg->id,
             'identificador_pc' => $identificadorPc,
             'estado' => TurnoOperativoEstacionamiento::ESTADO_HABILITADO,
-            'usuario_habilitacion_id' => (int) Auth::id(),
-            'usuario_habilitado_id' => $usuarioHabilitadoId,
+            'usuario_habilitacion_id' => $usuarioHabilitacionId,
+            'usuario_habilitado_id' => $usuarioHabilitacionId,
             'monto_habilitacion' => round($montoHabilitacion, 2),
             'observacion_habilitacion' => $this->limpiarObservacion($observacion),
             'habilitacion_en' => now(),

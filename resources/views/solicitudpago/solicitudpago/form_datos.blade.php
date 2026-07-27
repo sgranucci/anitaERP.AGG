@@ -54,37 +54,21 @@
             </div>
         </div>
 
-        <div class="form-group row">
-            <label class="col-lg-4 col-form-label">Proveedor</label>
-            <div class="col-lg-8">
-                <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
-                    <input type="hidden" name="proveedor_id" id="proveedor_id" class="proveedor_id"
-                           value="{{ old('proveedor_id', $data->proveedor_id ?? '') }}">
-                    <button type="button" title="Consulta proveedores" class="btn-accion-tabla consultaproveedor tooltipsC flex-shrink-0">
-                        <i class="fa fa-search text-primary"></i>
-                    </button>
-                    <input type="text" class="form-control proveedor" id="proveedor" name="proveedor" readonly
-                           style="flex: 1 1 auto;"
-                           value="{{ old('proveedor', optional($data->proveedores ?? null)->nombre ?? '') }}">
-                </div>
-            </div>
-        </div>
-
-        <div class="form-group row">
-            <label for="concepto_solicitudpago_id" class="col-lg-4 col-form-label">Concepto</label>
-            <div class="col-lg-8">
-                <select name="concepto_solicitudpago_id" id="concepto_solicitudpago_id" class="form-control"
-                        data-forma-pago-cuotas="CUOTAS">
-                    <option value="">-- Sin concepto --</option>
-                    @foreach ($concepto_query as $c)
-                        @php $sel = (int) old('concepto_solicitudpago_id', $data->concepto_solicitudpago_id ?? 0) === (int) $c->id; @endphp
-                        <option value="{{ $c->id }}" data-forma-pago="{{ $c->forma_pago }}" @selected($sel)>
-                            {{ $c->codigo }} — {{ $c->nombre }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-        </div>
+        @php
+            $proveedorModel = $data->proveedores ?? null;
+            $proveedorIdForm = old('proveedor_id', $data->proveedor_id ?? '');
+            if ($proveedorIdForm && (int) $proveedorIdForm !== (int) optional($proveedorModel)->id) {
+                $proveedorModel = \App\Models\Compras\Proveedor::query()->find($proveedorIdForm);
+            }
+        @endphp
+        @include('includes.compras.campo_proveedor_consulta', [
+            'proveedor_id' => $proveedorIdForm,
+            'codigo_proveedor' => old('codigoproveedor', optional($proveedorModel)->codigo ?? ''),
+            'nombre_proveedor' => old('nombreproveedor', optional($proveedorModel)->nombre ?? ''),
+            'col_label' => 'col-lg-4',
+            'col_input' => 'col-lg-8',
+            'requerido' => false,
+        ])
 
         <div class="form-group row">
             <label for="sector_solicitudpago_id" class="col-lg-4 col-form-label">Sector</label>
@@ -96,8 +80,43 @@
                         <option value="{{ $sector->id }}" @selected($sel)>{{ $sector->codigo }} — {{ $sector->nombre }}</option>
                     @endforeach
                 </select>
+                <small class="form-text text-muted">Si el concepto pertenece a un sector, selecci&oacute;nelo primero para filtrar la consulta.</small>
             </div>
         </div>
+
+        <div class="form-group row">
+            <label class="col-lg-4 col-form-label">Centro de costo</label>
+            <div class="col-lg-8">
+                @php
+                    $ccCab = $centrocosto_cabecera ?? ($data->centrocostos ?? null);
+                    $ccEtiqueta = $ccCab
+                        ? trim(($ccCab->codigo ?? '').' — '.($ccCab->nombre ?? ''))
+                        : '— Sin centro de costo en el usuario —';
+                @endphp
+                <input type="text" class="form-control" value="{{ $ccEtiqueta }}" readonly
+                       title="Se asigna automáticamente con el centro de costo del usuario que carga la solicitud"/>
+                <small class="form-text text-muted">Fijo al cargar la solicitud (no editable).</small>
+            </div>
+        </div>
+
+        @php
+            $conceptoIdForm = old('concepto_solicitudpago_id', $data->concepto_solicitudpago_id ?? '');
+            $conceptoModel = $data->conceptos ?? null;
+            if ($conceptoIdForm && (int) $conceptoIdForm !== (int) optional($conceptoModel)->id) {
+                $conceptoModel = \App\Models\Solicitudpago\Concepto_Solicitudpago::query()->find($conceptoIdForm);
+            }
+            $conceptoCodigoForm = old('concepto_codigo', optional($conceptoModel)->codigo ?? '');
+            $conceptoNombreForm = old('concepto_nombre', optional($conceptoModel)->nombre ?? '');
+            $conceptoFormaPagoForm = old('concepto_forma_pago', optional($conceptoModel)->forma_pago ?? '');
+        @endphp
+        @include('solicitudpago.partials.campo_consulta_concepto_solicitudpago', [
+            'conceptoId' => $conceptoIdForm,
+            'codigo' => $conceptoCodigoForm,
+            'nombre' => $conceptoNombreForm,
+            'formaPago' => $conceptoFormaPagoForm,
+            'col_label' => 'col-lg-4',
+            'col_input' => 'col-lg-8',
+        ])
 
         <div class="form-group row">
             <label for="formapagosol_id" class="col-lg-4 col-form-label">Forma de pago</label>
@@ -177,14 +196,24 @@
             </div>
         </div>
 
-        @if (isset($data) && $data->madre)
+        @if (isset($data) && (int) ($data->solicitudpago_madre_id ?? 0) > 0)
             <div class="form-group row">
-                <label class="col-lg-4 col-form-label">SP madre</label>
+                <label class="col-lg-4 col-form-label text-right">SP madre</label>
                 <div class="col-lg-8">
-                    <a href="{{ route('editar_solicitudpago', $data->madre->id) }}" target="_blank" rel="noopener">
-                        #{{ $data->madre->codigo }}
-                    </a>
-                    <input type="hidden" name="solicitudpago_madre_id" value="{{ $data->solicitudpago_madre_id }}"/>
+                    @if ($data->madre ?? null)
+                        <a href="{{ route('editar_solicitudpago', ['id' => $data->madre->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                           class="btn btn-outline-primary btn-sm font-weight-bold" target="_blank" rel="noopener"
+                           title="Abrir SP madre en solapa de consulta (sin menú)">
+                            <i class="fa fa-link"></i> #{{ $data->madre->codigo }}
+                        </a>
+                        <span class="ml-2">
+                            @include('solicitudpago.solicitudpago.partials.estado_badge', ['estado' => $data->madre->estado ?? ''])
+                        </span>
+                    @else
+                        <span class="text-muted">ID {{ $data->solicitudpago_madre_id }}</span>
+                    @endif
+                    <input type="hidden" name="solicitudpago_madre_id" id="solicitudpago_madre_id"
+                           value="{{ $data->solicitudpago_madre_id }}"/>
                 </div>
             </div>
         @endif

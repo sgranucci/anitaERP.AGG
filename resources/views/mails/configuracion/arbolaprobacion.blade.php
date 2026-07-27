@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-    <title>Aprobación @if(isset($datosComprobante->numeroordenventa)) OV {{ $datosComprobante->numeroordenventa }} @elseif(isset($datosComprobante->numerorequisicion)) REQ {{ $datosComprobante->numerorequisicion }} @elseif(isset($datosComprobante->numeroordencompra)) OC {{ $datosComprobante->numeroordencompra }} @endif</title>
+    <title>Aprobación @if(isset($datosComprobante->numeroordenventa)) OV {{ $datosComprobante->numeroordenventa }} @elseif(isset($datosComprobante->numerorequisicion)) REQ {{ $datosComprobante->numerorequisicion }} @elseif(isset($datosComprobante->numeroordencompra)) OC {{ $datosComprobante->numeroordencompra }} @elseif($tipoArbol == 'Solicitudes de pago') SP {{ $datosComprobante->codigo ?? $datosComprobante->id }} @endif</title>
 </head>
 <body>
     @if ($tipoArbol == 'Ordenes de venta')
@@ -18,6 +18,8 @@
         @else
             <p>En este nivel del árbol <strong>no está definido</strong> un estado destino al aprobar; solo avanzará la aprobación del flujo.</p>
         @endif
+    @elseif ($tipoArbol == 'Solicitudes de pago')
+        <p>Hola! Tiene una Solicitud de pago para aprobación</p>
     @else
         <p>Hola! Tiene una Requisición para aprobación</p>
         @php $mx = $mailExtras ?? []; @endphp
@@ -149,6 +151,29 @@
             <li>Depósito origen: {{ optional($datosComprobante->depositos)->nombre ?? '—' }}</li>
             <li>Comentarios: {{ $datosComprobante->comentario }}</li>
             <li>Detalle: {{ $datosComprobante->detalle }}</li>
+        </ul>
+        <br>
+        <label for="Autorizar">Autorizar:</label>
+        <div><p><a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a></p></div>
+        <br>
+        <label for="Rechazar">Rechazar:</label>
+        <div><p><a href="{{ $linkRechazo }}">{{ $linkRechazo }}</a></p></div>
+        <br>
+        <label for="Visualizar">Visualizar:</label>
+        <div><p><a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a></p></div>
+    @elseif ($tipoArbol == 'Solicitudes de pago')
+        @php $mx = $mailExtras ?? []; @endphp
+        <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle y podrá gestionar la aprobación.</p>
+        <ul>
+            <li>Empresa: {{ $datosComprobante->empresas->nombre ?? '' }}</li>
+            <li>Código SP: {{ $datosComprobante->codigo ?? $datosComprobante->id }}</li>
+            <li>Fecha: {{ date('d/m/Y', strtotime($datosComprobante->fecha ?? '')) }}</li>
+            <li>Monto: {{ $mx['moneda_abrev_items'] ?? (optional($datosComprobante->monedas)->abreviatura ?? '') }} {{ number_format((float) ($mx['monto_items'] ?? $datosComprobante->monto ?? 0), 2, ',', '.') }}</li>
+            <li>Proveedor: {{ optional($datosComprobante->proveedores)->nombre ?? '—' }}</li>
+            <li>Beneficiario: {{ $datosComprobante->beneficiario ?? '—' }}</li>
+            <li>Estado: {{ $datosComprobante->estado ?? '—' }}</li>
+            <li>Detalle: {{ $datosComprobante->detalle ?? '' }}</li>
+            <li>Observación: {{ $datosComprobante->observacion ?? '' }}</li>
         </ul>
         <br>
         <label for="Autorizar">Autorizar:</label>

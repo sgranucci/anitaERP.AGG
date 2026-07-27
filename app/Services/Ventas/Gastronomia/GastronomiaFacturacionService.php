@@ -401,6 +401,9 @@ final class GastronomiaFacturacionService
         $payload['omitir_percepciones'] = true;
 
         $opciones = $this->opcionesEmisionGastronomia();
+        if (! empty($payload['fechajornada'])) {
+            $opciones['fechajornada'] = (string) $payload['fechajornada'];
+        }
         if (! empty($payload['_omitir_numera_anita_fin'])) {
             $opciones['omitir_numera_anita_fin'] = true;
             unset($payload['_omitir_numera_anita_fin']);

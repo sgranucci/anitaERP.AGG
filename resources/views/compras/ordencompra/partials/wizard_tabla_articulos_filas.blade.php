@@ -17,14 +17,16 @@
         data-requisicion-articulo-id="{{ (int) ($a['requisicion_articulo_id'] ?? 0) }}"
         data-articulo-id="{{ (int) ($a['articulo_id'] ?? 0) }}"
         data-sku="{{ e($a['sku'] ?? '') }}"
-        data-descripcion="{{ e($a['descripcion_articulo'] ?? '') }}"
+        data-descripcion="{{ e(($a['nombre_articulo_proveedor'] ?? '') !== '' ? $a['nombre_articulo_proveedor'] : ($a['descripcion_articulo'] ?? '')) }}"
         data-color-id="{{ (int) ($a['color_id'] ?? 0) }}"
         data-talle-id="{{ (int) ($a['talle_id'] ?? 0) }}"
         data-color-nombre="{{ e($colorNombre) }}"
-        data-talle-nombre="{{ e($talleNombre) }}">
+        data-talle-nombre="{{ e($talleNombre) }}"
+        data-proveedor-id="{{ (int) ($a['proveedor_id'] ?? 0) }}"
+        data-articulo-proveedor-id="{{ (int) ($a['articulo_proveedor_id'] ?? 0) }}">
         <td class="text-center">{{ $idx + 1 }}</td>
         <td>{{ $a['sku'] ?? '' }}</td>
-        <td>{{ $a['descripcion_articulo'] ?? '' }}</td>
+        <td>{{ ($a['nombre_articulo_proveedor'] ?? '') !== '' ? $a['nombre_articulo_proveedor'] : ($a['descripcion_articulo'] ?? '') }}</td>
         <td>{{ $colorNombre !== '' ? $colorNombre : '—' }}</td>
         <td>{{ $talleNombre !== '' ? $talleNombre : '—' }}</td>
         <td>

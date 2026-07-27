@@ -27,6 +27,11 @@ Recepciones de proveedores
             <div class="card-header">
                 <h3 class="card-title"><i class="fa fa-truck"></i> Recepciones de proveedores</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('editar-configuracion-recepcion-proveedor', false))
+                        <a href="{{ route('configuracion_recepcion_proveedor') }}" class="btn btn-outline-secondary btn-sm mr-1" title="Configuración contable y tolerancias">
+                            <i class="fa fa-fw fa-cogs"></i> Configuración
+                        </a>
+                    @endif
                     @include('includes.stock.boton-manual-recepcion-movstock')
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-recepcion',

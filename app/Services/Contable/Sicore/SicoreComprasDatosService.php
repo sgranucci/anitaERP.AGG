@@ -116,6 +116,7 @@ final class SicoreComprasDatosService
 
                 $pagoActual = round((float) ($row['retv_pago_actual'] ?? 0) * $signo, 2);
                 $base = $signo < 0 ? abs($retencion) : abs($pagoActual);
+                $esDevolucion = strncmp((string) ($row['retv_tipo'] ?? ''), 'AOP', 3) === 0;
 
                 $out[] = [
                     'origen' => 'compras_ganancias',
@@ -123,7 +124,10 @@ final class SicoreComprasDatosService
                     'cod_regimen' => $regimen,
                     'cod_impuesto' => (int) $config->codigo_impuesto,
                     'cod_operacion' => (int) ($config->codigo_operacion ?? 1),
-                    'cod_comp' => strncmp((string) ($row['retv_tipo'] ?? ''), 'AOP', 3) === 0 ? 3 : 6,
+                    // Devolución AOP: cod_comp=8 al inicio del registro; importes del .dat en positivo.
+                    'cod_comp' => $esDevolucion
+                        ? SicoreFormatoV8Support::COD_COMP_DEVOLUCION
+                        : SicoreFormatoV8Support::COD_COMP_ORDEN_PAGO,
                     'fecha_comp' => $fechaContable,
                     'nro_comp' => (int) ($row['retv_nro'] ?? 0),
                     'importe_comp' => abs($pagoActual),
@@ -131,6 +135,7 @@ final class SicoreComprasDatosService
                     // Fecha del asiento (subdiario), no retv_fecha.
                     'fecha_retencion' => $fechaContable,
                     'cod_condicion' => $proveedor['cod_condicion'],
+                    // Signo interno para conciliar con mayor; el archivo aplica abs().
                     'importe' => $retencion,
                     'porc_excl' => (float) ($row['retv_porc_excl'] ?? 0),
                     'fecha_boletin' => '',
@@ -310,7 +315,7 @@ final class SicoreComprasDatosService
     /**
      * Devoluciones de retención de ganancias pagadas con cheque propio (CHP) que imputan
      * la cuenta configurada (ej. 214010013). No generan AOP en retmov; el mayor las ve
-     * como Debe sobre el pasivo. Se presentan en SICORE como anulación (cod_comp=3).
+     * como Debe sobre el pasivo. En SICORE: cod_comp=8 e importes positivos en el .dat.
      *
      * @return list<array<string, mixed>>
      */
@@ -386,13 +391,14 @@ final class SicoreComprasDatosService
                 'cod_regimen' => $regimen,
                 'cod_impuesto' => (int) $config->codigo_impuesto,
                 'cod_operacion' => (int) ($config->codigo_operacion ?? 1),
-                'cod_comp' => 3,
+                'cod_comp' => SicoreFormatoV8Support::COD_COMP_DEVOLUCION,
                 'fecha_comp' => $fechaIso,
                 'nro_comp' => (int) ($ch['nro'] ?? 0),
                 'importe_comp' => $pagoActual > 0.001 ? $pagoActual : $importeAbs,
                 'base_calculo' => $importeAbs,
                 'fecha_retencion' => $fechaIso,
                 'cod_condicion' => $proveedor['cod_condicion'],
+                // Signo interno para conciliar con mayor; el archivo aplica abs() → positivo.
                 'importe' => round(-$importeAbs, 2),
                 'porc_excl' => (float) ($origenRet['retv_porc_excl'] ?? 0),
                 'fecha_boletin' => '',

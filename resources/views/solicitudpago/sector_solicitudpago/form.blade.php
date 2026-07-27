@@ -17,3 +17,18 @@
                value="{{ old('nombre', $data->nombre ?? '') }}"/>
     </div>
 </div>
+<div class="form-group row">
+    <label for="centrocosto_id" class="col-lg-3 col-form-label">Centro de costo</label>
+    <div class="col-lg-6">
+        <select name="centrocosto_id" id="centrocosto_id" class="form-control">
+            <option value="">— Sin centro de costo —</option>
+            @foreach ($centrocosto_query as $cc)
+                <option value="{{ $cc->id }}"
+                    @if ((int) old('centrocosto_id', $data->centrocosto_id ?? 0) === (int) $cc->id)
+                        selected
+                    @endif
+                >{{ $cc->codigo }}-{{ $cc->nombre }}</option>
+            @endforeach
+        </select>
+    </div>
+</div>

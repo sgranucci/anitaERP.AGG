@@ -33,6 +33,11 @@
     <link rel="stylesheet" href="{{asset("assets/css/custom.css")}}">
     <link rel="stylesheet" href="{{asset("assets/css/sidebar.css")}}">
     <link rel="stylesheet" href="{{asset("assets/css/barra-tareas.css")}}">
+    @auth
+        @if (!$modoConsulta && can('ejecutar-consulta-ia', false) && filter_var(config('ai.habilitado', false), FILTER_VALIDATE_BOOLEAN) && filter_var(config('ai.skills.consultar_contexto_operativo.habilitada', false), FILTER_VALIDATE_BOOLEAN))
+            <link rel="stylesheet" href="{{ asset('assets/css/ai-consulta-operativa.css') }}?v={{ @filemtime(public_path('assets/css/ai-consulta-operativa.css')) ?: time() }}">
+        @endif
+    @endauth
 
     @routes
     <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
@@ -172,6 +177,17 @@
     @auth
         <script src="{{ asset('assets/js/barra-tareas.js') }}"></script>
         <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js')) ?: time() }}" type="text/javascript"></script>
+        @if (!$modoConsulta && can('ejecutar-consulta-ia', false) && filter_var(config('ai.habilitado', false), FILTER_VALIDATE_BOOLEAN) && filter_var(config('ai.skills.consultar_contexto_operativo.habilitada', false), FILTER_VALIDATE_BOOLEAN))
+            @include('includes.ai.panel_consulta_operativa')
+            <script>
+                window.AnitaAiConsulta = {
+                    urlIntents: @json(route('ai_consulta_intents')),
+                    urlConsultar: @json(route('ai_consulta_contexto')),
+                    urlExportar: @json(route('ai_consulta_exportar', ['formato' => 'EXCEL'])),
+                };
+            </script>
+            <script src="{{ asset('assets/pages/scripts/configuracion/ai/consulta_operativa.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/ai/consulta_operativa.js')) ?: time() }}" type="text/javascript"></script>
+        @endif
     @endauth
     @yield("scripts")
 </body>

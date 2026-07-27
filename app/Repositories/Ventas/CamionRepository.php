@@ -4,6 +4,7 @@ namespace App\Repositories\Ventas;
 
 use App\ApiAnita;
 use App\Models\Ventas\Camion;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
@@ -29,7 +30,7 @@ class CamionRepository implements CamionRepositoryInterface
             self::sincronizarConAnita();
         }
 
-        return $this->model->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->orderBy('dominio')->get();
+        return $this->model->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->orderBy('dominio')->get();
     }
 
     public function create(array $data)
@@ -267,7 +268,7 @@ class CamionRepository implements CamionRepositoryInterface
             });
         }
 
-        $data = $query->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->limit(200)->get();
+        $data = $query->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->limit(200)->get();
         $puedeAbrirAbm = can('editar-camion', false) || can('listar-camion', false);
 
         $output = ['data' => ''];
@@ -314,7 +315,7 @@ class CamionRepository implements CamionRepositoryInterface
             $maxAnita = (int) ltrim((string) ($dataAnita[0]->{$this->keyFieldAnita} ?? '0'), '0');
         }
 
-        $maxLocal = (int) Camion::query()->max(DB::raw('CAST(codigo AS UNSIGNED)'));
+        $maxLocal = (int) Camion::query()->max(DB::raw(SqlDialectSupport::castEntero('codigo')));
         $codigo = (string) (max($maxAnita, $maxLocal) + 1);
     }
 

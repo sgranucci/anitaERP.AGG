@@ -188,16 +188,24 @@ class CuentacontableController extends Controller
 		$columnsOut = ['cuentacontable_id', 'codigocuentacontable', 'nombrecuentacontable', 'nombreempresa'];
 
         $empresaId = $request->empresa_id;
-        $consulta = $request->consulta;
+        $consulta = trim((string) $request->input('consulta', ''));
+        // Código formateado (111010-001) no coincide con codigo numérico en BD.
+        $consultaCodigo = preg_replace('/\D+/', '', $consulta) ?? '';
         $count = count($columns);
 
         $query = CuentaContable::select('cuentacontable.id as cuentacontable_id', 'cuentacontable.codigo as codigocuentacontable', 
                 'cuentacontable.nombre as nombrecuentacontable', 'cuentacontable.empresa_id as empresa_id', 'empresa.nombre as nombreempresa',
                 'cuentacontable.tipocuenta')
 				->leftJoin('empresa','cuentacontable.empresa_id','=','empresa.id')
-                ->orWhere(function ($query) use ($count, $consulta, $columns) {
-                        for ($i = 0; $i < $count; $i++)
-                            $query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
+                ->orWhere(function ($query) use ($count, $consulta, $consultaCodigo, $columns) {
+                        for ($i = 0; $i < $count; $i++) {
+                            // Vacío → LIKE %% (listado inicial del modal).
+                            $query->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
+                            // Código formateado (111010-001) no coincide con codigo numérico en BD.
+                            if ($consultaCodigo !== '' && $consultaCodigo !== $consulta && $columns[$i] === 'cuentacontable.codigo') {
+                                $query->orWhere($columns[$i], 'LIKE', '%'.$consultaCodigo.'%');
+                            }
+                        }
                 })
                 ->get();
 

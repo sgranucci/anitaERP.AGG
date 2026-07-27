@@ -46,20 +46,53 @@ class PeriodoContableCierreSupport
         ];
     }
 
+    /**
+     * Alcances de la agenda mensual (sin "general"; el cierre de todos usa el atajo masivo).
+     *
+     * @return array<string, string>
+     */
+    public static function alcancesAgenda(): array
+    {
+        $todos = self::alcancesDisponibles();
+        unset($todos[self::ALCANCE_GENERAL]);
+
+        return $todos;
+    }
+
     public static function etiquetaAlcance(string $alcance): string
     {
         return self::alcancesDisponibles()[$alcance] ?? $alcance;
     }
 
-    public static function fechaCierreVigente(int $empresaId): ?Carbon
+    public static function alcanceEsValido(string $alcance): bool
+    {
+        return array_key_exists($alcance, self::alcancesDisponibles());
+    }
+
+    /**
+     * Fecha de cierre vigente para la empresa.
+     * Si se indica alcance de operación, considera cierres "general" y del mismo alcance
+     * (el MAX fecha_hasta es el más restrictivo).
+     */
+    public static function fechaCierreVigente(int $empresaId, ?string $alcance = null): ?Carbon
     {
         if ($empresaId <= 0) {
             return null;
         }
 
-        $fecha = PeriodoCierreContable::query()
-            ->where('empresa_id', $empresaId)
-            ->max('fecha_hasta');
+        $query = PeriodoCierreContable::query()
+            ->where('empresa_id', $empresaId);
+
+        if ($alcance !== null && $alcance !== '' && $alcance !== self::ALCANCE_GENERAL) {
+            $query->where(function ($q) use ($alcance) {
+                $q->where('alcance', self::ALCANCE_GENERAL)
+                    ->orWhere('alcance', $alcance);
+            });
+        } elseif ($alcance === self::ALCANCE_GENERAL) {
+            $query->where('alcance', self::ALCANCE_GENERAL);
+        }
+
+        $fecha = $query->max('fecha_hasta');
 
         if ($fecha === null) {
             return null;
@@ -80,7 +113,7 @@ class PeriodoContableCierreSupport
     }
 
     /**
-     * @param  array{omitir_validacion?: bool, modofacturacion_pv?: string|null}  $opciones
+     * @param  array{omitir_validacion?: bool, modofacturacion_pv?: string|null, fechajornada?: string|null}  $opciones
      */
     public static function assertOperacionPermitida(
         int $empresaId,
@@ -102,8 +135,14 @@ class PeriodoContableCierreSupport
             return;
         }
 
-        $fechaOperacion = Carbon::parse($fecha)->startOfDay();
-        $fechaCierre = self::fechaCierreVigente($empresaId);
+        $fechaValidacion = $fecha;
+        if ($alcance === self::ALCANCE_FACTURACION
+            && ! empty($opciones['fechajornada'])) {
+            $fechaValidacion = (string) $opciones['fechajornada'];
+        }
+
+        $fechaOperacion = Carbon::parse($fechaValidacion)->startOfDay();
+        $fechaCierre = self::fechaCierreVigente($empresaId, $alcance);
 
         if ($fechaCierre === null || $fechaOperacion->gt($fechaCierre)) {
             return;
@@ -185,7 +224,7 @@ class PeriodoContableCierreSupport
     /**
      * Valida cada día del rango (inclusive). Si no hay fechas, valida el día de hoy.
      *
-     * @param  array{omitir_validacion?: bool, modofacturacion_pv?: string|null}  $opciones
+     * @param  array{omitir_validacion?: bool, modofacturacion_pv?: string|null, fechajornada?: string|null}  $opciones
      */
     public static function assertRangoOperacionPermitido(
         int $empresaId,

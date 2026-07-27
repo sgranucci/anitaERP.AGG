@@ -6,12 +6,14 @@ use App\Models\Compras\Condicionpago;
 use App\Models\Compras\Condicionpagocuota;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
+use Carbon\Carbon;
 
 class CondicionpagoRepository implements CondicionpagoRepositoryInterface
 {
     protected $model, $modelCuota;
     protected $tableAnita = ['condpmae','condpmov'];
     protected $keyField = 'conpm_codigo';
+    protected $keyFieldAnita = 'conpm_codigo';
 
     /**
      * PostRepository constructor.
@@ -48,6 +50,8 @@ class CondicionpagoRepository implements CondicionpagoRepositoryInterface
         // Graba anita
 		self::guardarAnita($data, $data['cuotas'], $data['tiposplazo'], $data['plazos'], $data['fechasvencimiento'], 
 		$data['porcentajes'], $data['intereses']);
+
+		return $condicionpago;
     }
 
     public function update(array $data, $id)
@@ -244,8 +248,8 @@ class CondicionpagoRepository implements CondicionpagoRepositoryInterface
 						'".$porcentajes[$i_cuota]."' ,
 						'".$intereses[$i_cuota]."' "
         		);
+        	$apiAnita->apiCallEscritura($data);
 		}
-        $apiAnita->apiCallEscritura($data);
 	}
 
 	public function actualizarAnita($request, $id, $cuotas, $tiposplazo, $plazos, $fechasvencimiento, $porcentajes, $intereses) {
@@ -322,15 +326,16 @@ class CondicionpagoRepository implements CondicionpagoRepositoryInterface
 		$data = array( 'acc' => 'list', 
 				'sistema' => 'compras',
 				'tabla' => $this->tableAnita[0], 
-				'campos' => " max(concm_condicion) as $this->keyFieldAnita "
+				'campos' => " max({$this->keyFieldAnita}) as {$this->keyFieldAnita} "
 				);
 		$dataAnita = json_decode($apiAnita->apiCall($data));
 
-		if (count($dataAnita) > 0) 
-		{
-			$codigo = ltrim($dataAnita[0]->{$this->keyFieldAnita}, '0');
-			$codigo = $codigo + 1;
+		if (! is_array($dataAnita) || count($dataAnita) === 0) {
+			return;
 		}
+
+		$codigo = ltrim((string) ($dataAnita[0]->{$this->keyFieldAnita} ?? ''), '0');
+		$codigo = ((int) $codigo) + 1;
 	}
 		
 }

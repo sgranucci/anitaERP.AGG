@@ -53,4 +53,20 @@ return [
     'ticket_canje_porcentaje' => (float) env('CAJA_TICKET_CANJE_PORCENTAJE', 5),
     'ticket_canje_vencimiento_dias' => (int) env('CAJA_TICKET_CANJE_VENCIMIENTO_DIAS', 30),
     'ticket_canje_comando_timeout_segundos' => (int) env('CAJA_TICKET_CANJE_COMANDO_TIMEOUT', 30),
-    ];
+
+    /*
+     * Asignación diaria cajero↔caja (ABM caja/cajaasignacion).
+     * AGG: false (caja desde config PC + fallback). Crown u otros: true.
+     * Default: false si EMPRESA=AGG.
+     */
+    'requiere_asignacion' => filter_var(
+        env(
+            'CAJA_REQUIERE_ASIGNACION',
+            strtoupper(trim((string) env('EMPRESA', 'AGG'), " \t\n\r\0\x0B'\"")) !== 'AGG'
+        ),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /** Fallback de caja física cuando la PC no tiene caja_id en config. */
+    'caja_default_id' => (int) env('CAJA_DEFAULT_ID', 1),
+];

@@ -1,7 +1,3 @@
-var cuentacontablexcodigo;
-var nombrexcodigo;
-var codigoxcodigo;
-   
     $(function () {
         $('#agrega_renglon_cuenta').on('click', agregaRenglonCuenta);
         $(document).on('click', '.eliminar_cuenta', borraRenglonCuenta);
@@ -10,8 +6,16 @@ var codigoxcodigo;
 
 		activa_eventos(true);
 
+		if (typeof activa_eventos_consulta_cuentacontable === 'function') {
+			activa_eventos_consulta_cuentacontable();
+		}
+
+		$(document).on('change', '#tbody-cuenta-table .centrocosto', function () {
+			sincronizarCentrocostoPrevio($(this).closest('tr'));
+		});
+
 		// Completa centros de costo al abrir asiento
-		$("#tbody-cuenta-table .codigo").each(function(index) {
+		$("#tbody-cuenta-table .codigocuentacontable").each(function(index) {
 			var codigo = $(this);
 			var cuentacontable_id = $(this).parents("tr").find(".cuentacontable_id").val();
 			var centrocosto_id = $(this).parents("tr").find(".centrocosto_id_previo").val();
@@ -96,82 +100,11 @@ var codigoxcodigo;
 		// Si esta agregando items desactiva los eventos
 		if (!flInicio)
 		{
-			$('.consultacuenta').off('click');
-			$('.codigo').off('change');
 			$('.debe').off('change input');
 			$('.haber').off('change input');
 			$('.cotizacion').off('change input');
 			$('.moneda').off('change');
 		}
-		
-		$('.codigo').on('change', function (event) {
-			event.preventDefault();
-			var codigo = $(this);
-			var codigo_ant = $(this).parents("tr").find(".codigo_previo").val();
-			var codigo_nuevo = codigo.val();
-			let empresa_id = $('#empresa_id').val();
-
-			let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
-
-			$.get(url_cta, function(data){
-				if (data.id > 0)
-				{
-					$(codigo).parents("tr").find('.cuentacontable_id').val(data.id);
-					$(codigo).parents("tr").find(".cuentacontable_id_previa").val(data.id);
-					$(codigo).parents("tr").find(".nombre").val(data.nombre);
-				}
-				else
-				{
-					alert("No existe la cuenta");
-
-					// Borra el renglon
-					$(codigo).parents('tr').remove();
-					return;
-				}
-			});
-
-			if (codigo_nuevo != codigo_ant && empresa_id)
-				leeCentroCosto(this);
-		});
-
-		$('.consultacuenta').on('click', function (event) {
-        	cuentacontablexcodigo = $(this).parents("tr").find(".cuentacontable_id");
-			nombrexcodigo = $(this).parents("tr").find(".nombre");
-			codigoxcodigo = $(this).parents("tr").find(".codigo");
-			let empresa_id = $('#empresa_id').val();
-
-        	// Abre modal de consulta
-			if (empresa_id)
-				$("#consultacuentaModal").modal('show');
-			else	
-				alert('Debe ingresar empresa');
-    	});
-
-		$('#consultacuentaModal').on('shown.bs.modal', function () {
-			$(this).find('[autofocus]').focus();
-		})
-
-    	$('#aceptaconsultacuentaModal').on('click', function () {
-        	$('#consultacuentaModal').modal('hide');
-    	});
-
-		$(document).on('click', '.eligeconsultacuentacontable', function () {
-			var seleccion = $(this).parents("tr").children().html();
-			var nombre = $(this).parents("tr").find(".nombrecuentacontable").html();
-			var codigo = $(this).parents("tr").find(".codigocuentacontable").html();
-		
-			// Asigna a grilla los valores devueltos por consulta
-			$(cuentacontablexcodigo).val(seleccion);
-			$(nombrexcodigo).val(nombre);
-			$(codigoxcodigo).val(codigo);
-
-			//* Asigna nueva cuentacontable
-			$(cuentacontablexcodigo).parents("tr").find(".cuentacontable_id_previa").val($(cuentacontablexcodigo).val());
-		
-			$('#consultacuentaModal').modal('hide');
-
-			leeCentroCosto(codigoxcodigo);
-		});
 
 		$('.debe').on('change input', function (event) {
 			event.preventDefault();
@@ -299,73 +232,109 @@ var codigoxcodigo;
 		}
 	}
 
+	function asegurarOpcionCentroCosto($sel, valor, texto) {
+		var v = (valor === undefined || valor === null || valor === '') ? '0' : String(valor);
+		var t = texto || (v === '0' ? 'Sin CC' : v);
+		if (!$sel.find('option').length) {
+			$sel.append($('<option/>').val(v).text(t).prop('selected', true));
+		}
+	}
+
+	function sincronizarCentrocostoPrevio($tr) {
+		var $sel = $tr.find('.centrocosto');
+		var $prev = $tr.find('.centrocosto_id_previo');
+		if ($sel.length && $prev.length) {
+			$prev.val($sel.val() || '0');
+		}
+	}
+
 	function completarCentroCosto(ptrcodigo, cuentacontable_id, centrocosto_id){
+		var $tr = $(ptrcodigo).closest('tr');
+		var $sel = $tr.find('.centrocosto');
+		var valorPrev = centrocosto_id || $sel.val() || $tr.find('.centrocosto_id_previo').val() || '0';
+
+		// Un select sin <option> no se envía en el POST → "Undefined array key N" al grabar.
+		asegurarOpcionCentroCosto($sel, valorPrev);
+
+		if (!cuentacontable_id) {
+			return;
+		}
+
 		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
 
 		$.get(url_cta, function(data){
-			if (data === "No maneja centro de costo")
+			if (data === "No maneja centro de costo" || data === "Cuenta inexistente")
 			{
-				$(ptrcodigo).parents("tr").find('.centrocosto').empty();
-				$(ptrcodigo).parents("tr").find('.centrocosto').append('<option value="0" selected>Sin CC</option>');
-				$(ptrcodigo).parents("tr").find('.centrocosto').attr("readonly", true);
+				$sel.empty();
+				$sel.append('<option value="0" selected>Sin CC</option>');
+				$sel.attr("readonly", true);
 			}
 			else
 			{
 				var cta = $.map(data, function(value, index){
 					return [value];
 				});
-				$(ptrcodigo).parents("tr").find('.centrocosto').empty();
-				$(ptrcodigo).parents("tr").find('.centrocosto').append('<option value="">-- Seleccione CC --</option>');
+				$sel.empty();
+				$sel.append('<option value="0">-- Seleccione CC --</option>');
 				$.each(cta, function(index,value){
 					if (value.id == centrocosto_id)
-						$(ptrcodigo).parents("tr").find('.centrocosto').append('<option value="'+value.id+'" selected>'+value.codigo+'-'+value.nombre+'</option>');
+						$sel.append('<option value="'+value.id+'" selected>'+value.codigo+'-'+value.nombre+'</option>');
 					else
-						$(ptrcodigo).parents("tr").find('.centrocosto').append('<option value="'+value.id+'">'+value.codigo+'-'+value.nombre+'</option>');
+						$sel.append('<option value="'+value.id+'">'+value.codigo+'-'+value.nombre+'</option>');
 				});
+				if ($sel.val() === null || $sel.val() === undefined) {
+					asegurarOpcionCentroCosto($sel, valorPrev);
+				}
+				$sel.attr("readonly", false);
 			}
-        });
-        setTimeout(() => {
-        }, 3000);
+			sincronizarCentrocostoPrevio($tr);
+        }).fail(function () {
+			asegurarOpcionCentroCosto($sel, valorPrev);
+			sincronizarCentrocostoPrevio($tr);
+		});
     }
 
-	function leeCentroCosto(ptr) 
+	function leeCentroCosto(ptr)
 	{
-		var codigo = $(ptr);
-		var codigo_ant = $(ptr).parents("tr").find(".codigo_previo").val();
-		var codigo_nuevo = codigo.val();
+		var $codigo = $(ptr);
+		var $tr = $codigo.closest('tr');
+		var codigo_ant = $.trim($tr.find('.codigo_previo').val() || '');
+		var codigo_nuevo = $.trim($codigo.val() || '');
 
-		if (codigo_nuevo != codigo_ant)
-		{
-			let empresa_id = $("#empresa_id").val();
-
-			if (!empresa_id)
-				alert("Debe ingresar empresa");
-			else
-			{
-				let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
-
-				$.get(url_cta, function(data){
-					$(codigo).parents("tr").find('.cuentacontable_id').val(data.id);
-					$(codigo).parents("tr").find(".cuentacontable_id_previa").val(data.id);
-					$(codigo).parents("tr").find(".nombre").val(data.nombre);
-					if (data.manejaccosto === 'S')
-					{
-						$(codigo).parents("tr").find('.centrocosto').attr("readonly", false);
-
-						completarCentroCosto(codigo, data.id, 0);
-					}
-					else
-					{
-						$(codigo).parents("tr").find('.centrocosto').empty();
-						$(codigo).parents("tr").find('.centrocosto').append('<option value="0" selected>Sin CC</option>');
-						$(codigo).parents("tr").find('.centrocosto').attr("readonly", true);
-					}
-				});
-
-				//* Asigna nuevo codigo de cuenta
-				$(this).parents("tr").find(".codigo_previo").val(codigo_nuevo);
-			}
+		if (codigo_nuevo === codigo_ant) {
+			return;
 		}
+
+		var empresa_id = $('#empresa_id').val();
+
+		if (!empresa_id) {
+			alert('Debe ingresar empresa');
+			return;
+		}
+
+		var url_cta = carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/' + empresa_id + '/' + encodeURIComponent(codigo_nuevo);
+
+		$.get(url_cta, function (data) {
+			if (!(data && data.id > 0)) {
+				return;
+			}
+
+			$tr.find('.cuentacontable_id').val(data.id);
+			$tr.find('.cuentacontable_id_previa').val(data.id);
+			$tr.find('.nombrecuentacontable, .nombre').val(data.nombre);
+
+			if (data.manejaccosto === 'S' || data.manejaccosto === '1' || data.manejaccosto === 1) {
+				$tr.find('.centrocosto').attr('readonly', false);
+				completarCentroCosto($codigo, data.id, 0);
+			} else {
+				$tr.find('.centrocosto').empty();
+				$tr.find('.centrocosto').append('<option value="0" selected>Sin CC</option>');
+				$tr.find('.centrocosto').attr('readonly', true);
+				sincronizarCentrocostoPrevio($tr);
+			}
+
+			$tr.find('.codigo_previo').val(codigo_nuevo);
+		});
 	}
 
 	function leeCotizacion(ptr)
@@ -520,18 +489,37 @@ var codigoxcodigo;
 		enviarFormularioAsiento(true);
 	});
 	
+	function mostrarOverlayGuardandoAsiento() {
+		var overlay = document.getElementById('asiento-guardando-overlay');
+		if (!overlay) {
+			return;
+		}
+		overlay.classList.remove('d-none');
+		overlay.style.display = 'flex';
+		overlay.setAttribute('aria-hidden', 'false');
+	}
+
+	function ocultarOverlayGuardandoAsiento() {
+		var overlay = document.getElementById('asiento-guardando-overlay');
+		if (!overlay) {
+			return;
+		}
+		overlay.classList.add('d-none');
+		overlay.style.display = '';
+		overlay.setAttribute('aria-hidden', 'true');
+	}
+
 	function BeforeSend()
 	{
-		$("#loading").show();
+		mostrarOverlayGuardandoAsiento();
 	}
 	
 	function CompleteFunc()
 	{
-		$("#loading").hide();
+		ocultarOverlayGuardandoAsiento();
 	}
-	
 
-
-		
-
+	window.addEventListener('pageshow', function () {
+		ocultarOverlayGuardandoAsiento();
+	});
 

@@ -39,6 +39,9 @@ use App\Support\Stock\RecepcionProveedorPrecioPendienteSupport;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Compras\OrdencompraRecepcionCumplimientoService;
 use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
+use App\Services\Ai\AiDecisionLogger;
+use App\Models\Ai\AiDecision;
+use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrAiHashSupport;
 use Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,6 +60,7 @@ class RecepcionProveedorService
         private readonly OrdencompraRecepcionPrecioSyncService $ordencompraRecepcionPrecioSyncService,
         private readonly OrdencompraRecepcionCumplimientoService $ordencompraRecepcionCumplimientoService,
         private readonly RecepcionProveedorPrecioPendienteService $precioPendienteService,
+        private readonly AiDecisionLogger $aiDecisionLogger,
     ) {
     }
 
@@ -135,7 +139,8 @@ class RecepcionProveedorService
                     isset($data['impuesto_interno']) ? (float) $data['impuesto_interno'] : null,
                     $requiereImpuestoInterno
                 ),
-                'origen_carga' => $data['origen_carga'] ?? 'MANUAL',
+                'origen_carga' => $data['origen_carga']
+                    ?? (! empty($data['ai_decision_id']) ? 'OCR' : 'MANUAL'),
                 'creousuario_id' => Auth::id(),
                 'centrocosto_id' => RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga(),
             ];
@@ -161,6 +166,7 @@ class RecepcionProveedorService
             $this->logEstado($recepcion, null, RecepcionProveedorEstados::BORRADOR, 'Alta de recepción');
             $recepcion = $recepcion->fresh(['recepcion_proveedor_articulos.articulos']);
             RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion($recepcion, $items);
+            $this->resolverDecisionIaOcr($data, $recepcion, $items);
 
             return $this->precioPendienteService->evaluarTrasGuardarBorrador($recepcion, true);
         });
@@ -218,6 +224,9 @@ class RecepcionProveedorService
                 'resumen_diferencias' => $analisis['resumen_diferencias'] ?: null,
                 'resumen_rechazos' => $analisis['resumen_rechazos'] ?: null,
                 'observacion' => $data['observacion'] ?? null,
+                'origen_carga' => ! empty($data['ai_decision_id'])
+                    ? 'OCR'
+                    : ($data['origen_carga'] ?? $recepcion->origen_carga),
                 'impuesto_interno' => RecepcionProveedorImpuestoInternoSupport::normalizarImpuestoInternoGuardado(
                     isset($data['impuesto_interno']) ? (float) $data['impuesto_interno'] : null,
                     $requiereImpuestoInterno
@@ -233,8 +242,40 @@ class RecepcionProveedorService
                 RecepcionProveedorArchivoSupport::sincronizarAdjuntosDesdeRequest((int) $recepcion->id, $request);
             }
 
+            $this->resolverDecisionIaOcr($data, $recepcion, $items);
+
             return $this->precioPendienteService->evaluarTrasGuardarBorrador($recepcion->fresh(), true);
         });
+    }
+
+    /**
+     * Cierra el ciclo de gobernanza del OCR de remito al grabar la recepción.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function resolverDecisionIaOcr(array $data, Recepcion_Proveedor $recepcion, array $items): void
+    {
+        $decisionId = $data['ai_decision_id'] ?? null;
+        if (! is_numeric($decisionId)) {
+            return;
+        }
+
+        $hashSugerencia = trim((string) ($data['ai_sugerencia_hash'] ?? ''));
+        $recepcion->loadMissing('ordencompras');
+        $hashFinal = RecepcionProveedorOcrAiHashSupport::calcularDesdeItemsForm(
+            $items,
+            (int) $recepcion->ordencompra_id,
+            (int) (optional($recepcion->ordencompras)->numeroordencompra ?? 0),
+        );
+        $accion = $hashSugerencia !== '' && hash_equals($hashSugerencia, $hashFinal)
+            ? AiDecision::ACCION_CONFIRMADA
+            : AiDecision::ACCION_EDITADA;
+
+        $this->aiDecisionLogger->resolver((int) $decisionId, $accion, Auth::id() ? (int) Auth::id() : null, [
+            'entidad_id' => (int) $recepcion->id,
+            'entidad_tipo' => 'recepcion_proveedor',
+        ]);
     }
 
     public function confirmar(int $id): Recepcion_Proveedor

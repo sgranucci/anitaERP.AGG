@@ -20,6 +20,7 @@ class ConfiguracionPuntoventaEstacionamiento extends Model implements Auditable
         'identificador_pc',
         'descripcion',
         'empresa_id',
+        'caja_id',
         'puntoventa_cae_id',
         'puntoventa_caea_id',
         'salida_factura_id',
@@ -31,6 +32,11 @@ class ConfiguracionPuntoventaEstacionamiento extends Model implements Auditable
     public function empresa()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function caja()
+    {
+        return $this->belongsTo(\App\Models\Caja\Caja::class, 'caja_id');
     }
 
     public function puntoventaCae()

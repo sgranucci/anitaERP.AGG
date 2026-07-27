@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Sala;
 use App\Exports\Sala\RequisicionSalaListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRequisicionSala;
+use App\Http\Requests\ValidacionRequisicionSalaEdicionMenor;
+use App\Http\Requests\ValidacionRequisicionSalaReabrir;
 use App\Models\Sala\RequisicionSalaArchivo;
 use App\Models\Sala\RequisicionSalaEstado;
 use App\Queries\Sala\RequisicionSalaQueryInterface;
@@ -20,6 +22,7 @@ use App\Services\Sala\RequisicionSalaArbolIntegracionService;
 use App\Services\Sala\RequisicionSalaPdfService;
 use App\Services\Sala\RequisicionSalaService;
 use App\Support\Sala\RecpunicaAnitaSupport;
+use App\Support\Sala\RequisicionSalaEdicionSupport;
 use App\Support\Sala\RequisicionSalaListadoFiltros;
 use App\Support\Navegacion\ModoConsultaUrlSupport;
 use App\Support\Sala\RequisicionSalaTransferenciaAsociadaSupport;
@@ -117,14 +120,16 @@ class RequisicionSalaController extends Controller
         can('editar-requisicion-sala');
         $data = $this->repository->find($id);
         $modoConsulta = request()->input('vista') === 'consulta';
+        $flagsEdicion = $this->flagsEdicion($data);
 
-        return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), $this->datosVistaTransferencia($data), [
+        return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), $this->datosVistaTransferencia($data), $flagsEdicion, [
             'data' => $data,
             'movimientos_arbol' => $this->arbolIntegracion->findPorRequisicionSala((int) $id),
             'cumplimientos_sala' => $this->cumplimientoRepository->listarPorRequisicion((int) $id),
             'soloConsulta' => $modoConsulta,
             'ocultarVolver' => $modoConsulta,
             'puedeActualizarRequisicionSala' => can('actualizar-requisicion-sala', false),
+            'puedeReabrirRequisicionSala' => can('reabrir-requisicion-sala', false),
         ]));
     }
 
@@ -137,6 +142,30 @@ class RequisicionSalaController extends Controller
         }
 
         return redirect('sala/requisicion-sala')->with('mensaje', 'Requisición de sala actualizada con éxito');
+    }
+
+    public function actualizarDatosMenores(ValidacionRequisicionSalaEdicionMenor $request, $id)
+    {
+        can('actualizar-requisicion-sala');
+        $resultado = $this->service->actualizaDatosMenores($request, (int) $id);
+        if (($resultado['mensaje'] ?? '') === 'error') {
+            return redirect()->back()->withInput()->with('mensaje_error', $resultado['errores'] ?? 'Error al actualizar.');
+        }
+
+        return redirect()->route('editar_requisicion_sala', ['id' => $id])
+            ->with('mensaje', 'Datos menores actualizados (la aprobación se mantiene).');
+    }
+
+    public function reabrir(ValidacionRequisicionSalaReabrir $request, $id)
+    {
+        can('reabrir-requisicion-sala');
+        $resultado = $this->service->reabrirDesaprobar((int) $id, (string) $request->input('motivo', ''));
+        if (($resultado['mensaje'] ?? '') === 'error') {
+            return redirect()->back()->with('mensaje_error', $resultado['errores'] ?? 'Error al reabrir.');
+        }
+
+        return redirect()->route('editar_requisicion_sala', ['id' => $id])
+            ->with('mensaje', 'Requisición reabierta en PENDIENTE. Corregí los datos y guardá para reenviar al árbol de aprobación.');
     }
 
     public function eliminar(Request $request, $id)
@@ -239,7 +268,7 @@ class RequisicionSalaController extends Controller
         $data = $this->repository->find($id);
         $puedeActualizar = ModoConsultaUrlSupport::usuarioPuedeActualizarRequisicionSala();
 
-        return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), $this->datosVistaTransferencia($data), [
+        return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), $this->datosVistaTransferencia($data), $this->flagsEdicion($data), [
             'data' => $data,
             'movimientos_arbol' => $movimientos,
             'cumplimientos_sala' => $this->cumplimientoRepository->listarPorRequisicion((int) $id),
@@ -248,7 +277,25 @@ class RequisicionSalaController extends Controller
             'soloConsulta' => true,
             'ocultarVolver' => true,
             'puedeActualizarRequisicionSala' => $puedeActualizar,
+            'puedeReabrirRequisicionSala' => $puedeActualizar && can('reabrir-requisicion-sala', false),
         ]));
+    }
+
+    /** @return array{edicion_completa: bool, edicion_menor: bool, puede_reabrir: bool, cumplimientos_activos: int} */
+    private function flagsEdicion(?\App\Models\Sala\RequisicionSala $data): array
+    {
+        $estado = $data->estado ?? null;
+        $cumplimientosActivos = $data
+            ? RequisicionSalaEdicionSupport::cantidadCumplimientosActivos($data)
+            : 0;
+
+        return [
+            'edicion_completa' => RequisicionSalaEdicionSupport::permiteEdicionCompleta($estado),
+            'edicion_menor' => RequisicionSalaEdicionSupport::permiteEdicionMenor($estado),
+            'puede_reabrir' => RequisicionSalaEdicionSupport::permiteReabrir($estado),
+            'puede_reabrir_sin_bloqueos' => RequisicionSalaEdicionSupport::permiteReabrir($estado) && $cumplimientosActivos === 0,
+            'cumplimientos_activos' => $cumplimientosActivos,
+        ];
     }
 
     /** @return array<string, mixed> */

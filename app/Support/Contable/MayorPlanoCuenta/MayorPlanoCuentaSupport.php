@@ -14,10 +14,11 @@ class MayorPlanoCuentaSupport
     public const TIPO_ASIENTO_APERTURA = 'APE';
 
     /**
-     * Origen mínimo de saldos en Biyemas: ejercicio 2025 arranca en cero + APE 01/01/25.
+     * Origen mínimo de saldos en Biyemas: con cierre 2025 hecho, ejercicio 2026
+     * arranca con saldos acumulados desde 01/01/26 (APE).
      * No se lee ctamov anterior a esta fecha para saldo inicial.
      */
-    public const SALDO_ORIGEN_MINIMO_YMD = 20250101;
+    public const SALDO_ORIGEN_MINIMO_YMD = 20260101;
 
     public static function formatearCodigoCuenta(int $codigo): string
     {
@@ -87,13 +88,52 @@ class MayorPlanoCuentaSupport
     }
 
     /**
-     * Importe en moneda de referencia (movimiento nativo antes de convertir al reporte).
+     * Moneda de referencia = inversa de la del asiento.
+     * Pesos (id 1) → dólares (2); extranjera (id >= 2) → pesos (1).
      */
-    public static function importeMonedaReferencia(float $importe, string $dh): float
+    public static function monedaReferenciaId(int $monedaAsientoId): int
+    {
+        return max(1, $monedaAsientoId) <= 1 ? 2 : 1;
+    }
+
+    /**
+     * Firma Mon.Referencia: Debe positivo / Haber negativo.
+     */
+    public static function firmarImporteDh(float $importe, string $dh): float
     {
         $monto = abs($importe);
 
         return strtoupper(trim($dh)) === 'H' ? -$monto : $monto;
+    }
+
+    /**
+     * Importe en moneda de referencia (inversa del asiento) con cotización del asiento.
+     * - Pesos (id/cod 1) → dólares = importe / cotización
+     * - Extranjera (id >= 2) → pesos = importe * cotización
+     * Sin cotización válida → 0 (el procesador puede usar cotización diaria como fallback).
+     */
+    public static function importeMonedaReferencia(
+        float $importeNativo,
+        string $dh,
+        string $codMon = '1',
+        float $cotizacion = 0.0,
+    ): float {
+        $monto = abs($importeNativo);
+        if ($monto < 0.00001) {
+            return 0.0;
+        }
+
+        $cotiz = $cotizacion;
+        if ($cotiz < 0.01) {
+            return 0.0;
+        }
+
+        $monedaAsientoId = max(1, (int) (trim($codMon) !== '' ? trim($codMon) : '1'));
+        $convertido = $monedaAsientoId <= 1
+            ? $monto / $cotiz
+            : $monto * $cotiz;
+
+        return self::firmarImporteDh($convertido, $dh);
     }
 
     /** Inicio de ejercicio contable (01/01 del año del período). Equivalente a EMPM_extrae_ejercicio(). */
@@ -132,7 +172,7 @@ class MayorPlanoCuentaSupport
     }
 
     /**
-     * Desde qué fecha acumular saldo inicial: ejercicio actual si hay APE, si no el anterior (mín. 01/01/25).
+     * Desde qué fecha acumular saldo inicial: ejercicio actual si hay APE, si no el anterior (mín. 01/01/26).
      *
      * @param  list<int>  $fechasSaldoPorEmpresa
      */
@@ -196,5 +236,31 @@ class MayorPlanoCuentaSupport
         $leyenda = $leyendasPago->leyenda($tipoComprobante, $sucursal, $nroComprobante);
 
         return $leyenda ?? $descripcion;
+    }
+
+    /**
+     * Emisor = código de proveedor (Anita: subd_emisor; COM/DEP en ctamov no lo traen).
+     * Fallback l-mayor.c: primeros dígitos de la descripción (p. ej. "003615 EL SOL…" / "3980-MERCADO…").
+     */
+    public static function resolverEmisorProveedor(
+        string $tipoComprobante,
+        string $emisorOrigen,
+        string $descripcionMovimiento = '',
+    ): string {
+        $emisor = trim($emisorOrigen);
+        if ($emisor !== '') {
+            return $emisor;
+        }
+
+        $tipo = strtoupper(trim($tipoComprobante));
+        if (! in_array($tipo, ['COM', 'DEP'], true)) {
+            return '';
+        }
+
+        if (preg_match('/^\s*(\d+)/', $descripcionMovimiento, $m) !== 1) {
+            return '';
+        }
+
+        return ltrim($m[1], '0') !== '' ? $m[1] : '';
     }
 }

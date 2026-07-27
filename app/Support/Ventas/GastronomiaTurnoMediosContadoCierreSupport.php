@@ -7,6 +7,8 @@ use InvalidArgumentException;
 
 /**
  * Montos contados por el cajero al cierre definitivo de turno (arqueo por medio de pago).
+ *
+ * La cuenta puente TOTEM no entra al arqueo: es facturación ya cobrada en el tótem.
  */
 final class GastronomiaTurnoMediosContadoCierreSupport
 {
@@ -25,6 +27,9 @@ final class GastronomiaTurnoMediosContadoCierreSupport
         $esperados = [];
         foreach ($totalesTurno['por_medio_pago'] ?? [] as $p) {
             if (! is_array($p)) {
+                continue;
+            }
+            if (self::esMedioExcluidoDeArqueo($p)) {
                 continue;
             }
             $ccId = (int) ($p['cuentacaja_id'] ?? 0);
@@ -91,6 +96,10 @@ final class GastronomiaTurnoMediosContadoCierreSupport
             if (! is_array($row)) {
                 continue;
             }
+            if (self::esMedioExcluidoDeArqueo($row)) {
+                // Históricos: TOTEM pudo haberse guardado en el JSON; no reingresa al arqueo.
+                continue;
+            }
             $ccId = (int) ($row['cuentacaja_id'] ?? 0);
             if ($ccId <= 0) {
                 continue;
@@ -116,12 +125,17 @@ final class GastronomiaTurnoMediosContadoCierreSupport
      */
     public static function enriquecerTotalesConContado(array $totalesTurno, ?array $mediosContado): array
     {
+        $totalesTurno = GastronomiaTurnoOperativoTotalesSupport::marcarFacturacionTotemFueraDeArqueo($totalesTurno);
+
         if ($mediosContado === null || $mediosContado === []) {
             return $totalesTurno;
         }
 
         $porContado = [];
         foreach ($mediosContado as $m) {
+            if (self::esMedioExcluidoDeArqueo($m)) {
+                continue;
+            }
             $porContado[(int) $m['cuentacaja_id']] = $m;
         }
 
@@ -140,7 +154,7 @@ final class GastronomiaTurnoMediosContadoCierreSupport
             }
             $ccId = (int) ($p['cuentacaja_id'] ?? 0);
             $copia = $p;
-            if ($ccId > 0 && isset($porContado[$ccId])) {
+            if ($ccId > 0 && isset($porContado[$ccId]) && empty($copia['excluido_arqueo'])) {
                 $copia['esperado'] = (float) $porContado[$ccId]['esperado'];
                 $copia['contado'] = (float) $porContado[$ccId]['contado'];
                 $ccIdsIncluidos[$ccId] = true;
@@ -150,7 +164,7 @@ final class GastronomiaTurnoMediosContadoCierreSupport
 
         foreach ($mediosContado as $m) {
             $ccId = (int) ($m['cuentacaja_id'] ?? 0);
-            if ($ccId <= 0 || isset($ccIdsIncluidos[$ccId])) {
+            if ($ccId <= 0 || isset($ccIdsIncluidos[$ccId]) || self::esMedioExcluidoDeArqueo($m)) {
                 continue;
             }
             $enriquecidos[] = [
@@ -166,6 +180,9 @@ final class GastronomiaTurnoMediosContadoCierreSupport
 
         if ($enriquecidos === []) {
             foreach ($mediosContado as $m) {
+                if (self::esMedioExcluidoDeArqueo($m)) {
+                    continue;
+                }
                 $enriquecidos[] = [
                     'cuentacaja_id' => (int) $m['cuentacaja_id'],
                     'codigo' => (string) $m['codigo'],
@@ -181,7 +198,7 @@ final class GastronomiaTurnoMediosContadoCierreSupport
 
         $totalContado = 0.0;
         foreach ($enriquecidos as $p) {
-            if (! is_array($p)) {
+            if (! is_array($p) || ! empty($p['excluido_arqueo'])) {
                 continue;
             }
             $totalContado += array_key_exists('contado', $p)
@@ -193,6 +210,21 @@ final class GastronomiaTurnoMediosContadoCierreSupport
         $totalesTurno['arqueo_medios_cierre'] = true;
         $totalesTurno['total_cobrado_contado'] = round($totalContado, 2);
 
-        return $totalesTurno;
+        return GastronomiaTurnoOperativoTotalesSupport::marcarFacturacionTotemFueraDeArqueo($totalesTurno);
+    }
+
+    /**
+     * @param  array<string, mixed>  $medio
+     */
+    public static function esMedioExcluidoDeArqueo(array $medio): bool
+    {
+        if (! empty($medio['excluido_arqueo']) || ! empty($medio['es_facturacion_totem'])) {
+            return true;
+        }
+
+        $codigo = strtoupper(trim((string) ($medio['codigo'] ?? '')));
+        $codigoTotem = strtoupper(trim(GastronomiaCuentacajaTotem::codigo()));
+
+        return $codigoTotem !== '' && $codigo === $codigoTotem;
     }
 }

@@ -246,6 +246,16 @@ function mayorPlanoAgregarCuentaDesdeCampo() {
     });
 }
 
+/** Si el texto parece un código de cuenta (dígitos/guiones), busca sin formato. */
+function mayorPlanoTextoConsultaModal(valor) {
+    var trimmed = String(valor || '').trim();
+    if (trimmed !== '' && /^[\d\-\s.]+$/.test(trimmed) && /\d/.test(trimmed)) {
+        return mayorPlanoNormalizarCodigoCuenta(trimmed);
+    }
+
+    return trimmed;
+}
+
 function mayorPlanoBuscarCuentasModal(consulta) {
     var empresaId = mayorPlanoEmpresaIdParaConsultaCuenta();
 
@@ -264,7 +274,7 @@ function mayorPlanoBuscarCuentasModal(consulta) {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
         },
         data: {
-            consulta: consulta,
+            consulta: mayorPlanoTextoConsultaModal(consulta),
             empresa_id: empresaId,
         },
     })
@@ -347,7 +357,10 @@ function activaEventosMayorPlanoCuentaFiltro() {
         .on('shown.bs.modal.mpc', function () {
             var valor = '';
             if (mayorPlanoCuentaCampoActivo && mayorPlanoCuentaCampoActivo.length) {
-                valor = mayorPlanoCuentaCampoActivo.find('.codigocuentacontable').val().trim();
+                // Sin guión: el LIKE del modal busca contra codigo numérico en BD.
+                valor = mayorPlanoTextoConsultaModal(
+                    mayorPlanoCuentaCampoActivo.find('.codigocuentacontable').val()
+                );
             }
 
             $('#consultacuentacontable').val(valor);

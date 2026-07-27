@@ -13,6 +13,7 @@
     var apiCerrar = app.getAttribute('data-api-cerrar') || '';
     var apiAnularCierre = app.getAttribute('data-api-anular-cierre') || '';
     var apiConciliacionTurno = app.getAttribute('data-api-conciliacion-turno') || '';
+    var apiExplicarDiferencias = app.getAttribute('data-api-explicar-diferencias-conciliacion') || '';
     var apiConciliacionMedio = app.getAttribute('data-api-conciliacion-medio') || '';
     var apiConciliacionNotasCredito = app.getAttribute('data-api-conciliacion-notas-credito') || '';
     var apiConciliacionInvitaciones = app.getAttribute('data-api-conciliacion-invitaciones') || '';
@@ -1293,6 +1294,101 @@
             cargarPaginaGrilla(target, 1);
         });
     });
+
+    document.querySelectorAll('.js-explicar-diferencias-conciliacion').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var panelId = btn.getAttribute('data-panel-target') || 'panel-ia-conciliacion-turno';
+            explicarDiferenciasConciliacion(panelId, btn);
+        });
+    });
+
+    function explicarDiferenciasConciliacion(panelId, btn) {
+        if (!apiExplicarDiferencias) {
+            alert('Endpoint de explicación IA no configurado.');
+            return;
+        }
+        var panel = document.getElementById(panelId);
+        if (panel) {
+            panel.classList.remove('d-none');
+            panel.innerHTML = '<p class="text-muted small mb-0"><i class="fa fa-spinner fa-spin"></i> Analizando diferencias…</p>';
+        }
+        if (btn) {
+            btn.disabled = true;
+        }
+        getJson(apiExplicarDiferencias).then(function (res) {
+            if (btn) {
+                btn.disabled = false;
+            }
+            if (!res || !res.ok || !res.data || !res.data.ok) {
+                var err = (res && res.data && res.data.error) ? res.data.error : 'No se pudo explicar las diferencias.';
+                if (panel) {
+                    panel.innerHTML = '<div class="alert alert-warning py-2 mb-0">' + escHtml(err) + '</div>';
+                } else {
+                    alert(err);
+                }
+                return;
+            }
+            renderPanelIaConciliacion(panel, res.data.ai || null, res.data.total_con_diferencia);
+        }).catch(function () {
+            if (btn) {
+                btn.disabled = false;
+            }
+            if (panel) {
+                panel.innerHTML = '<div class="alert alert-danger py-2 mb-0">Error de red al consultar la IA.</div>';
+            }
+        });
+    }
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function fmtNumAr(n) {
+        var x = Number(n);
+        if (!isFinite(x)) {
+            return '0,00';
+        }
+        return x.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderPanelIaConciliacion(panel, ai, totalDif) {
+        if (!panel) {
+            return;
+        }
+        if (!ai) {
+            panel.classList.add('d-none');
+            panel.innerHTML = '';
+            return;
+        }
+        var parrafos = Array.isArray(ai.ai_parrafos) ? ai.ai_parrafos : [];
+        var score = ai.ai_score != null ? Number(ai.ai_score) : null;
+        var html = '<div class="card card-outline card-info mb-0">';
+        html += '<div class="card-header py-2"><h3 class="card-title mb-0 h6"><i class="fa fa-magic"></i> Ayuda conciliación (IA)';
+        if (score != null && isFinite(score)) {
+            html += ' <span class="badge badge-secondary ml-1">score ' + fmtNumAr(score) + '</span>';
+        }
+        if (totalDif != null) {
+            html += ' <span class="badge badge-warning ml-1">' + escHtml(totalDif) + ' DIF</span>';
+        }
+        html += '</h3></div><div class="card-body py-2">';
+        html += '<p class="small text-muted mb-2">Solo lectura: no corrige cobranzas ni cierra el turno.</p>';
+        if (parrafos.length) {
+            html += '<ul class="mb-0 pl-3">';
+            parrafos.forEach(function (p) {
+                html += '<li>' + escHtml(p) + '</li>';
+            });
+            html += '</ul>';
+        } else {
+            html += '<p class="mb-0 text-muted small">Sin observaciones.</p>';
+        }
+        html += '</div></div>';
+        panel.classList.remove('d-none');
+        panel.innerHTML = html;
+    }
 
     document.querySelectorAll('.js-filtro-solo-diferencias').forEach(function (chk) {
         chk.addEventListener('change', function () {

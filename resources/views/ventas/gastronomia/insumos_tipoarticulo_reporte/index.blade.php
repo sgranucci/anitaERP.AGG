@@ -24,19 +24,20 @@
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Cantidades facturadas en gastronomía por insumo (tipo de artículo) y día de jornada.
-                        Por defecto filtra <strong>CIGARRILLO</strong>; puede cambiar el tipo en pantalla.
+                        Por defecto filtra el tipo con control contable de cigarrillos; puede cambiarlo en pantalla.
+                        Si el tipo tiene el flag habilitado, se muestra la conciliación Contaduría vs mayor Anita.
                     </p>
 
                     @include('includes.form-empresa-asignada', [
                         'empresa_query' => $empresa_query,
                         'empresa_id' => $filtros['empresa_id'] ?? null,
                         'required' => true,
-                        'col_label' => 'col-lg-2',
+                        'col_label' => 'col-lg-2 control-label text-right pr-2',
                         'col_input' => 'col-lg-4',
                     ])
 
                     <div class="form-group row">
-                        <label for="tipoarticulo_id" class="col-lg-2 control-label requerido">Tipo artículo</label>
+                        <label for="tipoarticulo_id" class="col-lg-2 control-label text-right pr-2 requerido">Tipo artículo</label>
                         <div class="col-lg-4">
                             <select name="tipoarticulo_id" id="tipoarticulo_id" class="form-control" required>
                                 @foreach ($tipoarticulo_query as $tipo)
@@ -49,12 +50,12 @@
                     </div>
 
                     <div class="form-group row">
-                        <label for="fecha_desde" class="col-lg-2 control-label requerido">Desde jornada</label>
+                        <label for="fecha_desde" class="col-lg-2 control-label text-right pr-2 requerido">Desde jornada</label>
                         <div class="col-lg-3">
                             <input type="date" name="fecha_desde" id="fecha_desde" class="form-control"
                                 value="{{ $filtros['fecha_desde'] ?? '' }}" required>
                         </div>
-                        <label for="fecha_hasta" class="col-lg-2 control-label requerido">Hasta jornada</label>
+                        <label for="fecha_hasta" class="col-lg-2 control-label text-right pr-2 requerido">Hasta jornada</label>
                         <div class="col-lg-3">
                             <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control"
                                 value="{{ $filtros['fecha_hasta'] ?? '' }}" required>
@@ -92,12 +93,26 @@
                             ])
                         </div>
                         @if (! empty($resultado))
+                            @php
+                                $unidadMedidaEtiqueta = trim((string) ($resultado['unidad_medida_etiqueta'] ?? 'unidades'));
+                                if ($unidadMedidaEtiqueta === '') {
+                                    $unidadMedidaEtiqueta = 'unidades';
+                                }
+                            @endphp
                             <div class="small mb-1 mb-md-0 text-md-right">
                                 <span class="text-muted">Total general:</span>
                                 <strong>{{ number_format((float) ($resultado['total_general'] ?? 0), 3, ',', '.') }}</strong>
+                                <span class="text-muted">{{ $unidadMedidaEtiqueta }}</span>
                             </div>
                         @endif
                     </div>
+
+                    @if (! empty($usa_control_contable_cigarrillos) && ! empty($control_contable))
+                        @include('ventas.gastronomia.insumos_tipoarticulo_reporte.partials.control_contable_cigarrillos', [
+                            'control_contable' => $control_contable,
+                            'filtrosQuery' => $filtrosQuery ?? [],
+                        ])
+                    @endif
 
                     @php
                         $empresaLogo = ($empresa_query ?? collect())->firstWhere('id', (int) ($filtros['empresa_id'] ?? 0));

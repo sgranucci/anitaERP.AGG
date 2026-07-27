@@ -68,7 +68,8 @@
 <div class="form-group row">
     <label for="show" class="col-lg-3 col-form-label text-right">Show</label>
     <div class="col-lg-3">
-        <input type="number" step="0.01" name="show" id="show" class="form-control" value="{{ old('show', $data->show ?? 0) }}">
+        <input type="text" inputmode="decimal" name="show" id="show" class="form-control flash-campo-decimal" autocomplete="off"
+               value="{{ number_format((float) old('show', $data->show ?? 0), 2, ',', '.') }}">
     </div>
     <label for="cotizacion" class="col-lg-2 col-form-label text-right">Cotizaci&oacute;n</label>
     <div class="col-lg-2">

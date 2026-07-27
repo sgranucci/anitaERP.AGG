@@ -47,6 +47,28 @@
                             </select>
                         </div>
                         <div class="form-group col-md-3">
+                            <label for="usuario_id">Usuario que emite</label>
+                            @php
+                                $usuarioIdFiltro = (int) ($filtros['usuario_id'] ?? 0);
+                                $usuarioEnLista = ($usuario_query ?? collect())->contains('id', $usuarioIdFiltro);
+                            @endphp
+                            <select name="usuario_id" id="usuario_id" class="form-control">
+                                <option value="">Todos</option>
+                                @foreach ($usuario_query ?? [] as $usuario)
+                                    <option value="{{ $usuario->id }}" @selected($usuarioIdFiltro === (int) $usuario->id)>
+                                        {{ $usuario->nombre }}
+                                    </option>
+                                @endforeach
+                                @if ($usuarioIdFiltro > 0 && ! $usuarioEnLista)
+                                    <option value="{{ $usuarioIdFiltro }}" selected>
+                                        {{ $filtros['usuario_nombre'] ?? ('Usuario #'.$usuarioIdFiltro) }}
+                                    </option>
+                                @endif
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-md-12 mb-0">
                             <button type="submit" class="btn btn-primary">
                                 <i class="fa fa-search"></i> Consultar
                             </button>

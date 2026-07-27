@@ -386,14 +386,8 @@ final class CierreJornadaVentasCigarrillosSupport
         }
 
         self::$tipoArticuloCigarrilloIdResolved = true;
-        $nombre = mb_strtoupper(trim((string) config('facturacion.IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE', 'CIGARRILLO')));
-        if ($nombre === '') {
-            return self::$tipoArticuloCigarrilloIdCache = null;
-        }
 
-        $id = Tipoarticulo::query()->whereRaw('UPPER(nombre) = ?', [$nombre])->value('id');
-
-        return self::$tipoArticuloCigarrilloIdCache = $id !== null ? (int) $id : null;
+        return self::$tipoArticuloCigarrilloIdCache = Tipoarticulo::idControlContableCigarrillos();
     }
 
     private static function normalizarImporteCigarrillos(float $totalFactura, float $importeCigarrillos): float

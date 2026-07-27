@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Proveedor;
 use App\Models\Stock\Depmae;
+use App\Support\Compras\OrdencompraDescuentoSupport;
 
 class RecepcionProveedorFormItemsSupport
 {
@@ -203,7 +204,7 @@ class RecepcionProveedorFormItemsSupport
                 $proveedorId = (int) $oc->proveedor_id;
                 $empresaId = (int) $oc->empresa_id;
                 $empresaNombre = optional($oc->empresas)->nombre;
-                $descuentoOrdencompra = (float) ($oc->descuento ?? 0);
+                $descuentoOrdencompra = OrdencompraDescuentoSupport::porcentajeEfectivoDesdeOrdencompra($oc);
             }
         }
 

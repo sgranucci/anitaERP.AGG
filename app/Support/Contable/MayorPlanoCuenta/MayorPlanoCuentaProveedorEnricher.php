@@ -42,6 +42,8 @@ class MayorPlanoCuentaProveedorEnricher
             }
 
             $codigo = self::normalizarCodigoEmisor((string) ($fila['emisor'] ?? ''));
+            // Columna Emisor: sin ceros a la izquierda (Anita trae p. ej. 000482).
+            $filas[$idx]['emisor'] = $codigo;
             $filas[$idx]['proveedor_id'] = $codigo !== '' ? (int) ($this->cachePorCodigo[$codigo] ?? 0) : 0;
         }
 

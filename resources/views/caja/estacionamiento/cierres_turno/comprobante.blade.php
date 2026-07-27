@@ -78,7 +78,7 @@
         </tr>
         <tr>
             <td class="lbl">Habilitación</td>
-            <td>{{ $d['habilitacion_en'] }} — {{ $d['usuario_habilita'] }} → {{ $d['usuario_habilitado'] }}</td>
+            <td>{{ $d['habilitacion_en'] }} — Abierto por {{ $d['usuario_habilita'] ?? $d['usuario_habilitado'] ?? '' }}</td>
             <td class="lbl">Monto habilitación</td>
             <td class="num">${{ number_format((float) ($d['monto_habilitacion'] ?? 0), 2, ',', '.') }}</td>
         </tr>
@@ -154,8 +154,11 @@
         </tr>
     </table>
 
-    <p class="muted" style="font-size:11px; margin:0 0 8px;">Cobranzas leídas de cada comprobante emitido.</p>
-    @forelse ($totalesTurno['por_usuario_habilitado'] ?? [] as $m)
+    <p class="muted" style="font-size:11px; margin:0 0 8px;">Cobranzas leídas de cada comprobante emitido. Desglose por usuario que facturó.</p>
+    @php
+        $porUsuarioPdf = $totalesTurno['por_usuario'] ?? $totalesTurno['por_usuario_habilitado'] ?? [];
+    @endphp
+    @forelse ($porUsuarioPdf as $m)
         @php
             $mNcTotal = (float) ($m['notas_credito']['total'] ?? 0);
             $mNcCant = (int) ($m['notas_credito']['cantidad'] ?? 0);
@@ -168,10 +171,11 @@
                 : ($mTotalFinal - $mNcTotal);
             $mHayNc = $mNcCant > 0 || abs($mNcTotal) >= 0.005;
             $mHayInv = $mInvCant > 0 || abs($mInvTotal) >= 0.005;
+            $mNombreUsuario = $m['usuario_nombre'] ?? $m['usuario_habilitado_nombre'] ?? 'Sin usuario';
         @endphp
     <table style="margin-bottom:10px;">
         <tr class="total-grande">
-            <td class="lbl" colspan="2">{{ $m['usuario_habilitado_nombre'] ?? 'Sin usuario habilitado' }}</td>
+            <td class="lbl" colspan="2">{{ $mNombreUsuario }}</td>
             <td class="num">{{ (int) ($m['cantidad'] ?? 0) }} comp.</td>
             <td class="num">
                 @if ($mHayNc)
@@ -207,7 +211,7 @@
         @endif
     </table>
     @empty
-    <p class="muted">Sin comprobantes por usuario habilitado.</p>
+    <p class="muted">Sin comprobantes por usuario.</p>
     @endforelse
 
     @php

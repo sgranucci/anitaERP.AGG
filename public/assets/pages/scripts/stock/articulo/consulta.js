@@ -263,13 +263,14 @@ function buscar_datos_articulo(consulta) {
     });
 }
 
-// Enter en input: no dispara submit accidental, salvo en formulario de orden de compra (allí se deja el comportamiento por defecto).
+// Enter en input: no dispara submit accidental. En tablas con Enter=Tab (req/OC) o campos especiales se deja pasar al handler del módulo.
 $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnterSubmitArticulo', 'input', function (e) {
 	var keyCode = e.which;
 	if (keyCode !== 13) {
 		return;
 	}
-	if ($(this).closest('#form-ordencompra-general').length) {
+	// Búsqueda rápida del index (lupa / Enter): no bloquear.
+	if ($(this).is('#filtro_valor, #filtro_valor_panel') || $(this).attr('name') === 'filtro_valor') {
 		return;
 	}
 	if ($(this).hasClass('gastro-carga-sku')) {
@@ -290,9 +291,16 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
     if ($(this).closest('#tabla-articulos-requisicion').length) {
         return;
     }
+    if ($(this).closest('#tabla-articulos-ordencompra').length) {
+        return;
+    }
     if ($(this).closest('#tabla-articulos-requisicion-sala').length) {
         return;
     }
+	// Resto del form OC (fuera de la grilla de artículos): no bloquear Enter.
+	if ($(this).closest('#form-ordencompra-general').length) {
+		return;
+	}
 	if ($(this).closest('.tm-deposito-campo').length && $(this).hasClass('codigodeposito')) {
 		return;
 	}

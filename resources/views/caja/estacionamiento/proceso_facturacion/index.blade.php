@@ -298,7 +298,7 @@
                     <a href="{{ route('estacionamiento_habilitacion_turno') }}">Habilitar turno</a>.
                 @else
                     Turno <strong>{{ $turno_operativo['turno_nombre'] ?? '' }}</strong>
-                    — {{ $turno_operativo['usuario_habilitado'] ?? '' }}
+                    — Abierto por {{ $turno_operativo['usuario_apertura'] ?? $turno_operativo['usuario_habilitado'] ?? '' }}
                     — Habilitado {{ $turno_operativo['habilitacion_en_fmt'] ?? '' }}
                 @endif
             </div>

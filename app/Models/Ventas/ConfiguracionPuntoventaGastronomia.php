@@ -6,6 +6,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Salida;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Listaprecio;
+use App\Models\Caja\Caja;
 use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Ventas\UbicacionGastronomia;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,7 @@ class ConfiguracionPuntoventaGastronomia extends Model implements Auditable
         'identificador_pc',
         'descripcion',
         'empresa_id',
+        'caja_id',
         'puntoventa_cae_id',
         'puntoventa_caea_id',
         'ubicacion_id',
@@ -54,6 +56,11 @@ class ConfiguracionPuntoventaGastronomia extends Model implements Auditable
     public function empresa()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function caja()
+    {
+        return $this->belongsTo(Caja::class, 'caja_id');
     }
 
     public function puntoventaCae()

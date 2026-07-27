@@ -2,11 +2,14 @@
 
 namespace App\Exports\Caja\Flash;
 
+use App\Support\Caja\Flash\FlashCajaLFlashFormatoSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
@@ -16,7 +19,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class FlashCajaReporteExport implements FromView, ShouldAutoSize, WithEvents, WithStyles, WithTitle
+class FlashCajaReporteExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
 
@@ -30,9 +33,19 @@ class FlashCajaReporteExport implements FromView, ShouldAutoSize, WithEvents, Wi
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
-    private int $filaCabecerasExcel = 4;
+    private bool $hayFilaLogos = false;
 
-    private int $filaPrimeraDatosExcel = 5;
+    private int $filasMeta = 4;
+
+    private int $filaInicioMeta = 1;
+
+    private int $filaTituloExcel = 1;
+
+    private int $filaCabecerasExcel = 5;
+
+    private int $filaPrimeraDatosExcel = 6;
+
+    private string $formatoNumero = ExcelFormatoNumero::AUTO;
 
     /**
      * @param  array<string, mixed>  $reporte
@@ -51,24 +64,37 @@ class FlashCajaReporteExport implements FromView, ShouldAutoSize, WithEvents, Wi
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(collect([$filaLogo]));
         }
 
-        $this->filaCabecerasExcel = count($this->rutasLogosExcel) > 0 ? 4 : 3;
-        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+        $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
+        $this->formatoNumero = ExcelFormatoNumero::preferenciaGlobal();
+        $this->calcularFilasEncabezado();
 
         return view('exports.caja.flash.reporte', [
             'reporte' => $this->reporte,
             'historico' => $this->historico,
-            'reservarFilaLogoExcel' => count($this->rutasLogosExcel) > 0,
+            'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'formatoNumero' => $this->formatoNumero,
         ]);
+    }
+
+    private function calcularFilasEncabezado(): void
+    {
+        // título + Generado + subtítulo (empresa/fecha) + budget
+        $this->filasMeta = 4;
+        $offsetLogo = $this->hayFilaLogos ? 1 : 0;
+        $this->filaInicioMeta = $offsetLogo + 1;
+        $this->filaTituloExcel = $this->filaInicioMeta;
+        $this->filaCabecerasExcel = $offsetLogo + $this->filasMeta + 1;
+        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+    }
+
+    public function columnFormats(): array
+    {
+        return FlashCajaLFlashFormatoSupport::columnFormatsExcel($this->formatoNumero);
     }
 
     public function styles(Worksheet $sheet): array
     {
-        return [
-            $this->filaCabecerasExcel => [
-                'font' => ['bold' => true, 'color' => ['rgb' => '17202A'], 'size' => 11, 'name' => 'Arial'],
-                'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '85C1E9']],
-            ],
-        ];
+        return [];
     }
 
     public function registerEvents(): array
@@ -76,8 +102,9 @@ class FlashCajaReporteExport implements FromView, ShouldAutoSize, WithEvents, Wi
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
+                $colUltima = self::COL_ULTIMA;
 
-                if (count($this->rutasLogosExcel) > 0) {
+                if ($this->hayFilaLogos && $this->rutasLogosExcel !== []) {
                     $sheet->getRowDimension(1)->setRowHeight(54);
                     foreach ($this->rutasLogosExcel as $idx => $ruta) {
                         if (! is_string($ruta) || ! is_readable($ruta)) {
@@ -94,12 +121,59 @@ class FlashCajaReporteExport implements FromView, ShouldAutoSize, WithEvents, Wi
                     }
                 }
 
-                $filaTit = count($this->rutasLogosExcel) > 0 ? 2 : 1;
-                $sheet->mergeCells('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
-                    'font' => ['bold' => true, 'size' => 16, 'name' => 'Arial'],
-                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
+                for ($i = 0; $i < $this->filasMeta; $i++) {
+                    $fila = $this->filaInicioMeta + $i;
+                    $sheet->mergeCells('A'.$fila.':'.$colUltima.$fila);
+                }
+
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+                $sheet->getStyle('A'.$this->filaTituloExcel.':'.$colUltima.$this->filaTituloExcel)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'size' => 16,
+                        'name' => 'Arial',
+                        'color' => ['rgb' => '17202A'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => Alignment::HORIZONTAL_LEFT,
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                    ],
                 ]);
+
+                for ($i = 1; $i < $this->filasMeta; $i++) {
+                    $fila = $this->filaInicioMeta + $i;
+                    $sheet->getStyle('A'.$fila.':'.$colUltima.$fila)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'size' => 10,
+                            'name' => 'Arial',
+                            'color' => ['rgb' => '444444'],
+                        ],
+                        'alignment' => [
+                            'wrapText' => true,
+                            'vertical' => Alignment::VERTICAL_CENTER,
+                        ],
+                    ]);
+                    $sheet->getRowDimension($fila)->setRowHeight($i === 1 ? 18 : 22);
+                }
+
+                $sheet->getStyle('A'.$this->filaCabecerasExcel.':'.$colUltima.$this->filaCabecerasExcel)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '17202A'],
+                        'size' => 11,
+                        'name' => 'Arial',
+                    ],
+                    'fill' => [
+                        'fillType' => Fill::FILL_SOLID,
+                        'color' => ['rgb' => '85C1E9'],
+                    ],
+                    'alignment' => [
+                        'wrapText' => true,
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                    ],
+                ]);
+                $sheet->getRowDimension($this->filaCabecerasExcel)->setRowHeight(32);
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },

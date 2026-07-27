@@ -181,7 +181,12 @@ class RecepcionProveedorAsientoRecuadreService
         );
         $diffAnita = $debeAnita !== null ? round($debeNuevo - $debeAnita, 2) : null;
 
-        $necesitaErp = ! $soloAnita && abs($diffErp) >= $tol;
+        $lineasErpDifieren = RecepcionProveedorCuadreContableSupport::lineasDifierenDelPreview(
+            $movimientos,
+            $preview,
+            $tol
+        );
+        $necesitaErp = ! $soloAnita && (abs($diffErp) >= $tol || $lineasErpDifieren);
         $necesitaAnita = (bool) ($evaluacionCtamov['requiere_reparacion'] ?? false);
 
         $base = [

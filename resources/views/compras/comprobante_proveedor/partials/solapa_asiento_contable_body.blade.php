@@ -42,6 +42,11 @@
         Configure la cuenta en Stock &rarr; Configuración recepción proveedor para la empresa del comprobante.
     </div>
     @endif
+    @if(str_contains($errorTexto, 'anticipo a proveedores'))
+    <div class="mt-2 small">
+        Configure las cuentas de anticipo (factura anticipada / bienes de uso) en Stock &rarr; Configuración recepción proveedor para la empresa del comprobante.
+    </div>
+    @endif
 </div>
 @else
 @if(! empty($preview['es_preview']))

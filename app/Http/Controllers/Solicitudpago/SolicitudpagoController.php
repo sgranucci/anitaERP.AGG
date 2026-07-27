@@ -5,30 +5,38 @@ namespace App\Http\Controllers\Solicitudpago;
 use App\Exports\Solicitudpago\SolicitudpagoListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionSolicitudpago;
+use App\Models\Contable\Centrocosto;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
-use App\Repositories\Solicitudpago\Concepto_SolicitudpagoRepositoryInterface;
 use App\Repositories\Solicitudpago\FormapagosolRepositoryInterface;
 use App\Repositories\Solicitudpago\Sector_SolicitudpagoRepositoryInterface;
 use App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface;
+use App\Services\Solicitudpago\SolicitudpagoArchivosFusionService;
+use App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService;
+use App\Services\Solicitudpago\SolicitudpagoComprobantePdfService;
+use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoListadoFiltros;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
+use App\Support\Solicitudpago\SolicitudpagoVisibilidadSupport;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use PDF;
 
 class SolicitudpagoController extends Controller
 {
+    private const SESSION_FILTROS = 'solicitudpago_listado_filtros';
+
     public function __construct(
         private SolicitudpagoRepositoryInterface $repository,
         private EmpresaRepositoryInterface $empresaRepository,
         private Sector_SolicitudpagoRepositoryInterface $sectorRepository,
-        private Concepto_SolicitudpagoRepositoryInterface $conceptoRepository,
         private FormapagosolRepositoryInterface $formapagosolRepository,
         private MonedaRepositoryInterface $monedaRepository,
         private CentrocostoRepositoryInterface $centrocostoRepository,
+        private SolicitudpagoArbolIntegracionService $arbolIntegracionService,
+        private SolicitudpagoArchivosFusionService $archivosFusionService,
+        private SolicitudpagoComprobantePdfService $comprobantePdfService,
     ) {
     }
 
@@ -36,12 +44,59 @@ class SolicitudpagoController extends Controller
     {
         can('listar-solicitud-pago');
 
-        $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest($request);
-        $filtrosQuery = SolicitudpagoListadoFiltros::paraQueryString($filtros);
+        // Limpiar filtros: borra recuerdo de sesión
+        if ($request->boolean('limpiar_filtros')) {
+            session()->forget(self::SESSION_FILTROS);
+
+            return redirect()->route('consultar_solicitudpago');
+        }
+
+        // Memoria de filtros: con query se persiste; sin query se restaura el último filtro
+        if ($this->requestTraeFiltrosListado($request)) {
+            $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest($request);
+            if (! SolicitudpagoVisibilidadSupport::puedeVerTodasSinRestriccion()) {
+                $filtros['alcance'] = SolicitudpagoVisibilidadSupport::ALCANCE_TODAS;
+            }
+            $filtrosQuery = SolicitudpagoListadoFiltros::paraQueryString($filtros);
+            $page = (int) $request->input('page', 0);
+            if ($page > 1) {
+                $filtrosQuery['page'] = $page;
+            }
+            if (
+                SolicitudpagoListadoFiltros::tieneCriteriosAplicados($filtros)
+                || SolicitudpagoListadoFiltros::tieneAlcanceMiCentrocosto($filtros)
+                || $page > 1
+            ) {
+                session([self::SESSION_FILTROS => $filtrosQuery]);
+            } else {
+                session()->forget(self::SESSION_FILTROS);
+            }
+        } else {
+            $guardados = session(self::SESSION_FILTROS, []);
+            if (is_array($guardados) && $guardados !== []) {
+                return redirect()->route('consultar_solicitudpago', $guardados);
+            }
+            $filtros = SolicitudpagoListadoFiltros::filtrosVacios();
+            $filtrosQuery = [];
+        }
+
         $camposFiltro = SolicitudpagoListadoFiltros::CAMPOS;
         $coleccion = $this->repository->leeSolicitudpago($filtros, true);
         $estado_enum = SolicitudpagoEstados::opciones();
         $tratamiento_enum = SolicitudpagoTratamientos::opciones();
+        $limpiarFiltrosUrl = route('consultar_solicitudpago', ['limpiar_filtros' => 1]);
+        $puedeVerTodas = SolicitudpagoVisibilidadSupport::puedeVerTodasSinRestriccion();
+        $alcanceListado = $filtros['alcance'] ?? SolicitudpagoVisibilidadSupport::ALCANCE_TODAS;
+        $alcanceToggleUrl = null;
+        if ($puedeVerTodas) {
+            $paramsToggle = $filtrosQuery;
+            unset($paramsToggle['page']);
+            // alcance=todas debe ir explícito: si se omite, la sesión restaura mi_cc.
+            $paramsToggle['alcance'] = $alcanceListado === SolicitudpagoVisibilidadSupport::ALCANCE_MI_CC
+                ? SolicitudpagoVisibilidadSupport::ALCANCE_TODAS
+                : SolicitudpagoVisibilidadSupport::ALCANCE_MI_CC;
+            $alcanceToggleUrl = route('consultar_solicitudpago', $paramsToggle);
+        }
 
         return view('solicitudpago.solicitudpago.index', compact(
             'coleccion',
@@ -49,8 +104,38 @@ class SolicitudpagoController extends Controller
             'filtrosQuery',
             'camposFiltro',
             'estado_enum',
-            'tratamiento_enum'
+            'tratamiento_enum',
+            'limpiarFiltrosUrl',
+            'puedeVerTodas',
+            'alcanceListado',
+            'alcanceToggleUrl'
         ));
+    }
+
+    /**
+     * true si la request trae parámetros de filtro/paginación del listado.
+     */
+    private function requestTraeFiltrosListado(Request $request): bool
+    {
+        foreach ([
+            'filtro_valor',
+            'filtro_campo',
+            'filtro_operador',
+            'filtro_busqueda_rapida',
+            'madre_hija',
+            'estado',
+            'tratamiento',
+            'fecha_desde',
+            'fecha_hasta',
+            'alcance',
+            'page',
+        ] as $key) {
+            if ($request->query->has($key)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -60,6 +145,9 @@ class SolicitudpagoController extends Controller
         ini_set('max_execution_time', '300');
 
         $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        if (! SolicitudpagoVisibilidadSupport::puedeVerTodasSinRestriccion()) {
+            $filtros['alcance'] = SolicitudpagoVisibilidadSupport::ALCANCE_TODAS;
+        }
         switch (strtoupper((string) $formato)) {
             case 'PDF':
                 $datas = $this->repository->leeSolicitudpago($filtros, false);
@@ -97,34 +185,89 @@ class SolicitudpagoController extends Controller
     {
         try {
             $data = $request->validated();
-            $data['archivos_nuevos'] = $request->file('archivos_nuevos', []);
-            $this->repository->create($data);
+            $data['archivos_nuevos'] = array_values(array_filter(
+                array_merge(
+                    (array) $request->file('nombrearchivos', []),
+                    (array) $request->file('archivos_nuevos', [])
+                )
+            ));
+            $sp = $this->repository->create($data);
+            $pdfUrl = route('imprimir_pdf_solicitudpago', $sp->id);
 
-            return redirect('solicitudpago/solicitudpago')->with('mensaje', 'Solicitud de pago creada con éxito');
+            $redirect = redirect()
+                ->route('editar_solicitudpago', $sp->id)
+                ->with('mensaje', 'Solicitud de pago #'.$sp->codigo.' creada con éxito.')
+                ->with('abrir_pdf_solicitudpago', $pdfUrl);
+
+            if (
+                config('solicitudpago.arbol_al_crear', true)
+                && ($sp->estado ?? '') === SolicitudpagoEstados::EMITIDA
+                && ! $this->arbolIntegracionService->findPorSolicitudpago((int) $sp->id)->count()
+            ) {
+                $redirect->with('advertencias', [
+                    'No se generaron pendientes de aprobación ni correos: el concepto de la solicitud no tiene firmantes '
+                    .'operativos (solapa Usuarios del concepto) aplicables al monto. Configure el árbol en el concepto y use «Reenviar al árbol».',
+                ]);
+            }
+
+            return $redirect;
         } catch (\Throwable $e) {
             return back()->withInput()->with('mensaje', $e->getMessage());
         }
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        can('editar-solicitud-pago');
-        $data = $this->repository->findOrFail($id);
+        $soloConsulta = $request->query('origen') === 'modal_consulta'
+            || $request->query('vista') === 'consulta';
+        if ($soloConsulta) {
+            if (! can('listar-solicitud-pago', false) && ! can('editar-solicitud-pago', false)) {
+                abort(403);
+            }
+        } else {
+            can('editar-solicitud-pago');
+        }
 
-        return view('solicitudpago.solicitudpago.editar', array_merge($this->datosFormulario(), compact('data')));
+        $data = $this->repository->findOrFail($id);
+        $this->asegurarAccesoSolicitud((int) $id);
+        $ocultarVolver = $soloConsulta;
+        $puedeActualizar = can('actualizar-solicitud-pago', false);
+        $tienePendientesCorreoArbol = $this->arbolIntegracionService->tienePendientesConCorreo((int) $id);
+        $arbolMovimientos = $this->arbolIntegracionService->findPorSolicitudpago((int) $id);
+
+        return view('solicitudpago.solicitudpago.editar', array_merge(
+            $this->datosFormulario($data),
+            compact('data', 'soloConsulta', 'ocultarVolver', 'puedeActualizar', 'tienePendientesCorreoArbol', 'arbolMovimientos')
+        ));
     }
 
     public function actualizar(ValidacionSolicitudpago $request, $id)
     {
         can('actualizar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
 
         try {
             $data = $request->validated();
-            $data['archivos_nuevos'] = $request->file('archivos_nuevos', []);
+            $data['archivos_nuevos'] = array_values(array_filter(
+                array_merge(
+                    (array) $request->file('nombrearchivos', []),
+                    (array) $request->file('archivos_nuevos', [])
+                )
+            ));
             if ($request->boolean('archivos_gestionados')) {
                 $data['archivo_ids_existentes'] = $request->input('archivo_ids_existentes', []);
             }
             $this->repository->update($data, $id);
+
+            if ($request->input('origen') === 'modal_consulta' || $request->input('vista') === 'consulta') {
+                return redirect()
+                    ->route('editar_solicitudpago', [
+                        'id' => $id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ])
+                    ->with('mensaje', 'Solicitud de pago actualizada con éxito');
+            }
 
             return redirect('solicitudpago/solicitudpago')->with('mensaje', 'Solicitud de pago actualizada con éxito');
         } catch (\Throwable $e) {
@@ -132,9 +275,36 @@ class SolicitudpagoController extends Controller
         }
     }
 
+    public function familiaVinculos($id)
+    {
+        can('listar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
+
+        $data = $this->repository->findOrFail($id);
+
+        // Si es hija, mostrar el plan de la madre
+        if ((int) ($data->solicitudpago_madre_id ?? 0) > 0 && $data->madre) {
+            $data = $this->repository->findOrFail((int) $data->solicitudpago_madre_id);
+        }
+
+        if (($data->cuotas ?? collect())->isEmpty()) {
+            return response(
+                '<div class="alert alert-secondary mb-0">Esta solicitud no tiene plan de cuotas.</div>',
+                200,
+                ['Content-Type' => 'text/html; charset=UTF-8']
+            );
+        }
+
+        return view('solicitudpago.solicitudpago.partials.familia_vinculos', [
+            'data' => $data,
+            'modo_modal' => true,
+        ]);
+    }
+
     public function eliminar(Request $request, $id)
     {
         can('borrar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
 
         if ($request->ajax()) {
             return response()->json(['mensaje' => $this->repository->delete($id) ? 'ok' : 'ng']);
@@ -146,6 +316,7 @@ class SolicitudpagoController extends Controller
     public function suspender($id)
     {
         can('actualizar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
         $this->repository->cambiarEstado((int) $id, SolicitudpagoEstados::SUSPENDIDA, 'SUSPENDIDA');
 
         return redirect()->route('editar_solicitudpago', $id)->with('mensaje', 'Solicitud suspendida');
@@ -154,26 +325,119 @@ class SolicitudpagoController extends Controller
     public function levantarSuspension($id)
     {
         can('actualizar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
         $this->repository->cambiarEstado((int) $id, SolicitudpagoEstados::EMITIDA, 'Levanta suspensión');
 
         return redirect()->route('editar_solicitudpago', $id)->with('mensaje', 'Suspensión levantada');
     }
 
-    public function descargarArchivo($id, $archivoId)
+    public function reenviarArbolAprobacion($id)
+    {
+        can('actualizar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
+
+        try {
+            $resultado = $this->arbolIntegracionService->reenviarAlArbolAprobacion((int) $id);
+        } catch (\Throwable $e) {
+            return redirect()->route('editar_solicitudpago', $id)
+                ->with('mensaje_error', $e->getMessage());
+        }
+
+        return redirect()->route('editar_solicitudpago', $id)
+            ->with(
+                ! empty($resultado['ok']) ? 'mensaje' : 'mensaje_error',
+                $resultado['mensaje'] ?? 'No se pudo reenviar al árbol de aprobación.'
+            );
+    }
+
+    public function reenviarCorreoArbol($id)
+    {
+        can('actualizar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
+
+        try {
+            $resultado = $this->arbolIntegracionService->reenviarCorreoNivelPendiente((int) $id);
+        } catch (\Throwable $e) {
+            return redirect()->route('editar_solicitudpago', $id)
+                ->with('mensaje_error', $e->getMessage());
+        }
+
+        return redirect()->route('editar_solicitudpago', $id)
+            ->with(
+                ! empty($resultado['ok']) ? 'mensaje' : 'mensaje_error',
+                $resultado['mensaje'] ?? 'No se pudo reenviar el correo del árbol.'
+            );
+    }
+
+    public function imprimirPdf($id)
+    {
+        if (! can('listar-solicitud-pago', false) && ! can('editar-solicitud-pago', false)) {
+            return redirect()->route('inicio')->with('mensaje', 'No tiene permisos para emitir la solicitud de pago.');
+        }
+        $this->asegurarAccesoSolicitud((int) $id);
+
+        try {
+            $resultado = $this->comprobantePdfService->generar((int) $id);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('editar_solicitudpago', $id)
+                ->with('mensaje_error', 'No se pudo emitir el comprobante: '.$e->getMessage());
+        }
+
+        return $resultado['pdf']->stream($resultado['nombre']);
+    }
+
+    public function descargarArchivo(Request $request, $id, $archivoId)
     {
         can('listar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
         $sp = $this->repository->findOrFail($id);
         $arch = $sp->archivos->firstWhere('id', (int) $archivoId);
-        if (! $arch || ! Storage::disk('public')->exists($arch->archivo)) {
+        if (! $arch) {
             abort(404);
         }
 
-        return Storage::disk('public')->download($arch->archivo, $arch->nombre_original ?: basename($arch->archivo));
+        $ruta = SolicitudpagoArchivoStorageSupport::rutaAbsoluta($arch, (int) $sp->codigo);
+        if ($ruta === null) {
+            abort(404, 'Archivo no encontrado en el repositorio de solicitudes de pago.');
+        }
+
+        $nombre = $arch->nombre_original ?: basename((string) $arch->archivo);
+        if ($request->boolean('inline')) {
+            return response()->file($ruta, [
+                'Content-Disposition' => 'inline; filename="'.$nombre.'"',
+            ]);
+        }
+
+        return response()->download($ruta, $nombre);
+    }
+
+    public function unirArchivos($id)
+    {
+        can('listar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
+        $sp = $this->repository->findOrFail($id);
+
+        try {
+            $resultado = $this->archivosFusionService->fusionar($sp);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('editar_solicitudpago', ['id' => $id, 'tab' => 'archivos'])
+                ->with('mensaje_error', $e->getMessage());
+        }
+
+        $headers = [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$resultado['nombre'].'"',
+        ];
+
+        return response($resultado['contenido'], 200, $headers);
     }
 
     public function importarCuotas(Request $request, $id)
     {
         can('actualizar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
         $request->validate([
             'archivo_cuotas' => 'required|file|mimes:xlsx,xls,csv|max:10240',
         ]);
@@ -213,6 +477,7 @@ class SolicitudpagoController extends Controller
     public function marcarPagada($id)
     {
         can('actualizar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
         $sp = $this->repository->findOrFail($id);
         if ($sp->estado !== SolicitudpagoEstados::AUTORIZADA) {
             return redirect()->route('editar_solicitudpago', $id)
@@ -226,6 +491,7 @@ class SolicitudpagoController extends Controller
     public function irAPago($id)
     {
         can('actualizar-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
         $sp = $this->repository->findOrFail($id);
         if ($sp->estado !== SolicitudpagoEstados::AUTORIZADA) {
             return redirect()->route('editar_solicitudpago', $id)
@@ -241,17 +507,36 @@ class SolicitudpagoController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function datosFormulario(): array
+    private function datosFormulario($data = null): array
     {
+        $centrocostoCabecera = null;
+        if ($data !== null && $data->centrocosto_id) {
+            $centrocostoCabecera = $data->relationLoaded('centrocostos')
+                ? $data->centrocostos
+                : $data->centrocostos()->first();
+        } elseif ($data === null) {
+            $ccId = (int) (auth()->user()->centrocosto_id ?? 0);
+            if ($ccId > 0) {
+                $centrocostoCabecera = Centrocosto::query()->find($ccId);
+            }
+        }
+
         return [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'sector_query' => $this->sectorRepository->all(),
-            'concepto_query' => $this->conceptoRepository->all(),
             'formapagosol_query' => $this->formapagosolRepository->all(),
             'moneda_query' => $this->monedaRepository->all(),
             'centrocosto_query' => $this->centrocostoRepository->all(),
+            'centrocosto_cabecera' => $centrocostoCabecera,
             'estado_enum' => SolicitudpagoEstados::opciones(),
             'tratamiento_enum' => SolicitudpagoTratamientos::opciones(),
         ];
+    }
+
+    private function asegurarAccesoSolicitud(int $id): void
+    {
+        if (! SolicitudpagoVisibilidadSupport::solicitudAccesiblePorId($id)) {
+            abort(403, 'No tiene acceso a esta solicitud de pago.');
+        }
     }
 }

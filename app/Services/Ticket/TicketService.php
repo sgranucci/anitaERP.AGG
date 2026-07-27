@@ -281,5 +281,44 @@ class TicketService
 		}
 
 		return 'ok';
-	}	
+	}
+
+	public function cambiarEstadoTarea($ticket_tarea_id, string $estado): array
+	{
+		$estadosValidos = array_column(Ticket_Tarea_Novedad::$enumEstado, 'nombre');
+		if (! in_array($estado, $estadosValidos, true)) {
+			throw new \InvalidArgumentException('Estado de tarea inválido.');
+		}
+
+		$ticket_tarea = $this->ticket_tareaRepository->find($ticket_tarea_id);
+		if (! $ticket_tarea) {
+			throw new \InvalidArgumentException('Tarea no encontrada.');
+		}
+
+		$estadoActual = $ticket_tarea->estadoVisual();
+		if ($estadoActual === $estado) {
+			return ['mensaje' => 'ok', 'estado' => $estado];
+		}
+
+		$novedad = [
+			'ticket_tarea_id' => $ticket_tarea_id,
+			'desdefecha' => Carbon::now(),
+			'hastafecha' => Carbon::now(),
+			'comentario' => 'Cambio de estado a '.$estado,
+			'estado' => $estado,
+			'usuario_id' => Auth::user()->id,
+		];
+
+		$tarea_novedad = $this->ticket_tarea_novedadRepository->createUnique($novedad);
+
+		$this->ticket_estadoRepository->creaEstado(
+			$ticket_tarea->ticket_id,
+			Carbon::now(),
+			$tarea_novedad->estado,
+			Auth::user()->id,
+			$tarea_novedad->comentario.' '.($ticket_tarea->tareas->nombre ?? '')
+		);
+
+		return ['mensaje' => 'ok', 'estado' => $estado];
+	}
 }

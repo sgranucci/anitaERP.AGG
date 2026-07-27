@@ -4,6 +4,22 @@
     $ticketTareaId = $tarea->id ?? null;
 @endphp
 @if ($ticketTareaId)
+    @once
+        <style>
+            .fila-comentarios-tarea-admin .comentario-item {
+                font-size: 14px;
+                line-height: 1.45;
+            }
+            .fila-comentarios-tarea-admin .comentario-item .comentario-texto {
+                font-size: 15px;
+                margin-top: 0.25rem;
+                white-space: pre-wrap;
+            }
+            .fila-comentarios-tarea-admin .comentario-tarea-texto {
+                font-size: 14px;
+            }
+        </style>
+    @endonce
     <tr class="fila-comentarios-tarea-admin" data-ticket-tarea-id="{{ $ticketTareaId }}">
         <td colspan="9" class="p-1 bg-light">
             <button type="button"
@@ -20,17 +36,17 @@
             <div class="collapse show mt-1 panel-comentarios-tarea" id="{{ $collapseId }}">
                 <div class="lista-comentarios-tarea mb-2" data-ticket-tarea-id="{{ $ticketTareaId }}">
                     @forelse ($comentarios as $comentario)
-                        <div class="comentario-item small border rounded bg-white p-2 mb-1">
+                        <div class="comentario-item border rounded bg-white p-2 mb-1">
                             <div class="d-flex justify-content-between flex-wrap">
                                 <strong>{{ $comentario->usuarios->nombre ?? $comentario->usuarios->usuario ?? '' }}</strong>
                                 <span class="text-muted">
                                     {{ $comentario->created_at ? $comentario->created_at->format('d/m/Y H:i') : '' }}
                                 </span>
                             </div>
-                            <div class="mt-1" style="white-space: pre-wrap;">{{ $comentario->comentario }}</div>
+                            <div class="comentario-texto">{{ $comentario->comentario }}</div>
                         </div>
                     @empty
-                        <p class="text-muted small mb-1 sin-comentarios">Sin comentarios todavía.</p>
+                        <p class="text-muted mb-1 sin-comentarios">Sin comentarios todavía.</p>
                     @endforelse
                 </div>
                 <div class="form-nuevo-comentario border rounded bg-white p-2">

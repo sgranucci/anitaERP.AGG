@@ -20,6 +20,7 @@
     'solo_lectura' => ! empty($data->id),
     'col_input' => 'col-lg-8',
 ])
+@include('caja.partials.campo_caja_config_pc')
 @php
     $cuentacajaIdVal = old('cuentacaja_id', $data->cuentacaja_id ?? '');
     $cuentacajaModel = null;

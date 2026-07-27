@@ -53,7 +53,11 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => ['single'],
+            // daily: laravel-YYYY-MM-DD.log + retención LOG_DAYS (antes single sin rotación → laravel.log gigante).
+            'channels' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) env('LOG_STACK', 'daily')),
+            ))),
             'ignore_exceptions' => false,
         ],
 
@@ -67,7 +71,7 @@ return [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => 14,
+            'days' => max(1, (int) env('LOG_DAYS', 14)),
         ],
 
         'slack' => [
@@ -123,6 +127,17 @@ return [
             'path' => storage_path('logs/precarga_proveedor_api.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => 30,
+            // Escriben web (www-data) y CLI (usuario del sistema), que no comparten grupo.
+            'permission' => 0666,
+        ],
+
+        'ai' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ai.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 30,
+            // Al log escriben web (www-data) y CLI (usuario del sistema), que no comparten grupo.
+            'permission' => 0666,
         ],
     ],
 

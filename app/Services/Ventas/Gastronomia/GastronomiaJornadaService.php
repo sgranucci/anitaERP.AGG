@@ -14,6 +14,7 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
 use App\Support\Database\EloquentActualizacionPorLotesSupport;
 use App\Support\Ventas\GastronomiaAutoDescarteVaciasSupport;
+use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
@@ -94,6 +95,7 @@ final class GastronomiaJornadaService
         $payload['fechafactura'] = $fechas['fechafactura'];
         $payload['fechajornada'] = $fechas['fechajornada'];
         $payload['jornada_gastronomia_id'] = $fechas['jornada_id'];
+        $payload = CaeaEmisionFechaCorrelatividadSupport::aplicarAlPayload($payload);
 
         return $payload;
     }

@@ -203,7 +203,7 @@
         var html = '<div class="card border mb-3 est-panel-turno shadow-sm"><div class="card-body py-3 est-turno-resumen-wrap">';
         html += '<div class="row align-items-center">';
         html += '<div class="col-md-3 col-6 mb-1 mb-md-0"><span class="text-muted d-block">Turno</span><strong>' + esc(estado.turno_nombre || '—') + '</strong></div>';
-        html += '<div class="col-md-3 col-6 mb-1 mb-md-0"><span class="text-muted d-block">Usuario</span><strong>' + esc(estado.usuario_habilitado || '—') + '</strong></div>';
+        html += '<div class="col-md-3 col-6 mb-1 mb-md-0"><span class="text-muted d-block">Abierto por</span><strong>' + esc(estado.usuario_apertura || estado.usuario_habilitado || '—') + '</strong></div>';
         html += '<div class="col-md-2 col-6"><span class="text-muted d-block">Jornada</span><strong>' + esc(estado.fecha_jornada_fmt || estado.fecha_jornada || '—') + '</strong></div>';
         html += '<div class="col-md-2 col-6"><span class="text-muted d-block">Habilitado</span><strong>' + esc(estado.habilitacion_en_fmt || estado.habilitacion_en || '—') + '</strong></div>';
         html += '<div class="col-md-2 col-12">';
@@ -633,13 +633,16 @@
             }
             btn.dataset.boundConciliar = '1';
             btn.addEventListener('click', function () {
-                var rawUsuarioId = btn.getAttribute('data-usuario-habilitado-id');
+                var rawUsuarioId = btn.getAttribute('data-usuario-id')
+                    || btn.getAttribute('data-usuario-habilitado-id');
                 var usuarioId = rawUsuarioId !== null && rawUsuarioId !== '' ? parseInt(rawUsuarioId, 10) : null;
                 abrirModalMedio(
                     parseInt(btn.getAttribute('data-cuentacaja-id'), 10),
                     btn.getAttribute('data-medio-nombre') || '',
                     isNaN(usuarioId) ? null : usuarioId,
-                    btn.getAttribute('data-usuario-habilitado-nombre') || ''
+                    btn.getAttribute('data-usuario-nombre')
+                        || btn.getAttribute('data-usuario-habilitado-nombre')
+                        || ''
                 );
             });
         });
@@ -649,11 +652,14 @@
             }
             btn.dataset.boundConciliarNc = '1';
             btn.addEventListener('click', function () {
-                var rawUsuarioId = btn.getAttribute('data-usuario-habilitado-id');
+                var rawUsuarioId = btn.getAttribute('data-usuario-id')
+                    || btn.getAttribute('data-usuario-habilitado-id');
                 var usuarioId = rawUsuarioId !== null && rawUsuarioId !== '' ? parseInt(rawUsuarioId, 10) : null;
                 abrirModalNotasCredito(
                     isNaN(usuarioId) ? null : usuarioId,
-                    btn.getAttribute('data-usuario-habilitado-nombre') || ''
+                    btn.getAttribute('data-usuario-nombre')
+                        || btn.getAttribute('data-usuario-habilitado-nombre')
+                        || ''
                 );
             });
         });
@@ -663,11 +669,14 @@
             }
             btn.dataset.boundConciliarInv = '1';
             btn.addEventListener('click', function () {
-                var rawUsuarioId = btn.getAttribute('data-usuario-habilitado-id');
+                var rawUsuarioId = btn.getAttribute('data-usuario-id')
+                    || btn.getAttribute('data-usuario-habilitado-id');
                 var usuarioId = rawUsuarioId !== null && rawUsuarioId !== '' ? parseInt(rawUsuarioId, 10) : null;
                 abrirModalInvitaciones(
                     isNaN(usuarioId) ? null : usuarioId,
-                    btn.getAttribute('data-usuario-habilitado-nombre') || ''
+                    btn.getAttribute('data-usuario-nombre')
+                        || btn.getAttribute('data-usuario-habilitado-nombre')
+                        || ''
                 );
             });
         });
@@ -760,7 +769,7 @@
 
         var url = apiConciliacionMedio + '?cuentacaja_id=' + encodeURIComponent(cuentacajaId);
         if (usuarioHabilitadoId && usuarioHabilitadoId > 0) {
-            url += '&usuario_habilitado_id=' + encodeURIComponent(usuarioHabilitadoId);
+            url += '&usuario_id=' + encodeURIComponent(usuarioHabilitadoId);
         }
         getJson(url).then(function (res) {
             if (!body) {
@@ -786,7 +795,7 @@
                 html += '<td>' + (f.codigo || '—') + (f.es_invitacion ? ' <span class="badge badge-secondary">Inv.</span>' : '') + '</td>';
                 html += '<td>' + (f.hora || '') + '</td>';
                 html += '<td>' + (f.cliente || '') + '</td>';
-                html += '<td>' + (f.usuario_habilitado_nombre || '') + '</td>';
+                html += '<td>' + (f.usuario_nombre || f.usuario_habilitado_nombre || '') + '</td>';
                 html += '<td class="text-right">$' + fmt(f.total_facturado) + '</td>';
                 html += '<td class="text-right font-weight-bold">$' + fmt(f.monto_medio) + '</td>';
                 html += '<td class="text-right">$' + fmt(f.total_cobrado) + '</td>';
@@ -823,7 +832,7 @@
 
         var url = apiConciliacionNotasCredito;
         if (usuarioHabilitadoId && usuarioHabilitadoId > 0) {
-            url += '?usuario_habilitado_id=' + encodeURIComponent(usuarioHabilitadoId);
+            url += '?usuario_id=' + encodeURIComponent(usuarioHabilitadoId);
         }
 
         getJson(url).then(function (res) {
@@ -848,7 +857,7 @@
                 html += '<td><span class="badge badge-danger">NC</span> ' + (n.codigo || '—') + '</td>';
                 html += '<td>' + (n.hora || '') + '</td>';
                 html += '<td>' + (n.cliente || '') + '</td>';
-                html += '<td>' + (n.usuario_habilitado_nombre || '') + '</td>';
+                html += '<td>' + (n.usuario_nombre || n.usuario_habilitado_nombre || '') + '</td>';
                 html += '<td class="text-right font-weight-bold" style="color:#922b21;">$' + fmt(n.monto_nota_credito) + '</td>';
                 html += '<td class="text-right">';
                 if (n.factura_origen_id) {
@@ -898,7 +907,7 @@
 
         var url = apiConciliacionInvitaciones;
         if (usuarioHabilitadoId && usuarioHabilitadoId > 0) {
-            url += '?usuario_habilitado_id=' + encodeURIComponent(usuarioHabilitadoId);
+            url += '?usuario_id=' + encodeURIComponent(usuarioHabilitadoId);
         }
 
         getJson(url).then(function (res) {
@@ -926,7 +935,7 @@
                 html += '<td>' + (f.codigo || '—') + ' <span class="badge badge-warning text-dark">Inv.</span></td>';
                 html += '<td>' + (f.hora || '') + '</td>';
                 html += '<td>' + (f.cliente || '') + '</td>';
-                html += '<td>' + (f.usuario_habilitado_nombre || '') + '</td>';
+                html += '<td>' + (f.usuario_nombre || f.usuario_habilitado_nombre || '') + '</td>';
                 html += '<td class="text-right font-weight-bold">$' + fmt(f.total_facturado) + '</td>';
                 html += '<td>' + descLabel + '</td>';
                 html += '<td class="text-right text-muted">—</td>';
@@ -1182,19 +1191,13 @@
             formHab.addEventListener('submit', function (e) {
                 e.preventDefault();
                 var turnoId = document.getElementById('turno_estacionamiento_id').value;
-                var usuarioId = document.getElementById('usuario_habilitado_id').value;
                 if (!turnoId) {
                     alert('Seleccione el turno a habilitar.');
-                    return;
-                }
-                if (!usuarioId) {
-                    alert('Indique el usuario habilitado (código + Tab o lupa de consulta).');
                     return;
                 }
                 postJson(apiHabilitar, {
                     turno_estacionamiento_id: turnoId,
                     monto_habilitacion: document.getElementById('monto_habilitacion').value,
-                    usuario_habilitado_id: usuarioId,
                     observacion: document.getElementById('observacion_habilitacion').value,
                 }).then(function (res) {
                     if (respuestaApiOk(res)) {

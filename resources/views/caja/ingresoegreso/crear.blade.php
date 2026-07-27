@@ -26,6 +26,20 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @if (!empty($solicitudpagoOrigen))
+            <div class="alert alert-info">
+                <strong>Pago desde solicitud de pago #{{ $solicitudpagoOrigen->codigo }}</strong>
+                — monto SP: {{ number_format((float) $solicitudpagoOrigen->monto, 2, ',', '.') }}
+                @if ($solicitudpagoOrigen->estado)
+                    — estado: {{ $solicitudpagoOrigen->estado }}
+                @endif
+                <br>
+                Al guardar este IE, si la solicitud est&aacute; AUTORIZADA pasar&aacute; a PAGADA.
+                <a href="{{ route('editar_solicitudpago', $solicitudpagoOrigen->id) }}" target="_blank" rel="noopener">
+                    Abrir solicitud
+                </a>
+            </div>
+        @endif
         <div class="card card-danger">
             <div class="card-header">
                 <h3 class="card-title">Crear Movimientos de Caja</h3>

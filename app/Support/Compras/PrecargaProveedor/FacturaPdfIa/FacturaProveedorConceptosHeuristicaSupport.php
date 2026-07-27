@@ -89,6 +89,8 @@ final class FacturaProveedorConceptosHeuristicaSupport
         return [
             ['patron' => '/\biva\s+(?:inscripto\s+)?'.$ali.'\s*%/u', 'tipo' => 'iva', 'alicuota' => null],
             ['patron' => '/\bi\.?\s*v\.?\s*a\.?\s*(?:\s*'.$ali.')?\s*%/u', 'tipo' => 'iva', 'alicuota' => null],
+            ['patron' => '/\bi\.?\s*v\.?\s*a\.?\s*inscripto/u', 'tipo' => 'iva', 'alicuota' => null],
+            ['patron' => '/\biva\s+inscripto/u', 'tipo' => 'iva', 'alicuota' => null],
             ['patron' => '/\biva\s+discriminado/u', 'tipo' => 'iva', 'alicuota' => null],
             ['patron' => '/\bneto\s+gravado\s+'.$ali.'/u', 'tipo' => 'neto', 'alicuota' => null],
             ['patron' => '/\bimporte\s+neto\s+gravado/u', 'tipo' => 'neto', 'alicuota' => null],
@@ -97,12 +99,14 @@ final class FacturaProveedorConceptosHeuristicaSupport
             ['patron' => '/\boperaciones\s+exentas/u', 'tipo' => 'exento', 'alicuota' => 0.0],
             ['patron' => '/\bimporte\s+exento/u', 'tipo' => 'exento', 'alicuota' => 0.0],
             ['patron' => '/\bno\s+gravado/u', 'tipo' => 'no_gravado', 'alicuota' => 0.0],
+            // RG 5329 / Perc. IVA 3% (nombre_ia del concepto 103).
+            ['patron' => '/\brg\s*5329\b/u', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0],
             ['patron' => '/\bpercep(?:ci[oó]n)?\s+(?:iva|i\.v\.a)/u', 'tipo' => 'percepcion_iva', 'alicuota' => null],
-            ['patron' => '/\bpercep(?:ci[oó]n)?\s+(?:iibb|i\.i\.b\.b|ingresos\s+brutos)/u', 'tipo' => 'percepcion_iibb', 'alicuota' => null],
+            ['patron' => '/\bpercep(?:\.|\s)*(?:ii\.?\s*bb\.?|iibb|i\.i\.b\.b|ingresos\s+brutos)/u', 'tipo' => 'percepcion_iibb', 'alicuota' => null],
             ['patron' => '/\bpercep(?:ci[oó]n)?\s+(?:ganancias|gan\.)/u', 'tipo' => 'percepcion_ganancias', 'alicuota' => null],
             ['patron' => '/\bimpuestos?\s+internos/u', 'tipo' => 'interno', 'alicuota' => null],
             ['patron' => '/\bimp\.?\s*internos/u', 'tipo' => 'interno', 'alicuota' => null],
-            ['patron' => '/\bsub\s*total/u', 'tipo' => 'neto', 'alicuota' => null],
+            ['patron' => '/\bsub\s*total\b/u', 'tipo' => 'neto', 'alicuota' => null],
             ['patron' => '/\bimporte\s+neto\b/u', 'tipo' => 'neto', 'alicuota' => null],
             ['patron' => '/\botros?\s+tributos/u', 'tipo' => 'otro_tributo', 'alicuota' => null],
             ['patron' => '/\bretenc(?:i[oó]n)?\s+iva/u', 'tipo' => 'retencion_iva', 'alicuota' => null],
@@ -178,15 +182,19 @@ final class FacturaProveedorConceptosHeuristicaSupport
         $agregar = [];
 
         $bloques = [
+            ['regex' => '/i\.?\s*v\.?\s*a\.?\s*inscripto[^0-9\n]{0,20}([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => null, 'desc' => 'I.V.A. INSCRIPTO'],
             ['regex' => '/iva\s+(?:inscripto\s+)?21\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => 21.0, 'desc' => 'IVA 21%'],
             ['regex' => '/iva\s+(?:inscripto\s+)?10[,.]5\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => 10.5, 'desc' => 'IVA 10,5%'],
             ['regex' => '/iva\s+(?:inscripto\s+)?27\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'iva', 'alicuota' => 27.0, 'desc' => 'IVA 27%'],
+            ['regex' => '/sub\s*total[^0-9\n]{0,20}([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => null, 'desc' => 'SUBTOTAL'],
             ['regex' => '/neto\s+gravado\s+21\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => 21.0, 'desc' => 'Neto gravado 21%'],
             ['regex' => '/neto\s+gravado\s+10[,.]5\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => 10.5, 'desc' => 'Neto gravado 10,5%'],
             ['regex' => '/neto\s+gravado\s+27\s*%?\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'neto', 'alicuota' => 27.0, 'desc' => 'Neto gravado 27%'],
             ['regex' => '/operaciones\s+exentas\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'exento', 'alicuota' => 0.0, 'desc' => 'Operaciones exentas'],
-            ['regex' => '/percep(?:ci[oó]n)?\s+iibb[^0-9\n]{0,30}([\d.,]+)/iu', 'tipo' => 'percepcion_iibb', 'alicuota' => null, 'desc' => 'Percepción IIBB'],
-            ['regex' => '/percep(?:ci[oó]n)?\s+iva[^0-9\n]{0,30}([\d.,]+)/iu', 'tipo' => 'percepcion_iva', 'alicuota' => null, 'desc' => 'Percepción IVA'],
+            ['regex' => '/rg\s*5329[^0-9\n]{0,80}?((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0, 'desc' => 'RG 5329'],
+            ['regex' => '/percep(?:\.|\s)*(?:ii\.?\s*bb\.?|iibb)[^0-9\n]{0,30}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}|\$?\s*\d[\d.,]+)/iu', 'tipo' => 'percepcion_iibb', 'alicuota' => null, 'desc' => 'PERCEP II.BB.'],
+            ['regex' => '/percep(?:ci[oó]n)?\s+iva[^0-9\n]{0,30}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}|\$?\s*\d[\d.,]+)/iu', 'tipo' => 'percepcion_iva', 'alicuota' => null, 'desc' => 'Percepción IVA'],
+            ['regex' => '/impuestos?\s+internos[^0-9\n]{0,20}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}|\$?\s*\d[\d.,]+)/iu', 'tipo' => 'interno', 'alicuota' => null, 'desc' => 'IMPUESTOS INTERNOS'],
         ];
 
         foreach ($bloques as $bloque) {

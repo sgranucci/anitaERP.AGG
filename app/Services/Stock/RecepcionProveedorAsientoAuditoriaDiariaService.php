@@ -267,6 +267,17 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             );
         }
 
+        $detalleAnita = $this->anitaBridge->diagnosticoDetalleComAnita($recepcion);
+        $base['items_erp'] = (int) ($detalleAnita['lineas_erp'] ?? 0);
+        $base['recepmov_anita'] = (int) ($detalleAnita['recepmov'] ?? 0);
+        if (array_key_exists('stkmov', $detalleAnita) && $detalleAnita['stkmov'] !== null) {
+            $base['stkmov_anita'] = (int) $detalleAnita['stkmov'];
+        }
+        if ($detalleAnita['incompleto'] ?? false) {
+            $base['problemas'][] = (string) ($detalleAnita['mensaje']
+                ?? 'Detalle Anita incompleto (recepmov/stkmov con menos ítems que el ERP).');
+        }
+
         $movimientos = $asiento->asiento_movimientos ?? collect();
         if ($movimientos->isEmpty()) {
             $base['problemas'][] = 'El asiento ERP no tiene movimientos contables.';

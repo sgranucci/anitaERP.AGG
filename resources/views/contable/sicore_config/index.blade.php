@@ -59,7 +59,9 @@
                                         —
                                     @endif
                                 </td>
-                                <td class="small">{{ $data->cuentas->count() }}</td>
+                                <td class="small">
+                                    @include('contable.partials.config_cuentas_index', ['cuentas' => $data->cuentas])
+                                </td>
                                 <td>{{ $data->activo ? 'Sí' : 'No' }}</td>
                                 <td>
                                     @if (can('editar-sicore-config', false))

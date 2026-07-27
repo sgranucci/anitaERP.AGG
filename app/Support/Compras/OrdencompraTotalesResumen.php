@@ -11,11 +11,12 @@ use App\Services\Configuracion\ImpuestoService;
  * Totales de orden de compra: importe por línea en moneda del primer ítem =
  * cantidad × precio × coeficiente de conversión (cotización de línea solo si la moneda difiere de la referencia).
  * Impuestos: solo IVA nacional vía {@see ImpuestoService::calculaImpuestosNacionalesItems}.
+ * Descuento cabecera: % o monto ({@see OrdencompraDescuentoSupport}).
  */
 final class OrdencompraTotalesResumen
 {
     /**
-     * @param  array<string, mixed>  $data  Request-like: articulo_ids, cantidades, precios, moneda_linea_ids, cotizaciones_linea, fecha, descuento
+     * @param  array<string, mixed>  $data  Request-like: articulo_ids, cantidades, precios, moneda_linea_ids, cotizaciones_linea, fecha, descuento, descuento_tipo
      * @return array{
      *   moneda_id:int,
      *   moneda_abrev:string,
@@ -24,7 +25,8 @@ final class OrdencompraTotalesResumen
      *   neto_sin_iva:float,
      *   iva_total:float,
      *   total:float,
-     *   filas_iva:list<array{tasa:float,importe:float}>
+     *   filas_iva:list<array{tasa:float,importe:float}>,
+     *   descuento_porcentaje_efectivo:float
      * }
      */
     public static function desdeRequest(array $data, CotizacionQueryInterface $cotizacionQuery, ImpuestoService $impuestoService): array
@@ -33,9 +35,12 @@ final class OrdencompraTotalesResumen
         if ($lineas === []) {
             return self::vacioParaVista();
         }
-        $dto = (float) ($data['descuento'] ?? 0);
+        $valor = (float) ($data['descuento'] ?? 0);
+        $tipo = OrdencompraDescuentoSupport::normalizarTipo($data['descuento_tipo'] ?? null);
+        $subtotal = self::sumaImporteReferencia($lineas);
+        $dtoPct = OrdencompraDescuentoSupport::valorAPorcentaje($valor, $tipo, $subtotal);
 
-        return self::armarSalida($lineas, $dto, $impuestoService);
+        return self::armarSalida($lineas, $dtoPct, $impuestoService);
     }
 
     /**
@@ -43,17 +48,64 @@ final class OrdencompraTotalesResumen
      */
     public static function desdeModelo(Ordencompra $oc, CotizacionQueryInterface $cotizacionQuery, ImpuestoService $impuestoService): array
     {
+        $lineas = self::lineasMonedaReferenciaDesdeModelo($oc);
+        if ($lineas === []) {
+            return self::vacioParaVista();
+        }
+
+        $abrev = '';
+        $oc->loadMissing(['ordencompra_articulos.monedas']);
+        $primer = collect($oc->ordencompra_articulos ?? [])->sortBy('id')->first();
+        if ($primer !== null) {
+            $abrev = (string) (optional($primer->monedas)->abreviatura ?? '');
+        }
+
+        $valor = (float) ($oc->descuento ?? 0);
+        $tipo = OrdencompraDescuentoSupport::normalizarTipo($oc->descuento_tipo ?? null);
+        $subtotal = self::sumaImporteReferencia($lineas);
+        $dtoPct = OrdencompraDescuentoSupport::valorAPorcentaje($valor, $tipo, $subtotal);
+        $out = self::armarSalida($lineas, $dtoPct, $impuestoService);
+        $out['moneda_abrev'] = $abrev;
+
+        return $out;
+    }
+
+    /**
+     * Subtotal ítems en moneda de referencia (sin descuento ni IVA).
+     */
+    public static function subtotalBrutoSinIvaDesdeModelo(Ordencompra $oc, CotizacionQueryInterface $cotizacionQuery): float
+    {
+        return self::sumaImporteReferencia(self::lineasMonedaReferenciaDesdeModelo($oc));
+    }
+
+    /**
+     * @return array{0: float, 1: int}
+     */
+    public static function montoYMonedaDesdeRequest(array $data, CotizacionQueryInterface $cotizacionQuery): array
+    {
+        $lineas = self::lineasMonedaReferenciaDesdeRequest($data, $cotizacionQuery);
+        if ($lineas === []) {
+            return [0.0, 1];
+        }
+
+        return [round(self::sumaImporteReferencia($lineas), 4), (int) $lineas[0]['moneda_id']];
+    }
+
+    /**
+     * @return list<array{cantidad:float,importe_moneda_referencia:float,impuesto_id:int,moneda_id:int}>
+     */
+    private static function lineasMonedaReferenciaDesdeModelo(Ordencompra $oc): array
+    {
         $oc->loadMissing(['ordencompra_articulos.monedas', 'ordencompra_articulos.articulos']);
 
         $ordenadas = collect($oc->ordencompra_articulos ?? [])->sortBy('id');
 
         if ($ordenadas->isEmpty()) {
-            return self::vacioParaVista();
+            return [];
         }
 
         $primer = $ordenadas->first();
         $monedaBaseId = (int) ($primer->moneda_id ?: 1);
-        $abrev = (string) (optional($primer->monedas)->abreviatura ?? '');
 
         $lineas = [];
         foreach ($ordenadas as $lin) {
@@ -77,33 +129,7 @@ final class OrdencompraTotalesResumen
             ];
         }
 
-        if ($lineas === []) {
-            return self::vacioParaVista();
-        }
-
-        $dto = (float) ($oc->descuento ?? 0);
-        $out = self::armarSalida($lineas, $dto, $impuestoService);
-        $out['moneda_abrev'] = $abrev;
-
-        return $out;
-    }
-
-    /**
-     * @return array{0: float, 1: int}
-     */
-    public static function montoYMonedaDesdeRequest(array $data, CotizacionQueryInterface $cotizacionQuery): array
-    {
-        $lineas = self::lineasMonedaReferenciaDesdeRequest($data, $cotizacionQuery);
-        if ($lineas === []) {
-            return [0.0, 1];
-        }
-
-        $suma = 0.0;
-        foreach ($lineas as $ln) {
-            $suma += $ln['importe_moneda_referencia'];
-        }
-
-        return [round($suma, 4), (int) $lineas[0]['moneda_id']];
+        return $lineas;
     }
 
     /**
@@ -190,6 +216,19 @@ final class OrdencompraTotalesResumen
     }
 
     /**
+     * @param  list<array{importe_moneda_referencia:float}>  $lineas
+     */
+    private static function sumaImporteReferencia(array $lineas): float
+    {
+        $suma = 0.0;
+        foreach ($lineas as $ln) {
+            $suma += (float) ($ln['importe_moneda_referencia'] ?? 0);
+        }
+
+        return $suma;
+    }
+
+    /**
      * @param  list<array{cantidad:float,importe_moneda_referencia:float,impuesto_id:int}>  $lineas
      * @return array<string, mixed>
      */
@@ -223,6 +262,7 @@ final class OrdencompraTotalesResumen
             'iva_total' => $det['iva_total'],
             'total' => $det['total'],
             'filas_iva' => $det['filas_iva'],
+            'descuento_porcentaje_efectivo' => max(0.0, $descuentoPorcentaje),
         ];
     }
 
@@ -240,6 +280,7 @@ final class OrdencompraTotalesResumen
             'iva_total' => 0.0,
             'total' => 0.0,
             'filas_iva' => [],
+            'descuento_porcentaje_efectivo' => 0.0,
         ];
     }
 

@@ -33,7 +33,8 @@ final class RecepcionProveedorAnitaEscrituraSupport
         return (string) $value;
     }
 
-    public static function decimalSql(float $value, int $decimales = 4): string
+    /** Default 6: cantidades ERP (ej. 0.599940) deben cuadrar cant×precio con asiento COM. */
+    public static function decimalSql(float $value, int $decimales = 6): string
     {
         return number_format($value, $decimales, '.', '');
     }

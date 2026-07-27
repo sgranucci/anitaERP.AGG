@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Aplica deltas sobre cuentacontable_saldo_mes (agregado mensual por moneda origen).
+ *
+ * - monto / monto_local: neto firmado (debe +, haber −).
+ * - debe / haber (+ _local): brutos del mes (para Balance SyS por períodos).
  */
 class CuentacontableSaldoMesSupport
 {
@@ -23,6 +26,8 @@ class CuentacontableSaldoMesSupport
     }
 
     /**
+     * Alta (+1) o baja (−1) de un movimiento firmado sobre el agregado mensual.
+     *
      * @param  array{
      *   empresa_id: int|null,
      *   cuentacontable_id: int|null,
@@ -33,9 +38,92 @@ class CuentacontableSaldoMesSupport
      *   cotizacion: float|null
      * }  $contexto
      */
+    public static function aplicarMovimiento(array $contexto, float $signedMonto, int $factor = 1): void
+    {
+        if (! self::observerHabilitado() || abs($signedMonto) < 1e-9 || $factor === 0) {
+            return;
+        }
+
+        $factor = $factor >= 0 ? 1 : -1;
+        $deltaNeto = $signedMonto * $factor;
+        $deltaDebe = ($signedMonto > 0 ? $signedMonto : 0.0) * $factor;
+        $deltaHaber = ($signedMonto < 0 ? abs($signedMonto) : 0.0) * $factor;
+
+        $monedaId = (int) ($contexto['moneda_id'] ?? 0);
+        $deltaLocal = self::convertirMontoLocal($signedMonto, $monedaId, $contexto['cotizacion'] ?? null) * $factor;
+        $deltaDebeLocal = ($signedMonto > 0
+            ? self::convertirMontoLocal($signedMonto, $monedaId, $contexto['cotizacion'] ?? null)
+            : 0.0) * $factor;
+        $deltaHaberLocal = ($signedMonto < 0
+            ? abs(self::convertirMontoLocal($signedMonto, $monedaId, $contexto['cotizacion'] ?? null))
+            : 0.0) * $factor;
+
+        self::aplicarDeltas(
+            $contexto,
+            $deltaNeto,
+            $deltaLocal,
+            $deltaDebe,
+            $deltaHaber,
+            $deltaDebeLocal,
+            $deltaHaberLocal,
+        );
+    }
+
+    /**
+     * @param  array{
+     *   empresa_id: int|null,
+     *   cuentacontable_id: int|null,
+     *   centrocosto_id: int|null,
+     *   fecha: mixed,
+     *   moneda_id: int|null,
+     *   monto: float,
+     *   cotizacion: float|null
+     * }  $contexto
+     *
+     * @deprecated Preferir aplicarMovimiento() para mantener debe/haber brutos.
+     */
     public static function aplicarDelta(array $contexto, float $deltaMonto): void
     {
-        if (! self::observerHabilitado() || abs($deltaMonto) < 1e-9) {
+        if (abs($deltaMonto) < 1e-9) {
+            return;
+        }
+
+        // Compat: tratar el delta como un movimiento completo (alta o baja neta).
+        self::aplicarMovimiento($contexto, $deltaMonto, 1);
+    }
+
+    /**
+     * @param  array{
+     *   empresa_id: int|null,
+     *   cuentacontable_id: int|null,
+     *   centrocosto_id: int|null,
+     *   fecha: mixed,
+     *   moneda_id: int|null,
+     *   monto?: float,
+     *   cotizacion?: float|null
+     * }  $contexto
+     */
+    public static function aplicarDeltas(
+        array $contexto,
+        float $deltaNeto,
+        float $deltaLocal,
+        float $deltaDebe,
+        float $deltaHaber,
+        float $deltaDebeLocal,
+        float $deltaHaberLocal,
+    ): void {
+        if (! self::observerHabilitado()) {
+            return;
+        }
+
+        if (
+            abs($deltaNeto) < 1e-9
+            && abs($deltaLocal) < 1e-9
+            && abs($deltaDebe) < 1e-9
+            && abs($deltaHaber) < 1e-9
+            && abs($deltaDebeLocal) < 1e-9
+            && abs($deltaHaberLocal) < 1e-9
+        ) {
             return;
         }
 
@@ -49,7 +137,6 @@ class CuentacontableSaldoMesSupport
         }
 
         $centrocostoId = self::normalizarCentrocostoId($contexto['centrocosto_id'] ?? null);
-        $deltaLocal = self::convertirMontoLocal($deltaMonto, $monedaId, $contexto['cotizacion'] ?? null);
 
         try {
             DB::transaction(function () use (
@@ -58,8 +145,12 @@ class CuentacontableSaldoMesSupport
                 $centrocostoId,
                 $anioMes,
                 $monedaId,
-                $deltaMonto,
+                $deltaNeto,
                 $deltaLocal,
+                $deltaDebe,
+                $deltaHaber,
+                $deltaDebeLocal,
+                $deltaHaberLocal,
             ) {
                 $query = Cuentacontable_Saldo_Mes::query()
                     ->where('empresa_id', $empresaId)
@@ -82,14 +173,22 @@ class CuentacontableSaldoMesSupport
                         'centrocosto_id' => $centrocostoId,
                         'anio_mes' => $anioMes,
                         'moneda_id' => $monedaId,
-                        'monto' => $deltaMonto,
+                        'debe' => $deltaDebe,
+                        'haber' => $deltaHaber,
+                        'debe_local' => $deltaDebeLocal,
+                        'haber_local' => $deltaHaberLocal,
+                        'monto' => $deltaNeto,
                         'monto_local' => $deltaLocal,
                     ]);
 
                     return;
                 }
 
-                $row->monto = (float) $row->monto + $deltaMonto;
+                $row->debe = (float) $row->debe + $deltaDebe;
+                $row->haber = (float) $row->haber + $deltaHaber;
+                $row->debe_local = (float) $row->debe_local + $deltaDebeLocal;
+                $row->haber_local = (float) $row->haber_local + $deltaHaberLocal;
+                $row->monto = (float) $row->monto + $deltaNeto;
                 $row->monto_local = (float) $row->monto_local + $deltaLocal;
                 $row->save();
             });
@@ -99,7 +198,7 @@ class CuentacontableSaldoMesSupport
                 'cuentacontable_id' => $cuentaId,
                 'anio_mes' => $anioMes,
                 'moneda_id' => $monedaId,
-                'delta' => $deltaMonto,
+                'delta' => $deltaNeto,
                 'error' => $e->getMessage(),
             ]);
         }

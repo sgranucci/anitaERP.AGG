@@ -79,12 +79,38 @@ $(function () {
 		if (!$tr.closest('#tabla-articulos-ordencompra').length) {
 			return;
 		}
+		var provCab = parseInt($('#proveedor_id').val(), 10) || 0;
+		if (provCab <= 0) {
+			alert('Debe indicar el proveedor de la orden de compra antes de cargar artículos.');
+			$tr.find('.articulo_id').val('');
+			$tr.find('.codigoarticulo').val('');
+			$tr.find('.descripcionarticulo').val('');
+			ocLimpiarCantidadAlternativaHint($tr);
+			if (window.ArticuloProveedorOperativo) {
+				window.ArticuloProveedorOperativo.aplicarAFila($tr, null, dataArticulo);
+			}
+			$('#codigoproveedor').focus();
+			return;
+		}
 		if (typeof window.msAplicarExclusividadColorTalle === 'function') {
 			if (!window.msAplicarExclusividadColorTalle(dataArticulo, $tr)) {
 				return;
 			}
 		}
 		ocEnriquecerUmAltDesdeArticulo($tr, dataArticulo);
+		if (window.ArticuloProveedorOperativo && typeof window.ArticuloProveedorOperativo.resolverTrasArticulo === 'function') {
+			window.ArticuloProveedorOperativo.resolverTrasArticulo({
+				$tr: $tr,
+				dataArticulo: dataArticulo,
+				proveedorCabeceraId: provCab,
+				restrictivo: true,
+				onSinMatchCabecera: function () {
+					if (typeof toastr !== 'undefined') {
+						toastr.info('El artículo no tiene vínculo activo con este proveedor en el catálogo; se usan datos del maestro.');
+					}
+				}
+			});
+		}
 	};
 
 	function mostrarSolapa(sel) {
@@ -1453,6 +1479,19 @@ $(function () {
 		ocGuardarCuotasModal();
 	});
 
+	function ocActualizarAyudaDescuento() {
+		var tipo = ($('#descuento_tipo').val() || 'porcentaje');
+		var $ayuda = $('#descuento_ayuda');
+		if (!$ayuda.length) {
+			return;
+		}
+		if (tipo === 'importe') {
+			$ayuda.text('Monto fijo sobre el neto de ítems antes del IVA (en moneda del 1.er ítem).');
+		} else {
+			$ayuda.text('Porcentaje sobre el neto de ítems antes del IVA.');
+		}
+	}
+
 	function ocRecalcTotales() {
 		if (!$('#oc-panel-totales').length || $('#descuento').length === 0) {
 			return;
@@ -1482,6 +1521,7 @@ $(function () {
 				_token: $('meta[name="csrf-token"]').attr('content'),
 				fecha: $('#fecha').val() || '',
 				descuento: $('#descuento').val(),
+				descuento_tipo: $('#descuento_tipo').val() || 'porcentaje',
 				articulo_ids: articulo_ids,
 				cantidades: cantidades,
 				precios: precios,
@@ -1560,6 +1600,9 @@ $(function () {
 		$clone.find('select.ms-color-id, select.ms-talle-id').val('').attr('data-selected', '');
 		$clone.attr('data-maneja-stock-color-talle', '0');
 		ocLimpiarCantidadAlternativaHint($clone);
+		$clone.find('.linea-articulo-proveedor-id,.linea-codigo-articulo-proveedor,.linea-coef-conversion,.linea-um-compra-abrev').val('');
+		$clone.find('.linea-proveedor-etiqueta').text('—').attr('title', '');
+		$clone.find('.linea-conversion-hint').addClass('d-none').html('');
 		$tbody.append($clone);
 		$tbody.append($cloneSub);
 		ocRefreshDetalleLineaBadge($clone);
@@ -1621,7 +1664,11 @@ $(function () {
 
 	$(document).on('input change', '#tabla-articulos-ordencompra .cantidad-linea, #tabla-articulos-ordencompra .precio-linea, #tabla-articulos-ordencompra .oc-cotizacion-linea', function () {
 		if ($(this).hasClass('cantidad-linea')) {
-			ocActualizarCantidadAlternativaHint($(this).closest('tr.item-ordencompra-articulo'));
+			var $tr = $(this).closest('tr.item-ordencompra-articulo');
+			ocActualizarCantidadAlternativaHint($tr);
+			if (window.ArticuloProveedorOperativo) {
+				window.ArticuloProveedorOperativo.actualizarHintConversion($tr);
+			}
 		}
 		ocScheduleTotales();
 	});
@@ -1636,6 +1683,12 @@ $(function () {
 	$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
 		ocActualizarCantidadAlternativaHint($(this));
 	});
+	$('#descuento_tipo').on('change', function () {
+		ocActualizarAyudaDescuento();
+		ocScheduleTotales();
+	});
+	ocActualizarAyudaDescuento();
+
 	$('#fecha, #descuento').on('change input', function () {
 		if ($(this).attr('id') === 'fecha') {
 			ocRefrescarCotizacionesExtranjerasPorFecha();
@@ -1679,6 +1732,14 @@ $(function () {
 			e.preventDefault();
 			e.stopPropagation();
 			alert('Error al preparar comprobantes. Revise la solapa Comprobantes a venir o recargue la página.');
+			return false;
+		}
+		if (ocNormCabeceraId($('#proveedor_id').val()) <= 0) {
+			e.preventDefault();
+			e.stopPropagation();
+			alert('Debe indicar el proveedor de la orden de compra.');
+			ocMostrarSolapaDelElemento(document.getElementById('codigoproveedor') || document.getElementById('proveedor_id'));
+			$('#codigoproveedor').focus();
 			return false;
 		}
 		try {
@@ -1768,6 +1829,18 @@ $(function () {
 	$('#oc-boton-articulos').on('click', function () {
 		mostrarSolapa('#oc-solapa-articulos');
 		ocMarcarTabActivo('oc-boton-articulos');
+		var $primerSku = $('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo')
+			.first()
+			.find('.codigoarticulo')
+			.first();
+		if ($primerSku.length && !$primerSku.prop('readonly') && !$primerSku.prop('disabled')) {
+			setTimeout(function () {
+				$primerSku.trigger('focus');
+				if ($primerSku[0] && typeof $primerSku[0].select === 'function') {
+					$primerSku[0].select();
+				}
+			}, 0);
+		}
 	});
 	$('#oc-boton-comprobantes').on('click', function () {
 		mostrarSolapa('#oc-solapa-comprobantes');
@@ -2073,6 +2146,9 @@ $(function () {
 				$('#oc-aviso-arbol').removeClass('d-none').text(data.aviso_grabacion_pendiente);
 			} else {
 				$('#oc-aviso-arbol').addClass('d-none').text('');
+			}
+			if (window.AnitaArbolPanelIa) {
+				window.AnitaArbolPanelIa.render(data && data.ai_contexto_arbol ? data.ai_contexto_arbol : null, '#oc-panel-ia-arbol-solapa');
 			}
 		});
 	});

@@ -33,19 +33,35 @@
 						@endif
                     </a>
                 </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('asiento') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
-                </div>
+                @php $empresasFiltro = collect($empresa_query ?? []); @endphp
+                <form action="{{ route('asiento') }}" method="GET" class="form-inline justify-content-md-end mt-2">
+                    @if ($empresasFiltro->count() > 1)
+                        <div class="input-group input-group-sm mr-2 mb-1" style="width: auto;">
+                            <div class="input-group-prepend">
+                                <span class="input-group-text bg-white text-muted"><i class="fa fa-building"></i></span>
+                            </div>
+                            <select name="empresa_id" id="empresa_id" class="form-control form-control-sm" onchange="this.form.submit()">
+                                <option value="">Todas las empresas</option>
+                                @foreach ($empresasFiltro as $emp)
+                                    <option value="{{ $emp->id }}" @selected((int) ($empresa_id ?? 0) === (int) $emp->id)>{{ $emp->nombre }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @elseif ($empresasFiltro->count() === 1)
+                        <input type="hidden" name="empresa_id" value="{{ (int) $empresasFiltro->first()->id }}">
+                    @endif
+                    <div class="input-group input-group-sm mb-1" style="width: auto;">
+                        <input type="text" name="busqueda" value="{{ $busqueda ?? '' }}" class="form-control form-control-sm" placeholder="Buscar número, tipo o fecha…" style="min-width: 210px;">
+                        <div class="input-group-append">
+                            <button type="submit" class="btn btn-info">
+                                <i class="fa fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_asiento', 'busqueda' => $busqueda])
+                @include('includes.exportar-tabla-queryparams', ['ruta' => 'lista_asiento', 'queryparams' => $filtrosQuery ?? []])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
@@ -133,5 +149,5 @@
         </div>
     </div>
 </div>
-{{ $asientos->appends(['busqueda' => $busqueda])->links() }}
+{{ $asientos->appends($filtrosQuery ?? [])->links() }}
 @endsection

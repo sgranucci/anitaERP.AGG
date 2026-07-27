@@ -1,15 +1,29 @@
 @php
     $arqueoMedios = ! empty($totalesTurno['arqueo_medios_cierre']);
-    $tituloMedios = $tituloMedios ?? 'Total final por medio de pago';
-    $etiquetaTotal = $etiquetaTotal ?? 'Total';
-    $totalEsperadoSistema = (float) ($totalesTurno['total_cobrado'] ?? 0);
+    $tituloMedios = $tituloMedios ?? 'Medios a rendir en caja';
+    $etiquetaTotal = $etiquetaTotal ?? 'Total a rendir';
+    $facturacionTotem = is_array($totalesTurno['facturacion_totem'] ?? null) ? $totalesTurno['facturacion_totem'] : null;
+    $totalTotem = (float) ($facturacionTotem['total'] ?? $totalesTurno['total_facturacion_totem'] ?? 0);
+    $hayTotem = $facturacionTotem !== null || abs($totalTotem) >= 0.005;
+    $totalEsperadoSistema = (float) ($totalesTurno['total_cobrado_a_rendir']
+        ?? ((float) ($totalesTurno['total_cobrado'] ?? 0) - $totalTotem));
     $totalContadoCajero = (float) ($totalesTurno['total_cobrado_contado'] ?? $totalEsperadoSistema);
+    $mediosArqueo = [];
+    foreach ($totalesTurno['por_medio_pago'] ?? [] as $p) {
+        if (! is_array($p)) {
+            continue;
+        }
+        if (! empty($p['excluido_arqueo']) || ! empty($p['es_facturacion_totem'])) {
+            continue;
+        }
+        $mediosArqueo[] = $p;
+    }
 @endphp
 <h2>{{ $tituloMedios }}</h2>
 @if ($arqueoMedios)
-<p class="muted" style="font-size:11px; margin:0 0 8px;">
-    Montos declarados por el cajero al cierre definitivo del turno, comparados con el sistema.
-</p>
+    <p class="muted" style="font-size:11px; margin:0 0 8px;">
+        Montos que el cajero debe entregar o declarar. TOTEM no entra al arqueo (ya cobrado en el kiosco).
+    </p>
 @endif
 <table>
     <thead>
@@ -24,7 +38,7 @@
         </tr>
     </thead>
     <tbody>
-        @foreach ($totalesTurno['por_medio_pago'] ?? [] as $p)
+        @foreach ($mediosArqueo as $p)
             @php
                 $esperado = (float) ($p['esperado'] ?? $p['total'] ?? 0);
                 $contado = array_key_exists('contado', $p) ? (float) $p['contado'] : $esperado;
@@ -86,3 +100,30 @@
         </tr>
     </tfoot>
 </table>
+
+@if ($hayTotem)
+    <h2 style="margin-top:14px;">Facturación TOTEM — no entregar en caja</h2>
+    <p class="muted" style="font-size:11px; margin:0 0 8px;">
+        {{ $facturacionTotem['leyenda'] ?? 'Comandas Waitry ya cobradas en el tótem/kiosco. Integran la facturación del turno, pero el dinero no está en la gaveta.' }}
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Concepto</th>
+                <th class="num">Importe</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="background:#eef7fb;">
+                <td>{{ $facturacionTotem['nombre'] ?? $facturacionTotem['codigo'] ?? 'TOTEM' }} (puente contable)</td>
+                <td class="num" style="font-weight:bold;">${{ number_format($totalTotem, 2, ',', '.') }}</td>
+            </tr>
+        </tbody>
+        <tfoot>
+            <tr>
+                <td class="lbl">Cobrado neto del turno (caja + TOTEM)</td>
+                <td class="num">${{ number_format((float) ($totalesTurno['total_cobrado'] ?? 0), 2, ',', '.') }}</td>
+            </tr>
+        </tfoot>
+    </table>
+@endif

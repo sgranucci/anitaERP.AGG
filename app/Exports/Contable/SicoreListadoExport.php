@@ -25,7 +25,7 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'I';
+    private const COL_ULTIMA = 'G';
 
     private bool $hayFilaLogos = false;
 
@@ -91,13 +91,15 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
 
     public function columnFormats(): array
     {
+        // A Reg. | B Imp. | C Documento | D Razón social | E Fecha | F Base | G Importe
         return [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'C' => NumberFormat::FORMAT_TEXT,
             'D' => NumberFormat::FORMAT_TEXT,
+            'E' => NumberFormat::FORMAT_TEXT,
+            'F' => '#,##0.00',
             'G' => '#,##0.00',
-            'H' => '#,##0.00',
         ];
     }
 
@@ -113,13 +115,11 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
         return [
             'A' => 8,
             'B' => 8,
-            'C' => 12,
-            'D' => 16,
-            'E' => 28,
-            'F' => 12,
+            'C' => 16,
+            'D' => 28,
+            'E' => 12,
+            'F' => 14,
             'G' => 14,
-            'H' => 14,
-            'I' => 36,
         ];
     }
 
@@ -161,7 +161,7 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
                 }
 
                 // El lector HTML ya fusiona por colspan (título, generado, subtítulo, filas de
-                // conciliación con colspan=2, etc.). Volver a fusionar A:I sobre esas filas genera
+                // conciliación, etc.). Volver a fusionar A:G sobre esas filas genera
                 // rangos SOLAPADOS que corrompen el xlsx (Excel pide "reparar"). Solo fusionamos las
                 // filas meta que quedaron sin fusionar.
                 $filasYaFusionadas = [];

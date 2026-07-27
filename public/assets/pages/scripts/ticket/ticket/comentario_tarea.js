@@ -56,10 +56,10 @@ $(function () {
                 var $lista = $panel.find('.lista-comentarios-usuario[data-ticket-tarea-id="' + ticketTareaId + '"]');
                 $lista.find('.sin-comentarios').remove();
 
-                var html = '<div class="comentario-usuario-item small border-bottom pb-1 mb-1">' +
+                var html = '<div class="comentario-usuario-item border-bottom pb-1 mb-1">' +
                     '<strong>' + (resp.comentario.usuario || '') + '</strong>' +
                     '<span class="text-muted"> — ' + (resp.comentario.fecha || '') + '</span>' +
-                    '<div class="mt-1">' + $('<div>').text(resp.comentario.comentario).html() + '</div>' +
+                    '<div class="comentario-usuario-texto">' + $('<div>').text(resp.comentario.comentario).html() + '</div>' +
                     '</div>';
                 $lista.append(html);
 

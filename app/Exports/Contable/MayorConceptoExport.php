@@ -38,6 +38,10 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
 
     private bool $hayFilaLogos = false;
 
+    private int $filaInicioMeta = 1;
+
+    private int $filasMeta = 2;
+
     private int $filaCabecerasExcel = 2;
 
     private int $filaCabecerasResumenExcel = 0;
@@ -130,32 +134,35 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($filas);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
-        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-
-        $datosResumen = $agrupacionResumen === 'cuenta_concepto'
-            ? (is_array($resumenPorCuenta) ? $resumenPorCuenta : [])
-            : (is_array($resumen) ? $resumen : []);
-        $tieneBloqueResumen = (is_array($resumen) && $resumen !== [])
-            || (is_array($resumenPorCuenta) && $resumenPorCuenta !== []);
-
-        $this->calcularFilasEncabezado(
-            $tieneBloqueResumen,
-            $datosResumen,
-            $agrupacionResumen,
-            is_array($auditoriaPanel) ? $auditoriaPanel : null,
-        );
 
         $multiempresa = $this->esMultiempresa();
 
+        $cantidadDetalle = 0;
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') === 'detalle') {
+                $cantidadDetalle++;
+            }
+        }
+
         $totalesReporte = [
-            'cantidad_filas' => (int) ($resultado['totales']['lineas'] ?? 0),
+            'cantidad_filas' => $cantidadDetalle,
             'total_debe' => (float) ($resultado['totales']['debe'] ?? 0),
             'total_haber' => (float) ($resultado['totales']['haber'] ?? 0),
         ];
         if (MayorConceptoListadoFiltros::tieneFiltroDetalle($this->filtros)) {
             $totalesVisibles = MayorConceptoListadoFiltros::totalesDesdeFilasVisibles($filas);
-            $totalesReporte = array_merge($totalesReporte, $totalesVisibles, ['filtrado' => true]);
+            $totalesReporte = array_merge($totalesReporte, $totalesVisibles, [
+                'cantidad_filas' => (int) ($totalesVisibles['cantidad_filas'] ?? $cantidadDetalle),
+                'filtrado' => true,
+            ]);
         }
+
+        $subtitulo = trim(
+            $this->reporteService->formatearEmpresasTexto($this->filtros)
+            .' · '.$this->reporteService->formatearPeriodoTexto($this->filtros)
+        );
+
+        $this->calcularFilasEncabezado($subtitulo, $totalesReporte);
 
         return view('exports.contable.mayorconceptoindex', [
             'filas' => $filas,
@@ -167,62 +174,74 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
             'excel_formato_numero' => $this->formatoNumero(),
             'totales' => $totalesReporte,
             'titulo' => 'Mayor por concepto',
-            'subtitulo' => $this->reporteService->formatearEmpresasTexto($this->filtros)
-                .' · '.$this->reporteService->formatearPeriodoTexto($this->filtros),
+            'subtitulo' => $subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'multiempresa' => $multiempresa,
             'colSpanExcel' => $multiempresa ? 18 : 17,
-            'puede_ver_asiento' => can('listar-asiento', false) || can('editar-asiento', false),
-            'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
-            'puede_ver_concepto' => can('listar-conceptos-de-gastos', false) || can('editar-conceptos-de-gastos', false),
-            'puede_ver_ordencompra' => can('listar-ordencompra', false) || can('editar-ordencompra', false),
         ]);
     }
 
     /**
-     * @param  list<array<string, mixed>>  $datosResumen
-     * @param  array<string, mixed>|null  $auditoriaPanel
+     * @param  array<string, mixed>  $totales
      */
-    private function calcularFilasEncabezado(
-        bool $tieneBloqueResumen,
-        array $datosResumen,
-        string $agrupacionResumen,
-        ?array $auditoriaPanel,
-    ): void {
-        $fila = $this->filaTituloExcel;
-        $this->filaCabecerasResumenExcel = 0;
+    private function calcularFilasEncabezado(string $subtitulo, array $totales): void
+    {
+        $offsetLogo = $this->hayFilaLogos ? 1 : 0;
+        $this->filaInicioMeta = $offsetLogo + 1;
+        $this->filaTituloExcel = $this->filaInicioMeta;
 
-        if ($tieneBloqueResumen) {
-            $fila++; // título del bloque resumen
-            $fila++; // thead resumen
-            $this->filaCabecerasResumenExcel = $fila;
-            $fila += $this->contarFilasResumenDatos($datosResumen, $agrupacionResumen);
-            $fila++; // spacer
-            if (! empty($auditoriaPanel['conciliacion'])) {
-                $fila++;
-            }
-            $fila++; // "Detalle de movimientos"
+        // título + Generado + formato números (+ subtítulo) (+ contador)
+        $filasMeta = 3;
+        if (trim($subtitulo) !== '') {
+            $filasMeta++;
         }
+        if ((int) ($totales['cantidad_filas'] ?? 0) > 0) {
+            $filasMeta++;
+        }
+        $this->filasMeta = $filasMeta;
 
-        $fila++; // thead detalle
-        $this->filaCabecerasExcel = $fila;
-        $this->filaPrimeraDatosExcel = $fila + 1;
+        $this->filaCabecerasResumenExcel = 0;
+        $this->filaCabecerasExcel = $offsetLogo + $filasMeta + 1;
+        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
     }
 
     /**
-     * @param  list<array<string, mixed>>  $datosResumen
+     * Thead del bloque resumen (al pie del archivo): fila siguiente al título
+     * "Totales por concepto…" / "Totales por cuenta…".
      */
-    private function contarFilasResumenDatos(array $datosResumen, string $agrupacionResumen): int
+    private function localizarFilaCabeceraResumen(Worksheet $sheet): ?int
     {
-        $count = 0;
-        foreach ($datosResumen as $grupo) {
-            $hijos = $agrupacionResumen === 'cuenta_concepto'
-                ? ($grupo['conceptos'] ?? [])
-                : ($grupo['cuentas'] ?? []);
-            $count += (is_array($hijos) ? count($hijos) : 0) + 1; // + fila total del grupo
+        $highestRow = $sheet->getHighestRow();
+
+        for ($row = 1; $row <= $highestRow; $row++) {
+            $valor = trim((string) ($sheet->getCell('A'.$row)->getValue() ?? ''));
+            if ($valor === '') {
+                continue;
+            }
+            if (stripos($valor, 'Totales por concepto') !== false
+                || stripos($valor, 'Totales por cuenta') !== false) {
+                return $row + 1;
+            }
         }
 
-        return $count;
+        return null;
+    }
+
+    private function localizarFilaCabeceraDetalle(Worksheet $sheet): ?int
+    {
+        $highestRow = min($sheet->getHighestRow(), 500);
+        $colUltima = $this->colUltima();
+
+        for ($row = 1; $row <= $highestRow; $row++) {
+            foreach (range('A', $colUltima) as $col) {
+                $valor = trim((string) ($sheet->getCell($col.$row)->getValue() ?? ''));
+                if ($valor === 'Fecha') {
+                    return $row;
+                }
+            }
+        }
+
+        return null;
     }
 
     public function columnFormats(): array
@@ -260,47 +279,48 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
 
     public function columnWidths(): array
     {
+        // Anchos alineados al resto de reportes contables (sin ##### en importes).
         if ($this->esMultiempresa()) {
             return [
-                'A' => 14,
-                'B' => 8,
-                'C' => 22,
-                'D' => 12,
-                'E' => 22,
-                'F' => 10,
-                'G' => 10,
-                'H' => 5,
-                'I' => 16,
-                'J' => 10,
-                'K' => 8,
-                'L' => 16,
-                'M' => 12,
-                'N' => 28,
-                'O' => 5,
+                'A' => 14,  // Empr.
+                'B' => 12,  // Concepto
+                'C' => 22,  // Nombre concepto
+                'D' => 12,  // Cuenta
+                'E' => 24,  // Descripción cuenta
+                'F' => 11,  // Fecha
+                'G' => 11,  // N.Asi.
+                'H' => 5,   // Tip
+                'I' => 15,  // Comprobante
+                'J' => 11,  // Cheque
+                'K' => 9,   // Nro.OC.
+                'L' => 18,  // Emisor
+                'M' => 13,  // CUIT
+                'N' => 32,  // Descripción mov.
+                'O' => 5,   // Mon
                 'P' => 11,  // Cotiz.
-                'Q' => 16,  // Debe (ancho fijo)
-                'R' => 16,  // Haber (ancho fijo)
+                'Q' => 16,  // Debe
+                'R' => 16,  // Haber
             ];
         }
 
         return [
-            'A' => 8,
-            'B' => 22,
-            'C' => 12,
-            'D' => 22,
-            'E' => 10,
-            'F' => 10,
-            'G' => 5,
-            'H' => 16,
-            'I' => 10,
-            'J' => 8,
-            'K' => 16,
-            'L' => 12,
-            'M' => 28,
-            'N' => 5,
+            'A' => 12,  // Concepto
+            'B' => 22,  // Nombre concepto
+            'C' => 12,  // Cuenta
+            'D' => 24,  // Descripción cuenta
+            'E' => 11,  // Fecha
+            'F' => 11,  // N.Asi.
+            'G' => 5,   // Tip
+            'H' => 15,  // Comprobante
+            'I' => 11,  // Cheque
+            'J' => 9,   // Nro.OC.
+            'K' => 18,  // Emisor
+            'L' => 13,  // CUIT
+            'M' => 32,  // Descripción mov.
+            'N' => 5,   // Mon
             'O' => 11,  // Cotiz.
-            'P' => 16,  // Debe (ancho fijo)
-            'Q' => 16,  // Haber (ancho fijo)
+            'P' => 16,  // Debe
+            'Q' => 16,  // Haber
         ];
     }
 
@@ -333,10 +353,18 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
                     }
                 }
 
-                $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.$colUltima.$filaTit);
-                $sheet->getRowDimension($filaTit)->setRowHeight(28);
-                $sheet->getStyle('A'.$filaTit.':'.$colUltima.$filaTit)->applyFromArray([
+                $filaCabDetalle = $this->localizarFilaCabeceraDetalle($sheet) ?? $this->filaCabecerasExcel;
+                $this->filaCabecerasExcel = $filaCabDetalle;
+                $this->filaPrimeraDatosExcel = $filaCabDetalle + 1;
+                $this->filaCabecerasResumenExcel = $this->localizarFilaCabeceraResumen($sheet) ?? 0;
+
+                for ($i = 0; $i < $this->filasMeta; $i++) {
+                    $fila = $this->filaInicioMeta + $i;
+                    $sheet->mergeCells('A'.$fila.':'.$colUltima.$fila);
+                }
+
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+                $sheet->getStyle('A'.$this->filaTituloExcel.':'.$colUltima.$this->filaTituloExcel)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 16,
@@ -349,16 +377,30 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
                     ],
                 ]);
 
-                // Por si el conteo de filas meta no coincide con el HTML parseado, localizar thead detalle.
-                $filaCabDetalle = $this->localizarFilaCabeceraDetalle($sheet) ?? $this->filaCabecerasExcel;
-                $this->filaCabecerasExcel = $filaCabDetalle;
-                $this->filaPrimeraDatosExcel = $filaCabDetalle + 1;
+                for ($i = 1; $i < $this->filasMeta; $i++) {
+                    $fila = $this->filaInicioMeta + $i;
+                    $sheet->getStyle('A'.$fila.':'.$colUltima.$fila)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'size' => 10,
+                            'name' => 'Arial',
+                            'color' => ['rgb' => '444444'],
+                        ],
+                        'alignment' => [
+                            'wrapText' => true,
+                            'vertical' => Alignment::VERTICAL_CENTER,
+                        ],
+                    ]);
+                    $sheet->getRowDimension($fila)->setRowHeight(
+                        $i === 2 && $this->filasMeta >= 4 ? 22 : 18
+                    );
+                }
 
                 $estiloCabecera = [
                     'font' => [
                         'bold' => true,
                         'color' => ['rgb' => '17202A'],
-                        'size' => 11,
+                        'size' => 10,
                         'name' => 'Arial',
                     ],
                     'fill' => [
@@ -366,7 +408,9 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
                         'color' => ['rgb' => '85C1E9'],
                     ],
                     'alignment' => [
+                        'horizontal' => Alignment::HORIZONTAL_CENTER,
                         'vertical' => Alignment::VERTICAL_CENTER,
+                        'wrapText' => true,
                     ],
                 ];
 
@@ -377,38 +421,24 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
 
                 $sheet->getStyle('A'.$filaCabDetalle.':'.$colUltima.$filaCabDetalle)
                     ->applyFromArray($estiloCabecera);
+                $sheet->getRowDimension($filaCabDetalle)->setRowHeight(30);
 
                 $this->aplicarAlineacionImportes($sheet);
 
-                // Congelar solo filas "cortas". Si el resumen ocupa 100+ filas y congelamos
-                // en el thead del detalle, Excel deja el panel superior gigante y no se puede scrollear.
-                if ($filaCabDetalle > 0 && $filaCabDetalle <= 15) {
+                // Detalle primero: congelar siempre bajo el thead.
+                if ($filaCabDetalle > 0) {
                     $sheet->freezePane('A'.($filaCabDetalle + 1));
-                } else {
-                    // Resumen largo: congelar solo logos/título para poder recorrer el archivo.
-                    $sheet->freezePane('A'.($this->filaTituloExcel + 1));
                 }
 
                 $this->aplicarEstilosFilasTotalesRapido($sheet);
+
+                foreach ($this->columnWidths() as $col => $ancho) {
+                    $dim = $sheet->getColumnDimension($col);
+                    $dim->setAutoSize(false);
+                    $dim->setWidth($ancho);
+                }
             },
         ];
-    }
-
-    private function localizarFilaCabeceraDetalle(Worksheet $sheet): ?int
-    {
-        $highestRow = min($sheet->getHighestRow(), 500);
-        $colUltima = $this->colUltima();
-
-        for ($row = 1; $row <= $highestRow; $row++) {
-            foreach (range('A', $colUltima) as $col) {
-                $valor = trim((string) ($sheet->getCell($col.$row)->getValue() ?? ''));
-                if ($valor === 'Fecha') {
-                    return $row;
-                }
-            }
-        }
-
-        return null;
     }
 
     private function aplicarAlineacionImportes(Worksheet $sheet): void
@@ -425,12 +455,6 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
                     'vertical' => Alignment::VERTICAL_CENTER,
                 ],
             ]);
-        }
-
-        // Refuerzo de ancho fijo en Debe/Haber (por si AutoSize residual de otro concern).
-        foreach ($this->columnasDebeHaber() as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(false);
-            $sheet->getColumnDimension($col)->setWidth(16);
         }
     }
 

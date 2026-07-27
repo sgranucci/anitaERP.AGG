@@ -7,6 +7,12 @@
 return [
     'tolerancia_importe' => (float) env('CONCILIACION_BANCARIA_TOLERANCIA', 0.05),
 
+    /** Importe mínimo (abs) de un pendiente para marcar anomalía IA. */
+    'anomalia_importe_grande' => (float) env('CONCILIACION_BANCARIA_ANOMALIA_IMPORTE_GRANDE', 50000),
+
+    /** Diferencia de saldo ajustado a partir de la cual se señala anomalía IA. */
+    'anomalia_diferencia_saldo' => (float) env('CONCILIACION_BANCARIA_ANOMALIA_DIFERENCIA_SALDO', 1.0),
+
     'dias_tolerancia_fecha' => (int) env('CONCILIACION_BANCARIA_DIAS_FECHA', 3),
 
     /** OPP con Ch: vs CH DEP en extracto (cuenta 127: clearing ~5–15 días). */

@@ -13,6 +13,7 @@ use App\Support\Contable\CuentacontableSaldoMesSupport;
  *  - El mes se toma de asiento.fecha (no del timestamp del movimiento).
  *  - Se agrega por (empresa, cuenta, centro de costo, YYYYMM, moneda origen).
  *  - monto_local acumula el equivalente en moneda local (config contable).
+ *  - debe/haber (+ _local) acumulan brutos del mes (Balance SyS por períodos).
  *
  * Activación: CONTABLE_SALDOS_CUENTA_MES_OBSERVER=true en .env
  *
@@ -31,7 +32,7 @@ class Asiento_MovimientoObserver
 
         $movimiento->loadMissing('asientos');
         $contexto = CuentacontableSaldoMesSupport::contextoDesdeMovimiento($movimiento);
-        CuentacontableSaldoMesSupport::aplicarDelta($contexto, (float) $movimiento->monto);
+        CuentacontableSaldoMesSupport::aplicarMovimiento($contexto, (float) $movimiento->monto, 1);
     }
 
     public function updated(Asiento_Movimiento $movimiento): void
@@ -54,17 +55,9 @@ class Asiento_MovimientoObserver
         ];
         $contextoNew = CuentacontableSaldoMesSupport::contextoDesdeMovimiento($movimiento);
 
-        if ($this->mismaClaveAgregacion($contextoAnt, $contextoNew)) {
-            $delta = (float) $movimiento->monto - (float) ($original['monto'] ?? 0);
-            if (abs($delta) > 1e-9) {
-                CuentacontableSaldoMesSupport::aplicarDelta($contextoNew, $delta);
-            }
-
-            return;
-        }
-
-        CuentacontableSaldoMesSupport::aplicarDelta($contextoAnt, -((float) ($original['monto'] ?? 0)));
-        CuentacontableSaldoMesSupport::aplicarDelta($contextoNew, (float) $movimiento->monto);
+        // Siempre revierte el movimiento anterior y aplica el nuevo (mantiene debe/haber brutos).
+        CuentacontableSaldoMesSupport::aplicarMovimiento($contextoAnt, (float) ($original['monto'] ?? 0), -1);
+        CuentacontableSaldoMesSupport::aplicarMovimiento($contextoNew, (float) $movimiento->monto, 1);
     }
 
     public function deleted(Asiento_Movimiento $movimiento): void
@@ -75,27 +68,12 @@ class Asiento_MovimientoObserver
 
         $movimiento->loadMissing('asientos');
         $contexto = CuentacontableSaldoMesSupport::contextoDesdeMovimiento($movimiento);
-        CuentacontableSaldoMesSupport::aplicarDelta($contexto, -((float) $movimiento->monto));
+        CuentacontableSaldoMesSupport::aplicarMovimiento($contexto, (float) $movimiento->monto, -1);
     }
 
     public function restored(Asiento_Movimiento $movimiento): void
     {
         $this->created($movimiento);
-    }
-
-    /**
-     * @param  array<string, mixed>  $a
-     * @param  array<string, mixed>  $b
-     */
-    private function mismaClaveAgregacion(array $a, array $b): bool
-    {
-        return (int) ($a['empresa_id'] ?? 0) === (int) ($b['empresa_id'] ?? 0)
-            && (int) ($a['cuentacontable_id'] ?? 0) === (int) ($b['cuentacontable_id'] ?? 0)
-            && CuentacontableSaldoMesSupport::normalizarCentrocostoId($a['centrocosto_id'] ?? null)
-                === CuentacontableSaldoMesSupport::normalizarCentrocostoId($b['centrocosto_id'] ?? null)
-            && CuentacontableSaldoMesSupport::anioMesDesdeFecha($a['fecha'] ?? null)
-                === CuentacontableSaldoMesSupport::anioMesDesdeFecha($b['fecha'] ?? null)
-            && (int) ($a['moneda_id'] ?? 0) === (int) ($b['moneda_id'] ?? 0);
     }
 
     private function empresaIdDesdeAsientoId(int $asientoId): ?int

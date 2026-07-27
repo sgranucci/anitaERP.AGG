@@ -44,6 +44,15 @@ return [
             'throw' => false,
         ],
 
+        /*
+         * Adjuntos solicitudes de pago (Anita sol_files). Fuera del storage del ERP.
+         */
+        'solicitudpago_scan' => [
+            'driver' => 'local',
+            'root' => env('SOLICITUDPAGO_ARCHIVOS_ROOT', '/scan/compras/sol_files'),
+            'throw' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

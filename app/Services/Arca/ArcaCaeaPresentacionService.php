@@ -1048,7 +1048,13 @@ class ArcaCaeaPresentacionService
             $prev = $registro->informe_resumen;
             $syncMeta = [
                 'marcados' => (int) ($prev['sincronizados_arca'] ?? 0),
-                'ultimos_arca' => is_array($prev['ultimos_arca'] ?? null) ? $prev['ultimos_arca'] : [],
+                // El último ARCA es global por PV+tipo: no quedar pegado a un valor viejo
+                // de esta quincena si otra quincena de la empresa ya consultó uno mayor.
+                'ultimos_arca' => $this->ultimosArcaLocalEnriquecidos(
+                    (int) $registro->empresa_id,
+                    (int) $registro->id,
+                    is_array($prev['ultimos_arca'] ?? null) ? $prev['ultimos_arca'] : [],
+                ),
                 'errores_consulta' => is_array($prev['errores_consulta_arca'] ?? null) ? $prev['errores_consulta_arca'] : [],
             ];
         }
@@ -1378,6 +1384,63 @@ class ArcaCaeaPresentacionService
         }
 
         return $out;
+    }
+
+    /**
+     * Sin SOAP: el último autorizado es global por PV+tipo. Si otra quincena de la
+     * misma empresa ya guardó un valor mayor (p. ej. junio Q2 = 14212 y julio Q1
+     * quedó con 14068 de mitad de proceso), usar el máximo conocido para no bloquear
+     * la presentación al solo recargar el index.
+     *
+     * @param  list<array<string, mixed>>  $ultimosLocales
+     * @return list<array<string, mixed>>
+     */
+    private function ultimosArcaLocalEnriquecidos(int $empresaId, int $registroIdActual, array $ultimosLocales): array
+    {
+        /** @var array<string, array<string, mixed>> $porClave */
+        $porClave = [];
+        foreach ($ultimosLocales as $ua) {
+            if (! is_array($ua)) {
+                continue;
+            }
+            $pto = (int) ($ua['pto_vta'] ?? 0);
+            $tipo = (int) ($ua['tipo_afip'] ?? 0);
+            if ($pto <= 0 || $tipo <= 0) {
+                continue;
+            }
+            $porClave[$this->claveGrupoInforme($pto, $tipo)] = $ua;
+        }
+
+        $hermanos = ArcaCaea::query()
+            ->where('empresa_id', $empresaId)
+            ->where('id', '!=', $registroIdActual)
+            ->whereNotNull('informe_resumen')
+            ->get(['id', 'informe_resumen']);
+
+        foreach ($hermanos as $hermano) {
+            $resumen = is_array($hermano->informe_resumen) ? $hermano->informe_resumen : null;
+            if ($resumen === null) {
+                continue;
+            }
+            foreach ($resumen['ultimos_arca'] ?? [] as $ua) {
+                if (! is_array($ua)) {
+                    continue;
+                }
+                $pto = (int) ($ua['pto_vta'] ?? 0);
+                $tipo = (int) ($ua['tipo_afip'] ?? 0);
+                if ($pto <= 0 || $tipo <= 0) {
+                    continue;
+                }
+                $clave = $this->claveGrupoInforme($pto, $tipo);
+                $candidato = (int) ($ua['ultimo_arca'] ?? 0);
+                $actual = (int) ($porClave[$clave]['ultimo_arca'] ?? -1);
+                if ($candidato > $actual) {
+                    $porClave[$clave] = $ua;
+                }
+            }
+        }
+
+        return array_values($porClave);
     }
 
     private function claveGrupoInforme(int $ptoVta, int $cbteTipo): string

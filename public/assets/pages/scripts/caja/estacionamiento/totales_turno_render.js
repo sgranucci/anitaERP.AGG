@@ -116,8 +116,8 @@
             }
         }
 
-        var usuarioId = usuarioCtx && usuarioCtx.usuario_habilitado_id != null ? usuarioCtx.usuario_habilitado_id : '';
-        var usuarioNombre = usuarioCtx && usuarioCtx.usuario_habilitado_nombre ? usuarioCtx.usuario_habilitado_nombre : '';
+        var usuarioId = usuarioCtx && (usuarioCtx.usuario_id != null ? usuarioCtx.usuario_id : usuarioCtx.usuario_habilitado_id) != null ? (usuarioCtx.usuario_id != null ? usuarioCtx.usuario_id : usuarioCtx.usuario_habilitado_id) : '';
+        var usuarioNombre = usuarioCtx && (usuarioCtx.usuario_nombre || usuarioCtx.usuario_habilitado_nombre) ? (usuarioCtx.usuario_nombre || usuarioCtx.usuario_habilitado_nombre) : '';
 
         var html = '<table class="table table-bordered mb-0 est-totales-tabla">';
         html += '<thead class="thead-light"><tr><th>Medio de pago</th>';
@@ -174,10 +174,10 @@
                 html += '<button type="button" class="btn btn-xs btn-outline-info js-conciliar-medio" data-cuentacaja-id="' + ccId + '" ';
                 html += 'data-medio-nombre="' + esc(p.nombre || p.codigo || '') + '"';
                 if (usuarioId !== '') {
-                    html += ' data-usuario-habilitado-id="' + esc(usuarioId) + '"';
+                    html += ' data-usuario-id="' + esc(usuarioId) + '"';
                 }
                 if (usuarioNombre) {
-                    html += ' data-usuario-habilitado-nombre="' + esc(usuarioNombre) + '"';
+                    html += ' data-usuario-nombre="' + esc(usuarioNombre) + '"';
                 }
                 html += ' title="Ver facturas de este medio' + (usuarioNombre ? ' de ' + esc(usuarioNombre) : '') + '">';
                 html += '<i class="fa fa-search"></i> Facturas</button></td>';
@@ -197,10 +197,10 @@
                 html += '<td class="text-center">';
                 html += '<button type="button" class="btn btn-xs btn-outline-danger js-conciliar-nc"';
                 if (usuarioId !== '') {
-                    html += ' data-usuario-habilitado-id="' + esc(usuarioId) + '"';
+                    html += ' data-usuario-id="' + esc(usuarioId) + '"';
                 }
                 if (usuarioNombre) {
-                    html += ' data-usuario-habilitado-nombre="' + esc(usuarioNombre) + '"';
+                    html += ' data-usuario-nombre="' + esc(usuarioNombre) + '"';
                 }
                 html += ' title="Ver notas de crédito' + (usuarioNombre ? ' de ' + esc(usuarioNombre) : ' del turno') + '">';
                 html += '<i class="fa fa-search"></i> NC</button></td>';
@@ -219,10 +219,10 @@
                 html += '<td class="text-center">';
                 html += '<button type="button" class="btn btn-xs btn-outline-warning js-conciliar-invitaciones"';
                 if (usuarioId !== '') {
-                    html += ' data-usuario-habilitado-id="' + esc(usuarioId) + '"';
+                    html += ' data-usuario-id="' + esc(usuarioId) + '"';
                 }
                 if (usuarioNombre) {
-                    html += ' data-usuario-habilitado-nombre="' + esc(usuarioNombre) + '"';
+                    html += ' data-usuario-nombre="' + esc(usuarioNombre) + '"';
                 }
                 html += ' title="Ver facturas $0,01' + (usuarioNombre ? ' de ' + esc(usuarioNombre) : ' del turno') + '">';
                 html += '<i class="fa fa-search"></i> Facturas</button></td>';
@@ -396,7 +396,7 @@
             html += '<div class="card mb-2 border">';
             html += '<div class="card-header py-2 bg-light">';
             html += '<div class="d-flex flex-wrap justify-content-between align-items-center">';
-            html += '<strong class="est-item-nombre">' + esc(m.usuario_habilitado_nombre || 'Sin usuario habilitado') + '</strong>';
+            html += '<strong class="est-item-nombre">' + esc(m.usuario_nombre || m.usuario_habilitado_nombre || 'Sin usuario') + '</strong>';
             html += '<span class="small">';
             html += (m.cantidad || 0) + ' comp.';
             if (usuarioHayNc) {
@@ -423,8 +423,8 @@
                 opcionesConciliar,
                 usuarioHayNc ? mnc : null,
                 {
-                    usuario_habilitado_id: m.usuario_habilitado_id != null ? m.usuario_habilitado_id : '',
-                    usuario_habilitado_nombre: m.usuario_habilitado_nombre || '',
+                    usuario_id: m.usuario_id != null ? m.usuario_id : (m.usuario_habilitado_id != null ? m.usuario_habilitado_id : ''),
+                    usuario_nombre: m.usuario_nombre || m.usuario_habilitado_nombre || '',
                 },
                 usuarioHayInv ? minv : null
             );
@@ -503,7 +503,7 @@
 
         html += '<table class="table table-bordered table-sm mb-0 est-totales-tabla">';
         html += '<thead><tr>';
-        html += '<th>Comprobante</th><th>Hora</th><th>Cliente</th><th>Usuario habilitado</th>';
+        html += '<th>Comprobante</th><th>Hora</th><th>Cliente</th><th>Usuario</th>';
         html += '<th class="text-right">Facturado</th><th class="text-right">Cobrado</th><th class="text-right">Dif.</th>';
         columnas.forEach(function (c) {
             var med = etiquetaMedioColumna(c);
@@ -518,7 +518,7 @@
             html += '<td>' + esc(f.codigo) + (f.es_invitacion ? ' <span class="badge badge-secondary">Inv.</span>' : '') + '</td>';
             html += '<td>' + esc(f.hora) + '</td>';
             html += '<td>' + esc(f.cliente) + '</td>';
-            html += '<td>' + esc(f.usuario_habilitado_nombre || '—') + '</td>';
+            html += '<td>' + esc(f.usuario_nombre || f.usuario_habilitado_nombre || '—') + '</td>';
             html += '<td class="text-right">$' + fmt(f.total_facturado) + '</td>';
             html += '<td class="text-right">$' + fmt(f.total_cobrado) + '</td>';
             html += '<td class="text-right">$' + fmt(diff) + '</td>';
@@ -648,15 +648,15 @@
         html += '<span>' + labelFinal + ': <strong class="est-totales-monto">$' + fmt(totalFinal) + '</strong></span>';
         html += '</div>';
         var optsConc = (opciones && opciones.conciliarMedios) ? { habilitar: true } : null;
-        var compacto = opciones && opciones.soloUsuarioHabilitado;
+        var compacto = opciones && (opciones.soloPorUsuario || opciones.soloUsuarioHabilitado);
         var ocultarUsuario = opciones && opciones.ocultarDetalleUsuario;
 
         if (!compacto) {
             html += renderConciliacionHtml(totales);
         }
         if (!ocultarUsuario) {
-            html += '<h6 class="font-weight-bold mt-1 mb-2">Detalle por usuario habilitado</h6>';
-            html += renderPorUsuarioHabilitadoHtml(totales.por_usuario_habilitado, optsConc);
+            html += '<h6 class="font-weight-bold mt-1 mb-2">Detalle por usuario</h6>';
+            html += renderPorUsuarioHabilitadoHtml(totales.por_usuario || totales.por_usuario_habilitado, optsConc);
         }
         if (!compacto) {
             html += renderTotalMediosPagoFinalHtml(totales, optsConc, opciones);

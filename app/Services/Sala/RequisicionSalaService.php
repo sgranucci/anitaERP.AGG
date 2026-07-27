@@ -2,6 +2,7 @@
 
 namespace App\Services\Sala;
 
+use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Sala\RequisicionSalaEstado;
 use App\Repositories\Sala\RequisicionSalaArchivoRepositoryInterface;
 use App\Repositories\Sala\RequisicionSalaArticuloRepositoryInterface;
@@ -9,8 +10,11 @@ use App\Repositories\Sala\RequisicionSalaEstadoRepositoryInterface;
 use App\Repositories\Sala\RequisicionSalaRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ModuloAvisoService;
+use App\Services\Stock\TransferenciaMercaderiaService;
+use App\Support\Sala\RequisicionSalaEdicionSupport;
 use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioDeferred;
 use App\Support\Sala\RequisicionSalaTransferenciaAsociadaSupport;
+use App\Support\Stock\TransferenciaMercaderiaEstados;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -24,6 +28,7 @@ class RequisicionSalaService
         private RequisicionSalaArchivoRepositoryInterface $requisicionSalaArchivoRepository,
         private ArbolaprobacionService $arbolaprobacionService,
         private ModuloAvisoService $moduloAvisoService,
+        private TransferenciaMercaderiaService $transferenciaMercaderiaService,
     ) {
     }
 
@@ -76,7 +81,7 @@ class RequisicionSalaService
             return ['mensaje' => 'error', 'errores' => 'Requisición de sala no encontrada.'];
         }
         if (! $this->esEditable($existente->estado)) {
-            return ['mensaje' => 'error', 'errores' => 'Solo se puede editar en estado PENDIENTE, EN LABORATORIO o RECHAZADA.'];
+            return ['mensaje' => 'error', 'errores' => RequisicionSalaEdicionSupport::mensajeNoEditable()];
         }
 
         $data = $request->all();
@@ -121,6 +126,130 @@ class RequisicionSalaService
                 }
                 $this->arbolaprobacionService->procesaArbolaprobacion('RS', $id, 'insert');
             }
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+            RequisicionSalaTransferenciaLaboratorioDeferred::descartarPendientes();
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        RequisicionSalaTransferenciaLaboratorioDeferred::procesarPendientes();
+
+        return ['mensaje' => 'ok'];
+    }
+
+    /**
+     * Corrección de datos no estructurales en APROBADA/PARCIAL (sin reabrir árbol ni tocar TM).
+     *
+     * @return array{mensaje: string, errores?: string}
+     */
+    public function actualizaDatosMenores($request, int $id): array
+    {
+        $existente = $this->requisicionSalaRepository->find($id);
+        if (! $existente) {
+            return ['mensaje' => 'error', 'errores' => 'Requisición de sala no encontrada.'];
+        }
+        if (! RequisicionSalaEdicionSupport::permiteEdicionMenor($existente->estado)) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'La edición menor solo aplica en estado APROBADA o PARCIAL.',
+            ];
+        }
+
+        $data = $request->all();
+
+        DB::beginTransaction();
+        try {
+            $this->requisicionSalaRepository->update([
+                'fecha_entrega' => $data['fecha_entrega'] ?? $existente->fecha_entrega,
+                'zona_sala_id' => ! empty($data['zona_sala_id']) ? $data['zona_sala_id'] : null,
+                'prioridad_sala_id' => ! empty($data['prioridad_sala_id']) ? $data['prioridad_sala_id'] : null,
+                'comentario' => $data['comentario'] ?? '',
+                'detalle' => $data['detalle'] ?? '',
+            ], $id);
+
+            $this->requisicionSalaArticuloRepository->syncDatosMenoresFromRequest($data, $id);
+
+            $this->requisicionSalaEstadoRepository->creaEstado(
+                $id,
+                Carbon::now()->toDateTimeString(),
+                $existente->estado,
+                Auth::user()->id,
+                'Corrección de datos menores (sin reabrir aprobación)'
+            );
+
+            if (method_exists($this->requisicionSalaArchivoRepository, 'update')) {
+                $this->requisicionSalaArchivoRepository->update($request, $id);
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return ['mensaje' => 'ok'];
+    }
+
+    /**
+     * Desaprueba / reabre para cambio de negocio: limpia árbol, revierte TM lab si aplica,
+     * vuelve a PENDIENTE (editable). Al guardar luego se reenvía al árbol.
+     *
+     * @return array{mensaje: string, errores?: string}
+     */
+    public function reabrirDesaprobar(int $id, string $motivo): array
+    {
+        $existente = $this->requisicionSalaRepository->find($id);
+        if (! $existente) {
+            return ['mensaje' => 'error', 'errores' => 'Requisición de sala no encontrada.'];
+        }
+        if (! RequisicionSalaEdicionSupport::permiteReabrir($existente->estado)) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'Solo se puede reabrir en estado APROBADA o PARCIAL.',
+            ];
+        }
+
+        $activos = RequisicionSalaEdicionSupport::cantidadCumplimientosActivos($existente);
+        if ($activos > 0) {
+            return [
+                'mensaje' => 'error',
+                'errores' => RequisicionSalaEdicionSupport::mensajeBloqueoReabrirPorCumplimientos(),
+            ];
+        }
+
+        $motivo = trim($motivo);
+        if ($motivo === '') {
+            return ['mensaje' => 'error', 'errores' => 'Indicá el motivo de la reapertura.'];
+        }
+
+        $pendiente = RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+
+        DB::beginTransaction();
+        try {
+            $tmLab = RequisicionSalaTransferenciaAsociadaSupport::transferenciaLaboratorio($existente);
+            if ($tmLab
+                && (int) ($tmLab->transferencia_revertido_por_id ?? 0) <= 0
+                && $tmLab->estado === TransferenciaMercaderiaEstados::CONFIRMADA
+            ) {
+                $this->transferenciaMercaderiaService->revertirTransferenciaConfirmada((int) $tmLab->id);
+            }
+
+            Arbolaprobacion_Movimiento::query()
+                ->where('requisicion_sala_id', $id)
+                ->delete();
+
+            $this->requisicionSalaEstadoRepository->creaEstado(
+                $id,
+                Carbon::now()->toDateTimeString(),
+                $pendiente,
+                Auth::user()->id,
+                'Reapertura / desaprobación: '.$motivo
+            );
+            $this->requisicionSalaRepository->update(['estado' => $pendiente], $id);
+
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
@@ -186,11 +315,17 @@ class RequisicionSalaService
 
     public function esEditable(?string $estado): bool
     {
-        $pendiente = RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
-        $enLaboratorio = RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
-        $rechazada = RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
+        return RequisicionSalaEdicionSupport::permiteEdicionCompleta($estado);
+    }
 
-        return in_array($estado, [$pendiente, $enLaboratorio, $rechazada], true);
+    public function permiteEdicionMenor(?string $estado): bool
+    {
+        return RequisicionSalaEdicionSupport::permiteEdicionMenor($estado);
+    }
+
+    public function permiteReabrir(?string $estado): bool
+    {
+        return RequisicionSalaEdicionSupport::permiteReabrir($estado);
     }
 
     private static function armaCabecera(array $data): array

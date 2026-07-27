@@ -20,6 +20,7 @@
     'solo_lectura' => ! empty($data->id),
     'col_input' => 'col-lg-8',
 ])
+@include('caja.partials.campo_caja_config_pc')
 <div class="form-group row">
     <label for="puntoventa_cae_id" class="col-lg-3 col-form-label requerido">Punto de venta CAE</label>
     <div class="col-lg-8">

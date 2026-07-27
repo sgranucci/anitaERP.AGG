@@ -22,4 +22,37 @@ interface PagoproveedorRepositoryInterface
      * @param  array<string, mixed>  $filtros
      */
     public function leePagoproveedor(array $filtros, bool $flPaginando = true): LengthAwarePaginator|Collection;
+
+    /**
+     * Pagos visibles en el portal de proveedores (sin precargas internas).
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public function listarPortalProveedor(int $proveedorId, array $filtros = [], bool $paginar = true): LengthAwarePaginator|Collection;
+
+    /**
+     * KPIs del período filtrado para el portal.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array{
+     *   cantidad: int,
+     *   monto_pagado: float,
+     *   monto_retenciones: float,
+     *   monto_neto: float,
+     *   cantidad_retenciones: int
+     * }
+     */
+    public function resumenPortalProveedor(int $proveedorId, array $filtros = []): array;
+
+    /**
+     * Retenciones de pagos del proveedor para el portal.
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public function listarRetencionesPortalProveedor(int $proveedorId, array $filtros = [], bool $paginar = true): LengthAwarePaginator|Collection;
+
+    /**
+     * Detalle de OP del portal con ownership por proveedor.
+     */
+    public function findPortalProveedor(int $id, int $proveedorId): Pagoproveedor;
 }

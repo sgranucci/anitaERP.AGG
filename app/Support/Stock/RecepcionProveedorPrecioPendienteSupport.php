@@ -5,6 +5,7 @@ namespace App\Support\Stock;
 use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
+use App\Support\Compras\OrdencompraDescuentoSupport;
 
 /**
  * Circuito recepción borrador con precio distinto a OC sin permiso de modificar precio.
@@ -100,7 +101,7 @@ final class RecepcionProveedorPrecioPendienteSupport
         $oc->loadMissing('ordencompra_articulos');
         $recepcion->loadMissing('recepcion_proveedor_articulos');
 
-        $descuentoCabeceraOc = (float) ($oc->descuento ?? 0);
+        $descuentoCabeceraOc = OrdencompraDescuentoSupport::porcentajeEfectivoDesdeOrdencompra($oc);
         $preciosOc = $oc->ordencompra_articulos->mapWithKeys(
             static fn ($art) => [(int) $art->id => RecepcionProveedorConversionSupport::precioUnitarioNetoDesdeLineaOc(
                 (float) $art->precio,
@@ -136,7 +137,7 @@ final class RecepcionProveedorPrecioPendienteSupport
     public static function aplicarPreciosOcALineasRecepcion(Recepcion_Proveedor $recepcion, Ordencompra $oc): void
     {
         $oc->loadMissing('ordencompra_articulos');
-        $descuentoCabeceraOc = (float) ($oc->descuento ?? 0);
+        $descuentoCabeceraOc = OrdencompraDescuentoSupport::porcentajeEfectivoDesdeOrdencompra($oc);
         $preciosOc = $oc->ordencompra_articulos->mapWithKeys(
             static fn ($art) => [(int) $art->id => RecepcionProveedorConversionSupport::precioUnitarioNetoDesdeLineaOc(
                 (float) $art->precio,

@@ -27,7 +27,10 @@ class Sector_SolicitudpagoRepository implements Sector_SolicitudpagoRepositoryIn
     {
         $this->sincronizarConAnita();
 
-        return $this->model->newQuery()->orderBy('codigo')->get();
+        return $this->model->newQuery()
+            ->with('centrocostos')
+            ->orderBy('codigo')
+            ->get();
     }
 
     public function create(array $data)
@@ -121,9 +124,14 @@ class Sector_SolicitudpagoRepository implements Sector_SolicitudpagoRepositoryIn
                 ? (int) $data['codigo']
                 : $this->proximoCodigo());
 
+        $ccId = isset($data['centrocosto_id']) && (int) $data['centrocosto_id'] > 0
+            ? (int) $data['centrocosto_id']
+            : null;
+
         return [
             'codigo' => $codigo,
             'nombre' => $this->recortar(trim((string) ($data['nombre'] ?? '')), 30),
+            'centrocosto_id' => $ccId,
         ];
     }
 

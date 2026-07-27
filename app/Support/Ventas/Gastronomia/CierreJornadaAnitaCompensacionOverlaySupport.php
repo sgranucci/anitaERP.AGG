@@ -89,10 +89,11 @@ final class CierreJornadaAnitaCompensacionOverlaySupport
             if (! is_array($plan) || $plan === []) {
                 continue;
             }
-            if ((string) ($mov['medio_anita_clave'] ?? '') !== CierreJornadaProcesoMedioSupport::CLAVE_EFECTIVO) {
-                continue;
-            }
-            if (empty($mov['facturada_erp']) && empty($mov['anita_compensacion_redistribucion'])) {
+            // Identificar la compensación por la marca durable que puso la redistribución.
+            // Antes se filtraba por medio_anita_clave == 'efectivo', pero clasificar() re-deriva
+            // esa clave desde la cuentacaja real y borra el 'efectivo' que había puesto la fusión;
+            // eso hacía que se perdieran traslados y el asiento MP quedara por debajo del Z.
+            if (empty($mov['anita_compensacion_redistribucion'])) {
                 continue;
             }
 

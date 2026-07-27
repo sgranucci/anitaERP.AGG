@@ -40,6 +40,11 @@ Configuración recepción proveedores
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title"><i class="fa fa-cog"></i> Configuración contable por empresa</h3>
+                <div class="card-tools">
+                    <a href="{{ route('recepcion_proveedor') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-arrow-left"></i> Volver a Recepciones
+                    </a>
+                </div>
             </div>
             <form action="{{ route('actualizar_configuracion_recepcion_proveedor') }}" method="POST" id="form-config-contable" autocomplete="off">
                 @csrf

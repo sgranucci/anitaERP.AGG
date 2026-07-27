@@ -12,6 +12,7 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorAsientoService;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
+use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
@@ -86,6 +87,16 @@ class ComprobanteProveedorAsientoService
             ?? 1);
 
         $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+        $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
+        $tieneCapexAnticipo = $facturaAnticipada
+            ? ComprobanteProveedorFacturaAnticipadaSupport::ocTieneCapex($comprobante->ordencompras)
+            : false;
+        $cuentaAnticipoId = $facturaAnticipada
+            ? ComprobanteProveedorFacturaAnticipadaSupport::resolverCuentaAnticipoId(
+                (int) $comprobante->empresa_id,
+                $tieneCapexAnticipo
+            )
+            : 0;
 
         $lineasDebe = [];
         $totalNetoConceptos = 0.0;
@@ -109,6 +120,18 @@ class ComprobanteProveedorAsientoService
                 throw new RuntimeException(
                     'Concepto IVA «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'» con tipo «'.$tipoConcepto.'» no admite factura contra COM.'
                 );
+            }
+
+            // OC anticipada sin COM: neto → anticipo (Capex / sin Capex); impuestos siguen por concepto.
+            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+                $lineasDebe[] = [
+                    'cuentacontable_id' => $cuentaAnticipoId,
+                    'importe' => $monto,
+                    'centrocosto_id' => $centrocostoId,
+                    'observacion' => ComprobanteProveedorFacturaAnticipadaSupport::observacionDebe($tieneCapexAnticipo),
+                ];
+
+                continue;
             }
 
             $cuentaId = (int) ($concepto?->cuentacontabledebe_id ?? 0);

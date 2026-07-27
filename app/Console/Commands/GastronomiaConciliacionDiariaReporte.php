@@ -351,6 +351,34 @@ class GastronomiaConciliacionDiariaReporte extends Command
                     ));
                 }
 
+                $concMedios = $dia['conciliacion_medios'] ?? null;
+                if (is_array($concMedios) && ($concMedios['medios'] ?? []) !== []) {
+                    $this->line(sprintf(
+                        '  <comment>CONCILIACIÓN POR MEDIO (Z ↔ contabilizado)</comment>: Z $ %s | contab medios Z $ %s | Δ $ %s | %s',
+                        $this->fmt($concMedios['total_z'] ?? 0),
+                        $this->fmt($concMedios['total_contabilizado_z'] ?? 0),
+                        $this->fmtDiff($concMedios['diff_total'] ?? null),
+                        $concMedios['estado'] ?? '—',
+                    ));
+                    foreach ($concMedios['medios'] as $m) {
+                        $estado = (string) ($m['estado'] ?? '');
+                        $linea = sprintf(
+                            '    %s %s: Z $ %s | contab $ %s | Δ %s | %s',
+                            $m['cuenta_codigo'] ?? '—',
+                            $m['cuenta_nombre'] ?? '',
+                            $this->fmt($m['z'] ?? 0),
+                            $this->fmt($m['contabilizado'] ?? 0),
+                            $m['diff'] === null ? '—' : $this->fmtDiff($m['diff']),
+                            $estado,
+                        );
+                        if ($estado === 'DIF') {
+                            $this->warn($linea);
+                        } else {
+                            $this->line($linea);
+                        }
+                    }
+                }
+
                 $huecos = $dia['huecos_numeracion'] ?? null;
                 if (is_array($huecos) && (int) ($huecos['huecos_corr_erp'] ?? 0) > 0) {
                     $this->warn(sprintf(

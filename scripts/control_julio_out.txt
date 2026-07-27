@@ -1,0 +1,55 @@
+Bridge: http://10.20.30.200:8080/apiERP.php
+Control mensual por medio | empresas 1, 2, 3 | jornada 2026-07-01 → 2026-07-21 | tolerancia 0,02
+
+Empresa 1 — BIYEMAS S.A.  (20 jornadas)
+  Venta ERP (neto):      $ 106.949.578,26
+  Contabilidad global:   $ 106.949.578,28  (Δ ERP↔contab $ -0,02)
+  Flash (rendgastro):    $ 113.761.890,82
+  Z por medio de pago:
+    111050025 CTA CTE MERCADO PAGO: $ 32.774.400,00
+  Contabilizado por medio de pago:
+    111010001 CAJA PESOS: $ 85.703.540,00
+    111020005 FONDO FIJO SALA MAQUINAS $: $ -21.964.300,00
+    111050025 CTA CTE MERCADO PAGO: $ 32.778.200,00
+    113010001 TARJETAS A COBRAR: $ 6.801.060,00
+  Jornadas con DIF Z ↔ contabilizado por medio:
+    2026-07-06 · 111050025 CTA CTE MERCADO PAGO: Z $ 1.299.500,00 vs contab $ 1.297.400,00 · Δ $ +2.100,00
+    2026-07-08 · 111050025 CTA CTE MERCADO PAGO: Z $ 1.506.100,00 vs contab $ 1.509.500,00 · Δ $ -3.400,00
+    2026-07-09 · 111050025 CTA CTE MERCADO PAGO: Z $ 2.087.200,00 vs contab $ 2.082.400,00 · Δ $ +4.800,00
+    2026-07-10 · 111050025 CTA CTE MERCADO PAGO: Z $ 2.187.400,00 vs contab $ 2.195.200,00 · Δ $ -7.800,00
+    2026-07-16 · 111050025 CTA CTE MERCADO PAGO: Z $ 917.600,00 vs contab $ 917.100,00 · Δ $ +500,00
+
+Empresa 2 — KANDIKO S.A.  (20 jornadas)
+  Venta ERP (neto):      $ 32.467.173,56
+  Contabilidad global:   $ 32.467.173,56  (Δ ERP↔contab $ 0,00)
+  Flash (rendgastro):    $ 33.864.407,73
+  Z por medio de pago:
+    111050025 CTA CTE MERCADO PAGO: $ 10.590.800,00
+  Contabilizado por medio de pago:
+    111010001 CAJA PESOS: $ 25.259.600,00
+    111020005 FONDO FIJO SALA MAQUINAS $: $ -6.559.800,00
+    111050025 CTA CTE MERCADO PAGO: $ 10.627.500,00
+    113010001 TARJETAS A COBRAR: $ 3.037.600,00
+  Jornadas con DIF Z ↔ contabilizado por medio:
+    2026-07-02 · 111050025 CTA CTE MERCADO PAGO: Z $ 428.200,00 vs contab $ 426.200,00 · Δ $ +2.000,00
+    2026-07-13 · 111050025 CTA CTE MERCADO PAGO: Z $ 286.800,00 vs contab $ 302.000,00 · Δ $ -15.200,00
+    2026-07-16 · 111050025 CTA CTE MERCADO PAGO: Z $ 707.400,00 vs contab $ 730.900,00 · Δ $ -23.500,00
+
+Empresa 3 — REBISCO S.A.  (20 jornadas)
+  Venta ERP (neto):      $ 46.049.266,40
+  Contabilidad global:   $ 46.049.266,40  (Δ ERP↔contab $ 0,00)
+  Flash (rendgastro):    $ 47.187.405,16
+  Z por medio de pago:
+    111050025 CTA CTE MERCADO PAGO: $ 14.380.000,00
+  Contabilizado por medio de pago:
+    111010001 CAJA PESOS: $ 39.748.440,00
+    111020005 FONDO FIJO SALA MAQUINAS $: $ -9.795.700,00
+    111050025 CTA CTE MERCADO PAGO: $ 14.427.700,00
+    113010001 TARJETAS A COBRAR: $ 1.668.800,00
+  Jornadas con DIF Z ↔ contabilizado por medio:
+    2026-07-04 · 111050025 CTA CTE MERCADO PAGO: Z $ 1.004.400,00 vs contab $ 1.014.200,00 · Δ $ -9.800,00
+    2026-07-06 · 111050025 CTA CTE MERCADO PAGO: Z $ 630.900,00 vs contab $ 640.700,00 · Δ $ -9.800,00
+    2026-07-13 · 111050025 CTA CTE MERCADO PAGO: Z $ 466.100,00 vs contab $ 469.800,00 · Δ $ -3.700,00
+    2026-07-15 · 111050025 CTA CTE MERCADO PAGO: Z $ 656.800,00 vs contab $ 660.500,00 · Δ $ -3.700,00
+    2026-07-20 · 111050025 CTA CTE MERCADO PAGO: Z $ 1.122.500,00 vs contab $ 1.143.200,00 · Δ $ -20.700,00
+CSV: scripts/control_julio_medios.csv

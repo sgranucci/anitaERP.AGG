@@ -93,9 +93,12 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                 'valor' => $texto,
                 'valor_hasta' => '',
                 'busqueda' => $texto,
+                'estado' => ArticuloListadoFiltros::ESTADO_ACTIVO,
             ];
         } elseif (! is_array($filtros)) {
             $filtros = ArticuloListadoFiltros::filtrosVacios();
+        } elseif (! array_key_exists('estado', $filtros)) {
+            $filtros['estado'] = ArticuloListadoFiltros::ESTADO_ACTIVO;
         }
 
         $articulo = $this->model->select(
@@ -119,9 +122,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 ->leftJoin('usoarticulo', 'articulo.usoarticulo_id', '=', 'usoarticulo.id')
                                 ->orderby('articulo.sku', 'asc');
 
-        if (ArticuloListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            ArticuloListadoFiltros::aplicar($articulo, $filtros);
-        }
+        ArticuloListadoFiltros::aplicar($articulo, $filtros);
 
         if (isset($flPaginando)) {
             if ($flPaginando) {

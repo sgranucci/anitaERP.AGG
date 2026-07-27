@@ -1,0 +1,2559 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auditoría por medio de cobro 2026-07-01 → 2026-07-21</title>
+</head>
+<body style="font-family: Arial, sans-serif; color:#222; font-size:14px;">
+
+<h2 style="margin:0 0 8px 0;">Auditoría por medio de cobro — Z ↔ contabilizado (ERP)</h2>
+<p style="margin:0 0 12px 0;">
+    Período (jornadas del mes hasta hoy − 2 días):
+    <strong>2026-07-01</strong> → <strong>2026-07-21</strong>
+    · Tolerancia $ 0,02
+</p>
+<p style="margin:0 0 12px 0; color:#555; font-size:13px;">
+    Columna Z (esperado): <strong>Informe Z</strong> (tótem/MP) + <strong>cobranzas ERP</strong> (efectivo/tarjeta) + <strong>fondo fijo</strong> (compensación proceso).
+    Adjunto CSV: totales del mes (<code>tipo=mes</code>) y detalle día × medio (<code>tipo=dia</code>).
+</p>
+
+    <p style="color:#dc3545; font-weight:bold;">Hay jornadas con diferencia Z ↔ contabilizado por medio de cobro.</p>
+
+    
+    <h3 style="margin:18px 0 6px 0;">
+        Empresa 1 — BIYEMAS S.A.
+        <span style="font-weight:normal; color:#666;">(21 jornadas)</span>
+                    <span style="color:#28a745;">· OK</span>
+            </h3>
+
+    <p style="margin:0 0 8px 0; color:#444;">
+        Venta ERP (neto): <strong>$ 110.986.821,27</strong>
+        · Contabilidad global: <strong>$ 110.986.821,29</strong>
+        (Δ ERP↔contab $ -0,02)
+        · Flash (rendgastro): <strong>$ 118.611.097,00</strong>
+        · Total Z medios: <strong>$ 107.133.240,00</strong>
+        · Total contab medios: <strong>$ 107.133.240,00</strong>
+    </p>
+
+    <p style="margin:8px 0 4px 0; font-weight:bold;">Totales del mes por medio</p>
+    <table cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-bottom:8px;">
+        <thead>
+            <tr style="background:#85C1E9; color:#17202A;">
+                <th align="left" style="border:1px solid #ccc;">Cuenta</th>
+                <th align="left" style="border:1px solid #ccc;">Nombre</th>
+                <th align="left" style="border:1px solid #ccc;">Fuente Z</th>
+                <th align="right" style="border:1px solid #ccc;">Z (mes)</th>
+                <th align="right" style="border:1px solid #ccc;">Contabilizado (mes)</th>
+                <th align="right" style="border:1px solid #ccc;">Δ</th>
+                <th align="center" style="border:1px solid #ccc;">Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">111010001</td>
+                <td style="border:1px solid #ccc;">CAJA PESOS</td>
+                <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                <td align="right" style="border:1px solid #ccc;">$ 89.212.180,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ 89.212.180,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">111020005</td>
+                <td style="border:1px solid #ccc;">FONDO FIJO SALA MAQUINAS $</td>
+                <td style="border:1px solid #ccc;">Fondo fijo</td>
+                <td align="right" style="border:1px solid #ccc;">$ -22.919.500,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ -22.919.500,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">111050025</td>
+                <td style="border:1px solid #ccc;">CTA CTE MERCADO PAGO</td>
+                <td style="border:1px solid #ccc;">Informe Z</td>
+                <td align="right" style="border:1px solid #ccc;">$ 33.772.900,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ 33.772.900,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">113010001</td>
+                <td style="border:1px solid #ccc;">TARJETAS A COBRAR</td>
+                <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                <td align="right" style="border:1px solid #ccc;">$ 7.067.660,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ 7.067.660,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                </tbody>
+    </table>
+
+    <p style="margin:14px 0 4px 0; font-weight:bold;">Detalle día por día</p>
+    <table cellpadding="5" cellspacing="0" style="border-collapse:collapse; width:100%; margin-bottom:10px; font-size:12px;">
+        <thead>
+            <tr style="background:#85C1E9; color:#17202A;">
+                <th align="left" style="border:1px solid #ccc;">Jornada</th>
+                <th align="left" style="border:1px solid #ccc;">Cuenta</th>
+                <th align="left" style="border:1px solid #ccc;">Fuente</th>
+                <th align="right" style="border:1px solid #ccc;">Z</th>
+                <th align="right" style="border:1px solid #ccc;">Contabilizado</th>
+                <th align="right" style="border:1px solid #ccc;">Δ</th>
+                <th align="center" style="border:1px solid #ccc;">Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+                                                    <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.947.560,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.947.560,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -863.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -863.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.238.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.238.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 219.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 219.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.288.560,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.288.560,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -736.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -736.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.210.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.210.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 377.160,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 377.160,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.853.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.853.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -880.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -880.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.010.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.010.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 412.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 412.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 6.124.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 6.124.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.295.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.295.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.005.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.005.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 154.340,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 154.340,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 4.437.960,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 4.437.960,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -978.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -978.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.492.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.492.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 250.940,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 250.940,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.550.380,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.550.380,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -786.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -786.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.299.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.299.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 278.480,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 278.480,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.707.360,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.707.360,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.075.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.075.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.387.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.387.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 460.420,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 460.420,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.750.340,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.750.340,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.401.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.401.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.509.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.509.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.067.120,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.067.120,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.463.920,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.463.920,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.496.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.496.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.087.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.087.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 289.840,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 289.840,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.520.520,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.520.520,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.819.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.819.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.197.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.197.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 364.280,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 364.280,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 4.109.780,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 4.109.780,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.125.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.125.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.414.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.414.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 285.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 285.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.294.120,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.294.120,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.433.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.433.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.798.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.798.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 260.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 260.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.917.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.917.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -468.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -468.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 480.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 480.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 231.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 231.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.232.520,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.232.520,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -915.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -915.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.112.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.112.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 294.080,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 294.080,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.670.920,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.670.920,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.016.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.016.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.359.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.359.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 389.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 389.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.216.940,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.216.940,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -896.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -896.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 917.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 917.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 233.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 233.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 4.859.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 4.859.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.332.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.332.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.897.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.897.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 348.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 348.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.888.060,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 5.888.060,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.581.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -1.581.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.515.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.515.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 294.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 294.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.280.620,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.280.620,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -923.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -923.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.260.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.260.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 259.080,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 259.080,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.580.380,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.580.380,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -938.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -938.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.592.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.592.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 331.320,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 331.320,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.518.040,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 3.518.040,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -955.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -955.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 985.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 985.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 266.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 266.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                            </tbody>
+    </table>
+
+            
+    <h3 style="margin:18px 0 6px 0;">
+        Empresa 2 — KANDIKO S.A.
+        <span style="font-weight:normal; color:#666;">(21 jornadas)</span>
+                    <span style="color:#dc3545;">· DIF</span>
+            </h3>
+
+    <p style="margin:0 0 8px 0; color:#444;">
+        Venta ERP (neto): <strong>$ 33.622.534,64</strong>
+        · Contabilidad global: <strong>$ 33.622.534,64</strong>
+        (Δ ERP↔contab $ 0,00)
+        · Flash (rendgastro): <strong>$ 35.292.690,01</strong>
+        · Total Z medios: <strong>$ 33.520.260,00</strong>
+        · Total contab medios: <strong>$ 33.520.260,00</strong>
+    </p>
+
+    <p style="margin:8px 0 4px 0; font-weight:bold;">Totales del mes por medio</p>
+    <table cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-bottom:8px;">
+        <thead>
+            <tr style="background:#85C1E9; color:#17202A;">
+                <th align="left" style="border:1px solid #ccc;">Cuenta</th>
+                <th align="left" style="border:1px solid #ccc;">Nombre</th>
+                <th align="left" style="border:1px solid #ccc;">Fuente Z</th>
+                <th align="right" style="border:1px solid #ccc;">Z (mes)</th>
+                <th align="right" style="border:1px solid #ccc;">Contabilizado (mes)</th>
+                <th align="right" style="border:1px solid #ccc;">Δ</th>
+                <th align="center" style="border:1px solid #ccc;">Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">111010001</td>
+                <td style="border:1px solid #ccc;">CAJA PESOS</td>
+                <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                <td align="right" style="border:1px solid #ccc;">$ 26.344.900,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ 26.344.900,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">111020005</td>
+                <td style="border:1px solid #ccc;">FONDO FIJO SALA MAQUINAS $</td>
+                <td style="border:1px solid #ccc;">Fondo fijo</td>
+                <td align="right" style="border:1px solid #ccc;">$ -6.834.600,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ -6.834.600,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">111050025</td>
+                <td style="border:1px solid #ccc;">CTA CTE MERCADO PAGO</td>
+                <td style="border:1px solid #ccc;">Informe Z</td>
+                <td align="right" style="border:1px solid #ccc;">$ 10.903.400,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ 10.903.400,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">113010001</td>
+                <td style="border:1px solid #ccc;">TARJETAS A COBRAR</td>
+                <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                <td align="right" style="border:1px solid #ccc;">$ 3.106.560,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ 3.106.560,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                </tbody>
+    </table>
+
+    <p style="margin:14px 0 4px 0; font-weight:bold;">Detalle día por día</p>
+    <table cellpadding="5" cellspacing="0" style="border-collapse:collapse; width:100%; margin-bottom:10px; font-size:12px;">
+        <thead>
+            <tr style="background:#85C1E9; color:#17202A;">
+                <th align="left" style="border:1px solid #ccc;">Jornada</th>
+                <th align="left" style="border:1px solid #ccc;">Cuenta</th>
+                <th align="left" style="border:1px solid #ccc;">Fuente</th>
+                <th align="right" style="border:1px solid #ccc;">Z</th>
+                <th align="right" style="border:1px solid #ccc;">Contabilizado</th>
+                <th align="right" style="border:1px solid #ccc;">Δ</th>
+                <th align="center" style="border:1px solid #ccc;">Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+                                                    <tr style="background: #fdecea;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 752.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 768.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; color:#dc3545; font-weight:bold;">-15.800,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #dc3545;">DIF</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -149.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -149.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 412.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 412.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 8.080,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 8.080,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 863.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 863.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -172.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -172.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 428.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 428.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.080,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.080,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.503.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.503.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -354.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -354.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 428.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 428.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 271.040,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 271.040,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.151.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.151.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -236.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -236.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 851.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 851.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 115.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 115.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.318.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.318.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -265.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -265.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 719.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 719.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.080,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.080,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.014.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.014.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -193.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -193.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 357.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 357.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 11.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 11.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.312.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.312.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -367.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -367.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 421.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 421.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 211.440,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 211.440,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #fdecea;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.433.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.417.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; color:#dc3545; font-weight:bold;">+15.800,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #dc3545;">DIF</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -355.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -355.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 909.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 909.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 19.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 19.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.467.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.467.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -428.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -428.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 728.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 728.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 35.240,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 35.240,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.468.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.468.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -504.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -504.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 598.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 598.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 211.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 211.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.560.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.560.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -384.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -384.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 421.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 421.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 401.660,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 401.660,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.235.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.235.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -313.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -313.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 476.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 476.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 13.760,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 13.760,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 511.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 511.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -129.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -129.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 302.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 302.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 7.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 7.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.080.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.080.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -287.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -287.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 367.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 367.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 58.880,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 58.880,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.165.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.165.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -345.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -345.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 443.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 443.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 225.720,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 225.720,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.267.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.267.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -688.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -688.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 707.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 707.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 874.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 874.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.647.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.647.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -435.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -435.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 459.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 459.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 111.280,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 111.280,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.512.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.512.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -421.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -421.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 703.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 703.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 188.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 188.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 963.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 963.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -284.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -284.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 400.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 400.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 223.460,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 223.460,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.050.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.050.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -243.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -243.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 471.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 471.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 44.680,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 44.680,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.063.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.063.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -274.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -274.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 297.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 297.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 68.960,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 68.960,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                            </tbody>
+    </table>
+
+                <p style="margin:6px 0 4px 0; color:#dc3545; font-weight:bold;">Resumen jornadas con DIF (2):</p>
+        <ul style="margin:0 0 10px 18px; color:#dc3545;">
+                            <li>2026-07-01 · Δ total $ -15.800,00</li>
+                            <li>2026-07-08 · Δ total $ +15.800,00</li>
+                    </ul>
+        
+    <h3 style="margin:18px 0 6px 0;">
+        Empresa 3 — REBISCO S.A.
+        <span style="font-weight:normal; color:#666;">(21 jornadas)</span>
+                    <span style="color:#28a745;">· OK</span>
+            </h3>
+
+    <p style="margin:0 0 8px 0; color:#444;">
+        Venta ERP (neto): <strong>$ 47.587.507,42</strong>
+        · Contabilidad global: <strong>$ 47.587.507,42</strong>
+        (Δ ERP↔contab $ 0,00)
+        · Flash (rendgastro): <strong>$ 50.342.487,01</strong>
+        · Total Z medios: <strong>$ 47.587.480,00</strong>
+        · Total contab medios: <strong>$ 47.587.480,00</strong>
+    </p>
+
+    <p style="margin:8px 0 4px 0; font-weight:bold;">Totales del mes por medio</p>
+    <table cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-bottom:8px;">
+        <thead>
+            <tr style="background:#85C1E9; color:#17202A;">
+                <th align="left" style="border:1px solid #ccc;">Cuenta</th>
+                <th align="left" style="border:1px solid #ccc;">Nombre</th>
+                <th align="left" style="border:1px solid #ccc;">Fuente Z</th>
+                <th align="right" style="border:1px solid #ccc;">Z (mes)</th>
+                <th align="right" style="border:1px solid #ccc;">Contabilizado (mes)</th>
+                <th align="right" style="border:1px solid #ccc;">Δ</th>
+                <th align="center" style="border:1px solid #ccc;">Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">111010001</td>
+                <td style="border:1px solid #ccc;">CAJA PESOS</td>
+                <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                <td align="right" style="border:1px solid #ccc;">$ 41.221.480,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ 41.221.480,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">111020005</td>
+                <td style="border:1px solid #ccc;">FONDO FIJO SALA MAQUINAS $</td>
+                <td style="border:1px solid #ccc;">Fondo fijo</td>
+                <td align="right" style="border:1px solid #ccc;">$ -10.147.200,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ -10.147.200,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">111050025</td>
+                <td style="border:1px solid #ccc;">CTA CTE MERCADO PAGO</td>
+                <td style="border:1px solid #ccc;">Informe Z</td>
+                <td align="right" style="border:1px solid #ccc;">$ 14.805.000,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ 14.805.000,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                                <tr style="background: #ffffff;">
+                <td style="border:1px solid #ccc;">113010001</td>
+                <td style="border:1px solid #ccc;">TARJETAS A COBRAR</td>
+                <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                <td align="right" style="border:1px solid #ccc;">$ 1.708.200,00</td>
+                <td align="right" style="border:1px solid #ccc;">$ 1.708.200,00</td>
+                <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+            </tr>
+                </tbody>
+    </table>
+
+    <p style="margin:14px 0 4px 0; font-weight:bold;">Detalle día por día</p>
+    <table cellpadding="5" cellspacing="0" style="border-collapse:collapse; width:100%; margin-bottom:10px; font-size:12px;">
+        <thead>
+            <tr style="background:#85C1E9; color:#17202A;">
+                <th align="left" style="border:1px solid #ccc;">Jornada</th>
+                <th align="left" style="border:1px solid #ccc;">Cuenta</th>
+                <th align="left" style="border:1px solid #ccc;">Fuente</th>
+                <th align="right" style="border:1px solid #ccc;">Z</th>
+                <th align="right" style="border:1px solid #ccc;">Contabilizado</th>
+                <th align="right" style="border:1px solid #ccc;">Δ</th>
+                <th align="center" style="border:1px solid #ccc;">Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+                                                    <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.827.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.827.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -361.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -361.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 590.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 590.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-01</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 47.120,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 47.120,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.443.660,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.443.660,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -294.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -294.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 570.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 570.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-02</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 61.180,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 61.180,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.741.920,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.741.920,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -562.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -562.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 955.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 955.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-03</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 78.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 78.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.703.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.703.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -542.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -542.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.014.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.014.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-04</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 148.180,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 148.180,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.180.340,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.180.340,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -445.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -445.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 494.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 494.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-05</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 85.440,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 85.440,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.649.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.649.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -351.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -351.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 640.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 640.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-06</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 115.660,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 115.660,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.034.040,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.034.040,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -525.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -525.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 773.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 773.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-07</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 115.560,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 115.560,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.173.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.173.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -574.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -574.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 806.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 806.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-08</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 134.940,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 134.940,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.114.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.114.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -648.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -648.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 967.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 967.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-09</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 103.260,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 103.260,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.255.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.255.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -696.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -696.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 805.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 805.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-10</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 90.940,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 90.940,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.064.380,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.064.380,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -618.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -618.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 987.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 987.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-11</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 43.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 43.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.474.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.474.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -377.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -377.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 396.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 396.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-12</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 43.740,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 43.740,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.066.340,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.066.340,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -273.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -273.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 469.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 469.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-13</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 42.420,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 42.420,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.639.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.639.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -368.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -368.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 397.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 397.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-14</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 52.080,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 52.080,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.014.580,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.014.580,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -513.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -513.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 660.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 660.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-15</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 138.340,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 138.340,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.304.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.304.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -350.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -350.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 379.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 379.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-16</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 109.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 109.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.493.780,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.493.780,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -614.900,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -614.900,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 760.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 760.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-17</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 73.420,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 73.420,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.221.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.221.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -563.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -563.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.015.100,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.015.100,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-18</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 45.600,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 45.600,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.781.000,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.781.000,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -467.800,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -467.800,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 600.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 600.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-19</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 97.540,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 97.540,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.565.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 2.565.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -645.700,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -645.700,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.143.200,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.143.200,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-20</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 41.080,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 41.080,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                                                <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">111010001 CAJA PESOS</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.473.040,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 1.473.040,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">111020005 FONDO FIJO SALA MAQUINAS $</td>
+                    <td style="border:1px solid #ccc;">Fondo fijo</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -351.500,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ -351.500,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">111050025 CTA CTE MERCADO PAGO</td>
+                    <td style="border:1px solid #ccc;">Informe Z</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 377.300,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 377.300,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                                            <tr style="background: #ffffff;">
+                    <td style="border:1px solid #ccc;">2026-07-21</td>
+                    <td style="border:1px solid #ccc;">113010001 TARJETAS A COBRAR</td>
+                    <td style="border:1px solid #ccc;">Cobranza ERP</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 39.400,00</td>
+                    <td align="right" style="border:1px solid #ccc;">$ 39.400,00</td>
+                    <td align="right" style="border:1px solid #ccc; ">0,00</td>
+                    <td align="center" style="border:1px solid #ccc; color: #28a745;">OK</td>
+                </tr>
+                            </tbody>
+    </table>
+
+        
+<p style="margin:16px 0 0 0; color:#888; font-size:12px;">
+    Generado 23/07/2026 10:17 · anitaERP · Adjunto CSV con totales del mes y detalle día × medio.
+</p>
+</body>
+</html>

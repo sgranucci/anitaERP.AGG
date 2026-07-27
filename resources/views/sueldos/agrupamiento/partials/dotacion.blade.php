@@ -5,20 +5,9 @@
      data-url-crear="{{ route('guardar_dotacion_agrupamiento', ['id' => $agrupamiento->id]) }}"
      data-url-update-base="{{ url('sueldos/agrupamiento/dotacion') }}">
 
-    <div class="d-flex align-items-center mb-3">
-        <div>
-            <h5 class="mb-0">Dotaci&oacute;n anual de indumentaria</h5>
-            <small class="text-muted">Agrupamiento #{{ $agrupamiento->codigo }} — {{ $agrupamiento->descripcion }}</small>
-        </div>
-        @if ($puedeEditar)
-            <form action="{{ route('sincronizar_dotacion_agrupamiento') }}" method="POST" class="ml-auto"
-                  onsubmit="return confirm('¿Sincronizar la dotación de TODOS los agrupamientos desde Anita? Solo se agregan filas nuevas.');">
-                @csrf
-                <button type="submit" class="btn btn-outline-primary btn-sm">
-                    <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
-                </button>
-            </form>
-        @endif
+    <div class="mb-3">
+        <h5 class="mb-0">Dotaci&oacute;n anual de indumentaria</h5>
+        <small class="text-muted">Agrupamiento #{{ $agrupamiento->codigo }} — {{ $agrupamiento->descripcion }}</small>
     </div>
 
     @if ($puedeEditar)

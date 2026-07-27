@@ -202,6 +202,90 @@ class HabilitacionTurnoGastronomiaController extends Controller
         ]);
     }
 
+    public function apiExplicarDiferenciasConciliacion(Request $request)
+    {
+        if (! can('gestionar-habilitacion-turno-gastronomia', false)) {
+            return response()->json(['ok' => false, 'error' => 'Sin permiso para gestionar habilitación de turno.'], 403);
+        }
+
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
+        if ($cfg === null) {
+            return response()->json(['ok' => false, 'error' => 'Sin configuración PV.'], 422);
+        }
+
+        $pc = GastronomiaIdentificadorPc::resolver($request);
+        $activo = $this->turnoOperativoService->turnoHabilitadoEnPc($pc);
+        if ($activo === null) {
+            return response()->json(['ok' => false, 'error' => 'No hay turno habilitado.'], 422);
+        }
+
+        $activo->loadMissing('jornada');
+        $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
+            ?? Carbon::today()->format('Y-m-d');
+
+        try {
+            $grilla = GastronomiaTurnoOperativoTotalesSupport::grillaConciliacionRespuesta(
+                $pc,
+                (int) $cfg->empresa_id,
+                $fechaJornada,
+                $activo->habilitacion_en,
+                1,
+                100,
+                true,
+            );
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Error al armar la conciliación: '.$e->getMessage(),
+            ], 422);
+        }
+
+        $skill = \App\Services\Ventas\Ai\ExplicarDiferenciasConciliacionTurnoGastronomiaSkill::NOMBRE;
+        /** @var \App\Services\Ai\Skills\AiSkillRegistry $registry */
+        $registry = app(\App\Services\Ai\Skills\AiSkillRegistry::class);
+        /** @var \App\Services\Ai\AiPolicy $policy */
+        $policy = app(\App\Services\Ai\AiPolicy::class);
+
+        if (! $registry->tiene($skill) || ! $policy->puedeEjecutar($skill)) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'La ayuda IA de conciliación no está habilitada.',
+            ], 422);
+        }
+
+        $result = $registry->ejecutar($skill, new \App\Services\Ai\Skills\AiSkillContext(
+            entradas: [
+                'filas_dif' => $grilla['filas'] ?? [],
+                'totales' => $grilla['totales'] ?? [],
+                'identificador_pc' => $pc,
+                'fecha_jornada' => $fechaJornada,
+            ],
+            empresaId: (int) $cfg->empresa_id,
+            entidadTipo: \App\Services\Ventas\Ai\ExplicarDiferenciasConciliacionTurnoGastronomiaSkill::ENTIDAD,
+            entidadId: (int) $activo->id,
+        ));
+
+        if (! $result->ok) {
+            return response()->json([
+                'ok' => false,
+                'error' => $result->error ?? 'No se pudo explicar las diferencias.',
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'ai' => [
+                'ai_score' => $result->score,
+                'ai_decision_id' => $result->decisionId,
+                'ai_parrafos' => $result->datos['parrafos'] ?? $result->advertencias,
+                'ai_advertencias' => [],
+                'contexto' => $result->datos,
+            ],
+            'total_con_diferencia' => (int) ($grilla['total_con_diferencia'] ?? count($grilla['filas'] ?? [])),
+        ]);
+    }
+
     public function apiConciliacionMedio(Request $request)
     {
         if (! can('gestionar-habilitacion-turno-gastronomia', false)) {

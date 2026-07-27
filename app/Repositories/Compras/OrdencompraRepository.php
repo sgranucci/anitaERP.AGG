@@ -62,6 +62,8 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             'ordencompra_articulos.articulos.unidadesdemedidasalternativas', 'ordencompra_articulos.monedas', 'ordencompra_articulos.centrocostos_destino',
             'ordencompra_articulos.partidagastos.articulos', 'ordencompra_articulos.capexs',
             'ordencompra_articulos.color', 'ordencompra_articulos.talle',
+            'ordencompra_articulos.articulo_proveedor.unidadesmedidacompra',
+            'ordencompra_articulos.articulo_proveedor.proveedores',
             'ordencompra_comprobantes.monedas', 'ordencompra_comprobantes.condicionpagos',
             'ordencompra_comprobantes.ordencompra_comprobante_cuotas.monedas',
             'ordencompra_comprobantes.ordencompra_comprobante_cuotas.formapagos',

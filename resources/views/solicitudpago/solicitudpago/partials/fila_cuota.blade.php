@@ -19,9 +19,15 @@
     <td>
         <input type="hidden" name="solicitudpago_hija_ids[]" value="{{ $fila->solicitudpago_hija_id ?? '' }}">
         @if ($hija)
-            <a href="{{ route('editar_solicitudpago', $hija->id) }}" target="_blank" rel="noopener">
-                #{{ $hija->codigo }}
-            </a>
+            <div class="d-flex align-items-center flex-wrap">
+                <a href="{{ route('editar_solicitudpago', ['id' => $hija->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                   class="text-primary font-weight-bold mr-2"
+                   target="_blank" rel="noopener"
+                   title="Abrir SP hija en solapa de consulta (sin menú)">
+                    #{{ $hija->codigo }}
+                </a>
+                @include('solicitudpago.solicitudpago.partials.estado_badge', ['estado' => $hija->estado ?? ''])
+            </div>
         @elseif (!empty($fila->solicitudpago_hija_id))
             ID {{ $fila->solicitudpago_hija_id }}
         @else

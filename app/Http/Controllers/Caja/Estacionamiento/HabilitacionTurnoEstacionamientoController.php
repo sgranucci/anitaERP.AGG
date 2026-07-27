@@ -231,8 +231,8 @@ class HabilitacionTurnoEstacionamientoController extends Controller
         $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
 
-        $usuarioHabilitadoId = (int) $request->input('usuario_habilitado_id', 0);
-        $usuarioHabilitadoId = $usuarioHabilitadoId > 0 ? $usuarioHabilitadoId : null;
+        $usuarioId = (int) $request->input('usuario_id', $request->input('usuario_habilitado_id', 0));
+        $usuarioId = $usuarioId > 0 ? $usuarioId : null;
 
         $facturas = EstacionamientoTurnoOperativoTotalesSupport::facturasPorMedioPago(
             $pc,
@@ -240,7 +240,7 @@ class HabilitacionTurnoEstacionamientoController extends Controller
             $fechaJornada,
             $cuentacajaId,
             $activo->habilitacion_en,
-            $usuarioHabilitadoId,
+            $usuarioId,
         );
 
         $totales = EstacionamientoTurnoOperativoTotalesSupport::calcular(
@@ -289,15 +289,15 @@ class HabilitacionTurnoEstacionamientoController extends Controller
         $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
 
-        $usuarioHabilitadoId = (int) $request->input('usuario_habilitado_id', 0);
-        $usuarioHabilitadoId = $usuarioHabilitadoId > 0 ? $usuarioHabilitadoId : null;
+        $usuarioId = (int) $request->input('usuario_id', $request->input('usuario_habilitado_id', 0));
+        $usuarioId = $usuarioId > 0 ? $usuarioId : null;
 
         $notas = EstacionamientoTurnoOperativoTotalesSupport::notasCreditoDelTurno(
             $pc,
             (int) $cfg->empresa_id,
             $fechaJornada,
             $activo->habilitacion_en,
-            $usuarioHabilitadoId,
+            $usuarioId,
         );
 
         return response()->json([
@@ -334,15 +334,15 @@ class HabilitacionTurnoEstacionamientoController extends Controller
         $fechaJornada = $activo->jornada?->fecha_jornada?->format('Y-m-d')
             ?? Carbon::today()->format('Y-m-d');
 
-        $usuarioHabilitadoId = (int) $request->input('usuario_habilitado_id', 0);
-        $usuarioHabilitadoId = $usuarioHabilitadoId > 0 ? $usuarioHabilitadoId : null;
+        $usuarioId = (int) $request->input('usuario_id', $request->input('usuario_habilitado_id', 0));
+        $usuarioId = $usuarioId > 0 ? $usuarioId : null;
 
         $facturas = EstacionamientoTurnoOperativoTotalesSupport::invitacionesDelTurno(
             $pc,
             (int) $cfg->empresa_id,
             $fechaJornada,
             $activo->habilitacion_en,
-            $usuarioHabilitadoId,
+            $usuarioId,
         );
 
         return response()->json([
@@ -374,7 +374,6 @@ class HabilitacionTurnoEstacionamientoController extends Controller
                 EstacionamientoIdentificadorPc::resolver($request),
                 (int) $request->input('turno_estacionamiento_id', 0),
                 (float) $request->input('monto_habilitacion', 0),
-                (int) $request->input('usuario_habilitado_id', 0),
                 $request->input('observacion'),
             );
 

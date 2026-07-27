@@ -10,6 +10,16 @@ class ModuloAvisoMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /** Reintentos ante fallos transitorios (p. ej. SMTP inaccesible). */
+    public int $tries = 4;
+
+    /**
+     * Segundos de espera entre intentos: 1 min → 5 min → 15 min.
+     *
+     * @var list<int>
+     */
+    public array $backoff = [60, 300, 900];
+
     public string $textoCuerpo;
 
     public string $tituloEvento;

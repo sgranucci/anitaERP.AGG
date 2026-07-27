@@ -5,6 +5,9 @@
 
 @section('content')
 @include('configuracion.arbolaprobacion.partials.requisicion_sala_portal_resumen', ['modoPortal' => 'rechazo'])
+@include('configuracion.arbolaprobacion.partials.panel_ia_contexto_arbol', [
+    'ai_contexto_arbol' => $ai_contexto_arbol ?? null,
+])
 
 <div class="card card-danger portal-card">
     <div class="card-header">

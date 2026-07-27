@@ -262,7 +262,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
 
         usort($porMozo, fn ($a, $b) => strcmp($a['mozo_nombre'], $b['mozo_nombre']));
 
-        return [
+        return self::marcarFacturacionTotemFueraDeArqueo([
             'total_general' => $totalVentas,
             'total_ventas' => $totalVentas,
             'total_facturas' => $totalFacturas,
@@ -279,7 +279,93 @@ final class GastronomiaTurnoOperativoTotalesSupport
             'redondeo_invitaciones_sugerido' => $redondeoInvitacionesSugerido,
             'por_mozo' => array_values($porMozo),
             'por_medio_pago' => $porMedioGlobal,
-        ];
+        ]);
+    }
+
+    /**
+     * Separa la cuenta puente TOTEM del arqueo de caja.
+     *
+     * TOTEM forma parte de la facturación (comandas Waitry ya cobradas en kiosco),
+     * pero no debe pedirse al cajero: el dinero no está en la gaveta.
+     *
+     * @param  array<string, mixed>  $totales
+     * @return array<string, mixed>
+     */
+    public static function marcarFacturacionTotemFueraDeArqueo(array $totales): array
+    {
+        $codigoTotem = strtoupper(trim(GastronomiaCuentacajaTotem::codigo()));
+        $esTotem = static function (array $p) use ($codigoTotem): bool {
+            if ($codigoTotem === '') {
+                return false;
+            }
+
+            return strtoupper(trim((string) ($p['codigo'] ?? ''))) === $codigoTotem;
+        };
+
+        $marcarLista = static function (array $medios) use ($esTotem): array {
+            $out = [];
+            foreach ($medios as $p) {
+                if (! is_array($p)) {
+                    continue;
+                }
+                if ($esTotem($p)) {
+                    $p['excluido_arqueo'] = true;
+                    $p['es_facturacion_totem'] = true;
+                }
+                $out[] = $p;
+            }
+
+            return $out;
+        };
+
+        $medios = is_array($totales['por_medio_pago'] ?? null) ? $totales['por_medio_pago'] : [];
+        $totales['por_medio_pago'] = $marcarLista($medios);
+
+        $totalTotem = 0.0;
+        $filaTotem = null;
+        foreach ($totales['por_medio_pago'] as $p) {
+            if (! empty($p['es_facturacion_totem'])) {
+                $monto = round((float) ($p['total'] ?? $p['esperado'] ?? 0), 2);
+                $totalTotem = round($totalTotem + $monto, 2);
+                $filaTotem = $p;
+            }
+        }
+
+        $porMozo = is_array($totales['por_mozo'] ?? null) ? $totales['por_mozo'] : [];
+        foreach ($porMozo as &$mozo) {
+            if (! is_array($mozo)) {
+                continue;
+            }
+            $mediosMozo = is_array($mozo['por_medio_pago'] ?? null) ? $mozo['por_medio_pago'] : [];
+            $mozo['por_medio_pago'] = $marcarLista($mediosMozo);
+            $mozoTotem = 0.0;
+            foreach ($mozo['por_medio_pago'] as $pm) {
+                if (! empty($pm['es_facturacion_totem'])) {
+                    $mozoTotem = round($mozoTotem + (float) ($pm['total'] ?? $pm['esperado'] ?? 0), 2);
+                }
+            }
+            $mozo['total_facturacion_totem'] = $mozoTotem;
+        }
+        unset($mozo);
+        $totales['por_mozo'] = $porMozo;
+
+        $totales['total_facturacion_totem'] = $totalTotem;
+        $totales['total_cobrado_a_rendir'] = round((float) ($totales['total_cobrado'] ?? 0) - $totalTotem, 2);
+
+        if ($totalTotem > 0.005 && $filaTotem !== null) {
+            $totales['facturacion_totem'] = [
+                'cuentacaja_id' => (int) ($filaTotem['cuentacaja_id'] ?? 0),
+                'codigo' => (string) ($filaTotem['codigo'] ?? $codigoTotem),
+                'nombre' => (string) ($filaTotem['nombre'] ?? 'TOTEM'),
+                'total' => $totalTotem,
+                'leyenda' => 'Comandas Waitry ya cobradas en el tótem/kiosco (Mercado Pago). '
+                    .'Integran la facturación del turno, pero NO se entregan en caja: el cobro ya está en el tótem.',
+            ];
+        } else {
+            $totales['facturacion_totem'] = null;
+        }
+
+        return $totales;
     }
 
     /**
@@ -469,7 +555,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
 
         usort($porMozo, fn ($a, $b) => strcmp($a['mozo_nombre'], $b['mozo_nombre']));
 
-        return [
+        return self::marcarFacturacionTotemFueraDeArqueo([
             'total_general' => $totalVentas,
             'total_ventas' => $totalVentas,
             'total_facturas' => $totalFacturas,
@@ -486,7 +572,7 @@ final class GastronomiaTurnoOperativoTotalesSupport
             'redondeo_invitaciones_sugerido' => $redondeoInvitacionesSugerido,
             'por_mozo' => array_values($porMozo),
             'por_medio_pago' => $porMedioGlobal,
-        ];
+        ]);
     }
 
     /**

@@ -440,6 +440,7 @@ class MayorPlanoCuentaProcesador
         $lineaRef = $lineas[0];
         $codMonReporte = $monedaConverter->codigoAnitaDesdeMonedaId($monedaReporteId);
         $importeTotal = 0.0;
+        $importeNativoTotal = 0.0;
         $codMonGrupo = trim((string) ($lineaRef->subd_cod_mon ?? '1')) !== ''
             ? trim((string) ($lineaRef->subd_cod_mon ?? '1'))
             : '1';
@@ -456,8 +457,10 @@ class MayorPlanoCuentaProcesador
                 continue;
             }
 
+            $importeNativo = (float) ($linea->subd_importe ?? 0);
+            $importeNativoTotal += $importeNativo;
             $importeTotal += $monedaConverter->convertirImporte(
-                (float) ($linea->subd_importe ?? 0),
+                $importeNativo,
                 $codMon,
                 $cotiz,
                 (int) ($linea->subd_fecha ?? $fecha),
@@ -501,10 +504,15 @@ class MayorPlanoCuentaProcesador
             'tipo_asiento' => '',
             'balancea' => 'S',
             'nro_oc' => 0,
-            'emisor' => trim((string) ($lineaRef->subd_emisor ?? '')),
+            'emisor' => MayorPlanoCuentaSupport::resolverEmisorProveedor(
+                $tipoComp,
+                (string) ($lineaRef->subd_emisor ?? ''),
+                (string) ($lineaRef->subd_desc_mov ?? ''),
+            ),
             'cuit' => '',
             'es_subdiario' => true,
             'importe_ya_convertido' => true,
+            'importe_nativo' => $importeNativoTotal,
             'orden_sort' => $pasada === 'cuenta' ? 1 : 2,
         ];
     }
@@ -552,9 +560,14 @@ class MayorPlanoCuentaProcesador
             'tipo_asiento' => trim((string) ($linea->ctav_tipo_asiento ?? '')),
             'balancea' => trim((string) ($linea->ctav_balancea ?? 'S')) !== '' ? trim((string) ($linea->ctav_balancea ?? 'S')) : 'S',
             'nro_oc' => (int) ($linea->ctav_o_compra ?? 0),
-            'emisor' => '',
+            'emisor' => MayorPlanoCuentaSupport::resolverEmisorProveedor(
+                $tipo,
+                '',
+                (string) ($linea->ctav_desc_mov ?? ''),
+            ),
             'cuit' => '',
             'es_subdiario' => false,
+            'importe_nativo' => $importe,
             'orden_sort' => 0,
         ];
     }
@@ -653,10 +666,36 @@ class MayorPlanoCuentaProcesador
             $totalDebe += $debe;
             $totalHaber += $haber;
 
-            $monRef = MayorPlanoCuentaSupport::importeMonedaReferencia(
-                (float) ($mov['importe'] ?? 0),
-                (string) ($mov['dh'] ?? ''),
-            );
+            $codMonMov = trim((string) ($mov['cod_mon'] ?? '1')) !== ''
+                ? trim((string) ($mov['cod_mon'] ?? '1'))
+                : '1';
+            $cotizMov = (float) ($mov['cotizacion'] ?? 0);
+            $monedaAsientoId = $monedaConverter->monedaIdDesdeCodigoAnita($codMonMov);
+            // Importe nativo del asiento (nunca el ya convertido a moneda del reporte).
+            if (array_key_exists('importe_nativo', $mov)) {
+                $importeNativo = (float) $mov['importe_nativo'];
+            } elseif (! ($mov['importe_ya_convertido'] ?? false)) {
+                $importeNativo = (float) ($mov['importe'] ?? 0);
+            } else {
+                $importeNativo = 0.0;
+            }
+            // Mon.Referencia = inversa del asiento por cotización del asiento (no la del reporte):
+            // pesos → USD (/cotiz); extranjera → pesos (*cotiz). Fallback cotización diaria si falta.
+            $cotizRef = $cotizMov;
+            if ($cotizRef < 0.01) {
+                $importeRefAbs = $monedaConverter->convertirImporte(
+                    abs($importeNativo),
+                    $codMonMov,
+                    0.0,
+                    $fecha,
+                    MayorPlanoCuentaSupport::monedaReferenciaId($monedaAsientoId),
+                );
+            } elseif ($monedaAsientoId <= 1) {
+                $importeRefAbs = abs($importeNativo) / $cotizRef;
+            } else {
+                $importeRefAbs = abs($importeNativo) * $cotizRef;
+            }
+            $monRef = MayorPlanoCuentaSupport::firmarImporteDh($importeRefAbs, (string) ($mov['dh'] ?? ''));
 
             $nroAsiento = (int) ($mov['nro_asiento'] ?? 0);
             $lineasDetalle[] = [
@@ -681,10 +720,10 @@ class MayorPlanoCuentaProcesador
                 'cuit' => $mov['cuit'] ?? '',
                 'descripcion' => $mov['descripcion'] ?? '',
                 'nro_oc' => (int) ($mov['nro_oc'] ?? 0),
-                'moneda_abrev' => $monedaConverter->abreviaturaMoneda(
-                    $monedaConverter->monedaIdDesdeCodigoAnita((string) ($mov['cod_mon'] ?? '1')),
-                ),
-                'cotizacion' => (float) ($mov['cotizacion'] ?? 0),
+                'moneda_abrev' => $monedaConverter->abreviaturaMoneda($monedaAsientoId),
+                'cod_mon' => $codMonMov,
+                'importe_nativo' => $importeNativo,
+                'cotizacion' => $cotizMov,
                 'mon_referencia' => round($monRef, 2),
                 'debe' => round($debe, 2),
                 'haber' => round($haber, 2),

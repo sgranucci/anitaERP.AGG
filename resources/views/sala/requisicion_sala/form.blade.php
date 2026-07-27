@@ -1,5 +1,8 @@
 @php
-    $soloLectura = isset($visualizar) && $visualizar;
+    $soloLectura = ! empty($soloLectura) || (! empty($visualizar));
+    $bloqueoEstructural = ! empty($bloqueoEstructural);
+    $modoEdicionMenor = ! empty($modoEdicionMenor);
+    $campoBloqueado = $soloLectura || $bloqueoEstructural;
     $lineasTmBloqueadas = array_flip($lineas_articulo_bloqueadas_por_tm ?? []);
     $lineas = (isset($data) && $data && $data->requisicion_sala_articulos && $data->requisicion_sala_articulos->count())
         ? $data->requisicion_sala_articulos
@@ -18,14 +21,14 @@
             @include('includes.form-empresa-asignada', [
                 'empresa_query' => $empresa_query,
                 'empresa_id' => (isset($data) && $data) ? $data->empresa_id : null,
-                'solo_lectura' => $soloLectura || isset($data),
+                'solo_lectura' => $campoBloqueado || isset($data),
                 'col_input' => 'col-lg-5',
             ])
 
             <div class="form-group row">
                 <label for="centrocosto_id" class="col-lg-3 control-label requerido">Centro costo</label>
                 <div class="col-lg-6">
-                    <select name="centrocosto_id" id="centrocosto_id" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="centrocosto_id" id="centrocosto_id" class="form-control" required {{ $campoBloqueado ? 'disabled' : '' }}>
                         @php $ccDefault = (isset($data) && $data) ? $data->centrocosto_id : (auth()->user()->centrocosto_id ?? 1); @endphp
                         @foreach ($centrocosto_query as $cc)
                             @if ($cc->id > 0)
@@ -35,6 +38,9 @@
                             @endif
                         @endforeach
                     </select>
+                    @if($campoBloqueado)
+                        <input type="hidden" name="centrocosto_id" value="{{ old('centrocosto_id', $ccDefault) }}">
+                    @endif
                 </div>
             </div>
 
@@ -47,7 +53,7 @@
                 'depositoId' => $depositoId,
                 'codigo' => old('deposito_codigo', optional($depositoModel)->codigo ?? ''),
                 'descripcion' => old('deposito_descripcion', optional($depositoModel)->nombre ?? ''),
-                'solo_lectura' => $soloLectura,
+                'solo_lectura' => $campoBloqueado,
                 'col_label' => 'col-lg-3 control-label',
                 'col_input' => 'col-lg-6',
             ])
@@ -86,7 +92,7 @@
                 <div class="col-lg-4">
                     <input type="date" name="fecha" id="fecha" class="form-control" required
                         value="{{ old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d')) }}"
-                        {{ $soloLectura ? 'readonly' : '' }}>
+                        {{ $campoBloqueado ? 'readonly' : '' }}>
                 </div>
             </div>
             <div class="form-group row">
@@ -108,13 +114,16 @@
             <div class="form-group row">
                 <label for="estado" class="col-lg-3 control-label">Estado</label>
                 <div class="col-lg-5">
-                    <select name="estado" id="estado" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="estado" id="estado" class="form-control" {{ $campoBloqueado ? 'disabled' : '' }}>
                         @foreach ($estado_enum as $e)
                             <option value="{{ $e['nombre'] }}" {{ old('estado', $data->estado ?? '') == $e['nombre'] ? 'selected' : '' }}>
                                 {{ $e['nombre'] }}
                             </option>
                         @endforeach
                     </select>
+                    @if($campoBloqueado)
+                        <input type="hidden" name="estado" value="{{ old('estado', $data->estado ?? '') }}">
+                    @endif
                 </div>
             </div>
             @endif
@@ -136,6 +145,9 @@
     </div>
     <hr>
     <h5>Artículos</h5>
+    @php
+        $rsColspanLeyenda = ($soloLectura) ? 8 : 9;
+    @endphp
     <table class="table table-sm table-bordered" id="tabla-articulos-requisicion-sala">
         <thead class="thead-light">
             <tr>
@@ -146,6 +158,10 @@
                 <th>UID</th>
                 <th>Nº parte única</th>
                 <th>Destino</th>
+                <th class="text-center" style="width: 2.75rem;" title="Leyenda de la línea">
+                    <i class="fa fa-comment-o" aria-hidden="true"></i>
+                    <span class="sr-only">Leyenda</span>
+                </th>
                 @if(!$soloLectura)
                 <th></th>
                 @endif
@@ -154,8 +170,10 @@
         <tbody>
             @foreach ($lineas as $idx => $linea)
             @php
-                $lineaBloqueadaTm = ! $soloLectura && isset($lineasTmBloqueadas[(int) ($linea->id ?? 0)]);
-                $soloLecturaArticulo = $soloLectura || $lineaBloqueadaTm;
+                $lineaBloqueadaTm = ! $soloLectura && ! $bloqueoEstructural && isset($lineasTmBloqueadas[(int) ($linea->id ?? 0)]);
+                $soloLecturaArticulo = $soloLectura || $bloqueoEstructural || $lineaBloqueadaTm;
+                $leyendaLinea = old('detalle_articulos.'.$idx, $linea->detalle ?? '');
+                $tieneLeyenda = trim((string) $leyendaLinea) !== '';
             @endphp
             <tr class="item-requisicion-sala-articulo @if($lineaBloqueadaTm) linea-articulo-bloqueada-tm @endif">
                 <td class="align-middle">
@@ -172,26 +190,44 @@
                 </td>
                 <td class="col-desc-celda align-middle">
                     <input type="text" class="descripcionarticulo form-control form-control-sm" readonly value="{{ optional($linea->articulos)->descripcion ?? '' }}" title="{{ optional($linea->articulos)->descripcion ?? '' }}">
+                    <small class="rs-leyenda-resumen text-info d-block text-truncate mt-1 {{ $tieneLeyenda ? '' : 'd-none' }}" title="{{ $leyendaLinea }}">
+                        <i class="fa fa-comment-o" aria-hidden="true"></i> <span class="rs-leyenda-resumen-texto">{{ $leyendaLinea }}</span>
+                    </small>
                 </td>
-                <td class="align-middle"><input type="number" step="0.0001" name="cantidades[]" class="form-control form-control-sm cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
+                <td class="align-middle"><input type="number" step="0.0001" name="cantidades[]" class="form-control form-control-sm cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $campoBloqueado ? 'readonly' : '' }}></td>
                 <td class="align-middle">
-                    <select name="fueradeservicios[]" class="form-control form-control-sm fueradeservicio-linea" {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="fueradeservicios[]" class="form-control form-control-sm fueradeservicio-linea" {{ $campoBloqueado ? 'disabled' : '' }}>
                         <option value="N" {{ old('fueradeservicios.'.$idx, $linea->fueradeservicio ?? 'N') === 'N' ? 'selected' : '' }}>N</option>
                         <option value="S" {{ old('fueradeservicios.'.$idx, $linea->fueradeservicio ?? 'N') === 'S' ? 'selected' : '' }}>S</option>
                     </select>
+                    @if($campoBloqueado)
+                        <input type="hidden" name="fueradeservicios[]" value="{{ old('fueradeservicios.'.$idx, $linea->fueradeservicio ?? 'N') }}">
+                    @endif
                 </td>
                 <td class="align-middle">
                     <input type="text" name="uids[]" class="form-control form-control-sm uid-linea" value="{{ old('uids.'.$idx, $linea->uid ?? '') }}" maxlength="50" placeholder="Obligatorio si F/S = S" {{ $soloLectura ? 'readonly' : '' }}>
                 </td>
                 <td class="align-middle"><input type="text" name="numeropartes[]" class="form-control form-control-sm numeroparte-linea" value="{{ old('numeropartes.'.$idx, $linea->numeroparte ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}></td>
                 <td class="align-middle">
-                    <select name="destinos[]" class="form-control form-control-sm" {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="destinos[]" class="form-control form-control-sm" {{ $campoBloqueado ? 'disabled' : '' }}>
                         @foreach ($destino_enum as $d)
                             <option value="{{ $d['valor'] }}" {{ old('destinos.'.$idx, $linea->destino ?? 'S') === $d['valor'] ? 'selected' : '' }}>{{ $d['nombre'] }}</option>
                         @endforeach
                     </select>
+                    @if($campoBloqueado)
+                        <input type="hidden" name="destinos[]" value="{{ old('destinos.'.$idx, $linea->destino ?? 'S') }}">
+                    @endif
                 </td>
-                @if(!$soloLectura)
+                <td class="align-middle text-center p-1">
+                    <button type="button"
+                        class="btn btn-sm rs-toggle-leyenda {{ $tieneLeyenda ? 'btn-info has-leyenda' : 'btn-outline-secondary' }}"
+                        title="{{ $tieneLeyenda ? 'Ver / editar leyenda' : 'Agregar leyenda' }}"
+                        aria-expanded="false"
+                        aria-label="Leyenda de la línea">
+                        <i class="fa {{ $tieneLeyenda ? 'fa-comment' : 'fa-comment-o' }}" aria-hidden="true"></i>
+                    </button>
+                </td>
+                @if(!$soloLectura && !$bloqueoEstructural)
                 <td class="align-middle text-center">
                     @if($lineaBloqueadaTm)
                         <span class="text-muted" title="No se puede eliminar: incluido en transferencia al laboratorio"><i class="fa fa-lock"></i></span>
@@ -199,7 +235,29 @@
                         <button type="button" class="btn-accion-tabla eliminar_linea_sala"><i class="fa fa-times-circle text-danger"></i></button>
                     @endif
                 </td>
+                @elseif(!$soloLectura && $bloqueoEstructural)
+                <td class="align-middle text-center">
+                    <span class="text-muted" title="Edición menor: no se pueden agregar ni eliminar líneas"><i class="fa fa-lock"></i></span>
+                </td>
                 @endif
+            </tr>
+            <tr class="item-requisicion-sala-leyenda d-none">
+                <td colspan="{{ $rsColspanLeyenda }}" class="rs-leyenda-celda px-2 py-2">
+                    <div class="rs-leyenda-panel">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <label class="mb-0 small font-weight-bold text-secondary">
+                                <i class="fa fa-comment-o mr-1" aria-hidden="true"></i> Leyenda de la línea
+                            </label>
+                            <span class="rs-leyenda-preview text-muted small text-truncate ml-2 {{ $tieneLeyenda ? '' : 'd-none' }}" title="{{ $leyendaLinea }}">{{ $leyendaLinea }}</span>
+                        </div>
+                        <textarea name="detalle_articulos[]"
+                            class="form-control form-control-sm rs-leyenda-linea"
+                            rows="2"
+                            maxlength="2000"
+                            placeholder="Observaciones, detalle o nota específica de este ítem…"
+                            {{ $soloLectura ? 'readonly' : '' }}>{{ $leyendaLinea }}</textarea>
+                    </div>
+                </td>
             </tr>
             @endforeach
         </tbody>
@@ -211,7 +269,7 @@
         Debe registrar una <strong>transferencia de mercadería aparte</strong> (Stock → Transferencia de mercadería) para esos ítems.
     </div>
     @endif
-    @if(!$soloLectura)
+    @if(!$soloLectura && !$bloqueoEstructural)
     <button type="button" class="btn btn-danger btn-sm" id="agrega_renglon_sala">+ Agrega renglón</button>
     <small id="aviso-uid-fuera-servicio" class="text-danger d-none ml-2">Complete el UID de los ítems fuera de servicio antes de agregar otro renglón.</small>
     @endif
@@ -220,5 +278,42 @@
     #tabla-articulos-requisicion-sala td.align-middle { vertical-align: middle !important; }
     #tabla-articulos-requisicion-sala .celda-articulo-ms .codigoarticulo { min-width: 5rem; max-width: 8rem; }
     #tabla-articulos-requisicion-sala .col-desc-celda .descripcionarticulo { min-width: 0; width: 100%; }
+    #tabla-articulos-requisicion-sala tr.item-requisicion-sala-leyenda td.rs-leyenda-celda {
+        border-top: none !important;
+        background: #f7fbfe;
+    }
+    #tabla-articulos-requisicion-sala .rs-leyenda-panel {
+        border-left: 3px solid #85C1E9;
+        padding-left: 0.65rem;
+    }
+    #tabla-articulos-requisicion-sala .rs-toggle-leyenda {
+        padding: 0.15rem 0.4rem;
+        line-height: 1.2;
+        position: relative;
+    }
+    #tabla-articulos-requisicion-sala .rs-toggle-leyenda.has-leyenda::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #1a5276;
+    }
+    #tabla-articulos-requisicion-sala .rs-leyenda-preview {
+        max-width: 55%;
+        font-style: italic;
+    }
+    #tabla-articulos-requisicion-sala .rs-leyenda-resumen {
+        font-size: 0.75rem;
+        line-height: 1.2;
+        max-width: 100%;
+        cursor: pointer;
+    }
+    #tabla-articulos-requisicion-sala textarea.rs-leyenda-linea {
+        resize: vertical;
+        min-height: 2.4rem;
+    }
 </style>
 @include('sala.requisicion_sala.partials.template_linea_articulo')

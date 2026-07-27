@@ -29,7 +29,18 @@ class ValidacionConfiguracionPuntoventaBingo extends FormRequest
             ],
             'descripcion' => 'nullable|max:255',
             'empresa_id' => 'required|exists:empresa,id',
+            'caja_id' => 'required|exists:caja,id',
             'cuentacaja_id' => 'nullable|exists:cuentacaja,id',
+        ];
+    }
+
+    public function attributes()
+    {
+        return [
+            'identificador_pc' => 'identificador de PC',
+            'caja_id' => 'caja de recepción',
+            'empresa_id' => 'empresa',
+            'cuentacaja_id' => 'cuenta de caja',
         ];
     }
 

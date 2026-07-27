@@ -339,16 +339,29 @@ class FlashCajaController extends Controller
             'show',
         ]);
 
-        if ($request->boolean('recalcular') || $existente === null) {
-            $calculado = $this->calculoService->calcular($empresaId, $fecha);
-            $payload = array_merge($payload, $calculado);
+        $camposCalculados = [
+            'ayb', 'slot_coin_in', 'slot_d', 'slot_r', 'soft_count', 'hard_count', 'cant_slots',
+            'rul_coin_in', 'rul_d', 'rul_r', 'soft_rul', 'hard_rul', 'cant_rul',
+            'bingo_cant_carton', 'bingo_total_venta', 'bingo_resultado',
+            'win_ol_slot', 'win_ol_rul', 'estac', 'vending', 'cant_vehic',
+        ];
+
+        // Crear sin valores previos → recalcular. Si ya calcularon/editaron en pantalla, respetar el form.
+        $usarFormulario = $request->boolean('flash_valores_desde_formulario')
+            && ! $request->boolean('recalcular');
+        if ($existente !== null && ! $request->boolean('recalcular')) {
+            $usarFormulario = true;
+        }
+
+        if ($usarFormulario) {
+            $payload = array_merge($payload, $request->only($camposCalculados));
+            if ($existente === null) {
+                $payload['calculado_en'] = now();
+            }
         } else {
-            $payload = array_merge($payload, $request->only([
-                'ayb', 'slot_coin_in', 'slot_d', 'slot_r', 'soft_count', 'hard_count', 'cant_slots',
-                'rul_coin_in', 'rul_d', 'rul_r', 'soft_rul', 'hard_rul', 'cant_rul',
-                'bingo_cant_carton', 'bingo_total_venta', 'bingo_resultado',
-                'win_ol_slot', 'win_ol_rul', 'estac', 'vending', 'cant_vehic',
-            ]));
+            $calculado = $this->calculoService->calcular($empresaId, $fecha);
+            unset($calculado['advertencias_wigos']);
+            $payload = array_merge($payload, $calculado);
         }
 
         if ($existente === null) {
@@ -357,7 +370,7 @@ class FlashCajaController extends Controller
             $payload['actualizousuario_id'] = auth()->id();
         }
 
-        unset($payload['recalcular']);
+        unset($payload['recalcular'], $payload['flash_valores_desde_formulario']);
 
         return $payload;
     }

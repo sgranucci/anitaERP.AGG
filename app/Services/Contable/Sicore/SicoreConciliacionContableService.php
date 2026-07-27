@@ -12,6 +12,7 @@ use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
 use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
 use App\Support\Contable\Sicore\SicoreProveedorErpSupport;
+use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -20,6 +21,7 @@ final class SicoreConciliacionContableService
     public function __construct(
         private readonly Sicore_ConfigRepositoryInterface $configRepository,
         private readonly AnitaMayorAnaliticoSupport $mayorAnaliticoSupport,
+        private readonly SicoreSaldoEjercicioSupport $saldoEjercicioSupport,
         private readonly SicoreProveedorErpSupport $proveedorSupport = new SicoreProveedorErpSupport(),
     ) {
     }
@@ -39,6 +41,18 @@ final class SicoreConciliacionContableService
 
         $desde = (string) ($filtros['fecha_desde'] ?? '');
         $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+
+        // Precarga saldos de ejercicio (col. O) de todas las cuentas del proceso en un solo mayor plano.
+        $codigosSaldo = [];
+        foreach ($configs as $configPrecarga) {
+            foreach ($configPrecarga->cuentas->where('empresa_id', $empresaId) as $c) {
+                $codigo = (int) preg_replace('/\D/', '', (string) ($c->cuentacontable?->codigo ?? ''));
+                if ($codigo > 0) {
+                    $codigosSaldo[$codigo] = $codigo;
+                }
+            }
+        }
+        $this->saldoEjercicioSupport->precargar($empresaId, $hasta, array_values($codigosSaldo));
 
         $items = [];
         foreach ($configs as $config) {
@@ -143,6 +157,16 @@ final class SicoreConciliacionContableService
 
             $dif = (float) ($explicacion['diferencia'] ?? round($totalSicore - $totalMayorNeto, 2));
 
+            // Saldo de ejercicio (col. O mayor plano): 01/01/2026 → fecha_hasta.
+            // Independiente del Total mayor del período; no altera el badge Cuadra.
+            $saldoEjercicio = $this->saldoEjercicioSupport->saldoComparable(
+                $empresaId,
+                $hasta,
+                $cuentasDetalle,
+                $cuentaInversa,
+            );
+            $difSaldo = round($totalSicore - $saldoEjercicio, 2);
+
             $items[] = [
                 'config_id' => $configId,
                 'codigo_impuesto' => (int) $config->codigo_impuesto,
@@ -165,6 +189,9 @@ final class SicoreConciliacionContableService
                 'total_mayor_anita' => $totalMayorNetoAnita,
                 'diferencia' => $dif,
                 'cuadra' => SicoreFormatoV8Support::cuadra($totalSicore, $totalMayorNeto),
+                'saldo_ejercicio' => $saldoEjercicio,
+                'diferencia_sicore_saldo' => $difSaldo,
+                'cuadra_saldo' => SicoreFormatoV8Support::cuadra($totalSicore, $saldoEjercicio),
                 'explicacion_diferencia' => $explicacion,
                 'registros' => count($registrosConfig),
                 'fuente_mayor' => $fuenteMayor,
@@ -179,6 +206,8 @@ final class SicoreConciliacionContableService
             'habilitada' => true,
             'items' => $items,
             'tolerancia' => SicoreFormatoV8Support::tolerancia(),
+            'saldo_ejercicio_desde' => '2026-01-01',
+            'saldo_ejercicio_hasta' => $hasta,
         ];
     }
 

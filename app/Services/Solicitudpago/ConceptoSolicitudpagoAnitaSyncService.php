@@ -223,34 +223,12 @@ class ConceptoSolicitudpagoAnitaSyncService
         $vistos = [];
         foreach ($filas as $fila) {
             $empresaCodigo = (int) ($fila->csolc_empresa ?? 0);
-            $empresaId = $mapaEmpresas[$empresaCodigo] ?? null;
-            if ($empresaId === null) {
-                continue;
-            }
 
             $codigoCuenta = ltrim(trim((string) ($fila->csolc_cuenta ?? '')), '0');
             if ($codigoCuenta === '') {
                 $codigoCuenta = '0';
             }
             $codigoAnita = (string) (int) ($fila->csolc_cuenta ?? 0);
-
-            $cuenta = Cuentacontable::query()
-                ->where('empresa_id', $empresaId)
-                ->where(function ($q) use ($codigoAnita, $codigoCuenta) {
-                    $q->where('codigo', $codigoAnita)
-                        ->orWhere('codigo', $codigoCuenta)
-                        ->orWhereRaw('CAST(codigo AS UNSIGNED) = ?', [(int) $codigoAnita]);
-                })
-                ->first();
-            if ($cuenta === null) {
-                continue;
-            }
-
-            $clave = $empresaId.'-'.$cuenta->id;
-            if (isset($vistos[$clave])) {
-                continue;
-            }
-            $vistos[$clave] = true;
 
             $ccostoCodigo = (int) ($fila->csolc_ccosto ?? 0);
             $centrocostoId = null;
@@ -265,13 +243,41 @@ class ConceptoSolicitudpagoAnitaSyncService
                 $dh = 'D';
             }
 
-            Concepto_Solicitudpago_Cuenta::query()->create([
-                'concepto_solicitudpago_id' => $concepto->id,
-                'empresa_id' => $empresaId,
-                'cuentacontable_id' => $cuenta->id,
-                'centrocosto_id' => $centrocostoId,
-                'debe_haber' => $dh,
-            ]);
+            // Anita empresa 0 = cuenta genérica (todas las empresas que tengan ese código).
+            $cuentasMatch = Cuentacontable::query()
+                ->where(function ($q) use ($codigoAnita, $codigoCuenta) {
+                    $q->where('codigo', $codigoAnita)
+                        ->orWhere('codigo', $codigoCuenta)
+                        ->orWhereRaw('CAST(codigo AS UNSIGNED) = ?', [(int) $codigoAnita]);
+                });
+
+            if ($empresaCodigo > 0) {
+                $empresaId = $mapaEmpresas[$empresaCodigo] ?? null;
+                if ($empresaId === null) {
+                    continue;
+                }
+                $cuentasMatch->where('empresa_id', $empresaId);
+            }
+
+            foreach ($cuentasMatch->get(['id', 'empresa_id']) as $cuenta) {
+                $empresaId = (int) $cuenta->empresa_id;
+                if ($empresaId <= 0) {
+                    continue;
+                }
+                $clave = $empresaId.'-'.$cuenta->id;
+                if (isset($vistos[$clave])) {
+                    continue;
+                }
+                $vistos[$clave] = true;
+
+                Concepto_Solicitudpago_Cuenta::query()->create([
+                    'concepto_solicitudpago_id' => $concepto->id,
+                    'empresa_id' => $empresaId,
+                    'cuentacontable_id' => $cuenta->id,
+                    'centrocosto_id' => $centrocostoId,
+                    'debe_haber' => $dh,
+                ]);
+            }
         }
     }
 

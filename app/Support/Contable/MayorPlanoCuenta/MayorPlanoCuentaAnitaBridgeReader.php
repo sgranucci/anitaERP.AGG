@@ -30,7 +30,7 @@ class MayorPlanoCuentaAnitaBridgeReader
     /**
      * Resuelve desde qué fecha cargar movimientos de saldo inicial.
      * Si hay APE en el ejercicio del período → desde comienzo de ese ejercicio;
-     * si no → ejercicio anterior (l-mayor.c + regla Biyemas desde 01/01/25).
+     * si no → ejercicio anterior (l-mayor.c + regla Biyemas desde 01/01/26).
      *
      * @param  list<int>  $empresaIds
      */

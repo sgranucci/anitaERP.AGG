@@ -1,22 +1,45 @@
 @php
+    use App\Support\Solicitudpago\ConceptoSolicitudpagoFormaPago;
     use App\Support\Solicitudpago\SolicitudpagoTratamientos;
     $tratamiento = old('tratamiento', $data->tratamiento ?? SolicitudpagoTratamientos::NORMAL);
     $conceptoForma = old('concepto_forma_pago');
     if ($conceptoForma === null && isset($data) && $data->conceptos) {
         $conceptoForma = $data->conceptos->forma_pago;
     }
-    $mostrarCuotas = SolicitudpagoTratamientos::usaCuotas($tratamiento) || $conceptoForma === 'CUOTAS';
+    $conceptoIdForm = (int) old('concepto_solicitudpago_id', $data->concepto_solicitudpago_id ?? 0);
+    $madreIdForm = (int) old('solicitudpago_madre_id', $data->solicitudpago_madre_id ?? 0);
+    $esHijaSp = $madreIdForm > 0;
+    $mostrarCuotas = ConceptoSolicitudpagoFormaPago::muestraBloqueCuotas(
+        $conceptoForma,
+        $tratamiento,
+        $conceptoIdForm > 0,
+        $madreIdForm
+    );
 @endphp
+@if ($esHijaSp)
+<div class="alert alert-info mb-0">
+    <i class="fa fa-link"></i>
+    Esta solicitud es <strong>hija</strong> de un plan: no lleva cuotas propias.
+    El plan se consulta y edita en la SP madre
+    @if (isset($data) && ($data->madre ?? null))
+        <a href="{{ route('editar_solicitudpago', ['id' => $data->madre->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+           class="font-weight-bold" target="_blank" rel="noopener">#{{ $data->madre->codigo }}</a>.
+    @else
+        .
+    @endif
+</div>
+@endif
 <div id="bloque-cuotas" style="{{ $mostrarCuotas ? '' : 'display:none' }}">
     <p class="text-muted mb-2">Cuotas del plan / recurrente. Pod&eacute;s cargar manualmente o importar Excel (columnas: nro, vencimiento, monto — acepta alias).</p>
     @if (isset($data))
-        <form action="{{ route('importar_cuotas_solicitudpago', $data->id) }}" method="POST" enctype="multipart/form-data" class="form-inline mb-3">
-            @csrf
-            <input type="file" name="archivo_cuotas" class="form-control-file mr-2" accept=".xlsx,.xls,.csv" required>
-            <button type="submit" class="btn btn-outline-secondary btn-sm">
+        {{-- Fuera del form-general: un <form> anidado rompe el HTML y el required del archivo bloqueaba el grabar --}}
+        <div class="form-inline mb-3" id="sp-importar-cuotas-wrap">
+            <input type="file" id="archivo_cuotas_import" class="form-control-file mr-2" accept=".xlsx,.xls,.csv">
+            <button type="button" id="btn-importar-cuotas-sp" class="btn btn-outline-secondary btn-sm"
+                    data-url="{{ route('importar_cuotas_solicitudpago', $data->id) }}">
                 <i class="fa fa-upload"></i> Importar Excel
             </button>
-        </form>
+        </div>
     @endif
     <div class="table-responsive">
         <table class="table table-sm table-bordered" id="solicitudpago-cuota-table">
@@ -41,7 +64,7 @@
                                 'hijas' => null,
                             ];
                         })
-                        : collect(isset($data) ? ($data->cuotas ?? []) : []);
+                        : collect(($mostrarCuotas && isset($data)) ? ($data->cuotas ?? []) : []);
                 @endphp
                 @foreach ($filasCuota as $fila)
                     @include('solicitudpago.solicitudpago.partials.fila_cuota', ['fila' => $fila])
@@ -58,6 +81,7 @@
         </div>
     </div>
 </div>
-<div id="bloque-cuotas-aviso" class="alert alert-secondary" style="{{ $mostrarCuotas ? 'display:none' : '' }}">
-    Las cuotas aplican cuando el tratamiento es Plan de pago / Recurrente, o el concepto tiene forma de pago Cuotas.
+<div id="bloque-cuotas-aviso" class="alert alert-secondary" style="{{ ($mostrarCuotas || $esHijaSp) ? 'display:none' : '' }}">
+    Las cuotas solo son obligatorias si el <strong>concepto</strong> tiene forma de pago &quot;Cuotas&quot;
+    y la solicitud es la madre del plan. Las SP hijas no cargan cuotas (aunque el concepto sea de cuotas).
 </div>

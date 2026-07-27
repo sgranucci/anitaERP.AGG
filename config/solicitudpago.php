@@ -40,4 +40,14 @@ return [
     | Disparar árbol al crear SP manual en estado EMITIDA.
     */
     'arbol_al_crear' => filter_var(env('SOLICITUDPAGO_ARBOL_AL_CREAR', true), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+    | Archivos adjuntos: mount compartido Anita (/scan/compras/sol_files).
+    | Disco: SOLP-{codigo}.{nombre}. No copiar al storage del ERP.
+    */
+    'archivos' => [
+        'disk' => env('SOLICITUDPAGO_ARCHIVOS_DISK', 'solicitudpago_scan'),
+        'root' => env('SOLICITUDPAGO_ARCHIVOS_ROOT', '/scan/compras/sol_files'),
+        'prefijo' => env('SOLICITUDPAGO_ARCHIVOS_PREFIJO', 'SOLP-'),
+    ],
 ];

@@ -13,7 +13,7 @@ use Illuminate\Support\Collection;
 
 /**
  * Totales de comprobantes estacionamiento por PC: ventas y cobranzas leídas de cada factura emitida.
- * Sin desglose por mozo (estacionamiento no usa mozos).
+ * Desglose por usuario operador (venta.usuario_id = sesión al facturar), análogo a por_mozo en gastronomía.
  */
 final class EstacionamientoTurnoOperativoTotalesSupport
 {
@@ -286,6 +286,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             ->with([
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
+                'venta.usuario',
             ])
             ->get();
     }
@@ -433,7 +434,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 ->with([
                     'venta.cobranzasDirectas',
                     'venta.caja_movimientos.cobranzas',
-                    'turnoOperativo.usuarioHabilitado',
+                    'venta.usuario',
                 ])
                 ->get();
             $filas = self::construirFilasConciliacion($emisiones);
@@ -478,6 +479,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             ->with([
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
+                'venta.usuario',
             ]);
     }
 
@@ -487,7 +489,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
      */
     private static function calcularDesdeColeccionEmisiones(Collection $emisiones): array
     {
-        $porUsuarioHabilitado = [];
+        $porUsuario = [];
         $porMedioGlobal = [];
         $totalVentas = 0.0;
         $totalFacturas = 0.0;
@@ -504,7 +506,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             }
             self::acumularEmisionEnTotales(
                 $em,
-                $porUsuarioHabilitado,
+                $porUsuario,
                 $porMedioGlobal,
                 $totalVentas,
                 $totalFacturas,
@@ -519,7 +521,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
 
         return self::armarRespuestaTotales(
             $emisiones->count(),
-            $porUsuarioHabilitado,
+            $porUsuario,
             $porMedioGlobal,
             $totalVentas,
             $totalFacturas,
@@ -533,13 +535,13 @@ final class EstacionamientoTurnoOperativoTotalesSupport
     }
 
     /**
-     * @param  array<string, array<string, mixed>>  $porUsuarioHabilitado
+     * @param  array<string, array<string, mixed>>  $porUsuario
      * @param  array<int, array{cuentacaja_id:int, codigo:string, nombre:string, total:float}>  $porMedioGlobal
      * @return array<string, mixed>
      */
     private static function armarRespuestaTotales(
         int $cantidadComprobantes,
-        array $porUsuarioHabilitado,
+        array $porUsuario,
         array $porMedioGlobal,
         float $totalVentas,
         float $totalFacturas,
@@ -557,6 +559,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         $totalNotasCredito = round($totalNotasCredito, 2);
         $totalVentasCobrables = round($totalVentas - $totalInvitaciones, 2);
         $diferencia = round($totalCobrado - $totalVentasCobrables, 2);
+        $porUsuarioNorm = self::normalizarPorUsuario($porUsuario);
 
         return [
             'total_general' => $totalVentas,
@@ -573,18 +576,20 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             'cantidad_notas_credito' => $cantidadNotasCredito,
             'total_notas_credito' => $totalNotasCredito,
             'redondeo_invitaciones_sugerido' => self::redondeoInvitacionesSugerido($totalInvitaciones, $diferencia),
-            'por_usuario_habilitado' => self::normalizarPorUsuarioHabilitado($porUsuarioHabilitado),
+            'por_usuario' => $porUsuarioNorm,
+            // Alias legacy para snapshots/UI antiguos (misma lista).
+            'por_usuario_habilitado' => $porUsuarioNorm,
             'por_medio_pago' => self::normalizarMediosPago($porMedioGlobal),
         ];
     }
 
     /**
-     * @param  array<string, array<string, mixed>>  $porUsuarioHabilitado
+     * @param  array<string, array<string, mixed>>  $porUsuario
      * @return list<array<string, mixed>>
      */
-    private static function normalizarPorUsuarioHabilitado(array $porUsuarioHabilitado): array
+    private static function normalizarPorUsuario(array $porUsuario): array
     {
-        foreach ($porUsuarioHabilitado as &$row) {
+        foreach ($porUsuario as &$row) {
             $row['total'] = round((float) ($row['total'] ?? 0), 2);
             $row['total_facturas'] = round((float) ($row['total_facturas'] ?? 0), 2);
             $row['total_cobrado'] = round((float) ($row['total_cobrado'] ?? 0), 2);
@@ -597,14 +602,32 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         unset($row);
 
         usort(
-            $porUsuarioHabilitado,
+            $porUsuario,
             fn (array $a, array $b) => strcmp(
-                (string) ($a['usuario_habilitado_nombre'] ?? ''),
-                (string) ($b['usuario_habilitado_nombre'] ?? ''),
+                (string) ($a['usuario_nombre'] ?? ''),
+                (string) ($b['usuario_nombre'] ?? ''),
             ),
         );
 
-        return array_values($porUsuarioHabilitado);
+        return array_values($porUsuario);
+    }
+
+    /**
+     * @return array{0:?int, 1:string}
+     */
+    private static function usuarioOperadorDesdeEmision(VentaEstacionamientoEmision $em): array
+    {
+        $venta = $em->venta;
+        $usuarioId = $venta?->usuario_id !== null ? (int) $venta->usuario_id : null;
+        if ($usuarioId !== null && $usuarioId <= 0) {
+            $usuarioId = null;
+        }
+        $nombre = trim((string) ($venta?->usuario?->nombre ?? ''));
+        if ($nombre === '') {
+            $nombre = $usuarioId !== null ? ('Usuario #'.$usuarioId) : 'Sin usuario';
+        }
+
+        return [$usuarioId, $nombre];
     }
 
     /**
@@ -645,18 +668,18 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             ->with([
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
-                'turnoOperativo.usuarioHabilitado',
+                'venta.usuario',
             ])
             ->get();
     }
 
     /**
-     * @param  array<string, array<string, mixed>>  $porUsuarioHabilitado
+     * @param  array<string, array<string, mixed>>  $porUsuario
      * @param  array<int, array{cuentacaja_id:int, codigo:string, nombre:string, total:float}>  $porMedioGlobal
      */
     private static function acumularEmisionEnTotales(
         VentaEstacionamientoEmision $em,
-        array &$porUsuarioHabilitado,
+        array &$porUsuario,
         array &$porMedioGlobal,
         float &$totalVentas,
         float &$totalFacturas,
@@ -695,13 +718,15 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         // NC incluye cobranza negativa en su medio; rendvalor debe reflejar neto por cuenta.
         self::acumularMediosPago($medios, $porMedioGlobal);
 
-        $usuarioId = $em->turnoOperativo?->usuario_habilitado_id;
+        [$usuarioId, $usuarioNombre] = self::usuarioOperadorDesdeEmision($em);
         $key = $usuarioId !== null ? (string) $usuarioId : '0';
-        if (! isset($porUsuarioHabilitado[$key])) {
-            $usuario = $em->turnoOperativo?->usuarioHabilitado;
-            $porUsuarioHabilitado[$key] = [
-                'usuario_habilitado_id' => $usuarioId !== null ? (int) $usuarioId : null,
-                'usuario_habilitado_nombre' => trim((string) ($usuario?->nombre ?? '')) ?: 'Sin usuario habilitado',
+        if (! isset($porUsuario[$key])) {
+            $porUsuario[$key] = [
+                'usuario_id' => $usuarioId,
+                'usuario_nombre' => $usuarioNombre,
+                // Alias legacy (snapshots / JS viejo).
+                'usuario_habilitado_id' => $usuarioId,
+                'usuario_habilitado_nombre' => $usuarioNombre,
                 'total' => 0.0,
                 'total_facturas' => 0.0,
                 'total_cobrado' => 0.0,
@@ -718,21 +743,21 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             ];
         }
 
-        $porUsuarioHabilitado[$key]['total'] += $montoVenta;
-        $porUsuarioHabilitado[$key]['total_cobrado'] += $totalCobradoVenta;
-        $porUsuarioHabilitado[$key]['cantidad']++;
+        $porUsuario[$key]['total'] += $montoVenta;
+        $porUsuario[$key]['total_cobrado'] += $totalCobradoVenta;
+        $porUsuario[$key]['cantidad']++;
 
         if ($esNotaCredito) {
-            $porUsuarioHabilitado[$key]['notas_credito']['total'] += $montoVenta;
-            $porUsuarioHabilitado[$key]['notas_credito']['cantidad']++;
+            $porUsuario[$key]['notas_credito']['total'] += $montoVenta;
+            $porUsuario[$key]['notas_credito']['cantidad']++;
         } else {
-            $porUsuarioHabilitado[$key]['total_facturas'] += $montoVenta;
+            $porUsuario[$key]['total_facturas'] += $montoVenta;
             if (self::esInvitacionSinCobranza($montoVenta, $totalCobradoVenta)) {
-                $porUsuarioHabilitado[$key]['invitaciones']['total'] += $montoVenta;
-                $porUsuarioHabilitado[$key]['invitaciones']['cantidad']++;
+                $porUsuario[$key]['invitaciones']['total'] += $montoVenta;
+                $porUsuario[$key]['invitaciones']['cantidad']++;
             }
         }
-        self::acumularMediosPago($medios, $porUsuarioHabilitado[$key]['por_medio_pago']);
+        self::acumularMediosPago($medios, $porUsuario[$key]['por_medio_pago']);
     }
 
     /**
@@ -749,7 +774,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             ->with([
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
-                'turnoOperativo.usuarioHabilitado',
+                'venta.usuario',
             ])
             ->get();
     }
@@ -858,7 +883,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             ->with([
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
-                'turnoOperativo.usuarioHabilitado',
+                'venta.usuario',
             ])
             ->chunk(80, function ($emisiones) use (&$conDiferencia) {
                 foreach ($emisiones as $em) {
@@ -943,15 +968,15 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 }
             }
 
-            $usuarioId = $em->turnoOperativo?->usuario_habilitado_id;
-            $usuarioNombre = trim((string) ($em->turnoOperativo?->usuarioHabilitado?->nombre ?? ''))
-                ?: 'Sin usuario habilitado';
+            [$usuarioId, $usuarioNombre] = self::usuarioOperadorDesdeEmision($em);
 
             $filas[] = [
                 'venta_id' => (int) $venta->id,
                 'codigo' => (string) ($venta->codigo ?? ''),
                 'cliente' => (string) ($venta->nombre ?? ''),
-                'usuario_habilitado_id' => $usuarioId !== null ? (int) $usuarioId : null,
+                'usuario_id' => $usuarioId,
+                'usuario_nombre' => $usuarioNombre,
+                'usuario_habilitado_id' => $usuarioId,
                 'usuario_habilitado_nombre' => $usuarioNombre,
                 'hora' => $venta->created_at?->format('H:i') ?? '',
                 'total_facturado' => $montoVenta,
@@ -976,7 +1001,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         string $fechaJornada,
         int $cuentacajaId,
         ?Carbon $desdeHabilitacion = null,
-        ?int $usuarioHabilitadoId = null,
+        ?int $usuarioId = null,
     ): array {
         if ($cuentacajaId <= 0) {
             return [];
@@ -990,7 +1015,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
             if (! empty($fila['es_nota_credito'])) {
                 continue;
             }
-            if ($usuarioHabilitadoId !== null && (int) ($fila['usuario_habilitado_id'] ?? 0) !== $usuarioHabilitadoId) {
+            if ($usuarioId !== null && (int) ($fila['usuario_id'] ?? 0) !== $usuarioId) {
                 continue;
             }
             $montoMedio = (float) ($fila['medios'][$cuentacajaId] ?? 0);
@@ -1001,8 +1026,10 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 'venta_id' => $fila['venta_id'],
                 'codigo' => $fila['codigo'],
                 'cliente' => $fila['cliente'],
-                'usuario_habilitado_id' => $fila['usuario_habilitado_id'] ?? null,
-                'usuario_habilitado_nombre' => $fila['usuario_habilitado_nombre'] ?? '',
+                'usuario_id' => $fila['usuario_id'] ?? null,
+                'usuario_nombre' => $fila['usuario_nombre'] ?? '',
+                'usuario_habilitado_id' => $fila['usuario_id'] ?? null,
+                'usuario_habilitado_nombre' => $fila['usuario_nombre'] ?? '',
                 'hora' => $fila['hora'],
                 'total_facturado' => $fila['total_facturado'],
                 'monto_medio' => $montoMedio,
@@ -1022,17 +1049,17 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         int $empresaId,
         string $fechaJornada,
         ?Carbon $desdeHabilitacion = null,
-        ?int $usuarioHabilitadoId = null,
+        ?int $usuarioId = null,
         ?Carbon $hastaInclusive = null,
     ): array {
         $emisiones = self::emisionesEnAlcance($identificadorPc, $empresaId, $fechaJornada, $desdeHabilitacion, $hastaInclusive);
         $filas = self::construirFilasConciliacion($emisiones);
 
-        $ncFilas = array_values(array_filter($filas, function (array $f) use ($usuarioHabilitadoId) {
+        $ncFilas = array_values(array_filter($filas, function (array $f) use ($usuarioId) {
             if (empty($f['es_nota_credito'])) {
                 return false;
             }
-            if ($usuarioHabilitadoId !== null && (int) ($f['usuario_habilitado_id'] ?? 0) !== $usuarioHabilitadoId) {
+            if ($usuarioId !== null && (int) ($f['usuario_id'] ?? 0) !== $usuarioId) {
                 return false;
             }
 
@@ -1062,8 +1089,10 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 'venta_id' => $fila['venta_id'],
                 'codigo' => $fila['codigo'],
                 'cliente' => $fila['cliente'],
-                'usuario_habilitado_id' => $fila['usuario_habilitado_id'] ?? null,
-                'usuario_habilitado_nombre' => $fila['usuario_habilitado_nombre'] ?? '',
+                'usuario_id' => $fila['usuario_id'] ?? null,
+                'usuario_nombre' => $fila['usuario_nombre'] ?? '',
+                'usuario_habilitado_id' => $fila['usuario_id'] ?? null,
+                'usuario_habilitado_nombre' => $fila['usuario_nombre'] ?? '',
                 'hora' => $fila['hora'],
                 'total_facturado' => $fila['total_facturado'],
                 'monto_nota_credito' => $fila['total_facturado'],
@@ -1094,7 +1123,7 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         int $empresaId,
         string $fechaJornada,
         ?Carbon $desdeHabilitacion = null,
-        ?int $usuarioHabilitadoId = null,
+        ?int $usuarioId = null,
         ?Carbon $hastaInclusive = null,
     ): array {
         $emisiones = self::emisionesEnAlcance(
@@ -1106,11 +1135,11 @@ final class EstacionamientoTurnoOperativoTotalesSupport
         );
 
         $filas = self::construirFilasConciliacion($emisiones);
-        $invFilas = array_values(array_filter($filas, function (array $f) use ($usuarioHabilitadoId) {
+        $invFilas = array_values(array_filter($filas, function (array $f) use ($usuarioId) {
             if (empty($f['es_invitacion'])) {
                 return false;
             }
-            if ($usuarioHabilitadoId !== null && (int) ($f['usuario_habilitado_id'] ?? 0) !== $usuarioHabilitadoId) {
+            if ($usuarioId !== null && (int) ($f['usuario_id'] ?? 0) !== $usuarioId) {
                 return false;
             }
 
@@ -1127,8 +1156,10 @@ final class EstacionamientoTurnoOperativoTotalesSupport
                 'venta_id' => $fila['venta_id'],
                 'codigo' => $fila['codigo'],
                 'cliente' => $fila['cliente'],
-                'usuario_habilitado_id' => $fila['usuario_habilitado_id'] ?? null,
-                'usuario_habilitado_nombre' => $fila['usuario_habilitado_nombre'] ?? '',
+                'usuario_id' => $fila['usuario_id'] ?? null,
+                'usuario_nombre' => $fila['usuario_nombre'] ?? '',
+                'usuario_habilitado_id' => $fila['usuario_id'] ?? null,
+                'usuario_habilitado_nombre' => $fila['usuario_nombre'] ?? '',
                 'hora' => $fila['hora'],
                 'total_facturado' => $fila['total_facturado'],
                 'descuento_pct' => 0.0,

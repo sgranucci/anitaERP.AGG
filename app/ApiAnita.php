@@ -164,19 +164,41 @@ class ApiAnita {
     }
 
     /**
-     * Respuesta legacy del bridge en INSERT/UPDATE/DELETE exitoso.
+     * Cantidad de filas insert/update/delete reportada por el bridge, o null si no hay mensaje parseable.
+     * "[]" / body vacío (HTTP) no confirman filas afectadas.
+     */
+    public static function extraerFilasAfectadas(?string $respuesta): ?int
+    {
+        if ($respuesta === null) {
+            return null;
+        }
+
+        $limpia = self::limpiarRespuestaBridgeEscritura($respuesta);
+        if ($limpia === '' || $limpia === '[]' || $limpia === '{}') {
+            return null;
+        }
+
+        if (preg_match('/(\d+)\s+row\(s\)\s+(?:inserted|updated|deleted)\b/i', $limpia, $m) === 1) {
+            return (int) $m[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Respuesta legacy del bridge en INSERT/UPDATE/DELETE con al menos 1 fila afectada.
      */
     public static function respuestaBridgeEscrituraExitosa(string $respuesta): bool
     {
-        $limpia = self::limpiarRespuestaBridgeEscritura($respuesta);
+        $filas = self::extraerFilasAfectadas($respuesta);
 
-        return $limpia !== ''
-            && preg_match('/\d+\s+row\(s\)\s+(?:inserted|updated|deleted)\b/i', $limpia) === 1;
+        return $filas !== null && $filas >= 1;
     }
 
     /**
      * Detecta error en la respuesta del bridge (HTTP o legacy).
-     * [] es válido: lista sin filas (consulta) o OK en insert/update (bridge legacy).
+     * [] es válido: lista sin filas (consulta) o OK ambiguo en insert/update (bridge legacy/HTTP vacío).
+     * Para escrituras que deben impactar filas, usar apiCallEscritura(..., exigirFilasAfectadas: true).
      */
     public static function extraerMensajeError(?string $respuesta): ?string
     {
@@ -206,7 +228,12 @@ class ApiAnita {
         }
 
         $limpia = self::limpiarRespuestaBridgeEscritura($trim);
-        if (self::respuestaBridgeEscrituraExitosa($trim)) {
+        $filas = self::extraerFilasAfectadas($trim);
+        if ($filas !== null && $filas >= 1) {
+            return null;
+        }
+        // "0 row(s) updated" no es error genérico (borrado idempotente); quien lo necesite usa exigirFilasAfectadas.
+        if ($filas === 0) {
             return null;
         }
 
@@ -231,9 +258,15 @@ class ApiAnita {
 
     /**
      * Ejecuta escritura en Informix vía bridge y falla si la respuesta indica error.
+     *
+     * @param  bool  $exigirFilasAfectadas  Si true, rechaza []/vacío y "0 row(s) …" (UPDATE/DELETE deben impactar).
      */
-    public function apiCallEscritura(array $payload, ?string $contexto = null, string $logEvento = 'anita_bridge.fallo'): string
-    {
+    public function apiCallEscritura(
+        array $payload,
+        ?string $contexto = null,
+        string $logEvento = 'anita_bridge.fallo',
+        bool $exigirFilasAfectadas = false,
+    ): string {
         if ($contexto === null || $contexto === '') {
             $tabla = $payload['tabla'] ?? 'sql';
             $acc = $payload['acc'] ?? '';
@@ -250,6 +283,24 @@ class ApiAnita {
                 'mensaje' => $err,
             ]);
             throw new \RuntimeException('Error al grabar en Anita ('.$contexto.'): '.$err);
+        }
+
+        if ($exigirFilasAfectadas) {
+            $filas = self::extraerFilasAfectadas($raw === '' ? null : $raw);
+            if ($filas === null || $filas < 1) {
+                $detalle = $filas === 0
+                    ? '0 filas afectadas (el WHERE no coincidió o el UPDATE no tuvo efecto)'
+                    : 'respuesta sin confirmación de filas afectadas ('.$raw.')';
+                Log::warning($logEvento, [
+                    'contexto' => $contexto,
+                    'tabla' => $payload['tabla'] ?? null,
+                    'acc' => $payload['acc'] ?? null,
+                    'mensaje' => $detalle,
+                    'filas_afectadas' => $filas,
+                    'respuesta' => $raw,
+                ]);
+                throw new \RuntimeException('Error al grabar en Anita ('.$contexto.'): '.$detalle);
+            }
         }
 
         return $raw;

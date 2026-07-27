@@ -96,7 +96,6 @@
         urlPdfParcialBase: @json(url('caja/estacionamiento/cierres-turno/parcial')),
     };
 </script>
-<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/caja/estacionamiento/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/estacionamiento/totales_turno_render.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/caja/estacionamiento/habilitacion_turno.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/estacionamiento/habilitacion_turno.js')) }}" type="text/javascript"></script>
 @endsection
@@ -243,18 +242,6 @@
                                     <div class="form-group">
                                         <label for="monto_habilitacion" class="requerido">Monto habilitación</label>
                                         <input type="number" step="0.01" min="0" name="monto_habilitacion" id="monto_habilitacion" class="form-control" required value="0"/>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="usuario_habilitado_codigo" class="requerido">Usuario habilitado</label>
-                                        <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
-                                            <input type="hidden" name="usuario_habilitado_id" id="usuario_habilitado_id" class="usuario_id" value=""/>
-                                            <input type="text" style="flex: 0 0 110px; width: 110px; height: 38px;" class="usuario_codigo_arbol form-control" id="usuario_habilitado_codigo" value="" placeholder="Código usuario" title="Código de login o ID numérico; Tab fuera para cargar el nombre" autocomplete="off"/>
-                                            <button type="button" title="Consulta usuarios" style="padding: 1px; flex: 0 0 auto;" class="btn-accion-tabla consultausuario tooltipsC"
-                                                data-ptrusuario_id="#usuario_habilitado_id" data-ptrnombre="#nombre_usuario_habilitado" data-ptrusuario_codigo="#usuario_habilitado_codigo">
-                                                <i class="fa fa-search text-primary"></i>
-                                            </button>
-                                            <input type="text" style="flex: 1 1 auto; min-width: 0; height: 38px;" class="nombreusuario form-control" id="nombre_usuario_habilitado" value="" placeholder="Nombre usuario" readonly/>
-                                        </div>
                                     </div>
                                     <div class="form-group">
                                         <label for="observacion_habilitacion">Observaciones</label>
@@ -414,8 +401,6 @@
     </div>
 </div>
 
-@include('includes.admin.modalconsultausuario')
-
 <div class="modal fade" id="modal-conciliacion-medio" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
         <div class="modal-content">
@@ -433,7 +418,7 @@
                                 <th id="modal-conc-th-comprobante">Comprobante</th>
                                 <th id="modal-conc-th-hora">Hora</th>
                                 <th id="modal-conc-th-cliente">Cliente</th>
-                                <th id="modal-conc-th-item">Usuario habilitado</th>
+                                <th id="modal-conc-th-item">Usuario</th>
                                 <th id="modal-conc-th-total" class="text-right">Facturado</th>
                                 <th id="modal-conc-th-extra" class="text-right">Este medio</th>
                                 <th id="modal-conc-th-cobrado" class="text-right">Cobrado total</th>

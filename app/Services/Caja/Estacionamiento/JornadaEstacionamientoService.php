@@ -9,6 +9,7 @@ use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Repositories\Caja\Estacionamiento\JornadaEstacionamientoRepositoryInterface;
+use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
@@ -72,6 +73,7 @@ final class JornadaEstacionamientoService
         $payload['fechafactura'] = $fechas['fechafactura'];
         $payload['fechajornada'] = $fechas['fechajornada'];
         $payload['jornada_estacionamiento_id'] = $fechas['jornada_id'];
+        $payload = CaeaEmisionFechaCorrelatividadSupport::aplicarAlPayload($payload);
 
         return $payload;
     }

@@ -100,9 +100,152 @@
                         <a href="{{ route('exportar_sicore', $filtrosQuery) }}" class="btn btn-success">
                             <i class="fa fa-download"></i> Descargar archivo SICORE v8
                         </a>
+                        <button type="button"
+                            class="btn btn-warning js-sicore-liquidacion-abrir"
+                            title="Cuadro de liquidación + listados Compras y Sueldos (PDF combinado)">
+                            <i class="fa fa-file-pdf"></i> Liquidación completa
+                        </button>
                     @endif
                 </div>
             </form>
+        </div>
+
+        @include('includes.proceso_overlay_aviso', [
+            'overlayId' => 'sicore-liquidacion-overlay',
+            'tituloId' => 'sicore-liquidacion-titulo',
+            'subtituloId' => 'sicore-liquidacion-subtitulo',
+            'titulo' => 'Generando liquidación SICORE…',
+            'subtitulo' => 'Puede demorar. Esta pantalla sigue usable; el PDF se descarga al terminar.',
+        ])
+
+        {{-- Iframe oculto: la descarga no navega la pantalla original ni deja el overlay pegado. --}}
+        <iframe name="sicore_liq_dl" id="sicore-liq-dl-frame" title="Descarga liquidación SICORE"
+            style="position:absolute;width:0;height:0;border:0;visibility:hidden;"></iframe>
+
+        @php
+            $criterioPantalla = (string) ($filtros['criterio'] ?? 'compras');
+            $desdePantalla = (string) ($filtros['fecha_desde'] ?? '');
+            $hastaPantalla = (string) ($filtros['fecha_hasta'] ?? '');
+            $esSueldosPantalla = $criterioPantalla === 'sueldos';
+            $esComprasPantalla = in_array($criterioPantalla, ['compras', 'ventas'], true);
+            if ($esSueldosPantalla) {
+                $defSueldos = [$desdePantalla, $hastaPantalla];
+                $defCompras = \App\Support\Contable\Sicore\SicoreLiquidacionQuincenasSupport::rangoMismoMes(
+                    $desdePantalla !== '' ? $desdePantalla : date('Y-m-d')
+                );
+            } else {
+                $defCompras = [$desdePantalla, $hastaPantalla];
+                $defSueldos = \App\Support\Contable\Sicore\SicoreLiquidacionQuincenasSupport::rangoMismoMes(
+                    $desdePantalla !== '' ? $desdePantalla : date('Y-m-d')
+                );
+            }
+        @endphp
+
+        <div class="modal fade" id="modal-sicore-liquidacion" tabindex="-1" role="dialog"
+             aria-labelledby="modal-sicore-liquidacion-titulo" aria-hidden="true">
+            <div class="modal-dialog modal-lg" role="document">
+                <form method="get" action="{{ route('liquidacion_sicore') }}" id="form-sicore-liquidacion"
+                      class="modal-content" target="sicore_liq_dl" rel="noopener">
+                    <div class="modal-header bg-warning">
+                        <h5 class="modal-title" id="modal-sicore-liquidacion-titulo">
+                            Liquidación SICORE — rangos
+                        </h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-muted mb-3">
+                            La liquidación une <strong>Compras (217/767)</strong> y
+                            <strong>Sueldos 4ta categoría (787)</strong>, que suelen tener períodos distintos.
+                            Se toma lo ya consultado en pantalla y se pide confirmar el rango que falta.
+                            Al generar, el PDF se descarga sin bloquear esta pantalla.
+                        </p>
+                        <input type="hidden" name="empresa_id" value="{{ (int) ($filtros['empresa_id'] ?? 0) }}">
+                        <input type="hidden" name="criterio" value="{{ $criterioPantalla }}">
+                        <input type="hidden" name="fecha_desde" value="{{ $desdePantalla }}">
+                        <input type="hidden" name="fecha_hasta" value="{{ $hastaPantalla }}">
+                        @if (! empty($filtros['conciliar_contable']))
+                            <input type="hidden" name="conciliar_contable" value="1">
+                        @endif
+
+                        <div class="card card-outline card-secondary mb-3">
+                            <div class="card-header py-2">
+                                <strong>Compras</strong>
+                                <span class="text-muted small">(códigos 217 y 767)</span>
+                                @if ($esComprasPantalla)
+                                    <span class="badge badge-info ml-1">desde pantalla</span>
+                                @else
+                                    <span class="badge badge-warning ml-1">completar</span>
+                                @endif
+                            </div>
+                            <div class="card-body py-2">
+                                <div class="form-row">
+                                    <div class="form-group col-md-6 mb-2">
+                                        <label for="compras_fecha_desde">Desde</label>
+                                        <input type="date" class="form-control" name="compras_fecha_desde"
+                                            id="compras_fecha_desde" required
+                                            value="{{ $defCompras[0] }}"
+                                            @if ($esComprasPantalla) readonly @endif>
+                                    </div>
+                                    <div class="form-group col-md-6 mb-2">
+                                        <label for="compras_fecha_hasta">Hasta</label>
+                                        <input type="date" class="form-control" name="compras_fecha_hasta"
+                                            id="compras_fecha_hasta" required
+                                            value="{{ $defCompras[1] }}"
+                                            @if ($esComprasPantalla) readonly @endif>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card card-outline card-secondary mb-0">
+                            <div class="card-header py-2">
+                                <strong>Sueldos — 4ta categoría</strong>
+                                <span class="text-muted small">(código 787)</span>
+                                @if ($esSueldosPantalla)
+                                    <span class="badge badge-info ml-1">desde pantalla</span>
+                                @else
+                                    <span class="badge badge-warning ml-1">completar</span>
+                                @endif
+                            </div>
+                            <div class="card-body py-2">
+                                <div class="form-row">
+                                    <div class="form-group col-md-6 mb-2">
+                                        <label for="sueldos_fecha_desde">Desde</label>
+                                        <input type="date" class="form-control" name="sueldos_fecha_desde"
+                                            id="sueldos_fecha_desde" required
+                                            value="{{ $defSueldos[0] }}"
+                                            @if ($esSueldosPantalla) readonly @endif>
+                                    </div>
+                                    <div class="form-group col-md-6 mb-2">
+                                        <label for="sueldos_fecha_hasta">Hasta</label>
+                                        <input type="date" class="form-control" name="sueldos_fecha_hasta"
+                                            id="sueldos_fecha_hasta" required
+                                            value="{{ $defSueldos[1] }}"
+                                            @if ($esSueldosPantalla) readonly @endif>
+                                    </div>
+                                </div>
+                                @if (! $esSueldosPantalla)
+                                    <p class="small text-muted mb-0">
+                                        Sugerido: mismo mes calendario del &laquo;desde&raquo; de Compras (editable).
+                                    </p>
+                                @else
+                                    <p class="small text-muted mb-0">
+                                        Sugerido para Compras: mismo mes calendario del &laquo;desde&raquo; de Sueldos (editable).
+                                    </p>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-warning js-sicore-liquidacion-generar">
+                            <i class="fa fa-file-pdf"></i> Generar PDF combinado
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         @if ($consultado && $resultado)

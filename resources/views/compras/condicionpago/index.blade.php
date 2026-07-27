@@ -30,7 +30,7 @@ Condiciones de Venta
                 <h3 class="card-title">Condiciones de pago</h3>
                 <div class="card-tools">
                     <a href="{{route('crear_condicionpago')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-condiciones-de-pago', false))
+                       	@if (can('crear-condicion-de-pago', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
@@ -71,12 +71,12 @@ Condiciones de Venta
             						</ul>
         						</td>
         						<td>
-                       			@if (can('editar-condiciones-de-pago', false))
+                       			@if (can('editar-condicion-de-pago', false))
                                 	<a href="{{route('editar_condicionpago', ['id' => $condicionpago->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                    	<i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-condiciones-de-pago', false))
+                       			@if (can('borrar-condicion-de-pago', false))
                                 	<form action="{{route('eliminar_condicionpago', ['id' => $condicionpago->id])}}" class="d-inline form-eliminar" method="POST">
                                    		@csrf @method("delete")
                                    		<button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">

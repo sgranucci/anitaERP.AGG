@@ -145,6 +145,7 @@ final class CabeceraFieldMapper
             'condicionentrega_id' => self::mapCondicionentregaId($row, $ctx),
             'condicionpago_id' => self::mapCondicionpagoId($row, $ctx),
             'descuento' => self::mapDescuento($row),
+            'descuento_tipo' => 'porcentaje',
             'estadoordencompra' => self::mapEstadoordencompra($row, $ctx),
             'sector_legajocompra_id' => self::mapSectorLegajocompraId($ctx),
             'creousuario_id' => self::mapCreousuarioId($ctx),

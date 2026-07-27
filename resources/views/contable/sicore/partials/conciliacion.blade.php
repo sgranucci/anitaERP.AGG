@@ -5,6 +5,17 @@
             @if ($periodo_texto ?? '')
                 <span class="text-muted small ml-2">{{ $periodo_texto }}</span>
             @endif
+            @php
+                $saldoDesde = $conciliacion['saldo_ejercicio_desde'] ?? '2026-01-01';
+                $saldoHasta = $conciliacion['saldo_ejercicio_hasta'] ?? '';
+            @endphp
+            @if ($saldoHasta !== '')
+                <div class="small text-muted mt-1">
+                    Saldo ejerc. (col. O): {{ \Carbon\Carbon::parse($saldoDesde)->format('d/m/Y') }}
+                    &rarr; {{ \Carbon\Carbon::parse($saldoHasta)->format('d/m/Y') }}
+                    <span class="text-muted">— Total SICORE es del período filtrado; el saldo es acumulado.</span>
+                </div>
+            @endif
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -19,6 +30,9 @@
                             <th class="text-right">Total mayor</th>
                             <th class="text-right">Diferencia</th>
                             <th class="text-center">Estado</th>
+                            <th class="text-right" title="Saldo de ejercicio del mayor plano (columna O)">Saldo ejerc.</th>
+                            <th class="text-right">Dif. vs saldo</th>
+                            <th class="text-center">Estado saldo</th>
                             <th class="text-center">Reg.</th>
                         </tr>
                     </thead>
@@ -92,11 +106,22 @@
                                         <span class="badge badge-danger">Diferencia</span>
                                     @endif
                                 </td>
+                                <td class="text-right @if (($item['saldo_ejercicio'] ?? 0) < 0) text-danger @endif">
+                                    {{ number_format((float) ($item['saldo_ejercicio'] ?? 0), 2, ',', '.') }}
+                                </td>
+                                <td class="text-right">{{ number_format((float) ($item['diferencia_sicore_saldo'] ?? 0), 2, ',', '.') }}</td>
+                                <td class="text-center">
+                                    @if (! empty($item['cuadra_saldo']))
+                                        <span class="badge badge-success">Cuadra</span>
+                                    @else
+                                        <span class="badge badge-warning">Dif. saldo</span>
+                                    @endif
+                                </td>
                                 <td class="text-center">{{ $item['registros'] ?? 0 }}</td>
                             </tr>
                             @if ($tieneDetalle)
                                 <tr class="p-0 border-0">
-                                    <td colspan="9" class="p-0 border-0">
+                                    <td colspan="12" class="p-0 border-0">
                                         <div id="{{ $auditId }}" class="collapse border-top bg-light">
                                             <div class="px-3 py-3">
                                                 @php

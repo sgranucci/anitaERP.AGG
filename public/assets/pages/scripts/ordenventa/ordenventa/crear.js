@@ -499,7 +499,11 @@
 			cache: false
 		}).done(function (historia) {
 			wrapper.empty();
-			$.each(historia, function (index, value) {
+			var rows = Array.isArray(historia) ? historia : (historia.movimientos || historia);
+			if (window.AnitaArbolPanelIa && !Array.isArray(historia)) {
+				window.AnitaArbolPanelIa.render(historia.ai_contexto_arbol || null, '#ordenventa-panel-ia-arbol');
+			}
+			$.each(rows, function (index, value) {
 				var fecha = value.fechaenvio;
 				var fechaproceso = value.fechaproceso != null ? value.fechaproceso : '';
 				var $tr = $('<tr class="item-ordenventa-arbol"></tr>');

@@ -5,6 +5,7 @@ namespace App\Services\Contable;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
 use App\Support\Contable\MayorConceptoListadoFiltros;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaComprobanteEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaOrdencompraEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProveedorEnricher;
@@ -23,6 +24,7 @@ class MayorPlanoCuentaReporteService
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly MayorPlanoCuentaOrdencompraEnricher $ordencompraEnricher,
         private readonly MayorPlanoCuentaProveedorEnricher $proveedorEnricher,
+        private readonly MayorPlanoCuentaComprobanteEnricher $comprobanteEnricher,
     ) {
     }
 
@@ -212,6 +214,7 @@ class MayorPlanoCuentaReporteService
 
         $filas = $this->enriquecerEnlaces($filas, $empresaIds);
         $filas = $this->ordencompraEnricher->enriquecer($filas);
+        $filas = $this->comprobanteEnricher->enriquecer($filas);
         $filas = $this->proveedorEnricher->enriquecer($filas);
 
         if ($filtros !== []) {

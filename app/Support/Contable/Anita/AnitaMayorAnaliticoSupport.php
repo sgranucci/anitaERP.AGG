@@ -256,11 +256,19 @@ final class AnitaMayorAnaliticoSupport
     }
 
     /**
+     * Lee del bridge con reintentos ante respuesta vacía o error transitorio.
+     *
+     * El bridge HTTP de Anita devuelve intermitentemente un body vacío ("[]") aunque la consulta
+     * tenga filas (colisión de archivo temporal UNLOAD bajo concurrencia). Como estas cuentas de
+     * control (ventas/kiosco/tabaco/IVA) siempre tienen movimientos en el período consultado, un
+     * resultado vacío se trata como hipo del bridge y se reintenta; así el Mayor deja de mostrarse
+     * en 0 y generar diferencias falsas.
+     *
      * @return list<object>
      */
     private function listarBridge(string $sistema, string $tabla, string $campos, string $whereArmado): array
     {
-        $raw = $this->api->apiCall([
+        $payload = [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => $tabla,
@@ -269,13 +277,27 @@ final class AnitaMayorAnaliticoSupport
             'orderBy' => $tabla === 'subdiario'
                 ? 'subd_fecha, subd_nro_operacion'
                 : 'ctav_fecha, ctav_nro_asiento, ctav_nro_linea',
-        ]);
+        ];
 
-        if (ApiAnita::extraerMensajeError($raw) !== null) {
-            return [];
+        $intentos = max(1, (int) config('gastronomia.conciliacion_diaria_reporte.anita_reintentos_bridge', 3));
+
+        for ($i = 1; $i <= $intentos; $i++) {
+            $raw = $this->api->apiCall($payload);
+
+            if (ApiAnita::extraerMensajeError($raw) === null) {
+                $filas = ApiAnita::decodificarListaFilas($raw);
+                if ($filas !== [] || $i === $intentos) {
+                    return $filas;
+                }
+            } elseif ($i === $intentos) {
+                return [];
+            }
+
+            // Respuesta vacía o error transitorio: pausa breve y reintento.
+            usleep(200000);
         }
 
-        return ApiAnita::decodificarListaFilas($raw);
+        return [];
     }
 
     private function fechaAnitaAIso(int $fechaAnita): string

@@ -8,10 +8,12 @@ use App\Models\Ventas\ArcaCaea;
 use App\Services\Arca\ArcaCaeaAnitaSyncService;
 use App\Services\Arca\ArcaCaeaPresentacionService;
 use App\Services\Arca\ArcaWsfeCaeaService;
+use App\Support\Ventas\ArcaCaeaInformeColaSupport;
 use App\Support\Ventas\ArcaCaeaInformeUiSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Auth;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
@@ -101,12 +103,25 @@ class ArcaCaeaController extends Controller
             if ($resumen === null) {
                 $resumen = [];
             }
+            $procesoActivo = ArcaCaeaInformeColaSupport::estaActivo((int) $registro->id);
+            $progresoActivo = $procesoActivo
+                ? ArcaCaeaInformeColaSupport::progreso((int) $registro->id)
+                : null;
+            $puedePresentar = ! $procesoActivo
+                && ArcaCaeaInformeUiSupport::puedePresentarAhora($resumen);
+            $leyenda = $procesoActivo
+                ? ArcaCaeaInformeColaSupport::leyendaProcesoActivo($progresoActivo)
+                : ArcaCaeaInformeUiSupport::leyendaFaltante($resumen);
             $filasMeta[$registro->id] = [
                 'resumen' => $resumen,
-                'puede_presentar' => ArcaCaeaInformeUiSupport::puedePresentarAhora($resumen),
-                'leyenda' => ArcaCaeaInformeUiSupport::leyendaFaltante($resumen),
+                'proceso_activo' => $procesoActivo,
+                'progreso' => $progresoActivo,
+                'puede_presentar' => $puedePresentar,
+                'leyenda' => $leyenda,
                 'titulo_overlay' => ArcaCaeaInformeUiSupport::tituloProcesando($registro),
-                'badge' => ArcaCaeaInformeUiSupport::badgeInformeEstado($registro->informe_estado, $resumen),
+                'badge' => $procesoActivo
+                    ? 'procesando'
+                    : ArcaCaeaInformeUiSupport::badgeInformeEstado($registro->informe_estado, $resumen),
             ];
         }
 
@@ -151,7 +166,16 @@ class ArcaCaeaController extends Controller
             $erroresInforme = $this->presentacionService->listarErroresInforme($registro, 30);
         }
         $leyendaInforme = ArcaCaeaInformeUiSupport::leyendaFaltante(is_array($resumenInforme) ? $resumenInforme : null);
-        $puedePresentar = ArcaCaeaInformeUiSupport::puedePresentarAhora(is_array($resumenInforme) ? $resumenInforme : null);
+        $procesoActivo = $registro->estaAutorizado()
+            && ArcaCaeaInformeColaSupport::estaActivo((int) $registro->id);
+        $progresoActivo = $procesoActivo
+            ? ArcaCaeaInformeColaSupport::progreso((int) $registro->id)
+            : null;
+        if ($procesoActivo) {
+            $leyendaInforme = ArcaCaeaInformeColaSupport::leyendaProcesoActivo($progresoActivo);
+        }
+        $puedePresentar = ! $procesoActivo
+            && ArcaCaeaInformeUiSupport::puedePresentarAhora(is_array($resumenInforme) ? $resumenInforme : null);
         $erroresAgrupados = $registro->estaAutorizado()
             ? $this->presentacionService->agruparErroresInforme($registro, 15)
             : [];
@@ -165,6 +189,8 @@ class ArcaCaeaController extends Controller
                 'puedeGrabarAnita',
                 'puedeInformar',
                 'puedePresentar',
+                'procesoActivo',
+                'progresoActivo',
                 'resumenInforme',
                 'leyendaInforme',
                 'erroresInforme',
@@ -239,6 +265,19 @@ class ArcaCaeaController extends Controller
             ->with('mensaje-error', $resultado['mensaje']);
     }
 
+    public function estadoInforme(int $id)
+    {
+        can('listar-arca-caea');
+
+        $registro = $this->resolverRegistroPermitido($id);
+        $resumen = is_array($registro->informe_resumen) ? $registro->informe_resumen : [];
+        $puedeBase = $registro->estaAutorizado()
+            && ArcaCaeaInformeUiSupport::puedePresentarAhora($resumen);
+        $estado = ArcaCaeaInformeColaSupport::estadoUi((int) $registro->id, $puedeBase);
+
+        return response()->json($estado);
+    }
+
     public function informar(Request $request, int $id)
     {
         can('informar-arca-caea');
@@ -259,6 +298,12 @@ class ArcaCaeaController extends Controller
                 ->with('mensaje-error', 'El CAEA no está autorizado; no se puede informar comprobantes.');
         }
 
+        if (ArcaCaeaInformeColaSupport::estaActivo((int) $registro->id)) {
+            return redirect()
+                ->route('arca_caea', $filtros)
+                ->with('mensaje-error', 'Ya hay una presentación CAEA en segundo plano para esta quincena. Esperá a que termine (mail de aviso) antes de volver a encolar.');
+        }
+
         $usuario = Auth::user();
         $email = trim((string) ($usuario->email ?? ''));
         if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -268,8 +313,12 @@ class ArcaCaeaController extends Controller
         }
 
         try {
+            ArcaCaeaInformeColaSupport::marcarActivo((int) $registro->id, $usuarioId);
+            // Permitir mail del nuevo proceso aunque un intento anterior (p. ej. 704) ya hubiera avisado.
+            Cache::forget('arca-caea-informe-mail-'.(int) $registro->id.'-'.$usuarioId);
             InformarArcaCaeaPeriodoJob::dispatch($registro->id, $usuarioId, $soloErrores);
         } catch (\Throwable $e) {
+            ArcaCaeaInformeColaSupport::liberar((int) $registro->id);
             Log::error('arca.caea.informe.dispatch_fallo', [
                 'arca_caea_id' => $registro->id,
                 'usuario_id' => $usuarioId,

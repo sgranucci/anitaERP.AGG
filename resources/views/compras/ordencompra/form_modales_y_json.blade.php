@@ -23,3 +23,4 @@
 @include('includes.presupuesto.modalconsultacapex', ['centrocosto_query' => $centrocosto_query ?? null])
 @include('includes.compras.modalconsultaproveedor')
 @include('includes.compras.modalconsultarequisicion')
+@include('includes.compras.modal_elegir_articulo_proveedor')

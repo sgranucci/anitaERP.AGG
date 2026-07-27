@@ -8,32 +8,42 @@ use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class MayorPlanoCuentaExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
 
     /** @var array<string, mixed> */
     private array $filtros = [];
 
+    /** Resultado ya calculado (cache de pantalla); evita regenerar Anita al exportar. */
+    private ?array $resultado = null;
+
     private bool $hayFilaLogos = false;
+
+    private bool $multiempresa = false;
+
+    private int $filaTituloExcel = 1;
+
+    private int $filaInicioMeta = 1;
+
+    private int $filasMeta = 2;
 
     private int $filaCabecerasExcel = 2;
 
     private int $filaPrimeraDatosExcel = 3;
-
-    private int $filaTituloExcel = 1;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
@@ -45,69 +55,133 @@ class MayorPlanoCuentaExport implements FromView, ShouldAutoSize, WithColumnForm
 
     /**
      * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|null  $resultado  Cache de pantalla; si falta se regenera
      */
-    public function parametros(array $filtros): self
+    public function parametros(array $filtros, ?array $resultado = null): self
     {
         $this->filtros = $filtros;
+        $this->resultado = $resultado;
 
         return $this;
     }
 
     public function view(): View
     {
-        $resultado = $this->reporteService->generarDesdeFiltros($this->filtros);
+        $resultado = $this->resultado ?? $this->reporteService->generarDesdeFiltros($this->filtros);
+        $this->resultado = $resultado;
+
         $filas = $this->reporteService->aplanarFilas($resultado, $this->filtros, true);
+        $totales = [
+            'cantidad_filas' => (int) ($resultado['totales']['lineas'] ?? 0),
+            'cantidad_cuentas' => (int) ($resultado['totales']['cuentas'] ?? 0),
+            'total_debe' => (float) ($resultado['totales']['debe'] ?? 0),
+            'total_haber' => (float) ($resultado['totales']['haber'] ?? 0),
+        ];
+
+        $this->multiempresa = count($this->filtros['empresa_ids'] ?? []) > 1
+            || empty($this->filtros['consolidar_empresas']);
+
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($filas);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
-        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
-        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
-        $subtitulo = $this->reporteService->formatearPeriodoTexto($this->filtros)
-            .' · '.$this->reporteService->formatearEmpresasTexto($this->filtros);
+        $subtitulo = trim(
+            $this->reporteService->formatearEmpresasTexto($this->filtros)
+            .' · '.$this->reporteService->formatearPeriodoTexto($this->filtros)
+            .' · '.$this->reporteService->formatearInclusionAsientosTexto($this->filtros)
+        );
+
+        $this->calcularFilasEncabezado($subtitulo, $totales);
 
         return view('exports.contable.mayorplanocuentaindex', [
             'filas' => $filas,
+            'totales' => $totales,
             'filtros' => $this->filtros,
             'titulo' => 'Mayor analítico por cuenta contable',
             'subtitulo' => $subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'multiempresa' => $this->multiempresa,
+            'excel_formato_numero' => ExcelFormatoNumero::preferenciaGlobal(),
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $totales
+     */
+    private function calcularFilasEncabezado(string $subtitulo, array $totales): void
+    {
+        $offsetLogo = $this->hayFilaLogos ? 1 : 0;
+        $this->filaInicioMeta = $offsetLogo + 1;
+        $this->filaTituloExcel = $this->filaInicioMeta;
+
+        $filasMeta = 2; // título + Generado
+        if (trim($subtitulo) !== '') {
+            $filasMeta++;
+        }
+        if ((int) ($totales['cantidad_filas'] ?? 0) > 0) {
+            $filasMeta++;
+        }
+        $this->filasMeta = $filasMeta;
+
+        $this->filaCabecerasExcel = $offsetLogo + $filasMeta + 1;
+        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+    }
+
+    private function colUltima(): string
+    {
+        return $this->multiempresa ? 'P' : 'O';
     }
 
     public function columnFormats(): array
     {
-        // Importes con máscara neutra: cada PC los muestra según su config regional.
         $formato = ExcelFormatoNumero::preferenciaGlobal();
-
-        return [
+        $fmt = [
+            'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'H' => NumberFormat::FORMAT_TEXT,
-            'J' => ExcelFormatoNumero::codigoColumna($formato, 4), // Cotización
-            'L' => ExcelFormatoNumero::codigoColumna($formato, 2), // Debe
-            'M' => ExcelFormatoNumero::codigoColumna($formato, 2), // Haber
-            'N' => ExcelFormatoNumero::codigoColumna($formato, 2), // Saldo del mes
-            'O' => ExcelFormatoNumero::codigoColumna($formato, 2), // Saldo ejercicio
+            'J' => ExcelFormatoNumero::codigoColumna($formato, 4),
+            'K' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            'L' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            'M' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            'N' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            'O' => ExcelFormatoNumero::codigoColumna($formato, 2),
         ];
+
+        // Resumen (mismas columnas A–E numéricas cuando aplica): formato en AfterSheet por rango.
+
+        return $fmt;
     }
 
     public function styles(Worksheet $sheet)
     {
-        return [
-            $this->filaCabecerasExcel => [
-                'font' => ['bold' => true, 'color' => ['rgb' => '17202A'], 'size' => 11, 'name' => 'Arial'],
-                'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '85C1E9']],
-            ],
-        ];
+        return [];
     }
 
     public function columnWidths(): array
     {
-        return [
-            'A' => 10, 'B' => 10, 'C' => 6, 'D' => 14, 'E' => 10, 'F' => 14,
-            'G' => 28, 'H' => 10, 'I' => 6, 'J' => 10, 'K' => 12,
-            'L' => 12, 'M' => 12, 'N' => 12, 'O' => 12, 'P' => 6,
+        // Anchos para importes con separadores (ej. -12.345.678,90) sin #####.
+        // No achicar L–O: Excel muestra ##### si el ancho no alcanza.
+        $widths = [
+            'A' => 11,  // Fecha
+            'B' => 11,  // N.Asi.
+            'C' => 5,   // Tip
+            'D' => 15,  // Comprobante
+            'E' => 9,   // Emisor
+            'F' => 13,  // CUIT
+            'G' => 32,  // Descripción mov.
+            'H' => 11,  // O.Compra
+            'I' => 5,   // Mon
+            'J' => 11,  // Cotiz.
+            'K' => 13,  // Mon. Ref.
+            'L' => 16,  // Debe
+            'M' => 16,  // Haber
+            'N' => 16,  // Saldo del mes
+            'O' => 18,  // Saldo ejerc.
         ];
+        if ($this->multiempresa) {
+            $widths['P'] = 8;
+        }
+
+        return $widths;
     }
 
     public function title(): string
@@ -120,21 +194,194 @@ class MayorPlanoCuentaExport implements FromView, ShouldAutoSize, WithColumnForm
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                if ($this->hayFilaLogos) {
-                    $col = 'A';
+                $colUltima = $this->colUltima();
+
+                if ($this->hayFilaLogos && $this->rutasLogosExcel !== []) {
+                    $sheet->getRowDimension(1)->setRowHeight(54);
+                    $offsetXp = 6;
+                    $saltoXp = 160;
                     foreach ($this->rutasLogosExcel as $idx => $ruta) {
-                        if (! is_file($ruta)) {
+                        if (! is_string($ruta) || ! is_readable($ruta)) {
                             continue;
                         }
                         $drawing = new Drawing;
+                        $drawing->setName('Logo');
+                        $drawing->setDescription('Logo empresa');
                         $drawing->setPath($ruta);
-                        $drawing->setHeight(42);
-                        $drawing->setCoordinates(chr(ord('A') + $idx).'1');
+                        $drawing->setResizeProportional(true);
+                        $drawing->setHeight(46);
+                        $drawing->setCoordinates('A1');
+                        $drawing->setOffsetX($offsetXp + $idx * $saltoXp);
+                        $drawing->setOffsetY(4);
                         $drawing->setWorksheet($sheet);
                     }
                 }
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+
+                $filaCabDetalle = $this->localizarFilaCabeceraDetalle($sheet) ?? $this->filaCabecerasExcel;
+                $this->filaCabecerasExcel = $filaCabDetalle;
+                $this->filaPrimeraDatosExcel = $filaCabDetalle + 1;
+
+                for ($i = 0; $i < $this->filasMeta; $i++) {
+                    $fila = $this->filaInicioMeta + $i;
+                    $sheet->mergeCells('A'.$fila.':'.$colUltima.$fila);
+                }
+
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+                $sheet->getStyle('A'.$this->filaTituloExcel.':'.$colUltima.$this->filaTituloExcel)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'size' => 16,
+                        'name' => 'Arial',
+                        'color' => ['rgb' => '17202A'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => Alignment::HORIZONTAL_LEFT,
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                    ],
+                ]);
+
+                for ($i = 1; $i < $this->filasMeta; $i++) {
+                    $fila = $this->filaInicioMeta + $i;
+                    $sheet->getStyle('A'.$fila.':'.$colUltima.$fila)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'size' => 10,
+                            'name' => 'Arial',
+                            'color' => ['rgb' => '444444'],
+                        ],
+                        'alignment' => [
+                            'wrapText' => true,
+                            'vertical' => Alignment::VERTICAL_CENTER,
+                        ],
+                    ]);
+                    $sheet->getRowDimension($fila)->setRowHeight(18);
+                }
+
+                $estiloCabecera = [
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '17202A'],
+                        'size' => 10,
+                        'name' => 'Arial',
+                    ],
+                    'fill' => [
+                        'fillType' => Fill::FILL_SOLID,
+                        'color' => ['rgb' => '85C1E9'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => Alignment::HORIZONTAL_CENTER,
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                        'wrapText' => true,
+                    ],
+                ];
+
+                $sheet->getStyle('A'.$filaCabDetalle.':'.$colUltima.$filaCabDetalle)
+                    ->applyFromArray($estiloCabecera);
+                $sheet->getRowDimension($filaCabDetalle)->setRowHeight(30);
+
+                if ($filaCabDetalle <= 40) {
+                    $sheet->freezePane('A'.($filaCabDetalle + 1));
+                } else {
+                    $sheet->freezePane('A'.($this->filaTituloExcel + 1));
+                }
+
+                $this->aplicarAlineacionImportes($sheet);
+                $this->aplicarEstilosFilasEstructura($sheet);
+
+                // Anchos al final: el HTML/colspan suele dejar O (Saldo ejerc.) colapsada → #####.
+                foreach ($this->columnWidths() as $col => $ancho) {
+                    $dim = $sheet->getColumnDimension($col);
+                    $dim->setAutoSize(false);
+                    $dim->setWidth($ancho);
+                }
             },
         ];
+    }
+
+    private function localizarFilaCabeceraDetalle(Worksheet $sheet): ?int
+    {
+        $highestRow = min($sheet->getHighestRow(), 800);
+
+        for ($row = 1; $row <= $highestRow; $row++) {
+            $a = trim((string) ($sheet->getCell('A'.$row)->getValue() ?? ''));
+            $b = trim((string) ($sheet->getCell('B'.$row)->getValue() ?? ''));
+            if ($a === 'Fecha' && (str_starts_with($b, 'N.Asi') || $b === 'N.Asi.')) {
+                return $row;
+            }
+            if ($a === 'Fecha') {
+                $c = trim((string) ($sheet->getCell('C'.$row)->getValue() ?? ''));
+                if ($c === 'Tip') {
+                    return $row;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function aplicarAlineacionImportes(Worksheet $sheet): void
+    {
+        $highestRow = $sheet->getHighestRow();
+        if ($highestRow < 1) {
+            return;
+        }
+
+        $desde = max(1, $this->filaPrimeraDatosExcel);
+        foreach (['J', 'K', 'L', 'M', 'N', 'O'] as $col) {
+            $sheet->getStyle($col.$desde.':'.$col.$highestRow)->applyFromArray([
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_RIGHT,
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                ],
+            ]);
+        }
+    }
+
+    private function aplicarEstilosFilasEstructura(Worksheet $sheet): void
+    {
+        $highestRow = $sheet->getHighestRow();
+        $colUltima = $this->colUltima();
+        $desde = max(1, $this->filaPrimeraDatosExcel);
+
+        $estiloEmpresa = [
+            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'FFF3CD']],
+        ];
+        $estiloCuenta = [
+            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'D6EAF8']],
+            'borders' => [
+                'top' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '85C1E9']],
+            ],
+        ];
+        $estiloTotal = [
+            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'E9ECEF']],
+            'borders' => [
+                'top' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'ADB5BD']],
+            ],
+        ];
+        $estiloSaldo = [
+            'font' => ['italic' => true, 'name' => 'Arial', 'size' => 10, 'color' => ['rgb' => '555555']],
+        ];
+
+        for ($row = $desde; $row <= $highestRow; $row++) {
+            $valor = trim((string) ($sheet->getCell('A'.$row)->getValue() ?? ''));
+            if ($valor === '') {
+                // Puede ser total_cuenta (colspan en A vacío en algunos parsers) — mirar texto "Total cuenta"
+                $merged = trim((string) ($sheet->getCell('A'.$row)->getCalculatedValue() ?? ''));
+                $valor = $merged;
+            }
+
+            if (str_starts_with($valor, 'Empresa:')) {
+                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloEmpresa);
+            } elseif (str_starts_with($valor, 'Cuenta:')) {
+                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloCuenta);
+            } elseif (str_starts_with($valor, 'Total cuenta')) {
+                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloTotal);
+            } elseif ($valor === 'Saldo Inicial') {
+                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloSaldo);
+            }
+        }
     }
 }

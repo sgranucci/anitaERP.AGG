@@ -53,5 +53,68 @@
 
     $(function () {
         $('#fecha_desde').on('change', ajustarHastaPorDesde);
+
+        var overlay = document.getElementById('sicore-liquidacion-overlay');
+        var hideTimer = null;
+
+        function ocultarOverlay() {
+            if (hideTimer) {
+                clearTimeout(hideTimer);
+                hideTimer = null;
+            }
+            if (!overlay) {
+                return;
+            }
+            overlay.classList.add('d-none');
+            overlay.style.display = '';
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+
+        function mostrarOverlay() {
+            if (!overlay) {
+                return;
+            }
+            overlay.classList.remove('d-none');
+            overlay.style.display = 'flex';
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+
+        $(document).on('click', '.js-sicore-liquidacion-abrir', function (e) {
+            e.preventDefault();
+            $('#modal-sicore-liquidacion').modal('show');
+        });
+
+        // Descarga en iframe oculto: la pantalla original no navega.
+        // Overlay informativo; se oculta al load del iframe, al foco o por timeout de seguridad.
+        $('#form-sicore-liquidacion').on('submit', function () {
+            var form = this;
+            if (typeof form.checkValidity === 'function' && !form.checkValidity()) {
+                return true;
+            }
+            $('#modal-sicore-liquidacion').modal('hide');
+            mostrarOverlay();
+
+            var $iframe = $('#sicore-liq-dl-frame');
+            $iframe.off('load.sicoreLiq').on('load.sicoreLiq', function () {
+                // Attachment suele disparar load al iniciar/terminar la respuesta.
+                ocultarOverlay();
+            });
+
+            if (hideTimer) {
+                clearTimeout(hideTimer);
+            }
+            // Seguridad: no dejar el banner eterno si el iframe no dispara load.
+            hideTimer = setTimeout(ocultarOverlay, 120000);
+
+            var onFocus = function () {
+                setTimeout(ocultarOverlay, 400);
+                window.removeEventListener('focus', onFocus);
+            };
+            window.addEventListener('focus', onFocus);
+
+            return true;
+        });
+
+        window.addEventListener('pageshow', ocultarOverlay);
     });
 })(jQuery);

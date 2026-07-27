@@ -1,0 +1,272 @@
+/* Bloque referencias + cabecera asiento manual */
+.asiento-datos-card,
+.asiento-ref-card {
+    background: #f8fafb;
+    border: 1px solid #d5e4ef;
+    border-radius: 8px;
+    padding: 0.7rem 1rem;
+    border-top: 3px solid #85C1E9;
+}
+
+.asiento-datos-card {
+    padding: 1rem 1.15rem 1.1rem;
+}
+
+.asiento-datos-card-title {
+    color: #17202A;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.asiento-ref-card.is-collapsed {
+    padding-top: 0.65rem;
+    padding-bottom: 0.65rem;
+}
+
+.asiento-ref-card.is-expanded {
+    padding-bottom: 0.9rem;
+}
+
+/* —— Compact summary bar —— */
+.asiento-ref-compact {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.asiento-ref-compact-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    min-width: 0;
+    flex: 1 1 220px;
+}
+
+.asiento-ref-compact-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: #D6EAF8;
+    color: #1B4F72;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.asiento-ref-compact-body {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.asiento-ref-compact-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.2rem;
+}
+
+.asiento-ref-compact-title {
+    color: #17202A;
+    font-size: 0.92rem;
+    font-weight: 600;
+}
+
+.asiento-ref-badge {
+    background: #D6EAF8 !important;
+    color: #1B4F72 !important;
+    border: 1px solid #85C1E9;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    font-size: 0.68rem;
+    padding: 0.15em 0.45em;
+}
+
+.asiento-ref-compact-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.asiento-ref-tipo-pill {
+    display: inline-flex;
+    align-items: center;
+    background: #eaf4fb;
+    border: 1px solid #b8d4e8;
+    color: #1B4F72;
+    border-radius: 999px;
+    padding: 0.12rem 0.6rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.asiento-ref-tipo-pill.is-muted {
+    background: #f1f3f5;
+    border-color: #dee2e6;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.asiento-ref-pills {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: center;
+}
+
+.asiento-ref-chip-resumen {
+    display: inline-block;
+    background: #fff;
+    border: 1px solid #b8d4e8;
+    color: #17202A;
+    border-radius: 999px;
+    padding: 0.12rem 0.65rem;
+    font-size: 0.78rem;
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.asiento-ref-compact-hint {
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+
+.asiento-ref-toggle {
+    flex-shrink: 0;
+    border: 1px solid #85C1E9;
+    background: #fff;
+    color: #1B4F72;
+    border-radius: 999px;
+    padding: 0.3rem 0.85rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.3;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.asiento-ref-toggle:hover {
+    background: #D6EAF8;
+    color: #1B4F72;
+}
+
+.asiento-ref-card.is-expanded .asiento-ref-toggle {
+    background: #1B4F72;
+    border-color: #1B4F72;
+    color: #fff;
+}
+
+.asiento-ref-card.is-expanded .asiento-ref-toggle:hover {
+    background: #154360;
+    border-color: #154360;
+    color: #fff;
+}
+
+/* —— Editor —— */
+.asiento-ref-editor {
+    margin-top: 0.75rem;
+    border-top: 1px dashed #c5d9e8;
+    padding-top: 0.75rem;
+    overflow: hidden;
+    transition: opacity 0.15s ease;
+}
+
+.asiento-ref-editor[hidden] {
+    display: none !important;
+}
+
+.asiento-ref-editor-hint {
+    font-size: 0.82rem;
+}
+
+.asiento-ref-chips {
+    gap: 0.45rem;
+}
+
+.asiento-ref-chip {
+    border: 1px solid #ced4da;
+    background: #fff;
+    color: #495057;
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.85rem;
+    line-height: 1.3;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.asiento-ref-chip:hover {
+    border-color: #85C1E9;
+    color: #1B4F72;
+}
+
+.asiento-ref-chip.is-active {
+    background: #D6EAF8;
+    border-color: #2471A3;
+    color: #1B4F72;
+    font-weight: 600;
+}
+
+.asiento-ref-empty {
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.asiento-ref-panel {
+    margin-bottom: 0.85rem;
+}
+
+.asiento-ref-campo-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #1B4F72;
+    margin-bottom: 0.25rem;
+}
+
+.asiento-ref-clear {
+    border: 0;
+    background: transparent;
+    color: #6c757d;
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 0 0.25rem;
+    cursor: pointer;
+}
+
+.asiento-ref-clear:hover {
+    color: #c0392b;
+}
+
+.asiento-ref-editor-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.asiento-ref-done {
+    border: 1px solid #85C1E9;
+    background: #D6EAF8;
+    color: #1B4F72;
+    border-radius: 999px;
+    font-weight: 600;
+    padding: 0.3rem 0.95rem;
+}
+
+.asiento-ref-done:hover {
+    background: #85C1E9;
+    color: #17202A;
+}
+
+.asiento-seccion-cuentas {
+    color: #17202A;
+    font-weight: 600;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 0.35rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
+}

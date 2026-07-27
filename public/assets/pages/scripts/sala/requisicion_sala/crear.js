@@ -18,11 +18,72 @@
         return articuloId > 0;
     }
 
+    function filasArticulo() {
+        return $('#tabla-articulos-requisicion-sala tbody tr.item-requisicion-sala-articulo');
+    }
+
+    function filaLeyendaDe($trArticulo) {
+        return $trArticulo.next('tr.item-requisicion-sala-leyenda');
+    }
+
+    function eliminarParLinea($trArticulo) {
+        filaLeyendaDe($trArticulo).remove();
+        $trArticulo.remove();
+    }
+
+    function sincronizarEstadoLeyenda($trArticulo) {
+        var $leyenda = filaLeyendaDe($trArticulo);
+        var $ta = $leyenda.find('.rs-leyenda-linea');
+        var $btn = $trArticulo.find('.rs-toggle-leyenda');
+        var $preview = $leyenda.find('.rs-leyenda-preview');
+        var $resumen = $trArticulo.find('.rs-leyenda-resumen');
+        var $resumenTexto = $resumen.find('.rs-leyenda-resumen-texto');
+        var texto = $.trim($ta.val() || '');
+        var tiene = texto.length > 0;
+        var abierto = !$leyenda.hasClass('d-none');
+
+        $btn.toggleClass('has-leyenda btn-info', tiene)
+            .toggleClass('btn-outline-secondary', !tiene);
+        $btn.find('i').toggleClass('fa-comment', tiene).toggleClass('fa-comment-o', !tiene);
+        $btn.attr('title', tiene
+            ? (abierto ? 'Ocultar leyenda' : 'Ver / editar leyenda')
+            : (abierto ? 'Ocultar leyenda' : 'Agregar leyenda'));
+        $btn.attr('aria-expanded', abierto ? 'true' : 'false');
+
+        if (tiene && !abierto) {
+            $preview.text(texto).attr('title', texto).removeClass('d-none');
+            $resumenTexto.text(texto);
+            $resumen.attr('title', texto).removeClass('d-none');
+        } else {
+            $preview.text(tiene ? texto : '').attr('title', tiene ? texto : null);
+            $preview.addClass('d-none');
+            $resumenTexto.text(tiene ? texto : '');
+            $resumen.attr('title', tiene ? texto : null).addClass('d-none');
+        }
+    }
+
+    function toggleLeyendaLinea($trArticulo, forzarAbrir) {
+        var $leyenda = filaLeyendaDe($trArticulo);
+        if (!$leyenda.length) {
+            return;
+        }
+        var abrir = typeof forzarAbrir === 'boolean'
+            ? forzarAbrir
+            : $leyenda.hasClass('d-none');
+        $leyenda.toggleClass('d-none', !abrir);
+        sincronizarEstadoLeyenda($trArticulo);
+        if (abrir) {
+            setTimeout(function () {
+                $leyenda.find('.rs-leyenda-linea').trigger('focus');
+            }, 0);
+        }
+    }
+
     function marcarLineasNuevasSinTmIniciales() {
         if (!tieneTransferenciaLaboratorio()) {
             return;
         }
-        $('#tabla-articulos-requisicion-sala tbody tr').each(function () {
+        filasArticulo().each(function () {
             var $tr = $(this);
             if (!esLineaExistente($tr)) {
                 $tr.addClass('linea-nueva-sin-tm');
@@ -36,7 +97,7 @@
             return;
         }
         var hayNuevasConArticulo = false;
-        $('#tabla-articulos-requisicion-sala tbody tr.linea-nueva-sin-tm').each(function () {
+        filasArticulo().filter('.linea-nueva-sin-tm').each(function () {
             if (lineaTieneArticulo($(this))) {
                 hayNuevasConArticulo = true;
                 return false;
@@ -72,7 +133,7 @@
 
     function hayLineasNuevasConArticulo() {
         var hay = false;
-        $('#tabla-articulos-requisicion-sala tbody tr.linea-nueva-sin-tm').each(function () {
+        filasArticulo().filter('.linea-nueva-sin-tm').each(function () {
             if (lineaTieneArticulo($(this))) {
                 hay = true;
                 return false;
@@ -95,7 +156,7 @@
 
     function primeraLineaPendienteUid() {
         var $pendiente = null;
-        $('#tabla-articulos-requisicion-sala tbody tr').each(function () {
+        filasArticulo().each(function () {
             var $tr = $(this);
             if (lineaPendienteUid($tr)) {
                 $pendiente = $tr;
@@ -120,7 +181,7 @@
     }
 
     function actualizarControlesUid() {
-        $('#tabla-articulos-requisicion-sala tbody tr').each(function () {
+        filasArticulo().each(function () {
             actualizarEstadoUidLinea($(this));
         });
 
@@ -162,7 +223,7 @@
     }
 
     function limpiarMarcasValidacionLineas() {
-        $('#tabla-articulos-requisicion-sala tbody tr').each(function () {
+        filasArticulo().each(function () {
             var $tr = $(this);
             marcarCampoInvalido($tr.find('.codigoarticulo')[0], false);
             marcarCampoInvalido($tr.find('.cantidad-linea')[0], false);
@@ -170,7 +231,15 @@
         });
     }
 
+    function esEdicionMenor() {
+        return String($('#form-general').data('edicionMenor') || '') === '1';
+    }
+
     function validarRequisicionSalaAntesDeEnviar(form) {
+        if (esEdicionMenor()) {
+            return { valido: true, primerInvalido: null, cantidadInvalidos: 0 };
+        }
+
         var resultado = typeof validarCamposObligatoriosFormulario === 'function'
             ? validarCamposObligatoriosFormulario(form)
             : { valido: true, primerInvalido: null, cantidadInvalidos: 0 };
@@ -190,7 +259,7 @@
 
         var filasConArticulo = 0;
         var primeraLineaSinArticulo = null;
-        $('#tabla-articulos-requisicion-sala tbody tr').each(function () {
+        filasArticulo().each(function () {
             var $tr = $(this);
             var articuloId = parseInt($tr.find('.articulo_id').val() || '0', 10);
             var skuInp = $tr.find('.codigoarticulo')[0];
@@ -350,15 +419,24 @@
 
     function bindLinea($tr) {
         $tr.find('.eliminar_linea_sala').on('click', function () {
-            if ($('#tabla-articulos-requisicion-sala tbody tr').length > 1) {
-                $tr.remove();
+            if (filasArticulo().length > 1) {
+                eliminarParLinea($tr);
                 actualizarControlesUid();
                 actualizarAvisoLineasNuevasSinTm();
             }
         });
+        $tr.find('.rs-toggle-leyenda').on('click', function () {
+            toggleLeyendaLinea($tr);
+        });
+        $tr.find('.rs-leyenda-resumen').on('click', function () {
+            toggleLeyendaLinea($tr, true);
+        });
+        filaLeyendaDe($tr).find('.rs-leyenda-linea').on('input change', function () {
+            sincronizarEstadoLeyenda($tr);
+        });
         $tr.find('.codigoarticulo').on('change blur', function () {
             var sku = $(this).val();
-            var $row = $(this).closest('tr');
+            var $row = $(this).closest('tr.item-requisicion-sala-articulo');
             if (!sku || !urlNpu) {
                 actualizarAvisoLineasNuevasSinTm();
                 return;
@@ -390,23 +468,24 @@
             }
         });
         $tr.find('.fueradeservicio-linea').on('change', function () {
-            actualizarEstadoUidLinea($(this).closest('tr'));
+            actualizarEstadoUidLinea($(this).closest('tr.item-requisicion-sala-articulo'));
             actualizarControlesUid();
-            if (esFueraDeServicio($(this).closest('tr'))) {
-                $(this).closest('tr').find('.uid-linea').trigger('focus');
+            if (esFueraDeServicio($(this).closest('tr.item-requisicion-sala-articulo'))) {
+                $(this).closest('tr.item-requisicion-sala-articulo').find('.uid-linea').trigger('focus');
             }
         });
         $tr.find('.uid-linea').on('input change blur', function () {
-            actualizarEstadoUidLinea($(this).closest('tr'));
+            actualizarEstadoUidLinea($(this).closest('tr.item-requisicion-sala-articulo'));
             actualizarControlesUid();
         });
         actualizarEstadoUidLinea($tr);
+        sincronizarEstadoLeyenda($tr);
     }
 
     $(function () {
         urlNpu = $('#form-general').data('url-npu') || urlNpu;
         htmlBotonGrabar = $('#botonform0').html() || 'Grabar';
-        $('#tabla-articulos-requisicion-sala tbody tr').each(function () {
+        filasArticulo().each(function () {
             bindLinea($(this));
         });
         marcarLineasNuevasSinTmIniciales();
@@ -424,16 +503,21 @@
             if (!tpl) {
                 return;
             }
-            var $row = $(tpl);
-            if (tieneTransferenciaLaboratorio()) {
+            var $rows = $('<tbody></tbody>').append($.parseHTML($.trim(tpl))).children();
+            var $row = $rows.filter('tr.item-requisicion-sala-articulo').first();
+            if (tieneTransferenciaLaboratorio() && $row.length) {
                 $row.addClass('linea-nueva-sin-tm');
             }
-            $('#tabla-articulos-requisicion-sala tbody').append($row);
-            bindLinea($row);
+            $('#tabla-articulos-requisicion-sala tbody').append($rows);
+            if ($row.length) {
+                bindLinea($row);
+            }
             actualizarControlesUid();
             actualizarAvisoLineasNuevasSinTm();
             setTimeout(function () {
-                $row.find('.codigoarticulo').trigger('focus');
+                if ($row.length) {
+                    $row.find('.codigoarticulo').trigger('focus');
+                }
             }, 0);
         });
 

@@ -1,7 +1,10 @@
 <div class="modal fade" id="modal-precarga-pdf-ia" tabindex="-1" role="dialog" aria-labelledby="modalPrecargaPdfIaLabel" aria-hidden="true"
-     data-preview-url="{{ route('precarga_comprobante_proveedor_pdf_ia_preview') }}"
-     data-resolver-oc-url="{{ route('precarga_comprobante_proveedor_pdf_ia_resolver_oc') }}"
-     data-confirmar-url="{{ route('precarga_comprobante_proveedor_pdf_ia_confirmar') }}">
+     data-preview-url="{{ $pdfIaPreviewUrl ?? route('precarga_comprobante_proveedor_pdf_ia_preview') }}"
+     data-resolver-oc-url="{{ $pdfIaResolverOcUrl ?? route('precarga_comprobante_proveedor_pdf_ia_resolver_oc') }}"
+     data-confirmar-url="{{ $pdfIaConfirmarUrl ?? route('precarga_comprobante_proveedor_pdf_ia_confirmar') }}"
+     data-descartar-url="{{ $pdfIaDescartarUrl ?? route('descartar_ai_decision') }}"
+     data-proveedor-id-selector="{{ $pdfIaProveedorIdSelector ?? '' }}"
+     data-overlay-id="{{ $pdfIaOverlayId ?? '' }}">
     <div class="modal-dialog modal-xl" role="document">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
@@ -13,6 +16,9 @@
                 </button>
             </div>
             <div class="modal-body">
+                {{-- Visible en upload, OC manual y preview: no anidar dentro de un paso oculto --}}
+                <div id="precarga-pdf-ia-error" class="alert alert-danger d-none"></div>
+
                 <div id="precarga-pdf-ia-paso-upload">
                     <p class="text-muted small mb-2">
                         Identifica empresa, proveedor, conceptos IVA (sin artículos), moneda y cotización.
@@ -28,7 +34,6 @@
                         <input type="text" id="precarga-pdf-ia-numero-oc" class="form-control form-control-sm" maxlength="6"
                                pattern="\d{0,6}" placeholder="Ej. 214482" inputmode="numeric">
                     </div>
-                    <div id="precarga-pdf-ia-error" class="alert alert-danger d-none"></div>
                 </div>
 
                 <div id="precarga-pdf-ia-paso-oc-manual" class="d-none">
@@ -39,7 +44,8 @@
                         <div class="col-md-4">
                             <label for="precarga-pdf-ia-numero-oc-manual">Número de OC (6 dígitos)</label>
                             <input type="text" id="precarga-pdf-ia-numero-oc-manual" class="form-control" maxlength="6"
-                                   pattern="\d{6}" placeholder="214482" inputmode="numeric">
+                                   pattern="\d{6}" placeholder="214482" inputmode="numeric"
+                                   autocomplete="off">
                         </div>
                         <div class="col-md-4">
                             <button type="button" class="btn btn-warning" id="precarga-pdf-ia-btn-aplicar-oc">

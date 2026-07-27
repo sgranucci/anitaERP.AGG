@@ -8,6 +8,7 @@ use App\Mail\Ventas\ArcaCaeaInformeResultadoMail;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\ArcaCaea;
 use App\Services\Arca\ArcaCaeaPresentacionService;
+use App\Support\Ventas\ArcaCaeaInformeColaSupport;
 use App\Support\Ventas\ArcaCaeaInformeMailSupport;
 use App\Support\Ventas\ArcaCaeaInformeUiSupport;
 use Illuminate\Bus\Queueable;
@@ -66,6 +67,7 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
                 'arca_caea_id' => $this->arcaCaeaId,
                 'usuario_id' => $this->usuarioId,
             ]);
+            ArcaCaeaInformeColaSupport::liberar($this->arcaCaeaId);
 
             return;
         }
@@ -84,24 +86,28 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
             'timeout' => $this->timeout,
         ]);
 
-        $agregado = $this->ejecutarPresentacion($presentacion, $registro);
-        $this->guardarProgreso($registro, [
-            'fase' => 'fin',
-            'ok' => (bool) ($agregado['ok'] ?? false),
-            'mensaje' => (string) ($agregado['mensaje'] ?? ''),
-            'detalle' => is_array($agregado['detalle'] ?? null) ? $agregado['detalle'] : [],
-            'resumen' => is_array($agregado['resumen'] ?? null) ? $agregado['resumen'] : [],
-        ]);
+        try {
+            $agregado = $this->ejecutarPresentacion($presentacion, $registro);
+            $this->guardarProgreso($registro, [
+                'fase' => 'fin',
+                'ok' => (bool) ($agregado['ok'] ?? false),
+                'mensaje' => (string) ($agregado['mensaje'] ?? ''),
+                'detalle' => is_array($agregado['detalle'] ?? null) ? $agregado['detalle'] : [],
+                'resumen' => is_array($agregado['resumen'] ?? null) ? $agregado['resumen'] : [],
+            ]);
 
-        $this->enviarMailResultado($registro, $agregado, 'resultado');
+            $this->enviarMailResultado($registro, $agregado, 'resultado');
 
-        Log::info('arca.caea.informe.cola.fin', [
-            'arca_caea_id' => $registro->id,
-            'usuario_id' => $this->usuarioId,
-            'ok' => (bool) ($agregado['ok'] ?? false),
-            'lotes' => (int) ($agregado['detalle']['lotes'] ?? 0),
-            'informados' => (int) ($agregado['detalle']['informados'] ?? 0),
-        ]);
+            Log::info('arca.caea.informe.cola.fin', [
+                'arca_caea_id' => $registro->id,
+                'usuario_id' => $this->usuarioId,
+                'ok' => (bool) ($agregado['ok'] ?? false),
+                'lotes' => (int) ($agregado['detalle']['lotes'] ?? 0),
+                'informados' => (int) ($agregado['detalle']['informados'] ?? 0),
+            ]);
+        } finally {
+            ArcaCaeaInformeColaSupport::liberar($this->arcaCaeaId);
+        }
     }
 
     /**
@@ -293,7 +299,11 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
                 return;
             }
 
-            $progreso = Cache::get($this->claveProgreso(), []);
+            $progreso = ArcaCaeaInformeColaSupport::progreso($this->arcaCaeaId)
+                ?? Cache::get($this->claveProgreso(), []);
+            if (! is_array($progreso)) {
+                $progreso = [];
+            }
             $detalle = is_array($progreso['detalle'] ?? null) ? $progreso['detalle'] : [];
             $resumen = is_array($progreso['resumen'] ?? null) ? $progreso['resumen'] : [];
             $informados = (int) ($progreso['informados'] ?? $detalle['informados'] ?? 0);
@@ -339,6 +349,8 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
                 'arca_caea_id' => $this->arcaCaeaId,
                 'msg' => $e->getMessage(),
             ]);
+        } finally {
+            ArcaCaeaInformeColaSupport::liberar($this->arcaCaeaId);
         }
     }
 
@@ -347,19 +359,16 @@ class InformarArcaCaeaPeriodoJob implements ShouldBeUnique, ShouldQueue
      */
     private function guardarProgreso(ArcaCaea $registro, array $data): void
     {
-        $prev = Cache::get($this->claveProgreso(), []);
-        if (! is_array($prev)) {
-            $prev = [];
-        }
-        Cache::put($this->claveProgreso(), array_merge($prev, $data, [
-            'arca_caea_id' => $registro->id,
-            'updated_at' => now()->toIso8601String(),
-        ]), now()->addHours(6));
+        ArcaCaeaInformeColaSupport::guardarProgreso(
+            (int) $registro->id,
+            $this->usuarioId,
+            $data,
+        );
     }
 
     private function claveProgreso(): string
     {
-        return 'arca-caea-informe-progreso-'.$this->arcaCaeaId.'-'.$this->usuarioId;
+        return ArcaCaeaInformeColaSupport::claveProgreso($this->arcaCaeaId).'-'.$this->usuarioId;
     }
 
     private function claveMailEnviado(): string

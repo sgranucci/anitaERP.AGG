@@ -153,6 +153,16 @@ class RecepcionProveedorAnitaResincronizacionErpService
 
     public function requiereReparacionDetalleRef(Recepcion_Proveedor $recepcion): bool
     {
+        return $this->requiereReparacionDetalleIncompleto($recepcion);
+    }
+
+    /**
+     * Cabecera Anita presente y vinculada, pero recepmov/stkmov con menos ítems que el ERP.
+     * REF: solo regrava detalle. ERP con documentoid correcto: idem.
+     * ERP con documentoid huérfano: lo toma requiereResincronizacion (resync completo).
+     */
+    public function requiereReparacionDetalleIncompleto(Recepcion_Proveedor $recepcion): bool
+    {
         if ($recepcion->origen_carga === 'ANITA_IMPORT') {
             return false;
         }
@@ -165,18 +175,22 @@ class RecepcionProveedorAnitaResincronizacionErpService
             return false;
         }
 
+        if (! $this->anitaBridge->detalleComIncompletoEnAnita($recepcion)) {
+            return false;
+        }
+
         $cabecera = $this->anitaBridge->cabeceraRecepmaeVinculadaDocumento($recepcion);
         if ($cabecera === null) {
             return false;
         }
 
-        if (! RecepcionProveedorAnitaWhereSupport::esTerminalProtegidoAnita(
-            trim((string) ($cabecera->recm_terminal ?? ''))
-        )) {
-            return false;
+        $terminal = trim((string) ($cabecera->recm_terminal ?? ''));
+        if (RecepcionProveedorAnitaWhereSupport::esTerminalProtegidoAnita($terminal)) {
+            return true;
         }
 
-        return $this->anitaBridge->detalleComIncompletoEnAnita($recepcion);
+        // ERP: detalle-only solo si el documentoid ya apunta al ERP (si no, resync completo).
+        return (int) ($cabecera->recm_documentoid ?? 0) === (int) $recepcion->id;
     }
 
     /**
@@ -224,10 +238,11 @@ class RecepcionProveedorAnitaResincronizacionErpService
                 trim((string) ($cabeceraVinculada->recm_terminal ?? ''))
             )
         ) {
-            // REF / vacío con documentoid ERP: Anita ya tocó referencias; no re-sync completo.
+            // REF / vacío: Anita ya tocó referencias; no re-sync completo (solo detalle si falta).
             return false;
         }
 
+        // Terminal ERP sin documentoid apuntando a este id: hay que regrabar cabecera + detalle.
         if ($cabecerasErp === []) {
             return true;
         }

@@ -20,6 +20,7 @@ use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
 use App\Support\Stock\RecepcionProveedorCtamovCuadreSupport;
 use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
+use App\Support\Contable\Anita\AnitaSubdiarioMayorSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
@@ -332,7 +333,9 @@ class RecepcionProveedorAsientoService
      */
     public function assertCtamovCuadraTrasSync(Recepcion_Proveedor $recepcion, ?array $preview = null): void
     {
-        $recepcion->loadMissing([
+        // load (no loadMissing): tras recuadrar, los movimientos en memoria pueden estar stale.
+        $recepcion->unsetRelation('asientos');
+        $recepcion->load([
             'empresas',
             'asientos.asiento_movimientos.cuentacontables',
             'asientos.asiento_movimientos.centrocostos',
@@ -516,7 +519,14 @@ class RecepcionProveedorAsientoService
         $esAnticipada = $oc && strtoupper((string) $oc->tratamiento) === 'ANTICIPADA';
 
         if ($esAnticipada) {
-            $lineasHaber = $this->armarHaberAnticipada($oc, $empresaId, $totalDebe, $cotizacionRecepcion);
+            $lineasHaber = $this->armarHaberAnticipada(
+                $oc,
+                $empresaId,
+                $totalDebe,
+                $cotizacionRecepcion,
+                (int) ($claveAnita['nro'] ?? 0),
+                (int) ($claveAnita['sucursal'] ?? 0),
+            );
         } else {
             $lineasHaber[] = [
                 'cuentacontable_id' => $provisionId,
@@ -796,13 +806,18 @@ class RecepcionProveedorAsientoService
     }
 
     /**
+     * HABER por cierre de anticipo: mayoriza cuentas de anticipo en Anita (aplicped → subdiario)
+     * y aplica hasta el total del DEBE; el remanente lo completa el caller con provisión FAR.
+     *
      * @return list<array{cuentacontable_id:int, importe:float, observacion?:string}>
      */
     private function armarHaberAnticipada(
         Ordencompra $oc,
         int $empresaId,
         float $totalDebe,
-        float $cotizacionRecepcion
+        float $cotizacionRecepcion,
+        int $comNroActual = 0,
+        int $comSucursalActual = 0,
     ): array {
         $cuentasAnticipo = array_filter([
             CuentaAutomaticaResolver::resolverId($empresaId, CuentaAutomaticaClaves::RECEPCION_FACTURA_ANTICIPADA) ?? 0,
@@ -822,7 +837,13 @@ class RecepcionProveedorAsientoService
             }
         }
 
-        $saldos = $this->mayorizarAnticiposDesdeAnita((int) $oc->numeroordencompra, array_values($codigosCuenta), $cotizacionRecepcion);
+        $saldos = $this->mayorizarAnticiposDesdeAnita(
+            (int) $oc->numeroordencompra,
+            array_values($codigosCuenta),
+            $cotizacionRecepcion,
+            $comNroActual,
+            $comSucursalActual,
+        );
         $lineasHaber = [];
         $restante = $totalDebe;
 
@@ -846,33 +867,94 @@ class RecepcionProveedorAsientoService
     }
 
     /**
-     * Mayoriza subdiario contable: facturas suman, recepciones restan.
+     * Saldo disponible de anticipo en moneda de la recepción.
+     * Facturas (aplicped ≠ COM): subdiario D suma / H resta (cuenta y contrapartida).
+     * Recepciones COM previas: ctamov H resta / D suma (anticipo ya revertido).
      *
      * @param  list<string>  $codigosCuenta
      * @return array<string, float> codigo => saldo en moneda recepción
      */
-    private function mayorizarAnticiposDesdeAnita(int $numeroOc, array $codigosCuenta, float $cotizacionRecepcion): array
-    {
+    private function mayorizarAnticiposDesdeAnita(
+        int $numeroOc,
+        array $codigosCuenta,
+        float $cotizacionRecepcion,
+        int $comNroActual = 0,
+        int $comSucursalActual = 0,
+    ): array {
         $saldos = array_fill_keys($codigosCuenta, 0.0);
-        $facturas = $this->buscarComprobantesOc($numeroOc);
+        if ($codigosCuenta === []) {
+            return $saldos;
+        }
 
-        foreach ($facturas as $factura) {
-            $lineasSubdiario = $this->leerSubdiarioFactura($factura);
-            foreach ($lineasSubdiario as $linea) {
-                $codigoCta = trim((string) ($linea->subd_cuenta ?? ''));
-                if (! in_array($codigoCta, $codigosCuenta, true)) {
+        /** @var array<int, string> $codigoPorInt */
+        $codigoPorInt = [];
+        foreach ($codigosCuenta as $codigo) {
+            $codigoPorInt[(int) $codigo] = $codigo;
+        }
+
+        foreach ($this->buscarComprobantesAplicadosOc($numeroOc, excluirCom: true) as $factura) {
+            foreach ($this->leerSubdiarioComprobante($factura) as $linea) {
+                $cotSubd = (float) ($linea->subd_cotizacion ?? 1);
+                foreach (AnitaSubdiarioMayorSupport::imputacionesLineaSubdiario($linea) as $imp) {
+                    $codigo = $codigoPorInt[(int) $imp['cuenta']] ?? null;
+                    if ($codigo === null) {
+                        continue;
+                    }
+                    $importeConv = RecepcionProveedorConversionSupport::convertirMoneda(
+                        (float) $imp['importe'],
+                        $cotSubd,
+                        $cotizacionRecepcion
+                    );
+                    if ($imp['dh'] === 'D') {
+                        $saldos[$codigo] += $importeConv;
+                    } else {
+                        $saldos[$codigo] -= $importeConv;
+                    }
+                }
+            }
+        }
+
+        $cfg = config('recepcion_proveedor.anita');
+        $comTipo = (string) ($cfg['recepcion_tipo'] ?? 'COM');
+        $comLetra = (string) ($cfg['recepcion_letra'] ?? 'X');
+
+        foreach ($this->buscarComprobantesAplicadosOc($numeroOc, excluirCom: false) as $com) {
+            $tipo = trim((string) ($com->aplp_tipo ?? ''));
+            $letra = trim((string) ($com->aplp_letra ?? ''));
+            $sucursal = (int) ($com->aplp_sucursal ?? 0);
+            $nro = (int) ($com->aplp_nro ?? 0);
+            if ($tipo !== $comTipo || $nro <= 0) {
+                continue;
+            }
+            if (
+                $comNroActual > 0
+                && $nro === $comNroActual
+                && $sucursal === $comSucursalActual
+                && $letra === $comLetra
+            ) {
+                continue;
+            }
+
+            foreach ($this->leerCtamovComprobante($tipo, $letra, $sucursal, $nro) as $linea) {
+                $imp = AnitaSubdiarioMayorSupport::imputacionLineaCtamov($linea);
+                if ($imp === null) {
                     continue;
                 }
-
-                $importe = (float) ($linea->subd_importe ?? 0);
-                $tipoMov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? 'D')));
-                $cotSubd = (float) ($linea->subd_cotizacion ?? 1);
-                $importeConv = RecepcionProveedorConversionSupport::convertirMoneda(abs($importe), $cotSubd, $cotizacionRecepcion);
-
-                if ($tipoMov === 'D') {
-                    $saldos[$codigoCta] += $importeConv;
+                $codigo = $codigoPorInt[(int) $imp['cuenta']] ?? null;
+                if ($codigo === null) {
+                    continue;
+                }
+                $cot = (float) ($linea->ctav_cotizacion ?? 1);
+                $importeConv = RecepcionProveedorConversionSupport::convertirMoneda(
+                    (float) $imp['importe'],
+                    $cot,
+                    $cotizacionRecepcion
+                );
+                // HABER en COM = anticipo ya revertido → reduce saldo disponible.
+                if ($imp['dh'] === 'H') {
+                    $saldos[$codigo] -= $importeConv;
                 } else {
-                    $saldos[$codigoCta] -= $importeConv;
+                    $saldos[$codigo] += $importeConv;
                 }
             }
         }
@@ -884,11 +966,19 @@ class RecepcionProveedorAsientoService
         return $saldos;
     }
 
-    /** @return list<object> */
-    private function buscarComprobantesOc(int $numeroOc): array
+    /**
+     * Comprobantes distintos en aplicped vinculados a la OC (aplp_ref_* = PEP).
+     *
+     * @return list<object>
+     */
+    private function buscarComprobantesAplicadosOc(int $numeroOc, bool $excluirCom): array
     {
         $api = new ApiAnita;
         $cfg = config('recepcion_proveedor.anita');
+        $filtroTipo = $excluirCom
+            ? " and aplp_tipo<>'{$cfg['recepcion_tipo']}'"
+            : " and aplp_tipo='{$cfg['recepcion_tipo']}'";
+
         $rows = json_decode($api->apiCall([
             'acc' => 'list',
             'sistema' => $cfg['sistema_compras'],
@@ -898,36 +988,76 @@ class RecepcionProveedorAsientoService
                 aplp_ref_tipo='{$cfg['oc_tipo']}' and
                 aplp_ref_letra='{$cfg['oc_letra']}' and
                 aplp_ref_sucursal={$cfg['oc_sucursal']} and
-                aplp_ref_nro={$numeroOc} and
-                aplp_tipo<>'COM'",
+                aplp_ref_nro={$numeroOc}
+                {$filtroTipo}",
+        ]));
+
+        if (! is_array($rows)) {
+            return [];
+        }
+
+        $unicos = [];
+        foreach ($rows as $row) {
+            $clave = trim((string) ($row->aplp_tipo ?? '')).'|'
+                .trim((string) ($row->aplp_letra ?? '')).'|'
+                .(int) ($row->aplp_sucursal ?? 0).'|'
+                .(int) ($row->aplp_nro ?? 0);
+            if ($clave === '|||0' || isset($unicos[$clave])) {
+                continue;
+            }
+            $unicos[$clave] = $row;
+        }
+
+        return array_values($unicos);
+    }
+
+    /** @return list<object> */
+    private function leerSubdiarioComprobante(object $comprobante): array
+    {
+        $api = new ApiAnita;
+        $tipo = trim((string) ($comprobante->aplp_tipo ?? ''));
+        $letra = trim((string) ($comprobante->aplp_letra ?? ''));
+        $sucursal = (int) ($comprobante->aplp_sucursal ?? 0);
+        $nro = (int) ($comprobante->aplp_nro ?? 0);
+
+        if ($tipo === '' || $nro <= 0) {
+            return [];
+        }
+
+        // Solo subdiario: un join a ctamae sin condición genera producto cartesiano.
+        $rows = json_decode($api->apiCall([
+            'acc' => 'list',
+            'sistema' => config('recepcion_proveedor.anita.sistema_contab'),
+            'tabla' => config('recepcion_proveedor.anita.tablas.subdiario'),
+            'campos' => 'subd_tipo, subd_letra, subd_sucursal, subd_nro, subd_cuenta, subd_contrapartida, subd_importe, subd_tipo_mov, subd_cotizacion',
+            'whereArmado' => " WHERE
+                subd_tipo='{$tipo}' and
+                subd_letra='{$letra}' and
+                subd_sucursal={$sucursal} and
+                subd_nro={$nro}",
         ]));
 
         return is_array($rows) ? $rows : [];
     }
 
     /** @return list<object> */
-    private function leerSubdiarioFactura(object $factura): array
+    private function leerCtamovComprobante(string $tipo, string $letra, int $sucursal, int $nro): array
     {
-        $api = new ApiAnita;
-        $tipo = trim((string) ($factura->aplp_tipo ?? ''));
-        $letra = trim((string) ($factura->aplp_letra ?? ''));
-        $sucursal = (int) ($factura->aplp_sucursal ?? 0);
-        $nro = (int) ($factura->aplp_nro ?? 0);
-
         if ($tipo === '' || $nro <= 0) {
             return [];
         }
 
+        $api = new ApiAnita;
         $rows = json_decode($api->apiCall([
             'acc' => 'list',
             'sistema' => config('recepcion_proveedor.anita.sistema_contab'),
-            'tabla' => config('recepcion_proveedor.anita.tablas.subdiario').', '.config('recepcion_proveedor.anita.tablas.cuenta'),
-            'campos' => 'subd_tipo, subd_letra, subd_sucursal, subd_nro, subd_cuenta, subd_importe, subd_tipo_mov, subd_cotizacion',
+            'tabla' => 'ctamov',
+            'campos' => 'ctav_cuenta, ctav_d_h, ctav_importe, ctav_cotizacion, ctav_tipo, ctav_letra, ctav_sucursal, ctav_nro',
             'whereArmado' => " WHERE
-                subd_tipo='{$tipo}' and
-                subd_letra='{$letra}' and
-                subd_sucursal={$sucursal} and
-                subd_nro={$nro}",
+                ctav_tipo='{$tipo}' and
+                ctav_letra='{$letra}' and
+                ctav_sucursal={$sucursal} and
+                ctav_nro={$nro}",
         ]));
 
         return is_array($rows) ? $rows : [];

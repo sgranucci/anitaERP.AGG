@@ -13,13 +13,16 @@ final class SicoreSueldosDatosService
 {
     /**
      * Prefijo de columnas Informix según tabla.
-     * auxrec → aux_*; auxhist → auxh_*
+     * auxrec → aux_*; auxhist → auxh_* (nómina normal: liquidación actual + histórico)
+     * auxconf → axco_*; auxconfh → auxcoh_* (nómina confidencial: actual + histórico)
      *
      * @var array<string, string>
      */
     private const PREFIJO_COLUMNAS = [
         'auxrec' => 'aux_',
         'auxhist' => 'auxh_',
+        'auxconf' => 'axco_',
+        'auxconfh' => 'auxcoh_',
     ];
 
     /**
@@ -43,6 +46,10 @@ final class SicoreSueldosDatosService
         $acumulado = [];
         $this->acumularTabla('auxrec', $empresaAnita, $desdeAnita, $hastaAnita, $conceptoRet, $conceptoDev, $acumulado);
         $this->acumularTabla('auxhist', $empresaAnita, $desdeAnita, $hastaAnita, $conceptoRet, $conceptoDev, $acumulado);
+        // Nómina confidencial: las ganancias (4ta cat.) se liquidan en auxconf (actual) y
+        // se archivan en auxconfh (histórico), igual que auxrec/auxhist en la nómina normal.
+        $this->acumularTabla('auxconf', $empresaAnita, $desdeAnita, $hastaAnita, $conceptoRet, $conceptoDev, $acumulado);
+        $this->acumularTabla('auxconfh', $empresaAnita, $desdeAnita, $hastaAnita, $conceptoRet, $conceptoDev, $acumulado);
 
         if ($acumulado === []) {
             return [];
@@ -60,8 +67,9 @@ final class SicoreSueldosDatosService
             if (abs($totales['ret']) >= 0.001) {
                 $filas[] = $this->filaSueldo($config, $regimen, $cuit, $nombre, $fechaIso, $totales['ret'], 7, $legajo);
             }
-            if ($conceptoDev > 0 && abs($totales['dev']) >= 0.001) {
-                $filas[] = $this->filaSueldo($config, $regimen, $cuit, $nombre, $fechaIso, $totales['dev'], 8, $legajo);
+            // Incluye concepto_devolucion y créditos del concepto retención (deducción negativa).
+            if (abs($totales['dev']) >= 0.001) {
+                $filas[] = $this->filaSueldo($config, $regimen, $cuit, $nombre, $fechaIso, abs($totales['dev']), 8, $legajo);
             }
         }
 
@@ -163,7 +171,14 @@ final class SicoreSueldosDatosService
             }
 
             if ($codigo === $conceptoRet) {
-                $acumulado[$legajo]['ret'] += $monto;
+                // Créditos/devoluciones suelen liquidarse en el mismo concepto de
+                // retención (ej. 1650) con deducción negativa, no en concepto_devolucion.
+                // SICORE: retención → cod_comp 7; crédito → cod_comp 8.
+                if ($monto < -0.001) {
+                    $acumulado[$legajo]['dev'] += abs($monto);
+                } elseif ($monto > 0.001) {
+                    $acumulado[$legajo]['ret'] += $monto;
+                }
                 $acumulado[$legajo]['base'] += (float) ($row[$colTotal] ?? 0);
             } elseif ($conceptoDev > 0 && $codigo === $conceptoDev) {
                 $acumulado[$legajo]['dev'] += $monto;

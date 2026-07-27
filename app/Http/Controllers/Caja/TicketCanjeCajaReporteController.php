@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Caja;
 use App\Exports\Caja\TicketCanjeCajaReporteExport;
 use App\Http\Controllers\Controller;
 use App\Queries\Caja\TicketCanjeCajaReporteQuery;
+use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\TicketCanjeCajaReporteFiltros;
 use Carbon\Carbon;
@@ -17,6 +18,7 @@ class TicketCanjeCajaReporteController extends Controller
     public function __construct(
         private readonly TicketCanjeCajaReporteQuery $query,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly UsuarioRepositoryInterface $usuarioRepository,
     ) {
     }
 
@@ -30,6 +32,8 @@ class TicketCanjeCajaReporteController extends Controller
         $this->assertEmpresaPermitida((int) ($filtros['empresa_id'] ?? 0));
 
         $filtros['empresas_asignadas'] = $this->empresaRepository->traeEmpresasAsignadas();
+        $usuario_query = $this->usuariosParaSelector($filtros);
+        $filtros['usuario_nombre'] = $this->nombreUsuarioFiltro($filtros, $usuario_query);
         $consultado = ! empty($filtros['consultar']) && TicketCanjeCajaReporteFiltros::tieneCriteriosAplicados($filtros);
 
         $filas = new LengthAwarePaginator([], 0, 25, 1);
@@ -44,6 +48,7 @@ class TicketCanjeCajaReporteController extends Controller
 
         return view('caja.canjes.informe.index', [
             'empresa_query' => $empresa_query,
+            'usuario_query' => $usuario_query,
             'filtros' => $filtros,
             'filtrosQuery' => TicketCanjeCajaReporteFiltros::paraQueryString($filtros),
             'consultado' => $consultado,
@@ -66,6 +71,7 @@ class TicketCanjeCajaReporteController extends Controller
         $filtros['consultar'] = true;
         $this->assertEmpresaPermitida((int) ($filtros['empresa_id'] ?? 0));
         $filtros['empresas_asignadas'] = $this->empresaRepository->traeEmpresasAsignadas();
+        $filtros['usuario_nombre'] = $this->nombreUsuarioFiltro($filtros, $this->usuariosParaSelector($filtros));
 
         if (! TicketCanjeCajaReporteFiltros::tieneCriteriosAplicados($filtros)) {
             return redirect()->route(
@@ -132,6 +138,44 @@ class TicketCanjeCajaReporteController extends Controller
         }
 
         return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Support\Collection<int, mixed>
+     */
+    private function usuariosParaSelector(array $filtros)
+    {
+        $emisores = $this->query->idsUsuariosEmisores($filtros);
+        if ($emisores === []) {
+            return collect();
+        }
+
+        return $this->usuarioRepository
+            ->listadoOperativoParaSelector(
+                ! empty($filtros['empresa_id']) ? (int) $filtros['empresa_id'] : null,
+                null,
+                ['id', 'nombre', 'usuario'],
+            )
+            ->whereIn('id', $emisores)
+            ->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  \Illuminate\Support\Collection<int, mixed>  $usuarioQuery
+     */
+    private function nombreUsuarioFiltro(array $filtros, $usuarioQuery): ?string
+    {
+        $usuarioId = (int) ($filtros['usuario_id'] ?? 0);
+        if ($usuarioId <= 0) {
+            return null;
+        }
+
+        $usuario = $usuarioQuery->firstWhere('id', $usuarioId)
+            ?? $this->usuarioRepository->findOperativo($usuarioId);
+
+        return $usuario?->nombre;
     }
 
     private function assertEmpresaPermitida(int $empresaId): void

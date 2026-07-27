@@ -1,6 +1,7 @@
 <p class="text-muted mb-3">
-    &Aacute;rbol de aprobaci&oacute;n propio del concepto (nivel, usuario y monto desde).
-    El cableado operativo se har&aacute; con el CRUD principal de solicitudes.
+    &Aacute;rbol de aprobaci&oacute;n de las solicitudes de pago con este concepto:
+    nivel, usuario firmante y monto desde el cual aplica el nivel.
+    Al emitir una SP se notifica a los firmantes del primer nivel aplicable al monto.
 </p>
 <div class="table-responsive">
     <table class="table table-sm table-bordered" id="concepto-usuario-table">

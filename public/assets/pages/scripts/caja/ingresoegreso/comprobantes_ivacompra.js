@@ -10,12 +10,39 @@
     var ptrFilaCuentaConcepto = null;
     window.ptrIeCpFilaCuentaConcepto = null;
     var previewTimer = null;
+    var iaDecisionId = null;
+    var iaSugerenciaHash = null;
+    // true solo mientras la sugerencia IA está en el modal y aún no se aceptó a la grilla
+    var iaDecisionPendienteModal = false;
 
     function parseJsonEl(id, fallback) {
         try {
             return JSON.parse($(id).text() || 'null') || fallback;
         } catch (e) {
             return fallback;
+        }
+    }
+
+    function descartarDecisionPendiente() {
+        var decisionId = parseInt(iaDecisionId || '0', 10);
+        var url = $('#modal-ie-comprobante-iva').data('descartar-url');
+        if (!iaDecisionPendienteModal || !decisionId || !url) {
+            return;
+        }
+        iaDecisionPendienteModal = false;
+        try {
+            $.ajax({
+                url: url,
+                method: 'POST',
+                data: {
+                    _token: $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val(),
+                    decision_id: decisionId,
+                },
+                dataType: 'json',
+                async: true,
+            });
+        } catch (e) {
+            // ignore
         }
     }
 
@@ -102,6 +129,10 @@
     }
 
     function limpiarModal() {
+        descartarDecisionPendiente();
+        iaDecisionId = null;
+        iaSugerenciaHash = null;
+        iaDecisionPendienteModal = false;
         $('#ie-cp-edit-index').val('');
         $('#ie-cp-tbody-conceptos').empty();
         agregarFilaConcepto(null);
@@ -142,6 +173,10 @@
             $('#ie-cp-moneda-id').val(c.moneda_id || 1);
             $('#ie-cp-cae').val(c.numerocae || '');
             $('#ie-cp-pdf-temp-id').val(c.pdf_temp_id || '');
+            // Ya estaba en grilla: no descartar al cerrar sin re-aceptar.
+            iaDecisionId = c.ai_decision_id || null;
+            iaSugerenciaHash = c.ai_sugerencia_hash || null;
+            iaDecisionPendienteModal = false;
             $('#ie-cp-tbody-conceptos').empty();
             (c.conceptos || []).forEach(function (concepto) {
                 agregarFilaConcepto(concepto);
@@ -243,6 +278,8 @@
             cotizacion: 1,
             numerocae: $('#ie-cp-cae').val() || null,
             pdf_temp_id: ($('#ie-cp-pdf-temp-id').val() || '').trim() || null,
+            ai_decision_id: iaDecisionId,
+            ai_sugerencia_hash: iaSugerenciaHash,
             tiene_pdf: previo.tiene_pdf || false,
             conceptos: conceptos,
         };
@@ -337,6 +374,7 @@
         var empresaId = $('#empresa_id').val();
 
         function persistirEnGrilla() {
+            iaDecisionPendienteModal = false;
             var idx = $('#ie-cp-edit-index').val();
             if (idx !== '') {
                 comprobantesIva[parseInt(idx, 10)] = payload;
@@ -398,6 +436,9 @@
             if (data.pdf_temp_id) {
                 $('#ie-cp-pdf-temp-id').val(data.pdf_temp_id);
             }
+            iaDecisionId = data.ai_decision_id || null;
+            iaSugerenciaHash = data.ai_sugerencia_hash || null;
+            iaDecisionPendienteModal = !!iaDecisionId;
             var cab = data.cabecera || {};
             if (cab.proveedor_id) {
                 $('#ie-cp-proveedor-id').val(cab.proveedor_id);
@@ -464,6 +505,13 @@
         });
 
         $('#ie-cp-guardar-modal').on('click', guardarDesdeModal);
+
+        $('#modal-ie-comprobante-iva').on('hidden.bs.modal', function () {
+            descartarDecisionPendiente();
+            iaDecisionId = null;
+            iaSugerenciaHash = null;
+            iaDecisionPendienteModal = false;
+        });
 
         $(document).on('change input', '#ie-cp-tbody-conceptos .ie-cp-concepto-id, #ie-cp-tbody-conceptos .ie-cp-monto, #ie-cp-total', function () {
             var $row = $(this).closest('.ie-cp-fila-concepto');

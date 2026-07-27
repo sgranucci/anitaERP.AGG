@@ -214,6 +214,11 @@
     </div>
     <hr>
     <h5>Artículos</h5>
+    <p class="text-muted small mb-2">
+        Si el art&iacute;culo tiene datos en la solapa <strong>Proveedores</strong> del maestro (<code>articulo_proveedor</code>),
+        al cargarlo se completan nombre, precio de lista, UM de compra y proveedor de la l&iacute;nea.
+        Sin cat&aacute;logo, se usan los datos del maestro como hasta ahora.
+    </p>
     @php
         $centrocostoDefaultDestino = (int) (
             (isset($data) && $data && $data->centrocosto_id)
@@ -272,12 +277,13 @@
     <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-requisicion-moneda-default="{{ $monedaDefaultLinea }}">
         <thead>
             <tr>
-                <th style="width: 12%;">Artículo</th>
-                <th style="width: 13%;">Descripción</th>
+                <th style="width: 11%;">Artículo</th>
+                <th style="width: 12%;">Descripción</th>
+                <th style="width: 7%;" class="text-nowrap" title="Solo si el artículo tiene filas en articulo_proveedor: proveedor/UM de compra del catálogo">Prov.</th>
                 <th class="ms-col-color-talle" style="width: 7%; display:none;">Color</th>
                 <th class="ms-col-color-talle" style="width: 6%; display:none;">Talle</th>
                 <th style="width: 7%;">Cantidad</th>
-                <th style="width: 6%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase)">Cant. alt.</th>
+                <th style="width: 6%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase) o conversión UM compra → stock">Cant. alt.</th>
                 <th style="width: 7%;">Precio unit.</th>
                 <th style="width: 5%;">Moneda</th>
                 <th style="width: 9%;">CC destino</th>
@@ -317,12 +323,34 @@
                     'maneja_stock_color_talle.'.$idx,
                     optional($linea->articulos)->maneja_stock_color_talle ?? ($_colorIdLin > 0 || $_talleIdLin > 0)
                 );
+                $_ap = $linea->articulo_proveedor;
+                $_provLinId = (int) old('linea_proveedor_ids.'.$idx, $linea->proveedor_id ?? 0);
+                $_apId = (int) old('articulo_proveedor_ids.'.$idx, $linea->articulo_proveedor_id ?? 0);
+                $_apCodigo = old('linea_codigo_articulo_proveedor.'.$idx, optional($_ap)->codigo_articulo_proveedor ?? '');
+                $_apCoef = old('linea_coef_conversion.'.$idx, optional($_ap)->coeficiente_conversion ?? '');
+                $_apUm = old('linea_um_compra_abrev.'.$idx, optional(optional($_ap)->unidadesmedidacompra)->abreviatura ?? '');
+                $_provEtiq = '';
+                if ($_provLinId > 0) {
+                    $_p = $linea->proveedores ?? optional($_ap)->proveedores;
+                    $_provEtiq = trim((string) (optional($_p)->codigo ?? '').' '.(optional($_p)->nombre ?? ''));
+                }
+                $_descLinea = old('descripcionarticulos.'.$idx);
+                if ($_descLinea === null || $_descLinea === '') {
+                    $_descLinea = trim((string) (optional($_ap)->nombre_articulo_proveedor ?? '')) !== ''
+                        ? (string) $_ap->nombre_articulo_proveedor
+                        : (optional($linea->articulos)->descripcion ?? '');
+                }
             @endphp
             <tr class="item-requisicion-articulo{{ $_lineaCerrada ? ' req-requisicion-linea-cerrada' : '' }}"@if($_lineaCerrada) title="{{ e($_etiqCierre) }}"@endif
                 data-maneja-stock-color-talle="{{ $_manejaColorTalle ? '1' : '0' }}">
                 <td>
                     <input type="hidden" class="requisicion_articulo_id" name="requisicion_articulo_ids[]" value="{{ old('requisicion_articulo_ids.'.$idx, $linea->id ?? '') }}">
                     <input type="hidden" name="cantidadalternativas[]" class="req-cantidadalternativa" value="{{ $_cantAltShow }}">
+                    <input type="hidden" class="linea-proveedor-id" name="linea_proveedor_ids[]" value="{{ $_provLinId > 0 ? $_provLinId : '' }}">
+                    <input type="hidden" class="linea-articulo-proveedor-id" name="articulo_proveedor_ids[]" value="{{ $_apId > 0 ? $_apId : '' }}">
+                    <input type="hidden" class="linea-codigo-articulo-proveedor" name="linea_codigo_articulo_proveedor[]" value="{{ $_apCodigo }}">
+                    <input type="hidden" class="linea-coef-conversion" value="{{ $_apCoef !== '' && $_apCoef !== null ? $_apCoef : '' }}">
+                    <input type="hidden" class="linea-um-compra-abrev" value="{{ $_apUm }}">
                     <div class="form-group row celda-articulo-requisicion mb-0 d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}" >
                         <button type="button" title="Consulta art&iacute;culos (F1)" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
@@ -335,7 +363,15 @@
                     </div>
                 </td>
                 <td>
-                    <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{ old('descripcionarticulos.'.$idx, optional($linea->articulos)->descripcion ?? '') }}" readonly>
+                    <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{ $_descLinea }}" readonly>
+                </td>
+                <td class="align-middle px-1">
+                    <small class="linea-proveedor-etiqueta text-muted d-block text-truncate" style="max-width: 7rem;" title="{{ e($_provEtiq) }}">{{ $_provEtiq !== '' ? $_provEtiq : '—' }}</small>
+                    <div class="linea-conversion-hint{{ ($_apUm !== '' && (float) $_apCoef > 0) ? '' : ' d-none' }}">
+                        @if ($_apUm !== '' && (float) $_apCoef > 0)
+                            <small class="text-muted" title="Al recibir: stock = cantidad compra × coef">{{ $_apUm }} ×{{ rtrim(rtrim(number_format((float) $_apCoef, 6, '.', ''), '0'), '.') }} → stock</small>
+                        @endif
+                    </div>
                 </td>
                 @include('stock.movimientostock.partials.fila_color_talle', [
                     'colorId' => $_colorIdLin,
@@ -452,3 +488,4 @@
 @include('includes.presupuesto.modalconsultacapex', ['centrocosto_query' => $centrocosto_query ?? null])
 @include('includes.compras.modalconsultaproveedor')
 @include('includes.compras.modalconsultalistasprecio')
+@include('includes.compras.modal_elegir_articulo_proveedor')

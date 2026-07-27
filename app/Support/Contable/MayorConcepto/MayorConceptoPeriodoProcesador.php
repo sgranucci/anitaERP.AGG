@@ -700,7 +700,7 @@ class MayorConceptoPeriodoProcesador
                     continue;
                 }
 
-                $cuentaCheque = $this->cuentaChequeMayorConcepto($cheque, $auxpag, $empresaId);
+                $cuentaCheque = $this->cuentaChequeMayorConcepto($cheque, $auxpag, $empresaId, $lineasOp);
 
                 $lineas[] = $this->lineaReporte(
                     $lineaBanco ?? $lineaRef,
@@ -766,7 +766,10 @@ class MayorConceptoPeriodoProcesador
                 $nroOc = $this->ordenComDesdeAplicacion($aplicacion);
                 $fisAdelantado = $tipoAp === 'FIS' && ! $tieneComGasto;
                 $gastoAdelantado = ! $tieneComGasto;
-                $fisServicios = $fisAdelantado && ! $anticipo114040;
+                // FIS sin COM con gasto 521/115: imputar subdiario de la factura (no 114020-009).
+                // FIS sin COM solo 114xxx: servicios → 114020-009.
+                $fisServicios = $fisAdelantado && ! $anticipo114040
+                    && ! $this->lineasGastoIncluyenResultadoCompras($lineasGasto);
                 $percepcionesRaw = $tieneComGasto
                     ? $this->percepcionesRawDesdeLineasSubdiario($this->cargarComDesdeFactura($aplicacion))
                     : $this->percepcionesRawDesdeAplicacion($aplicacion);
@@ -776,6 +779,10 @@ class MayorConceptoPeriodoProcesador
                         ? $this->ivaCreditoRawDesdeLineasSubdiario($this->cargarComDesdeFactura($aplicacion))
                         : $this->ivaCreditoRawDesdeAplicacion($aplicacion))
                     : [];
+                // COM histórica suele traer solo el neto: el IVA queda en el subdiario de la factura.
+                if ($inscripto && $ivaCreditoRaw === []) {
+                    $ivaCreditoRaw = $this->ivaCreditoRawDesdeAplicacion($aplicacion);
+                }
                 $totalIvaCreditoRaw = array_sum($ivaCreditoRaw);
                 // Base documental del comprobante (COM + percepciones + IVA): prorratea el
                 // pago efectivo (cheque/banco), no el importe aplicado en auxpag.
@@ -805,12 +812,17 @@ class MayorConceptoPeriodoProcesador
                 $totalPercepciones = array_sum(array_map(fn ($p) => (float) ($p['importe'] ?? 0), $percepcionesFactura));
 
                 if ($this->comGastoEsSolo117010($lineasGasto)) {
+                    // Misma proporción que un COM de gasto: no absorber IVA/resto en 117010.
+                    $netoCom = array_sum(array_map(fn ($l) => (float) ($l->subd_importe ?? 0), $lineasGasto));
+                    $importe117 = $baseComprobante > 0
+                        ? round($montoImputable * ($netoCom / $baseComprobante), 2)
+                        : round($montoImputable, 2);
                     $cuentaCheque = 117010001;
                     $claveAgrup = $cuentaCheque.'|'.$this->motor->conceptoDeCuenta($empresaId, $cuentaCheque);
                     $gastoAgrupadoFactura[$claveAgrup] = [
                         'cuenta' => $cuentaCheque,
                         'concepto' => $this->motor->conceptoDeCuenta($empresaId, $cuentaCheque),
-                        'importe' => round($montoImputable, 2),
+                        'importe' => $importe117,
                         'origen_log' => 'COM cheque 117010',
                         'aplicacion' => $aplicacion,
                         'linea_gasto' => null,
@@ -827,7 +839,12 @@ class MayorConceptoPeriodoProcesador
                             continue;
                         }
 
-                        $cuentaGasto = $this->cuentaVisibleDesdeDocumentoGasto($lineaGasto, $tipoAp, $anticipo114040);
+                        $cuentaGasto = $this->cuentaVisibleDesdeDocumentoGasto(
+                            $lineaGasto,
+                            $tipoAp,
+                            $anticipo114040,
+                            $fisServicios,
+                        );
                         if ($cuentaGasto <= 0) {
                             continue;
                         }
@@ -862,13 +879,13 @@ class MayorConceptoPeriodoProcesador
                                 : $montoImputable;
                             $ivaImp = 0.0;
                         } elseif ($tipoAp === 'FIS') {
-                            $netoImp = $fisAdelantado
-                                ? ($baseComprobante > 0
-                                    ? round($montoImputable * ($netoLinea / $baseComprobante), 2)
-                                    : $netoLinea)
-                                : ($totalNeto > 0
-                                    ? round($montoImputable * ($netoLinea / $totalNeto), 2)
-                                    : $montoImputable);
+                            // Prorratear siempre sobre la base documental (neto + IVA + percepciones):
+                            // con COM el IVA de la factura sale en su propia línea (114010/521130), así
+                            // el gasto no lo absorbe y no queda duplicado. En factura C (sin IVA) la base
+                            // es igual al neto, por lo que el gasto se lleva el pago completo sin línea IVA.
+                            $netoImp = $baseComprobante > 0
+                                ? round($montoImputable * ($netoLinea / $baseComprobante), 2)
+                                : ($fisAdelantado ? $netoLinea : $montoImputable);
                             $ivaImp = 0.0;
                         } elseif ($tipoAp === 'FGA') {
                             $netoImp = $baseComprobante > 0
@@ -886,6 +903,8 @@ class MayorConceptoPeriodoProcesador
                             $anticipo114040 => 'Anticipo 114040',
                             $tipoAp === 'FGA' => 'FGA COM neto',
                             $fisServicios => 'FIS gasto adelantado',
+                            $tipoAp === 'FIS' && ! $tieneComGasto
+                                && $this->lineasGastoIncluyenResultadoCompras([$lineaGasto]) => 'FIS directa',
                             $gastoAdelantado => 'Factura adelantada',
                             $tipoAp === 'FIS' && $tieneComGasto => 'FIS COM neto',
                             $tipoAp === 'FIS' => 'FIS directa',
@@ -920,70 +939,124 @@ class MayorConceptoPeriodoProcesador
                             $gastoAgrupadoFactura[$claveAgrup]['anticipo_prefijo_origen'] = $cuentaOrigen >= 114040000 ? '114040' : '114010';
                         }
                     }
+                }
 
-                    foreach ($percepcionesFactura as $percepcion) {
-                        $cuentaRet = (int) ($percepcion['cuenta'] ?? 0);
-                        $importeRet = (float) ($percepcion['importe'] ?? 0);
-                        if ($cuentaRet <= 0 || $importeRet <= 0) {
+                foreach ($percepcionesFactura as $percepcion) {
+                    $cuentaRet = (int) ($percepcion['cuenta'] ?? 0);
+                    $importeRet = (float) ($percepcion['importe'] ?? 0);
+                    if ($cuentaRet <= 0 || $importeRet <= 0) {
+                        continue;
+                    }
+
+                    $claveRet = $cuentaRet.'|'.$this->motor->conceptoImputacionCuenta($empresaId, $cuentaRet).'|D';
+                    if (! isset($gastoAgrupadoFactura[$claveRet])) {
+                        $gastoAgrupadoFactura[$claveRet] = [
+                            'cuenta' => $cuentaRet,
+                            'concepto' => $this->motor->conceptoImputacionCuenta($empresaId, $cuentaRet),
+                            'importe' => 0.0,
+                            'origen_log' => 'Percepción factura',
+                            'aplicacion' => $aplicacion,
+                            'linea_gasto' => null,
+                            'dh' => 'D',
+                        ];
+                    }
+
+                    $gastoAgrupadoFactura[$claveRet]['importe'] += $importeRet;
+                }
+
+                // Anticipo 114040: el desglose mayor concepto imputa solo neto anticipo al banco
+                // (l-mayorconc); el IVA ya está en la base documental del coeficiente pero no
+                // genera líneas separadas en 114040.
+                if ($inscripto && ! $anticipo114040) {
+                    foreach ($ivaCreditoRaw as $cuentaIva => $importeIvaRaw) {
+                        if ($importeIvaRaw <= 0) {
+                            continue;
+                        }
+                        $cuentaIvaVisible = $this->cuentaVisibleDesdeDocumentoGasto(
+                            (object) ['subd_cuenta' => $cuentaIva],
+                            $tipoAp,
+                            $anticipo114040,
+                            $fisServicios,
+                        );
+                        if ($cuentaIvaVisible <= 0) {
+                            continue;
+                        }
+                        $importeIva = round($montoImputable * ($importeIvaRaw / $baseComprobante), 2);
+                        if ($importeIva <= 0) {
+                            continue;
+                        }
+                        $conceptoIva = $this->conceptoImputacionGasto(
+                            $empresaId,
+                            $cuentaIvaVisible,
+                            $tipoAp,
+                            $nroOc,
+                            trim((string) ($aplicacion->axp_pro ?? '')),
+                        );
+                        $claveIva = $cuentaIvaVisible.'|'.$conceptoIva.'|iva';
+                        if (! isset($gastoAgrupadoFactura[$claveIva])) {
+                            $gastoAgrupadoFactura[$claveIva] = [
+                                'cuenta' => $cuentaIvaVisible,
+                                'concepto' => $conceptoIva,
+                                'importe' => 0.0,
+                                'origen_log' => 'IVA crédito fiscal',
+                                'aplicacion' => $aplicacion,
+                                'linea_gasto' => null,
+                            ];
+                        }
+                        $gastoAgrupadoFactura[$claveIva]['importe'] += $importeIva;
+                    }
+
+                    // Criterio OP: el IVA queda fusionado en los gastos de SU propia
+                    // factura (no en otra aplicación del mismo pago). Se reparte entre
+                    // las líneas de gasto en proporción a su neto; contaduría no carga
+                    // todo el IVA en la cuenta de mayor importe.
+                    foreach ($gastoAgrupadoFactura as $claveIvaFusion => $entradaIva) {
+                        if (! str_ends_with((string) $claveIvaFusion, '|iva')) {
                             continue;
                         }
 
-                        $claveRet = $cuentaRet.'|'.$this->motor->conceptoImputacionCuenta($empresaId, $cuentaRet).'|D';
-                        if (! isset($gastoAgrupadoFactura[$claveRet])) {
-                            $gastoAgrupadoFactura[$claveRet] = [
-                                'cuenta' => $cuentaRet,
-                                'concepto' => $this->motor->conceptoImputacionCuenta($empresaId, $cuentaRet),
-                                'importe' => 0.0,
-                                'origen_log' => 'Percepción factura',
-                                'aplicacion' => $aplicacion,
-                                'linea_gasto' => null,
-                                'dh' => 'D',
-                            ];
+                        $importeIvaFusion = round((float) ($entradaIva['importe'] ?? 0), 2);
+                        if ($importeIvaFusion <= 0) {
+                            unset($gastoAgrupadoFactura[$claveIvaFusion]);
+
+                            continue;
                         }
 
-                        $gastoAgrupadoFactura[$claveRet]['importe'] += $importeRet;
-                    }
-
-                    // Anticipo 114040: el desglose mayor concepto imputa solo neto anticipo al banco
-                    // (l-mayorconc); el IVA ya está en la base documental del coeficiente pero no
-                    // genera líneas separadas en 114040.
-                    if ($inscripto && ! $anticipo114040) {
-                        foreach ($ivaCreditoRaw as $cuentaIva => $importeIvaRaw) {
-                            if ($importeIvaRaw <= 0) {
+                        $clavesGasto = [];
+                        $totalNetoGasto = 0.0;
+                        foreach ($gastoAgrupadoFactura as $claveGasto => $entradaGasto) {
+                            if (str_ends_with((string) $claveGasto, '|iva')
+                                || ($entradaGasto['origen_log'] ?? '') === 'Percepción factura') {
                                 continue;
                             }
-                            $cuentaIvaVisible = $this->cuentaVisibleDesdeDocumentoGasto(
-                                (object) ['subd_cuenta' => $cuentaIva],
-                                $tipoAp,
-                                $anticipo114040,
-                            );
-                            if ($cuentaIvaVisible <= 0) {
+                            $netoGasto = round((float) ($entradaGasto['importe'] ?? 0), 2);
+                            if ($netoGasto <= 0) {
                                 continue;
                             }
-                            $importeIva = round($montoImputable * ($importeIvaRaw / $baseComprobante), 2);
-                            if ($importeIva <= 0) {
-                                continue;
-                            }
-                            $conceptoIva = $this->conceptoImputacionGasto(
-                                $empresaId,
-                                $cuentaIvaVisible,
-                                $tipoAp,
-                                $nroOc,
-                                trim((string) ($aplicacion->axp_pro ?? '')),
-                            );
-                            $claveIva = $cuentaIvaVisible.'|'.$conceptoIva.'|iva';
-                            if (! isset($gastoAgrupadoFactura[$claveIva])) {
-                                $gastoAgrupadoFactura[$claveIva] = [
-                                    'cuenta' => $cuentaIvaVisible,
-                                    'concepto' => $conceptoIva,
-                                    'importe' => 0.0,
-                                    'origen_log' => 'IVA crédito fiscal',
-                                    'aplicacion' => $aplicacion,
-                                    'linea_gasto' => null,
-                                ];
-                            }
-                            $gastoAgrupadoFactura[$claveIva]['importe'] += $importeIva;
+                            $clavesGasto[] = $claveGasto;
+                            $totalNetoGasto += $netoGasto;
                         }
+
+                        if ($clavesGasto === [] || $totalNetoGasto <= 0) {
+                            continue;
+                        }
+
+                        $acumuladoIva = 0.0;
+                        $ultimo = count($clavesGasto) - 1;
+                        foreach ($clavesGasto as $indiceGasto => $claveGasto) {
+                            if ($indiceGasto === $ultimo) {
+                                $porcionIva = round($importeIvaFusion - $acumuladoIva, 2);
+                            } else {
+                                $peso = (float) ($gastoAgrupadoFactura[$claveGasto]['importe'] ?? 0);
+                                $porcionIva = round($importeIvaFusion * ($peso / $totalNetoGasto), 2);
+                                $acumuladoIva += $porcionIva;
+                            }
+                            $gastoAgrupadoFactura[$claveGasto]['importe'] = round(
+                                (float) ($gastoAgrupadoFactura[$claveGasto]['importe'] ?? 0) + $porcionIva,
+                                2,
+                            );
+                        }
+                        unset($gastoAgrupadoFactura[$claveIvaFusion]);
                     }
                 }
 
@@ -1477,6 +1550,23 @@ class MayorConceptoPeriodoProcesador
             return [];
         }
 
+        // Venta máquinas (Anita): cada cuenta > límite va a su concepto; no exige ancla ≤ límite.
+        if ($this->debeProcesarAsientoCtamovVentaMaquinas($lineasAsiento, $lineasOp)) {
+            $lineas = $this->procesarAsientoCtamovVentaMaquinasPorConcepto(
+                $empresaId,
+                $lineasOp,
+                $monedaConverter,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+            );
+            if ($lineas !== []) {
+                $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
+                $opsProcesadas[$this->claveAsientoContable($nroAsiento, $fecha)] = true;
+            }
+
+            return $lineas;
+        }
+
         if (! $this->asientoOpTieneCuentaDentroLimiteMayorConcepto($lineasOp)) {
             return [];
         }
@@ -1497,14 +1587,16 @@ class MayorConceptoPeriodoProcesador
             return $lineas;
         }
 
-        if ($this->debeProcesarAsientoCtamovVentaMaquinas($lineasAsiento, $lineasOp)) {
-            $lineas = $this->procesarAsientoMultilinea(
+        // Gastro/estacionamiento con medios 111+113: importe completo de ventas/IVA
+        // (igual al mayor plano), prorrateado entre todos los medios. Si cae en sistema B
+        // se aplica factor parcial caja/(caja+113) y 413xxx queda por debajo del plano.
+        if ($this->debeProcesarAsientoCtamovVentaMultibanco($lineasAsiento, $lineasOp)) {
+            $lineas = $this->procesarAsientoCtamovVentaMultibanco(
                 $empresaId,
                 $lineasOp,
                 $monedaConverter,
                 $monedaReporteId,
                 $soloMonedaOrigen,
-                'Ctamov venta maquinas',
             );
             if ($lineas !== []) {
                 $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
@@ -1650,6 +1742,10 @@ class MayorConceptoPeriodoProcesador
         }
 
         if ($this->esAsientoCtamovDirectoCobranzaCreditoComercial($lineasOp)) {
+            return false;
+        }
+
+        if ($this->debeProcesarAsientoCtamovVentaMultibanco($lineasAsiento, $lineasOp)) {
             return false;
         }
 
@@ -2656,14 +2752,13 @@ class MayorConceptoPeriodoProcesador
         int $monedaReporteId,
         bool $soloMonedaOrigen,
     ): array {
-        $mediosCobranza = $this->mediosCobranzaDebeAsiento($lineasOp);
+        $mediosCobranza = $this->mediosCobranzaDebeAsientoVentaGastro($lineasOp);
         $totalMedios = array_sum($mediosCobranza);
         if ($totalMedios <= 0) {
             return [];
         }
 
         $lineas = [];
-        $bancoReferencia = $this->resolverBancoReferenciaAsiento($lineasOp);
         // Prorrateo entre medios (111/113/211) ya alinea concepto con analítico ampliado; no recortar al solo banco.
         $factorProrrateo = 1.0;
 
@@ -2679,8 +2774,13 @@ class MayorConceptoPeriodoProcesador
             }
 
             $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if (! in_array($mov, ['D', 'H'], true)) {
+                continue;
+            }
 
-            if ($this->esMedioCobranzaCtamovVenta($cuenta, $mov)) {
+            // Medios de cobro (caja, crédito comercial, cupones 211): no se imputan como gasto/venta.
+            if ($this->esMedioCobranzaCtamovVenta($cuenta, $mov)
+                || ($mov === 'D' && $this->esCuentaPasivaPublicoCtamovSistemaB($cuenta))) {
                 continue;
             }
 
@@ -2688,43 +2788,8 @@ class MayorConceptoPeriodoProcesador
                 continue;
             }
 
-            if ($mov === 'H' && $this->esCuentaVentaCtamovMultibanco($cuenta)) {
-                $importeImputable = $this->aplicarFactorProrrateoAnaliticoControl($importe, $factorProrrateo);
-                if ($importeImputable <= 0) {
-                    continue;
-                }
-
-                $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
-                foreach ($this->prorratearImportePorMediosCobranza($importeImputable, $mediosCobranza) as $porcion) {
-                    if ($porcion['importe'] <= 0) {
-                        continue;
-                    }
-
-                    $lineas[] = $this->lineaReporte(
-                        $linea,
-                        $cuenta,
-                        $concepto,
-                        $porcion['importe'],
-                        $mov,
-                        $monedaConverter,
-                        $monedaReporteId,
-                        'Ctamov venta cobranza',
-                        [
-                            'cuenta_disponibilidad' => $porcion['cuenta'],
-                            'emisor' => trim((string) ($linea->subd_emisor ?? '')),
-                        ],
-                    );
-                }
-
-                continue;
-            }
-
-            if (! $this->esCuentaVisibleAsientoMultilinea($cuenta)) {
-                continue;
-            }
-
-            // Solo contrapartidas al Haber (IVA, percepciones…); piernas D generan disp_haber espurio en el medio.
-            if ($mov !== 'H') {
+            $esVentaOIva = $this->esCuentaVentaCtamovMultibanco($cuenta);
+            if (! $esVentaOIva && ! $this->esCuentaVisibleAsientoMultilinea($cuenta)) {
                 continue;
             }
 
@@ -2733,31 +2798,87 @@ class MayorConceptoPeriodoProcesador
                 continue;
             }
 
-            $cuentaDisp = $this->resolverBancoParaLineaAsiento($linea, $lineasOp);
-            if ($cuentaDisp <= 0) {
-                $cuentaDisp = $bancoReferencia > 0 ? $bancoReferencia : $this->resolverCuentaDisponibilidad($linea);
-            }
-            if ($cuentaDisp <= 0) {
-                continue;
+            $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
+            // Ventas/IVA: prorratear entre medios (caja/tarjeta/cupón) para alinear con cobranza.
+            // Resto (ej. diferencia de caja 521280-004): una sola línea con el importe ctamov
+            // completo — contaduría no parte ese ajuste entre medios.
+            if ($esVentaOIva) {
+                $porciones = $this->prorratearImportePorMediosCobranza($importeImputable, $mediosCobranza);
+            } else {
+                $cuentaDisp = $this->cuentaMedioCobranzaPrincipal($mediosCobranza);
+                $porciones = $cuentaDisp > 0
+                    ? [['cuenta' => $cuentaDisp, 'importe' => round($importeImputable, 2)]]
+                    : [];
             }
 
-            $lineas[] = $this->lineaReporte(
-                $linea,
-                $cuenta,
-                $this->motor->conceptoImputacionCuenta($empresaId, $cuenta),
-                $importeImputable,
-                $mov,
-                $monedaConverter,
-                $monedaReporteId,
-                'Ctamov venta cobranza',
-                [
-                    'cuenta_disponibilidad' => $cuentaDisp,
-                    'emisor' => trim((string) ($linea->subd_emisor ?? '')),
-                ],
-            );
+            foreach ($porciones as $porcion) {
+                if ($porcion['importe'] <= 0) {
+                    continue;
+                }
+
+                $lineas[] = $this->lineaReporte(
+                    $linea,
+                    $cuenta,
+                    $concepto,
+                    $porcion['importe'],
+                    $mov,
+                    $monedaConverter,
+                    $monedaReporteId,
+                    'Ctamov venta cobranza',
+                    [
+                        'cuenta_disponibilidad' => $porcion['cuenta'],
+                        'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                    ],
+                );
+            }
         }
 
         return $this->reconciliarImputacionMediosVentaCtamov($lineas, $mediosCobranza);
+    }
+
+    /**
+     * Medio de cobranza de mayor peso (caja suele dominar sobre tarjetas/cupones).
+     *
+     * @param  array<int, float>  $mediosCobranza
+     */
+    private function cuentaMedioCobranzaPrincipal(array $mediosCobranza): int
+    {
+        $cuentaPrincipal = 0;
+        $importeMax = 0.0;
+
+        foreach ($mediosCobranza as $cuenta => $importe) {
+            $importe = (float) $importe;
+            if ($importe > $importeMax) {
+                $importeMax = $importe;
+                $cuentaPrincipal = (int) $cuenta;
+            }
+        }
+
+        return $cuentaPrincipal;
+    }
+
+    /**
+     * Medios de cobro de venta gastro/estacionamiento: 111/113 y también 211 (cupones / cta. cte. público).
+     *
+     * @param  list<object>  $lineasOp
+     * @return array<int, float>
+     */
+    private function mediosCobranzaDebeAsientoVentaGastro(array $lineasOp): array
+    {
+        $porCuenta = $this->mediosCobranzaDebeAsiento($lineasOp);
+
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($importe <= 0 || $mov !== 'D' || ! $this->esCuentaPasivaPublicoCtamovSistemaB($cuenta)) {
+                continue;
+            }
+
+            $porCuenta[$cuenta] = ($porCuenta[$cuenta] ?? 0.0) + $importe;
+        }
+
+        return $porCuenta;
     }
 
     /**
@@ -4298,7 +4419,7 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
-     * Venta máquinas ctamov sistema B (412xxx al Haber + cobranza 111/113 al Debe).
+     * Venta máquinas ctamov sistema B/V (412xxx): imputación Anita por concepto de cada cuenta.
      *
      * @param  list<object>  $lineasAsiento
      * @param  list<object>  $lineasOp
@@ -4319,11 +4440,64 @@ class MayorConceptoPeriodoProcesador
             return false;
         }
 
-        if (! $this->esAsientoCtamovVentaMaquinas($lineasOp)) {
-            return false;
+        return $this->esAsientoCtamovVentaMaquinas($lineasOp);
+    }
+
+    /**
+     * Venta máquinas como Anita: cada pierna con cuenta > límite caja/banco va a su concepto
+     * (APLICACIONES/ORIGENES nativos). No se toman cuentas ≤ límite ni se ancla a banco narrow.
+     *
+     * @param  list<object>  $lineasOp
+     * @return list<array<string, mixed>>
+     */
+    private function procesarAsientoCtamovVentaMaquinasPorConcepto(
+        int $empresaId,
+        array $lineasOp,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+        bool $soloMonedaOrigen,
+    ): array {
+        $lineas = [];
+
+        foreach ($lineasOp as $linea) {
+            if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
+                continue;
+            }
+
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $importe = (float) ($linea->subd_importe ?? 0);
+            if ($cuenta <= 0 || $importe <= 0) {
+                continue;
+            }
+
+            // Sin cuentas menores/iguales al límite (caja/banco ancla mayor por concepto).
+            if ($this->motor->esDisponibilidad($cuenta)) {
+                continue;
+            }
+
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if (! in_array($mov, ['D', 'H'], true)) {
+                continue;
+            }
+
+            // Plano = disp: misma cuenta (no espeja contra banco ≤ límite).
+            $lineas[] = $this->lineaReporte(
+                $linea,
+                $cuenta,
+                $this->motor->conceptoImputacionCuenta($empresaId, $cuenta),
+                $importe,
+                $mov,
+                $monedaConverter,
+                $monedaReporteId,
+                'Ctamov venta maquinas',
+                [
+                    'cuenta_disponibilidad' => $cuenta,
+                    'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                ],
+            );
         }
 
-        return $this->mediosDisponibilidadDebeDentroAnaliticoControl($lineasOp) !== [];
+        return $lineas;
     }
 
     /**
@@ -4831,6 +5005,11 @@ class MayorConceptoPeriodoProcesador
                     return false;
                 }
 
+                // Puente bienes de uso / activo (ej. 123010030): no tratar como CHP gaming.
+                if ($cuenta >= 123000000 && $cuenta < 124000000) {
+                    return false;
+                }
+
                 if ($cuenta >= 500000000 && $cuenta < 600000000 && $cuenta !== 521130001) {
                     if ($cuenta < 117000000 || $cuenta >= 118000000) {
                         return false;
@@ -4934,12 +5113,18 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
-     * CHP: 521240 gaming si hay OC (FNB/PEP), 114040/FNB-COM si aplica; si no 117010.
+     * CHP directo: cuenta de la pierna no-caja del asiento (subdiario).
+     * Si hay gaming/prepaga asociados, prevalecen; si no, 117010 solo como último fallback.
      *
      * @param  list<object>  $auxpag
+     * @param  list<object>  $lineasOp
      */
-    private function cuentaChequeMayorConcepto(?object $cheque, array $auxpag = [], int $empresaId = 0): int
-    {
+    private function cuentaChequeMayorConcepto(
+        ?object $cheque,
+        array $auxpag = [],
+        int $empresaId = 0,
+        array $lineasOp = [],
+    ): int {
         $cuentaGaming = $this->resolverCuentaGastoGamingDesdeOp($auxpag);
         if ($cuentaGaming > 0) {
             return $cuentaGaming;
@@ -4952,7 +5137,39 @@ class MayorConceptoPeriodoProcesador
             }
         }
 
+        $cuentaAsiento = $this->cuentaContrapartidaNoDisponibilidadAsiento($lineasOp);
+        if ($cuentaAsiento > 0) {
+            return $cuentaAsiento;
+        }
+
         return 117010001;
+    }
+
+    /**
+     * Pierna del asiento que no es caja/banco ≤ límite (ej. CHP: 111 H / 113 Debe).
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function cuentaContrapartidaNoDisponibilidadAsiento(array $lineasOp): int
+    {
+        foreach ($lineasOp as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $contrapartida = (int) ($linea->subd_contrapartida ?? 0);
+
+            if ($this->motor->esDisponibilidad($cuenta)
+                && $contrapartida > 0
+                && ! $this->motor->esDisponibilidad($contrapartida)) {
+                return $contrapartida;
+            }
+
+            if ($this->motor->esDisponibilidad($contrapartida)
+                && $cuenta > 0
+                && ! $this->motor->esDisponibilidad($cuenta)) {
+                return $cuenta;
+            }
+        }
+
+        return 0;
     }
 
     /**
@@ -5050,14 +5267,25 @@ class MayorConceptoPeriodoProcesador
             }
         }
 
+        // FNB con OC pero sin 521/114040 en gasto: usar la cuenta real de la COM
+        // (ej. 123010030 bienes de uso). Solo si no hay COM útil → 521240002 (gaming legacy).
         foreach ($auxpag as $aplicacion) {
             if (strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? ''))) !== 'FNB') {
                 continue;
             }
 
-            if ($this->ordenComDesdeAplicacion($aplicacion) > 0) {
-                return 521240002;
+            if ($this->ordenComDesdeAplicacion($aplicacion) <= 0) {
+                continue;
             }
+
+            foreach ($this->filtrarComGasto($this->cargarComDesdeFactura($aplicacion)) as $lineaCom) {
+                $cuentaCom = (int) ($lineaCom->subd_cuenta ?? 0);
+                if ($cuentaCom > 0 && $cuentaCom !== 521130001) {
+                    return $cuentaCom;
+                }
+            }
+
+            return 521240002;
         }
 
         return 0;
@@ -5104,7 +5332,9 @@ class MayorConceptoPeriodoProcesador
 
         foreach ($lineasReporte as $ln) {
             $disp = (int) ($ln['cuenta_disponibilidad'] ?? 0);
-            if ($disp <= 0) {
+            // Solo disponibilidad ≤ tope mayor concepto. Venta máquinas ancla disp=cuenta
+            // concepto (>tope): no entra al cuadre del plano caja/banco.
+            if ($disp <= 0 || ! $this->motor->esDisponibilidad($disp)) {
                 continue;
             }
 
@@ -5127,7 +5357,9 @@ class MayorConceptoPeriodoProcesador
             $dDebe = round((float) ($plano['debe'] ?? 0) - $imp['debe'], 2);
             $dHaber = round((float) ($plano['haber'] ?? 0) - $imp['haber'], 2);
 
-            if (abs($dDebe) >= 0.05) {
+            // Solo completar faltante (plano > imputado). El exceso imputado (inflación
+            // narrow / sistema B) no genera línea "Ajuste mayor plano" de signo negativo.
+            if ($dDebe >= 0.05) {
                 $remanente[] = $this->lineaRemanenteMayorPlano(
                     $empresaId,
                     $cuenta,
@@ -5139,7 +5371,7 @@ class MayorConceptoPeriodoProcesador
                 );
             }
 
-            if (abs($dHaber) >= 0.05) {
+            if ($dHaber >= 0.05) {
                 $remanente[] = $this->lineaRemanenteMayorPlano(
                     $empresaId,
                     $cuenta,
@@ -5361,7 +5593,7 @@ class MayorConceptoPeriodoProcesador
             $cuenta = (int) ($linea->subd_cuenta ?? 0);
             $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
 
-            if ($mov !== 'D' || $cuenta < 114010000 || $cuenta >= 114020000) {
+            if ($mov !== 'D' || ! $this->esCuentaIvaCreditoFiscalCompras($cuenta)) {
                 continue;
             }
 
@@ -5537,7 +5769,7 @@ class MayorConceptoPeriodoProcesador
             $cuenta = (int) ($linea->subd_cuenta ?? 0);
             $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
 
-            if ($mov !== 'D' || $cuenta < 114010000 || $cuenta >= 114020000) {
+            if ($mov !== 'D' || ! $this->esCuentaIvaCreditoFiscalCompras($cuenta)) {
                 continue;
             }
 
@@ -5547,8 +5779,18 @@ class MayorConceptoPeriodoProcesador
         return $porCuenta;
     }
 
+    /** IVA crédito en factura/COM: 114010-114019 o 521130-001 (FNB/rebisco). */
+    private function esCuentaIvaCreditoFiscalCompras(int $cuenta): bool
+    {
+        if ($cuenta >= 114010000 && $cuenta < 114020000) {
+            return true;
+        }
+
+        return $cuenta === 521130001;
+    }
+
     /**
-     * FIS sin COM: anticipo 114040 (públicidad/gaming) o servicios 114010→114020-009, o reimputa 521xxx.
+     * FIS sin COM: anticipo 114040, gasto de factura (521/115) tal cual, o servicios 114010→114020-009.
      *
      * @param  list<object>  $sub
      * @return list<object>
@@ -5564,32 +5806,30 @@ class MayorConceptoPeriodoProcesador
             return $this->filtrarLineasAnticipoProveedor($todas);
         }
 
-        $cuentaGasto = 0;
-        foreach ($todas as $linea) {
+        // Con gasto en la factura: no reimputar IVA/114010 al 521 (eso duplicaba el IVA en el peso
+        // y forzaba 114020-009). El IVA y las percepciones salen en sus cuentas del subdiario.
+        $gastoNeto = $this->filtrarLineasGastoNetoComprobanteCompras($sub);
+        if ($gastoNeto !== []) {
+            return $gastoNeto;
+        }
+
+        return $this->filtrarLineasFisMayorConcepto($sub);
+    }
+
+    /**
+     * @param  list<object>  $lineasGasto
+     */
+    private function lineasGastoIncluyenResultadoCompras(array $lineasGasto): bool
+    {
+        foreach ($lineasGasto as $linea) {
             $cuenta = (int) ($linea->subd_cuenta ?? 0);
-            if ($cuenta >= 521000000 && $cuenta < 600000000 && $cuenta !== 521130001) {
-                $cuentaGasto = $cuenta;
-                break;
+            if (($cuenta >= 115000000 && $cuenta < 600000000 && $cuenta !== 521130001)
+                || ($cuenta >= 123000000 && $cuenta < 124000000)) {
+                return true;
             }
         }
 
-        if ($cuentaGasto <= 0) {
-            return $this->filtrarLineasFisMayorConcepto($sub);
-        }
-
-        $lineas = [];
-        foreach ($todas as $linea) {
-            $cuenta = (int) ($linea->subd_cuenta ?? 0);
-            if ($cuenta >= 214010000 && $cuenta < 215000000) {
-                continue;
-            }
-
-            $clon = clone $linea;
-            $clon->subd_cuenta = $cuentaGasto;
-            $lineas[] = $clon;
-        }
-
-        return $lineas;
+        return false;
     }
 
     /**
@@ -5814,8 +6054,12 @@ class MayorConceptoPeriodoProcesador
         }));
     }
 
-    private function cuentaVisibleDesdeDocumentoGasto(object $lineaGasto, string $tipoAp, bool $anticipo114040 = false): int
-    {
+    private function cuentaVisibleDesdeDocumentoGasto(
+        object $lineaGasto,
+        string $tipoAp,
+        bool $anticipo114040 = false,
+        bool $fisServicios114020 = false,
+    ): int {
         $cuenta = (int) ($lineaGasto->subd_cuenta ?? 0);
         if ($cuenta <= 0) {
             return 0;
@@ -5825,7 +6069,9 @@ class MayorConceptoPeriodoProcesador
             return 114040001;
         }
 
-        if (strtoupper($tipoAp) === 'FIS' && $cuenta >= 114010000 && $cuenta < 114020000) {
+        // Solo FIS "servicios" (sin COM ni 521/115): Anita muestra 114010 como 114020-009.
+        if ($fisServicios114020 && strtoupper($tipoAp) === 'FIS'
+            && $cuenta >= 114010000 && $cuenta < 114020000) {
             return 114020009;
         }
 
@@ -5864,7 +6110,10 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
-     * Reimputa 114010/521130 al mayor gasto de la misma operación (l-mayorconc.c reimputa_cuentas).
+     * Reimputa 114010/521130 (y IVA crédito fiscal de OP) a los gastos de resultado
+     * de la misma operación (l-mayorconc.c reimputa_cuentas). El importe se reparte
+     * entre cuentas 4xx/5xx en proporción a su monto; no se mezcla sobre otras
+     * cuentas de IVA/impuesto (114/214), para no inflar p.ej. 114010-008 en un EGR.
      *
      * @param  list<array<string, mixed>>  $lineas
      * @return list<array<string, mixed>>
@@ -5872,6 +6121,8 @@ class MayorConceptoPeriodoProcesador
     private function reimputarCuentasAnticipoCompras(array $lineas): array
     {
         $cuentasReimputa = MayorConceptoMemoriaMotor::CUENTAS_REIMPUTA_CONCEPTO;
+        $esReimputable = static fn (array $linea): bool => in_array((int) ($linea['cuenta'] ?? 0), $cuentasReimputa, true)
+            || ($linea['origen'] ?? '') === 'IVA crédito fiscal';
         $porOperacion = [];
 
         foreach ($lineas as $indice => $linea) {
@@ -5888,44 +6139,104 @@ class MayorConceptoPeriodoProcesador
         }
 
         foreach ($porOperacion as $indices) {
-            $indiceDestino = null;
-            $maxMonto = 0.0;
+            $indicesGasto = [];
+            $totalNetoGasto = 0.0;
+            $indicesIva = [];
 
             foreach ($indices as $indice) {
-                $cuenta = (int) ($lineas[$indice]['cuenta'] ?? 0);
-                $monto = max((float) ($lineas[$indice]['debe'] ?? 0), (float) ($lineas[$indice]['haber'] ?? 0));
-                if (in_array($cuenta, $cuentasReimputa, true)) {
+                if ($esReimputable($lineas[$indice])) {
+                    // En EGR (gastos bancarios) cada pierna 114010/521130 queda
+                    // con el importe del subdiario; no absorberlas en comisiones.
+                    if (str_starts_with((string) ($lineas[$indice]['origen'] ?? ''), 'EGR')) {
+                        continue;
+                    }
+                    $indicesIva[] = $indice;
+
                     continue;
                 }
 
-                if ($monto > $maxMonto) {
-                    $maxMonto = $monto;
-                    $indiceDestino = $indice;
+                $cuentaDestino = (int) ($lineas[$indice]['cuenta'] ?? 0);
+                if (! $this->esCuentaDestinoReimputacionIva($cuentaDestino)) {
+                    continue;
                 }
+
+                $monto = round(
+                    max((float) ($lineas[$indice]['debe'] ?? 0), (float) ($lineas[$indice]['haber'] ?? 0)),
+                    2,
+                );
+                if ($monto <= 0) {
+                    continue;
+                }
+
+                $indicesGasto[] = $indice;
+                $totalNetoGasto += $monto;
             }
 
-            if ($indiceDestino === null) {
+            if ($indicesGasto === [] || $indicesIva === [] || $totalNetoGasto <= 0) {
                 continue;
             }
 
-            $cuentaDestino = (int) ($lineas[$indiceDestino]['cuenta'] ?? 0);
-            $conceptoDestino = (int) ($lineas[$indiceDestino]['concepto_id'] ?? 0);
-            $nombreDestino = (string) ($lineas[$indiceDestino]['concepto_nombre'] ?? '');
+            foreach ($indicesIva as $indiceIva) {
+                $debeIva = round((float) ($lineas[$indiceIva]['debe'] ?? 0), 2);
+                $haberIva = round((float) ($lineas[$indiceIva]['haber'] ?? 0), 2);
+                $dispDebeIva = round((float) ($lineas[$indiceIva]['disp_debe'] ?? 0), 2);
+                $dispHaberIva = round((float) ($lineas[$indiceIva]['disp_haber'] ?? 0), 2);
+                $pesoIva = max($debeIva, $haberIva);
+                if ($pesoIva <= 0) {
+                    unset($lineas[$indiceIva]);
 
-            foreach ($indices as $indice) {
-                $cuenta = (int) ($lineas[$indice]['cuenta'] ?? 0);
-                if (! in_array($cuenta, $cuentasReimputa, true)) {
                     continue;
                 }
 
-                $lineas[$indice]['cuenta'] = $cuentaDestino;
-                $lineas[$indice]['cuenta_codigo'] = $this->motor->formatearCodigoCuenta($cuentaDestino);
-                $lineas[$indice]['concepto_id'] = $conceptoDestino;
-                $lineas[$indice]['concepto_nombre'] = $nombreDestino;
+                $acumDebe = 0.0;
+                $acumHaber = 0.0;
+                $acumDispDebe = 0.0;
+                $acumDispHaber = 0.0;
+                $ultimo = count($indicesGasto) - 1;
+
+                foreach ($indicesGasto as $pos => $indiceGasto) {
+                    $pesoGasto = max(
+                        (float) ($lineas[$indiceGasto]['debe'] ?? 0),
+                        (float) ($lineas[$indiceGasto]['haber'] ?? 0),
+                    );
+                    $factor = $pesoGasto / $totalNetoGasto;
+
+                    if ($pos === $ultimo) {
+                        $addDebe = round($debeIva - $acumDebe, 2);
+                        $addHaber = round($haberIva - $acumHaber, 2);
+                        $addDispDebe = round($dispDebeIva - $acumDispDebe, 2);
+                        $addDispHaber = round($dispHaberIva - $acumDispHaber, 2);
+                    } else {
+                        $addDebe = round($debeIva * $factor, 2);
+                        $addHaber = round($haberIva * $factor, 2);
+                        $addDispDebe = round($dispDebeIva * $factor, 2);
+                        $addDispHaber = round($dispHaberIva * $factor, 2);
+                        $acumDebe += $addDebe;
+                        $acumHaber += $addHaber;
+                        $acumDispDebe += $addDispDebe;
+                        $acumDispHaber += $addDispHaber;
+                    }
+
+                    $lineas[$indiceGasto]['debe'] = round((float) ($lineas[$indiceGasto]['debe'] ?? 0) + $addDebe, 2);
+                    $lineas[$indiceGasto]['haber'] = round((float) ($lineas[$indiceGasto]['haber'] ?? 0) + $addHaber, 2);
+                    $lineas[$indiceGasto]['disp_debe'] = round((float) ($lineas[$indiceGasto]['disp_debe'] ?? 0) + $addDispDebe, 2);
+                    $lineas[$indiceGasto]['disp_haber'] = round((float) ($lineas[$indiceGasto]['disp_haber'] ?? 0) + $addDispHaber, 2);
+                }
+
+                unset($lineas[$indiceIva]);
             }
         }
 
-        return $lineas;
+        return array_values($lineas);
+    }
+
+    /**
+     * Destino de reimputación de IVA: solo cuentas de resultado (venta/gasto).
+     * Las 114/214 (crédito fiscal, percepciones, etc.) conservan su propio importe.
+     */
+    private function esCuentaDestinoReimputacionIva(int $cuenta): bool
+    {
+        return $cuenta >= 400000000 && $cuenta < 600000000;
     }
 
     /**
@@ -6625,6 +6936,9 @@ class MayorConceptoPeriodoProcesador
     ): array {
         $porCuenta = [];
         $asientosDentroLimite = $this->indexarAsientosDentroLimiteMayorConcepto($subdiario, $ctamovLista);
+        // Venta máquinas se imputa por cuenta concepto (disp = misma cuenta > tope).
+        // Sus piernas de caja/banco no deben generar "Ajuste mayor plano".
+        $asientosVentaMaquinas = $this->indexarAsientosVentaMaquinas($ctamovLista);
 
         foreach ($ctamovLista as $lineaCtamov) {
             $adaptada = $this->ctamovComoSubdiario($lineaCtamov);
@@ -6634,6 +6948,9 @@ class MayorConceptoPeriodoProcesador
 
             $nroAsiento = (int) ($lineaCtamov->ctav_nro_asiento ?? 0);
             if ($nroAsiento <= 0 || ! isset($asientosDentroLimite[$nroAsiento])) {
+                continue;
+            }
+            if (isset($asientosVentaMaquinas[$nroAsiento])) {
                 continue;
             }
 
@@ -6661,6 +6978,9 @@ class MayorConceptoPeriodoProcesador
 
             $nroOperacion = (int) ($linea->subd_nro_operacion ?? 0);
             if ($nroOperacion <= 0 || ! isset($asientosDentroLimite[$nroOperacion])) {
+                continue;
+            }
+            if (isset($asientosVentaMaquinas[$nroOperacion])) {
                 continue;
             }
 
@@ -6703,6 +7023,33 @@ class MayorConceptoPeriodoProcesador
         ksort($porCuenta);
 
         return $porCuenta;
+    }
+
+    /**
+     * Asientos ctamov de venta máquinas (tienen pierna 41201x).
+     *
+     * @param  list<object>  $ctamovLista
+     * @return array<int, true>
+     */
+    private function indexarAsientosVentaMaquinas(array $ctamovLista): array
+    {
+        $porAsiento = [];
+        foreach ($ctamovLista as $linea) {
+            $nro = (int) ($linea->ctav_nro_asiento ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            $porAsiento[$nro][] = $this->ctamovComoSubdiario($linea);
+        }
+
+        $index = [];
+        foreach ($porAsiento as $nro => $lineasOp) {
+            if ($this->esAsientoCtamovVentaMaquinas($lineasOp)) {
+                $index[(int) $nro] = true;
+            }
+        }
+
+        return $index;
     }
 
     /**
@@ -6810,7 +7157,12 @@ class MayorConceptoPeriodoProcesador
      */
     private function acumularMovimientoPlanoDisponibilidad(array &$porCuenta, int $cuenta, string $mov, float $importe): void
     {
-        if ($cuenta <= 0 || $importe <= 0 || ! $this->motor->esDisponibilidadPlano($cuenta)) {
+        // El mayor por concepto topa en 112010008 (esDisponibilidad). Las cuentas por encima
+        // del tope (113xxx coin/tarjetas, 112040xxx, etc.) no tienen mayor propio: su movimiento
+        // se refleja en la caja/banco narrow contra la que operan, no se agrega al plano. Esto
+        // evita el "Ajuste mayor plano" por doble conteo de la pierna > tope (la recaudación
+        // coin 113 ya queda imputada en el banco donde se deposita).
+        if ($cuenta <= 0 || $importe <= 0 || ! $this->motor->esDisponibilidad($cuenta)) {
             return;
         }
 
@@ -7071,7 +7423,8 @@ class MayorConceptoPeriodoProcesador
                 );
                 $fecha = (int) ($lineaCtamov->ctav_fecha ?? 0);
 
-                if ($esSistemaBCtamov && ! $esVentaMaquinas && ! $esReclasificacionDispContra) {
+                if ($esSistemaBCtamov && ! $esVentaMaquinas && ! $esReclasificacionDispContra && ! $incluirMediosCtamov) {
+                    // Sistema B puro (no gastro): solo caja/banco ≤ límite analítico.
                     if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
                         continue;
                     }
@@ -7091,6 +7444,8 @@ class MayorConceptoPeriodoProcesador
                     continue;
                 }
 
+                // Gastro/estacionamiento: ampliar analítico a medios 113/211 (además de 111),
+                // para que cierre contra la imputación completa del camino multibanco.
                 $this->acumularAnaliticoPorAsientoControl(
                     $porAsiento,
                     $nro,
@@ -7098,7 +7453,7 @@ class MayorConceptoPeriodoProcesador
                     $cuenta,
                     $mov,
                     $importe,
-                    $incluirMediosCtamov && ! $esReclasificacionDispContra && ! $esVentaMaquinas && ! $esSistemaBCtamov,
+                    $incluirMediosCtamov && ! $esReclasificacionDispContra && ! $esVentaMaquinas,
                 );
             }
         }
@@ -7316,7 +7671,8 @@ class MayorConceptoPeriodoProcesador
 
         $incluir = $this->motor->esCuentaAnaliticoControl($cuenta)
             || ($incluirMediosCobranzaVentaCtamov && $this->esMedioCobranzaCtamovVenta($cuenta, $mov))
-            || ($incluirMediosCobranzaVentaCtamov && $this->esPiernaDirectaCreditoComercialCtamovSistemaB($cuenta, $mov));
+            || ($incluirMediosCobranzaVentaCtamov && $this->esPiernaDirectaCreditoComercialCtamovSistemaB($cuenta, $mov))
+            || ($incluirMediosCobranzaVentaCtamov && $mov === 'D' && $this->esCuentaPasivaPublicoCtamovSistemaB($cuenta));
 
         if (! $incluir) {
             return;

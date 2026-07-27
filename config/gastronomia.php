@@ -223,6 +223,16 @@ return [
     ],
 
     /**
+     * Purga diaria de storage/app/anita_audit_cache y anita_import_cache (mtime > N días).
+     * Comando: gastronomia:purge-anita-caches
+     */
+    'anita_storage_cache_purge' => [
+        'habilitado' => filter_var(env('GASTRONOMIA_ANITA_CACHE_PURGE_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('GASTRONOMIA_ANITA_CACHE_PURGE_HORA', '03:40'),
+        'dias' => max(1, (int) env('GASTRONOMIA_ANITA_CACHE_PURGE_DIAS', 7)),
+    ],
+
+    /**
      * Reporte mensual solo Anita (venta/vengrav/ctamov/rendg) — CSV por mail.
      */
     'auditoria_mes_totales_anita' => [
@@ -291,6 +301,15 @@ return [
          * Default 1: el Informix flash del mismo día suele demorar; se concilia flash/rendg/ERP del día anterior.
          */
         'control_flash_jornada_offset_dias' => max(0, (int) env('GASTRONOMIA_CONCILIACION_CONTROL_FLASH_OFFSET_DIAS', 1)),
+        /**
+         * Anita Informix no discrimina vending en el flash: flash_ayb = AyB + vending.
+         * true (default): FLASH-GASTRO compara flash_ayb vs (gastro + vending) ERP/Rendg.
+         * false: cuando el flash operativo viva en ERP con vending discriminado.
+         */
+        'control_flash_ayb_incluye_vending' => filter_var(
+            env('GASTRONOMIA_CONCILIACION_CONTROL_FLASH_AYB_INCLUYE_VENDING', true),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
     ],
 
     /**
@@ -576,6 +595,38 @@ return [
      * Proceso automático de cierre Waitry (gastronomia:cierre-jornada-waitry-automatico).
      * Deshabilitado por defecto hasta validar en producción con el botón de prueba.
      */
+    /**
+     * Auto-sanado diario del Informe Z desde el proceso (idempotente).
+     * Regenera el Z solo cuando el recomputo desde las órdenes del proceso coincide con lo contabilizado
+     * (Z desactualizado por órdenes tardías post-cierre). Las jornadas donde no coincide se dejan intactas
+     * y quedan marcadas para revisión del asiento en la conciliación diaria.
+     */
+    'regenerar_z_desde_proceso' => [
+        'habilitado' => filter_var(env('GASTRONOMIA_REGENERAR_Z_PROCESO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('GASTRONOMIA_REGENERAR_Z_PROCESO_HORA', '07:45'),
+        'dias_atras' => max(1, (int) env('GASTRONOMIA_REGENERAR_Z_PROCESO_DIAS_ATRAS', 2)),
+    ],
+
+    /**
+     * Auditoría mensual por MEDIO DE COBRO (Z ↔ contabilizado, ERP sin ctamov) enviada por mail a diario.
+     * Cubre las jornadas del mes en curso hasta hoy − dias_atras (default 2: a las 09:15 ayer aún sin asiento).
+     * Rápida: no consulta Anita/ctamov.
+     */
+    'auditoria_medios_mensual' => [
+        'habilitada' => filter_var(env('GASTRONOMIA_AUDITORIA_MEDIOS_MENSUAL_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('GASTRONOMIA_AUDITORIA_MEDIOS_MENSUAL_HORA', '09:15'),
+        'dias_atras' => max(1, (int) env('GASTRONOMIA_AUDITORIA_MEDIOS_MENSUAL_DIAS_ATRAS', 2)),
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('GASTRONOMIA_AUDITORIA_MEDIOS_MENSUAL_EMPRESAS_IDS', '1,2,3')),
+        ))),
+        'email' => env(
+            'GASTRONOMIA_AUDITORIA_MEDIOS_MENSUAL_EMAIL',
+            env('GASTRONOMIA_CONCILIACION_DIARIA_EMAIL', 'sergiogranucci@gmail.com'),
+        ),
+        'tolerancia' => (float) env('GASTRONOMIA_AUDITORIA_MEDIOS_MENSUAL_TOLERANCIA', 0.02),
+    ],
+
     'cierre_jornada_automatico' => [
         'habilitado' => filter_var(env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
         'hora' => env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_HORA', '09:00'),

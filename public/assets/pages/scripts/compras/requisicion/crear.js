@@ -141,6 +141,9 @@ $(function () {
 					$row.find('.codigoarticulo').val('');
 					$row.find('.descripcionarticulo').val('');
 					reqLimpiarCantidadAlternativaHint($row);
+					if (window.ArticuloProveedorOperativo) {
+						window.ArticuloProveedorOperativo.aplicarAFila($row, null, dataArticulo);
+					}
 				}
 				return;
 			}
@@ -153,6 +156,18 @@ $(function () {
 				}
 			}
 			reqEnriquecerUmAltDesdeArticulo($row, dataArticulo);
+			if (window.ArticuloProveedorOperativo && typeof window.ArticuloProveedorOperativo.resolverTrasArticulo === 'function') {
+				var provCab = parseInt($('#proveedor_id').val(), 10) || 0;
+				window.ArticuloProveedorOperativo.resolverTrasArticulo({
+					$tr: $row,
+					dataArticulo: dataArticulo,
+					proveedorCabeceraId: provCab,
+					restrictivo: false,
+					afterApply: function () {
+						$(document).trigger('req:articulo-linea-cargado', [$row, dataArticulo]);
+					}
+				});
+			}
 		}
 	};
 
@@ -178,6 +193,8 @@ $(function () {
 		$clone.find('select.ms-color-id, select.ms-talle-id').val('').attr('data-selected', '');
 		$clone.attr('data-maneja-stock-color-talle', '0');
 		reqLimpiarCantidadAlternativaHint($clone);
+		$clone.find('.linea-proveedor-etiqueta').text('—').attr('title', '');
+		$clone.find('.linea-conversion-hint').addClass('d-none').html('');
 		$clone.removeAttr('data-req-cc-manual data-req-moneda-manual');
 		$clone.find('select').each(function () {
 			$(this).prop('selectedIndex', 0);
@@ -232,7 +249,11 @@ $(function () {
 	});
 
 	$(document).on('input change', '#tabla-articulos-requisicion .cantidad-linea', function () {
-		reqActualizarCantidadAlternativaHint($(this).closest('tr.item-requisicion-articulo'));
+		var $tr = $(this).closest('tr.item-requisicion-articulo');
+		reqActualizarCantidadAlternativaHint($tr);
+		if (window.ArticuloProveedorOperativo) {
+			window.ArticuloProveedorOperativo.actualizarHintConversion($tr);
+		}
 	});
 
 	$(document).on('change', '#tabla-articulos-requisicion .codigoarticulo', function () {
@@ -426,6 +447,9 @@ $(function () {
 				setAvisoArbolEstado('warn', aviso);
 			} else {
 				setAvisoArbolEstado('ok');
+			}
+			if (window.AnitaArbolPanelIa && !Array.isArray(resp)) {
+				window.AnitaArbolPanelIa.render(resp.ai_contexto_arbol || null, '#requisicion-panel-ia-arbol');
 			}
 			if (!rows.length) {
 				$w.append('<tr><td colspan="7" class="text-center text-muted">Sin movimientos registrados en el árbol.</td></tr>');

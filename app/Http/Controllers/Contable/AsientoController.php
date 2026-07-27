@@ -17,6 +17,7 @@ use App\Exports\Contable\AsientoExport;
 use App\Models\Contable\Asiento;
 use App\Services\Contable\AsientoAprobacionService;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
+use App\Support\Contable\AsientoReferenciaAnitaSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -74,10 +75,33 @@ class AsientoController extends Controller
 		if (!$hayAsientos)
 			$this->asientoRepository->sincronizarConAnita();
 
-        $busqueda = $request->busqueda;
+        // Memoria de filtros: si el request trae filtros los usa y persiste; si vuelve
+        // desde editar (URL sin parámetros) restaura el último filtro de la sesión.
+        if ($request->has('busqueda') || $request->has('empresa_id'))
+        {
+            $busqueda = $request->input('busqueda');
+            $empresaId = (int) $request->input('empresa_id', 0);
+            session(['asiento_listado_filtros' => ['busqueda' => $busqueda, 'empresa_id' => $empresaId]]);
+        }
+        else
+        {
+            $filtros = session('asiento_listado_filtros', []);
+            $busqueda = $filtros['busqueda'] ?? null;
+            $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        }
 
-		$asientos = $this->asientoQuery->leeAsiento($busqueda, true);
-        $datas = ['asientos' => $asientos, 'busqueda' => $busqueda];
+		$asientos = $this->asientoQuery->leeAsiento($busqueda, true, $empresaId);
+
+        $datas = [
+            'asientos' => $asientos,
+            'busqueda' => $busqueda,
+            'empresa_id' => $empresaId,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'filtrosQuery' => array_filter([
+                'busqueda' => $busqueda,
+                'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            ], fn ($v) => $v !== null && $v !== ''),
+        ];
 
         return view('contable.asiento.index', $datas);
     }
@@ -89,10 +113,15 @@ class AsientoController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        // Los filtros llegan por query params (busqueda, empresa_id); se conserva el
+        // segmento de ruta {busqueda} por compatibilidad con enlaces antiguos.
+        $busqueda = $request->input('busqueda', $busqueda);
+        $empresaId = (int) $request->input('empresa_id', 0);
+
         switch($formato)
         {
         case 'PDF':
-            $asientos = $this->asientoQuery->leeAsiento($busqueda, false);
+            $asientos = $this->asientoQuery->leeAsiento($busqueda, false, $empresaId);
 
             $view =  \View::make('contable.asiento.listado', compact('asientos'))
                         ->render();
@@ -108,20 +137,18 @@ class AsientoController extends Controller
 
         case 'EXCEL':
             return (new AsientoExport($this->asientoQuery))
-                        ->parametros($busqueda)
+                        ->parametros($busqueda, $empresaId)
                         ->download('asiento.xlsx');
             break;
 
         case 'CSV':
             return (new AsientoExport($this->asientoQuery))
-                        ->parametros($busqueda)
+                        ->parametros($busqueda, $empresaId)
                         ->download('asiento.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   
 
-        $datas = ['asientos' => $asientos, 'busqueda' => $busqueda];
-
-		return view('contable.asiento.indexp', $datas);       
+        return redirect()->route('asiento');
     }
 
     public function imprimirPdf($id)
@@ -190,6 +217,7 @@ class AsientoController extends Controller
         }
 
         $data = $request->all();
+        $data = AsientoReferenciaAnitaSupport::aplicarAPayload($data);
         if ($evaluacion['requiere_aprobacion']) {
             $data['estado_aprobacion'] = Asiento::ESTADO_APROBACION_PENDIENTE;
             $data['cuentas_no_autorizadas'] = json_encode($evaluacion['cuentas_no_autorizadas']);
@@ -258,6 +286,7 @@ class AsientoController extends Controller
         }
 
 		$data = $this->asientoRepository->find($id);
+        $asiento_referencias = AsientoReferenciaAnitaSupport::etiquetasDesdeAsiento($data);
 
         $tipoasiento_query = $this->tipoasientoRepository->all();
         $moneda_query = $this->monedaRepository->all();
@@ -265,8 +294,9 @@ class AsientoController extends Controller
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
 
-        return view('contable.asiento.editar', compact('data', 
-                                                    'tipoasiento_query', 'moneda_query', 
+        return view('contable.asiento.editar', compact('data',
+                                                    'asiento_referencias',
+                                                    'tipoasiento_query', 'moneda_query',
                                                     'empresa_query', 'cuentacontable_query',
                                                     'centrocosto_query'));
     }
@@ -288,8 +318,11 @@ class AsientoController extends Controller
         DB::beginTransaction();
         try
         {
+            $existente = $this->asientoRepository->find($id);
+            $data = AsientoReferenciaAnitaSupport::conservarFksOrigenProceso($request->all(), $existente);
+            $data = AsientoReferenciaAnitaSupport::aplicarAPayload($data);
             // Graba asiento
-            $asiento = $this->asientoRepository->update($request->all(), $id);
+            $asiento = $this->asientoRepository->update($data, $id);
 
             if ($asiento === 'Error')
                 throw new Exception('Error en grabacion anita.');

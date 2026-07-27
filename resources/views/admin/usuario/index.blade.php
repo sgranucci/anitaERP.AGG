@@ -15,6 +15,11 @@ Usuarios
             <div class="card-header">
                 <h3 class="card-title">Usuarios</h3>
                 <div class="card-tools">
+                    @if (can('importar-usuarios', false))
+                        <a href="{{ route('crear_importacion_usuario') }}" class="btn btn-outline-success btn-sm">
+                            <i class="fa fa-fw fa-file-excel"></i> Carga masiva Excel
+                        </a>
+                    @endif
                     <a href="{{route('crear_usuario')}}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
                     </a>

@@ -138,6 +138,24 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
         }
 
+        $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
+        if ($facturaAnticipada) {
+            $tieneCapex = ComprobanteProveedorFacturaAnticipadaSupport::ocTieneCapex($comprobante->ordencompras);
+            $claveAnticipo = ComprobanteProveedorFacturaAnticipadaSupport::claveCuentaAnticipo($tieneCapex);
+            $cuentaAnticipoId = CuentaAutomaticaResolver::resolverId(
+                (int) $comprobante->empresa_id,
+                $claveAnticipo
+            );
+            if (! $cuentaAnticipoId) {
+                $avisos[] = [
+                    'tipo' => 'anticipo_sin_config',
+                    'mensaje' => $tieneCapex
+                        ? 'OC anticipada con Capex: falta configurar la cuenta de anticipo a proveedores bienes de uso para la empresa.'
+                        : 'OC anticipada sin Capex: falta configurar la cuenta de anticipo a proveedores (factura anticipada) para la empresa.',
+                ];
+            }
+        }
+
         foreach ($comprobante->comprobante_proveedor_conceptos as $linea) {
             $concepto = $linea->concepto_ivacompras;
             if (! $concepto) {
@@ -152,6 +170,11 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $tipoConcepto = (string) ($concepto->tipoconcepto ?? '');
 
             if ($modoAsignaRecepcion && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+                continue;
+            }
+
+            // Neto de factura anticipada: usa cuenta automática de anticipo, no la del concepto.
+            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 continue;
             }
 

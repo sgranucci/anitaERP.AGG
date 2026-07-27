@@ -3,7 +3,7 @@
     $codigosIniciales = collect($cuentasIniciales)->pluck('codigo')->filter()->implode(',');
 @endphp
 <div class="form-group row mb-2" id="mpc-cuentas-filtro">
-    <label class="col-lg-2 control-label">Cuentas</label>
+    <label class="col-lg-2 control-label text-right">Cuentas</label>
     <div class="col-lg-9">
         <input type="hidden" name="cuentas" id="mpc_cuentas" value="{{ old('cuentas', $codigosIniciales) }}">
 

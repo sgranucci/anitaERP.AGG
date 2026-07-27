@@ -38,6 +38,14 @@ final class SicoreMayorComparableSupport
         '/\bPRESENTACI[OÓ]N\s+SICORE\b/iu',
         '/\bPAGO\s+SICORE\b/iu',
         '/\bDDJJ\s+SICORE\b/iu',
+        // IIBB / ARBA: pago de liquidación quincenal (no es generación de retención).
+        '/\bRETENCIONES?\s+ARBA\b/iu',
+        '/\bPERCEPCIONES?\s+ARBA\b/iu',
+        '/\bARBA\s*[12]Q\b/iu',
+        '/\bIIBB\s*[12]Q\b/iu',
+        '/\bPAGO\s+(DE\s+)?(RETENCIONES?\s+|PERCEPCIONES?\s+)?ARBA\b/iu',
+        '/\bPRESENTACI[OÓ]N\s+(ARBA|IIBB)\b/iu',
+        '/\bDDJJ\s+(ARBA|IIBB)\b/iu',
         '/^RECLA\b/iu',
         '/\bRECLASIF/iu',
     ];
@@ -193,6 +201,9 @@ final class SicoreMayorComparableSupport
         if (str_contains($patron, 'COMPENSACI')) {
             return 'compensacion_sicore';
         }
+        if (str_contains($patron, 'ARBA') || str_contains($patron, 'IIBB')) {
+            return 'pago_arba';
+        }
         if (str_contains($patron, '[12]Q') || str_contains($patron, 'PRESENTACI') || str_contains($patron, 'PAGO') || str_contains($patron, 'DDJJ')) {
             return 'pago_sicore';
         }
@@ -201,6 +212,9 @@ final class SicoreMayorComparableSupport
         }
         if (str_contains($upper, 'SICORE')) {
             return 'pago_sicore';
+        }
+        if (str_contains($upper, 'ARBA') || str_contains($upper, 'IIBB')) {
+            return 'pago_arba';
         }
 
         return 'excluido';

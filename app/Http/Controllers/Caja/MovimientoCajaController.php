@@ -39,20 +39,35 @@ class MovimientoCajaController extends Controller
 
         $busqueda = $request->busqueda;
 
-        // Verifica asignacion de cajero para el usuario
+        // Asignación diaria (Crown) o caja desde config PC / default (AGG)
         $usuario_id = Auth::user()->id;
 
         $caja_asignacion = $this->caja_asignacionQuery->leeAsignacionPorUsuario($usuario_id, Carbon::now());
 
-        if ($caja_asignacion)
+        if ($caja_asignacion) {
             $caja_id = $caja_asignacion->caja_id;
+        } else {
+            [$cajaResueltaId, $cajaNombre] = \App\Support\Caja\CajaRecepcionPcSupport::resolver(null, $request);
+            if ($cajaResueltaId > 0) {
+                $caja_id = $cajaResueltaId;
+                $caja_asignacion = (object) [
+                    'caja_id' => $cajaResueltaId,
+                    'cajas' => (object) ['nombre' => $cajaNombre],
+                ];
+            }
+        }
 
         if (!isset($caja_id))
         {
             if (can('supervisor-movimientos-caja'))
                 $caja_id = 0;
-            else
-                return view('caja.movimientocaja.index')->with('mensaje', 'No tiene caja asignada');
+            else {
+                $mensaje = \App\Support\Caja\CajaRecepcionPcSupport::requiereAsignacion()
+                    ? 'No tiene caja asignada'
+                    : 'No se pudo determinar la caja de recepción (config PC / caja default).';
+
+                return view('caja.movimientocaja.index')->with('mensaje', $mensaje);
+            }
         }
 
         $caja_movimiento = $this->caja_movimientoQuery->leeCaja_Movimiento_Cuentacaja($busqueda, $caja_id, true);

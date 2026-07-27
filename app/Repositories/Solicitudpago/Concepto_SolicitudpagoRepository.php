@@ -93,6 +93,75 @@ class Concepto_SolicitudpagoRepository implements Concepto_SolicitudpagoReposito
         return $this->model->newQuery()->where('codigo', $codigo)->first();
     }
 
+    public function listadoOperativoParaConsulta(?string $consulta = null, ?int $sectorId = null)
+    {
+        $query = $this->model->newQuery()
+            ->with('sectores:id,codigo,nombre')
+            ->where('estado', ConceptoSolicitudpagoEstados::ACTIVO);
+
+        if ($sectorId !== null && $sectorId > 0) {
+            $query->where('sector_solicitudpago_id', $sectorId);
+        }
+
+        $consulta = strtoupper(trim((string) $consulta));
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('codigo', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhereHas('sectores', function ($sq) use ($consulta) {
+                        $sq->where('codigo', 'LIKE', '%'.$consulta.'%')
+                            ->orWhere('nombre', 'LIKE', '%'.$consulta.'%');
+                    });
+            });
+        }
+
+        return $query->orderBy('codigo')->limit(200)->get();
+    }
+
+    public function findOperativoPorCodigo(int $codigo, ?int $sectorId = null)
+    {
+        $query = $this->model->newQuery()
+            ->with('sectores:id,codigo,nombre')
+            ->where('codigo', $codigo)
+            ->where('estado', ConceptoSolicitudpagoEstados::ACTIVO);
+
+        if ($sectorId !== null && $sectorId > 0) {
+            $query->where('sector_solicitudpago_id', $sectorId);
+        }
+
+        return $query->first();
+    }
+
+    public function cuentasTemplateParaSolicitud(int $conceptoId, ?int $empresaId = null): array
+    {
+        $concepto = $this->model->newQuery()
+            ->with(['cuentas.empresas:id,nombre', 'cuentas.cuentacontables:id,codigo,nombre', 'cuentas.centrocostos:id,codigo,nombre'])
+            ->find($conceptoId);
+
+        if ($concepto === null) {
+            return [];
+        }
+
+        $cuentas = $concepto->cuentas;
+        if ($empresaId !== null && $empresaId > 0) {
+            $cuentas = $cuentas->where('empresa_id', $empresaId)->values();
+        }
+
+        return $cuentas->map(static function ($fila) {
+            $cuenta = $fila->cuentacontables;
+
+            return [
+                'empresa_id' => $fila->empresa_id,
+                'cuentacontable_id' => $fila->cuentacontable_id,
+                'centrocosto_id' => $fila->centrocosto_id,
+                'debe_haber' => strtoupper((string) ($fila->debe_haber ?? 'D')) === 'H' ? 'H' : 'D',
+                'monto' => 0,
+                'codigo' => optional($cuenta)->codigo,
+                'nombre' => optional($cuenta)->nombre,
+            ];
+        })->values()->all();
+    }
+
     public function guardarCompleto(array $data, ?int $id = null)
     {
         return DB::transaction(function () use ($data, $id) {

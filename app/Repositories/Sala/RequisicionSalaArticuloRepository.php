@@ -99,4 +99,34 @@ class RequisicionSalaArticuloRepository implements RequisicionSalaArticuloReposi
         }
         $queryEliminar->delete();
     }
+
+    public function syncDatosMenoresFromRequest(array $data, int $requisicion_sala_id): void
+    {
+        if (! isset($data['requisicion_sala_articulo_ids']) || ! is_array($data['requisicion_sala_articulo_ids'])) {
+            return;
+        }
+
+        $idsEntrantes = $data['requisicion_sala_articulo_ids'];
+        $n = count($idsEntrantes);
+        for ($i = 0; $i < $n; $i++) {
+            $idLinea = $idsEntrantes[$i] ?? null;
+            $idLinea = ($idLinea === null || $idLinea === '') ? null : (int) $idLinea;
+            if ($idLinea === null || $idLinea <= 0) {
+                continue;
+            }
+
+            $registro = $this->model->where('id', $idLinea)
+                ->where('requisicion_sala_id', $requisicion_sala_id)
+                ->first();
+            if (! $registro) {
+                continue;
+            }
+
+            $registro->update([
+                'detalle' => $data['detalle_articulos'][$i] ?? ($registro->detalle ?? ''),
+                'uid' => $data['uids'][$i] ?? ($registro->uid ?? ''),
+                'numeroparte' => $data['numeropartes'][$i] ?? ($registro->numeroparte ?? ''),
+            ]);
+        }
+    }
 }

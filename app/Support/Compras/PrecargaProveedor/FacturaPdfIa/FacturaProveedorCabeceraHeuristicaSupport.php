@@ -125,10 +125,31 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     private function inferirTipoComprobante(string $texto): string
     {
-        if (preg_match('/\bNOTA\s+DE\s+(?:D[EÉ]BITO|DEBITO)\b/iu', $texto)) {
+        // Código de comprobante AFIP en cabecera (COD. 003, Código 008, etc.)
+        if (preg_match('/(?:cod(?:igo|\.)?|c[oó]digo)\s*(?:de\s+)?(?:comp(?:robante)?\.?)?\s*[:#]?\s*0*(\d{1,3})\b/iu', $texto, $m)) {
+            $codigo = (int) $m[1];
+            if (in_array($codigo, [2, 7, 12, 52, 54], true)) {
+                return 'ND';
+            }
+            if (in_array($codigo, [3, 8, 13, 53, 55], true)) {
+                return 'NC';
+            }
+            if (in_array($codigo, [1, 6, 11, 51], true)) {
+                return 'FC';
+            }
+        }
+
+        if (preg_match('/\bNOTA\s+DE\s+(?:D[EÉ]BITO|DEBITO)\b|\bN\.?\s*D[EÉ]BITO\b|\bN\/D\b/iu', $texto)) {
             return 'ND';
         }
-        if (preg_match('/\bNOTA\s+DE\s+CR[EÉ]DITO\b/iu', $texto)) {
+        if (preg_match('/\bNOTA\s+DE\s+CR[EÉ]DITO\b|\bN\.?\s*CR[EÉ]DITO\b|\bN\/C\b/iu', $texto)) {
+            return 'NC';
+        }
+        // Etiqueta corta en título (evitar confundir con "NC" de otras palabras)
+        if (preg_match('/^\s*N\.?\s*D\.?\s*$/imu', $texto) || preg_match('/\bCOMPROBANTE\s*:\s*ND\b/iu', $texto)) {
+            return 'ND';
+        }
+        if (preg_match('/^\s*N\.?\s*C\.?\s*$/imu', $texto) || preg_match('/\bCOMPROBANTE\s*:\s*NC\b/iu', $texto)) {
             return 'NC';
         }
 
@@ -159,11 +180,15 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     private function extraerCae(string $texto): ?string
     {
-        if (preg_match('/CAE\s*(?:N[°ºo]\.?)?[:\s]*(\d{10,20})/iu', $texto, $m)) {
-            return $m[1];
-        }
-        if (preg_match('/\bCAI\s*(?:N[°ºo]\.?)?[:\s]*(\d{10,20})/iu', $texto, $m)) {
-            return $m[1];
+        // C.A.E.: / C-A-E-i / CAE N° — OCR suele separar las letras.
+        $patrones = [
+            '/C[\.\-\s]*A[\.\-\s]*E[\.\-\s]*(?:N[°ºo]\.?)?[:\s]*(\d{10,20})/iu',
+            '/\bCAI\s*(?:N[°ºo]\.?)?[:\s]*(\d{10,20})/iu',
+        ];
+        foreach ($patrones as $patron) {
+            if (preg_match($patron, $texto, $m)) {
+                return $m[1];
+            }
         }
 
         return null;
@@ -171,7 +196,7 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     private function extraerFechaVtoCae(string $texto): ?string
     {
-        if (preg_match('/vto\.?\s*(?:CAE|CAI)[:\s]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/iu', $texto, $m)) {
+        if (preg_match('/vto\.?\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI)\.?\s*:?\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/iu', $texto, $m)) {
             return $this->isoFecha($m[1], $m[2], $m[3]);
         }
 
@@ -180,10 +205,21 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     private function extraerSubtotal(string $texto): ?float
     {
+        if (preg_match(
+            '/SUB\s*TOTAL[^\n]{0,160}TOTAL\s*[\r\n]+\s*(-?[\d.,]+)/iu',
+            $texto,
+            $m
+        )) {
+            $v = $this->importeParser->parsear($m[1]);
+            if ($v !== null) {
+                return $v;
+            }
+        }
+
         $patrones = [
-            '/sub\s*total[:\s]*(-?\d[\d.,]+)/iu',
-            '/importe\s+neto\s+gravado[:\s]*(-?\d[\d.,]+)/iu',
-            '/neto\s+gravado[:\s]*(-?\d[\d.,]+)/iu',
+            '/sub\s*total[^\S\n]*(-?\d[\d.,]+)/iu',
+            '/importe\s+neto\s+gravado[^\S\n]*(-?\d[\d.,]+)/iu',
+            '/neto\s+gravado[^\S\n]*(-?\d[\d.,]+)/iu',
         ];
         foreach ($patrones as $patron) {
             if (preg_match($patron, $texto, $m)) {
@@ -199,8 +235,43 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     private function extraerTotal(string $texto): ?float
     {
-        if (preg_match('/\btotal(?:\s+general)?[:\s]*(-?\d[\d.,]+)/iu', $texto, $m)) {
-            return $this->importeParser->parsear($m[1]);
+        // Preferir "TOTAL $ 1.571.612,21" explícito (no Subtotal/Neto).
+        $filas = preg_split('/\R/u', $texto) ?: [];
+        $mejor = null;
+        foreach ($filas as $fila) {
+            if (preg_match('/sub\s*total|\bneto\b|precio|unitario|bultos/iu', $fila)) {
+                continue;
+            }
+            if (! preg_match('/\btotal(?:es)?\b/iu', $fila)) {
+                continue;
+            }
+            if (preg_match_all('/(?:\$|S\s)?\s*(-?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})|-?\d+[.,]\d{2})/u', $fila, $m)) {
+                foreach ($m[1] as $raw) {
+                    $v = $this->importeParser->parsear($raw);
+                    if ($v !== null && $v >= 50 && ($mejor === null || $v > $mejor)) {
+                        $mejor = $v;
+                    }
+                }
+            }
+        }
+        if ($mejor !== null) {
+            return $mejor;
+        }
+
+        // Pie en tabla (rótulos arriba / importes abajo): el TOTAL es el ÚLTIMO importe.
+        if (preg_match(
+            '/SUB\s*TOTAL[^\n]{0,160}TOTAL\s*[\r\n]+\s*((?:-?[\d.,]+)(?:\s+-?[\d.,]+){2,})/iu',
+            $texto,
+            $m
+        )) {
+            $parts = preg_split('/\s+/', trim($m[1])) ?: [];
+            $ultimo = end($parts);
+            if (is_string($ultimo)) {
+                $v = $this->importeParser->parsear($ultimo);
+                if ($v !== null && $v > 0) {
+                    return $v;
+                }
+            }
         }
 
         return null;

@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Corrige correlatividad CAEA Rebisco PV 30: FAC B 54044–54053
  * (emitidas con fecha/CAEA de 2Q junio) → fecha 15/06/2026 + CAEA 1Q junio.
+ * Solo mueve fecha (= CbteFch). No toca fechajornada (jornada operativa / contable).
  */
 class RebiscoCorregirFechaCaeaPv30JunioQ1 extends Command
 {
@@ -71,7 +72,7 @@ class RebiscoCorregirFechaCaeaPv30JunioQ1 extends Command
         }
 
         $this->info(($dryRun ? '[PREVIEW] ' : '[APLICAR] ').'Rebisco PV30 FAC B '.self::NRO_DESDE.'–'.self::NRO_HASTA);
-        $this->line('Destino: fecha/jornada '.self::FECHA_NUEVA.' | CAEA '.self::CAEA_Q1.' | vto '.self::VTO_CAEA_Q1);
+        $this->line('Destino: fecha (CbteFch; fechajornada no se toca) '.self::FECHA_NUEVA.' | CAEA '.self::CAEA_Q1.' | vto '.self::VTO_CAEA_Q1);
         $this->table(
             ['id', 'nro', 'fecha', 'jornada', 'cae', 'vto_cae'],
             $filas->map(fn ($r) => [
@@ -111,7 +112,7 @@ class RebiscoCorregirFechaCaeaPv30JunioQ1 extends Command
                 ->whereIn('id', $ids)
                 ->update([
                     'fecha' => self::FECHA_NUEVA,
-                    'fechajornada' => self::FECHA_NUEVA,
+                    // fechajornada NO se modifica: jornada operativa / cierre contable.
                     'cae' => self::CAEA_Q1,
                     'fechavencimientocae' => self::VTO_CAEA_Q1,
                     'updated_at' => now(),
@@ -205,7 +206,6 @@ class RebiscoCorregirFechaCaeaPv30JunioQ1 extends Command
             ->where('venta.codigo', 'like', 'FAC B%')
             ->where(function ($q): void {
                 $q->where('venta.fecha', '!=', self::FECHA_NUEVA)
-                    ->orWhere('venta.fechajornada', '!=', self::FECHA_NUEVA)
                     ->orWhere('venta.cae', '!=', self::CAEA_Q1)
                     ->orWhere('venta.fechavencimientocae', '!=', self::VTO_CAEA_Q1);
             })

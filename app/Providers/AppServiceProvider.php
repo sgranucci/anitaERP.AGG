@@ -52,6 +52,7 @@ class AppServiceProvider extends ServiceProvider
             $menus = Menu::getMenu(true, $nivelActual);
             $menus = \App\Support\Caja\Estacionamiento\EstacionamientoModuloSupport::filtrarMenuAside($menus);
             $menus = \App\Support\Caja\Bingo\BingoModuloSupport::filtrarMenuAside($menus);
+            $menus = \App\Support\Caja\CajaRecepcionPcSupport::filtrarMenuAside($menus);
             $view->with('menusComposer', $menus);
 
             if (auth()->check()) {
@@ -524,6 +525,19 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Caja\Estadocheque_BancoRepositoryInterface',
             'App\Repositories\Caja\Estadocheque_BancoRepository',
+        );
+
+        // Ingesta de facturas por correo: driver según config (imap; futuro graph)
+        $this->app->bind(
+            \App\Support\Compras\PrecargaProveedor\Mail\MailboxLectorInterface::class,
+            function () {
+                $driver = (string) config('precarga_comprobante_mail.driver', 'imap');
+
+                return match ($driver) {
+                    'imap' => app(\App\Support\Compras\PrecargaProveedor\Mail\ImapMailboxLector::class),
+                    default => throw new \RuntimeException("Driver de casilla no soportado: {$driver}"),
+                };
+            },
         );
 
         $this->app->bind(
@@ -1018,6 +1032,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Contable\Sicore_Config_CuentaRepositoryInterface',
             'App\Repositories\Contable\Sicore_Config_CuentaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Contable\Iibb_Presentacion_ConfigRepositoryInterface',
+            'App\Repositories\Contable\Iibb_Presentacion_ConfigRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Contable\Iibb_Presentacion_Config_CuentaRepositoryInterface',
+            'App\Repositories\Contable\Iibb_Presentacion_Config_CuentaRepository',
         );
 
         $this->app->bind(
@@ -2020,5 +2044,46 @@ class AppServiceProvider extends ServiceProvider
             'App\Repositories\Produccion\OrdenproduccionRepository',
         );
 
+        $this->registrarPlataformaIa();
+    }
+
+    /**
+     * Plataforma IA transversal (config/ai.php): drivers, gateway, política y registro de skills.
+     */
+    private function registrarPlataformaIa(): void
+    {
+        $this->app->singleton(\App\Services\Ai\AiPolicy::class);
+        $this->app->singleton(\App\Services\Ai\AiDecisionLogger::class);
+
+        // Drivers de modelo: agregar aquí cada nuevo backend.
+        $this->app->tag([
+            \App\Services\Ai\Drivers\OllamaAiDriver::class,
+            \App\Services\Ai\Drivers\HttpAiDriver::class,
+        ], 'ai.drivers');
+
+        $this->app->singleton(\App\Services\Ai\AiGateway::class, function ($app) {
+            return new \App\Services\Ai\AiGateway(
+                $app->tagged('ai.drivers'),
+                $app->make(\App\Services\Ai\AiPolicy::class),
+            );
+        });
+
+        // Skills concretas: etiquetar con 'ai.skills' a medida que se implementen.
+        $this->app->tag([
+            \App\Services\Compras\Ai\ExtraerFacturaProveedorSkill::class,
+            \App\Services\Caja\Ai\ExtraerComprobanteIvaCajaSkill::class,
+            \App\Services\Stock\Ai\ExtraerRemitoRecepcionSkill::class,
+            \App\Services\Contable\Ai\SugerirParesConciliacionBancariaSkill::class,
+            \App\Services\Configuracion\Ai\ExplicarContextoArbolAprobacionSkill::class,
+            \App\Services\Ventas\Ai\ExplicarDiferenciasConciliacionTurnoGastronomiaSkill::class,
+            \App\Services\Ai\ConsultarContextoOperativoSkill::class,
+        ], 'ai.skills');
+
+        $this->app->singleton(\App\Services\Ai\Skills\AiSkillRegistry::class, function ($app) {
+            return new \App\Services\Ai\Skills\AiSkillRegistry(
+                $app->tagged('ai.skills'),
+                $app->make(\App\Services\Ai\AiPolicy::class),
+            );
+        });
     }
 }

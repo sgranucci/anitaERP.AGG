@@ -679,7 +679,7 @@ class MayorConceptoReporteService
      */
     public function aplanarFilasConTotales(array $resultado): array
     {
-        return $this->aplanarFilasInterno($resultado, true);
+        return $this->aplanarFilasInterno($resultado, true, true);
     }
 
     /**
@@ -699,7 +699,7 @@ class MayorConceptoReporteService
      * @param  array<string, mixed>  $resultado
      * @return list<array<string, mixed>>
      */
-    private function aplanarFilasInterno(array $resultado, bool $conTotales): array
+    private function aplanarFilasInterno(array $resultado, bool $conTotales, bool $agruparDetalle = false): array
     {
         $empresaIds = array_values(array_filter(array_map(
             'intval',
@@ -755,7 +755,12 @@ class MayorConceptoReporteService
             $totalConceptoHaber = 0.0;
 
             foreach ($seccion['cuentas'] ?? [] as $cuentaBlock) {
-                foreach ($cuentaBlock['lineas'] ?? [] as $ln) {
+                $lineasBloque = $cuentaBlock['lineas'] ?? [];
+                if ($agruparDetalle) {
+                    $lineasBloque = $this->agruparLineasDetalleEquivalentes($lineasBloque);
+                }
+
+                foreach ($lineasBloque as $ln) {
                     $empresaLinea = (int) ($ln['empresa_id'] ?? $empresaId);
                     $nombreLinea = $empresaLinea > 0
                         ? ($nombresEmpresa[$empresaLinea] ?? '')
@@ -801,6 +806,69 @@ class MayorConceptoReporteService
         }
 
         return $this->enriquecerEnlaces($filas);
+    }
+
+    /**
+     * Une líneas que el usuario ve idénticas (mismo concepto, cuenta, asiento y
+     * comprobante) y que el motor abrió solo por la disponibilidad de origen: en
+     * ventas con varios medios de cobro (caja + tarjetas) cada venta/IVA sale una
+     * vez por medio. Los totales por cuenta y concepto no cambian.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function agruparLineasDetalleEquivalentes(array $lineas): array
+    {
+        if (count($lineas) < 2) {
+            return array_values($lineas);
+        }
+
+        $agrupadas = [];
+        $pesoDisponibilidad = [];
+
+        foreach ($lineas as $linea) {
+            $clave = implode('|', [
+                (int) ($linea['empresa_id'] ?? 0),
+                (int) ($linea['concepto_id'] ?? 0),
+                (int) ($linea['cuenta'] ?? 0),
+                (int) ($linea['fecha'] ?? 0),
+                (int) ($linea['nro_asiento'] ?? 0),
+                (string) ($linea['tipo_comp'] ?? ''),
+                (string) ($linea['comprobante'] ?? ''),
+                (string) ($linea['cheque'] ?? ''),
+                (int) ($linea['nro_oc'] ?? 0),
+                (string) ($linea['emisor'] ?? ''),
+                (string) ($linea['cuit'] ?? ''),
+                (string) ($linea['descripcion'] ?? ''),
+                (string) ($linea['moneda_abrev'] ?? ''),
+                (string) ($linea['cotizacion'] ?? ''),
+            ]);
+
+            $dispLinea = abs((float) ($linea['disp_debe'] ?? 0)) + abs((float) ($linea['disp_haber'] ?? 0));
+
+            if (! isset($agrupadas[$clave])) {
+                $agrupadas[$clave] = $linea;
+                $pesoDisponibilidad[$clave] = $dispLinea;
+
+                continue;
+            }
+
+            foreach (['debe', 'haber', 'disp_debe', 'disp_haber'] as $campo) {
+                $agrupadas[$clave][$campo] = round(
+                    (float) ($agrupadas[$clave][$campo] ?? 0) + (float) ($linea[$campo] ?? 0),
+                    2,
+                );
+            }
+
+            // La disponibilidad mostrada queda en la de mayor peso del grupo.
+            if ($dispLinea > $pesoDisponibilidad[$clave]) {
+                $pesoDisponibilidad[$clave] = $dispLinea;
+                $agrupadas[$clave]['cuenta_disponibilidad'] = $linea['cuenta_disponibilidad'] ?? null;
+                $agrupadas[$clave]['cuenta_disponibilidad_codigo'] = $linea['cuenta_disponibilidad_codigo'] ?? null;
+            }
+        }
+
+        return array_values($agrupadas);
     }
 
     /**

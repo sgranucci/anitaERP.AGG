@@ -73,7 +73,15 @@ class Cuentacontable_Saldo_MesRepository implements Cuentacontable_Saldo_MesRepo
             }
             $deleteQuery->delete();
 
-            /** @var array<string, array{monto: float, monto_local: float, attrs: array<string, mixed>}> $aggregates */
+            /** @var array<string, array{
+             *   monto: float,
+             *   monto_local: float,
+             *   debe: float,
+             *   haber: float,
+             *   debe_local: float,
+             *   haber_local: float,
+             *   attrs: array<string, mixed>
+             * }> $aggregates */
             $aggregates = [];
 
             $query = DB::table('asiento_movimiento as am')
@@ -118,6 +126,10 @@ class Cuentacontable_Saldo_MesRepository implements Cuentacontable_Saldo_MesRepo
                     $aggregates[$key] = [
                         'monto' => 0.0,
                         'monto_local' => 0.0,
+                        'debe' => 0.0,
+                        'haber' => 0.0,
+                        'debe_local' => 0.0,
+                        'haber_local' => 0.0,
                         'attrs' => [
                             'empresa_id' => (int) $row->empresa_id,
                             'cuentacontable_id' => (int) $row->cuentacontable_id,
@@ -128,12 +140,22 @@ class Cuentacontable_Saldo_MesRepository implements Cuentacontable_Saldo_MesRepo
                     ];
                 }
 
-                $aggregates[$key]['monto'] += $monto;
-                $aggregates[$key]['monto_local'] += CuentacontableSaldoMesSupport::convertirMontoLocal(
+                $montoLocal = CuentacontableSaldoMesSupport::convertirMontoLocal(
                     $monto,
                     $monedaId,
                     $row->cotizacion,
                 );
+
+                $aggregates[$key]['monto'] += $monto;
+                $aggregates[$key]['monto_local'] += $montoLocal;
+
+                if ($monto > 0) {
+                    $aggregates[$key]['debe'] += $monto;
+                    $aggregates[$key]['debe_local'] += $montoLocal;
+                } else {
+                    $aggregates[$key]['haber'] += abs($monto);
+                    $aggregates[$key]['haber_local'] += abs($montoLocal);
+                }
             }
 
             $now = now();
@@ -141,6 +163,10 @@ class Cuentacontable_Saldo_MesRepository implements Cuentacontable_Saldo_MesRepo
 
             foreach ($aggregates as $item) {
                 $batch[] = array_merge($item['attrs'], [
+                    'debe' => $item['debe'],
+                    'haber' => $item['haber'],
+                    'debe_local' => $item['debe_local'],
+                    'haber_local' => $item['haber_local'],
                     'monto' => $item['monto'],
                     'monto_local' => $item['monto_local'],
                     'created_at' => $now,

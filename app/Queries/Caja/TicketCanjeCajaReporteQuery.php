@@ -53,6 +53,30 @@ final class TicketCanjeCajaReporteQuery
     }
 
     /**
+     * Usuarios que emitieron canjes (para el selector del informe), sin filtrar por fecha ni estado.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public function idsUsuariosEmisores(array $filtros): array
+    {
+        $query = TicketCanjeCaja::query()->from('ticket_canje_caja')->toBase();
+
+        if (! empty($filtros['empresas_asignadas']) && is_array($filtros['empresas_asignadas'])) {
+            $query->whereIn('ticket_canje_caja.empresa_id', $filtros['empresas_asignadas']);
+        }
+        if (! empty($filtros['empresa_id'])) {
+            $query->where('ticket_canje_caja.empresa_id', (int) $filtros['empresa_id']);
+        }
+
+        return $query->whereNotNull('ticket_canje_caja.usuario_id')
+            ->distinct()
+            ->pluck('ticket_canje_caja.usuario_id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
      * @param  array<string, mixed>  $filtros
      */
     private function baseQuery(array $filtros): Builder
@@ -77,6 +101,10 @@ final class TicketCanjeCajaReporteQuery
 
         if (! empty($filtros['empresa_id'])) {
             $query->where('ticket_canje_caja.empresa_id', (int) $filtros['empresa_id']);
+        }
+
+        if (! empty($filtros['usuario_id'])) {
+            $query->where('ticket_canje_caja.usuario_id', (int) $filtros['usuario_id']);
         }
 
         if (! empty($filtros['fecha_desde'])) {

@@ -7,6 +7,12 @@ use App\Models\Caja\InterbankingMovimiento;
 use App\Support\Caja\InterbankingSaldoResolverSupport;
 use App\Models\Contable\ConciliacionBancariaEjecucion;
 use App\Models\Contable\ConciliacionBancariaPar;
+use App\Services\Ai\AiPolicy;
+use App\Services\Ai\Skills\AiSkillContext;
+use App\Services\Ai\Skills\AiSkillRegistry;
+use App\Services\Contable\Ai\SugerirParesConciliacionBancariaSkill;
+use App\Support\Ai\AiAgenteEventoDispatcherSupport;
+use App\Support\Ai\AiAgenteOperativoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCodificacionSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMatcher;
@@ -21,6 +27,8 @@ class ConciliacionBancariaService
 {
     public function __construct(
         private readonly MayorPlanoCuentaReporteService $mayorPlanoService,
+        private readonly AiSkillRegistry $skillRegistry,
+        private readonly AiPolicy $aiPolicy,
     ) {
     }
 
@@ -247,6 +255,97 @@ class ConciliacionBancariaService
             ],
             'usuario_id' => $usuarioId,
         ]);
+
+        $resultado = $this->enriquecerConGobernanzaIa($resultado, $empresaId, $cuentacajaId, $mes, $anio);
+
+        return $resultado;
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    private function enriquecerConGobernanzaIa(
+        array $resultado,
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+    ): array {
+        $skill = SugerirParesConciliacionBancariaSkill::NOMBRE;
+        if (! $this->skillRegistry->tiene($skill) || ! $this->aiPolicy->puedeEjecutar($skill)) {
+            return $resultado;
+        }
+
+        $snapshot = [
+            'pares_nuevos' => $resultado['pares_nuevos'] ?? [],
+            'pendientes_contables' => $resultado['pendientes_contables'] ?? [],
+            'pendientes_banco' => $resultado['pendientes_banco'] ?? [],
+            'diferencia' => $resultado['diferencia'] ?? 0,
+            'suma_pendientes_contables' => $resultado['suma_pendientes_contables'] ?? 0,
+            'suma_pendientes_banco' => $resultado['suma_pendientes_banco'] ?? 0,
+        ];
+
+        $skillResult = $this->skillRegistry->ejecutar($skill, new AiSkillContext(
+            entradas: [
+                'snapshot' => $snapshot,
+                'cuentacaja_id' => $cuentacajaId,
+                'mes' => $mes,
+                'anio' => $anio,
+            ],
+            empresaId: $empresaId,
+            entidadTipo: SugerirParesConciliacionBancariaSkill::ENTIDAD,
+        ));
+
+        if (! $skillResult->ok) {
+            $resultado['ai_anomalias'] = [];
+            $resultado['ai_score'] = null;
+            $resultado['ai_advertencias'] = [$skillResult->error ?? 'No se pudo evaluar anomalías IA.'];
+
+            return $resultado;
+        }
+
+        $resultado['ai_decision_id'] = $skillResult->decisionId;
+        $resultado['ai_score'] = $skillResult->score;
+        $resultado['ai_anomalias'] = $skillResult->datos['anomalias'] ?? [];
+        $resultado['ai_resumen'] = $skillResult->datos['resumen'] ?? [];
+        $resultado['ai_advertencias'] = $skillResult->advertencias;
+
+        $anomalias = is_array($resultado['ai_anomalias']) ? $resultado['ai_anomalias'] : [];
+        if ($anomalias !== []) {
+            $resultado['ai_plan'] = AiAgenteOperativoSupport::planDesdeAnomaliasConciliacion(
+                $anomalias,
+                [
+                    'mes' => $mes,
+                    'anio' => $anio,
+                    'cuentacaja_id' => $cuentacajaId,
+                ]
+            );
+            $evento = AiAgenteEventoDispatcherSupport::registrar([
+                'evento' => AiAgenteOperativoSupport::EVENTO_DESVIO_CONCILIACION,
+                'origen' => 'contable.conciliacion_bancaria',
+                'severidad' => count(array_filter($anomalias, static fn ($a) => ($a['severidad'] ?? '') === 'alta')) > 0
+                    ? 'alta'
+                    : 'media',
+                'entidad_tipo' => 'cuentacaja',
+                'entidad_id' => $cuentacajaId,
+                'empresa_id' => $empresaId,
+                'resumen' => $resultado['ai_plan']['resumen'] ?? (count($anomalias).' anomalía(s) de conciliación'),
+                'payload' => [
+                    'mes' => $mes,
+                    'anio' => $anio,
+                    'anomalias' => count($anomalias),
+                    'ai_decision_id' => $skillResult->decisionId,
+                ],
+                'plan_params' => [
+                    'fecha_desde' => sprintf('%04d-%02d-01', $anio, $mes),
+                    'fecha_hasta' => date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $anio, $mes))),
+                ],
+            ]);
+            if ($evento) {
+                $resultado['ai_agente_evento_id'] = $evento->id;
+            }
+        }
 
         return $resultado;
     }

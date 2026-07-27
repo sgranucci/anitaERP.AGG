@@ -61,6 +61,27 @@ class AyudaManuales
                 'icono' => 'fa-file-invoice',
                 'disponible' => true,
             ],
+            [
+                'modulo' => 'Solicitudes de pago',
+                'bajada' => 'Listado, filtros, planes madre/hijas, cuotas, árbol de aprobación, pago e informe analítico.',
+                'url' => route('manual_solicitudpago'),
+                'icono' => 'fa-money-check-alt',
+                'disponible' => true,
+            ],
+            [
+                'modulo' => 'Contable — Cierres y aperturas',
+                'bajada' => 'Agenda mensual por módulo, cierre general, hora de ejecución, histórico y aperturas temporales.',
+                'url' => route('manual_contable'),
+                'icono' => 'fa-lock',
+                'disponible' => true,
+            ],
+            [
+                'modulo' => 'Plataforma IA (SAP-aligned)',
+                'bajada' => 'Skills, Document AI, panel, gobernanza, HITL, RAG de manuales, MCP, permisos y runbook operativo.',
+                'url' => route('manual_ia'),
+                'icono' => 'fa-magic',
+                'disponible' => true,
+            ],
         ];
     }
 

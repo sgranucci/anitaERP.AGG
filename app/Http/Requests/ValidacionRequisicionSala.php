@@ -35,6 +35,8 @@ class ValidacionRequisicionSala extends FormRequest
             'uids.*' => 'nullable|string|max:50',
             'numeropartes' => 'nullable|array',
             'numeropartes.*' => 'nullable|string|max:50',
+            'detalle_articulos' => 'nullable|array',
+            'detalle_articulos.*' => 'nullable|string|max:2000',
         ];
     }
 

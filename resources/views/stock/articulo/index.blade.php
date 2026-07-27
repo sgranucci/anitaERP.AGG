@@ -78,11 +78,18 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                     'limpiarUrl' => route('articulo'),
                 ])
             </form>
+            <div class="card-body py-2 border-bottom bg-white d-flex flex-wrap align-items-center justify-content-between">
+                <div class="mb-1 mb-md-0">
+                    @include('includes.exportar-tabla-queryparams', [
+                        'ruta' => 'lista_articulo',
+                        'queryparams' => $filtrosQuery ?? [],
+                    ])
+                </div>
+                <div class="mb-1 mb-md-0 ml-auto">
+                    @include('stock.articulo.partials.filtros_externos')
+                </div>
+            </div>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_articulo',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>

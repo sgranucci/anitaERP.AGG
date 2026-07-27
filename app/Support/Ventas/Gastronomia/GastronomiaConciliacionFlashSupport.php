@@ -9,11 +9,17 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Control flash (caja Informix): flash_ayb / flash_estac vs rendgastro neto por unidad de negocio.
+ *
+ * Transición Anita → ERP: Informix no discrimina vending en el flash; flash_ayb = AyB + vending.
+ * Mientras eso sea así, FLASH-GASTRO compara flash_ayb contra (gastro + vending) en ERP/Rendg.
+ * Cuando el flash operativo viva en ERP con vending discriminado, desactivar
+ * `control_flash_ayb_incluye_vending`.
  */
 final class GastronomiaConciliacionFlashSupport
 {
     public function __construct(
         private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroSupport,
+        private readonly GastronomiaConciliacionVendingRendgSupport $vendingSupport,
     ) {
     }
 
@@ -36,6 +42,7 @@ final class GastronomiaConciliacionFlashSupport
 
         $totalesErp = $this->totalesErpGastroEstacionamiento($filasDia);
         $rendgPorUnidad = $this->cargarRendgPorUnidadNegocio($empresaId, $fechaJornada);
+        $vending = $this->cargarVendingParaFlashAyb($empresaId, $fechaJornada, $filasDia);
 
         $flashAyb = round((float) ($flashPrecargado['flash_ayb'] ?? 0), 2);
         $flashEstac = round((float) ($flashPrecargado['flash_estac'] ?? 0), 2);
@@ -48,6 +55,7 @@ final class GastronomiaConciliacionFlashSupport
                 $flashAyb,
                 $tolerancia,
                 $fechaFlashEtiqueta,
+                $vending,
             ),
             $this->armarFilaSegmento(
                 'estacionamiento',
@@ -56,6 +64,7 @@ final class GastronomiaConciliacionFlashSupport
                 $flashEstac,
                 $tolerancia,
                 $fechaFlashEtiqueta,
+                ['erp' => 0.0, 'rendg' => 0.0, 'incluido_en_ayb' => false],
             ),
         ];
     }
@@ -66,6 +75,7 @@ final class GastronomiaConciliacionFlashSupport
      *   ventas_erp_estacionamiento: float
      * }  $totalesErp
      * @param  array{gastro: float|null, estacionamiento: float|null}  $rendgPorUnidad
+     * @param  array{erp: float, rendg: float, incluido_en_ayb: bool}  $vending
      * @return array<string, mixed>
      */
     private function armarFilaSegmento(
@@ -75,15 +85,24 @@ final class GastronomiaConciliacionFlashSupport
         float $flashValor,
         float $tolerancia,
         ?string $fechaFlashEtiqueta = null,
+        array $vending = ['erp' => 0.0, 'rendg' => 0.0, 'incluido_en_ayb' => false],
     ): array {
         $esGastro = $segmento === 'gastro';
+        $incluyeVending = $esGastro && (bool) ($vending['incluido_en_ayb'] ?? false);
+        $vendingErp = $incluyeVending ? round((float) ($vending['erp'] ?? 0), 2) : 0.0;
+        $vendingRendg = $incluyeVending ? round((float) ($vending['rendg'] ?? 0), 2) : 0.0;
 
-        $ventasErp = $esGastro
+        $ventasErpBase = $esGastro
             ? (float) $totalesErp['ventas_erp_gastro']
             : (float) $totalesErp['ventas_erp_estacionamiento'];
-        $rendgNeto = $esGastro
+        $rendgNetoBase = $esGastro
             ? $rendgPorUnidad['gastro']
             : $rendgPorUnidad['estacionamiento'];
+
+        $ventasErp = round($ventasErpBase + $vendingErp, 2);
+        $rendgNeto = $rendgNetoBase === null
+            ? null
+            : round((float) $rendgNetoBase + $vendingRendg, 2);
 
         $flashAyb = $esGastro ? $flashValor : 0.0;
         $flashEstac = $esGastro ? 0.0 : $flashValor;
@@ -109,26 +128,34 @@ final class GastronomiaConciliacionFlashSupport
             ? ' [jornada flash '.$fechaFlashEtiqueta.']'
             : '';
 
+        $descripcion = $esGastro
+            ? ($incluyeVending
+                ? 'Flash gastro: flash_ayb Anita (AyB+vending, sin discriminar) vs ERP/Rendg gastro+vending'
+                : 'Flash gastro: flash_ayb (Informix caja) vs rendgastro salón (AyB)')
+            : 'Flash estacionamiento: flash_estac (Informix caja) vs rendgastro estacionamiento';
+
         return [
             'tipo_fila' => $esGastro ? 'control_flash_gastro' : 'control_flash_estacionamiento',
             'circuito' => 'FLASH',
             'identificador_pc' => $esGastro ? 'FLASH-GASTRO' : 'FLASH-ESTAC',
             'tipo_pv' => 'EMPRESA',
             'pv_codigo' => '—',
-            'descripcion_pc' => ($esGastro
-                ? 'Flash gastro: flash_ayb (Informix caja) vs rendgastro salón (AyB)'
-                : 'Flash estacionamiento: flash_estac (Informix caja) vs rendgastro estacionamiento'
-            ).$sufijoFecha,
+            'descripcion_pc' => $descripcion.$sufijoFecha,
             'pv_cae' => '—',
             'pv_caea' => '—',
             'ventas_erp_cae' => 0.0,
             'ventas_erp_caea' => 0.0,
             'ventas_erp' => $ventasErp,
+            'ventas_erp_gastro_base' => $esGastro ? round($ventasErpBase, 2) : null,
             'ventas_anita_cae' => 0.0,
             'ventas_anita_caea' => 0.0,
             'ventas_anita' => null,
             'rendgastro_z' => $rendgNeto,
             'rendgastro_neto' => $rendgNeto,
+            'rendgastro_gastro_base' => $esGastro && $rendgNetoBase !== null ? round((float) $rendgNetoBase, 2) : null,
+            'vending_erp' => $incluyeVending ? $vendingErp : null,
+            'vending_rendg' => $incluyeVending ? $vendingRendg : null,
+            'flash_ayb_incluye_vending' => $incluyeVending,
             'flash_ayb' => $flashAyb,
             'flash_estac' => $flashEstac,
             'total_flash' => $flashValor,
@@ -143,6 +170,87 @@ final class GastronomiaConciliacionFlashSupport
             'segmento_flash' => $segmento,
             'fecha_flash' => $fechaFlashEtiqueta,
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filasDia
+     * @return array{erp: float, rendg: float, incluido_en_ayb: bool}
+     */
+    private function cargarVendingParaFlashAyb(int $empresaId, string $fechaJornada, array $filasDia): array
+    {
+        if (! $this->flashAybIncluyeVending()) {
+            return ['erp' => 0.0, 'rendg' => 0.0, 'incluido_en_ayb' => false];
+        }
+
+        $vendingErp = $this->vendingErpDesdeFilasOConsulta($empresaId, $fechaJornada, $filasDia);
+        $vendingRendg = $this->vendingRendgDelDia($empresaId, $fechaJornada);
+
+        return [
+            'erp' => $vendingErp,
+            'rendg' => $vendingRendg,
+            'incluido_en_ayb' => true,
+        ];
+    }
+
+    private function flashAybIncluyeVending(): bool
+    {
+        return (bool) config(
+            'gastronomia.conciliacion_diaria_reporte.control_flash_ayb_incluye_vending',
+            true,
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filasDia
+     */
+    private function vendingErpDesdeFilasOConsulta(int $empresaId, string $fechaJornada, array $filasDia): float
+    {
+        foreach ($filasDia as $fila) {
+            if (($fila['tipo_fila'] ?? '') === 'total_vending') {
+                return round((float) ($fila['ventas_erp'] ?? 0), 2);
+            }
+        }
+
+        try {
+            $map = $this->vendingSupport->totalesMaquinavendingErpPorJornada(
+                $empresaId,
+                $fechaJornada,
+                $fechaJornada,
+            );
+
+            return round((float) ($map[$fechaJornada] ?? 0), 2);
+        } catch (\Throwable $e) {
+            Log::warning('gastronomia.conciliacion_diaria_reporte.flash_vending_erp_fallo', [
+                'empresa_id' => $empresaId,
+                'fecha_jornada' => $fechaJornada,
+                'msg' => $e->getMessage(),
+            ]);
+
+            return 0.0;
+        }
+    }
+
+    private function vendingRendgDelDia(int $empresaId, string $fechaJornada): float
+    {
+        $fechaEntera = (int) str_replace('-', '', $fechaJornada);
+        if ($empresaId <= 0 || $fechaEntera <= 0) {
+            return 0.0;
+        }
+
+        try {
+            $cabeceras = $this->rendgastroSupport->listarCabecerasEmpresaFechaDetalle($empresaId, $fechaEntera);
+            $totales = $this->vendingSupport->ventaAnitaVendingDesdeRendg($empresaId, $cabeceras);
+
+            return round((float) ($totales['total'] ?? 0), 2);
+        } catch (\Throwable $e) {
+            Log::warning('gastronomia.conciliacion_diaria_reporte.flash_vending_rendg_fallo', [
+                'empresa_id' => $empresaId,
+                'fecha_jornada' => $fechaJornada,
+                'msg' => $e->getMessage(),
+            ]);
+
+            return 0.0;
+        }
     }
 
     /**

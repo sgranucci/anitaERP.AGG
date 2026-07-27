@@ -1,0 +1,706 @@
+{
+    "cierre_totem_id": 124,
+    "jornada_gastronomia_id": 124,
+    "empresa_id": 3,
+    "detalle_json": {
+        "lineas": [],
+        "auditoria": {
+            "ventana_operativa": "14\/07\/2026 04:38 — 15\/07\/2026 05:20",
+            "snapshot_preview_en": "2026-07-15 05:20:25",
+            "consulta_waitry_rango": "14\/07\/2026 — 15\/07\/2026 (días calendario API Waitry)",
+            "registro_desde_snapshot": true,
+            "waitry_anuladas_descuento": {
+                "total": 0,
+                "cantidad": 0
+            },
+            "cantidad_canceladas_excluidas": 0,
+            "cantidad_anuladas_descuento_excluidas": 0
+        },
+        "resumen_totems": {
+            "tramo": {
+                "tramo_modo": "definitivo_cierre_jornada",
+                "persistido_en": "2026-07-15T05:20:42-03:00",
+                "rango_etiqueta": "Órdenes Waitry #18099603 — #18109971 (nuevas desde #18098668)",
+                "jornada_cierre_en": "2026-07-15T05:20:42-03:00",
+                "tramo_cierre_hasta": "2026-07-15T05:20:11-03:00",
+                "waitry_order_id_desde": 18099603,
+                "waitry_order_id_hasta": 18109971,
+                "waitry_order_id_anterior": 18098667,
+                "tramo_ultimo_ticket_origen": "ultimo_leido"
+            },
+            "por_totem": [
+                {
+                    "detalle": "Totem 1 RSA",
+                    "totem_id": 4,
+                    "por_table_id": [
+                        {
+                            "total_ingreso": 1639400,
+                            "por_medio_pago": [
+                                {
+                                    "tipo": "cash",
+                                    "total": 1639400,
+                                    "cantidad": 205,
+                                    "etiqueta": "Efectivo"
+                                }
+                            ],
+                            "waitry_table_id": 101068,
+                            "cantidad_ordenes": 205,
+                            "waitry_table_name": "C"
+                        },
+                        {
+                            "total_ingreso": 3700,
+                            "por_medio_pago": [
+                                {
+                                    "tipo": "mercadopago",
+                                    "total": 3700,
+                                    "cantidad": 1,
+                                    "etiqueta": "Mercado Pago"
+                                }
+                            ],
+                            "waitry_table_id": 102878,
+                            "cantidad_ordenes": 1,
+                            "waitry_table_name": "Terraza 20"
+                        },
+                        {
+                            "total_ingreso": 389700,
+                            "por_medio_pago": [
+                                {
+                                    "tipo": "credit_card",
+                                    "total": 208600,
+                                    "cantidad": 11,
+                                    "etiqueta": "Posnet (tótem)"
+                                },
+                                {
+                                    "tipo": "totalcoin",
+                                    "total": 181100,
+                                    "cantidad": 14,
+                                    "etiqueta": "QR (Totalcoin \/ tótem)"
+                                }
+                            ],
+                            "waitry_table_id": 103442,
+                            "cantidad_ordenes": 25,
+                            "waitry_table_name": "K"
+                        }
+                    ],
+                    "total_ingreso": 2032800,
+                    "por_medio_pago": [
+                        {
+                            "tipo": "mercadopago",
+                            "total": 3700,
+                            "cantidad": 1,
+                            "etiqueta": "Mercado Pago",
+                            "cuentacaja_label": "GMEP — Mercado pago"
+                        },
+                        {
+                            "tipo": "cash",
+                            "total": 1639400,
+                            "cantidad": 205,
+                            "etiqueta": "Mostrador (integración)",
+                            "cuentacaja_label": "TOTEM — TOTEM"
+                        },
+                        {
+                            "tipo": "credit_card",
+                            "total": 208600,
+                            "cantidad": 11,
+                            "etiqueta": "Posnet (tótem)",
+                            "cuentacaja_label": "GMEP — Mercado pago"
+                        },
+                        {
+                            "tipo": "totalcoin",
+                            "total": 181100,
+                            "cantidad": 14,
+                            "etiqueta": "QR MP (kiosco)",
+                            "cuentacaja_label": "GMEP — Mercado pago"
+                        }
+                    ],
+                    "waitry_table_id": null,
+                    "cantidad_ordenes": 231,
+                    "ubicacion_nombre": "Barra",
+                    "waitry_layout_id": null
+                }
+            ],
+            "total_general": {
+                "total_ingreso": 2032800,
+                "por_medio_pago": [
+                    {
+                        "tipo": "mercadopago",
+                        "total": 3700,
+                        "cantidad": 1,
+                        "etiqueta": "Mercado Pago",
+                        "cuentacaja_label": "GMEP — Mercado pago"
+                    },
+                    {
+                        "tipo": "cash",
+                        "total": 1639400,
+                        "cantidad": 205,
+                        "etiqueta": "Mostrador (integración)",
+                        "cuentacaja_label": "TOTEM — TOTEM"
+                    },
+                    {
+                        "tipo": "credit_card",
+                        "total": 208600,
+                        "cantidad": 11,
+                        "etiqueta": "Posnet (tótem)",
+                        "cuentacaja_label": "GMEP — Mercado pago"
+                    },
+                    {
+                        "tipo": "totalcoin",
+                        "total": 181100,
+                        "cantidad": 14,
+                        "etiqueta": "QR MP (kiosco)",
+                        "cuentacaja_label": "GMEP — Mercado pago"
+                    }
+                ],
+                "cantidad_ordenes": 231
+            }
+        },
+        "informe_z_ordenes": [
+            {
+                "monto": 36400,
+                "placed_at": "2026-07-14 10:35:54.000000",
+                "display_id": "W-14FCBD",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18102303,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 27600,
+                "placed_at": "2026-07-14 12:07:49.000000",
+                "display_id": "W-D574EF",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18103007,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 38800,
+                "placed_at": "2026-07-14 14:13:40.000000",
+                "display_id": "W-29404A",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18104286,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 8200,
+                "placed_at": "2026-07-14 14:33:53.000000",
+                "display_id": "W-4AAAF3",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18104513,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 41400,
+                "placed_at": "2026-07-14 14:47:36.000000",
+                "display_id": "W-C5702B",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18104660,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 21700,
+                "placed_at": "2026-07-14 14:51:06.000000",
+                "display_id": "W-7ACEE8",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18104692,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 34300,
+                "placed_at": "2026-07-14 15:16:26.000000",
+                "display_id": "W-F159B2",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18105135,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 10800,
+                "placed_at": "2026-07-14 16:38:13.000000",
+                "display_id": "W-946951",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18106600,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 5000,
+                "placed_at": "2026-07-14 17:21:38.000000",
+                "display_id": "W-100ECE",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18107132,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 7400,
+                "placed_at": "2026-07-14 19:28:26.000000",
+                "display_id": "W-F80BE2",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18107889,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 5900,
+                "placed_at": "2026-07-14 19:47:32.000000",
+                "display_id": "W-B4D122",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18107984,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 17500,
+                "placed_at": "2026-07-14 20:08:08.000000",
+                "display_id": "W-FB7738",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18108106,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 17500,
+                "placed_at": "2026-07-14 20:12:20.000000",
+                "display_id": "W-8A3A33",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18108125,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 7400,
+                "placed_at": "2026-07-14 21:00:43.000000",
+                "display_id": "W-C82C5E",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18108444,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 17500,
+                "placed_at": "2026-07-14 21:25:36.000000",
+                "display_id": "W-085938",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18108577,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 5900,
+                "placed_at": "2026-07-14 21:41:28.000000",
+                "display_id": "W-3FEFA6",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18108662,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 17500,
+                "placed_at": "2026-07-14 22:10:21.000000",
+                "display_id": "W-85F193",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18108757,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 17500,
+                "placed_at": "2026-07-14 22:12:27.000000",
+                "display_id": "W-2B230C",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18108767,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 17500,
+                "placed_at": "2026-07-14 22:46:59.000000",
+                "display_id": "W-C215D8",
+                "tipo_medio": "credit_card",
+                "medio_label": "Posnet (tótem)",
+                "waitry_order_id": 18108878,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 5900,
+                "placed_at": "2026-07-14 22:51:39.000000",
+                "display_id": "W-F791EE",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18108895,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 7000,
+                "placed_at": "2026-07-14 22:58:04.000000",
+                "display_id": "W-E840F9",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18108914,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 5900,
+                "placed_at": "2026-07-14 23:00:34.000000",
+                "display_id": "W-A76AF3",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18108923,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 3300,
+                "placed_at": "2026-07-14 23:35:19.000000",
+                "display_id": "W-15C981",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18109008,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 5900,
+                "placed_at": "2026-07-15 00:25:16.000000",
+                "display_id": "W-A68889",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18109108,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            },
+            {
+                "monto": 3700,
+                "placed_at": "2026-07-15 00:55:39.000000",
+                "display_id": "W-A49A7F",
+                "tipo_medio": "mercadopago",
+                "medio_label": "Mercado Pago",
+                "waitry_order_id": 18109164,
+                "waitry_table_id": 102878,
+                "waitry_table_name": "Terraza 20",
+                "waitry_layout_name": "Terraza"
+            },
+            {
+                "monto": 5900,
+                "placed_at": "2026-07-15 01:19:26.000000",
+                "display_id": "W-54FE3E",
+                "tipo_medio": "totalcoin",
+                "medio_label": "QR MP (kiosco)",
+                "waitry_order_id": 18109218,
+                "waitry_table_id": 103442,
+                "waitry_table_name": "K",
+                "waitry_layout_name": "Kiosco"
+            }
+        ],
+        "resumen_informe_z": {
+            "tramo": {
+                "tramo_modo": "definitivo_cierre_jornada",
+                "persistido_en": "2026-07-15T05:20:42-03:00",
+                "rango_etiqueta": "Órdenes Waitry #18099603 — #18109971 (nuevas desde #18098668)",
+                "jornada_cierre_en": "2026-07-15T05:20:42-03:00",
+                "tramo_cierre_hasta": "2026-07-15T05:20:11-03:00",
+                "waitry_order_id_desde": 18099603,
+                "waitry_order_id_hasta": 18109971,
+                "waitry_order_id_anterior": 18098667,
+                "tramo_ultimo_ticket_origen": "ultimo_leido"
+            },
+            "por_totem": [
+                {
+                    "detalle": "Totem 1 RSA",
+                    "totem_id": 4,
+                    "por_table_id": [
+                        {
+                            "total_ingreso": 3700,
+                            "por_medio_pago": [
+                                {
+                                    "tipo": "mercadopago",
+                                    "total": 3700,
+                                    "cantidad": 1,
+                                    "etiqueta": "Mercado Pago"
+                                }
+                            ],
+                            "waitry_table_id": 102878,
+                            "cantidad_ordenes": 1,
+                            "waitry_table_name": "Terraza 20"
+                        },
+                        {
+                            "total_ingreso": 389700,
+                            "por_medio_pago": [
+                                {
+                                    "tipo": "posnet_kiosco",
+                                    "total": 208600,
+                                    "cantidad": 11,
+                                    "etiqueta": "Posnet Kiosco"
+                                },
+                                {
+                                    "tipo": "qr_kiosco",
+                                    "total": 181100,
+                                    "cantidad": 14,
+                                    "etiqueta": "QR Kiosco"
+                                }
+                            ],
+                            "waitry_table_id": 103442,
+                            "cantidad_ordenes": 25,
+                            "waitry_table_name": "K"
+                        }
+                    ],
+                    "total_ingreso": 393400,
+                    "por_medio_pago": [
+                        {
+                            "tipo": "mercadopago",
+                            "total": 3700,
+                            "cantidad": 1,
+                            "etiqueta": "Mercado Pago",
+                            "categoria": "mercadopago",
+                            "cuentacaja_label": "GMEP — Mercado pago"
+                        },
+                        {
+                            "tipo": "posnet_kiosco",
+                            "total": 208600,
+                            "cantidad": 11,
+                            "etiqueta": "Posnet Kiosco",
+                            "categoria": "posnet_kiosco",
+                            "cuentacaja_label": "GMEP — Mercado pago"
+                        },
+                        {
+                            "tipo": "qr_kiosco",
+                            "total": 181100,
+                            "cantidad": 14,
+                            "etiqueta": "QR Kiosco",
+                            "categoria": "qr_kiosco",
+                            "cuentacaja_label": "GMEP — Mercado pago"
+                        }
+                    ],
+                    "waitry_table_id": null,
+                    "cantidad_ordenes": 26,
+                    "ubicacion_nombre": "Barra",
+                    "waitry_layout_id": null
+                }
+            ],
+            "total_general": {
+                "total_ingreso": 393400,
+                "por_medio_pago": [
+                    {
+                        "tipo": "mercadopago",
+                        "total": 3700,
+                        "cantidad": 1,
+                        "etiqueta": "Mercado Pago",
+                        "categoria": "mercadopago",
+                        "cuentacaja_label": "GMEP — Mercado pago"
+                    },
+                    {
+                        "tipo": "posnet_kiosco",
+                        "total": 208600,
+                        "cantidad": 11,
+                        "etiqueta": "Posnet Kiosco",
+                        "categoria": "posnet_kiosco",
+                        "cuentacaja_label": "GMEP — Mercado pago"
+                    },
+                    {
+                        "tipo": "qr_kiosco",
+                        "total": 181100,
+                        "cantidad": 14,
+                        "etiqueta": "QR Kiosco",
+                        "categoria": "qr_kiosco",
+                        "cuentacaja_label": "GMEP — Mercado pago"
+                    }
+                ],
+                "cantidad_ordenes": 26
+            }
+        },
+        "informe_z_por_totem": [
+            {
+                "lineas": [
+                    {
+                        "monto": 3700,
+                        "tipo_waitry": "mercadopago",
+                        "cuentacaja_id": 201,
+                        "monto_sistema": 3700,
+                        "monto_informe_z": 3700,
+                        "cuentacaja_codigo": "GMEP",
+                        "cuentacaja_nombre": "Mercado pago"
+                    },
+                    {
+                        "monto": 208600,
+                        "tipo_waitry": "posnet_kiosco",
+                        "cuentacaja_id": 201,
+                        "monto_sistema": 208600,
+                        "monto_informe_z": 208600,
+                        "cuentacaja_codigo": "GMEP",
+                        "cuentacaja_nombre": "Mercado pago"
+                    },
+                    {
+                        "monto": 181100,
+                        "tipo_waitry": "qr_kiosco",
+                        "cuentacaja_id": 201,
+                        "monto_sistema": 181100,
+                        "monto_informe_z": 181100,
+                        "cuentacaja_codigo": "GMEP",
+                        "cuentacaja_nombre": "Mercado pago"
+                    }
+                ],
+                "totem_id": 0,
+                "waitry_table_id": null
+            }
+        ],
+        "transmision_faltante_z": {
+            "modo": "diff_ids",
+            "motivo": "Comandas en ventana de jornada no incluidas en el Informe Z del cierre (transmisión Waitry \/ snapshot de preview).",
+            "comandas": [],
+            "empresa_id": 3,
+            "jornada_id": 124,
+            "calculado_en": "2026-07-15 05:35:56",
+            "diff_totales": 0,
+            "mail_enviado": false,
+            "fecha_jornada": "2026-07-14",
+            "empresa_nombre": "REBISCO S.A.",
+            "total_faltante": 0,
+            "cierre_totem_id": 124,
+            "total_tesoreria": 393400,
+            "cantidad_comandas": 0,
+            "cierre_jornada_en": "2026-07-15 05:20:42",
+            "fecha_jornada_fmt": "14\/07\/2026",
+            "tiene_diferencias": false,
+            "total_z_historico": 393400,
+            "total_z_relectura": 393400,
+            "cierre_jornada_en_fmt": "15\/07\/2026 05:20",
+            "cantidad_ordenes_snapshot": 26,
+            "cantidad_ordenes_relectura": 26
+        }
+    },
+    "informe_z_json": {
+        "totems": [
+            {
+                "lineas": [
+                    {
+                        "monto": 3700,
+                        "tipo_waitry": "mercadopago",
+                        "cuentacaja_id": 201,
+                        "monto_sistema": 3700,
+                        "monto_informe_z": 3700,
+                        "cuentacaja_codigo": "GMEP",
+                        "cuentacaja_nombre": "Mercado pago"
+                    },
+                    {
+                        "monto": 208600,
+                        "tipo_waitry": "posnet_kiosco",
+                        "cuentacaja_id": 201,
+                        "monto_sistema": 208600,
+                        "monto_informe_z": 208600,
+                        "cuentacaja_codigo": "GMEP",
+                        "cuentacaja_nombre": "Mercado pago"
+                    },
+                    {
+                        "monto": 181100,
+                        "tipo_waitry": "qr_kiosco",
+                        "cuentacaja_id": 201,
+                        "monto_sistema": 181100,
+                        "monto_informe_z": 181100,
+                        "cuentacaja_codigo": "GMEP",
+                        "cuentacaja_nombre": "Mercado pago"
+                    }
+                ],
+                "totem_id": 0,
+                "waitry_table_id": null
+            }
+        ],
+        "usuario_id": 202,
+        "conciliacion": {
+            "ok": true,
+            "totems": [
+                {
+                    "ok": true,
+                    "lineas": [
+                        {
+                            "ok": true,
+                            "etiqueta": "Mercado Pago",
+                            "diferencia": 0,
+                            "tipo_waitry": "mercadopago",
+                            "monto_sistema": 3700,
+                            "monto_informe_z": 3700,
+                            "cantidad_sistema": 1
+                        },
+                        {
+                            "ok": true,
+                            "etiqueta": "Posnet Kiosco",
+                            "diferencia": 0,
+                            "tipo_waitry": "posnet_kiosco",
+                            "monto_sistema": 208600,
+                            "monto_informe_z": 208600,
+                            "cantidad_sistema": 11
+                        },
+                        {
+                            "ok": true,
+                            "etiqueta": "QR Kiosco",
+                            "diferencia": 0,
+                            "tipo_waitry": "qr_kiosco",
+                            "monto_sistema": 181100,
+                            "monto_informe_z": 181100,
+                            "cantidad_sistema": 14
+                        }
+                    ],
+                    "detalle": "Salón \/ jornada",
+                    "totem_id": 0,
+                    "total_sistema": 393400,
+                    "total_informe_z": 393400,
+                    "waitry_table_id": null,
+                    "diferencia_total": 0,
+                    "ubicacion_nombre": "Informe Z Waitry"
+                }
+            ],
+            "tolerancia": 0.02
+        },
+        "informe_z_en": "2026-07-15 05:20:42",
+        "usuario_nombre": "Gustavo Enriquez"
+    }
+}

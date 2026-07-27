@@ -127,6 +127,12 @@ class SolicitudpagoAnitaSyncService
             })->all(),
             'ccostos' => Centrocosto::query()->pluck('id', 'codigo')->all(),
             'usuarios' => $usuariosAnita,
+            'centrocostos_usuario' => Usuario::query()
+                ->whereNotNull('centrocosto_id')
+                ->where('centrocosto_id', '>', 0)
+                ->pluck('centrocosto_id', 'id')
+                ->map(fn ($id) => (int) $id)
+                ->all(),
         ];
     }
 
@@ -146,6 +152,11 @@ class SolicitudpagoAnitaSyncService
             $provCodigo = '0';
         }
         $anitaUsuario = (int) ($row->solpm_usuario_umod ?? 0);
+        $usuarioUmodId = $anitaUsuario > 0 ? ($mapas['usuarios'][$anitaUsuario] ?? null) : null;
+        $centrocostoId = null;
+        if ($usuarioUmodId) {
+            $centrocostoId = $mapas['centrocostos_usuario'][(int) $usuarioUmodId] ?? null;
+        }
 
         $fecha = SolicitudpagoAnitaFechaSupport::fechaDesdeAnita($row->solpm_fecha ?? 0)
             ?? now()->toDateString();
@@ -169,8 +180,9 @@ class SolicitudpagoAnitaSyncService
             'observacion' => $this->recortar(trim((string) ($row->solpm_observacion ?? '')), 160) ?: null,
             'estado' => SolicitudpagoEstados::desdeAnita($row->solpm_estado ?? 'E'),
             'sector_solicitudpago_id' => $mapas['sectores'][$sectorCodigo] ?? null,
+            'centrocosto_id' => $centrocostoId,
             'detalle' => $this->recortar(trim((string) ($row->solpm_detalle ?? '')), 180) ?: null,
-            'usuario_umod_id' => $anitaUsuario > 0 ? ($mapas['usuarios'][$anitaUsuario] ?? null) : null,
+            'usuario_umod_id' => $usuarioUmodId,
         ];
     }
 

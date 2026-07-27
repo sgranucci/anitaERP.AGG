@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Solicitudpago;
 
+use App\Models\Solicitudpago\Concepto_Solicitudpago;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Models\Solicitudpago\Solicitudpago_Archivo;
 use App\Models\Solicitudpago\Solicitudpago_Cuenta;
@@ -9,13 +10,16 @@ use App\Models\Solicitudpago\Solicitudpago_Cuota;
 use App\Models\Solicitudpago\Solicitudpago_Estado;
 use App\Services\Solicitudpago\SolicitudpagoAnitaEscrituraService;
 use App\Services\Solicitudpago\SolicitudpagoAnitaSyncService;
+use App\Support\Solicitudpago\ConceptoSolicitudpagoFormaPago;
+use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoListadoFiltros;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
+use App\Support\Solicitudpago\SolicitudpagoVisibilidadSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
 {
@@ -59,13 +63,21 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
         }
 
         $q = $this->model->newQuery()
-            ->with(['empresas', 'proveedores', 'conceptos', 'sectores', 'formapagosol', 'monedas', 'madre'])
+            ->with(['empresas', 'proveedores', 'conceptos', 'sectores', 'centrocostos', 'formapagosol', 'monedas', 'madre'])
             ->withCount([
                 'cuotas as cuotas_pendientes_count' => fn ($qq) => $qq->whereNull('solicitudpago_hija_id'),
+                'cuotas as cuotas_total_count',
+                'hijas as hijas_count',
             ])
             ->orderByDesc('fecha')
             ->orderByDesc('codigo');
 
+        SolicitudpagoVisibilidadSupport::aplicarFiltroListado(
+            $q,
+            'solicitudpago.empresa_id',
+            'solicitudpago.centrocosto_id',
+            SolicitudpagoVisibilidadSupport::forzarAlcanceCentrocostoDesdeFiltros(is_array($filtros) ? $filtros : [])
+        );
         SolicitudpagoListadoFiltros::aplicar($q, $filtros);
 
         return $paginar ? $q->paginate(10) : $q->get();
@@ -106,7 +118,8 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
     {
         $registro = $this->model->newQuery()
             ->with([
-                'empresas', 'proveedores', 'conceptos', 'formapagosol', 'monedas', 'sectores', 'madre',
+                'empresas', 'proveedores', 'conceptos', 'formapagosol', 'monedas', 'sectores', 'centrocostos', 'madre',
+                'hijas:id,codigo,estado,monto,fecha,solicitudpago_madre_id',
                 'cuentas.empresas', 'cuentas.cuentacontables', 'cuentas.centrocostos',
                 'cuotas.hijas',
                 'estados.usuarios',
@@ -246,7 +259,19 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             'detalle' => $this->recortar(trim((string) ($data['detalle'] ?? '')), 180) ?: null,
             'solicitudpago_madre_id' => $this->nullableInt($data['solicitudpago_madre_id'] ?? null),
             'usuario_umod_id' => Auth::id(),
+            // CC de cabecera: en update se conserva. En alta: payload interno (ej. cuota) o CC del usuario en sesión.
+            // No tomar del request del CRUD (ValidacionSolicitudpago no lo incluye).
+            'centrocosto_id' => $existente !== null
+                ? ($existente->centrocosto_id ? (int) $existente->centrocosto_id : null)
+                : ($this->nullableInt($data['centrocosto_id'] ?? null) ?? $this->centrocostoIdUsuarioSesion()),
         ];
+    }
+
+    private function centrocostoIdUsuarioSesion(): ?int
+    {
+        $id = (int) (Auth::user()->centrocosto_id ?? 0);
+
+        return $id > 0 ? $id : null;
     }
 
     /**
@@ -261,6 +286,8 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
         $ccIds = $data['centrocosto_ids'] ?? [];
         $dhs = $data['debe_haberes'] ?? [];
         $montos = $data['montos_cuenta'] ?? [];
+        $montosDebe = $data['montos_debe'] ?? null;
+        $montosHaber = $data['montos_haber'] ?? null;
 
         $n = max(count($empresaIds), count($cuentaIds));
         for ($i = 0; $i < $n; $i++) {
@@ -269,11 +296,30 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             if ($empresaId <= 0 || $cuentaId <= 0) {
                 continue;
             }
-            $dh = strtoupper(trim((string) ($dhs[$i] ?? 'D')));
-            if ($dh !== 'H') {
-                $dh = 'D';
-            }
             $cc = $this->nullableInt($ccIds[$i] ?? null);
+
+            if (is_array($montosDebe) || is_array($montosHaber)) {
+                $debe = (float) str_replace(',', '.', (string) (($montosDebe[$i] ?? '') !== '' ? ($montosDebe[$i] ?? 0) : 0));
+                $haber = (float) str_replace(',', '.', (string) (($montosHaber[$i] ?? '') !== '' ? ($montosHaber[$i] ?? 0) : 0));
+                if ($haber > 0 && $debe <= 0) {
+                    $dh = 'H';
+                    $monto = $haber;
+                } elseif ($debe > 0) {
+                    $dh = 'D';
+                    $monto = $debe;
+                } else {
+                    continue;
+                }
+            } else {
+                $dh = strtoupper(trim((string) ($dhs[$i] ?? 'D')));
+                if ($dh !== 'H') {
+                    $dh = 'D';
+                }
+                $monto = (float) str_replace(',', '.', (string) ($montos[$i] ?? 0));
+                if ($monto <= 0) {
+                    continue;
+                }
+            }
 
             Solicitudpago_Cuenta::query()->create([
                 'solicitudpago_id' => $sp->id,
@@ -281,7 +327,7 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
                 'cuentacontable_id' => $cuentaId,
                 'centrocosto_id' => $cc,
                 'debe_haber' => $dh,
-                'monto' => (float) str_replace(',', '.', (string) ($montos[$i] ?? 0)),
+                'monto' => $monto,
             ]);
         }
     }
@@ -291,7 +337,23 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
      */
     private function guardarCuotas(Solicitudpago $sp, array $data): void
     {
+        $madreId = (int) ($data['solicitudpago_madre_id'] ?? $sp->solicitudpago_madre_id ?? 0);
+        // SP hija: no arma ni borra plan propio; las cuotas viven en la madre.
+        if ($madreId > 0) {
+            return;
+        }
+
         Solicitudpago_Cuota::query()->where('solicitudpago_id', $sp->id)->delete();
+
+        $formaConcepto = null;
+        $conceptoId = (int) ($data['concepto_solicitudpago_id'] ?? $sp->concepto_solicitudpago_id ?? 0);
+        if ($conceptoId > 0) {
+            $formaConcepto = Concepto_Solicitudpago::query()->whereKey($conceptoId)->value('forma_pago');
+            $formaConcepto = $formaConcepto !== null ? (string) $formaConcepto : null;
+        }
+        if (! ConceptoSolicitudpagoFormaPago::requiereCuotas($formaConcepto, $madreId)) {
+            return;
+        }
 
         $nros = $data['nro_cuotas'] ?? [];
         $vtos = $data['fecha_vencimientos_cuota'] ?? [];
@@ -332,9 +394,7 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
                 ->get();
 
             foreach ($aBorrar as $arch) {
-                if ($arch->archivo && Storage::disk('public')->exists($arch->archivo)) {
-                    Storage::disk('public')->delete($arch->archivo);
-                }
+                SolicitudpagoArchivoStorageSupport::eliminar($arch, (int) $sp->codigo);
                 $arch->delete();
             }
         }
@@ -346,16 +406,16 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
 
         $maxLinea = (int) (Solicitudpago_Archivo::query()->where('solicitudpago_id', $sp->id)->max('nro_linea') ?? 0);
         foreach ($nuevos as $file) {
-            if (! is_object($file) || ! method_exists($file, 'store')) {
+            if (! ($file instanceof UploadedFile) || ! $file->isValid()) {
                 continue;
             }
             $maxLinea++;
-            $path = $file->store('solicitudpago/'.$sp->codigo, 'public');
+            $guardado = SolicitudpagoArchivoStorageSupport::guardarUpload($file, (int) $sp->codigo);
             Solicitudpago_Archivo::query()->create([
                 'solicitudpago_id' => $sp->id,
                 'nro_linea' => $maxLinea,
-                'archivo' => $path,
-                'nombre_original' => $file->getClientOriginalName(),
+                'archivo' => $guardado['archivo'],
+                'nombre_original' => $guardado['nombre_original'],
                 'usuario_id' => Auth::id(),
                 'fecha' => now()->toDateString(),
                 'hora' => now()->format('H:i'),

@@ -1,25 +1,37 @@
 <template id="template-renglon-cuenta">
     <tr class="item-cuenta">
         <td>
-            <div class="form-group row" id="cuenta">
+            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;" id="cuenta">
                 <input type="hidden" name="cuenta[]" class="form-control iicuenta" readonly value="1" />
                 <input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="" >
                 <input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="" >
-                <button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">
-                        <i class="fa fa-search text-primary"></i>
+                <button type="button" title="Consulta cuentas contables (F1)" style="padding:1; flex: 0 0 auto;"
+                        class="btn-accion-tabla consultacuentacontable tooltipsC">
+                    <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="" >
+                @if (can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false))
+                    <a href="#"
+                       target="_blank" rel="noopener"
+                       class="btn-accion-tabla btn-link-editar-cuentacontable tooltipsC flex-shrink-0 d-none"
+                       title="Consultar cuenta contable en ABM">
+                        <i class="fa fa-edit"></i>
+                    </a>
+                @endif
+                <input type="text" style="flex: 0 0 100px; width: 100px; height: 38px;"
+                       class="codigocuentacontable form-control" name="codigos[]" value=""
+                       placeholder="C&oacute;d." autocomplete="off">
                 <input type="hidden" class="codigo_previo" name="codigo_previos[]" value="" >
             </div>
-        </td>							
+        </td>
         <td>
-            <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombre form-control" name="nombres[]" value="" readonly >
+            <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombrecuentacontable form-control" name="nombres[]"
+                   value="" readonly placeholder="Descripci&oacute;n">
         </td>
         <td>
             <select name="centrocosto_ids[]" data-placeholder="Centro de costo" class="centrocosto form-control" data-fouc>
                 <option value="">-- Seleccionar --</option>
                 @foreach($centrocosto_query as $key => $value)
-                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                    <option value="{{ $value->id }}">{{ $value->nombre }}</option>
                 @endforeach
             </select>
         </td>
@@ -27,7 +39,7 @@
             <select name="moneda_ids[]" data-placeholder="Moneda" class="moneda form-control" required data-fouc>
                 <option value="">-- Seleccionar --</option>
                 @foreach($moneda_query as $key => $value)
-                    <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>    
+                    <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>
                 @endforeach
             </select>
         </td>

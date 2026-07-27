@@ -24,6 +24,7 @@ class ValidacionSector_Solicitudpago extends FormRequest
                 Rule::unique('sector_solicitudpago', 'codigo')->ignore($id),
             ],
             'nombre' => 'required|string|max:30',
+            'centrocosto_id' => 'nullable|integer|exists:centrocosto,id',
         ];
     }
 
@@ -32,6 +33,7 @@ class ValidacionSector_Solicitudpago extends FormRequest
         return [
             'codigo' => 'código',
             'nombre' => 'nombre',
+            'centrocosto_id' => 'centro de costo',
         ];
     }
 }

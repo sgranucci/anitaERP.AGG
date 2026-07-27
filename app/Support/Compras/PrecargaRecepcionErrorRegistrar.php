@@ -16,6 +16,10 @@ final class PrecargaRecepcionErrorRegistrar
 
     public const ORIGEN_PDF_IA = 'PDF_IA';
 
+    public const ORIGEN_MAIL = 'MAIL';
+
+    public const ORIGEN_BATCH_IA = 'BATCH_IA';
+
     /**
      * @param  array{
      *   origen?: string,
@@ -154,11 +158,50 @@ final class PrecargaRecepcionErrorRegistrar
         ]);
     }
 
+    /**
+     * Desde la ingesta de facturas por correo (compras:ingestar-facturas-mail).
+     *
+     * @param  array<string, mixed>  $contexto
+     */
+    public static function registrarMail(string $fase, string $mensaje, array $contexto = []): void
+    {
+        self::registrar([
+            'origen' => self::ORIGEN_MAIL,
+            'fase' => $fase,
+            'evento' => 'mail.'.$fase,
+            'mensaje' => $mensaje,
+            'numero_oc' => self::extraerString($contexto, ['numero_oc', 'numeroordencompra']),
+            'cuit_proveedor' => self::extraerString($contexto, ['cuit_proveedor']),
+            'cuit_empresa' => self::extraerString($contexto, ['cuit_empresa']),
+            'tipo_comprobante' => self::extraerString($contexto, ['tipo', 'tipo_abreviatura']),
+            'archivo_nombre' => isset($contexto['archivo_nombre']) ? (string) $contexto['archivo_nombre'] : null,
+            'contexto' => $contexto,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $contexto
+     */
+    public static function registrarBatchIa(string $fase, string $mensaje, array $contexto = []): void
+    {
+        self::registrar([
+            'origen' => self::ORIGEN_BATCH_IA,
+            'fase' => $fase,
+            'evento' => 'batch_ia.'.$fase,
+            'mensaje' => $mensaje,
+            'numero_oc' => self::extraerString($contexto, ['numero_oc', 'numeroordencompra']),
+            'archivo_nombre' => isset($contexto['archivo_nombre']) ? (string) $contexto['archivo_nombre'] : null,
+            'contexto' => $contexto,
+        ]);
+    }
+
     public static function etiquetaOrigen(?string $origen): string
     {
         return match ($origen) {
             self::ORIGEN_PDF_IA => 'PDF — IA Anita',
             self::ORIGEN_API => 'Agente / API (IA)',
+            self::ORIGEN_MAIL => 'Correo — IA Anita',
+            self::ORIGEN_BATCH_IA => 'Lote automático — IA Anita',
             default => (string) $origen,
         };
     }

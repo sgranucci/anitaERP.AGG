@@ -31,6 +31,7 @@
                             <th class="width20">ID</th>
                             <th>Nombre</th>
                             <th>Abreviatura</th>
+                            <th>Control cigarrillos</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -40,6 +41,7 @@
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->abreviatura}}</td>
+                            <td>{{ ! empty($data->usa_control_contable_cigarrillos) ? 'Sí' : 'No' }}</td>
                             <td>
                        			@if (can('editar-tipo-articulo', false))
                                 	<a href="{{route('editar_tipoarticulo', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

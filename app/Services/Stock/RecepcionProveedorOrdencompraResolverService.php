@@ -8,6 +8,7 @@ use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Services\Compras\OrdencompraAnitaSyncService;
 use App\Services\Compras\OrdencompraRecepcionCumplimientoService;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
+use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Stock\RecepcionProveedorAccionLineaOc;
 use App\Support\Stock\RecepcionProveedorCentrocostoLineaSupport;
@@ -126,7 +127,19 @@ class RecepcionProveedorOrdencompraResolverService
             : collect();
 
         $articuloIdsOc = $articulosOc->pluck('articulo_id')->filter()->unique()->values()->all();
-        $articulosProveedor = ($proveedorId > 0 && $articuloIdsOc !== [])
+        $apIdsLinea = $articulosOc->pluck('articulo_proveedor_id')->filter()->unique()->values()->all();
+
+        // Solo si hay filas en articulo_proveedor: sin catálogo se usan datos del maestro.
+        $articulosProveedorPorId = $apIdsLinea !== []
+            ? \App\Models\Stock\Articulo_Proveedor::query()
+                ->with('unidadesmedidacompra')
+                ->whereIn('id', $apIdsLinea)
+                ->where('activo', true)
+                ->get()
+                ->keyBy('id')
+            : collect();
+
+        $articulosProveedorPorArticulo = ($proveedorId > 0 && $articuloIdsOc !== [])
             ? \App\Models\Stock\Articulo_Proveedor::query()
                 ->with('unidadesmedidacompra')
                 ->where('proveedor_id', $proveedorId)
@@ -139,7 +152,7 @@ class RecepcionProveedorOrdencompraResolverService
                 ->keyBy('articulo_id')
             : collect();
 
-        $descuentoCabeceraOc = (float) ($oc->descuento ?? 0);
+        $descuentoCabeceraOc = OrdencompraDescuentoSupport::porcentajeEfectivoDesdeOrdencompra($oc);
 
         foreach ($articulosOc as $ocArt) {
             if ((string) ($ocArt->estado_linea_oc ?? \App\Support\Compras\OrdencompraLineaEstados::ACTIVA)
@@ -148,10 +161,26 @@ class RecepcionProveedorOrdencompraResolverService
             }
 
             $articulo = $ocArt->articulos;
+            $apIdLinea = (int) ($ocArt->articulo_proveedor_id ?? 0);
+            $apCatalogo = $apIdLinea > 0
+                ? $articulosProveedorPorId->get($apIdLinea)
+                : $articulosProveedorPorArticulo->get((int) $ocArt->articulo_id);
+
+            $codigoAp = $apCatalogo
+                ? trim((string) ($apCatalogo->codigo_articulo_proveedor ?? ''))
+                : '';
             $coefProveedor = RecepcionProveedorDepositoSupport::coeficienteProveedor(
                 (int) $ocArt->articulo_id,
-                $proveedorId
+                $proveedorId,
+                $codigoAp !== '' ? $codigoAp : null
             );
+            if ($apCatalogo !== null) {
+                $coefAp = (float) ($apCatalogo->coeficiente_conversion ?? 0);
+                if ($coefAp > 0) {
+                    $coefProveedor = $coefAp;
+                }
+            }
+
             $depositoEntregaId = RecepcionProveedorDepositoSupport::depositoEntregaVisible(
                 (int) ($articulo->depositoentrega_id ?? 0) ?: null,
                 $empresaId
@@ -171,7 +200,7 @@ class RecepcionProveedorOrdencompraResolverService
                 [],
                 $articulo,
                 $insumo,
-                $articulosProveedor->get((int) $ocArt->articulo_id)
+                $apCatalogo
             );
 
             $precioLista = null;
@@ -204,6 +233,17 @@ class RecepcionProveedorOrdencompraResolverService
                 $descuentoCabeceraOc,
             );
 
+            $nombreProv = $apCatalogo
+                ? trim((string) ($apCatalogo->nombre_articulo_proveedor ?? ''))
+                : '';
+            $descripcionLinea = $nombreProv !== ''
+                ? $nombreProv
+                : ($articulo->descripcion ?? ($ocArt->detalle ?? ''));
+
+            $codigoProveedor = $codigoAp !== ''
+                ? $codigoAp
+                : trim((string) ($precioLista['codigo_articulo_proveedor'] ?? $articulo->skuproveedor ?? ''));
+
             $lineas[] = [
                 '_empresa_id' => $empresaId,
                 'orden' => $orden++,
@@ -212,6 +252,7 @@ class RecepcionProveedorOrdencompraResolverService
                 'tipo_linea' => RecepcionProveedorDiferenciaSupport::TIPO_OC,
                 'ordencompra_articulo_id' => $ocArt->id,
                 'articulo_id' => $ocArt->articulo_id,
+                'articulo_proveedor_id' => $apCatalogo ? (int) $apCatalogo->id : null,
                 'color_id' => $ocArt->color_id ? (int) $ocArt->color_id : null,
                 'talle_id' => $ocArt->talle_id ? (int) $ocArt->talle_id : null,
                 'color_nombre' => $ocArt->color ? (string) ($ocArt->color->nombre ?? '') : '',
@@ -219,7 +260,7 @@ class RecepcionProveedorOrdencompraResolverService
                 'maneja_stock_color_talle' => (bool) ($articulo->maneja_stock_color_talle ?? false),
                 'tipoarticulo_id' => (int) ($articulo->tipoarticulo_id ?? 0) ?: null,
                 'sku' => $articulo->sku ?? '',
-                'descripcion' => $articulo->descripcion ?? ($ocArt->detalle ?? ''),
+                'descripcion' => $descripcionLinea,
                 'cantidad_oc' => $cantidadOc,
                 'cantidad_recibida' => $recibido,
                 'cantidad' => $cantidadPendiente,
@@ -244,7 +285,7 @@ class RecepcionProveedorOrdencompraResolverService
                 'precio' => $precioNetoOc,
                 'precio_ordencompra' => $precioNetoOc,
                 'precio_lista_proveedor' => $precioLista,
-                'codigo_proveedor' => trim((string) ($precioLista['codigo_articulo_proveedor'] ?? $articulo->skuproveedor ?? '')),
+                'codigo_proveedor' => $codigoProveedor,
                 'moneda_id' => (int) ($ocArt->moneda_id ?: 1),
                 'cotizacion' => RequisicionTotalesCabecera::cotizacionVentaPorMonedaEnFecha(
                     $this->cotizacionQuery,
@@ -288,6 +329,7 @@ class RecepcionProveedorOrdencompraResolverService
                 'empresas', 'proveedores', 'centrocostos',
                 'ordencompra_articulos' => static fn ($q) => $q->orderBy('penvp_orden')->orderBy('id'),
                 'ordencompra_articulos.articulos.unidadesdemedidas',
+                'ordencompra_articulos.articulo_proveedor.unidadesmedidacompra',
                 'ordencompra_articulos.color',
                 'ordencompra_articulos.talle',
                 'ordencompra_articulos.monedas',

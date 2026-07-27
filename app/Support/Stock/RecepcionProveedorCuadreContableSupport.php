@@ -123,6 +123,80 @@ final class RecepcionProveedorCuadreContableSupport
         ];
     }
 
+    /**
+     * True si el asiento ERP difiere del preview en cuentas/importes (aunque los totales cuadren).
+     * Caso típico: OC anticipada con todo el HABER en anticipo en vez de anticipo + provisión.
+     *
+     * @param  Collection<int, object>|iterable<int, object>  $movimientos
+     * @param  array{payload_asiento?: array<string, mixed>}  $preview
+     */
+    public static function lineasDifierenDelPreview(iterable $movimientos, array $preview, ?float $tolerancia = null): bool
+    {
+        $tol = $tolerancia ?? self::tolerancia();
+        $esperadas = self::agregarLineasPayload($preview['payload_asiento'] ?? []);
+        $actuales = self::agregarLineasMovimientos($movimientos);
+
+        $claves = array_unique(array_merge(array_keys($esperadas), array_keys($actuales)));
+        foreach ($claves as $clave) {
+            if (abs(($esperadas[$clave] ?? 0.0) - ($actuales[$clave] ?? 0.0)) >= $tol) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, float> clave "cuentaId|D|H" => importe
+     */
+    private static function agregarLineasPayload(array $payload): array
+    {
+        $out = [];
+        $cuentas = $payload['cuentacontable_ids'] ?? [];
+        $debes = $payload['debes'] ?? [];
+        $haberes = $payload['haberes'] ?? [];
+
+        foreach ($cuentas as $i => $cuentaId) {
+            $ctaId = (int) $cuentaId;
+            $debe = round((float) ($debes[$i] ?? 0), 2);
+            $haber = round((float) ($haberes[$i] ?? 0), 2);
+            if ($debe > 0) {
+                $clave = $ctaId.'|D';
+                $out[$clave] = round(($out[$clave] ?? 0) + $debe, 2);
+            }
+            if ($haber > 0) {
+                $clave = $ctaId.'|H';
+                $out[$clave] = round(($out[$clave] ?? 0) + $haber, 2);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  Collection<int, object>|iterable<int, object>  $movimientos
+     * @return array<string, float>
+     */
+    private static function agregarLineasMovimientos(iterable $movimientos): array
+    {
+        $out = [];
+        foreach ($movimientos as $movimiento) {
+            $monto = round((float) ($movimiento->monto ?? 0), 2);
+            if (abs($monto) < 0.001) {
+                continue;
+            }
+            $ctaId = (int) ($movimiento->cuentacontable_id ?? 0);
+            if ($ctaId <= 0) {
+                continue;
+            }
+            $clave = $ctaId.'|'.($monto > 0 ? 'D' : 'H');
+            $out[$clave] = round(($out[$clave] ?? 0) + abs($monto), 2);
+        }
+
+        return $out;
+    }
+
     private static function formatoImporte(float $importe): string
     {
         return number_format($importe, 2, ',', '.');

@@ -148,7 +148,7 @@ class MayorPlanoCuentaOrdencompraResolver
             }
         }
 
-        if ($emisor !== '' && $nro > 0) {
+        if ($emisor !== '' && $nro > 0 && $tipo !== '') {
             $claveDoc = $this->claveDocumentoCompras($emisor, $tipo, $letra, $sucursal, $nro);
             if ($claveDoc !== '') {
                 foreach ($this->auxpagPorDocumento[$claveDoc] ?? [] as $axp) {
@@ -157,12 +157,18 @@ class MayorPlanoCuentaOrdencompraResolver
                         return $orden;
                     }
                 }
+            }
 
-                if (in_array($tipo, MayorConceptoMemoriaMotor::TIPOS_FACTURA_APLICADA, true)) {
-                    $orden = $this->ordenDesdeDocumentoCompras($emisor, $tipo, $letra, $sucursal, $nro);
-                    if ($orden > 0) {
-                        return $orden;
-                    }
+            // Documento de compras en subdiario/ctamov: cadena aplicped (DNS→PEP→COM, FGA→PEP→COM, etc.).
+            // No limitar a TIPOS_FACTURA_APLICADA: débitos como DNS tienen OC en aplicped
+            // aunque no figuren como factura aplicada en auxpag.
+            if (! MayorPlanoCuentaSupport::esTipoOrdenPago($tipo)
+                && ! $this->mediopagoSupport->esMedioPagoAuxpag($tipo)
+                && ! $this->mediopagoSupport->esAuxpagIgnorado($tipo)
+            ) {
+                $orden = $this->ordenDesdeDocumentoCompras($emisor, $tipo, $letra, $sucursal, $nro);
+                if ($orden > 0) {
+                    return $orden;
                 }
             }
         }

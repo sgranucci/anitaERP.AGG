@@ -3,8 +3,12 @@
 namespace App\Services\Ventas\Gastronomia;
 
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
+use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
+use App\Models\Ventas\TotemWaitryGastronomia;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionMedioPagoSupport;
 use App\Support\Ventas\Waitry\WaitryCobrosPostCierreJornadaSupport;
+use App\Support\Ventas\Waitry\WaitryTotemJornadaResumenSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZTransmisionFaltanteSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
@@ -15,7 +19,118 @@ final class GastronomiaCierreTotemInformeZService
 {
     public function __construct(
         private readonly \App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService $ordenesExternasService,
+        private readonly GastronomiaConciliacionMedioPagoSupport $medioPagoSupport,
     ) {
+    }
+
+    /**
+     * Regenera el Informe Z desde las LÍNEAS DEL PROCESO (fuente del asiento) y lo iguala al Sistema.
+     *
+     * Clasifica la jornada:
+     *  - `ok`: el Z ya refleja las líneas del proceso (nada que hacer).
+     *  - `regenerar`: el Z estaba desactualizado (órdenes tardías) y el recomputo COINCIDE con lo contabilizado
+     *    → seguro regenerarlo (mismo criterio que el fix de la jornada 124).
+     *  - `revisar_asiento`: el recomputo NO coincide con lo contabilizado → el asiento no refleja las órdenes
+     *    reales (p. ej. reclasificación de cobranzas); NO se toca el Z, se marca para revisión del asiento.
+     *
+     * @return array<string, mixed>
+     */
+    public function regenerarInformeZDesdeProceso(int $jornadaId, float $tolerancia = 0.02, bool $persistir = true): array
+    {
+        $cierre = $this->cierrePorJornada($jornadaId);
+        $empresaId = (int) $cierre->empresa_id;
+        $fechaJornada = $cierre->jornada?->fecha_jornada?->format('Y-m-d') ?? '';
+
+        $base = [
+            'jornada_id' => $jornadaId,
+            'cierre_totem_id' => (int) $cierre->id,
+            'empresa_id' => $empresaId,
+            'fecha_jornada' => $fechaJornada,
+        ];
+
+        $snap = GastronomiaCierreJornadaProcesoSnapshot::query()
+            ->where('jornada_gastronomia_id', $jornadaId)
+            ->orderByDesc('id')
+            ->first();
+        if ($snap === null) {
+            return $base + ['decision' => 'sin_snapshot', 'persistido' => false];
+        }
+
+        $payload = is_array($snap->payload) ? $snap->payload : (array) json_decode((string) $snap->payload, true);
+        $lineas = is_array($payload['lineas'] ?? null) ? $payload['lineas'] : [];
+        if ($lineas === []) {
+            return $base + ['decision' => 'sin_lineas', 'persistido' => false];
+        }
+        foreach ($lineas as &$ln) {
+            if (empty($ln['empresa_id'])) {
+                $ln['empresa_id'] = $empresaId;
+            }
+        }
+        unset($ln);
+
+        $totems = TotemWaitryGastronomia::query()->where('empresa_id', $empresaId)->with('ubicacion')->get();
+        $resumen = WaitryTotemJornadaResumenSupport::armarParaInformeZ($totems, $lineas, $empresaId);
+        $recomputado = round((float) ($resumen['total_general']['total_ingreso'] ?? 0), 2);
+
+        $conc = $this->medioPagoSupport->conciliarJornada($empresaId, $fechaJornada, $tolerancia, $cierre);
+        $zActual = round((float) ($conc['total_z'] ?? 0), 2);
+        $contabZ = round((float) ($conc['total_contabilizado_z'] ?? 0), 2);
+
+        // El objetivo es que el Z coincida con lo contabilizado.
+        $zYaCoincide = abs($zActual - $contabZ) <= $tolerancia;
+        // El recomputo desde el proceso confirma el número contabilizado → regenerar es seguro.
+        $recomputadoConfirmaAsiento = abs($recomputado - $contabZ) <= $tolerancia;
+
+        $base += [
+            'z_actual' => $zActual,
+            'z_recomputado' => $recomputado,
+            'contabilizado' => $contabZ,
+            'diff_recomputado_contab' => round($recomputado - $contabZ, 2),
+        ];
+
+        if ($zYaCoincide) {
+            return $base + ['decision' => 'ok', 'persistido' => false];
+        }
+
+        if (! $recomputadoConfirmaAsiento) {
+            return $base + ['decision' => 'revisar_asiento', 'persistido' => false];
+        }
+
+        if (! $persistir) {
+            return $base + ['decision' => 'regenerar', 'persistido' => false];
+        }
+
+        // Regeneración segura (asiento correcto, Z desactualizado): setear Sistema recomputado + igualar Z = Sistema.
+        $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
+        $sistemaAnterior = (float) ($detalle['resumen_informe_z']['total_general']['total_ingreso'] ?? 0);
+        $detalle['resumen_informe_z'] = $resumen;
+        $aud = is_array($detalle['auditoria'] ?? null) ? $detalle['auditoria'] : [];
+        $aud['resumen_informe_z_recomputado_proceso_en'] = now()->format('Y-m-d H:i:s');
+        $aud['resumen_informe_z_sistema_anterior'] = round($sistemaAnterior, 2);
+        $aud['resumen_informe_z_motivo'] = 'Regeneración desde líneas del proceso (Z desactualizado por órdenes tardías; recomputo = contabilizado).';
+        $detalle['auditoria'] = $aud;
+        $cierre->detalle_json = $detalle;
+        $cierre->save();
+
+        $out = $this->igualarInformeZConSistemaEnCierre($jornadaId, true);
+
+        $cierre->refresh();
+        $iz = is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [];
+        $iz['correccion_masiva'] = [
+            'motivo' => 'Alinear Z con lo contabilizado recomputando desde líneas del proceso (órdenes tardías omitidas del Z congelado).',
+            'aplicada_en' => now()->format('Y-m-d H:i:s'),
+            'z_anterior' => round((float) ($out['z_anterior'] ?? $zActual), 2),
+            'z_nuevo' => round((float) ($out['z_nuevo'] ?? $recomputado), 2),
+        ];
+        $cierre->informe_z_json = $iz;
+        $cierre->save();
+
+        return $base + [
+            'decision' => 'regenerar',
+            'persistido' => true,
+            'z_nuevo' => round((float) ($out['z_nuevo'] ?? $recomputado), 2),
+            'conciliacion_ok' => (bool) ($out['conciliacion_ok'] ?? false),
+        ];
     }
 
     /**

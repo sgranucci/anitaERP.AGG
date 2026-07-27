@@ -93,13 +93,14 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 		// Graba cuentas contables
 		if (isset($data))
 		{
-			$cuentacontable_ids = $data['cuentacontable_ids'];
-			$centrocosto_ids = $data['centrocosto_ids'];
-			$moneda_ids = $data['moneda_ids'];
-			$debes = $data['debes'];
-			$haberes = $data['haberes'];
-			$cotizaciones = $data['cotizaciones'];
-			$observaciones = $data['observaciones'];
+			$cuentacontable_ids = $data['cuentacontable_ids'] ?? [];
+			$centrocosto_ids = $data['centrocosto_ids'] ?? [];
+			$centrocosto_ids_previo = $data['centrocosto_id_previo'] ?? [];
+			$moneda_ids = $data['moneda_ids'] ?? [];
+			$debes = $data['debes'] ?? [];
+			$haberes = $data['haberes'] ?? [];
+			$cotizaciones = $data['cotizaciones'] ?? [];
+			$observaciones = $data['observaciones'] ?? [];
 
 			if ($funcion == 'update')
 			{
@@ -118,20 +119,24 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 					if ($i < count($cuentacontable_ids))
 					{
 						$monto = 0;
-						if ($debes[$i] != null && $debes[$i] != 0)
-							$monto = $debes[$i];
+						$debeLin = $debes[$i] ?? null;
+						$haberLin = $haberes[$i] ?? null;
+						if ($debeLin != null && $debeLin != 0)
+							$monto = $debeLin;
 
-						if ($haberes[$i] != null && $haberes[$i] != 0)
-							$monto = -$haberes[$i];
+						if ($haberLin != null && $haberLin != 0)
+							$monto = -$haberLin;
+
+						$ccId = $centrocosto_ids[$i] ?? $centrocosto_ids_previo[$i] ?? 0;
 
 						$asiento_movimiento = $this->model->findOrFail($_id[$i])->update([
 									"asiento_id" => $id,
 									"cuentacontable_id" => $cuentacontable_ids[$i],
-									"centrocosto_id" => $this->normalizarCentrocostoId($centrocosto_ids[$i]),
-									"moneda_id" => $moneda_ids[$i],
+									"centrocosto_id" => $this->normalizarCentrocostoId($ccId),
+									"moneda_id" => $moneda_ids[$i] ?? null,
 									"monto" => $monto,
-									"cotizacion" => $cotizaciones[$i],
-									"observacion" => $observaciones[$i]
+									"cotizacion" => $cotizaciones[$i] ?? 0,
+									"observacion" => $observaciones[$i] ?? ''
 									]);
 					}
 				}
@@ -147,24 +152,28 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 				if ($cuentacontable_ids[$i_movimiento] != '') 
 				{
 					$monto = 0;
-					if ($debes[$i_movimiento] != null && $debes[$i_movimiento] != 0)
-						$monto = $debes[$i_movimiento];
+					$debeLin = $debes[$i_movimiento] ?? null;
+					$haberLin = $haberes[$i_movimiento] ?? null;
+					if ($debeLin != null && $debeLin != 0)
+						$monto = $debeLin;
 
-					if ($haberes[$i_movimiento] != null && $haberes[$i_movimiento] != 0)
-						$monto = -$haberes[$i_movimiento];
+					if ($haberLin != null && $haberLin != 0)
+						$monto = -$haberLin;
 
 					if (abs($monto) <= 0.0001) {
 						continue;
 					}
 
+					$ccId = $centrocosto_ids[$i_movimiento] ?? $centrocosto_ids_previo[$i_movimiento] ?? 0;
+
 					$asiento_movimiento = $this->model->create([
 									"asiento_id" => $id,
 									"cuentacontable_id" => $cuentacontable_ids[$i_movimiento],
-									"centrocosto_id" => $this->normalizarCentrocostoId($centrocosto_ids[$i_movimiento]),
-									"moneda_id" => $moneda_ids[$i_movimiento],
+									"centrocosto_id" => $this->normalizarCentrocostoId($ccId),
+									"moneda_id" => $moneda_ids[$i_movimiento] ?? null,
 									"monto" => $monto,
-									"cotizacion" => $cotizaciones[$i_movimiento],
-									"observacion" => $observaciones[$i_movimiento]
+									"cotizacion" => $cotizaciones[$i_movimiento] ?? 0,
+									"observacion" => $observaciones[$i_movimiento] ?? ''
 									]);
 				}
 			}

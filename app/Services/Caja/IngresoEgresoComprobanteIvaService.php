@@ -2,6 +2,7 @@
 
 namespace App\Services\Caja;
 
+use App\Models\Ai\AiDecision;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
@@ -9,6 +10,8 @@ use App\Models\Compras\Concepto_Ivacompra;
 use App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
+use App\Services\Ai\AiDecisionLogger;
+use App\Support\Caja\IngresoEgresoComprobanteIvaAiHashSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
@@ -30,6 +33,7 @@ class IngresoEgresoComprobanteIvaService
         private CuentacontableRepositoryInterface $cuentacontableRepository,
         private IngresoEgresoComprobanteIvaArchivoService $archivoService,
         private IngresoEgresoComprobanteIvaAsientoVinculoService $asientoVinculoService,
+        private AiDecisionLogger $aiDecisionLogger,
     ) {}
 
     /**
@@ -94,6 +98,7 @@ class IngresoEgresoComprobanteIvaService
                     }
                     $this->actualizarComprobante($comprobante, $payload, $empresaId);
                     $this->archivoService->persistirDesdePayload($comprobante->fresh(), $payload);
+                    $this->resolverDecisionIa($payload, (int) $comprobante->id);
                     $conservados[] = $id;
 
                     continue;
@@ -101,6 +106,7 @@ class IngresoEgresoComprobanteIvaService
 
                 $nuevo = $this->crearComprobante($payload, $cajaMovimientoId, $empresaId);
                 $this->archivoService->persistirDesdePayload($nuevo, $payload);
+                $this->resolverDecisionIa($payload, (int) $nuevo->id);
                 $conservados[] = (int) $nuevo->id;
             }
         });
@@ -113,6 +119,30 @@ class IngresoEgresoComprobanteIvaService
         if ($vincularAsiento) {
             $this->asientoVinculoService->vincularPorCajaMovimiento($cajaMovimientoId);
         }
+    }
+
+    /**
+     * Marca confirmada o editada la sugerencia que originó el comprobante.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolverDecisionIa(array $payload, int $comprobanteId): void
+    {
+        $decisionId = $payload['ai_decision_id'] ?? null;
+        if (! is_numeric($decisionId)) {
+            return;
+        }
+
+        $hashSugerencia = trim((string) ($payload['ai_sugerencia_hash'] ?? ''));
+        $hashFinal = IngresoEgresoComprobanteIvaAiHashSupport::calcular($payload);
+        $accion = $hashSugerencia !== '' && hash_equals($hashSugerencia, $hashFinal)
+            ? AiDecision::ACCION_CONFIRMADA
+            : AiDecision::ACCION_EDITADA;
+
+        $this->aiDecisionLogger->resolver((int) $decisionId, $accion, null, [
+            'entidad_id' => $comprobanteId,
+            'entidad_tipo' => 'comprobante_proveedor',
+        ]);
     }
 
     /**

@@ -57,6 +57,9 @@
             <td style="width: 65%; text-align: right;">
                 <h1>{{ $d['titulo'] }}</h1>
                 <div class="subtitulo">{{ $d['subtitulo'] }}</div>
+                @if (! empty($d['puntoventa_cae_etiqueta']))
+                    <div class="subtitulo">Punto de venta (CAE): {{ $d['puntoventa_cae_etiqueta'] }}</div>
+                @endif
                 <div class="muted">Emitido: {{ $d['fecha_emision_comprobante'] }}</div>
             </td>
         </tr>
@@ -243,7 +246,9 @@
         $invCantGlobal = (int) ($totalesTurno['cantidad_invitaciones'] ?? 0);
         $hayNc = $ncCantGlobal > 0 || abs($ncTotalGlobal) >= 0.005;
         $hayInv = $invCantGlobal > 0 || abs($invTotalGlobal) >= 0.005;
-        $tieneMedios = ! empty($totalesTurno['por_medio_pago']);
+        $totalTotemGlobal = (float) ($totalesTurno['total_facturacion_totem'] ?? ($totalesTurno['facturacion_totem']['total'] ?? 0));
+        $hayTotem = $totalTotemGlobal >= 0.005 || ! empty($totalesTurno['facturacion_totem']);
+        $tieneMedios = ! empty($totalesTurno['por_medio_pago']) || $hayTotem;
     @endphp
 
     @if (!empty($d['solo_totales_mozo']))
@@ -310,8 +315,13 @@
         </thead>
         <tbody>
             @foreach ($totalesTurno['por_medio_pago'] ?? [] as $p)
-            <tr>
-                <td>{{ $p['nombre'] ?? $p['codigo'] ?? '—' }}</td>
+            <tr @if (!empty($p['es_facturacion_totem']) || !empty($p['excluido_arqueo'])) style="background:#eef7fb;" @endif>
+                <td>
+                    {{ $p['nombre'] ?? $p['codigo'] ?? '—' }}
+                    @if (!empty($p['es_facturacion_totem']) || !empty($p['excluido_arqueo']))
+                        <span style="font-size:9px; color:#555;"> — no entregar en caja</span>
+                    @endif
+                </td>
                 <td class="num">${{ number_format((float) ($p['total'] ?? 0), 2, ',', '.') }}</td>
             </tr>
             @endforeach

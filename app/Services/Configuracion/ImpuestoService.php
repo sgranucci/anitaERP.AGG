@@ -839,17 +839,9 @@ class ImpuestoService extends FacturacionService
 			return $this->tipoarticuloImpuestoInternoIdCache;
 		}
 
-		$nombre = strtoupper((string) config('facturacion.IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE', 'CIGARRILLO'));
-		if ($nombre === '') {
-			$this->tipoarticuloImpuestoInternoIdResolved = true;
-
-			return $this->tipoarticuloImpuestoInternoIdCache = null;
-		}
-
-		$id = Tipoarticulo::query()->whereRaw('UPPER(nombre) = ?', [$nombre])->value('id');
 		$this->tipoarticuloImpuestoInternoIdResolved = true;
 
-		return $this->tipoarticuloImpuestoInternoIdCache = $id !== null ? (int) $id : null;
+		return $this->tipoarticuloImpuestoInternoIdCache = Tipoarticulo::idControlContableCigarrillos();
 	}
 
 	/**

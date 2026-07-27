@@ -6,6 +6,15 @@ namespace App\Support\Contable\Sicore;
 
 final class SicoreFormatoV8Support
 {
+    /** Orden de pago / retención practicada. */
+    public const COD_COMP_ORDEN_PAGO = 6;
+
+    /**
+     * Devolución / anulación de retención (SICORE ganancias).
+     * Va al inicio del registro (posiciones 1–2); los importes se emiten en positivo.
+     */
+    public const COD_COMP_DEVOLUCION = 8;
+
     /**
      * Genera una línea del archivo SICORE versión 8 (RG 738/99).
      *
@@ -22,25 +31,32 @@ final class SicoreFormatoV8Support
 
         $nroDocumento = self::normalizarDocumento((string) ($reg['nro_documento'] ?? ''));
 
+        // Importes con punto decimal, independiente del locale del sistema (ARCA/ANITA
+        // usan punto; sprintf('%f') respetaría LC_NUMERIC y saldría con coma).
+        $importeComp = self::montoDecimal((float) ($reg['importe_comp'] ?? 0), 16);
+        $baseCalculo = self::montoDecimal((float) ($reg['base_calculo'] ?? 0), 14);
+        $importeRet = self::montoDecimal((float) ($reg['importe'] ?? 0), 14);
+        $porcExcl = self::montoDecimal((float) ($reg['porc_excl'] ?? 0), 6);
+
         return sprintf(
-            '%2d%10s%16d%16.2f%04d%03d%1d%14.2f%10s%02d %14.2f%6.2f%10s%2d%20s%14d',
-            (int) ($reg['cod_comp'] ?? 6),
+            '%2d%10s%16d%16s%04d%03d%1d%14s%10s%02d %14s%6s%10s%2d%20s%14d',
+            (int) ($reg['cod_comp'] ?? self::COD_COMP_ORDEN_PAGO),
             $fechaComp,
             (int) ($reg['nro_comp'] ?? 0),
-            abs((float) ($reg['importe_comp'] ?? 0)),
+            $importeComp,
             (int) ($reg['cod_impuesto'] ?? 0),
             (int) ($reg['cod_regimen'] ?? 0),
             (int) ($reg['cod_operacion'] ?? 1),
-            abs((float) ($reg['base_calculo'] ?? 0)),
+            $baseCalculo,
             $fechaRet,
             (int) ($reg['cod_condicion'] ?? 1),
-            abs((float) ($reg['importe'] ?? 0)),
-            (float) ($reg['porc_excl'] ?? 0),
+            $importeRet,
+            $porcExcl,
             $fechaBoletin,
             (int) ($reg['cod_documento'] ?? 80),
             $nroDocumento,
             (int) ($reg['nro_cert'] ?? 0),
-        )."\n";
+        )."\r\n"; // SIAP/SICORE exige terminador CRLF (Windows); con solo LF rebota por longitud.
     }
 
     /**
@@ -54,6 +70,17 @@ final class SicoreFormatoV8Support
         }
 
         return $out;
+    }
+
+    /**
+     * Formatea un importe con dos decimales y punto decimal (sin separador de miles),
+     * alineado a la derecha en el ancho fijo del campo SICORE. No depende del locale.
+     */
+    public static function montoDecimal(float $valor, int $ancho): string
+    {
+        $texto = number_format(abs($valor), 2, '.', '');
+
+        return str_pad($texto, $ancho, ' ', STR_PAD_LEFT);
     }
 
     public static function fechaLegacy(string $fechaIso): string
@@ -108,8 +135,13 @@ final class SicoreFormatoV8Support
             '01' => 1,
             '02' => 4,
             '03' => 3,
-            default => 6,
+            default => self::COD_COMP_ORDEN_PAGO,
         };
+    }
+
+    public static function esDevolucion(array $reg): bool
+    {
+        return (int) ($reg['cod_comp'] ?? 0) === self::COD_COMP_DEVOLUCION;
     }
 
     public static function tolerancia(): float

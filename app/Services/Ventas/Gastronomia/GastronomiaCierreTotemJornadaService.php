@@ -263,6 +263,20 @@ final class GastronomiaCierreTotemJornadaService
             }
         }
 
+        // Self-heal del tope: las líneas ya vienen acotadas a la ventana [apertura, cierre_en] de la
+        // jornada. Si el watermark persistido (waitry_order_id_hasta) quedó por debajo del último
+        // ticket real —preview anterior al último ticket o salto de numeración Waitry (serie
+        // 1.000.000.000)— su instante corta comandas legítimas de la jornada. Extender el tope al
+        // último ticket por fecha/hora dentro de la ventana para no perderlas en el proceso/asientos.
+        $topeFecha = $this->topeUltimoTicketPorFechaEnLineas($cargado['lineas']);
+        if ($topeFecha['instante'] !== null
+            && ($instanteTope === null || $topeFecha['instante']->greaterThan($instanteTope))) {
+            $instanteTope = $topeFecha['instante'];
+            if ($topeFecha['id'] > 0) {
+                $hasta = max($hasta, $topeFecha['id']);
+            }
+        }
+
         $lineas = array_values(array_filter(
             $cargado['lineas'],
             function (array $l) use ($hasta, $instanteTope) {
@@ -312,6 +326,40 @@ final class GastronomiaCierreTotemJornadaService
     private function waitryOrderIdDeLinea(array $linea): int
     {
         return max(0, (int) ($linea['waitry_order_id'] ?? $linea['order_id'] ?? 0));
+    }
+
+    /**
+     * Último ticket por fecha/hora (placed_at) entre líneas ya acotadas a la ventana de la jornada.
+     * Igual criterio que {@see self::topeUltimaOrdenPorFecha()} pero sobre líneas ERP (no órdenes API):
+     * el watermark se elige por fecha/hora y no por mayor order_id, para no confundir la serie anómala
+     * de Waitry (1.000.000.000) con el último ticket real de la jornada.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return array{id: int, instante: ?Carbon}
+     */
+    private function topeUltimoTicketPorFechaEnLineas(array $lineas): array
+    {
+        $idPorFecha = 0;
+        $instanteTope = null;
+        foreach ($lineas as $l) {
+            if (! is_array($l)) {
+                continue;
+            }
+            $instante = $this->parsearInstanteOrden($l);
+            if ($instante === null) {
+                continue;
+            }
+            $id = $this->waitryOrderIdDeLinea($l);
+            if ($instanteTope === null
+                || $instante->greaterThan($instanteTope)
+                || ($instante->equalTo($instanteTope) && $id > $idPorFecha)
+            ) {
+                $instanteTope = $instante;
+                $idPorFecha = $id;
+            }
+        }
+
+        return ['id' => $idPorFecha, 'instante' => $instanteTope];
     }
 
     /**
@@ -928,17 +976,28 @@ final class GastronomiaCierreTotemJornadaService
             ->where('jornada_gastronomia_id', (int) $jornada->id)
             ->first();
 
-        if ($cierre !== null && (int) $cierre->waitry_order_id_hasta > 0) {
-            $hastaId = (int) $cierre->waitry_order_id_hasta;
-
-            return ['id' => $hastaId, 'instante' => $this->instanteOrdenPorId($ordenesActivas, $hastaId)];
-        }
-
-        return $this->topeUltimaOrdenPorFecha(
+        $porFecha = $this->topeUltimaOrdenPorFecha(
             $ordenesActivas,
             (int) $jornada->empresa_id,
             $jornada->fecha_jornada?->format('Y-m-d') ?? '',
         );
+
+        if ($cierre !== null && (int) $cierre->waitry_order_id_hasta > 0) {
+            $hastaId = (int) $cierre->waitry_order_id_hasta;
+            $instantePersistido = $this->instanteOrdenPorId($ordenesActivas, $hastaId);
+
+            // Self-heal: si la relectura tiene comandas dentro de la ventana de jornada colocadas
+            // después del watermark persistido (quedó bajo por un preview anterior al último ticket
+            // o por un salto de numeración Waitry), extender el tope al último real por fecha/hora.
+            if ($porFecha['instante'] !== null
+                && ($instantePersistido === null || $porFecha['instante']->greaterThan($instantePersistido))) {
+                return $porFecha;
+            }
+
+            return ['id' => $hastaId, 'instante' => $instantePersistido];
+        }
+
+        return $porFecha;
     }
 
     /**

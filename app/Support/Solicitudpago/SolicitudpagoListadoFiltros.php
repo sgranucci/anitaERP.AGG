@@ -8,12 +8,13 @@ use Illuminate\Http\Request;
 
 final class SolicitudpagoListadoFiltros
 {
+    /**
+     * Estado y tratamiento van por selects dedicados del panel (no como campo de texto).
+     */
     public const CAMPOS = [
         'codigo' => ['etiqueta' => 'Código', 'tipo' => 'entero', 'columna' => 'solicitudpago.codigo'],
         'detalle' => ['etiqueta' => 'Detalle', 'tipo' => 'texto', 'columna' => 'solicitudpago.detalle'],
         'beneficiario' => ['etiqueta' => 'Beneficiario', 'tipo' => 'texto', 'columna' => 'solicitudpago.beneficiario'],
-        'estado' => ['etiqueta' => 'Estado', 'tipo' => 'texto', 'columna' => 'solicitudpago.estado'],
-        'tratamiento' => ['etiqueta' => 'Tratamiento', 'tipo' => 'texto', 'columna' => 'solicitudpago.tratamiento'],
         'fecha' => ['etiqueta' => 'Fecha', 'tipo' => 'texto', 'columna' => 'solicitudpago.fecha'],
     ];
 
@@ -39,7 +40,18 @@ final class SolicitudpagoListadoFiltros
     ];
 
     /**
-     * @return array{campo: ?string, operador: string, valor: string, busqueda_rapida: bool, madre_hija: string}
+     * @return array{
+     *     campo: ?string,
+     *     operador: string,
+     *     valor: string,
+     *     busqueda_rapida: bool,
+     *     madre_hija: string,
+     *     estado: string,
+     *     tratamiento: string,
+     *     fecha_desde: string,
+     *     fecha_hasta: string,
+     *     alcance: string
+     * }
      */
     public static function filtrosVacios(): array
     {
@@ -53,6 +65,7 @@ final class SolicitudpagoListadoFiltros
             'tratamiento' => '',
             'fecha_desde' => '',
             'fecha_hasta' => '',
+            'alcance' => SolicitudpagoVisibilidadSupport::ALCANCE_TODAS,
         ];
     }
 
@@ -68,8 +81,23 @@ final class SolicitudpagoListadoFiltros
         $filtros['tratamiento'] = (string) $request->input('tratamiento', '');
         $filtros['fecha_desde'] = (string) $request->input('fecha_desde', '');
         $filtros['fecha_hasta'] = (string) $request->input('fecha_hasta', '');
+        $filtros['alcance'] = self::normalizarAlcance($request->input('alcance'));
 
         return $filtros;
+    }
+
+    public static function normalizarAlcance(mixed $valor): string
+    {
+        $alcance = (string) ($valor ?? SolicitudpagoVisibilidadSupport::ALCANCE_TODAS);
+
+        return $alcance === SolicitudpagoVisibilidadSupport::ALCANCE_MI_CC
+            ? SolicitudpagoVisibilidadSupport::ALCANCE_MI_CC
+            : SolicitudpagoVisibilidadSupport::ALCANCE_TODAS;
+    }
+
+    public static function tieneAlcanceMiCentrocosto(array $filtros): bool
+    {
+        return self::normalizarAlcance($filtros['alcance'] ?? null) === SolicitudpagoVisibilidadSupport::ALCANCE_MI_CC;
     }
 
     public static function tieneCriteriosAplicados(array $filtros): bool
@@ -106,6 +134,9 @@ final class SolicitudpagoListadoFiltros
                 $out[$k] = $filtros[$k];
             }
         }
+        if (self::tieneAlcanceMiCentrocosto($filtros)) {
+            $out['alcance'] = SolicitudpagoVisibilidadSupport::ALCANCE_MI_CC;
+        }
 
         return $out;
     }
@@ -132,6 +163,15 @@ final class SolicitudpagoListadoFiltros
             $query->whereNull('solicitudpago.solicitudpago_madre_id');
         } elseif (($filtros['madre_hija'] ?? '') === 'hijas') {
             $query->whereNotNull('solicitudpago.solicitudpago_madre_id');
+        } elseif (($filtros['madre_hija'] ?? '') === 'madres_con_plan') {
+            $query->whereNull('solicitudpago.solicitudpago_madre_id')
+                ->whereHas('cuotas');
+        } elseif (($filtros['madre_hija'] ?? '') === 'familia') {
+            $query->where(function ($q) {
+                $q->whereNotNull('solicitudpago.solicitudpago_madre_id')
+                    ->orWhereHas('cuotas')
+                    ->orWhereHas('hijas');
+            });
         }
 
         $valor = trim((string) ($filtros['valor'] ?? ''));
@@ -139,12 +179,31 @@ final class SolicitudpagoListadoFiltros
             return $query;
         }
 
+        // Si ya filtró por el select de estado/tratamiento y el texto es solo ese enum,
+        // no AND-ear búsqueda de texto (evita 0 resultados al escribir "autorizada").
+        $estadoSelect = trim((string) ($filtros['estado'] ?? ''));
+        $tratSelect = trim((string) ($filtros['tratamiento'] ?? ''));
+        $estadosValor = self::codigosEnumQueCoinciden(SolicitudpagoEstados::opciones(), $valor);
+        $tratsValor = self::codigosEnumQueCoinciden(SolicitudpagoTratamientos::opciones(), $valor);
+        if ($estadoSelect !== '' && $estadosValor !== [] && $tratsValor === [] && ! self::pareceCodigoOTextoLibre($valor)) {
+            return $query;
+        }
+        if ($tratSelect !== '' && $tratsValor !== [] && $estadosValor === [] && ! self::pareceCodigoOTextoLibre($valor)) {
+            return $query;
+        }
+
         if (! empty($filtros['busqueda_rapida']) || empty($filtros['campo'])) {
-            $query->where(function ($q) use ($valor) {
+            $query->where(function ($q) use ($valor, $estadosValor, $tratsValor) {
                 $q->where('solicitudpago.codigo', 'like', '%'.$valor.'%')
                     ->orWhere('solicitudpago.detalle', 'like', '%'.$valor.'%')
                     ->orWhere('solicitudpago.beneficiario', 'like', '%'.$valor.'%')
                     ->orWhere('solicitudpago.observacion', 'like', '%'.$valor.'%');
+                if ($estadosValor !== []) {
+                    $q->orWhereIn('solicitudpago.estado', $estadosValor);
+                }
+                if ($tratsValor !== []) {
+                    $q->orWhereIn('solicitudpago.tratamiento', $tratsValor);
+                }
                 CoincidenciaFlexibleTexto::aplicar($q, 'solicitudpago.detalle', $valor);
             });
 
@@ -153,6 +212,14 @@ final class SolicitudpagoListadoFiltros
 
         $campo = self::CAMPOS[$filtros['campo']] ?? null;
         if ($campo === null) {
+            // Compat URLs viejas filtro_campo=estado|tratamiento
+            if (($filtros['campo'] ?? '') === 'estado' && $estadosValor !== []) {
+                return $query->whereIn('solicitudpago.estado', $estadosValor);
+            }
+            if (($filtros['campo'] ?? '') === 'tratamiento' && $tratsValor !== []) {
+                return $query->whereIn('solicitudpago.tratamiento', $tratsValor);
+            }
+
             return $query;
         }
 
@@ -184,6 +251,41 @@ final class SolicitudpagoListadoFiltros
         };
 
         return $query;
+    }
+
+    /**
+     * @param  list<array{valor: string, nombre: string}>  $opciones
+     * @return list<string>
+     */
+    private static function codigosEnumQueCoinciden(array $opciones, string $valor): array
+    {
+        $needle = mb_strtoupper(trim($valor), 'UTF-8');
+        if ($needle === '') {
+            return [];
+        }
+
+        $out = [];
+        $len = mb_strlen($needle, 'UTF-8');
+        foreach ($opciones as $opt) {
+            $codigo = mb_strtoupper((string) $opt['valor'], 'UTF-8');
+            $nombre = mb_strtoupper((string) $opt['nombre'], 'UTF-8');
+            $igual = $codigo === $needle || $nombre === $needle;
+            // Contiene solo con 4+ caracteres para no matchear "A" → casi todos
+            $parcial = $len >= 4 && (str_contains($codigo, $needle) || str_contains($nombre, $needle));
+            if ($igual || $parcial) {
+                $out[] = (string) $opt['valor'];
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    /** true si el valor parece un código numérico u otro texto libre (no solo etiqueta de enum). */
+    private static function pareceCodigoOTextoLibre(string $valor): bool
+    {
+        $v = trim($valor);
+
+        return $v !== '' && preg_match('/\d/', $v) === 1;
     }
 
     public static function operadoresParaCampo(string $campo): array

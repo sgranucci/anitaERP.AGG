@@ -1,0 +1,13 @@
+{
+    "generado": "2026-07-22T09:32:37-03:00",
+    "empresa_id": 1,
+    "numeroasiento": 349802,
+    "asiento_id": 38647,
+    "mp_mov_id": 40945,
+    "mp_old": 1817892,
+    "mp_new": 1827692,
+    "caja_mov_id": 40942,
+    "caja_old": 3702628,
+    "caja_new": 3692828,
+    "delta": 9800
+}

@@ -195,6 +195,28 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
         return $precarga_comprobante_proveedors;
     }
 
+    /**
+     * Seguimiento acotado al proveedor del portal.
+     *
+     * En el MVP interno el proveedor se selecciona en pantalla; en el portal externo
+     * el controller deberá obtener este ID de la sesión autenticada, nunca del request.
+     */
+    public function listarPortalProveedor(int $proveedorId, bool $paginar = true)
+    {
+        $query = $this->model
+            ->with([
+                'empresas:id,nombre',
+                'proveedores:id,codigo,nombre,nroinscripcion',
+                'tipotransaccion_compras:id,nombre,abreviatura',
+                'monedas:id,nombre',
+            ])
+            ->where('proveedor_id', $proveedorId)
+            ->whereIn('empresa_id', $this->empresaRepository->traeEmpresasAsignadas())
+            ->orderByDesc('id');
+
+        return $paginar ? $query->paginate(15) : $query->get();
+    }
+
     public function findDuplicadoPrecarga(
         int $empresaId,
         int $proveedorId,

@@ -10,11 +10,18 @@
     }
 @endphp
 @php
-    $tieneCriteriosPanel = ArticuloListadoFiltros::tieneCriteriosAplicados($f);
+    $tieneCriteriosPanel = ArticuloListadoFiltros::tieneCriteriosTexto($f);
     $limpiarUrlPanel = $limpiarUrl ?? route('articulo');
+    $fEstado = $f['estado'] ?? ArticuloListadoFiltros::ESTADO_ACTIVO;
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-articulo" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    {{-- Persistencia del filtro externo de estado al buscar por texto o aplicar el panel --}}
+    @if ($fEstado === '')
+        <input type="hidden" name="filtro_estado" value="TODOS">
+    @elseif ($fEstado !== ArticuloListadoFiltros::ESTADO_ACTIVO)
+        <input type="hidden" name="filtro_estado" value="{{ $fEstado }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">

@@ -14,6 +14,7 @@ use App\Models\Contable\Asiento;
 use App\Models\Ordenventa\Ordenventa;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cobranza;
+use App\Models\Seguridad\Usuario;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Venta extends Model implements Auditable
@@ -111,6 +112,11 @@ class Venta extends Model implements Auditable
     public function estacionamientoEmision()
     {
         return $this->hasOne(\App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision::class, 'venta_id');
+    }
+
+    public function usuario()
+    {
+        return $this->belongsTo(Usuario::class, 'usuario_id');
     }
 
     public function actividad_arcas()

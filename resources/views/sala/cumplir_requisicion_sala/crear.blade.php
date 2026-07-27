@@ -100,6 +100,20 @@
                             </div>
                         </div>
 
+                        @if (\App\Support\Stock\TransferenciaMercaderiaIntercompanySupport::puedeUsar())
+                        <div class="form-group row mb-2" id="crs_panel_intercompany">
+                            <div class="col-lg-12">
+                                <button type="button" id="crs_btn_intercompany" class="btn btn-outline-secondary btn-sm">
+                                    <i class="fa fa-building"></i> Ver dep&oacute;sitos de otras empresas
+                                </button>
+                                <input type="hidden" id="crs_modo_intercompany" value="0">
+                                <small class="text-muted d-block mt-1">
+                                    Permite elegir dep&oacute;sito origen de otra empresa al cumplir la requisici&oacute;n.
+                                </small>
+                            </div>
+                        </div>
+                        @endif
+
                         <div class="table-responsive">
                             <table class="table table-bordered table-sm" id="tabla-lineas-cumple">
                                 <thead style="background-color:#85C1E9;color:#17202A;">

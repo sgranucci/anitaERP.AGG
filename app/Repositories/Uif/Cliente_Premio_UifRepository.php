@@ -154,7 +154,10 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 
 	public function updateUnique(array $data, $id)
     {
-		$cliente_premio_uif = $this->model->findOrFail($id)->update($data);
+		$cliente_premio_uif = $this->model->findOrFail($id);
+		$cliente_premio_uif->update($data);
+
+		return $cliente_premio_uif->fresh();
     }
 
     public function delete($id)

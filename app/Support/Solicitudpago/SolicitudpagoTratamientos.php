@@ -70,4 +70,16 @@ final class SolicitudpagoTratamientos
             ['valor' => self::RECURRENTE, 'nombre' => 'Recurrente'],
         ];
     }
+
+    public static function label(?string $tratamiento): string
+    {
+        $tratamiento = strtoupper(trim((string) $tratamiento));
+        foreach (self::opciones() as $opcion) {
+            if ($opcion['valor'] === $tratamiento) {
+                return $opcion['nombre'];
+            }
+        }
+
+        return $tratamiento !== '' ? $tratamiento : '—';
+    }
 }
