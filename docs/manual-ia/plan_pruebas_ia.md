@@ -66,12 +66,22 @@ Casilla `PRECARGA_MAIL_USUARIO` · label `PRECARGA_MAIL_CARPETA`.
 | F2 | Token malo | 401 |
 | F3 | call NL | ok + intent |
 
+## G. Pedido por consumo (skill ejemplo)
+
+| # | Caso | Pasos | Resultado esperado |
+|---|------|-------|--------------------|
+| G1 | Sin depósito | «pedido consumo CC 93 últimos 60 días» | Pide aclaración: depósito obligatorio |
+| G2 | Proyección 60 días | «pedido consumo CC {codigo} depósito {id} últimos 60 días» | Tabla SKU/consumo/stock/pedir/doc; borradores compra y/o sala |
+| G3 | Split documentos | Misma consulta con stock origen en algunos SKU | Líneas `sala` vs `compra` coherentes |
+| G4 | Confirmar HITL | Botón Crear RQ compra/sala | Crea documento; `ai_decision` → confirmada (si hay permiso) |
+| G5 | Hooks roadmap | Params `solo_sabados` / `multiplicador_evento` | Reflejados en `_meta` y párrafos |
+
 ## Orden sugerido
 
 1. **A1–A2** (FC ok) → **A3–A7** (ND/NC) → **A8** UI  
 2. **B2** portal NC  
 3. **C1–C4** mail (FC + NC + ND) → C5–C8  
-4. **D** → **E** → **F**
+4. **D** → **E** → **F** → **G** (pedido consumo)
 
 ## Criterio de cierre de esta tanda
 
@@ -79,3 +89,4 @@ Casilla `PRECARGA_MAIL_USUARIO` · label `PRECARGA_MAIL_CARPETA`.
 - [ ] A7 paridad API vs IA en al menos un NC y un ND reales
 - [ ] Portal card mail visible; ≥1 precarga origen Mail
 - [ ] Inbox personal no procesa basura
+- [ ] G2 proyección pedido consumo con CC + depósito reales

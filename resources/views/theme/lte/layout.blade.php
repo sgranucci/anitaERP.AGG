@@ -184,6 +184,7 @@
                     urlIntents: @json(route('ai_consulta_intents')),
                     urlConsultar: @json(route('ai_consulta_contexto')),
                     urlExportar: @json(route('ai_consulta_exportar', ['formato' => 'EXCEL'])),
+                    urlConfirmarPedido: @json(route('ai_consulta_confirmar_pedido_consumo')),
                 };
             </script>
             <script src="{{ asset('assets/pages/scripts/configuracion/ai/consulta_operativa.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/ai/consulta_operativa.js')) ?: time() }}" type="text/javascript"></script>

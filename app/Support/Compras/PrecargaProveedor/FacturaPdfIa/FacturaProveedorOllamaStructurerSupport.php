@@ -148,6 +148,7 @@ Respondé ÚNICAMENTE JSON válido con esta forma:
 }
 
 tipos de linea permitidos: neto, iva, exento, no_gravado, percepcion_iva, percepcion_iibb, percepcion_ganancias, interno, otro_tributo, retencion_iva, retencion_iibb.
+Si solo hay TOTAL final sin desglose neto/IVA (o Imp. Exento = Total), una sola línea tipo "exento" con importe = total (subtotal = total). No inventes IVA.
 moneda: PESOS, DOLARES o EUROS.
 
 Heurísticas previas (pueden tener errores, corregí con el OCR):

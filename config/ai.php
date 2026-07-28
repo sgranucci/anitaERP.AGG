@@ -134,6 +134,14 @@ return [
             'llm_router' => filter_var(env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_ROUTER', true), FILTER_VALIDATE_BOOLEAN),
             'llm_timeout' => (int) env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_TIMEOUT', 45),
         ],
+
+        // Pedido por consumo (CC + depósito) → sugerencia RQ compra / sala (HITL)
+        'sugerir_pedido_consumo_sector' => [
+            'habilitada' => filter_var(env('AI_SKILL_SUGERIR_PEDIDO_CONSUMO_SECTOR', true), FILTER_VALIDATE_BOOLEAN),
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => (float) env('AI_SKILL_SUGERIR_PEDIDO_CONSUMO_SECTOR_AUTO_SCORE', 0),
+            'driver' => null,
+        ],
     ],
 
     /*
@@ -151,7 +159,7 @@ return [
             'trim',
             explode(',', (string) env(
                 'AI_AGENTE_EVENTO_PERMITIDOS',
-                'desvio_conciliacion,factura_apocrifa,z_transmision_faltante,deuda_proveedor,deuda_cliente,firma_oc,stock_insumo'
+                'desvio_conciliacion,factura_apocrifa,z_transmision_faltante,deuda_proveedor,deuda_cliente,firma_oc,stock_insumo,planear_pedido_consumo'
             ))
         ))),
     ],

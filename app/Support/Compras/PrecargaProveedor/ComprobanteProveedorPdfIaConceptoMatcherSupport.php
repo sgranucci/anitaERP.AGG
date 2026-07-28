@@ -93,11 +93,18 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             $score = $this->mejorScoreAlias($descLinea, $aliases);
             $score += $this->scorePorTipoLinea($tipoLinea, $tipoConcepto);
 
+            if (str_contains($descLinea, 'exent') && $tipoConcepto === 'E') {
+                $score += 40;
+            }
+
             $alicuotaConcepto = $candidato['alicuota_iva'] ?? null;
             if ($alicuotaLinea !== null && $alicuotaConcepto !== null
                 && abs($alicuotaLinea - (float) $alicuotaConcepto) < 0.01) {
-                $score += 55;
-            } elseif ($alicuotaLinea !== null) {
+                // Alicuota 0 es ambigua (exento / percepción / no gravado): solo bonificar E/N.
+                if ($alicuotaLinea > 0.01 || in_array($tipoConcepto, ['E', 'N'], true)) {
+                    $score += 55;
+                }
+            } elseif ($alicuotaLinea !== null && $alicuotaLinea > 0.01) {
                 $needle = $this->formatearAlicuota($alicuotaLinea);
                 foreach ($aliases as $alias) {
                     if (str_contains($alias, $needle) || str_contains($alias, (string) (int) $alicuotaLinea)) {
@@ -164,19 +171,22 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
             $tokens = preg_split('/\s+/', $alias) ?: [];
             $hits = 0;
             $utiles = 0;
+            $hitsFuertes = 0;
             foreach ($tokens as $token) {
-                if (mb_strlen($token) < 3) {
+                if (mb_strlen($token) < 3 || $this->esTokenAliasDebil($token)) {
                     continue;
                 }
                 $utiles++;
                 if (str_contains($descLinea, $token)) {
                     $hits++;
+                    $hitsFuertes++;
                 }
             }
-            if ($utiles > 0 && $hits === $utiles) {
+            // Evitar que «iva» dentro de «sin desglose IVA» dispare match 85 a «iva 21».
+            if ($utiles > 0 && $hits === $utiles && $hitsFuertes > 0) {
                 $mejor = max($mejor, 85);
-            } elseif ($hits > 0) {
-                $mejor = max($mejor, min(70, 25 + ($hits * 20)));
+            } elseif ($hitsFuertes > 0) {
+                $mejor = max($mejor, min(70, 25 + ($hitsFuertes * 20)));
             }
 
             similar_text($descLinea, $alias, $pct);
@@ -186,13 +196,23 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
         return $mejor;
     }
 
+    private function esTokenAliasDebil(string $token): bool
+    {
+        $t = mb_strtolower($token);
+
+        return in_array($t, [
+            'iva', 'neto', 'total', 'importe', 'compra', 'compras', 'gravado',
+            'inscripto', 'impuesto', 'valor', 'agregado', 'perc', 'percep', 'percepcion',
+        ], true);
+    }
+
     private function scorePorTipoLinea(string $tipoLinea, string $tipoConcepto): int
     {
         $mapa = [
             'iva' => ['I' => 50, 'P' => 15],
             'neto' => ['G' => 50, 'N' => 40, 'E' => 25],
-            'exento' => ['E' => 55, 'N' => 25],
-            'no_gravado' => ['N' => 50, 'G' => 25],
+            'exento' => ['E' => 80, 'N' => 35, 'G' => -40, 'I' => -50, 'P' => -50],
+            'no_gravado' => ['N' => 50, 'G' => 25, 'E' => 30],
             'percepcion_iva' => ['P' => 55, 'I' => 15],
             'percepcion_iibb' => ['B' => 60, 'P' => 10],
             'percepcion_ganancias' => ['P' => 40, 'B' => 15],

@@ -24,6 +24,9 @@ final class AiAgenteOperativoSupport
     /** Emitido por verificación Z transmision faltante gastronomía. */
     public const EVENTO_Z_TRANSMISION_FALTANTE = 'z_transmision_faltante';
 
+    /** Hook roadmap: stock bajo cobertura → sugerir pedido_consumo_sector. */
+    public const EVENTO_PLANEAR_PEDIDO_CONSUMO = 'planear_pedido_consumo';
+
     /** @return array<string, string> */
     public static function eventosEtiquetas(): array
     {
@@ -35,6 +38,7 @@ final class AiAgenteOperativoSupport
             self::EVENTO_STOCK_INSUMO => 'Stock / kardex de insumo',
             self::EVENTO_FACTURA_APOCRIFA => 'Facturas / CUIT apócrifos (ARCA)',
             self::EVENTO_Z_TRANSMISION_FALTANTE => 'Z con transmisión faltante (gastronomía)',
+            self::EVENTO_PLANEAR_PEDIDO_CONSUMO => 'Planear pedido por consumo (CC + depósito)',
         ];
     }
 
@@ -77,6 +81,7 @@ final class AiAgenteOperativoSupport
             self::EVENTO_STOCK_INSUMO => self::planStockInsumo($params),
             self::EVENTO_FACTURA_APOCRIFA => self::planFacturaApocrifa($params),
             self::EVENTO_Z_TRANSMISION_FALTANTE => self::planZTransmisionFaltante($params),
+            self::EVENTO_PLANEAR_PEDIDO_CONSUMO => self::planPlanearPedidoConsumo($params),
             default => [],
         };
 
@@ -182,6 +187,10 @@ final class AiAgenteOperativoSupport
         }
         if (str_contains($norm, 'conciliacion') || str_contains($norm, 'desvio') || str_contains($norm, 'interbanking')) {
             return self::EVENTO_DESVIO_CONCILIACION;
+        }
+        if (str_contains($norm, 'pedido consumo') || str_contains($norm, 'planear pedido')
+            || (str_contains($norm, 'consumo') && str_contains($norm, 'pedir'))) {
+            return self::EVENTO_PLANEAR_PEDIDO_CONSUMO;
         }
         if (str_contains($norm, 'firmar') || str_contains($norm, 'firma') || str_contains($norm, 'arbol')) {
             return self::EVENTO_FIRMA_OC;
@@ -373,6 +382,46 @@ final class AiAgenteOperativoSupport
                     'fecha_desde' => date('Y-m-01'),
                     'fecha_hasta' => date('Y-m-d'),
                 ],
+            ],
+        ];
+    }
+
+    /**
+     * Hook roadmap: guía al intent pedido_consumo_sector (requiere CC + depósito).
+     *
+     * @param  array<string,mixed>  $params
+     * @return list<array<string,mixed>>
+     */
+    private static function planPlanearPedidoConsumo(array $params): array
+    {
+        $cc = trim((string) ($params['centrocosto_codigo'] ?? $params['codigo'] ?? $params['valor'] ?? ''));
+        $dep = trim((string) ($params['deposito_id'] ?? $params['deposito_codigo'] ?? ''));
+        if ($cc === '' || $dep === '') {
+            return [
+                [
+                    'intent' => AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR,
+                    'etiqueta' => 'Completar CC y depósito de consumo',
+                    'frase' => 'pedido consumo CC … depósito … últimos 60 días',
+                    'motivo' => 'El skill exige centro de costo y depósito donde se midió el consumo.',
+                    'params' => $params,
+                ],
+            ];
+        }
+
+        $frase = 'pedido consumo CC '.$cc.' depósito '.$dep.' últimos 60 días';
+
+        return [
+            [
+                'intent' => AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR,
+                'etiqueta' => 'Proyectar pedido por consumo',
+                'frase' => $frase,
+                'motivo' => 'Consumo histórico → qty neta → RQ compra o sala.',
+                'params' => array_merge($params, [
+                    'centrocosto_codigo' => $cc,
+                    'deposito_id' => is_numeric($dep) ? (int) $dep : null,
+                    'deposito_codigo' => is_numeric($dep) ? null : $dep,
+                    'solo_insumo' => true,
+                ]),
             ],
         ];
     }

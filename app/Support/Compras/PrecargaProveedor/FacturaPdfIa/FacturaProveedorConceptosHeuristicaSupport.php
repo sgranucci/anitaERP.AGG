@@ -34,14 +34,65 @@ final class FacturaProveedorConceptosHeuristicaSupport
 
         $lineas = $this->fusionarDuplicados($lineas);
         $lineas = $this->completarDesdeBloquesMultilinea($textoNorm, $lineas);
+        $lineas = $this->promoverSoloTotalAExento($lineas, $totalFactura, $textoNorm);
 
         if ($lineas === [] && $totalFactura !== null && $totalFactura > 0) {
             $lineas[] = [
-                'descripcion' => 'Total factura (sin desglose detectado)',
+                'descripcion' => 'Operaciones exentas (total sin desglose IVA)',
                 'importe' => $totalFactura,
-                'alicuota_iva' => null,
-                'tipo' => 'neto',
+                'alicuota_iva' => 0.0,
+                'tipo' => 'exento',
             ];
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * Un solo neto/subtotal ≈ total y sin IVA en el texto → tratar como exento.
+     *
+     * @param  list<array{descripcion: string, importe: float, alicuota_iva: ?float, tipo: string}>  $lineas
+     * @return list<array{descripcion: string, importe: float, alicuota_iva: ?float, tipo: string}>
+     */
+    private function promoverSoloTotalAExento(array $lineas, ?float $totalFactura, string $texto): array
+    {
+        if ($totalFactura === null || $totalFactura <= 0 || $lineas === []) {
+            return $lineas;
+        }
+
+        $sumaIva = 0.0;
+        $sumaOtros = 0.0;
+        $sumaNeto = 0.0;
+        $sumaExento = 0.0;
+        foreach ($lineas as $linea) {
+            $imp = abs((float) ($linea['importe'] ?? 0));
+            $tipo = strtolower((string) ($linea['tipo'] ?? ''));
+            if (str_contains($tipo, 'iva') && ! str_contains($tipo, 'percepcion') && ! str_contains($tipo, 'retencion')) {
+                $sumaIva += $imp;
+            } elseif (str_contains($tipo, 'exento')) {
+                $sumaExento += $imp;
+            } elseif (str_contains($tipo, 'neto') || str_contains($tipo, 'subtotal') || str_contains($tipo, 'gravado')) {
+                $sumaNeto += $imp;
+            } elseif (str_contains($tipo, 'percepcion') || str_contains($tipo, 'interno') || str_contains($tipo, 'retencion') || str_contains($tipo, 'tributo')) {
+                $sumaOtros += $imp;
+            }
+        }
+
+        $senalExentoColumna = (bool) preg_match('/imp\.?\s*exento/iu', $texto);
+        $sinIvaEnTexto = ! preg_match('/\biva\s+(?:inscripto\s+)?(?:21|10[,.]5|27)\s*%/iu', $texto)
+            && ! preg_match('/i\.?\s*v\.?\s*a\.?\s*inscripto[^0-9\n]{0,20}[\d.,]{3,}/iu', $texto);
+
+        if ($sumaIva > 0.01 || $sumaOtros > 0.01 || $sumaExento > 0.01) {
+            return $lineas;
+        }
+
+        if ($sumaNeto > 0 && abs($sumaNeto - $totalFactura) <= 0.05 && ($senalExentoColumna || $sinIvaEnTexto)) {
+            return [[
+                'descripcion' => 'Operaciones exentas (total sin desglose IVA)',
+                'importe' => $totalFactura,
+                'alicuota_iva' => 0.0,
+                'tipo' => 'exento',
+            ]];
         }
 
         return $lineas;
@@ -98,6 +149,7 @@ final class FacturaProveedorConceptosHeuristicaSupport
             ['patron' => '/\bneto\s+'.$ali.'\s*%/u', 'tipo' => 'neto', 'alicuota' => null],
             ['patron' => '/\boperaciones\s+exentas/u', 'tipo' => 'exento', 'alicuota' => 0.0],
             ['patron' => '/\bimporte\s+exento/u', 'tipo' => 'exento', 'alicuota' => 0.0],
+            ['patron' => '/\bimp\.?\s*exento/u', 'tipo' => 'exento', 'alicuota' => 0.0],
             ['patron' => '/\bno\s+gravado/u', 'tipo' => 'no_gravado', 'alicuota' => 0.0],
             // RG 5329 / Perc. IVA 3% (nombre_ia del concepto 103).
             ['patron' => '/\brg\s*5329\b/u', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0],

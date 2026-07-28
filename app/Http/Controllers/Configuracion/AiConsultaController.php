@@ -10,6 +10,8 @@ use App\Services\Ai\Skills\AiSkillRegistry;
 use App\Support\Ai\AiConsultaOperativaRouterSupport;
 use App\Support\Ai\AiConsultaOperativaSchemaSupport;
 use App\Support\Ai\AiConsultaOperativaSupport;
+use App\Support\Ai\PedidoConsumoSectorConfirmacionSupport;
+use App\Support\Ai\PedidoConsumoSectorProyeccionSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -21,6 +23,7 @@ class AiConsultaController extends Controller
 {
     public function __construct(
         private AiSkillRegistry $registry,
+        private PedidoConsumoSectorConfirmacionSupport $pedidoConfirmacion,
     ) {}
 
     public function intents(): JsonResponse
@@ -118,6 +121,38 @@ class AiConsultaController extends Controller
             'score' => $result->score,
             'ai_decision_id' => $result->decisionId,
         ]);
+    }
+
+    /**
+     * HITL: crea RQ compra o sala desde el borrador sugerido por pedido_consumo_sector.
+     */
+    public function confirmarPedidoConsumo(Request $request): JsonResponse
+    {
+        can('ejecutar-consulta-ia');
+
+        $tipo = strtolower(trim((string) $request->input('tipo', '')));
+        $decisionId = $request->input('ai_decision_id');
+        $decisionId = is_numeric($decisionId) ? (int) $decisionId : null;
+        $borrador = $request->input('borrador');
+        if (is_string($borrador)) {
+            $decoded = json_decode($borrador, true);
+            $borrador = is_array($decoded) ? $decoded : [];
+        }
+        if (! is_array($borrador) || $borrador === []) {
+            return response()->json(['ok' => false, 'message' => 'Borrador inválido.'], 422);
+        }
+
+        if ($tipo === PedidoConsumoSectorProyeccionSupport::DOCUMENTO_COMPRA) {
+            can('crear-requisicion');
+        } elseif ($tipo === PedidoConsumoSectorProyeccionSupport::DOCUMENTO_SALA) {
+            can('crear-requisicion-sala');
+        } else {
+            return response()->json(['ok' => false, 'message' => 'Tipo debe ser compra o sala.'], 422);
+        }
+
+        $resultado = $this->pedidoConfirmacion->confirmar($tipo, $borrador, $decisionId);
+
+        return response()->json($resultado, ($resultado['ok'] ?? false) ? 200 : 422);
     }
 
     /**
@@ -299,6 +334,7 @@ class AiConsultaController extends Controller
             AiConsultaOperativaSupport::INTENT_SALDO_CUENTA,
             AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA => 'Código de cuenta contable',
             AiConsultaOperativaSupport::INTENT_PLAN_AGENTE => 'desvío / deuda proveedor 475 / firmar OC 1234',
+            AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR => 'CC 93 depósito 12 (últimos 60 días)',
             default => 'Valor a consultar',
         };
     }

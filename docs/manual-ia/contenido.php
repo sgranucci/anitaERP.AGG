@@ -98,6 +98,7 @@ return [
                     ['explicar_contexto_arbol_aprobacion', 'Árbol OC / portales', '(lectura / hash público)', 'No aplica'],
                     ['explicar_diferencias_…_gastronomia', 'Conciliación turno gastronomía', 'gestionar-habilitacion-turno-gastronomia', 'No aplica'],
                     ['consultar_contexto_operativo', 'Panel FAB / NL', 'ejecutar-consulta-ia', 'No aplica'],
+                    ['sugerir_pedido_consumo_sector', 'Pedido por consumo CC+depósito (también vía intent FAB)', 'ejecutar-consulta-ia', 'No (siempre HITL)'],
                 ],
             ],
             'items' => [
@@ -141,7 +142,7 @@ return [
             'parrafos' => [
                 'El panel flotante (FAB) es el copiloto operativo: chips de intent + lenguaje natural. El router primero aplica reglas; si no alcanza, un LLM solo clasifica intent/params (no inventa saldos). El grounding lo hace AiConsultaOperativaSupport contra maestros y movimientos del ERP.',
                 'Visibilidad: permiso ejecutar-consulta-ia. Sin ese permiso el FAB no aparece. Además, cada intent exige el permiso del módulo (artículos, OC, CT, etc.). Los intents contables (mayor, saldo de cuenta, asiento) requieren también consulta-ia-contable, para que un rol de gastronomía no consulte un mayor sensible aunque tuviera el panel.',
-                'Ejemplos de frases: “saldo insumo muzarella”, “kardex 12345 este mes”, “CT proveedor 001234”, “mayor cuenta 214010013 julio”, “qué hago con desvíos de conciliación”, “cómo cargo una orden de compra” (RAG).',
+                'Ejemplos de frases: “saldo insumo muzarella”, “kardex 12345 este mes”, “CT proveedor 001234”, “mayor cuenta 214010013 julio”, “pedido consumo CC 93 depósito 12 últimos 60 días”, “qué hago con desvíos de conciliación”, “cómo cargo una orden de compra” (RAG).',
             ],
             'tabla' => [
                 'caption' => 'Intents principales',
@@ -152,6 +153,7 @@ return [
                     ['cliente / cliente_ctacte', 'Ficha y CT cliente', 'listar-clientes / CT'],
                     ['ordencompra / arbol_oc', 'Estado OC y árbol', 'listar/editar-ordencompra'],
                     ['mayor_cuenta / saldo_cuenta / asiento', 'Contable analítico', 'módulo + consulta-ia-contable'],
+                    ['pedido_consumo_sector', 'Proyecta pedido por consumo (CC + depósito) → borrador RQ compra o sala', 'artículos / crear-requisicion(-sala)'],
                     ['plan_agente', 'Plan HITL sugerido ante un evento', '(panel)'],
                     ['consultar_manual', 'Pasajes de manuales (RAG)', 'panel + RAG habilitado'],
                 ],
@@ -160,6 +162,7 @@ return [
                 'Exportar: el panel puede exportar tablas (Excel) respetando el mismo intent y permisos.',
                 'Typos: coincidencia flexible en artículos (ej. muzarella/mozarella) y filtro solo_insumo para gastronomía.',
                 'El mayor se arma desde asientos ERP con columnas; no es un texto plano del LLM.',
+                'Pedido por consumo: el depósito de consumo es obligatorio; qty = consumo_diario×cobertura − stock − pendientes. Con stock en depósito origen → RQ sala; si no → RQ compra. Confirmar con botón HITL (no auto-graba).',
             ],
         ],
 
@@ -206,6 +209,7 @@ return [
                     ['z_transmision_faltante', 'Informe Z gastronomía', 'Completar transmisión / jornada'],
                     ['deuda_proveedor / deuda_cliente', 'Plan vía panel', 'Usar CT y acuerdos; el plan es guía'],
                     ['firma_oc / stock_insumo', 'Plan vía panel', 'Árbol OC o kardex según pasos'],
+                    ['planear_pedido_consumo', 'Panel / auditor futuro stock bajo', 'Abrir pedido_consumo_sector (CC+depósito) y confirmar RQ'],
                 ],
             ],
             'parrafos2' => [

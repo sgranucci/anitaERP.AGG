@@ -110,10 +110,41 @@ final class AiConsultaOperativaSchemaSupport
             $out['deposito_id'] = (int) $params['deposito_id'];
         }
 
+        if (isset($params['centrocosto_id']) && is_numeric($params['centrocosto_id']) && (int) $params['centrocosto_id'] > 0) {
+            $out['centrocosto_id'] = (int) $params['centrocosto_id'];
+        }
+        if (isset($params['centrocosto_codigo']) && is_scalar($params['centrocosto_codigo'])) {
+            $v = trim((string) $params['centrocosto_codigo']);
+            if ($v !== '') {
+                $out['centrocosto_codigo'] = $v;
+            }
+        }
+        if (isset($params['deposito_consumo_id']) && is_numeric($params['deposito_consumo_id']) && (int) $params['deposito_consumo_id'] > 0) {
+            $out['deposito_consumo_id'] = (int) $params['deposito_consumo_id'];
+        }
+        if (isset($params['deposito_origen_id']) && is_numeric($params['deposito_origen_id']) && (int) $params['deposito_origen_id'] > 0) {
+            $out['deposito_origen_id'] = (int) $params['deposito_origen_id'];
+        }
+        if (isset($params['dias_cobertura']) && is_numeric($params['dias_cobertura'])) {
+            $out['dias_cobertura'] = max(1, (int) $params['dias_cobertura']);
+        }
+        if (isset($params['multiplicador_evento']) && is_numeric($params['multiplicador_evento'])) {
+            $out['multiplicador_evento'] = (float) $params['multiplicador_evento'];
+        }
+        if (! empty($params['solo_sabados'])) {
+            $out['solo_sabados'] = true;
+        }
+        if (isset($params['lead_time_dias']) && is_numeric($params['lead_time_dias'])) {
+            $out['lead_time_dias'] = max(0, (int) $params['lead_time_dias']);
+        }
+        if (isset($params['buffer_dias']) && is_numeric($params['buffer_dias'])) {
+            $out['buffer_dias'] = max(0, (int) $params['buffer_dias']);
+        }
         if (! empty($params['solo_insumo'])
             && in_array($intent, [
                 AiConsultaOperativaSupport::INTENT_ARTICULO_SALDO,
                 AiConsultaOperativaSupport::INTENT_ARTICULO_KARDEX,
+                AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR,
             ], true)) {
             $out['solo_insumo'] = true;
         }
@@ -174,6 +205,7 @@ final class AiConsultaOperativaSchemaSupport
             AiConsultaOperativaSupport::INTENT_SALDO_CUENTA,
             AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA => self::aliasValor($out, 'cuenta_codigo'),
             AiConsultaOperativaSupport::INTENT_PLAN_AGENTE => $out,
+            AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR => self::aliasValor($out, 'codigo'),
             default => $out,
         };
     }

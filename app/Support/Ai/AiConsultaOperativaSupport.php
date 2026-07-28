@@ -64,6 +64,8 @@ final class AiConsultaOperativaSupport
 
     public const INTENT_CONSULTAR_MANUAL = 'consultar_manual';
 
+    public const INTENT_PEDIDO_CONSUMO_SECTOR = 'pedido_consumo_sector';
+
     /** @return array<string, string> */
     public static function intentsEtiquetas(): array
     {
@@ -83,6 +85,7 @@ final class AiConsultaOperativaSupport
             self::INTENT_FACTURA_VENTA => 'Factura de venta',
             self::INTENT_PLAN_AGENTE => 'Plan agente (HITL ante desvío / deuda / firma)',
             self::INTENT_CONSULTAR_MANUAL => 'Manual / ayuda (RAG)',
+            self::INTENT_PEDIDO_CONSUMO_SECTOR => 'Pedido por consumo (CC + depósito)',
         ];
     }
 
@@ -145,6 +148,11 @@ final class AiConsultaOperativaSupport
             self::INTENT_FACTURA_VENTA => can('listar-factura', false) || can('editar-factura', false) || can('facturar', false),
             self::INTENT_PLAN_AGENTE => true,
             self::INTENT_CONSULTAR_MANUAL => AiManualRagSupport::habilitado(),
+            self::INTENT_PEDIDO_CONSUMO_SECTOR => can('listar-articulos', false)
+                || can('listar-requisicion', false)
+                || can('crear-requisicion', false)
+                || can('listar-requisicion-sala', false)
+                || can('crear-requisicion-sala', false),
             default => false,
         };
     }
@@ -193,6 +201,7 @@ final class AiConsultaOperativaSupport
                 $params
             ),
             self::INTENT_CONSULTAR_MANUAL => AiManualRagSupport::consultar($params),
+            self::INTENT_PEDIDO_CONSUMO_SECTOR => self::consultarPedidoConsumoSector($params),
             default => self::fallo($intent, 'Intent no implementado.'),
         };
     }
@@ -1563,6 +1572,35 @@ final class AiConsultaOperativaSupport
                 'codigo' => $codigo,
                 'total' => (float) ($venta->total ?? 0),
             ],
+        ];
+    }
+
+    /**
+     * @param  array<string,mixed>  $params
+     * @return array<string,mixed>
+     */
+    private static function consultarPedidoConsumoSector(array $params): array
+    {
+        if (! self::usuarioPuedeIntent(self::INTENT_PEDIDO_CONSUMO_SECTOR)) {
+            return self::fallo(self::INTENT_PEDIDO_CONSUMO_SECTOR, 'Sin permiso para planear pedidos por consumo.');
+        }
+
+        $resultado = PedidoConsumoSectorProyeccionSupport::proyectar($params);
+        if (! ($resultado['ok'] ?? false)) {
+            return self::fallo(
+                self::INTENT_PEDIDO_CONSUMO_SECTOR,
+                $resultado['error'] ?? 'No se pudo proyectar el pedido.'
+            );
+        }
+
+        return [
+            'ok' => true,
+            'intent' => self::INTENT_PEDIDO_CONSUMO_SECTOR,
+            'score' => (float) ($resultado['score'] ?? 0.88),
+            'parrafos' => $resultado['parrafos'] ?? [],
+            'links' => $resultado['links'] ?? [],
+            'tabla' => $resultado['tabla'] ?? null,
+            'datos' => $resultado['datos'] ?? [],
         ];
     }
 

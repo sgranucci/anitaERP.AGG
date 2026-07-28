@@ -2077,6 +2077,7 @@ class AppServiceProvider extends ServiceProvider
             \App\Services\Configuracion\Ai\ExplicarContextoArbolAprobacionSkill::class,
             \App\Services\Ventas\Ai\ExplicarDiferenciasConciliacionTurnoGastronomiaSkill::class,
             \App\Services\Ai\ConsultarContextoOperativoSkill::class,
+            \App\Services\Ai\SugerirPedidoConsumoSectorSkill::class,
         ], 'ai.skills');
 
         $this->app->singleton(\App\Services\Ai\Skills\AiSkillRegistry::class, function ($app) {

@@ -102,6 +102,85 @@ final class AiConsultaOperativaRouterSupport
             ];
         }
 
+        // Pedido por consumo (CC + depósito) — antes de plan agente genérico
+        if (self::contieneAlguno($norm, [
+            'pedido consumo', 'pedido por consumo', 'planear pedido', 'planear pedidos',
+            'que pedir', 'que pedimos', 'que compre', 'que compramos', 'insumos pedir',
+            'consumo del sector', 'consumo centro de costo', 'consumo cc',
+            'cobertura de stock', 'sugerir pedido', 'sugerir requisicion',
+        ]) || (str_contains($norm, 'consumo') && self::contieneAlguno($norm, [
+            'pedido', 'pedir', 'comprar', 'requisicion', 'cobertura', 'deposito',
+        ]))) {
+            $params = self::extraerParamsPeriodoYExtras($texto, $norm);
+            $params['solo_insumo'] = true;
+
+            if (preg_match('/\bcc\s*(\d{1,6})\b/u', $norm, $mCc)) {
+                $params['centrocosto_codigo'] = $mCc[1];
+                $params['codigo'] = $mCc[1];
+                $params['valor'] = $mCc[1];
+            } elseif (preg_match('/centro\s+de\s+costo\s+(\d{1,6})\b/u', $norm, $mCc2)) {
+                $params['centrocosto_codigo'] = $mCc2[1];
+                $params['codigo'] = $mCc2[1];
+                $params['valor'] = $mCc2[1];
+            }
+
+            if (preg_match('/deposit[oa]\s+(?:consumo\s+)?(\d{1,6}|[a-z0-9\.\-]+)/u', $norm, $mDep)) {
+                $tok = $mDep[1];
+                if (ctype_digit($tok)) {
+                    $params['deposito_id'] = (int) $tok;
+                    $params['deposito_consumo_id'] = (int) $tok;
+                } else {
+                    $params['deposito_codigo'] = $tok;
+                }
+            }
+
+            if (preg_match('/(?:ultimos?|últimos?)\s+(\d{1,3})\s+dias/u', $norm, $mDias)) {
+                $dias = max(1, (int) $mDias[1]);
+                $params['fecha_hasta'] = date('Y-m-d');
+                $params['fecha_desde'] = date('Y-m-d', strtotime('-'.($dias - 1).' days'));
+            } elseif (str_contains($norm, 'dos meses') || str_contains($norm, '2 meses')) {
+                $params['fecha_hasta'] = date('Y-m-d');
+                $params['fecha_desde'] = date('Y-m-d', strtotime('-59 days'));
+            }
+
+            if (preg_match('/cobertura\s+(\d{1,3})\s*dias/u', $norm, $mCob)) {
+                $params['dias_cobertura'] = (int) $mCob[1];
+            }
+
+            if (empty($params['centrocosto_codigo']) && empty($params['centrocosto_id']) && empty($params['codigo'])) {
+                return [
+                    'ok' => false,
+                    'needs_clarification' => true,
+                    'clarification' => 'Indique el centro de costo y el depósito de consumo (ej.: «pedido consumo CC 93 depósito 12 últimos 60 días»).',
+                    'error' => 'Falta centro de costo.',
+                    'sugerencias' => [
+                        'pedido consumo CC 93 depósito 12 últimos 60 días',
+                        'qué pedimos para CC 10 depósito 5 cobertura 7 días',
+                    ],
+                ];
+            }
+            if (empty($params['deposito_id']) && empty($params['deposito_consumo_id']) && empty($params['deposito_codigo'])) {
+                return [
+                    'ok' => false,
+                    'needs_clarification' => true,
+                    'clarification' => 'Indique el depósito de consumo (obligatorio). Ejemplo: «… depósito 12».',
+                    'error' => 'Falta depósito de consumo.',
+                    'sugerencias' => [
+                        'pedido consumo CC 93 depósito 12 últimos 60 días',
+                    ],
+                ];
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR,
+                'params' => $params,
+                'interpretacion' => 'Pedido por consumo'
+                    .(isset($params['centrocosto_codigo']) ? ' CC '.$params['centrocosto_codigo'] : '')
+                    .(isset($params['deposito_id']) ? ' depósito '.$params['deposito_id'] : ''),
+            ];
+        }
+
         // Plan agente HITL (antes que intents puntuales)
         if (self::contieneAlguno($norm, [
             'que hago', 'que hacer', 'plan para', 'plan de', 'plan operativo',
@@ -499,6 +578,7 @@ final class AiConsultaOperativaRouterSupport
             'factura proveedor A-1-12345',
             'cómo cargo una orden de compra',
             'manual de gastronomía cierres',
+            'pedido consumo CC 93 depósito 12 últimos 60 días',
         ];
     }
 

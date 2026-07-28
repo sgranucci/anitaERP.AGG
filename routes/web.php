@@ -266,6 +266,7 @@ Route::get('configuracion/manual-ia/descargar-pdf', 'Configuracion\ManualIaContr
 Route::get('configuracion/manual-ia/descargar-word', 'Configuracion\ManualIaController@descargarWord')->name('manual_ia_word');
 Route::get('configuracion/ai/intents-consulta', 'Configuracion\AiConsultaController@intents')->name('ai_consulta_intents');
 Route::post('configuracion/ai/consultar-contexto', 'Configuracion\AiConsultaController@consultar')->name('ai_consulta_contexto');
+Route::post('configuracion/ai/confirmar-pedido-consumo', 'Configuracion\AiConsultaController@confirmarPedidoConsumo')->name('ai_consulta_confirmar_pedido_consumo');
 Route::post('configuracion/ai/exportar-consulta/{formato?}', 'Configuracion\AiConsultaController@exportar')->name('ai_consulta_exportar');
 
 /*

@@ -70,6 +70,7 @@ final class ComprobanteProveedorPdfIaPipelineService
             $resultado = $this->aplicarCamposAutoridadArchivo($resultado, $pdf->getClientOriginalName());
             $resultado = $this->aplicarPieAResultado($resultado, $pie);
             $resultado = $this->sanearCuitsYOc($resultado);
+            $resultado = $this->sanearSoloTotalComoExento($resultado, $textoOcr);
             $resultado['_meta']['ocr_chars'] = $chars;
             $resultado['_meta']['ocr_muestra'] = mb_substr(preg_replace('/\s+/', ' ', $textoOcr) ?? '', 0, 400);
 
@@ -218,6 +219,73 @@ final class ComprobanteProveedorPdfIaPipelineService
         }
 
         return $resultado;
+    }
+
+    /**
+     * Comprobante con solo TOTAL (sin IVA/percepciones): una línea exento = total.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function sanearSoloTotalComoExento(array $data, string $textoOcr): array
+    {
+        $total = isset($data['total']) ? (float) $data['total'] : 0.0;
+        $lineas = is_array($data['lineas'] ?? null) ? $data['lineas'] : [];
+        if ($total <= 0 || $lineas === []) {
+            return $data;
+        }
+
+        $sumaIva = 0.0;
+        $sumaOtros = 0.0;
+        $sumaNeto = 0.0;
+        $sumaExento = 0.0;
+        foreach ($lineas as $linea) {
+            if (! is_array($linea)) {
+                continue;
+            }
+            $imp = abs((float) ($linea['importe'] ?? 0));
+            $tipo = strtolower((string) ($linea['tipo'] ?? ''));
+            if (str_contains($tipo, 'iva') && ! str_contains($tipo, 'percepcion') && ! str_contains($tipo, 'retencion')) {
+                $sumaIva += $imp;
+            } elseif (str_contains($tipo, 'exento')) {
+                $sumaExento += $imp;
+            } elseif (str_contains($tipo, 'neto') || str_contains($tipo, 'subtotal') || str_contains($tipo, 'gravado')) {
+                $sumaNeto += $imp;
+            } elseif (str_contains($tipo, 'percepcion') || str_contains($tipo, 'interno') || str_contains($tipo, 'retencion') || str_contains($tipo, 'tributo')) {
+                $sumaOtros += $imp;
+            }
+        }
+
+        if ($sumaIva > 0.01 || $sumaOtros > 0.01) {
+            return $data;
+        }
+
+        if ($sumaExento > 0 && abs($sumaExento - $total) <= 0.05 && $sumaNeto <= 0.01) {
+            $data['subtotal'] = $total;
+            $data['lineas'] = [[
+                'descripcion' => 'Operaciones exentas (total sin desglose IVA)',
+                'importe' => $total,
+                'alicuota_iva' => 0.0,
+                'tipo' => 'exento',
+            ]];
+            $data['_meta']['lineas_origen'] = 'solo_total_exento';
+
+            return $data;
+        }
+
+        $senalExento = (bool) preg_match('/imp\.?\s*exento/iu', $textoOcr);
+        if ($sumaNeto > 0 && abs($sumaNeto - $total) <= 0.05 && ($senalExento || $sumaExento <= 0.01)) {
+            $data['subtotal'] = $total;
+            $data['lineas'] = [[
+                'descripcion' => 'Operaciones exentas (total sin desglose IVA)',
+                'importe' => $total,
+                'alicuota_iva' => 0.0,
+                'tipo' => 'exento',
+            ]];
+            $data['_meta']['lineas_origen'] = 'solo_total_exento';
+        }
+
+        return $data;
     }
 
     /**

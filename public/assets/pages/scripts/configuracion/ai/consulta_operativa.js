@@ -13,7 +13,8 @@
 		intent: null,
 		placeholder: '',
 		busy: false,
-		ultimaExport: null
+		ultimaExport: null,
+		ultimoPedido: null
 	};
 
 	function escapeHtml(s) {
@@ -70,6 +71,70 @@
 		});
 		html += '</div>';
 		return html;
+	}
+
+	function renderPedidoConsumoAcciones(data) {
+		var datos = data && data.datos ? data.datos : null;
+		if (!datos || (!datos.borrador_compra && !datos.borrador_sala)) {
+			return '';
+		}
+		state.ultimoPedido = {
+			decisionId: data.ai_decision_id || null,
+			borrador_compra: datos.borrador_compra || null,
+			borrador_sala: datos.borrador_sala || null,
+			puede_compra: !!datos.puede_confirmar_compra,
+			puede_sala: !!datos.puede_confirmar_sala
+		};
+		if (!CFG.urlConfirmarPedido) {
+			return '<div class="small text-muted mt-1">Borradores listos (use Alta RQ si no aparece el botón de confirmar).</div>';
+		}
+		var html = '<div class="anita-ai-consulta__pedido-acciones mt-2">';
+		if (state.ultimoPedido.borrador_compra && state.ultimoPedido.puede_compra) {
+			html += '<button type="button" class="btn btn-sm btn-success mr-1 anita-ai-consulta__btn-confirmar-pedido" data-tipo="compra">'
+				+ '<i class="fa fa-check"></i> Crear RQ compra</button>';
+		}
+		if (state.ultimoPedido.borrador_sala && state.ultimoPedido.puede_sala) {
+			html += '<button type="button" class="btn btn-sm btn-info anita-ai-consulta__btn-confirmar-pedido" data-tipo="sala">'
+				+ '<i class="fa fa-exchange"></i> Crear RQ sala</button>';
+		}
+		html += '</div>';
+		return html;
+	}
+
+	function confirmarPedidoConsumo(tipo) {
+		if (!state.ultimoPedido || !CFG.urlConfirmarPedido) {
+			return;
+		}
+		var borrador = tipo === 'sala' ? state.ultimoPedido.borrador_sala : state.ultimoPedido.borrador_compra;
+		if (!borrador) {
+			showError('No hay borrador «' + tipo + '» en la última proyección.');
+			return;
+		}
+		if (!window.confirm('¿Confirmar creación de requisición de ' + tipo + ' con las líneas sugeridas?')) {
+			return;
+		}
+		$.ajax({
+			url: CFG.urlConfirmarPedido,
+			method: 'POST',
+			data: {
+				tipo: tipo,
+				ai_decision_id: state.ultimoPedido.decisionId || '',
+				borrador: JSON.stringify(borrador)
+			},
+			headers: {
+				'X-CSRF-TOKEN': csrf(),
+				'Accept': 'application/json'
+			}
+		}).done(function (resp) {
+			if (resp && resp.ok) {
+				appendMsg('bot', '<span class="text-success">' + escapeHtml(resp.message || 'Documento creado.') + '</span>');
+			} else {
+				appendMsg('bot', '<span class="text-warning">' + escapeHtml((resp && resp.message) || 'No se pudo confirmar.') + '</span>');
+			}
+		}).fail(function (xhr) {
+			var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'Error al confirmar el pedido.';
+			appendMsg('bot', '<span class="text-danger">' + escapeHtml(msg) + '</span>');
+		});
 	}
 
 	function csrf() {
@@ -189,6 +254,7 @@
 		}
 		html += renderTabla(data.tabla);
 		html += renderPlanPasos(data.datos);
+		html += renderPedidoConsumoAcciones(data);
 		var links = Array.isArray(data.links) ? data.links : [];
 		if (links.length) {
 			html += '<div class="anita-ai-consulta__links">';
@@ -337,6 +403,10 @@
 		$('#anita-ai-consulta-chat').on('click', '.anita-ai-consulta__btn-excel', function (e) {
 			e.preventDefault();
 			exportarExcel();
+		});
+		$('#anita-ai-consulta-chat').on('click', '.anita-ai-consulta__btn-confirmar-pedido', function (e) {
+			e.preventDefault();
+			confirmarPedidoConsumo($(this).attr('data-tipo') || 'compra');
 		});
 		$('#anita-ai-consulta-chat').on('click', '.anita-ai-consulta__plan-paso', function (e) {
 			e.preventDefault();

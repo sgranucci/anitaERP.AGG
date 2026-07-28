@@ -792,43 +792,72 @@ final class FacturaProveedorPieTotalesSupport
      */
     private function conLineas(array $vals, string $origen): array
     {
+        $total = (float) ($vals['total'] ?? 0);
+        $subtotal = (float) ($vals['subtotal'] ?? 0);
+        $iva = (float) ($vals['iva'] ?? 0);
+        $internos = (float) ($vals['impuestos_internos'] ?? 0);
+        $percIva = (float) ($vals['percepcion_iva'] ?? 0);
+        $percIibb = (float) ($vals['percepcion_iibb'] ?? 0);
+
+        // NC/FC “rara”: solo TOTAL (o SUBTOTAL = TOTAL) sin IVA ni tributos → exento = total.
+        $sinDesgloseIva = $total > 0
+            && $iva <= 0.005
+            && $internos <= 0.005
+            && $percIva <= 0.005
+            && $percIibb <= 0.005
+            && ($subtotal <= 0.005 || abs($subtotal - $total) <= 0.05);
+
+        if ($sinDesgloseIva) {
+            $vals['subtotal'] = $total;
+
+            return $vals + [
+                'lineas' => [[
+                    'descripcion' => 'Operaciones exentas (total sin desglose IVA)',
+                    'importe' => $total,
+                    'alicuota_iva' => 0.0,
+                    'tipo' => 'exento',
+                ]],
+                'origen' => $origen,
+            ];
+        }
+
         $lineas = [];
-        if ($vals['subtotal'] > 0) {
+        if ($subtotal > 0) {
             $lineas[] = [
                 'descripcion' => 'Neto gravado',
-                'importe' => $vals['subtotal'],
+                'importe' => $subtotal,
                 'alicuota_iva' => null,
                 'tipo' => 'neto',
             ];
         }
-        if ($vals['iva'] > 0) {
+        if ($iva > 0) {
             $lineas[] = [
                 'descripcion' => 'I.V.A. INSCRIPTO',
-                'importe' => $vals['iva'],
+                'importe' => $iva,
                 'alicuota_iva' => null,
                 'tipo' => 'iva',
             ];
         }
-        if ($vals['impuestos_internos'] > 0) {
+        if ($internos > 0) {
             $lineas[] = [
                 'descripcion' => 'IMPUESTOS INTERNOS',
-                'importe' => $vals['impuestos_internos'],
+                'importe' => $internos,
                 'alicuota_iva' => null,
                 'tipo' => 'interno',
             ];
         }
-        if ($vals['percepcion_iva'] > 0) {
+        if ($percIva > 0) {
             $lineas[] = [
                 'descripcion' => 'Percepción IVA / RG 5329',
-                'importe' => $vals['percepcion_iva'],
+                'importe' => $percIva,
                 'alicuota_iva' => 3.0,
                 'tipo' => 'percepcion_iva',
             ];
         }
-        if ($vals['percepcion_iibb'] > 0) {
+        if ($percIibb > 0) {
             $lineas[] = [
                 'descripcion' => 'PERCEP II.BB.',
-                'importe' => $vals['percepcion_iibb'],
+                'importe' => $percIibb,
                 'alicuota_iva' => null,
                 'tipo' => 'percepcion_iibb',
             ];

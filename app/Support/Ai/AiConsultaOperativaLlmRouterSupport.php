@@ -64,6 +64,7 @@ Reglas:
 - "saldo del artículo/insumo" → articulo_saldo; "kardex/movimientos" → articulo_kardex (valor/sku).
 - "insumo" → solo_insumo=true. Tolera typos (muzarella/mozarella).
 - "qué hago / plan para / desvíos" → plan_agente (params.evento: desvio_conciliacion|deuda_proveedor|deuda_cliente|firma_oc|stock_insumo).
+- "pedido consumo / qué pedimos / planear pedido" → pedido_consumo_sector (params.centrocosto_codigo o codigo, deposito_id o deposito_codigo; opcional fecha_desde/fecha_hasta, dias_cobertura).
 - "cómo hago / manual / ayuda / documentación" → consultar_manual (params.valor = frase completa).
 - OC → ordencompra; firmar/árbol → arbol_oc.
 - Período: fecha_desde/fecha_hasta ISO; "este mes", "mes pasado", "julio"/"julio 2026".
