@@ -156,9 +156,16 @@ final class ClienteAnitaNumeracionSupport
         return $numero;
     }
 
+    /**
+     * Código en ERP: sin ceros a la izquierda (Anita sí usa 6 dígitos en clim_cliente).
+     */
     public static function formatearCodigoErp(int $numero): string
     {
-        return str_pad((string) $numero, 6, '0', STR_PAD_LEFT);
+        if ($numero <= 0) {
+            throw new \InvalidArgumentException('Número de cliente ERP inválido.');
+        }
+
+        return (string) $numero;
     }
 
     /**

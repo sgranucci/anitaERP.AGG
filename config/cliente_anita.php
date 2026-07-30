@@ -39,4 +39,35 @@ return [
     'villafranca' => [
         'path_sistema' => env('CLIENTE_ANITA_VILLAFRANCA_PATH', '/usr2/villafranca'),
     ],
+
+    /*
+     * Fallback clim_zonamult si el bridge no devuelve zonamult (zonm_codjur → zonm_codigo).
+     * Preferencia: lectura live de ventas.zonamult; este mapa solo si Anita no responde.
+     */
+    'zonamult_por_jurisdiccion' => [
+        901 => 1,  // CABA
+        902 => 2,  // PBA
+        903 => 15, // Catamarca
+        904 => 13, // Cordoba
+        905 => 7,  // Corrientes
+        906 => 6,  // Chaco
+        907 => 5,  // Chubut
+        908 => 16, // Entre Rios
+        909 => 20, // Formosa
+        910 => 24, // Jujuy
+        911 => 9,  // La Pampa
+        912 => 23, // La Rioja
+        913 => 10, // Mendoza
+        914 => 17, // Misiones
+        915 => 4,  // Neuquen
+        916 => 3,  // Rio Negro
+        917 => 22, // Salta
+        918 => 21, // San Juan
+        919 => 11, // San Luis
+        920 => 8,  // Santa Cruz
+        921 => 14, // Santa Fe
+        922 => 18, // Santiago del Estero
+        923 => 12, // Tierra del Fuego
+        924 => 19, // Tucuman
+    ],
 ];

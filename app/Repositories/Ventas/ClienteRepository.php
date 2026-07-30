@@ -33,6 +33,7 @@ use App\ApiAnita;
 use App\Support\Ventas\ClienteListadoFiltros;
 use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
+use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Services\Ventas\ClienteAnitaSyncService;
 use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
@@ -1248,6 +1249,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$codigolistaprecio, $codigoabasto, $codigocoeficiente, $codigodistribuidor,
 			$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
 
+		$codigozonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaId(
+			isset($request['provincia_id']) ? (int) $request['provincia_id'] : null
+		);
+
 		$fecha = Carbon::now()->format('Ymd');
 
 		if (config('app.empresa') == 'EL BIERZO') {
@@ -1313,7 +1318,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'0',
 				'".$codigozonavta."',
 				'".(($request['subzonavta_id'] ?? 0) > 0 ? $request['subzonavta_id'] : 0)."',
-				'".$codigoprovincia."',
+				'".$codigozonamult."',
 				'".$codigovendedor."',
 				'".$codigocobrador."',
 				'".$codigotransporte."',
@@ -1469,8 +1474,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 	 */
 	public function replicarClienteEnAnitaPorCodigo(string $codigo): string
 	{
-		$codigoNorm = ltrim($codigo, '0');
-		$cliente = $this->model->where('codigo', $codigoNorm)->first();
+		$codigoNorm = ltrim($codigo, '0') ?: '0';
+		$cliente = $this->model->whereIn('codigo', $this->variantesCodigoCliente($codigoNorm))->first();
 		if ($cliente === null) {
 			throw new ModelNotFoundException('Cliente ERP no encontrado con código '.$codigo);
 		}
@@ -1610,6 +1615,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$codigolistaprecio, $codigoabasto, $codigocoeficiente, $codigodistribuidor,
 			$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
 
+		$codigozonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaId(
+			isset($request['provincia_id']) ? (int) $request['provincia_id'] : null
+		);
+
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre']);
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
 		$domicilio = $this->domicilioParaAnita($request['domicilio'] ?? '');
@@ -1647,7 +1656,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_cta_contable 	            = '".$cuentacontable."',
                 clim_zonavta 	                = '".$codigozonavta."',
                 clim_subzona 	                = '".($request['subzonavta_id'] > 0 ? $request['subzonavta_id'] : 0)."',
-                clim_zonamult 	                = '".$codigoprovincia."',
+                clim_zonamult 	                = '".$codigozonamult."',
                 clim_vendedor 	                = '".$codigovendedor."',
                 clim_cobrador 	                = '".$codigocobrador."',
                 clim_expreso 	                = '".$codigotransporte."',
