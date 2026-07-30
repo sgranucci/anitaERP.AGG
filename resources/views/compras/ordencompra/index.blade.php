@@ -126,8 +126,8 @@ $(function () {
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-ordencompra',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => OrdencompraListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('consultar_ordencompra'),
+                        'tieneCriterios' => OrdencompraListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => route('consultar_ordencompra', OrdencompraListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
                         'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-ordencompra',
                         'toggleId' => 'btn-toggle-filtros-ordencompra',
@@ -139,10 +139,9 @@ $(function () {
                 </div>
             </div>
             <form method="get" action="{{ route('consultar_ordencompra') }}" id="form-filtros-ordencompra" class="mb-0">
-                @include('compras.ordencompra.partials.filtros_listado', [
-                    'limpiarUrl' => route('consultar_ordencompra'),
-                ])
+                @include('compras.ordencompra.partials.filtros_listado')
             </form>
+            @include('compras.ordencompra.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_ordencompra',

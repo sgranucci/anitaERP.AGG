@@ -59,6 +59,8 @@ function aplicarCuentaContableEnContexto($ctx, data) {
         $ctx.find('.cuentacontable_id_previa').val(data.id);
         $ctx.find('.codigo_previo').val(data.codigo);
         actualizarLinkEditarCuentaContable($ctx, data.id);
+        // Contexto de grilla/campo: no tocar otros .tm-cuentacontable-campo del form.
+        return;
     }
 
     $('#cuentacontable_id').val(data.id);
@@ -75,6 +77,7 @@ function limpiarCuentaContableEnContexto($ctx) {
         $ctx.find('.cuentacontable_id_previa').val('');
         $ctx.find('.codigo_previo').val('');
         actualizarLinkEditarCuentaContable($ctx, 0);
+        return;
     }
 
     $('#cuentacontable_id').val('');

@@ -61,6 +61,12 @@ label.requerido:after{
 .width120{
     width: 120px !important;
 }
+.width160{
+    width: 160px !important;
+}
+.width180{
+    width: 180px !important;
+}
 .pl-40{
     padding-left:40px !important;
 }

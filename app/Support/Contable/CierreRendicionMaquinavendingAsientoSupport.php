@@ -396,11 +396,11 @@ final class CierreRendicionMaquinavendingAsientoSupport
             ->find($cuentaRefId);
 
         if ($caja !== null) {
-            $cc = $caja->cuentacontables;
-            if ($cc !== null && (int) ($cc->empresa_id ?? 0) === $empresaId) {
-                $cache[$cuentaRefId] = (int) $cc->id;
+            $desdeCaja = CuentacajaCuentacontableResolverSupport::resolverIdParaEmpresa($caja, $empresaId);
+            if ($desdeCaja !== null) {
+                $cache[$cuentaRefId] = $desdeCaja;
 
-                return (int) $cc->id;
+                return $desdeCaja;
             }
         }
 
@@ -414,8 +414,13 @@ final class CierreRendicionMaquinavendingAsientoSupport
             return $directa;
         }
 
+        $detalle = $caja !== null
+            ? ' (cuentacaja '.$caja->codigo.' — '.$caja->nombre.')'
+            : '';
+
         throw new InvalidArgumentException(
-            'No se pudo resolver cuenta contable para referencia #'.$cuentaRefId.' (empresa '.$empresaId.').',
+            'No se pudo resolver cuenta contable para referencia #'.$cuentaRefId
+            .' (empresa '.$empresaId.')'.$detalle.'.',
         );
     }
 

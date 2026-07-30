@@ -254,23 +254,41 @@ class ConciliacionBancariaExport
         $ws->setCellValue('A2', 'Movimientos de Cuentas sin conciliar');
         $ws->setCellValue('A3', 'Desde primer mov. hasta '.$this->resultado['fecha_hasta']);
         $ws->setCellValue('A4', 'Cuenta: ('.str_pad((string) ($cc?->codigo ?? ''), 8, '0', STR_PAD_LEFT).') '.$cc?->nombre);
+        $ws->setCellValue('A1', 'Fuente: '.($this->resultado['pendientes_cheques_fuente'] ?? 'mayor'));
 
         $this->estiloCabecera($ws, 5, [
             'A' => 'Tip', 'B' => 'Numero', 'C' => 'N.Orig.', 'D' => 'F.Mov.', 'E' => 'F.Dev.',
-            'F' => 'Detalle', 'G' => 'Debitos', 'H' => 'Creditos', 'I' => 'N.Con.', 'J' => 'Concepto',
+            'F' => 'F.Entr.', 'G' => 'F.Conc.', 'H' => 'Detalle', 'I' => 'Debitos', 'J' => 'Creditos',
         ]);
 
+        $pendientes = $this->resultado['pendientes_cheques_cpromae'] ?? null;
         $row = 6;
+        if (is_array($pendientes) && $pendientes !== []) {
+            foreach ($pendientes as $ch) {
+                $ws->setCellValue('A'.$row, $ch['tip'] ?? 'CHP');
+                $ws->setCellValue('B'.$row, $ch['numero_cheque'] ?? '');
+                $ws->setCellValue('D'.$row, $ch['fecha_emision'] ?? '');
+                $ws->setCellValue('E'.$row, $ch['fecha_cheque'] ?? '');
+                $ws->setCellValue('F'.$row, $ch['fecha_entrega'] ?? '');
+                $ws->setCellValue('G'.$row, $ch['fecha_conciliacion'] ?? '');
+                $ws->setCellValue('H'.$row, $ch['entregado_a'] ?? '');
+                $ws->setCellValue('J'.$row, abs((float) ($ch['importe'] ?? 0)));
+                $row++;
+            }
+
+            return;
+        }
+
         foreach ($this->resultado['pendientes_contables'] ?? [] as $mov) {
             $importe = \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport::importeFirmadoContable($mov);
             $ws->setCellValue('A'.$row, $mov['tipo_comp'] ?? '');
             $ws->setCellValue('B'.$row, $mov['nro'] ?? '');
             $ws->setCellValue('D'.$row, $mov['fecha_fmt'] ?? '');
-            $ws->setCellValue('F'.$row, $mov['descripcion'] ?? '');
+            $ws->setCellValue('H'.$row, $mov['descripcion'] ?? '');
             if ($importe >= 0) {
-                $ws->setCellValue('G'.$row, $importe);
+                $ws->setCellValue('I'.$row, $importe);
             } else {
-                $ws->setCellValue('H'.$row, abs($importe));
+                $ws->setCellValue('J'.$row, abs($importe));
             }
             $row++;
         }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Caja\Flash;
 
+use App\Exports\Caja\Flash\FlashCajaDesgloseWigosExport;
 use App\Exports\Caja\Flash\FlashCajaHistoricoDiarioExport;
 use App\Exports\Caja\Flash\FlashCajaListadoExport;
 use App\Exports\Caja\Flash\FlashCajaReporteExport;
@@ -14,14 +15,17 @@ use App\Services\Caja\Flash\FlashCajaCalculoService;
 use App\Support\Caja\Flash\FlashCajaHistoricoFiltros;
 use App\Support\Caja\Flash\FlashCajaListadoFiltros;
 use App\Support\Caja\Flash\FlashCajaReporteSupport;
-use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Reportes\ReportePreferenciasUsuario;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Jurosh\PDFMerge\PDFMerger;
 use Maatwebsite\Excel\Excel;
 
 class FlashCajaController extends Controller
 {
+    private const PREFERENCIAS_HISTORICO = 'flash_caja_historico';
+
     public function __construct(
         private readonly FlashCajaRepositoryInterface $repository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
@@ -32,6 +36,7 @@ class FlashCajaController extends Controller
     {
         can('listar-flash-caja');
 
+        $empresa_query = $this->empresaRepository->allFiltrado();
         $filtros = $this->resolverFiltrosListado($request);
         $datas = $this->repository->leeFlashCaja($filtros, true);
 
@@ -40,7 +45,7 @@ class FlashCajaController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => FlashCajaListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => FlashCajaListadoFiltros::CAMPOS,
-            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'empresa_query' => $empresa_query,
         ]);
     }
 
@@ -182,6 +187,47 @@ class FlashCajaController extends Controller
         ]);
     }
 
+    public function exportarDesgloseWigos(Request $request)
+    {
+        if (! can('crear-flash-caja', false) && ! can('actualizar-flash-caja', false)) {
+            abort(403);
+        }
+
+        ini_set('max_execution_time', '300');
+        ini_set('memory_limit', '512M');
+
+        $request->validate([
+            'empresa_id' => ['required', 'integer', 'min:1'],
+            'fecha' => ['required', 'date'],
+        ]);
+
+        $empresaId = (int) $request->input('empresa_id');
+        $this->assertAccesoEmpresa($empresaId);
+        $fecha = (string) $request->input('fecha');
+
+        try {
+            $calculado = $this->calculoService->calcular($empresaId, $fecha);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->back()
+                ->with('error', 'No se pudo armar el desglose Wigos: '.$e->getMessage());
+        }
+
+        $desglose = $calculado['desglose_wigos'] ?? null;
+        if (! is_array($desglose)) {
+            return redirect()
+                ->back()
+                ->with('error', 'El cálculo no devolvió desglose Wigos.');
+        }
+
+        $empresa = $this->empresaRepository->find($empresaId);
+        $empresaNombre = (string) ($empresa->nombre ?? '');
+        $slugFecha = str_replace('-', '', $fecha);
+
+        return (new FlashCajaDesgloseWigosExport($desglose, $empresaNombre))
+            ->download('flash_desglose_wigos_'.$empresaId.'_'.$slugFecha.'.xlsx');
+    }
+
     public function reporte(Request $request, $id, $formato = 'PDF')
     {
         can('exportar-reporte-flash-caja');
@@ -209,18 +255,22 @@ class FlashCajaController extends Controller
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $filtros = FlashCajaHistoricoFiltros::resolverDesdeRequest($request);
-        $filtros = $this->aplicarDefaultsHistorico($filtros);
+        $filtros = $this->aplicarDefaultsHistorico($request, $filtros, $empresaQuery);
 
         $consultado = $request->boolean('consultar')
             && FlashCajaHistoricoFiltros::tieneCriteriosAplicados($filtros);
 
         $reporte = null;
-        $empresaNombre = null;
+        $empresasTexto = null;
 
         if ($consultado) {
-            $this->assertAccesoEmpresa((int) $filtros['empresa_id']);
+            $this->assertAccesoEmpresas(FlashCajaHistoricoFiltros::empresaIds($filtros));
+            ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_HISTORICO, [
+                'empresa_ids' => FlashCajaHistoricoFiltros::empresaIds($filtros),
+                'consolidar_empresas' => (bool) ($filtros['consolidar_empresas'] ?? true),
+            ]);
             $reporte = $this->generarReporteHistorico($filtros);
-            $empresaNombre = $reporte['empresa']->nombre ?? null;
+            $empresasTexto = $reporte['empresas_texto'] ?? null;
         }
 
         return view('caja.flash.reporte_historico.index', [
@@ -229,7 +279,7 @@ class FlashCajaController extends Controller
             'filtrosQuery' => FlashCajaHistoricoFiltros::paraQueryString($filtros),
             'consultado' => $consultado,
             'reporte' => $reporte,
-            'subtitulo' => FlashCajaHistoricoFiltros::subtitulo($filtros, $empresaNombre),
+            'subtitulo' => FlashCajaHistoricoFiltros::subtitulo($filtros, $empresasTexto),
         ]);
     }
 
@@ -240,14 +290,17 @@ class FlashCajaController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $empresaQuery = $this->empresaRepository->allFiltrado();
         $filtros = FlashCajaHistoricoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarDefaultsHistorico($request, $filtros, $empresaQuery);
         if (! FlashCajaHistoricoFiltros::tieneCriteriosAplicados($filtros)) {
             return redirect()->route('flash_caja_reporte_historico');
         }
 
-        $this->assertAccesoEmpresa((int) $filtros['empresa_id']);
+        $empresaIds = FlashCajaHistoricoFiltros::empresaIds($filtros);
+        $this->assertAccesoEmpresas($empresaIds);
         $reporte = $this->generarReporteHistorico($filtros);
-        $slug = 'flash_historico_'.$filtros['empresa_id'].'_'.$filtros['fecha_desde'].'_'.$filtros['fecha_hasta'];
+        $slug = 'flash_historico_'.implode('-', $empresaIds).'_'.$filtros['fecha_desde'].'_'.$filtros['fecha_hasta'];
 
         switch (strtoupper((string) $formato)) {
             case 'EXCEL':
@@ -259,6 +312,9 @@ class FlashCajaController extends Controller
                     ->download($slug.'.csv', Excel::CSV);
 
             case 'PDF':
+                if (count($empresaIds) > 1 && empty($filtros['consolidar_empresas'])) {
+                    return $this->descargarPdfHistoricoPorEmpresa($reporte, $slug);
+                }
                 $html = view('caja.flash.reporte_historico.listado', compact('reporte'))->render();
 
                 return $this->descargarReportePdf($html, $slug);
@@ -273,29 +329,89 @@ class FlashCajaController extends Controller
      */
     private function generarReporteHistorico(array $filtros): array
     {
-        $empresaId = (int) $filtros['empresa_id'];
-        $filas = $this->repository->leeFlashPorRango(
-            $empresaId,
-            (string) $filtros['fecha_desde'],
-            (string) $filtros['fecha_hasta'],
-        );
+        $empresaIds = FlashCajaHistoricoFiltros::empresaIds($filtros);
+        $consolidar = ! empty($filtros['consolidar_empresas']) || count($empresaIds) <= 1;
+        $conSeason = (int) ($filtros['con_season'] ?? 1) === 1;
+        $fechaDesde = (string) $filtros['fecha_desde'];
+        $fechaHasta = (string) $filtros['fecha_hasta'];
 
-        $empresa = $this->empresaRepository->find($empresaId);
+        $nombres = [];
+        foreach ($empresaIds as $empresaId) {
+            $nombres[$empresaId] = (string) ($this->empresaRepository->find($empresaId)?->nombre ?? ('#'.$empresaId));
+        }
+        $empresasTexto = implode(', ', array_values($nombres));
 
-        return FlashCajaReporteSupport::armarHistorico(
-            $filas,
-            $empresa,
-            (string) $filtros['fecha_desde'],
-            (string) $filtros['fecha_hasta'],
-            (int) ($filtros['con_season'] ?? 1) === 1,
-        );
+        if ($consolidar) {
+            $empresaRef = $this->empresaRepository->find((int) $empresaIds[0]);
+            $filas = $this->repository->leeFlashPorRango(
+                (int) $empresaIds[0],
+                $fechaDesde,
+                $fechaHasta,
+            );
+            $reporte = FlashCajaReporteSupport::armarHistorico(
+                $filas,
+                $empresaRef,
+                $fechaDesde,
+                $fechaHasta,
+                $conSeason,
+                $empresaIds,
+            );
+            $reporte['empresas_texto'] = $empresasTexto;
+            $reporte['consolidar_empresas'] = true;
+            $reporte['multiempresa'] = count($empresaIds) > 1;
+
+            return $reporte;
+        }
+
+        $secciones = [];
+        foreach ($empresaIds as $empresaId) {
+            $empresa = $this->empresaRepository->find($empresaId);
+            $filas = $this->repository->leeFlashPorRango($empresaId, $fechaDesde, $fechaHasta);
+            $seccion = FlashCajaReporteSupport::armarHistorico(
+                $filas,
+                $empresa,
+                $fechaDesde,
+                $fechaHasta,
+                $conSeason,
+                [$empresaId],
+            );
+            $seccion['empresas_texto'] = $nombres[$empresaId] ?? '';
+            $secciones[] = $seccion;
+        }
+
+        return [
+            'titulo' => 'Consolidated Income',
+            'multiempresa' => true,
+            'consolidar_empresas' => false,
+            'empresa_ids' => $empresaIds,
+            'empresas_texto' => $empresasTexto,
+            'secciones' => $secciones,
+            'empresa' => $this->empresaRepository->find((int) $empresaIds[0]),
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'periodo' => FlashCajaReporteSupport::formatearPeriodo($fechaDesde, $fechaHasta),
+            'through_day' => Carbon::parse($fechaHasta)->format('d'),
+            'es_historico' => true,
+            'con_season' => $conSeason,
+            'cantidad_dias' => collect($secciones)->sum(fn ($s) => (int) ($s['cantidad_dias'] ?? 0)),
+            'filas_diarias' => [],
+            'budget_mes' => $secciones[0]['budget_mes'] ?? [],
+        ];
     }
 
     /**
-     * @param  array{empresa_id: int, fecha_desde: string, fecha_hasta: string, con_season?: int}  $filtros
-     * @return array{empresa_id: int, fecha_desde: string, fecha_hasta: string, con_season: int}
+     * @param  array{
+     *   empresa_ids?: list<int>,
+     *   empresa_id?: int,
+     *   consolidar_empresas?: bool,
+     *   fecha_desde: string,
+     *   fecha_hasta: string,
+     *   con_season?: int
+     * }  $filtros
+     * @param  \Illuminate\Support\Collection<int, mixed>  $empresaQuery
+     * @return array<string, mixed>
      */
-    private function aplicarDefaultsHistorico(array $filtros): array
+    private function aplicarDefaultsHistorico(Request $request, array $filtros, $empresaQuery): array
     {
         if ($filtros['fecha_desde'] === '' && $filtros['fecha_hasta'] === '') {
             $filtros['fecha_desde'] = Carbon::today()->startOfMonth()->format('Y-m-d');
@@ -305,7 +421,83 @@ class FlashCajaController extends Controller
             $filtros['con_season'] = 1;
         }
 
+        $permitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if (! $request->has('consolidar_empresas')) {
+            $filtros['consolidar_empresas'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_HISTORICO,
+                'consolidar_empresas',
+                true,
+            );
+        }
+
+        if (FlashCajaHistoricoFiltros::empresaIds($filtros) === []) {
+            $cached = ReportePreferenciasUsuario::leerEmpresaIds(self::PREFERENCIAS_HISTORICO);
+            if ($cached !== null && $cached !== []) {
+                $filtros['empresa_ids'] = ReportePreferenciasUsuario::filtrarEmpresaIdsPermitidas($cached, $permitidos);
+            }
+        }
+
+        if (FlashCajaHistoricoFiltros::empresaIds($filtros) === [] && $empresaQuery->count() >= 1) {
+            $filtros['empresa_ids'] = $empresaQuery->count() === 1
+                ? [(int) $empresaQuery->first()->id]
+                : $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+        }
+
+        $filtros['empresa_ids'] = ReportePreferenciasUsuario::filtrarEmpresaIdsPermitidas(
+            FlashCajaHistoricoFiltros::empresaIds($filtros),
+            $permitidos,
+        );
+        $filtros['empresa_id'] = (int) ($filtros['empresa_ids'][0] ?? 0);
+
+        if (count($filtros['empresa_ids']) <= 1) {
+            $filtros['consolidar_empresas'] = true;
+        }
+
         return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $reporte
+     */
+    private function descargarPdfHistoricoPorEmpresa(array $reporte, string $slug)
+    {
+        $dir = storage_path('pdf/listados');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        $temporales = [];
+        try {
+            foreach ($reporte['secciones'] ?? [] as $seccion) {
+                $html = view('caja.flash.reporte_historico.listado', ['reporte' => $seccion])->render();
+                $temp = $dir.'/flash_historico_tmp_'.uniqid('', true).'.pdf';
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($html, 'UTF-8')->save($temp);
+                $temporales[] = $temp;
+            }
+
+            $destino = $dir.'/'.$slug.'.pdf';
+            if (count($temporales) === 1) {
+                rename($temporales[0], $destino);
+                $temporales = [];
+            } else {
+                $merger = new PDFMerger;
+                foreach ($temporales as $ruta) {
+                    $merger->addPDF($ruta, 'all', 'horizontal');
+                }
+                $merger->merge('file', $destino);
+            }
+
+            return response()->download($destino);
+        } finally {
+            foreach ($temporales as $ruta) {
+                if (is_file($ruta)) {
+                    @unlink($ruta);
+                }
+            }
+        }
     }
 
     private function descargarReportePdf(string $html, string $nombreBase)
@@ -360,7 +552,7 @@ class FlashCajaController extends Controller
             }
         } else {
             $calculado = $this->calculoService->calcular($empresaId, $fecha);
-            unset($calculado['advertencias_wigos']);
+            unset($calculado['advertencias_wigos'], $calculado['desglose_wigos']);
             $payload = array_merge($payload, $calculado);
         }
 
@@ -380,24 +572,36 @@ class FlashCajaController extends Controller
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $filtros = FlashCajaListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = FlashCajaListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
         $filtros['empresas_asignadas'] = $this->empresaRepository->traeEmpresasAsignadas();
-
-        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return $filtros;
-        }
 
         return $filtros;
     }
 
     private function assertAccesoEmpresa(int $empresaId): void
     {
+        $this->assertAccesoEmpresas([$empresaId]);
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     */
+    private function assertAccesoEmpresas(array $empresaIds): void
+    {
         $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
         if ($asignadas === [] || $asignadas === null) {
             return;
         }
-        if (! in_array($empresaId, array_map('intval', (array) $asignadas), true)) {
-            abort(403, 'Sin acceso a la empresa seleccionada.');
+        $permitidas = array_map('intval', (array) $asignadas);
+        foreach ($empresaIds as $empresaId) {
+            if (! in_array((int) $empresaId, $permitidas, true)) {
+                abort(403, 'Sin acceso a la empresa seleccionada.');
+            }
         }
     }
 }

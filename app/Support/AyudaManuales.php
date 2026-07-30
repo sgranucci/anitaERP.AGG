@@ -63,7 +63,7 @@ class AyudaManuales
             ],
             [
                 'modulo' => 'Solicitudes de pago',
-                'bajada' => 'Listado, filtros, planes madre/hijas, cuotas, árbol de aprobación, pago e informe analítico.',
+                'bajada' => 'Listado, carga masiva CSV, filtros, planes madre/hijas, cuotas, árbol, pago e informe analítico.',
                 'url' => route('manual_solicitudpago'),
                 'icono' => 'fa-money-check-alt',
                 'disponible' => true,

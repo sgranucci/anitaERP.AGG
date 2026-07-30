@@ -171,14 +171,17 @@ class CumplimientoRequisicionSalaListadoFiltros
             return;
         }
 
-        $query->where(function ($q) use ($valor) {
-            $q->where('cumplimiento_requisicion_sala.numero', 'like', '%'.$valor.'%')
-                ->orWhere('cumplimiento_requisicion_sala.id', 'like', '%'.$valor.'%')
-                ->orWhere('usuario.nombre', 'like', '%'.$valor.'%')
-                ->orWhere('empresa.nombre', 'like', '%'.$valor.'%')
-                ->orWhere('cumplimiento_requisicion_sala.leyenda', 'like', '%'.$valor.'%');
-            CoincidenciaFlexibleTexto::aplicar($q, $valor, self::COLUMNAS_COINCIDENCIA_FLEXIBLE);
-            $q->orWhereHas('articulos.requisicionSala', fn ($sq) => $sq->where('numerorequisicion', 'like', '%'.$valor.'%'));
+        $like = '%'.CoincidenciaFlexibleTexto::escapeLike($valor).'%';
+        $query->where(function ($q) use ($valor, $like) {
+            $q->where('cumplimiento_requisicion_sala.numero', 'like', $like)
+                ->orWhere('cumplimiento_requisicion_sala.id', 'like', $like)
+                ->orWhere('usuario.nombre', 'like', $like)
+                ->orWhere('empresa.nombre', 'like', $like)
+                ->orWhere('cumplimiento_requisicion_sala.leyenda', 'like', $like);
+            foreach (self::COLUMNAS_COINCIDENCIA_FLEXIBLE as $col) {
+                CoincidenciaFlexibleTexto::aplicar($q, $col, $valor, true);
+            }
+            $q->orWhereHas('articulos.requisicionSala', fn ($sq) => $sq->where('numerorequisicion', 'like', $like));
         });
     }
 
@@ -228,8 +231,11 @@ class CumplimientoRequisicionSalaListadoFiltros
 
         match ($operador) {
             'contiene' => $query->where(function ($q) use ($column, $valor) {
-                $q->where($column, 'like', '%'.$valor.'%');
-                CoincidenciaFlexibleTexto::aplicar($q, $valor, [$column]);
+                $like = '%'.CoincidenciaFlexibleTexto::escapeLike($valor).'%';
+                $q->where($column, 'like', $like);
+                if (in_array($column, self::COLUMNAS_COINCIDENCIA_FLEXIBLE, true)) {
+                    CoincidenciaFlexibleTexto::aplicar($q, $column, $valor, false);
+                }
             }),
             'empieza' => $query->where($column, 'like', $valor.'%'),
             'termina' => $query->where($column, 'like', '%'.$valor),

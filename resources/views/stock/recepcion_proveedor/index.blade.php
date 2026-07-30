@@ -36,8 +36,8 @@ Recepciones de proveedores
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-recepcion',
                         'filtroValor' => $filtros['filtro_valor'] ?? '',
-                        'tieneCriterios' => RecepcionProveedorListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('recepcion_proveedor'),
+                        'tieneCriterios' => RecepcionProveedorListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => route('recepcion_proveedor', RecepcionProveedorListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
                         'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-recepcion',
                         'toggleId' => 'btn-toggle-filtros-recepcion',
@@ -48,10 +48,9 @@ Recepciones de proveedores
                 </div>
             </div>
             <form method="get" action="{{ route('recepcion_proveedor') }}" id="form-filtros-recepcion" class="mb-0">
-                @include('stock.recepcion_proveedor.partials.filtros_listado', [
-                    'limpiarUrl' => route('recepcion_proveedor'),
-                ])
+                @include('stock.recepcion_proveedor.partials.filtros_listado')
             </form>
+            @include('stock.recepcion_proveedor.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', ['ruta' => 'lista_recepcion_proveedor', 'queryparams' => $filtrosQuery ?? []])
                 <table id="tabla-paginada" class="table table-hover table-striped table-sm">

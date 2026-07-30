@@ -36,6 +36,14 @@
         min-height: 2.75rem;
         min-width: 2.75rem;
     }
+    .tm-centrocosto-campo .form-control {
+        font-size: 1rem;
+        min-height: 2.75rem;
+    }
+    .tm-centrocosto-campo .btn {
+        min-height: 2.75rem;
+        min-width: 2.75rem;
+    }
     .tm-filtro {
         background: #f8f9fa;
         padding: 0.5rem 0;
@@ -153,6 +161,7 @@
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/transferencia/aviso-modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/transferencia/aviso-modal.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/transferencia_mercaderia/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/transferencia_mercaderia/index.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
@@ -292,18 +301,19 @@
                             </select>
                             <small class="text-muted" id="tm_destinatario_ayuda">Usuario del ERP que recibirá el aviso (activo y con email). Vacío = administrador principal del depósito.</small>
                         </div>
-                        <div class="form-group col-12 mb-2" id="tm_panel_centrocosto" style="display:none;">
-                            <label for="centrocosto_destino_id">Centro de costo destino</label>
-                            <select id="centrocosto_destino_id" class="form-control">
-                                <option value="">— Seleccionar —</option>
-                                @foreach ($centrocosto_query as $cc)
-                                    <option value="{{ $cc->id }}"
-                                        @if ((int) ($defaults['centrocosto_destino_id'] ?? auth()->user()->centrocosto_id ?? 0) === (int) $cc->id) selected @endif>
-                                        {{ $cc->codigo }} — {{ $cc->nombre }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <small class="text-muted">Requerido para tipos de transferencia que generan asiento contable.</small>
+                        <div id="tm_panel_centrocosto" style="display:none;">
+                            @include('contable.partials.campo_consulta_centrocosto', [
+                                'prefix' => 'destino',
+                                'layout' => 'inline',
+                                'inputName' => 'centrocosto_destino_id',
+                                'inputId' => 'centrocosto_destino_id',
+                                'label' => 'Centro de costo destino',
+                                'centrocostoId' => '',
+                                'codigo' => '',
+                                'descripcion' => '',
+                                'required' => true,
+                                'ayuda' => 'Obligatorio para tipos de transferencia que generan asiento contable.',
+                            ])
                         </div>
                         <div class="form-group col-12 mb-2">
                             <button type="button" id="tm_btn_agregar_articulo" class="btn btn-outline-primary btn-block">
@@ -350,5 +360,6 @@
 
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultaarticulo')
+@include('includes.contable.modalconsultacentrocosto')
 @include('includes.stock.modal_aviso_transferencia')
 @endsection

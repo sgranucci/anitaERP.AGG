@@ -8,15 +8,21 @@
     foreach (MovimientoStockListadoFiltros::CAMPOS as $key => $meta) {
         $operadoresJson[$key] = MovimientoStockListadoFiltros::operadoresParaCampo($key);
     }
-    $tieneCriteriosPanel = MovimientoStockListadoFiltros::tieneCriteriosAplicados($f);
-    $limpiarUrlPanel = $limpiarUrl ?? route('movimientostock');
-    $empresaIdSeleccion = (int) ($f['empresa_id'] ?? 0);
+    $tieneCriteriosPanel = MovimientoStockListadoFiltros::tieneCriteriosTexto($f);
+    $limpiarUrlPanel = $limpiarUrl ?? route('movimientostock', MovimientoStockListadoFiltros::paraQueryStringEmpresa($f));
+    $fScope = $f['empresa_scope'] ?? 'una';
+    $fEmp = (int) ($f['empresa_id'] ?? 0);
     $depositoIdSeleccion = (int) ($f['deposito_id'] ?? 0);
-    $empresasDisponibles = collect($empresa_query ?? []);
     $depositosDisponibles = collect($deposito_query ?? []);
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-movimientostock" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    {{-- Persistencia del filtro externo de empresa al buscar por texto o aplicar el panel --}}
+    @if ($fScope === 'todas')
+        <input type="hidden" name="empresa_todas" value="1">
+    @elseif ($fEmp > 0)
+        <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">
@@ -67,22 +73,9 @@
                 </button>
             </div>
         </div>
-        <hr class="my-2">
-        <div class="form-row align-items-end">
-            @if ($empresasDisponibles->count() > 1)
-                <div class="form-group col-md-3 col-sm-6 mb-2">
-                    <label class="small mb-1" for="empresa_id">Empresa</label>
-                    <select name="empresa_id" id="empresa_id" class="form-control form-control-sm">
-                        <option value="">Todas (asignadas)</option>
-                        @foreach ($empresasDisponibles as $emp)
-                            <option value="{{ $emp->id }}" @selected($empresaIdSeleccion === (int) $emp->id)>{{ $emp->nombre }}</option>
-                        @endforeach
-                    </select>
-                </div>
-            @elseif ($empresasDisponibles->count() === 1)
-                <input type="hidden" name="empresa_id" id="empresa_id" value="{{ (int) $empresasDisponibles->first()->id }}"/>
-            @endif
-            @if (($mostrarFiltroDeposito ?? false) && $depositosDisponibles->count() > 1)
+        @if (($mostrarFiltroDeposito ?? false) && $depositosDisponibles->count() > 1)
+            <hr class="my-2">
+            <div class="form-row align-items-end">
                 <div class="form-group col-md-3 col-sm-6 mb-2">
                     <label class="small mb-1" for="deposito_id">Dep&oacute;sito</label>
                     <select name="deposito_id" id="deposito_id" class="form-control form-control-sm">
@@ -92,9 +85,9 @@
                         @endforeach
                     </select>
                 </div>
-            @elseif ($depositosDisponibles->count() === 1)
-                <input type="hidden" name="deposito_id" id="deposito_id" value="{{ (int) $depositosDisponibles->first()->id }}"/>
-            @endif
-        </div>
+            </div>
+        @elseif ($depositosDisponibles->count() === 1)
+            <input type="hidden" name="deposito_id" id="deposito_id" value="{{ (int) $depositosDisponibles->first()->id }}"/>
+        @endif
     </div>
 </div>

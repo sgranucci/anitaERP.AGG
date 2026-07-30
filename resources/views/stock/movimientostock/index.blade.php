@@ -25,8 +25,8 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-movimientostock',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => MovimientoStockListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('movimientostock'),
+                        'tieneCriterios' => MovimientoStockListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => route('movimientostock', MovimientoStockListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
                         'placeholder' => 'Búsqueda rápida (movimientos y transferencias)…',
                         'toggleTarget' => '#panel-filtros-movimientostock',
                         'toggleId' => 'btn-toggle-filtros-movimientostock',
@@ -37,10 +37,9 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
                 </div>
             </div>
             <form method="get" action="{{ route('movimientostock') }}" id="form-filtros-movimientostock" class="mb-0">
-                @include('stock.movimientostock.partials.filtros_listado', [
-                    'limpiarUrl' => route('movimientostock'),
-                ])
+                @include('stock.movimientostock.partials.filtros_listado')
             </form>
+            @include('stock.movimientostock.partials.filtros_externos')
             @if(!empty($alcance_centro_costo))
                 <div class="px-3 py-2 border-bottom bg-white text-muted small">
                     <i class="fa fa-filter"></i>

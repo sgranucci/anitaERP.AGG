@@ -116,7 +116,7 @@
             <td>{{ $descripcionLinea !== '' ? $descripcionLinea : '—' }}</td>
             <td>{{ $leyendaLinea !== '' ? $leyendaLinea : '—' }}</td>
             <td class="num">{{ rtrim(rtrim(number_format((float) $linea->cantidad, 4, '.', ''), '0'), '.') }}</td>
-            <td class="cen">{{ $linea->fueradeservicio ? 'Sí' : 'No' }}</td>
+            <td class="cen">{{ ((string) ($linea->fueradeservicio ?? '')) === 'S' ? 'Sí' : 'No' }}</td>
             <td>{{ $linea->uid ?: '—' }}</td>
             <td>{{ $linea->numeroparte ?: '—' }}</td>
             <td>{{ $destinoLinea !== '' ? $destinoLinea : '—' }}</td>

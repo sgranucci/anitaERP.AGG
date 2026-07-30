@@ -119,9 +119,7 @@ class RequisicionQuery implements RequisicionQueryInterface
 
         RequisicionVisibilidadSupport::aplicarFiltroListado($q);
 
-        if (RequisicionListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            RequisicionListadoFiltros::aplicar($q, $filtros);
-        }
+        RequisicionListadoFiltros::aplicar($q, $filtros);
 
         $q->orderBy('requisicion.fecha', 'desc')->orderBy('requisicion.id', 'desc');
 

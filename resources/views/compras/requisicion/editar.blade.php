@@ -10,15 +10,22 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/presupuesto/capex/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/articulo_proveedor/operativo.js")}}" type="text/javascript"></script>
+@php
+    $estadoPendienteNombre = \App\Models\Compras\Requisicion_Estado::$enumEstado[array_search('P', array_column(\App\Models\Compras\Requisicion_Estado::$enumEstado, 'valor'))]['nombre'] ?? 'PENDIENTE';
+@endphp
 <script>
 window.requisicionLineasConfig = window.requisicionLineasConfig || {};
 window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_precio_ultima_compra_articulo'));
 window.requisicionLineasConfig.urlCalcularTotales = @json(route('requisicion_calcular_totales'));
+window.requisicionModoProvisorio = @json(!empty($es_provisorio));
+window.requisicionPideCcArbolAlGrabar = @json(empty($visualizar) && empty($es_provisorio) && (($data->estado ?? '') === $estadoPendienteNombre));
 window.msColoresOpciones = @json(($color_query ?? collect())->map(fn ($c) => ['id' => (int) $c->id, 'nombre' => $c->nombre])->values());
 window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id' => (int) $t->id, 'nombre' => $t->nombre])->values());
 </script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/lineas.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/form-color-talle.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/centrocosto-arbol-grabacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/centrocosto-arbol-grabacion.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/arbolaprobacion/panel_ia.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/consulta-listasprecio.js")}}" type="text/javascript"></script>
@@ -181,7 +188,8 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
                 </div>
             </form>
             @if(!empty($es_provisorio) && empty($visualizar))
-            <form action="{{ route('confirmar_requisicion', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-requisicion-confirmar" method="POST" class="d-none" aria-hidden="true">
+            <form action="{{ route('confirmar_requisicion', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-requisicion-confirmar" method="POST" class="d-none" aria-hidden="true"
+                  data-preview-cc-url="{{ route('centros_costo_arbol_requisicion', ['id' => $data->id]) }}">
                 @csrf
             </form>
             @if(empty($tiene_ordencompra_asociada))

@@ -298,14 +298,16 @@ class RecepcionProveedorAsientoService
             throw new \RuntimeException('La recepción no tiene asiento contable asociado.');
         }
 
-        $recepcion->loadMissing('asientos');
+        $recepcion->loadMissing(['asientos.asiento_movimientos.monedas', 'ordencompras']);
         $asiento = $recepcion->asientos;
         if (! $asiento) {
             throw new \RuntimeException('No se encontró el asiento id '.$asientoId.' de la recepción.');
         }
 
-        $preview ??= $this->armarPreviewAsiento($recepcion);
-        $payload = $preview['payload_asiento'];
+        // Fuente de verdad = asiento ERP persistido (no el preview): evita que CC/cuentas
+        // del preview desalineen ctamov vs movimientos ya grabados y fallen el assert.
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        $payload = $this->asientoRepository->armarPayloadAnitaDesdeModelo($asiento);
 
         $fechaAsiento = $asiento->fecha;
         if ($fechaAsiento instanceof \DateTimeInterface) {
@@ -319,6 +321,15 @@ class RecepcionProveedorAsientoService
             'empresa_id' => (int) $asiento->empresa_id,
             'tipoasiento_id' => (int) $asiento->tipoasiento_id,
             'fecha' => $fechaAsiento,
+            'recepcionproveedor_id' => (int) $recepcion->id,
+            'tipo' => $clave['tipo'],
+            'letra' => $clave['letra'],
+            'sucursal' => $clave['sucursal'],
+            'nro' => $clave['nro'],
+            'sistema_ctav' => 'C',
+            'ctav_o_compra' => (int) ($recepcion->ordencompras->numeroordencompra
+                ?? $payload['ctav_o_compra']
+                ?? 0),
         ]);
 
         $this->eliminarCtamovAnitaPorComRecepcion($recepcion);

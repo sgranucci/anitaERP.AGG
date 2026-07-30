@@ -4,6 +4,7 @@ namespace App\Repositories\Compras;
 
 use App\Models\Compras\Ordencompra;
 use App\Queries\Configuracion\CotizacionQueryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraTotalesCabecera;
@@ -17,6 +18,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
     public function __construct(
         private Ordencompra $model,
         private CotizacionQueryInterface $cotizacionQuery,
+        private EmpresaRepositoryInterface $empresaRepository,
     ) {
     }
 
@@ -150,6 +152,8 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
                 'valor' => $texto,
                 'valor_hasta' => '',
                 'busqueda' => $texto,
+                'empresa_id' => null,
+                'empresa_scope' => 'todas',
             ];
         }
 
@@ -252,9 +256,9 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             $q->where('ordencompra.sector_legajocompra_id', $sectorUsuarioId);
         }
 
-        if (OrdencompraListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            OrdencompraListadoFiltros::aplicar($q, $filtros);
-        }
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($q, 'ordencompra.empresa_id');
+
+        OrdencompraListadoFiltros::aplicar($q, $filtros);
     }
 
     public function proximoNumeroOrdencompra(): int

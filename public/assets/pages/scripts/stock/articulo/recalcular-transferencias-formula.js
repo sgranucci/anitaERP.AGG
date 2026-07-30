@@ -301,7 +301,11 @@
                 cargarPreview();
                 $('#rtf-resumen').text(
                     'Aplicado: ' + (data.lineas_actualizadas || 0) + ' línea(s), '
-                    + (data.movimientos_actualizados || 0) + ' movimiento(s). Recargando vista previa…'
+                    + (data.movimientos_actualizados || 0) + ' movimiento(s)'
+                    + (data.stkmae_actualizados != null
+                        ? ', ' + (data.stkmae_actualizados || 0) + ' precio(s) Anita (stkm_pre_compra3)'
+                        : '')
+                    + '. Recargando vista previa…'
                 );
             })
             .fail(function (xhr) {

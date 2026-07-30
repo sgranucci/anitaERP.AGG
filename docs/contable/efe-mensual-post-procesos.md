@@ -85,6 +85,7 @@ Implementación: `EfeMensualReporteService::armarFilasDatos`.
     - **no** pisa concepto 20;  
     - **solo** aplica si el REC tiene FGA/CIB/FDT conc=5 (no alcanza un FIB conc=5 solo).
 - **Objetivo vs Excel:** evitar que PAPELERA (FIB conc=5) pase de Varios a Gastronomía.
+- **Fallback (2026-07-29):** si no hay cuenta de gasto COM/piernas → `axp_concepto` (≠63). Solo se aplica a filas que siguen en **concepto 0** (no pisa c20/c12). No modifica el mayor por concepto.
 
 ### 6. Reimputa anticipo
 - **Clase:** `EfeDatosReimputaAnticipoSupport`

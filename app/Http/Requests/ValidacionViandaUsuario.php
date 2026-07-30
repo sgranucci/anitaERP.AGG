@@ -13,6 +13,19 @@ class ValidacionViandaUsuario extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $centrocostoId = $this->input('centrocosto_id');
+        if ($centrocostoId === '' || $centrocostoId === null) {
+            $this->merge(['centrocosto_id' => null]);
+        }
+
+        $tipoMenuId = $this->input('vianda_tipo_menu_id');
+        if ($tipoMenuId === '' || $tipoMenuId === null) {
+            $this->merge(['vianda_tipo_menu_id' => null]);
+        }
+    }
+
     public function rules()
     {
         $id = (int) $this->route('id');

@@ -17,6 +17,7 @@ class ConciliacionBancariaCommand extends Command
                             {--mes= : Mes 1-12}
                             {--anio= : Año}
                             {--export= : Ruta Excel de salida (opcional)}
+                            {--comparar-excel= : Excel Contaduría para benchmark de carátula}
                             {--sin-persistir : No grabar nuevos pares conciliados}';
 
     protected $description = 'Conciliación bancaria: mayor analítico (bridge) vs movimientos Interbanking persistidos';
@@ -88,6 +89,12 @@ class ConciliacionBancariaCommand extends Command
         $this->line('Cuenta contable: '.($cuenta->cuentacontables?->codigo ?? '—'));
         $this->line('Interbanking: '.($cuenta->cuenta_interbanking ?? '—'));
 
+        $comparar = trim((string) $this->option('comparar-excel'));
+        $opciones = [];
+        if ($comparar !== '') {
+            $opciones['pendientes_excel'] = $comparar;
+        }
+
         try {
             $resultado = $service->ejecutar(
                 $empresaId,
@@ -96,6 +103,7 @@ class ConciliacionBancariaCommand extends Command
                 $anio,
                 null,
                 ! $this->option('sin-persistir'),
+                $opciones,
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
@@ -108,7 +116,7 @@ class ConciliacionBancariaCommand extends Command
         $this->info('Resultado conciliación');
         $this->table(['Concepto', 'Importe'], [
             ['Saldo banco (extracto)', $c['saldo_banco_extracto'] ?? 0],
-            ['Pendientes contables (cheques/no acreditados)', $c['cheques_no_acreditados'] ?? 0],
+            ['Cheques no acreditados (cpromae)', $c['cheques_no_acreditados'] ?? 0],
             ['Pendientes banco (sin contabilizar)', $c['movimientos_pendientes_banco'] ?? 0],
             ['Saldo banco ajustado', $c['saldo_banco_ajustado'] ?? 0],
             ['Saldo contable', $c['saldo_contable'] ?? 0],
@@ -116,8 +124,61 @@ class ConciliacionBancariaCommand extends Command
         ]);
 
         $this->line('Pares nuevos conciliados: '.count($resultado['pares_nuevos'] ?? []));
-        $this->line('Pendientes contables: '.count($resultado['pendientes_contables'] ?? []));
+        $this->line(sprintf(
+            'Pendientes cpromae: %d (carátula mes: %d, fuente: %s)',
+            count($resultado['pendientes_cheques_cpromae'] ?? []),
+            count($resultado['pendientes_cheques_caratula'] ?? []),
+            (string) ($resultado['pendientes_cheques_fuente'] ?? '—'),
+        ));
+        $this->line('Pendientes contables mayor (otros/sin match): '.count($resultado['pendientes_contables_otros'] ?? []));
         $this->line('Pendientes banco: '.count($resultado['pendientes_banco'] ?? []));
+        if (isset($resultado['ai_score'])) {
+            $this->line('IA score: '.$resultado['ai_score'].' · anomalías: '.count($resultado['ai_anomalias'] ?? []));
+        }
+
+        if ($comparar !== '') {
+            try {
+                $resultado = $service->compararContraExcel($resultado, $comparar);
+            } catch (\Throwable $e) {
+                $this->error('Comparación Excel: '.$e->getMessage());
+
+                return self::FAILURE;
+            }
+
+            $c = $resultado['caratula'] ?? [];
+            $this->newLine();
+            $this->info('Benchmark vs Excel Contaduría ('.$resultado['excel_referencia']['archivo'].' / '.$resultado['excel_referencia']['fuente'].')');
+            $filasCmp = [];
+            foreach ($resultado['excel_comparacion']['filas'] ?? [] as $fila) {
+                $filasCmp[] = [
+                    $fila['concepto'],
+                    $fila['excel'] === null ? '—' : number_format((float) $fila['excel'], 2, ',', '.'),
+                    $fila['erp'] === null ? '—' : number_format((float) $fila['erp'], 2, ',', '.'),
+                    $fila['delta'] === null ? '—' : number_format((float) $fila['delta'], 2, ',', '.'),
+                    ! empty($fila['ok']) ? 'OK' : 'Δ',
+                ];
+            }
+            $this->table(['Concepto', 'Excel', 'ERP', 'Delta', ''], $filasCmp);
+            $tol = $resultado['excel_comparacion']['tolerancia'] ?? 1;
+            if (! empty($resultado['excel_comparacion']['ok'])) {
+                $this->info("Carátula alineada al Excel (tolerancia ±{$tol}).");
+            } else {
+                $this->warn("Hay desvíos vs Excel (tolerancia ±{$tol}).");
+            }
+
+            $cob = $resultado['excel_pendientes_cobertura'] ?? [];
+            $det = $resultado['excel_pendientes_detalle'] ?? [];
+            $this->line(sprintf(
+                'Pendientes: Excel %d · ERP %d · ∩ %d · solo Excel %d · solo ERP %d. Banco Excel: %d (suma %s).',
+                (int) ($cob['excel_n'] ?? 0),
+                (int) ($cob['erp_n'] ?? 0),
+                (int) ($cob['interseccion_n'] ?? 0),
+                count($cob['solo_excel'] ?? []),
+                count($cob['solo_erp'] ?? []),
+                count($det['banco_pendientes'] ?? []),
+                number_format((float) ($det['suma_banco_pendientes'] ?? 0), 2, ',', '.'),
+            ));
+        }
 
         $export = trim((string) $this->option('export'));
         if ($export !== '') {

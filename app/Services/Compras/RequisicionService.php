@@ -102,6 +102,11 @@ class RequisicionService
         try {
             $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
             if (! $modoProvisorio) {
+                $resolucionCc = $this->resolverCentrocostoArbolParaGrabacion($data);
+                if (($resolucionCc['mensaje'] ?? '') === 'seleccionar_centrocosto') {
+                    return $resolucionCc;
+                }
+                $data['centrocostodestino_arbol_id'] = $resolucionCc['centrocosto_arbol_id'];
                 $this->arbolaprobacionService->validaRequisicionRequestContraArbol($data);
             }
         } catch (\RuntimeException $e) {
@@ -181,9 +186,9 @@ class RequisicionService
     /**
      * Confirma una requisición en PROVISORIO: validaciones completas, árbol, Anita y estado PENDIENTE.
      *
-     * @return array{mensaje: string, errores?: string}
+     * @return array{mensaje: string, errores?: string, centros_costo?: list<array<string, mixed>>, centrocosto_arbol_id?: int}
      */
-    public function confirmarRequisicion(int $id): array
+    public function confirmarRequisicion(int $id, ?int $centrocostoArbolId = null): array
     {
         $existente = $this->requisicionRepository->find($id);
         if (! $existente) {
@@ -197,8 +202,22 @@ class RequisicionService
         }
 
         $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $ccArbol = 0;
 
         try {
+            $idsDistintos = $this->arbolaprobacionService->centrosCostoDestinoDistintosIdsDesdeModelo($existente);
+            $ccResuelto = $this->arbolaprobacionService->resolverCentroCostoArbolRequisicion($existente, $centrocostoArbolId, $idsDistintos);
+            if ($ccResuelto === null) {
+                return [
+                    'mensaje' => 'seleccionar_centrocosto',
+                    'centros_costo' => $this->arbolaprobacionService->listadoCentrosCostoDestinoArbol($idsDistintos),
+                ];
+            }
+            $ccArbol = (int) $ccResuelto;
+            if ($ccArbol > 0) {
+                $existente->centrocostodestino_arbol_id = $ccArbol;
+            }
+
             $this->arbolaprobacionService->validaRequisicionModeloContraArbol($existente);
             $payloadValidacion = $this->payloadValidacionLineasDesdeModelo($existente);
             ValidacionPresupuestoPartidaCapexLineas::validar($payloadValidacion);
@@ -219,6 +238,10 @@ class RequisicionService
             $existente = $this->requisicionRepository->find($id);
             $numerorequisicion = (int) $existente->numerorequisicion;
 
+            $payloadEstado = ['estado' => $pendiente];
+            if ($ccArbol > 0) {
+                $payloadEstado['centrocostodestino_arbol_id'] = $ccArbol;
+            }
             $this->requisicion_estadoRepository->creaEstado(
                 $id,
                 Carbon::now()->toDateTimeString(),
@@ -226,7 +249,7 @@ class RequisicionService
                 Auth::user()->id,
                 'Confirmación desde provisorio'
             );
-            $this->requisicionRepository->update(['estado' => $pendiente], $id);
+            $this->requisicionRepository->update($payloadEstado, $id);
 
             $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert');
 
@@ -523,7 +546,15 @@ class RequisicionService
 
         if (($data['estado'] ?? '') == $pendiente && ! $esProvisorio) {
             $data['requisicion_id'] = $id;
+            if (! empty($existente->centrocostodestino_arbol_id) && empty($data['centrocostodestino_arbol_id'])) {
+                $data['centrocostodestino_arbol_id'] = $existente->centrocostodestino_arbol_id;
+            }
             try {
+                $resolucionCc = $this->resolverCentrocostoArbolParaGrabacion($data);
+                if (($resolucionCc['mensaje'] ?? '') === 'seleccionar_centrocosto') {
+                    return $resolucionCc;
+                }
+                $data['centrocostodestino_arbol_id'] = $resolucionCc['centrocosto_arbol_id'];
                 $this->arbolaprobacionService->validaRequisicionRequestContraArbol($data);
             } catch (\RuntimeException $e) {
                 return ['mensaje' => 'error', 'errores' => $e->getMessage()];
@@ -710,9 +741,63 @@ class RequisicionService
         return $payload;
     }
 
+    /**
+     * Preview de CC de destino para elegir circuito de árbol (confirmación / grabación).
+     *
+     * @return array{mensaje: string, requiere_seleccion_centrocosto: bool, centros_costo: list<array<string, mixed>>, centrocosto_arbol_id?: int|null, errores?: string}
+     */
+    public function previewCentrocostoArbol(int $id): array
+    {
+        $req = $this->requisicionRepository->find($id);
+        if (! $req) {
+            return ['mensaje' => 'error', 'errores' => 'Requisición no encontrada.', 'requiere_seleccion_centrocosto' => false, 'centros_costo' => []];
+        }
+
+        $idsDistintos = $this->arbolaprobacionService->centrosCostoDestinoDistintosIdsDesdeModelo($req);
+        $cc = $this->arbolaprobacionService->resolverCentroCostoArbolRequisicion($req, null, $idsDistintos);
+        if ($cc === null) {
+            return [
+                'mensaje' => 'ok',
+                'requiere_seleccion_centrocosto' => true,
+                'centros_costo' => $this->arbolaprobacionService->listadoCentrosCostoDestinoArbol($idsDistintos),
+            ];
+        }
+
+        return [
+            'mensaje' => 'ok',
+            'requiere_seleccion_centrocosto' => false,
+            'centros_costo' => $this->arbolaprobacionService->listadoCentrosCostoDestinoArbol($idsDistintos),
+            'centrocosto_arbol_id' => $cc,
+        ];
+    }
+
+    /**
+     * Resuelve el CC de circuito para alta/actualización. Si hay varios y falta selección, pide modal.
+     *
+     * @return array{mensaje: string, centrocosto_arbol_id?: int, centros_costo?: list<array<string, mixed>>}
+     */
+    private function resolverCentrocostoArbolParaGrabacion(array $data): array
+    {
+        $idsDistintos = $this->arbolaprobacionService->centrosCostoDestinoDistintosIdsDesdeRequest($data);
+        $seleccion = (int) ($data['centrocostodestino_arbol_id'] ?? 0);
+        $seleccion = $seleccion > 0 ? $seleccion : null;
+        $cc = $this->arbolaprobacionService->resolverCentroCostoArbolDesdeRequest($data, $seleccion, $idsDistintos);
+        if ($cc === null) {
+            return [
+                'mensaje' => 'seleccionar_centrocosto',
+                'centros_costo' => $this->arbolaprobacionService->listadoCentrosCostoDestinoArbol($idsDistintos),
+            ];
+        }
+
+        return [
+            'mensaje' => 'ok',
+            'centrocosto_arbol_id' => $cc,
+        ];
+    }
+
     private static function armaCabecera(array $data)
     {
-        return [
+        $cabecera = [
             'fecha' => $data['fecha'] ?? null,
             'fechaentrega' => $data['fechaentrega'] ?? null,
             'empresa_id' => $data['empresa_id'] ?? null,
@@ -730,6 +815,13 @@ class RequisicionService
             'ordencompra_id' => ! empty($data['ordencompra_id']) ? $data['ordencompra_id'] : null,
             'creousuario_id' => $data['creousuario_id'] ?? Auth::user()->id,
         ];
+
+        if (array_key_exists('centrocostodestino_arbol_id', $data)) {
+            $ccArbol = (int) ($data['centrocostodestino_arbol_id'] ?? 0);
+            $cabecera['centrocostodestino_arbol_id'] = $ccArbol > 0 ? $ccArbol : null;
+        }
+
+        return $cabecera;
     }
 
     /**

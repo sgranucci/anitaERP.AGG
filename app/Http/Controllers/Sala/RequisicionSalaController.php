@@ -49,7 +49,12 @@ class RequisicionSalaController extends Controller
     public function index(Request $request)
     {
         can('listar-requisicion-sala');
-        $filtros = RequisicionSalaListadoFiltros::resolverDesdeRequest($request);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = RequisicionSalaListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
         $coleccion = $this->query->leeRequisicionSala($filtros, true, true);
 
         return view('sala.requisicion_sala.index', [
@@ -57,6 +62,7 @@ class RequisicionSalaController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => RequisicionSalaListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => RequisicionSalaListadoFiltros::CAMPOS,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
             'estado_enum' => RequisicionSalaEstado::$enumEstado,
             'estado_en_laboratorio' => RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
             'estado_pendiente' => RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
@@ -69,7 +75,12 @@ class RequisicionSalaController extends Controller
         can('listar-requisicion-sala');
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
-        $filtros = RequisicionSalaListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = RequisicionSalaListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busqueda,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
 
         switch ($formato) {
             case 'PDF':

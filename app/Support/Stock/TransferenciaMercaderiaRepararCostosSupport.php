@@ -181,6 +181,7 @@ final class TransferenciaMercaderiaRepararCostosSupport
      *     modo: string,
      *     lineas_actualizadas: int,
      *     movimientos_actualizados: int,
+     *     stkmae_actualizados: int,
      *     filas: list<array<string, mixed>>
      * }
      */
@@ -215,7 +216,10 @@ final class TransferenciaMercaderiaRepararCostosSupport
 
         $movActualizados = 0;
         $lineasActualizadas = 0;
+        $stkmaeActualizados = 0;
         $filasAplicadas = [];
+        /** @var array<int, true> $tmIdsParaAnita */
+        $tmIdsParaAnita = [];
 
         DB::beginTransaction();
         try {
@@ -239,7 +243,19 @@ final class TransferenciaMercaderiaRepararCostosSupport
                 $resultado = self::aplicarLineaConservandoCostoOrigen($linea, $coef);
                 $lineasActualizadas++;
                 $movActualizados += (int) $resultado['movimientos_actualizados'];
+                $tmIdsParaAnita[(int) $tm->id] = true;
                 $filasAplicadas[] = self::armarFilaPreview($linea->fresh(['transferencias.empresas', 'transferencias.depositoDestino', 'articuloDestino']), $coef);
+            }
+
+            // Misma regla que recalcularTransferencia: empujar precio_costo_destino a Anita stkmae.
+            foreach (array_keys($tmIdsParaAnita) as $tmId) {
+                $tmFresh = Transferencia_Mercaderia::query()
+                    ->with(['articulos.articuloDestino'])
+                    ->find($tmId);
+                if ($tmFresh === null) {
+                    continue;
+                }
+                $stkmaeActualizados += StkmaePrecioCompraAnitaBridgeSupport::actualizarDesdeTransferencia($tmFresh);
             }
 
             DB::commit();
@@ -254,6 +270,7 @@ final class TransferenciaMercaderiaRepararCostosSupport
             'modo' => $preview['modo'],
             'lineas_actualizadas' => $lineasActualizadas,
             'movimientos_actualizados' => $movActualizados,
+            'stkmae_actualizados' => $stkmaeActualizados,
             'filas' => $filasAplicadas,
         ];
     }

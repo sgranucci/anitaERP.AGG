@@ -55,9 +55,10 @@ class FlashCajaHistoricoDiarioExport implements FromView, ShouldAutoSize, WithCo
 
     public function view(): View
     {
-        $empresa = $this->reporte['empresa'] ?? null;
-        if ($empresa !== null) {
-            $filaLogo = (object) ['nombreempresa' => $empresa->nombre ?? ''];
+        $nombreLogo = $this->reporte['empresas_texto']
+            ?? (($this->reporte['empresa']->nombre ?? '') ?: '');
+        if ($nombreLogo !== '') {
+            $filaLogo = (object) ['nombreempresa' => $nombreLogo];
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(collect([$filaLogo]));
         }
 

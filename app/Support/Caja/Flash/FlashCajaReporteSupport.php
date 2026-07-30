@@ -86,6 +86,7 @@ final class FlashCajaReporteSupport
      * Informe mensual estilo l-flash.c (MENSUAL): desde día 1 del mes hasta through-day.
      *
      * @param  Collection<int, FlashCaja>  $filas  Ignorado si se puede recargar; se usa como fallback.
+     * @param  list<int>|null  $empresaIds  Varias empresas = consolida importes por día (season/budget por empresa y luego suma).
      * @return array<string, mixed>
      */
     public static function armarHistorico(
@@ -94,36 +95,50 @@ final class FlashCajaReporteSupport
         string $fechaDesde,
         string $fechaHasta,
         bool $conSeason = true,
+        ?array $empresaIds = null,
     ): array {
-        $empresaId = (int) ($empresa->id ?? $filas->first()?->empresa_id ?? 0);
+        $ids = collect($empresaIds ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($ids === []) {
+            $ids = [(int) ($empresa->id ?? $filas->first()?->empresa_id ?? 0)];
+            $ids = array_values(array_filter($ids, fn (int $id) => $id > 0));
+        }
+
+        $empresaId = (int) ($ids[0] ?? 0);
         $hasta = Carbon::parse($fechaHasta)->startOfDay();
         // l-flash MENSUAL: siempre desde el 1 del mes de la fecha "desde"
         $desde = Carbon::parse($fechaDesde)->startOfMonth();
 
-        $filasActuales = self::cargarRango($empresaId, $desde->format('Y-m-d'), $hasta->format('Y-m-d'));
+        $filasActuales = self::cargarRangoEmpresas($ids, $desde->format('Y-m-d'), $hasta->format('Y-m-d'));
         if ($filasActuales->isEmpty() && $filas->isNotEmpty()) {
             $filasActuales = $filas;
         }
 
-        $periodoActual = self::armarPeriodo($filasActuales, $empresaId, $desde, $hasta, $conSeason, 'actual');
+        $periodoActual = self::armarPeriodo($filasActuales, $ids, $desde, $hasta, $conSeason, 'actual');
 
         $mesAntDesde = $desde->copy()->subMonthNoOverflow();
         $mesAntHasta = $hasta->copy()->subMonthNoOverflow();
-        $filasMesAnt = self::cargarRango($empresaId, $mesAntDesde->format('Y-m-d'), $mesAntHasta->format('Y-m-d'));
-        $periodoMesAnt = self::armarPeriodo($filasMesAnt, $empresaId, $mesAntDesde, $mesAntHasta, $conSeason, 'mes_ant');
+        $filasMesAnt = self::cargarRangoEmpresas($ids, $mesAntDesde->format('Y-m-d'), $mesAntHasta->format('Y-m-d'));
+        $periodoMesAnt = self::armarPeriodo($filasMesAnt, $ids, $mesAntDesde, $mesAntHasta, $conSeason, 'mes_ant');
 
         $anioAntDesde = $desde->copy()->subYear();
         $anioAntHasta = $hasta->copy()->subYear();
-        $filasAnioAnt = self::cargarRango($empresaId, $anioAntDesde->format('Y-m-d'), $anioAntHasta->format('Y-m-d'));
-        $periodoAnioAnt = self::armarPeriodo($filasAnioAnt, $empresaId, $anioAntDesde, $anioAntHasta, $conSeason, 'anio_ant');
+        $filasAnioAnt = self::cargarRangoEmpresas($ids, $anioAntDesde->format('Y-m-d'), $anioAntHasta->format('Y-m-d'));
+        $periodoAnioAnt = self::armarPeriodo($filasAnioAnt, $ids, $anioAntDesde, $anioAntHasta, $conSeason, 'anio_ant');
 
         $consolidado = self::consolidar($filasActuales);
         $periodoLabel = self::formatearPeriodo($desde->format('Y-m-d'), $hasta->format('Y-m-d'));
+        $cantidadDias = collect($periodoActual['filas_diarias'] ?? [])->count();
 
         return [
             'titulo' => 'Consolidated Income',
             'flash' => $consolidado,
             'empresa' => $empresa,
+            'empresa_ids' => $ids,
             'fecha' => $periodoLabel,
             'fecha_desde' => $desde->format('Y-m-d'),
             'fecha_hasta' => $hasta->format('Y-m-d'),
@@ -131,7 +146,7 @@ final class FlashCajaReporteSupport
             'through_day' => $hasta->format('d'),
             'es_historico' => true,
             'con_season' => $conSeason,
-            'cantidad_dias' => $filasActuales->count(),
+            'cantidad_dias' => $cantidadDias,
             'budget_mes' => $periodoActual['budget_mes'],
             'filas_diarias' => $periodoActual['filas_diarias'],
             'total_final' => $periodoActual['total_final'],
@@ -152,18 +167,29 @@ final class FlashCajaReporteSupport
 
     /**
      * @param  Collection<int, FlashCaja>  $filas
+     * @param  list<int>  $empresaIds
      * @return array<string, mixed>
      */
     private static function armarPeriodo(
         Collection $filas,
-        int $empresaId,
+        array $empresaIds,
         Carbon $desde,
         Carbon $hasta,
         bool $conSeason,
         string $etiqueta,
     ): array {
-        $porFecha = $filas->keyBy(fn (FlashCaja $f) => $f->fecha?->format('Y-m-d'));
+        $empresaIds = collect($empresaIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $porFechaEmpresa = $filas->groupBy(
+            fn (FlashCaja $f) => ($f->fecha?->format('Y-m-d') ?? '').'|'.(int) $f->empresa_id
+        );
         $parametroCache = [];
+        $budgetCargadoEmpresa = [];
         $filasDiarias = [];
         $acumCoef = [
             'coef_total' => 0.0,
@@ -180,28 +206,50 @@ final class FlashCajaReporteSupport
         while ($cursor->lte($hasta)) {
             $ymd = $cursor->format('Y-m-d');
             $periodo = $cursor->format('Ym');
-            if (! isset($parametroCache[$periodo])) {
-                $parametroCache[$periodo] = FlashCajaLFlashCalculoSupport::cargarParametro($empresaId, $periodo);
-            }
-            $parametro = $parametroCache[$periodo];
-            if ($parametro !== null && (float) ($budgetMes['budget_total'] ?? 0) == 0.0) {
-                $budgetMes = FlashCajaLFlashCalculoSupport::budgetDesdeParametro($parametro);
-            }
+            $filasDelDia = [];
 
-            /** @var FlashCaja|null $flash */
-            $flash = $porFecha->get($ymd);
-            if ($flash !== null) {
+            foreach ($empresaIds as $empresaId) {
+                if (! isset($parametroCache[$empresaId][$periodo])) {
+                    $parametroCache[$empresaId][$periodo] = FlashCajaLFlashCalculoSupport::cargarParametro($empresaId, $periodo);
+                }
+                $parametro = $parametroCache[$empresaId][$periodo] ?? null;
+                if ($parametro !== null && ! isset($budgetCargadoEmpresa[$empresaId])) {
+                    $budgetEmp = FlashCajaLFlashCalculoSupport::budgetDesdeParametro($parametro);
+                    $esPrimeraEmpresaBudget = $budgetCargadoEmpresa === [];
+                    $budgetCargadoEmpresa[$empresaId] = true;
+                    if (count($empresaIds) > 1) {
+                        $budgetMes = $esPrimeraEmpresaBudget
+                            ? $budgetEmp
+                            : self::sumarBudgets($budgetMes, $budgetEmp);
+                    } elseif ((float) ($budgetMes['budget_total'] ?? 0) == 0.0) {
+                        $budgetMes = $budgetEmp;
+                    }
+                }
+
+                /** @var FlashCaja|null $flash */
+                $flash = $porFechaEmpresa->get($ymd.'|'.$empresaId)?->first();
+                if ($flash === null) {
+                    continue;
+                }
                 $indice = FlashCajaLFlashCalculoSupport::cargarIndice($empresaId, $ymd);
                 $metricas = FlashCajaLFlashCalculoSupport::metricasDesdeFlash($flash);
-                $fila = FlashCajaLFlashCalculoSupport::enriquecerConBudgetYSeason(
+                $filaEmp = FlashCajaLFlashCalculoSupport::enriquecerConBudgetYSeason(
                     $metricas,
                     $parametro,
                     $indice,
                     $cursor->copy(),
                     $conSeason,
                 );
-                $fila['id'] = $flash->id;
-                $fila['etiqueta'] = $fila['dia_semana'];
+                $filaEmp['id'] = $flash->id;
+                $filasDelDia[] = $filaEmp;
+            }
+
+            if ($filasDelDia !== []) {
+                $fila = count($filasDelDia) === 1
+                    ? $filasDelDia[0]
+                    : self::sumarFilasDiariasEnriquecidas($filasDelDia, $conSeason);
+                $fila['id'] = $filasDelDia[0]['id'] ?? null;
+                $fila['etiqueta'] = $fila['dia_semana'] ?? '';
                 $filasDiarias[] = $fila;
                 foreach (array_keys($acumCoef) as $k) {
                     $acumCoef[$k] += (float) ($fila['vs_season'][$k] ?? 0);
@@ -373,17 +421,128 @@ final class FlashCajaReporteSupport
      */
     private static function cargarRango(int $empresaId, string $desde, string $hasta): Collection
     {
-        if ($empresaId <= 0) {
+        return self::cargarRangoEmpresas($empresaId > 0 ? [$empresaId] : [], $desde, $hasta);
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     * @return Collection<int, FlashCaja>
+     */
+    private static function cargarRangoEmpresas(array $empresaIds, string $desde, string $hasta): Collection
+    {
+        $ids = collect($empresaIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === []) {
             return collect();
         }
 
         return FlashCaja::query()
-            ->where('empresa_id', $empresaId)
+            ->whereIn('empresa_id', $ids)
             ->whereDate('fecha', '>=', $desde)
             ->whereDate('fecha', '<=', $hasta)
             ->with('empresa')
             ->orderBy('fecha')
+            ->orderBy('empresa_id')
             ->get();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return array<string, mixed>
+     */
+    private static function sumarFilasDiariasEnriquecidas(array $filas, bool $conSeason): array
+    {
+        $base = $filas[0];
+        $sumKeys = [
+            'custom', 'slot_units', 'slot_coin_in', 'slot_drop', 'slot_ol_win', 'slot_fin_win',
+            'rul_units', 'rul_coin_in', 'rul_drop', 'rul_ol_win', 'rul_fin_win',
+            'bingo_carton', 'bingo_venta', 'bingo_win', 'gaming', 'ayb', 'estac',
+            'vehiculos', 'vending', 'show', 'otros', 'revenues', 'pos_online',
+            'win_online', 'win_financial', 'win_diff', 'el_positions',
+            'customer_budget', 'vehiculos_budget', 'pos_vs_budget',
+        ];
+        foreach ($sumKeys as $k) {
+            $base[$k] = 0.0;
+        }
+        $coefs = [
+            'coef_total' => 0.0, 'coef_elec' => 0.0, 'coef_bingo' => 0.0,
+            'coef_ayb' => 0.0, 'coef_estac' => 0.0,
+        ];
+        $budget = FlashCajaLFlashCalculoSupport::budgetDesdeParametro(null);
+
+        foreach ($filas as $fila) {
+            foreach ($sumKeys as $k) {
+                $base[$k] = round((float) ($base[$k] ?? 0) + (float) ($fila[$k] ?? 0), 6);
+            }
+            foreach (array_keys($coefs) as $ck) {
+                $coefs[$ck] += (float) ($fila['vs_season'][$ck] ?? 0);
+            }
+            $budget = self::sumarBudgets($budget, is_array($fila['budget'] ?? null) ? $fila['budget'] : []);
+        }
+
+        $base = FlashCajaLFlashCalculoSupport::recalcularRatiosPublico($base);
+        $base['budget'] = $budget;
+        $base['customer_dev_pct'] = ((float) ($base['customer_budget'] ?? 0) != 0.0)
+            ? round((((float) ($base['custom'] ?? 0) / (float) $base['customer_budget']) - 1) * 100, 2)
+            : 0.0;
+        $base['vs_season'] = [
+            'total' => self::pctDiff((float) ($base['revenues'] ?? 0), $coefs['coef_total']),
+            'electronic' => self::pctDiff((float) ($base['win_online'] ?? 0), $coefs['coef_elec']),
+            'bingo' => self::pctDiff((float) ($base['bingo_win'] ?? 0), $coefs['coef_bingo']),
+            'ayb' => self::pctDiff((float) ($base['ayb'] ?? 0), $coefs['coef_ayb']),
+            'estac' => self::pctDiff((float) ($base['estac'] ?? 0), $coefs['coef_estac']),
+            'coef_total' => $coefs['coef_total'],
+            'coef_elec' => $coefs['coef_elec'],
+            'coef_bingo' => $coefs['coef_bingo'],
+            'coef_ayb' => $coefs['coef_ayb'],
+            'coef_estac' => $coefs['coef_estac'],
+        ];
+        $base['vs_budget'] = [
+            'total' => self::pctDiff((float) ($base['revenues'] ?? 0), (float) ($budget['budget_total'] ?? 0)),
+            'electronic' => self::pctDiff((float) ($base['win_online'] ?? 0), (float) ($budget['budget_electronic'] ?? 0)),
+            'bingo' => self::pctDiff((float) ($base['bingo_win'] ?? 0), (float) ($budget['budget_bingo'] ?? 0)),
+            'ayb' => self::pctDiff((float) ($base['ayb'] ?? 0), (float) ($budget['budget_ayb'] ?? 0)),
+            'estac' => self::pctDiff((float) ($base['estac'] ?? 0), (float) ($budget['budget_estac'] ?? 0)),
+        ];
+        if (! $conSeason) {
+            $base['vs_season'] = array_merge($base['vs_budget'], [
+                'coef_total' => (float) ($budget['budget_total'] ?? 0),
+                'coef_elec' => (float) ($budget['budget_electronic'] ?? 0),
+                'coef_bingo' => (float) ($budget['budget_bingo'] ?? 0),
+                'coef_ayb' => (float) ($budget['budget_ayb'] ?? 0),
+                'coef_estac' => (float) ($budget['budget_estac'] ?? 0),
+            ]);
+        }
+        $base['con_season'] = $conSeason;
+        $base['fecha'] = $filas[0]['fecha'] ?? '';
+        $base['fecha_iso'] = $filas[0]['fecha_iso'] ?? '';
+        $base['dia_semana'] = $filas[0]['dia_semana'] ?? '';
+
+        return $base;
+    }
+
+    /**
+     * @param  array<string, float|int>  $a
+     * @param  array<string, float|int>  $b
+     * @return array<string, float|int>
+     */
+    private static function sumarBudgets(array $a, array $b): array
+    {
+        $keys = [
+            'budget_total', 'budget_slot', 'budget_rul', 'budget_poker', 'budget_bingo',
+            'budget_ayb', 'budget_estac', 'budget_pos', 'budget_electronic',
+        ];
+        $out = $a;
+        foreach ($keys as $k) {
+            $out[$k] = round((float) ($a[$k] ?? 0) + (float) ($b[$k] ?? 0), 2);
+        }
+
+        return $out;
     }
 
     /**

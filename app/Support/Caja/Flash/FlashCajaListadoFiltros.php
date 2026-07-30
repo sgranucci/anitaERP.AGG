@@ -54,10 +54,15 @@ class FlashCajaListadoFiltros
         'menor' => 'Menor que',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId ?? 0,
+                'empresa_scope' => $empresaScope,
+            ]);
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -89,17 +94,42 @@ class FlashCajaListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
-            'empresa_id' => (int) $request->input('empresa_id', 0),
+            'empresa_id' => $empresaId ?? 0,
+            'empresa_scope' => $empresaScope,
             'empresas_asignadas' => [],
         ];
     }
 
-    public static function tieneCriteriosAplicados(array $filtros): bool
+    /**
+     * Filtro externo del index: empresa (default primera asignada) o todas (`empresa_todas=1`).
+     *
+     * @return array{0:?int,1:string}  [empresa_id, empresa_scope]
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
     {
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            return true;
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
         }
 
+        return [null, 'todas'];
+    }
+
+    public static function tieneCriteriosAplicados(array $filtros): bool
+    {
+        return self::tieneCriteriosTexto($filtros);
+    }
+
+    /**
+     * Criterios del panel / búsqueda rápida (sin el filtro externo de empresa).
+     */
+    public static function tieneCriteriosTexto(array $filtros): bool
+    {
         if (($filtros['operador'] ?? '') === 'vacio') {
             return true;
         }
@@ -134,6 +164,7 @@ class FlashCajaListadoFiltros
             'valor_hasta' => '',
             'busqueda' => '',
             'empresa_id' => 0,
+            'empresa_scope' => 'una',
             'empresas_asignadas' => [],
         ];
     }
@@ -141,7 +172,8 @@ class FlashCajaListadoFiltros
     /** @return array<string, string|int|bool> */
     public static function paraQueryString(array $filtros): array
     {
-        $params = [];
+        $params = self::paraQueryStringEmpresa($filtros);
+
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
         }
@@ -157,11 +189,25 @@ class FlashCajaListadoFiltros
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            $params['empresa_id'] = (int) $filtros['empresa_id'];
-        }
 
         return $params;
+    }
+
+    /**
+     * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
+     *
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (($filtros['empresa_id'] ?? 0) > 0) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     /**

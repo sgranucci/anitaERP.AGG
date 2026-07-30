@@ -50,7 +50,11 @@
     }
 
     function actualizarPanelCentrocosto() {
-        $('#tm_panel_centrocosto').toggle(tipoManejaContabilidad());
+        var visible = tipoManejaContabilidad();
+        $('#tm_panel_centrocosto').toggle(visible);
+        if (!visible && typeof window.limpiarCentrocostoCampo === 'function') {
+            window.limpiarCentrocostoCampo('centrocosto_destino_id');
+        }
     }
 
     function actualizarPanelesDestino() {
@@ -704,7 +708,8 @@
         }
 
         if (tipoManejaContabilidad() && !(parseInt($('#centrocosto_destino_id').val(), 10) > 0)) {
-            alert('Debe seleccionar centro de costo destino (transferencia con contabilidad).');
+            alert('Debe indicar centro de costo destino (transferencia con contabilidad).');
+            $('#centrocosto_destino_id_codigo').trigger('focus');
             return;
         }
 
@@ -901,6 +906,9 @@
 
         if (typeof activa_eventos_consultadeposito === 'function') {
             activa_eventos_consultadeposito();
+        }
+        if (typeof activa_eventos_consultacentrocosto === 'function') {
+            activa_eventos_consultacentrocosto();
         }
 
         $('#tm_btn_intercompany').on('click', function () {

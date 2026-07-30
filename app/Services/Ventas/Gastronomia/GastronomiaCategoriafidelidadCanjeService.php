@@ -333,11 +333,7 @@ final class GastronomiaCategoriafidelidadCanjeService
             if (! $articulo instanceof Articulo) {
                 continue;
             }
-            // Catálogo compartido: empresa_id null/0 = válido en cualquier PV (igual que queryArticulosCatalogo).
-            $artEmpresaId = (int) ($articulo->empresa_id ?? 0);
-            if ($artEmpresaId > 0 && $artEmpresaId !== $empresaId) {
-                continue;
-            }
+            // Sin filtro por articulo.empresa_id: igual que queryArticulosCatalogo (catálogo V* multiempresa).
 
             $precios = PrecioService::asignaPrecioPorLista(
                 (int) $articulo->id,

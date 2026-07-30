@@ -21,6 +21,20 @@ return [
     /** OPP/OPA/TRF vs TRF.DATA y similares. */
     'dias_tolerancia_fecha_pago' => (int) env('CONCILIACION_BANCARIA_DIAS_FECHA_PAGO', 7),
 
+    /** Importe único 1:1 (pasada IA candidatos cercanos). */
+    'dias_tolerancia_fecha_unico' => (int) env('CONCILIACION_BANCARIA_DIAS_FECHA_UNICO', 15),
+
+    /** Tolerancia al comparar carátula ERP vs Excel Contaduría. */
+    'excel_tolerancia_importe' => (float) env('CONCILIACION_BANCARIA_EXCEL_TOLERANCIA', 1.0),
+
+    /** Meses de mayor históricos a incluir (cheques previos a cobertura IB). */
+    'historico_lookback_meses' => (int) env('CONCILIACION_BANCARIA_HISTORICO_MESES', 18),
+
+    'memory_limit' => env('CONCILIACION_BANCARIA_MEMORY_LIMIT', '2048M'),
+
+    /** Créditos IB pendientes que entran a carátula si no son CABAL (tope absoluto). */
+    'caratula_credito_max_importe' => (float) env('CONCILIACION_BANCARIA_CARATULA_CREDITO_MAX', 45000),
+
     /**
      * Compatibilidad tipo comprobante mayor → concepto Interbanking (code_description_ib / bank).
      */

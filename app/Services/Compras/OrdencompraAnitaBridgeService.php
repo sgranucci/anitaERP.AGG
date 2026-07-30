@@ -11,6 +11,7 @@ use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaOcfpagoCuotaExpander;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaWhereSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
+use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -192,6 +193,308 @@ class OrdencompraAnitaBridgeService
         }
 
         return $result;
+    }
+
+    /**
+     * Diagnóstico ERP → Anita (cabecera, proveedor pad, líneas, auxiliares).
+     *
+     * @return array{
+     *   numero: int,
+     *   problemas: list<string>,
+     *   cabecera: bool,
+     *   proveedor_anita: ?string,
+     *   proveedor_esperado: string,
+     *   lineas_anita: int,
+     *   cantentr_por_interno: array<int, float>
+     * }
+     */
+    public function diagnosticarSincronizacionAnita(Ordencompra $oc): array
+    {
+        $this->cargarRelaciones($oc);
+        $numero = (int) $oc->numeroordencompra;
+        $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
+        $ctx = OrdencompraAnitaErpContext::desdeUsuarioId(
+            $oc->creousuario_id !== null ? (int) $oc->creousuario_id : null
+        );
+        $proveedorEsperado = $ctx->codigoProveedor6((int) $oc->proveedor_id);
+        $problemas = [];
+
+        $cabecera = $this->leerCabeceraPendmaep($clave);
+        $lineas = $this->listarPendmovp($clave);
+        $cantentrPorInterno = [];
+        foreach ($lineas as $linea) {
+            $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
+            if ($nroInterno > 0) {
+                $cantentrPorInterno[$nroInterno] = max(
+                    (float) ($cantentrPorInterno[$nroInterno] ?? 0),
+                    (float) ($linea->penvp_cantentr ?? 0)
+                );
+            }
+        }
+
+        if ($cabecera === null) {
+            $problemas[] = 'Falta cabecera pendmaep en Anita.';
+            if ($lineas !== []) {
+                $problemas[] = 'Hay '.count($lineas).' línea(s) pendmovp huérfana(s) sin cabecera.';
+            }
+        } else {
+            $proveedorAnita = RecepcionProveedorAnitaReferenciaSupport::proveedorAnita6(
+                (string) ($cabecera->penmp_proveedor ?? '')
+            );
+            $proveedorRaw = trim((string) ($cabecera->penmp_proveedor ?? ''));
+            if ($proveedorRaw === '' || ! preg_match('/^\d{6}$/', $proveedorRaw)) {
+                $problemas[] = 'Proveedor cabecera sin pad de 6 dígitos (Anita="'.$proveedorRaw.'", esperado='.$proveedorEsperado.').';
+            } elseif ($proveedorAnita !== $proveedorEsperado) {
+                $problemas[] = 'Proveedor cabecera distinto al ERP (Anita='.$proveedorAnita.', esperado='.$proveedorEsperado.').';
+            }
+        }
+
+        $esperadas = $oc->ordencompra_articulos->count();
+        if ($cabecera !== null && count($lineas) === 0 && $esperadas > 0) {
+            $problemas[] = 'Cabecera Anita sin líneas pendmovp.';
+        }
+        if (count($lineas) > $esperadas && $esperadas > 0) {
+            $problemas[] = 'Líneas Anita duplicadas o de más (Anita='.count($lineas).', ERP='.$esperadas.').';
+        }
+
+        if ($cabecera !== null) {
+            if (! $this->existeLegcompra($numero)) {
+                $problemas[] = 'Falta legcompra en Anita.';
+            }
+            if (! $this->existePendfecha($clave, $proveedorEsperado)) {
+                $problemas[] = 'Falta pendfecha en Anita.';
+            }
+            if (! $this->existeOccuota($clave)) {
+                $problemas[] = 'Falta occuota en Anita.';
+            }
+        }
+
+        return [
+            'numero' => $numero,
+            'problemas' => $problemas,
+            'cabecera' => $cabecera !== null,
+            'proveedor_anita' => $cabecera !== null
+                ? trim((string) ($cabecera->penmp_proveedor ?? ''))
+                : null,
+            'proveedor_esperado' => $proveedorEsperado,
+            'lineas_anita' => count($lineas),
+            'cantentr_por_interno' => $cantentrPorInterno,
+        ];
+    }
+
+    /**
+     * Repara gaps ERP → Anita sin perder penvp_cantentr de recepciones aplicadas.
+     *
+     * @return array{numero: int, acciones: list<string>, problemas_restantes: list<string>}
+     */
+    public function repararSincronizacionAnita(Ordencompra $oc): array
+    {
+        if (! $this->habilitado()) {
+            throw new \RuntimeException('Escritura OC Anita deshabilitada.');
+        }
+
+        $this->cargarRelaciones($oc);
+        $this->validarCabeceraMinima($oc);
+
+        $numero = (int) $oc->numeroordencompra;
+        $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
+        $ctx = OrdencompraAnitaErpContext::desdeUsuarioId(
+            $oc->creousuario_id !== null ? (int) $oc->creousuario_id : null
+        );
+        $proveedorEsperado = $ctx->codigoProveedor6((int) $oc->proveedor_id);
+        $acciones = [];
+
+        $diag = $this->diagnosticarSincronizacionAnita($oc);
+        $cantentrPreserve = $diag['cantentr_por_interno'];
+
+        if (! $diag['cabecera']) {
+            OrdencompraAnitaLineaSupport::asignarClavesLineas($oc);
+            $this->cargarRelaciones($oc);
+            $this->insertarPendmaep($oc, $ctx, $clave);
+            $acciones[] = 'insertó pendmaep';
+
+            $lineasAnita = $this->listarPendmovp($clave);
+            if (count($lineasAnita) !== $oc->ordencompra_articulos->count()) {
+                $this->eliminarDetalle($clave);
+                $this->grabarDetalle($oc, $ctx, $clave);
+                $acciones[] = 'regrabó pendmovp/movpresup';
+            }
+
+            $this->restaurarCantentrLineas($clave, $cantentrPreserve);
+            if ($cantentrPreserve !== []) {
+                $acciones[] = 'restauró penvp_cantentr';
+            }
+
+            $estadoAnita = $ctx->mapEstadoAnita((string) $oc->estadoordencompra);
+            $api = new ApiAnita;
+            $api->apiCallEscritura([
+                'acc' => 'update',
+                'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+                'tabla' => config('ordencompra_anita.tablas.cabecera'),
+                'valores' => RecepcionProveedorAnitaEscrituraSupport::penmpEstadoUpdateSet($estadoAnita),
+                'whereArmado' => OrdencompraAnitaWhereSupport::pendmaep($clave),
+            ], 'ordencompra pendmaep estado reparacion');
+            $acciones[] = 'estado cabecera='.$estadoAnita;
+        } else {
+            $proveedorRaw = (string) ($diag['proveedor_anita'] ?? '');
+            if ($proveedorRaw === '' || ! preg_match('/^\d{6}$/', $proveedorRaw) || $proveedorRaw !== $proveedorEsperado) {
+                $this->actualizarProveedorPendmaep($clave, $proveedorEsperado);
+                $acciones[] = 'corrigió penmp_proveedor a '.$proveedorEsperado;
+            }
+
+            $lineasAnita = $this->listarPendmovp($clave);
+            if (count($lineasAnita) > $oc->ordencompra_articulos->count() && $oc->ordencompra_articulos->isNotEmpty()) {
+                foreach ($lineasAnita as $linea) {
+                    $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
+                    if ($nroInterno > 0) {
+                        $cantentrPreserve[$nroInterno] = max(
+                            (float) ($cantentrPreserve[$nroInterno] ?? 0),
+                            (float) ($linea->penvp_cantentr ?? 0)
+                        );
+                    }
+                }
+                $this->eliminarDetalle($clave);
+                $this->grabarDetalle($oc, $ctx, $clave);
+                $this->restaurarCantentrLineas($clave, $cantentrPreserve);
+                $acciones[] = 'eliminó líneas duplicadas y regrabó detalle';
+            }
+        }
+
+        $aux = $this->repararRegistrosAnitaFaltantes($oc);
+        if (($aux['legcompra'] ?? '') === 'insertado') {
+            $acciones[] = 'insertó legcompra';
+        }
+        if (($aux['pendfecha'] ?? '') === 'insertado') {
+            $acciones[] = 'insertó pendfecha';
+        }
+
+        if (! $this->existeOccuota($clave) && $oc->ordencompra_comprobantes->isNotEmpty()) {
+            try {
+                $this->grabarComprobantesCuotas($oc, $ctx, $clave);
+                $acciones[] = 'insertó occuota/ocfpagocuota';
+            } catch (\Throwable $e) {
+                // Restos parciales (ocfpago sin occuota, o viceversa): limpiar y regrabar.
+                $this->eliminarComprobantesCuotas($clave);
+                $this->grabarComprobantesCuotas($oc, $ctx, $clave);
+                $acciones[] = 'regrabó occuota/ocfpagocuota (tras limpieza)';
+                Log::warning('OrdencompraAnitaBridge: occuota reparación con limpieza', [
+                    'numero' => $numero,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $restantes = $this->diagnosticarSincronizacionAnita($oc)['problemas'];
+
+        return [
+            'numero' => $numero,
+            'acciones' => $acciones,
+            'problemas_restantes' => $restantes,
+        ];
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function leerCabeceraPendmaep(array $clave): ?object
+    {
+        $api = new ApiAnita;
+        $raw = $api->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.cabecera'),
+            'campos' => 'penmp_nro,penmp_proveedor,penmp_estado,penmp_fecha,penmp_empresa',
+            'whereArmado' => OrdencompraAnitaWhereSupport::pendmaep($clave),
+            'limit' => 'FIRST 1',
+        ], 'ordencompra pendmaep leer');
+
+        return ApiAnita::primeraFilaLista((string) $raw);
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @return list<object>
+     */
+    private function listarPendmovp(array $clave): array
+    {
+        $api = new ApiAnita;
+        $raw = $api->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.linea'),
+            'campos' => 'penvp_nro,penvp_orden,penvp_nro_interno,penvp_proveedor,penvp_cantidad,penvp_cantentr,penvp_articulo',
+            'whereArmado' => OrdencompraAnitaWhereSupport::pendmovp($clave),
+            'limit' => 'FIRST 200',
+        ], 'ordencompra pendmovp listar');
+
+        $decoded = json_decode((string) $raw);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        return array_values(array_filter($decoded, static fn ($row) => is_object($row)));
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function existeOccuota(array $clave): bool
+    {
+        $api = new ApiAnita;
+        $raw = $api->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.cuota'),
+            'campos' => 'occ_nro',
+            'whereArmado' => OrdencompraAnitaWhereSupport::occuota($clave),
+            'limit' => 'FIRST 1',
+        ], 'ordencompra occuota existe');
+
+        return ApiAnita::primeraFilaLista((string) $raw) !== null;
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     */
+    private function actualizarProveedorPendmaep(array $clave, string $proveedor6): void
+    {
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.cabecera'),
+            'valores' => RecepcionProveedorAnitaEscrituraSupport::updateSet([
+                'penmp_proveedor' => RecepcionProveedorAnitaEscrituraSupport::proveedorSql($proveedor6),
+            ]),
+            'whereArmado' => OrdencompraAnitaWhereSupport::pendmaep($clave),
+        ], 'ordencompra pendmaep proveedor pad');
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
+     * @param  array<int, float>  $cantentrPorInterno
+     */
+    private function restaurarCantentrLineas(array $clave, array $cantentrPorInterno): void
+    {
+        if ($cantentrPorInterno === []) {
+            return;
+        }
+
+        $api = new ApiAnita;
+        $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
+        foreach ($cantentrPorInterno as $nroInterno => $cantentr) {
+            if ((int) $nroInterno <= 0 || (float) $cantentr <= 0) {
+                continue;
+            }
+            $api->apiCallEscritura([
+                'acc' => 'update',
+                'sistema' => $sistema,
+                'tabla' => config('ordencompra_anita.tablas.linea'),
+                'valores' => RecepcionProveedorAnitaEscrituraSupport::pendmovpCantentrUpdateSet((float) $cantentr),
+                'whereArmado' => OrdencompraAnitaWhereSupport::pendmovp($clave)
+                    .' AND penvp_nro_interno='.(int) $nroInterno,
+            ], 'ordencompra pendmovp cantentr restore '.$nroInterno);
+        }
     }
 
     /**

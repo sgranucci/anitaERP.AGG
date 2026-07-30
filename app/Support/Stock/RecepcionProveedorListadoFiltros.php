@@ -3,6 +3,7 @@
 namespace App\Support\Stock;
 
 use App\Support\Listado\CoincidenciaFlexibleTexto;
+use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -35,13 +36,24 @@ class RecepcionProveedorListadoFiltros
         'numerorecepcion', 'numerofactura', 'nombreproveedor', 'nombreempresa',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
+        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId,
+                'empresa_scope' => $empresaScope,
+            ]);
+        }
+
         $filtros = [
             'filtro_valor' => $request->input('filtro_valor'),
             'filtro_campo' => $request->input('filtro_campo'),
             'filtro_operador' => $request->input('filtro_operador'),
             'filtro_busqueda_rapida' => $request->boolean('filtro_busqueda_rapida'),
+            'empresa_id' => $empresaId,
+            'empresa_scope' => $empresaScope,
         ];
 
         if ($request->has('filtro_valor')) {
@@ -56,6 +68,26 @@ class RecepcionProveedorListadoFiltros
         return $filtros;
     }
 
+    /**
+     * Filtro externo del index: empresa (default primera asignada) o todas (`empresa_todas=1`).
+     *
+     * @return array{0:?int,1:string}  [empresa_id, empresa_scope]
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
     public static function filtrosVacios(): array
     {
         return [
@@ -63,10 +95,15 @@ class RecepcionProveedorListadoFiltros
             'filtro_campo' => '',
             'filtro_operador' => 'contiene',
             'filtro_busqueda_rapida' => false,
+            'empresa_id' => null,
+            'empresa_scope' => 'una',
         ];
     }
 
-    public static function tieneCriteriosAplicados(array $filtros): bool
+    /**
+     * Criterios del panel / búsqueda rápida (sin el filtro externo de empresa).
+     */
+    public static function tieneCriteriosTexto(array $filtros): bool
     {
         if ($filtros['filtro_busqueda_rapida'] ?? false) {
             return trim((string) ($filtros['filtro_valor'] ?? '')) !== '';
@@ -78,15 +115,41 @@ class RecepcionProveedorListadoFiltros
         return $campo !== '' && $valor !== '';
     }
 
+    public static function tieneCriteriosAplicados(array $filtros): bool
+    {
+        return self::tieneCriteriosTexto($filtros);
+    }
+
     /** @return array<string, mixed> */
     public static function paraQueryString(array $filtros): array
     {
-        return array_filter([
+        $params = self::paraQueryStringEmpresa($filtros);
+
+        $texto = array_filter([
             'filtro_valor' => $filtros['filtro_valor'] ?? null,
             'filtro_campo' => $filtros['filtro_campo'] ?? null,
             'filtro_operador' => $filtros['filtro_operador'] ?? null,
             'filtro_busqueda_rapida' => ! empty($filtros['filtro_busqueda_rapida']) ? 1 : null,
         ], fn ($v) => $v !== null && $v !== '');
+
+        return array_merge($params, $texto);
+    }
+
+    /**
+     * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
+     *
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     public static function operadoresParaCampo(string $campo): array
@@ -101,6 +164,14 @@ class RecepcionProveedorListadoFiltros
 
     public static function aplicar(Builder $query, array $filtros): void
     {
+        if (! empty($filtros['empresa_id'])) {
+            $query->where('recepcion_proveedor.empresa_id', (int) $filtros['empresa_id']);
+        }
+
+        if (! self::tieneCriteriosTexto($filtros)) {
+            return;
+        }
+
         if ($filtros['filtro_busqueda_rapida'] ?? false) {
             $valor = trim((string) ($filtros['filtro_valor'] ?? ''));
             if ($valor === '') {

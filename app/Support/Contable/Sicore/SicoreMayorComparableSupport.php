@@ -46,6 +46,13 @@ final class SicoreMayorComparableSupport
         '/\bPAGO\s+(DE\s+)?(RETENCIONES?\s+|PERCEPCIONES?\s+)?ARBA\b/iu',
         '/\bPRESENTACI[OÓ]N\s+(ARBA|IIBB)\b/iu',
         '/\bDDJJ\s+(ARBA|IIBB)\b/iu',
+        // SUSS: pago de liquidación quincenal (detalle típico "RETENCIONES SUSS BSA 2Q 06.26").
+        // La generación en pago a proveedor usa "Pago: … #OP", no este texto.
+        '/\bRETENCIONES?\s+SUSS\b/iu',
+        '/\bSUSS\s*[12]Q\b/iu',
+        '/\bPAGO\s+(DE\s+)?RETENCIONES?\s+SUSS\b/iu',
+        '/\bPRESENTACI[OÓ]N\s+SUSS\b/iu',
+        '/\bDDJJ\s+SUSS\b/iu',
         '/^RECLA\b/iu',
         '/\bRECLASIF/iu',
     ];
@@ -203,6 +210,9 @@ final class SicoreMayorComparableSupport
         }
         if (str_contains($patron, 'ARBA') || str_contains($patron, 'IIBB')) {
             return 'pago_arba';
+        }
+        if (str_contains($patron, 'SUSS')) {
+            return 'pago_suss';
         }
         if (str_contains($patron, '[12]Q') || str_contains($patron, 'PRESENTACI') || str_contains($patron, 'PAGO') || str_contains($patron, 'DDJJ')) {
             return 'pago_sicore';

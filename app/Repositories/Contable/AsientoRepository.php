@@ -3,6 +3,7 @@
 namespace App\Repositories\Contable;
 
 use App\Models\Contable\Asiento;
+use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Ventas\Venta;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
@@ -11,6 +12,7 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
 use App\ApiAnita;
@@ -646,15 +648,29 @@ class AsientoRepository implements AsientoRepositoryInterface
 
 			$numeroOrdenCompra = (int) ($request['ctav_o_compra'] ?? 0);
 
-			if (isset($request['tipo']))
-			{
+			// Si el payload trae tipo (sync COM) usarlo; si falta pero el asiento es de recepción,
+			// resolver clave COM para no reescribir ctamov con numeración en blanco.
+			if (isset($request['tipo']) && trim((string) $request['tipo']) !== '') {
 				$tipo = $request['tipo'];
 				$letra = $request['letra'];
 				$sucursal = $request['sucursal'];
 				$nro = $request['nro'];
-			}
-			else
-			{
+			} elseif (! empty($request['recepcionproveedor_id'])) {
+				$recepcion = Recepcion_Proveedor::query()->find((int) $request['recepcionproveedor_id']);
+				if ($recepcion) {
+					$clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+					$tipo = $clave['tipo'];
+					$letra = $clave['letra'];
+					$sucursal = $clave['sucursal'];
+					$nro = $clave['nro'];
+					if (! isset($request['sistema_ctav']) || $request['sistema_ctav'] === '') {
+						$sistema = 'C';
+					}
+				} else {
+					$tipo = $letra = ' ';
+					$sucursal = $nro = 0;
+				}
+			} else {
 				$tipo = $letra = ' ';
 				$sucursal = $nro = 0;
 			}

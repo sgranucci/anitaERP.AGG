@@ -123,10 +123,18 @@ class EfeDatosOppGastoComSupport
             return false;
         }
 
+        $sinCuentaGasto = (int) ($gasto['cuenta'] ?? 0) <= 0;
+
+        // Fallback axp_concepto (sin pierna/COM de gasto): solo si la fila sigue en c0.
+        // No pisa varios/gaming/etc. ya clasificados (DI NAPOLI, PAPELERA, …).
+        if ($sinCuentaGasto && $conceptoActual !== 0) {
+            return false;
+        }
+
         // Concepto 5 solo por axp (sin cuenta COM): Anita Datos no pisa C20 PAPELERA
         // ni cheques con solo FIB conc=5 (van a varios/publicidad). Sí aplica con FGA/CIB.
         if ($conceptoDestino === EfeDatosGastronomiaSupport::CONCEPTO_GASTRONOMIA
-            && (int) ($gasto['cuenta'] ?? 0) <= 0) {
+            && $sinCuentaGasto) {
             if ($conceptoActual === EfeDatosVariosSupport::CONCEPTO_VARIOS) {
                 return false;
             }
@@ -148,6 +156,7 @@ class EfeDatosOppGastoComSupport
                 return true;
             }
 
+            // Con cuenta COM real sí puede reclasificar 12/20/65; sin cuenta ya se cortó arriba.
             return $conceptoDestino !== $conceptoActual
                 && in_array($conceptoActual, [12, 20, 65], true);
         }

@@ -7,6 +7,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class ConciliacionBancariaEjecucion extends Model implements Auditable
@@ -54,5 +55,10 @@ class ConciliacionBancariaEjecucion extends Model implements Auditable
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
+    }
+
+    public function chequesPendientes(): HasMany
+    {
+        return $this->hasMany(ConciliacionBancariaChequePendiente::class, 'ejecucion_id');
     }
 }

@@ -221,20 +221,31 @@ final class RecepcionProveedorAsientoAuditoriaSupport
             $sucursal = (int) ($fila['ctav_sucursal'] ?? 0);
             $nro = (int) ($fila['ctav_nro'] ?? 0);
 
-            if ($tipo !== '' && $tipo !== $clave['tipo']) {
-                $mensajes[] = 'Numeración COM: tipo ctamov '.$tipo.' vs esperado '.$clave['tipo'].'.';
+            // Numeración COM obligatoria en ctamov: vacío/cero no es OK (antes se omitía y la
+            // auditoría marcaba OK al encontrar el asiento solo por ctav_nro_asiento).
+            if ($tipo === '' || $tipo !== $clave['tipo']) {
+                $mensajes[] = $tipo === ''
+                    ? 'Numeración COM ausente en ctamov (tipo vacío; esperado '.$clave['tipo'].' '
+                        .$clave['letra'].' '.$clave['sucursal'].' '.$clave['nro'].').'
+                    : 'Numeración COM: tipo ctamov '.$tipo.' vs esperado '.$clave['tipo'].'.';
                 break;
             }
-            if ($letra !== '' && $letra !== $clave['letra']) {
-                $mensajes[] = 'Numeración COM: letra ctamov '.$letra.' vs esperado '.$clave['letra'].'.';
+            if ($letra === '' || $letra !== $clave['letra']) {
+                $mensajes[] = $letra === ''
+                    ? 'Numeración COM ausente en ctamov (letra vacía; esperada '.$clave['letra'].').'
+                    : 'Numeración COM: letra ctamov '.$letra.' vs esperado '.$clave['letra'].'.';
                 break;
             }
-            if ($sucursal > 0 && $sucursal !== (int) $clave['sucursal']) {
-                $mensajes[] = 'Numeración COM: sucursal ctamov '.$sucursal.' vs esperado '.$clave['sucursal'].'.';
+            if ($sucursal <= 0 || $sucursal !== (int) $clave['sucursal']) {
+                $mensajes[] = $sucursal <= 0
+                    ? 'Numeración COM ausente en ctamov (sucursal vacía; esperada '.$clave['sucursal'].').'
+                    : 'Numeración COM: sucursal ctamov '.$sucursal.' vs esperado '.$clave['sucursal'].'.';
                 break;
             }
-            if ($nro > 0 && $nro !== (int) $clave['nro']) {
-                $mensajes[] = 'Numeración COM: número ctamov '.$nro.' vs esperado '.$clave['nro'].'.';
+            if ($nro <= 0 || $nro !== (int) $clave['nro']) {
+                $mensajes[] = $nro <= 0
+                    ? 'Numeración COM ausente en ctamov (número vacío; esperado '.$clave['nro'].').'
+                    : 'Numeración COM: número ctamov '.$nro.' vs esperado '.$clave['nro'].'.';
                 break;
             }
         }

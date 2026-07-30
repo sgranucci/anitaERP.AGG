@@ -84,7 +84,12 @@ class OrdencompraController extends Controller
             $this->ordencompraAnitaSyncService->sincronizarConAnita((int) Auth::id());
         }
 
-        $filtros = OrdencompraListadoFiltros::resolverDesdeRequest($request);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = OrdencompraListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
         $sectorUsuario = Auth::user()->sector_legajocompra_id ?? null;
         $sectorId = $sectorUsuario ? (int) $sectorUsuario : null;
         $ordencompra = $this->ordencompraRepository->listadoIndex(
@@ -101,6 +106,7 @@ class OrdencompraController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => OrdencompraListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => OrdencompraListadoFiltros::CAMPOS,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
             'estados' => $estados,
             'sectores' => $sectores,
             'sectorUsuario' => $sectorId,
@@ -200,7 +206,12 @@ class OrdencompraController extends Controller
 
         $sectorUsuario = Auth::user()->sector_legajocompra_id ?? null;
         $sectorId = $sectorUsuario ? (int) $sectorUsuario : null;
-        $filtros = OrdencompraListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = OrdencompraListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busqueda,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
 
         if (in_array($formato, ['PDF', 'EXCEL', 'CSV'], true)) {
             ini_set('memory_limit', '-1');

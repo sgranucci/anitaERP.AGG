@@ -14,6 +14,7 @@ use App\Repositories\Solicitudpago\Sector_SolicitudpagoRepositoryInterface;
 use App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface;
 use App\Services\Solicitudpago\SolicitudpagoArchivosFusionService;
 use App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService;
+use App\Services\Solicitudpago\SolicitudpagoCargaMasivaCsvService;
 use App\Services\Solicitudpago\SolicitudpagoComprobantePdfService;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
@@ -37,7 +38,57 @@ class SolicitudpagoController extends Controller
         private SolicitudpagoArbolIntegracionService $arbolIntegracionService,
         private SolicitudpagoArchivosFusionService $archivosFusionService,
         private SolicitudpagoComprobantePdfService $comprobantePdfService,
+        private SolicitudpagoCargaMasivaCsvService $cargaMasivaCsvService,
     ) {
+    }
+
+    public function previewCargaMasiva(Request $request)
+    {
+        can('crear-solicitud-pago');
+        $request->validate([
+            'archivo' => [
+                'required',
+                'file',
+                'max:10240',
+                function (string $attribute, $value, $fail) {
+                    if (! $value instanceof \Illuminate\Http\UploadedFile) {
+                        $fail('Archivo inválido.');
+
+                        return;
+                    }
+                    $ext = strtolower($value->getClientOriginalExtension() ?: '');
+                    if (! in_array($ext, ['csv', 'txt'], true)) {
+                        $fail('El archivo debe ser CSV.');
+                    }
+                },
+            ],
+        ], [
+            'archivo.required' => 'Seleccione un archivo CSV.',
+        ]);
+
+        try {
+            $preview = $this->cargaMasivaCsvService->preview($request->file('archivo'));
+
+            return response()->json(['ok' => true] + $preview);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function confirmarCargaMasiva(Request $request)
+    {
+        can('crear-solicitud-pago');
+        $request->validate([
+            'token' => 'required|string|max:64',
+        ]);
+
+        try {
+            $resultado = $this->cargaMasivaCsvService->confirmar((string) $request->input('token'));
+
+            return response()->json(['ok' => true] + $resultado);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
     }
 
     public function index(Request $request)

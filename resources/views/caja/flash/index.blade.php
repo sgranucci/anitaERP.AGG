@@ -32,8 +32,8 @@
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-flash-caja',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => FlashCajaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('flash_caja'),
+                        'tieneCriterios' => FlashCajaListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => route('flash_caja', FlashCajaListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
                         'placeholder' => 'B&uacute;squeda r&aacute;pida (fecha, empresa, comentario)&hellip;',
                         'toggleTarget' => '#panel-filtros-flash-caja',
                         'toggleId' => 'btn-toggle-filtros-flash-caja',
@@ -44,10 +44,9 @@
                 </div>
             </div>
             <form method="get" action="{{ route('flash_caja') }}" id="form-filtros-flash-caja" class="mb-0">
-                @include('caja.flash.partials.filtros_listado', [
-                    'limpiarUrl' => route('flash_caja'),
-                ])
+                @include('caja.flash.partials.filtros_listado')
             </form>
+            @include('caja.flash.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_flash_caja',
@@ -63,10 +62,12 @@
                             <th class="width100 text-right">Estac.</th>
                             <th class="width100 text-right">Vending</th>
                             <th class="width100 text-right">Bingo</th>
+                            <th class="width100 text-right">Win OL slots</th>
+                            <th class="width100 text-right">Win OL ruletas</th>
                             <th class="width100 text-right">Gaming</th>
                             <th class="width100 text-right">Revenues</th>
                             <th class="width120">Comentario</th>
-                            <th class="width100" data-orderable="false"></th>
+                            <th class="width160 text-nowrap" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -79,10 +80,12 @@
                             <td class="text-right">{{ number_format((float) $data->estac, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format((float) $data->vending, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format((float) $data->bingo_total_venta, 2, ',', '.') }}</td>
+                            <td class="text-right">{{ number_format((float) $data->win_ol_slot, 2, ',', '.') }}</td>
+                            <td class="text-right">{{ number_format((float) $data->win_ol_rul, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format($data->total_gaming, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format($data->total_revenues, 2, ',', '.') }}</td>
                             <td>{{ $data->comentario }}</td>
-                            <td>
+                            <td class="text-nowrap">
                                 @if (can('exportar-reporte-flash-caja', false))
                                     <a href="{{ route('flash_caja_reporte', ['id' => $data->id, 'formato' => 'PDF']) }}" class="btn-accion-tabla tooltipsC" title="Reporte PDF" target="_blank" rel="noopener">
                                         <i class="fa fa-file-pdf-o text-danger"></i>

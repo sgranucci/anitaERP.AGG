@@ -1,0 +1,72 @@
+---
+description: UI de CRUD nuevos alineada a módulos modernos (card-info/primary, thead #85C1E9, filtros, grillas)
+alwaysApply: true
+---
+
+# CRUD: UI moderna (obligatoria en ABM nuevos o migrados)
+
+Todo **CRUD nuevo** o pantallas crear/editar/index que se modernicen deben seguir esta UI. No copiar ABM legacy con `card-danger`, `tabla-data` (DataTables) ni formularios planos sin toolbar de filtros.
+
+Complementa (no reemplaza): `index-listado-paginado-export.mdc`, `listado-filtros-crud.mdc`, `crud-card-colores.mdc`, `empresa-asignada-formulario.mdc`, `iconos-acciones-listado.mdc`.
+
+## Referencias canónicas
+
+| Tipo | Ejemplo |
+|---|---|
+| Index + filtros + export | `caja/cuentacaja`, `caja/apertura_gasto`, `presupuesto/capex` |
+| Crear / editar formulario | `caja/flash`, `caja/apertura_gasto`, `bingo/configuracion_puntoventa` |
+| Grilla multiempresa (cuentas) | `caja/apertura_gasto` (híja por empresa) / `stock/articulo` form4 |
+| Workbench / proceso | `caja/rendicion_maquina/cargar` (`card-info` + thead `#85C1E9`) |
+
+## Colores de card (barra superior)
+
+| Pantalla | Clase contenedor | Prohibido |
+|---|---|---|
+| Index / listado / consultar | `card card-info` | `card-danger`, card sin variante |
+| Crear / editar (ABM) | `card card-primary` | `card-danger` (legacy) |
+| Subpanel / grilla dentro del form | `card card-outline card-info` | |
+| Acción destructiva de proceso (cierre, anular) | `card-outline card-danger` / `bg-danger` solo ahí | Usar danger en ABM maestro |
+
+Volver al listado: `btn btn-outline-info btn-sm` + `fa-reply-all`.
+
+## Index
+
+- `id="tabla-paginada"` + paginación server-side + `appends($filtrosQuery)`.
+- Toolbar: `@include('includes.listado.filtros_toolbar')` (botón Nuevo ahí, no suelto).
+- Export: `@include('includes.exportar-tabla-queryparams', …)`.
+- Thead: fondo `#85C1E9`, texto `#17202A` (inline o CSS del módulo).
+- Acciones: `btn-accion-tabla` + `fa-edit` / `fa-times-circle text-danger` (ver `iconos-acciones-listado.mdc`).
+
+## Crear / editar
+
+- Layout: `@extends("theme.$theme.layout")`, `form-horizontal`, `@include('includes.form-error')` + `mensaje`.
+- Scripts: `admin/crear.js` + JS propio del módulo si hay grilla/modales.
+- Empresa: `includes.form-empresa-asignada` / `-control` (nunca select crudo de todas las empresas).
+- Cuentas / depósitos / CC / artículos: **modales de consulta** del ERP (`tm-*-campo` + `consulta.js`), no inventar selects masivos.
+- Grillas hijas (N empresas, N líneas): tabla `table-sm table-bordered`, thead `#85C1E9`, template `<template>` + botón outline `Agregar…`; replicar a otras empresas resolviendo ID por código (patrón apertura-gasto / artículo).
+
+## Tablas y tipografía en pantalla
+
+```blade
+<thead style="background:#85C1E9;color:#17202A;">
+```
+
+Misma paleta en PDF/Excel de listado (ya exigida por reglas de export).
+
+## Prohibido en CRUD nuevos
+
+- `card card-danger` en crear/editar ABM.
+- `tabla-data` + DataTables como único listado.
+- Form POST a `resultado.blade.php` sin paginar/export.
+- Duplicar filtros de empresa/suspendido fuera de supports/repositories canónicos.
+- Copiar UI de un módulo viejo “porque está en el mismo menú” si ya existe versión moderna en Caja/Presupuesto/Flash.
+
+## Checklist al cerrar un CRUD nuevo
+
+```bash
+rg 'card card-danger' resources/views/{modulo}/{recurso}/
+rg 'id="tabla-data"' resources/views/{modulo}/{recurso}/index.blade.php
+rg '85C1E9|card-primary|card-info' resources/views/{modulo}/{recurso}/
+rg 'exportar-tabla-queryparams|filtros_toolbar' resources/views/{modulo}/{recurso}/index.blade.php
+php artisan view:cache
+```

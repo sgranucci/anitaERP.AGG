@@ -7,6 +7,7 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/filtro.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/enviar-arbol.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/volver-compras.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
@@ -35,8 +36,8 @@ Requisiciones
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-requisicion',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => RequisicionListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('consultar_requisicion'),
+                        'tieneCriterios' => RequisicionListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => route('consultar_requisicion', RequisicionListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
                         'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-requisicion',
                         'toggleId' => 'btn-toggle-filtros-requisicion',
@@ -48,10 +49,9 @@ Requisiciones
                 </div>
             </div>
             <form method="get" action="{{ route('consultar_requisicion') }}" id="form-filtros-requisicion" class="mb-0">
-                @include('compras.requisicion.partials.filtros_listado', [
-                    'limpiarUrl' => route('consultar_requisicion'),
-                ])
+                @include('compras.requisicion.partials.filtros_listado')
             </form>
+            @include('compras.requisicion.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_requisicion',
@@ -108,7 +108,8 @@ Requisiciones
                                 </a>
                                 @if ($esProvisorioFila && can('confirmar-requisicion', false))
                                 <form action="{{ route('confirmar_requisicion', $data->id) }}" class="d-inline form-confirmar-requisicion" method="POST"
-                                      data-confirm-msg="¿Confirmar requisición {{ $data->numerorequisicion }}? Enviará al árbol de aprobación y sincronizará con Anita.">
+                                      data-confirm-msg="¿Confirmar requisición {{ $data->numerorequisicion }}? Enviará al árbol de aprobación y sincronizará con Anita."
+                                      data-preview-cc-url="{{ route('centros_costo_arbol_requisicion', ['id' => $data->id]) }}">
                                     @csrf
                                     <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Confirmar requisición">
                                         <i class="fa fa-check"></i>

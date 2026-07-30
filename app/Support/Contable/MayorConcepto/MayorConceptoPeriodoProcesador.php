@@ -1587,9 +1587,8 @@ class MayorConceptoPeriodoProcesador
             return $lineas;
         }
 
-        // Gastro/estacionamiento con medios 111+113: importe completo de ventas/IVA
-        // (igual al mayor plano), prorrateado entre todos los medios. Si cae en sistema B
-        // se aplica factor parcial caja/(caja+113) y 413xxx queda por debajo del plano.
+        // Gastro/estacionamiento con medios 111+113(+211): ventas/IVA al concepto de cada
+        // cuenta (plano); 113/211 también a su concepto (ctaconc). Caja 111 queda analítica.
         if ($this->debeProcesarAsientoCtamovVentaMultibanco($lineasAsiento, $lineasOp)) {
             $lineas = $this->procesarAsientoCtamovVentaMultibanco(
                 $empresaId,
@@ -2758,9 +2757,14 @@ class MayorConceptoPeriodoProcesador
             return [];
         }
 
+        // Ancla analítica: solo caja/banco dentro del límite mayor concepto (111…).
+        // 113/211 salen como líneas de concepto (ctaconc de cada cuenta).
+        $mediosAncla = $this->mediosCobranzaDentroLimiteMayorConcepto($mediosCobranza);
+        $cuentaAncla = $this->cuentaMedioCobranzaPrincipal(
+            $mediosAncla !== [] ? $mediosAncla : $mediosCobranza
+        );
+
         $lineas = [];
-        // Prorrateo entre medios (111/113/211) ya alinea concepto con analítico ampliado; no recortar al solo banco.
-        $factorProrrateo = 1.0;
 
         foreach ($lineasOp as $linea) {
             if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
@@ -2778,13 +2782,29 @@ class MayorConceptoPeriodoProcesador
                 continue;
             }
 
-            // Medios de cobro (caja, crédito comercial, cupones 211): no se imputan como gasto/venta.
-            if ($this->esMedioCobranzaCtamovVenta($cuenta, $mov)
-                || ($mov === 'D' && $this->esCuentaPasivaPublicoCtamovSistemaB($cuenta))) {
+            // Caja/banco ≤ límite: solo analítico (no línea de concepto).
+            if ($this->motor->esDisponibilidad($cuenta)) {
                 continue;
             }
 
-            if ($this->motor->esDisponibilidad($cuenta)) {
+            // Crédito comercial 113 / cupones 211: al concepto de la propia cuenta.
+            if ($this->esMedioCobranzaImputableConceptoVentaCtamov($cuenta, $mov)) {
+                $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
+                $lineas[] = $this->lineaReporte(
+                    $linea,
+                    $cuenta,
+                    $concepto,
+                    round($importe, 2),
+                    $mov,
+                    $monedaConverter,
+                    $monedaReporteId,
+                    'Ctamov venta cobranza',
+                    [
+                        'cuenta_disponibilidad' => $cuenta,
+                        'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                    ],
+                );
+
                 continue;
             }
 
@@ -2793,47 +2813,51 @@ class MayorConceptoPeriodoProcesador
                 continue;
             }
 
-            $importeImputable = $this->aplicarFactorProrrateoAnaliticoControl($importe, $factorProrrateo);
-            if ($importeImputable <= 0) {
+            $importeImputable = round($importe, 2);
+            if ($importeImputable <= 0 || $cuentaAncla <= 0) {
                 continue;
             }
 
+            // Ventas/IVA y ajustes (dif. caja): importe ctamov completo, ancla = caja.
             $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
-            // Ventas/IVA: prorratear entre medios (caja/tarjeta/cupón) para alinear con cobranza.
-            // Resto (ej. diferencia de caja 521280-004): una sola línea con el importe ctamov
-            // completo — contaduría no parte ese ajuste entre medios.
-            if ($esVentaOIva) {
-                $porciones = $this->prorratearImportePorMediosCobranza($importeImputable, $mediosCobranza);
-            } else {
-                $cuentaDisp = $this->cuentaMedioCobranzaPrincipal($mediosCobranza);
-                $porciones = $cuentaDisp > 0
-                    ? [['cuenta' => $cuentaDisp, 'importe' => round($importeImputable, 2)]]
-                    : [];
-            }
-
-            foreach ($porciones as $porcion) {
-                if ($porcion['importe'] <= 0) {
-                    continue;
-                }
-
-                $lineas[] = $this->lineaReporte(
-                    $linea,
-                    $cuenta,
-                    $concepto,
-                    $porcion['importe'],
-                    $mov,
-                    $monedaConverter,
-                    $monedaReporteId,
-                    'Ctamov venta cobranza',
-                    [
-                        'cuenta_disponibilidad' => $porcion['cuenta'],
-                        'emisor' => trim((string) ($linea->subd_emisor ?? '')),
-                    ],
-                );
-            }
+            $lineas[] = $this->lineaReporte(
+                $linea,
+                $cuenta,
+                $concepto,
+                $importeImputable,
+                $mov,
+                $monedaConverter,
+                $monedaReporteId,
+                'Ctamov venta cobranza',
+                [
+                    'cuenta_disponibilidad' => $cuentaAncla,
+                    'emisor' => trim((string) ($linea->subd_emisor ?? '')),
+                ],
+            );
         }
 
-        return $this->reconciliarImputacionMediosVentaCtamov($lineas, $mediosCobranza);
+        return $lineas;
+    }
+
+    /**
+     * Medios de cobranza que deben salir en el mayor por concepto (no son analítico de caja).
+     * 113xxx crédito comercial; 211xxx cupones / moneda en poder del público.
+     */
+    private function esMedioCobranzaImputableConceptoVentaCtamov(int $cuenta, string $mov): bool
+    {
+        if ($cuenta <= 0 || strtoupper(trim($mov)) !== 'D') {
+            return false;
+        }
+
+        if ($this->motor->esDisponibilidad($cuenta)) {
+            return false;
+        }
+
+        if ($this->esCuentaPasivaPublicoCtamovSistemaB($cuenta)) {
+            return true;
+        }
+
+        return $this->esMedioCobranzaCtamovVenta($cuenta, $mov);
     }
 
     /**
@@ -7268,7 +7292,8 @@ class MayorConceptoPeriodoProcesador
         bool $soloMonedaOrigen,
     ): array {
         $porAsiento = [];
-        $asientosCtamovVentaCobranza = $this->indexarAsientosCtamovMediosAnalitico($ctamovLista);
+        $asientosCtamovMediosAnalitico = $this->indexarAsientosCtamovMediosAnalitico($ctamovLista);
+        $asientosCtamovVentaGastro = $this->indexarAsientosCtamovVentaCobranza($ctamovLista);
         $asientosVentaMaquinasCtamov = $this->indexarAsientosCtamovVentaMaquinas($ctamovLista);
 
         $subdiarioPorOperacion = [];
@@ -7398,7 +7423,8 @@ class MayorConceptoPeriodoProcesador
             }
 
             $lineasOp = $this->ctamovAsientoComoLineasOp($lineasAsiento);
-            $incluirMediosCtamov = isset($asientosCtamovVentaCobranza[$nro]);
+            $incluirMediosCtamov = isset($asientosCtamovMediosAnalitico[$nro]);
+            $esVentaGastro = isset($asientosCtamovVentaGastro[$nro]);
             $esSistemaBCtamov = $this->esCtamovAsientoSistemaB($lineasAsiento);
             $esSistemaB = $this->debeProcesarAsientoCtamovSistemaB($lineasAsiento, $lineasOp);
             $esReclasificacionDispContra = $esSistemaBCtamov
@@ -7423,7 +7449,12 @@ class MayorConceptoPeriodoProcesador
                 );
                 $fecha = (int) ($lineaCtamov->ctav_fecha ?? 0);
 
-                if ($esSistemaBCtamov && ! $esVentaMaquinas && ! $esReclasificacionDispContra && ! $incluirMediosCtamov) {
+                if ($esVentaGastro && ! $esReclasificacionDispContra && ! $esVentaMaquinas) {
+                    // Gastro: 113/211 van a concepto; analítico solo caja/banco ≤ límite.
+                    if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                        continue;
+                    }
+                } elseif ($esSistemaBCtamov && ! $esVentaMaquinas && ! $esReclasificacionDispContra && ! $incluirMediosCtamov) {
                     // Sistema B puro (no gastro): solo caja/banco ≤ límite analítico.
                     if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
                         continue;
@@ -7444,8 +7475,7 @@ class MayorConceptoPeriodoProcesador
                     continue;
                 }
 
-                // Gastro/estacionamiento: ampliar analítico a medios 113/211 (además de 111),
-                // para que cierre contra la imputación completa del camino multibanco.
+                // Gastro ya no amplía analítico a 113/211 (salen por concepto).
                 $this->acumularAnaliticoPorAsientoControl(
                     $porAsiento,
                     $nro,
@@ -7453,7 +7483,7 @@ class MayorConceptoPeriodoProcesador
                     $cuenta,
                     $mov,
                     $importe,
-                    $incluirMediosCtamov && ! $esReclasificacionDispContra && ! $esVentaMaquinas,
+                    $incluirMediosCtamov && ! $esVentaGastro && ! $esReclasificacionDispContra && ! $esVentaMaquinas,
                 );
             }
         }
@@ -7581,7 +7611,8 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
-     * Ctamov gastro/estacionamiento (sistema B o V): incluir 113/211 en analítico por asiento.
+     * Ctamov gastro/estacionamiento (sistema B o V): marca asientos cuya cobranza 113/211
+     * va a concepto (analítico solo caja ≤ límite).
      *
      * @param  list<object>  $ctamovLista
      * @return array<int, true>

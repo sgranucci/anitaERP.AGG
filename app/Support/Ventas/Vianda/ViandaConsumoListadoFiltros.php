@@ -23,7 +23,8 @@ final class ViandaConsumoListadoFiltros
      *   centrocosto_id:?int,
      *   texto:string,
      *   estado:string,
-     *   orden_por:string
+     *   orden_por:string,
+     *   presentacion_columnas:bool
      * }
      */
     public static function resolverDesdeRequest(Request $request): array
@@ -49,6 +50,7 @@ final class ViandaConsumoListadoFiltros
             'texto' => trim((string) $request->input('texto', '')),
             'estado' => $estado,
             'orden_por' => self::normalizarOrden($request->input('orden_por')),
+            'presentacion_columnas' => $request->boolean('presentacion_columnas'),
         ];
     }
 
@@ -120,7 +122,7 @@ final class ViandaConsumoListadoFiltros
     {
         $orden = self::normalizarOrden($filtros['orden_por'] ?? self::ORDEN_CENTROCOSTO);
 
-        return array_filter([
+        $params = array_filter([
             'fecha_desde' => $filtros['fecha_desde'] ?? null,
             'fecha_hasta' => $filtros['fecha_hasta'] ?? null,
             'empresa_id' => $filtros['empresa_id'] ?? null,
@@ -129,6 +131,32 @@ final class ViandaConsumoListadoFiltros
             'estado' => $filtros['estado'] ?? null,
             'orden_por' => $orden !== self::ORDEN_CENTROCOSTO ? $orden : null,
         ], fn ($v) => $v !== null && $v !== '');
+
+        if (! empty($filtros['presentacion_columnas'])) {
+            $params['presentacion_columnas'] = 1;
+        }
+
+        return $params;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|null  $resultado
+     */
+    public static function debeUsarVistaColumnas(array $filtros, ?array $resultado): bool
+    {
+        if (empty($filtros['presentacion_columnas']) || $resultado === null) {
+            return false;
+        }
+
+        $vista = $resultado['vista_columnas'] ?? null;
+        if (! is_array($vista)) {
+            return false;
+        }
+
+        $columnas = $vista['columnas'] ?? [];
+
+        return is_array($columnas) && $columnas !== [];
     }
 
     /**
@@ -170,10 +198,14 @@ final class ViandaConsumoListadoFiltros
             'N' => 'Anulados',
             default => 'Todos',
         };
-        $partes[] = 'Orden: '.match (self::normalizarOrden($filtros['orden_por'] ?? self::ORDEN_CENTROCOSTO)) {
-            self::ORDEN_USUARIO => 'Usuario',
-            default => 'Centro de costo',
-        };
+        if (! empty($filtros['presentacion_columnas'])) {
+            $partes[] = 'Vista: columnas por centro de costo';
+        } else {
+            $partes[] = 'Orden: '.match (self::normalizarOrden($filtros['orden_por'] ?? self::ORDEN_CENTROCOSTO)) {
+                self::ORDEN_USUARIO => 'Usuario',
+                default => 'Centro de costo',
+            };
+        }
 
         return implode(' · ', $partes);
     }

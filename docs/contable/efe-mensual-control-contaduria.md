@@ -96,6 +96,13 @@ Detalle funcional de cada uno: ver secciones siguientes y el histórico en §4.
 | Mant. c24: solo si piernas tienen cuenta con concepto 24 (p.ej. 521180); no por `axp_concepto=24` | `EfeDatosMantenimientoEdificioSupport` | DI NAPOLI/TERZAGHI salen de c24 |
 | Varios: ya no fuerza c24 por FIB conc=20 | `EfeDatosVariosSupport` | FARMACIA UOM → c20 |
 
+### 2026-07-29 — Fallback axp_concepto si anticipo queda en c0
+| Cambio | Archivos | Efecto esperado |
+|---|---|---|
+| OPP→COM: si no hay cuenta de gasto (COM/piernas), fallback a `axp_concepto` (≠63) | `EfeOppComGastoResolverSupport` | EXCELL 5257724 FIS conc=24 → c24 |
+| Ese fallback **solo** aplica si la fila EFE sigue en concepto **0** (no pisa c20/c12) | `EfeDatosOppGastoComSupport` | DI NAPOLI/PAPELERA ya en varios/gaming intactos |
+| **No toca** el motor de mayor por concepto | — | mayor sigue en anticipo c0 |
+
 ---
 
 ## 5. Estado de desvíos BSA may/26 (validación 2026-07-17, regla cuenta)
@@ -115,17 +122,18 @@ Sumarias E68: **OK** · Mayor auditoría: **cuadra**.
 
 ## 6. C24 — regla cuenta vs Excel residual
 
-**Regla vigente (contaduría):** cheques con FIB → concepto de la **cuenta contable** (`ctaconc`), no `axp_concepto`.
+**Regla vigente (contaduría):** cheques con FIB → concepto de la **cuenta contable** (`ctaconc`) cuando existe pierna/COM de gasto.  
+**Fallback EFE (2026-07-29):** si el mayor deja el puente/anticipo en **c0** y no hay cuenta de gasto, usar `axp_concepto` del auxpag (solo mientras la fila siga en c0).
 
-| Ejemplo | Excel | ERP (regla cuenta) | Motivo |
+| Ejemplo | Excel | ERP | Motivo |
 |---|---|---|---|
-| DI NAPOLI / TERZAGHI / PROYECTOS (cheques) | **c20** | **c20** | FIB sin cuenta conc. 24 (solo IVA 63 + pasivo) |
-| FARMACIA UOM | **c20** | **c20** | Idem / no fuerza c24 por axp |
-| ERNESTO MAYER | **c12** | **c12** | Gaming CHP+FNS |
-| BARCA VINCIGUERRA / LLANO / CARAMUTA | **c24** | **c20** si no hay cuenta conc. 24 | Excel histórico usaba axp; con regla cuenta pueden diferir |
-| RELD (parte) | c24 + **c55** IIBB | c24 monto cheque | Falta partir IIBB `214010` |
+| DIEGER (`123010`) | c24 | **c2** | Puente bienes de uso gana sobre axp |
+| EXCELL / FIS anticipo solo IVA+114040, axp=24 | c24 | **c24** | Fallback axp (mayor c0) |
+| DI NAPOLI / TERZAGHI (ya varios) | c20 | **c20** | Fallback no pisa c20 |
+| ERNESTO MAYER | c12 | **c12** | Gaming; no pisa c12 |
+| BARCA / mant. con `521180` | c24 | **c24** | Concepto por cuenta |
 
-Si BARCA u otros deben quedar en c24 sin `521180`/cuenta conc. 24, contaduría debe indicar **otra señal** (rubro, proveedor, etc.).
+Si BARCA u otros deben quedar en c24 sin `521180` ni `axp_concepto` en factura, contaduría debe indicar **otra señal**.
 
 ---
 

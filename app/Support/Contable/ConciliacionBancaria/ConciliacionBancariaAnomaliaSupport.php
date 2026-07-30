@@ -26,6 +26,9 @@ final class ConciliacionBancariaAnomaliaSupport
     {
         $pares = is_array($resultado['pares_nuevos'] ?? null) ? $resultado['pares_nuevos'] : [];
         $pendC = is_array($resultado['pendientes_contables'] ?? null) ? $resultado['pendientes_contables'] : [];
+        $pendOtros = is_array($resultado['pendientes_contables_otros'] ?? null)
+            ? $resultado['pendientes_contables_otros']
+            : [];
         $pendB = is_array($resultado['pendientes_banco'] ?? null) ? $resultado['pendientes_banco'] : [];
         $diferencia = abs((float) ($resultado['diferencia'] ?? 0));
         $anomalias = [];
@@ -101,6 +104,38 @@ final class ConciliacionBancariaAnomaliaSupport
             ];
         }
 
+        $sumaOtros = abs((float) ($resultado['suma_pendientes_contables_otros'] ?? 0));
+        if (count($pendOtros) > 0 && $sumaOtros >= (float) config('conciliacion_bancaria.anomalia_importe_grande', 50000)) {
+            $anomalias[] = [
+                'codigo' => 'pendientes_contables_sin_cobertura_ib',
+                'severidad' => 'media',
+                'mensaje' => count($pendOtros).' pendientes contables no-cheque (posible sin cobertura Interbanking o match N:1): '
+                    .number_format($sumaOtros, 2, ',', '.').'.',
+                'detalle' => [
+                    'cantidad' => count($pendOtros),
+                    'suma' => $sumaOtros,
+                ],
+            ];
+        }
+
+        $excelCmp = is_array($resultado['excel_comparacion'] ?? null) ? $resultado['excel_comparacion'] : null;
+        if ($excelCmp !== null && empty($excelCmp['ok'])) {
+            $deltas = [];
+            foreach ($excelCmp['filas'] ?? [] as $fila) {
+                if (! empty($fila['ok'])) {
+                    continue;
+                }
+                $deltas[] = ($fila['concepto'] ?? '?').' Δ '
+                    .number_format((float) ($fila['delta'] ?? 0), 2, ',', '.');
+            }
+            $anomalias[] = [
+                'codigo' => 'desvio_vs_excel_contaduria',
+                'severidad' => 'alta',
+                'mensaje' => 'Carátula ERP desvío vs Excel Contaduría: '.implode('; ', array_slice($deltas, 0, 4)),
+                'detalle' => ['filas' => $excelCmp['filas'] ?? []],
+            ];
+        }
+
         $anomalias = array_slice($anomalias, 0, 40);
 
         $totalMov = max(1, count($pares) + count($pendC) + count($pendB));
@@ -116,6 +151,7 @@ final class ConciliacionBancariaAnomaliaSupport
                 'pares_nuevos' => count($pares),
                 'pares_score_bajo' => $scoresBajos,
                 'pendientes_contables' => count($pendC),
+                'pendientes_contables_otros' => count($pendOtros),
                 'pendientes_banco' => count($pendB),
                 'candidatos_cercanos' => count($near),
                 'diferencia' => $diferencia,

@@ -25,6 +25,7 @@ final class ViandaProcesoService
         private readonly GastronomiaJornadaService $jornadaService,
         private readonly ViandaStockService $stockService,
         private readonly ViandaVoucherService $voucherService,
+        private readonly ViandaConsumoSinCentrocostoAvisoService $avisoSinCentrocostoService,
     ) {
     }
 
@@ -283,7 +284,9 @@ final class ViandaProcesoService
             return $consumo;
         });
 
-        $consumo->load(['lineas', 'centrocosto', 'viandaUsuario', 'empresa', 'tipoMenu']);
+        $consumo->load(['lineas', 'centrocosto', 'viandaUsuario', 'empresa', 'tipoMenu', 'terminal']);
+        // Sin C.C.: no se bloquea el marchar; se avisa por mail al gerente de gastronomía.
+        $this->avisoSinCentrocostoService->avisarSiCorresponde($consumo);
         $voucher = $this->voucherService->emitir($consumo, $cfg);
 
         return ['consumo' => $consumo, 'voucher' => $voucher];

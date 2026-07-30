@@ -94,7 +94,12 @@ class MovimientoStockController extends Controller
     {
         can('listar-movimientos-de-stock');
 
-        $filtros = MovimientoStockListadoFiltros::resolverDesdeRequest($request);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = MovimientoStockListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
         $datas = $this->movimientoStockService->leeMovimientoStockListado($filtros, true);
         $estado_enum = $this->movimientoStockService->estadoEnum();
         $empresa_query = $this->empresaRepository->allFiltrado();
@@ -148,7 +153,12 @@ class MovimientoStockController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = MovimientoStockListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = MovimientoStockListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busqueda,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
         $estado_enum = $this->movimientoStockService->estadoEnum();
 
         switch ($formato) {

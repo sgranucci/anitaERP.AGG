@@ -34,6 +34,21 @@ return [
         'piso_nro_oc' => (int) env('ORDENCOMPRA_ANITA_PISO_NRO_OC', 200000),
     ],
 
+    /*
+    | Auditoría diaria OC ERP ↔ Anita (ordencompra:auditoria-anita-diaria).
+    | Detecta/repara: cabecera pendmaep faltante, líneas huérfanas, proveedor sin pad 6,
+    | legcompra/pendfecha/occuota, aplicped de recepciones confirmadas.
+    */
+    'auditoria_diaria' => [
+        'habilitada' => filter_var(env('ORDENCOMPRA_AUDITORIA_ANITA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('ORDENCOMPRA_AUDITORIA_ANITA_HORA', '07:50'),
+        'usuario_id' => (int) env('ORDENCOMPRA_AUDITORIA_ANITA_USUARIO_ID', 1),
+        'email' => env('ORDENCOMPRA_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com'),
+        'ventana_dias' => max(1, (int) env('ORDENCOMPRA_AUDITORIA_ANITA_VENTANA_DIAS', 7)),
+        'auto_reparar' => filter_var(env('ORDENCOMPRA_AUDITORIA_ANITA_AUTO_REPARAR', true), FILTER_VALIDATE_BOOLEAN),
+        'mail_siempre' => filter_var(env('ORDENCOMPRA_AUDITORIA_ANITA_MAIL_SIEMPRE', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
     'tablas' => [
         'cabecera' => 'pendmaep',
         'linea' => 'pendmovp',

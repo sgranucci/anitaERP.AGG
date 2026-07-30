@@ -7,11 +7,28 @@ use Illuminate\Http\Request;
 class FlashCajaHistoricoFiltros
 {
     /**
-     * @return array{empresa_id: int, fecha_desde: string, fecha_hasta: string, con_season: int}
+     * @return array{
+     *   empresa_ids: list<int>,
+     *   empresa_id: int,
+     *   consolidar_empresas: bool,
+     *   fecha_desde: string,
+     *   fecha_hasta: string,
+     *   con_season: int
+     * }
      */
     public static function resolverDesdeRequest(Request $request): array
     {
-        $empresaId = (int) $request->input('empresa_id', 0);
+        $empresaIds = collect($request->input('empresa_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($empresaIds === [] && (int) $request->input('empresa_id', 0) > 0) {
+            $empresaIds = [(int) $request->input('empresa_id')];
+        }
+
         $fechaDesde = trim((string) $request->input('fecha_desde', ''));
         $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
         $conSeason = $request->has('con_season')
@@ -23,7 +40,9 @@ class FlashCajaHistoricoFiltros
         }
 
         return [
-            'empresa_id' => $empresaId,
+            'empresa_ids' => $empresaIds,
+            'empresa_id' => (int) ($empresaIds[0] ?? 0),
+            'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
             'con_season' => $conSeason,
@@ -32,24 +51,46 @@ class FlashCajaHistoricoFiltros
 
     /**
      * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public static function empresaIds(array $filtros): array
+    {
+        $ids = collect($filtros['empresa_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === [] && (int) ($filtros['empresa_id'] ?? 0) > 0) {
+            return [(int) $filtros['empresa_id']];
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
      */
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
-        return (int) ($filtros['empresa_id'] ?? 0) > 0
+        return self::empresaIds($filtros) !== []
             && trim((string) ($filtros['fecha_desde'] ?? '')) !== ''
             && trim((string) ($filtros['fecha_hasta'] ?? '')) !== '';
     }
 
     /**
      * @param  array<string, mixed>  $filtros
-     * @return array<string, string|int>
+     * @return array<string, mixed>
      */
     public static function paraQueryString(array $filtros): array
     {
         $params = ['consultar' => 1];
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            $params['empresa_id'] = (int) $filtros['empresa_id'];
+
+        foreach (self::empresaIds($filtros) as $empresaId) {
+            $params['empresa_ids'][] = $empresaId;
         }
+
         if (! empty($filtros['fecha_desde'])) {
             $params['fecha_desde'] = (string) $filtros['fecha_desde'];
         }
@@ -58,20 +99,29 @@ class FlashCajaHistoricoFiltros
         }
         $params['con_season'] = (int) ($filtros['con_season'] ?? 1);
 
+        if (empty($filtros['consolidar_empresas'])) {
+            $params['consolidar_empresas'] = 0;
+        }
+
         return $params;
     }
 
     /**
      * @param  array<string, mixed>  $filtros
      */
-    public static function subtitulo(array $filtros, ?string $empresaNombre = null): string
+    public static function subtitulo(array $filtros, ?string $empresasTexto = null): string
     {
         $partes = [];
-        if ($empresaNombre) {
-            $partes[] = 'Empresa: '.$empresaNombre;
+        if ($empresasTexto) {
+            $partes[] = 'Empresa'.(count(self::empresaIds($filtros)) > 1 ? 's' : '').': '.$empresasTexto;
+        }
+        if (count(self::empresaIds($filtros)) > 1) {
+            $partes[] = ! empty($filtros['consolidar_empresas'])
+                ? 'Modo: consolidado'
+                : 'Modo: un reporte por empresa';
         }
         if (! empty($filtros['fecha_desde']) && ! empty($filtros['fecha_hasta'])) {
-            $partes[] = 'Per&iacute;odo: '.FlashCajaReporteSupport::formatearPeriodo(
+            $partes[] = 'Período: '.FlashCajaReporteSupport::formatearPeriodo(
                 (string) $filtros['fecha_desde'],
                 (string) $filtros['fecha_hasta'],
             );
@@ -80,6 +130,6 @@ class FlashCajaHistoricoFiltros
             ? 'Con season index'
             : 'Sin season index';
 
-        return implode(' &mdash; ', $partes);
+        return implode(' — ', $partes);
     }
 }

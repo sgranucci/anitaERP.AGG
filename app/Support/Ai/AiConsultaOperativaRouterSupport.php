@@ -181,6 +181,12 @@ final class AiConsultaOperativaRouterSupport
             ];
         }
 
+        // KPIs / mediciones de Compras (antes de plan agente y OC puntual)
+        $rutaComprasKpi = self::interpretarComprasKpi($texto, $norm);
+        if ($rutaComprasKpi !== null) {
+            return $rutaComprasKpi;
+        }
+
         // Plan agente HITL (antes que intents puntuales)
         if (self::contieneAlguno($norm, [
             'que hago', 'que hacer', 'plan para', 'plan de', 'plan operativo',
@@ -234,6 +240,57 @@ final class AiConsultaOperativaRouterSupport
             ];
         }
 
+        // Mayor / analitico (antes que OC genérica: «mayor de la OC …»)
+        $pideMayor = self::contieneAlguno($norm, [
+            'mayor de la cuenta', 'mayor de cuenta', 'mayor cuenta', 'mayor analitico', 'mayor analítico',
+            'mayor de la oc', 'mayor de oc', 'mayor oc', 'mayor de la orden', 'movimientos del mayor',
+            'mayor filtrado', 'mayor con centro', 'mayor centro de costo',
+        ]) || (str_contains($norm, 'mayor') && self::contieneAlguno($norm, [
+            'cuenta', 'oc', 'orden de compra', 'centro de costo', 'cc ',
+        ]) && ! str_contains($norm, 'corriente'));
+
+        if ($pideMayor) {
+            $params = self::extraerParamsPeriodoYExtras($texto, $norm);
+            $params = array_merge($params, self::extraerFiltrosMayor($texto, $norm));
+
+            $tieneCuenta = ! empty($params['cuenta_codigo']);
+            $tieneOc = ! empty($params['numero_oc']);
+            $tieneCc = ! empty($params['centrocosto_codigo']) || ! empty($params['centrocosto_id']);
+
+            if (! $tieneCuenta && ! $tieneOc && ! $tieneCc) {
+                return [
+                    'ok' => false,
+                    'needs_clarification' => true,
+                    'clarification' => 'Indique cuenta, OC o centro de costo (ej.: «mayor cuenta 214010013 CC 85 julio empresa 1» o «mayor de la OC 221022»).',
+                    'error' => 'Falta criterio de mayor (cuenta / OC / CC).',
+                    'sugerencias' => [
+                        'mayor de la cuenta 214010013 este mes',
+                        'mayor cuenta 211010004 CC 85 de julio',
+                        'mayor de la OC 221022',
+                        'mayor cuenta 214010013 empresa 1 2026-01-01 2026-07-31',
+                    ],
+                ];
+            }
+
+            $partes = [];
+            if ($tieneCuenta) {
+                $partes[] = 'cuenta '.$params['cuenta_codigo'];
+            }
+            if ($tieneCc) {
+                $partes[] = 'CC '.($params['centrocosto_codigo'] ?? $params['centrocosto_id']);
+            }
+            if ($tieneOc) {
+                $partes[] = 'OC '.$params['numero_oc'];
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA,
+                'params' => $params,
+                'interpretacion' => 'Mayor '.implode(', ', $partes),
+            ];
+        }
+
         // Árbol / firma (antes que OC genérica)
         if (self::contieneAlguno($norm, ['arbol', 'aprobacion', 'aprobar', 'firmar', 'firma', 'quien firma', 'quien tiene que firmar', 'pendiente de firma'])) {
             $numero = self::extraerNumeroOc($texto);
@@ -254,8 +311,9 @@ final class AiConsultaOperativaRouterSupport
         }
 
         // Orden de compra
-        if (self::contieneAlguno($norm, ['orden de compra', 'ordencompra', ' o.c.', 'estado de la oc', 'estado oc'])
-            || preg_match('/\boc\b/u', $norm) === 1) {
+        if ((self::contieneAlguno($norm, ['orden de compra', 'ordencompra', ' o.c.', 'estado de la oc', 'estado oc'])
+            || preg_match('/\boc\b/u', $norm) === 1)
+            && ! str_contains($norm, 'mayor')) {
             $numero = self::extraerNumeroOc($texto);
             if ($numero === null) {
                 return [
@@ -338,29 +396,6 @@ final class AiConsultaOperativaRouterSupport
                 'intent' => AiConsultaOperativaSupport::INTENT_FACTURA_VENTA,
                 'params' => ['numero' => $numero, 'valor' => $numero],
                 'interpretacion' => 'Factura de venta '.$numero,
-            ];
-        }
-
-        // Mayor / saldo de cuenta contable (antes que proveedor genérico con "cuenta")
-        if (self::contieneAlguno($norm, ['mayor de la cuenta', 'mayor de cuenta', 'mayor cuenta', 'mayor analitico', 'mayor analítico'])
-            || (str_contains($norm, 'mayor') && str_contains($norm, 'cuenta') && ! str_contains($norm, 'corriente'))) {
-            $cuenta = self::extraerCodigoCuenta($texto, $norm);
-            if ($cuenta === null) {
-                return [
-                    'ok' => false,
-                    'error' => 'Indique el código de cuenta para el mayor (ej.: «mayor de la cuenta 214010013 este mes»).',
-                    'sugerencias' => ['mayor de la cuenta 214010013', 'mayor cuenta 111010000 sin detalle'],
-                ];
-            }
-            $params = self::extraerParamsPeriodoYExtras($texto, $norm);
-            $params['cuenta_codigo'] = $cuenta;
-            $params['valor'] = $cuenta;
-
-            return [
-                'ok' => true,
-                'intent' => AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA,
-                'params' => $params,
-                'interpretacion' => 'Mayor de la cuenta '.$cuenta,
             ];
         }
 
@@ -569,6 +604,15 @@ final class AiConsultaOperativaRouterSupport
             'saldo del proveedor 475 de julio',
             'saldo del cliente 10025 este mes',
             'mayor de la cuenta 211010004 de julio',
+            'mayor cuenta 214010013 CC 85 este mes',
+            'mayor de la OC 221022',
+            'mayor cuenta 211010004 empresa 1 julio',
+            'resumen operativo de compras',
+            'OC pendientes de firma',
+            'OC vencidas sin recepción',
+            'lead time OC recepción últimos 90 días',
+            'top proveedores por monto este mes',
+            'requisiciones sin OC',
             'qué hago con desvíos de conciliación',
             'plan para deuda del proveedor 475',
             'plan para firmar la OC 1234',
@@ -694,6 +738,150 @@ final class AiConsultaOperativaRouterSupport
         }
 
         return $params;
+    }
+
+    /**
+     * Filtros combinables del mayor: cuenta, CC, empresa, OC.
+     *
+     * @return array<string,mixed>
+     */
+    private static function extraerFiltrosMayor(string $texto, string $norm): array
+    {
+        $params = [];
+
+        $numeroOc = null;
+        if (self::contieneAlguno($norm, ['oc', 'orden de compra', 'orden compra'])) {
+            $numeroOc = self::extraerNumeroOc($texto);
+            if ($numeroOc !== null) {
+                $params['numero_oc'] = $numeroOc;
+            }
+        }
+
+        if (preg_match('/cuenta\s*[#:]?\s*([0-9]{4,12})/ui', $texto, $mCuenta) === 1) {
+            $params['cuenta_codigo'] = trim($mCuenta[1]);
+            $params['valor'] = $params['cuenta_codigo'];
+        } elseif ($numeroOc === null) {
+            $cuenta = self::extraerCodigoCuenta($texto, $norm);
+            if ($cuenta !== null) {
+                $params['cuenta_codigo'] = $cuenta;
+                $params['valor'] = $cuenta;
+            }
+        }
+
+        if (preg_match('/\bcc\s*(\d{1,6})\b/u', $norm, $mCc) === 1) {
+            $params['centrocosto_codigo'] = $mCc[1];
+        } elseif (preg_match('/centro\s+de\s+costo\s+(\d{1,6})\b/u', $norm, $mCc2) === 1) {
+            $params['centrocosto_codigo'] = $mCc2[1];
+        }
+
+        if (preg_match('/\bempresa\s*[#:=]?\s*(\d{1,6})\b/ui', $texto, $mEmp) === 1) {
+            $params['empresa_id'] = (int) $mEmp[1];
+            $params['empresa_codigo'] = $mEmp[1];
+        } elseif (preg_match('/\bempresa\s*[#:=]?\s*([A-Za-z0-9][A-Za-z0-9\.\-]{0,20})\b/ui', $texto, $mEmp2) === 1) {
+            $params['empresa_codigo'] = trim($mEmp2[1]);
+        }
+
+        return $params;
+    }
+
+    /**
+     * @return array{
+     *   ok: bool,
+     *   intent: string,
+     *   params: array<string,mixed>,
+     *   interpretacion: string
+     * }|null
+     */
+    private static function interpretarComprasKpi(string $texto, string $norm): ?array
+    {
+        $params = self::extraerParamsPeriodoYExtras($texto, $norm);
+        if (preg_match('/\bempresa\s*[#:=]?\s*(\d{1,6})\b/ui', $texto, $mEmp) === 1) {
+            $params['empresa_id'] = (int) $mEmp[1];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'oc vencidas', 'ordenes vencidas', 'órdenes vencidas', 'vencidas sin recepcion',
+            'vencidas sin recepción', 'oc sin recepcion', 'oc sin recepción',
+        ])) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_OC_VENCIDAS_SIN_RECEPCION,
+                'params' => $params,
+                'interpretacion' => 'OC vencidas sin recepción',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'oc pendientes de firma', 'oc pendiente de firma', 'pendientes de firma',
+            'oc pendientes', 'ordenes pendientes de firma', 'órdenes pendientes de firma',
+            'bandeja de firmas oc', 'firma pendiente oc',
+        ]) || (str_contains($norm, 'pendiente') && str_contains($norm, 'firma') && self::contieneAlguno($norm, ['oc', 'orden']))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_OC_PENDIENTES_FIRMA,
+                'params' => $params,
+                'interpretacion' => 'OC pendientes de firma',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'lead time', 'leadtime', 'tiempo de entrega oc', 'demora oc recepcion',
+            'demora oc recepción', 'plazo oc recepcion', 'plazo oc recepción',
+        ]) || (str_contains($norm, 'lead') && self::contieneAlguno($norm, ['oc', 'recepcion', 'recepción']))) {
+            if (empty($params['fecha_desde'])) {
+                $params['fecha_desde'] = date('Y-m-d', strtotime('-89 days'));
+                $params['fecha_hasta'] = date('Y-m-d');
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_LEAD_TIME_OC_RECEPCION,
+                'params' => $params,
+                'interpretacion' => 'Lead time OC → recepción',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'top proveedores', 'ranking proveedores', 'proveedores por monto',
+            'mayores proveedores', 'proveedores mas comprados', 'proveedores más comprados',
+        ])) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_TOP_PROVEEDORES_MONTO,
+                'params' => $params,
+                'interpretacion' => 'Top proveedores por monto',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'requisiciones sin oc', 'rq sin oc', 'requisicion sin oc', 'requisición sin oc',
+            'rq pendientes de compra', 'requisiciones pendientes de oc', 'lineas sin oc',
+            'líneas sin oc', 'rq sin orden',
+        ])) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_RQ_SIN_OC,
+                'params' => $params,
+                'interpretacion' => 'Requisiciones con líneas sin OC',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'kpi compras', 'kpis compras', 'dashboard compras', 'tablero compras',
+            'resumen compras', 'resumen operativo compras', 'resumen operativo de compras',
+            'mediciones compras', 'indicadores compras', 'situacion de compras',
+            'situación de compras',
+        ]) || (self::contieneAlguno($norm, ['kpi', 'medicion', 'medición', 'indicador', 'dashboard', 'tablero'])
+            && str_contains($norm, 'compra'))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_RESUMEN,
+                'params' => $params,
+                'interpretacion' => 'KPI / resumen operativo de Compras',
+            ];
+        }
+
+        return null;
     }
 
     /**

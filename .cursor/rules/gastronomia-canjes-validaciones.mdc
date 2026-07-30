@@ -135,7 +135,7 @@ En el mismo preflight (no exclusivas de canje):
 | Cupón normalizado | No vacío; quita `*` inicial si existe |
 | No canjeado en ERP | No existe en `ticketcanje_gastronomia` |
 | Ítems decodificados | Al menos un artículo; SKU con prefijo `V` en `GIFT_ID` |
-| Artículo en ERP | `articulo` por SKU y `empresa_id` |
+| Artículo en ERP | `articulo` por SKU (sin filtrar `empresa_id`; igual que catálogo POS) |
 | Vencimiento | Fecha premio dentro de `canje_premio_vencimiento_dias` |
 | Descuento / cliente config | Existen en BD por código configurado |
 
@@ -215,7 +215,7 @@ En el mismo preflight (no exclusivas de canje):
 |------------|---------|
 | Un canje por DNI por día | `CategoriafidelidadEntregaGastronomiaRepository::existeCanjeHoyPorDocumento` — `whereDate(fechacanje, today)` |
 | Categoría ERP | `findPorCodigo(levelCode)`; si no existe, error configuración |
-| Artículos canje | Al menos uno en categoría, empresa y lista precios del PV |
+| Artículos canje | Al menos uno en categoría + lista precios del PV (sin filtrar `articulo.empresa_id`) |
 | Artículo seleccionado | Si varios, `articulo_id` obligatorio en request |
 | Descuento / cliente config | Por código en config |
 

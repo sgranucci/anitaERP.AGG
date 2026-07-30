@@ -303,8 +303,10 @@ return [
         'control_flash_jornada_offset_dias' => max(0, (int) env('GASTRONOMIA_CONCILIACION_CONTROL_FLASH_OFFSET_DIAS', 1)),
         /**
          * Anita Informix no discrimina vending en el flash: flash_ayb = AyB + vending.
-         * true (default): FLASH-GASTRO compara flash_ayb vs (gastro + vending) ERP/Rendg.
-         * false: cuando el flash operativo viva en ERP con vending discriminado.
+         * true (default):
+         *  - reporte diario FLASH-GASTRO compara flash_ayb vs (gastro + vending) ERP/Rendg;
+         *  - conciliación Contable gastronomía resta vending ERP del flash antes de confrontar facturación.
+         * false: cuando el flash operativo viva en ERP con vending discriminado (deja de restarse / sumarse).
          */
         'control_flash_ayb_incluye_vending' => filter_var(
             env('GASTRONOMIA_CONCILIACION_CONTROL_FLASH_AYB_INCLUYE_VENDING', true),

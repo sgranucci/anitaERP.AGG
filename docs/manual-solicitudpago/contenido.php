@@ -2,12 +2,12 @@
 
 /**
  * Manual de usuario — Solicitudes de pago.
- * Audiencia: operadores de tesorería / pagos / administración sin experiencia técnica.
+ * Audiencia: operadores de tesorería / pagos / administración / capital humano / impuestos.
  */
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Solicitudes de pago',
-    'version' => '1.0',
+    'version' => '1.1',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -15,15 +15,16 @@ return [
         [
             'titulo' => '1. Introducción',
             'parrafos' => [
-                'Este manual explica el circuito de Solicitudes de pago (SP) en Anita ERP: cómo listar, filtrar, cargar, autorizar, pagar y consultar planes con cuotas (madre e hijas). Está pensado para quien usa el sistema en el día a día; no hace falta saber programación.',
+                'Este manual explica el circuito de Solicitudes de pago (SP) en Anita ERP: cómo listar, filtrar, cargar (una a una o por CSV masivo), autorizar, pagar y consultar planes con cuotas (madre e hijas). Está pensado para quien usa el sistema en el día a día; no hace falta saber programación.',
                 'Una solicitud de pago es el pedido formal de desembolsar dinero a un proveedor o beneficiario. Puede ser un pago único o formar parte de un plan de cuotas. El sistema acompaña el circuito desde la emisión hasta el pago (y, si corresponde, la conciliación con el mayor contable).',
                 'Menú principal: Solicitud de pago → Solicitudes de pago (listado operativo) e Informe solicitudes de pago (consulta analítica tipo Anita). Las acciones visibles dependen de los permisos de su usuario.',
-                'Desde el Centro de ayuda o el botón Manual del listado puede volver a este documento en cualquier momento.',
+                'La documentación oficial está en el Centro de ayuda del ERP. Ahí encontrará este manual y el resto de guías de módulo. El asistente de IA (panel FAB) también puede citar extractos de este manual cuando pregunta cómo operar una SP.',
             ],
             'items' => [
                 'El listado recuerda los filtros de la sesión: si vuelve al menú, recupera la última consulta.',
                 'Las SP hijas de un plan no llevan cuotas propias: el plan se edita siempre en la SP madre.',
                 'Desde el ícono de plan/cuotas puede consultar madre e hijas sin perder el listado.',
+                'Carga masiva CSV: botón en el listado (permiso crear) para incorporar muchas SP de una vez, con vista previa.',
             ],
         ],
         [
@@ -46,6 +47,7 @@ return [
                     ['Árbol', 'Circuito de aprobación por niveles (correos a firmantes).'],
                     ['IE', 'Instrumento de egreso / pago en caja al autorizar una SP.'],
                     ['Informe SP', 'Consulta analítica con filtros de período, familia y conciliación.'],
+                    ['Carga masiva', 'Alta de muchas SP desde un CSV (formato Anita p-cargasolpm), con preview y confirmación.'],
                 ],
             ],
             'items' => [
@@ -61,6 +63,7 @@ return [
                 'El ciclo habitual de una SP es: Emitida → (Controlada) → Autorizada → Pagada. También puede Suspenderse, Rechazarse o marcarse Terminada según el negocio.',
                 'En planes de pago: primero se carga la madre con el concepto de cuotas y el detalle del plan; luego el sistema (o un proceso) genera hijas por cuota. Cada hija sigue su propio circuito de aprobación y pago.',
                 'Si necesita rearmar notificaciones del árbol (sin estar Pagada), use Reenviar al árbol o Reenviar correo en la edición de la SP.',
+                'Las SP creadas por carga masiva CSV nacen Autorizadas (igual que en Anita): no disparan el árbol al crear. Sirven para liquidaciones y lotes ya revisados fuera del ERP.',
             ],
             'tabla' => [
                 'caption' => 'Estados principales',
@@ -68,7 +71,7 @@ return [
                 'rows' => [
                     ['Emitida', 'SP cargada; inicia o espera el circuito de aprobación.'],
                     ['Controlada', 'Pasó un control intermedio (según árbol / Anita).'],
-                    ['Autorizada', 'Lista para pagar (IE) o marcar pagada.'],
+                    ['Autorizada', 'Lista para pagar (IE) o marcar pagada. También estado de salida de la carga masiva CSV.'],
                     ['Pagada', 'Desembolso registrado; no se reenvía al árbol.'],
                     ['Suspendida', 'Fuera de circuito temporalmente (fila gris en listado).'],
                     ['Rechazada', 'No continúa el circuito de pago.'],
@@ -87,17 +90,50 @@ return [
                 'Haga clic en el código (azul) para editar o consultar. El enlace de SP madre abre el plan. El contador de cuotas lleva a la solapa Cuotas de la madre.',
                 'Exportación PDF / Excel / CSV: respeta los filtros activos de toda la consulta, no solo la página visible.',
                 'Memoria de filtros: al consultar, el sistema guarda los criterios en la sesión. Si entra de nuevo al listado sin parámetros, recupera esa consulta. Para empezar de cero use Limpiar filtros (o ?limpiar_filtros=1).',
+                'Documentación: use el Centro de ayuda del ERP (no hay botón Manual en el listado).',
             ],
             'items' => [
                 'Lápiz: editar la solicitud.',
                 'Ícono sitemap (plan/cuotas): abre el modal con el plan madre e hijas sin salir del listado.',
                 'Papelera: eliminar (según permiso); confirme antes de borrar.',
                 'Nuevo registro: alta de una SP.',
-                'Manual: abre esta guía en otra pestaña.',
+                'Carga masiva: importa un CSV Anita, muestra preview y genera las SP.',
             ],
         ],
         [
-            'titulo' => '5. Filtros del listado (detalle)',
+            'titulo' => '5. Carga masiva desde CSV',
+            'parrafos' => [
+                'En el listado, el botón Carga masiva (permiso crear-solicitud-pago) abre un modal para incorporar muchas solicitudes de una vez, con el mismo formato que Anita (proceso p-cargasolpm).',
+                'Paso 1 — Archivo: suba un CSV (coma o punto y coma). La primera fila de encabezado se ignora automáticamente. Máximo 1000 filas de datos.',
+                'Paso 2 — Vista previa: el sistema valida empresa, proveedor, concepto, sector, forma de pago, moneda y cuentas contables (por empresa). Muestra cuántas SP se generarán, monto total, totales por empresa, códigos estimados y el detalle fila a fila (OK o error).',
+                'Paso 3 — Confirmar: pulse Generar N solicitudes. Cada fila válida se graba como SP Autorizada, tratamiento Normal, fecha de entrega = hoy, sin plan de cuotas ni archivos. Al terminar verá el rango de códigos creados y links a las primeras SP.',
+            ],
+            'tabla' => [
+                'caption' => 'Columnas del CSV (orden fijo Anita)',
+                'headers' => ['Col', 'Campo', 'Notas'],
+                'rows' => [
+                    ['1', 'Empresa', 'Código Anita de empresa (ej. 1, 2, 3).'],
+                    ['2', 'Proveedor', 'Código de proveedor (se completa a 6 dígitos).'],
+                    ['3', 'Concepto', 'Código de concepto de solicitud de pago.'],
+                    ['4', 'Sector', 'Código de sector SP (también aporta el centro de costo de línea).'],
+                    ['5', 'Forma de pago', 'Código de forma de pago SP.'],
+                    ['6', 'Beneficiario', 'Texto opcional.'],
+                    ['7', 'Moneda', 'Código moneda Anita (ej. 1 = pesos).'],
+                    ['8', 'Detalle', 'Texto descriptivo (máx. 180).'],
+                    ['9', 'Fecha vencimiento', 'dd/mm/aaaa; vacío = sin vencimiento.'],
+                    ['10', 'Monto total', 'Importe del pago (sin espacios; se limpian comas de miles).'],
+                    ['11+', 'Pares cuenta/importe', 'Cuenta con guión (ej. 111050-009) + importe; primera = Haber, segunda = Debe, y así.'],
+                ],
+            ],
+            'items' => [
+                'Si el importe de la primera cuenta es 0, se usa el monto total en las (hasta) dos primeras cuentas.',
+                'Filas con error (maestro inexistente, cuenta no hallada, monto 0, empresa no asignada) no se generan; el preview las lista.',
+                'Revise siempre el preview antes de confirmar: la generación escribe en ERP y en Anita.',
+                'Roles típicos con permiso: Impuestos (Enc/Op) y Capital Humano (enc/op/ger/opcont).',
+            ],
+        ],
+        [
+            'titulo' => '6. Filtros del listado (detalle)',
             'captura_id' => 'sp_filtros',
             'parrafos' => [
                 'Hay dos modos de búsqueda. Entenderlos evita “no encuentro la SP” cuando en realidad el filtro la está ocultando.',
@@ -131,7 +167,7 @@ return [
             ],
         ],
         [
-            'titulo' => '6. Consulta de madres, hijas y cuotas',
+            'titulo' => '7. Consulta de madres, hijas y cuotas',
             'captura_id' => 'sp_modal_familia',
             'parrafos' => [
                 'Desde el listado, el ícono de plan/cuotas (sitemap) abre un modal con el plan de la familia: si eligió una hija, el sistema muestra el plan de su madre.',
@@ -156,7 +192,7 @@ return [
             ],
         ],
         [
-            'titulo' => '7. Alta y edición de una SP',
+            'titulo' => '8. Alta y edición de una SP',
             'herramientas_grupos' => [
                 ['titulo' => 'Cabecera y solapas', 'clave' => 'sp_formulario'],
             ],
@@ -176,7 +212,7 @@ return [
             ],
         ],
         [
-            'titulo' => '8. Plan de cuotas (madre)',
+            'titulo' => '9. Plan de cuotas (madre)',
             'captura_id' => 'sp_cuotas',
             'parrafos' => [
                 'En la solapa Cuotas de una madre puede agregar filas (nº, vencimiento, monto) o importar un Excel (columnas flexibles: nro, vencimiento, monto y alias).',
@@ -190,7 +226,7 @@ return [
             ],
         ],
         [
-            'titulo' => '9. Informe de solicitudes de pago',
+            'titulo' => '10. Informe de solicitudes de pago',
             'herramientas_grupos' => [
                 ['titulo' => 'Consulta e informe', 'clave' => 'sp_informe'],
             ],
@@ -214,36 +250,40 @@ return [
             ],
         ],
         [
-            'titulo' => '10. Permisos',
+            'titulo' => '11. Permisos',
             'parrafos' => [
                 'Si no ve un botón descrito aquí, su rol probablemente no tiene el permiso. Solicítelo al administrador de usuarios.',
+                'Roles operativos habituales con el CRUD de SP (incluye carga masiva): Impuestos (Enc-impuestos, Op-impuestos) y Capital Humano (enc-Capital Humano, op-Capital Humano, ger-capitalhumano, opcont-capitalhumano), además de administrador.',
             ],
             'tabla' => [
                 'caption' => 'Permisos principales',
                 'headers' => ['Permiso', 'Para qué sirve'],
                 'rows' => [
                     ['listar-solicitud-pago', 'Ver listado, exportar, modal de plan, modo consulta.'],
-                    ['crear-solicitud-pago', 'Botón Nuevo registro.'],
+                    ['crear-solicitud-pago', 'Nuevo registro y carga masiva CSV.'],
                     ['editar-solicitud-pago', 'Abrir formulario de edición.'],
                     ['actualizar-solicitud-pago', 'Guardar cambios, importar cuotas.'],
                     ['borrar-solicitud-pago', 'Eliminar SP.'],
                     ['listar-informe-solicitudpago', 'Informe analítico y sus exportaciones.'],
+                    ['listar-todas-solicitud-pago', 'Ver todas las SP sin restringir por centro de costo (Impuestos).'],
                 ],
             ],
         ],
         [
-            'titulo' => '11. Buenas prácticas',
+            'titulo' => '12. Buenas prácticas',
             'parrafos' => [
                 'Antes de grabar una madre de plan, confirme concepto (Cuotas), montos y vencimientos: corregir después de generar hijas es más costoso.',
                 'Use el modal de familia desde el listado para recorrer hijas sin perder filtros.',
                 'Para colas de pago: filtre Estado = Autorizada y exporte Excel si necesita trabajar fuera del ERP.',
                 'Si “desapareció” una SP del listado, revise filtros activos (amarillo) o Limpiar filtros; la memoria de sesión puede estar aplicando un criterio viejo.',
                 'En hijas, no intente cargar cuotas: el sistema las omite a propósito. Edite el plan en la madre.',
+                'En carga masiva: valide el CSV en el preview; no confirme si hay muchas filas en error. Conserve una copia del archivo fuera del ERP.',
             ],
             'items' => [
                 'Mantenga el asiento balanceado: es el control más frecuente al grabar.',
                 'Adjunte comprobantes en Archivos para la auditoría del árbol.',
                 'Documente en Detalle/Observación el vínculo con OC, contrato o legajo cuando aplique.',
+                'Consulte siempre el Centro de ayuda para el procedimiento vigente; el copiloto IA cita este manual.',
             ],
         ],
     ],

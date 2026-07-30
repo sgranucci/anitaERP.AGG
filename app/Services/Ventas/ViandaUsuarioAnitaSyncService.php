@@ -232,7 +232,9 @@ class ViandaUsuarioAnitaSyncService
     {
         ViandaConsumo::query()
             ->where('vianda_usuario_id', $viandaUsuarioId)
-            ->whereNull('centrocosto_id')
+            ->where(function ($q) {
+                $q->whereNull('centrocosto_id')->orWhere('centrocosto_id', 0);
+            })
             ->update(['centrocosto_id' => $centrocostoId]);
     }
 }

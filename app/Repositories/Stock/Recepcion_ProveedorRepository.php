@@ -82,12 +82,17 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
             ->orderByDesc('recepcion_proveedor.id');
 
         if (is_string($filtros)) {
-            $filtros = ['filtro_valor' => $filtros];
+            $filtros = [
+                'filtro_valor' => $filtros,
+                'filtro_busqueda_rapida' => true,
+                'empresa_id' => null,
+                'empresa_scope' => 'todas',
+            ];
         }
 
         RecepcionProveedorVisibilidadSupport::aplicarFiltroListado($query);
 
-        if (is_array($filtros) && RecepcionProveedorListadoFiltros::tieneCriteriosAplicados($filtros)) {
+        if (is_array($filtros)) {
             RecepcionProveedorListadoFiltros::aplicar($query, $filtros);
         }
 

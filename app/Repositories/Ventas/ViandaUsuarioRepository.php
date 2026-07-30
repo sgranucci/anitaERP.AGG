@@ -3,6 +3,7 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\ViandaUsuario;
+use App\Models\Ventas\ViandaConsumo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Ventas\ViandaUsuarioListadoFiltros;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -69,8 +70,19 @@ class ViandaUsuarioRepository implements ViandaUsuarioRepositoryInterface
     {
         $registro = $this->model->findOrFail($id);
         $registro->update($this->filtrarCabecera($data));
+        $registro = $registro->fresh(['empresa', 'centrocosto', 'tipoMenu']);
 
-        return $registro->fresh(['empresa', 'centrocosto', 'tipoMenu']);
+        $centrocostoId = (int) ($registro->centrocosto_id ?? 0);
+        if ($centrocostoId > 0) {
+            ViandaConsumo::query()
+                ->where('vianda_usuario_id', (int) $registro->id)
+                ->where(function ($q) {
+                    $q->whereNull('centrocosto_id')->orWhere('centrocosto_id', 0);
+                })
+                ->update(['centrocosto_id' => $centrocostoId]);
+        }
+
+        return $registro;
     }
 
     public function delete($id)

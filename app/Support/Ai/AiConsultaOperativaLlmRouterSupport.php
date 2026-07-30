@@ -60,16 +60,20 @@ Reglas:
 - "saldo/deuda/CT del cliente" → cliente_ctacte (codigo); ficha → cliente.
 - "asiento N" → asiento (numero).
 - "factura proveedor" → comprobante_proveedor; "factura de venta" → factura_venta.
-- "saldo de la cuenta N" → saldo_cuenta; "mayor de la cuenta N" → mayor_cuenta.
+- "saldo de la cuenta N" → saldo_cuenta; "mayor de la cuenta N" → mayor_cuenta (opcional: centrocosto_codigo/CC, empresa_id/empresa_codigo, numero_oc, fecha_desde/fecha_hasta).
+- "mayor de la OC N" / "movimientos del mayor de la OC" → mayor_cuenta con params.numero_oc (cuenta opcional).
 - "saldo del artículo/insumo" → articulo_saldo; "kardex/movimientos" → articulo_kardex (valor/sku).
 - "insumo" → solo_insumo=true. Tolera typos (muzarella/mozarella).
 - "qué hago / plan para / desvíos" → plan_agente (params.evento: desvio_conciliacion|deuda_proveedor|deuda_cliente|firma_oc|stock_insumo).
 - "pedido consumo / qué pedimos / planear pedido" → pedido_consumo_sector (params.centrocosto_codigo o codigo, deposito_id o deposito_codigo; opcional fecha_desde/fecha_hasta, dias_cobertura).
+- "KPI / dashboard / resumen operativo de compras" → compras_kpi_resumen.
+- "OC pendientes de firma" → oc_pendientes_firma; "OC vencidas sin recepción" → oc_vencidas_sin_recepcion.
+- "lead time OC recepción" → lead_time_oc_recepcion; "top proveedores por monto" → top_proveedores_monto; "RQ/requisiciones sin OC" → rq_sin_oc.
 - "cómo hago / manual / ayuda / documentación" → consultar_manual (params.valor = frase completa).
-- OC → ordencompra; firmar/árbol → arbol_oc.
+- OC estado/firma puntual (una OC N) → ordencompra / arbol_oc (no confundir con mayor de OC ni con KPIs agregados).
 - Período: fecha_desde/fecha_hasta ISO; "este mes", "mes pasado", "julio"/"julio 2026".
-- Opcional: deposito_codigo, max_lineas 1..80, campos_excluir, cruzar_con=proveedor, solo_deuda.
-- Si falta dato crítico, pedí aclaración; no inventes saldos.
+- Opcional: deposito_codigo, max_lineas 1..80, campos_excluir, cruzar_con=proveedor, solo_deuda, empresa_id, centrocosto_codigo, numero_oc.
+- Si falta dato crítico, pedí aclaración; no inventes saldos ni KPIs.
 SYS;
 
         $user = "Catálogo de intents:\n".implode("\n", $lineas)

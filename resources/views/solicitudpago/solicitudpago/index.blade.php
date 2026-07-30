@@ -8,6 +8,9 @@
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/solicitudpago/solicitudpago/filtro.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/solicitudpago/solicitudpago/familia_vinculos.js")}}" type="text/javascript"></script>
+@if (can('crear-solicitud-pago', false))
+<script src="{{asset("assets/pages/scripts/solicitudpago/solicitudpago/carga_masiva.js")}}" type="text/javascript"></script>
+@endif
 @endsection
 
 <?php use App\Support\Solicitudpago\SolicitudpagoListadoFiltros; ?>
@@ -23,7 +26,12 @@
             <div class="card-header">
                 <h3 class="card-title">Solicitudes de pago</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
-                    @include('includes.solicitudpago.boton-manual')
+                    @if (can('crear-solicitud-pago', false))
+                        <button type="button" class="btn btn-success btn-sm mr-1" id="btn-carga-masiva-sp"
+                                title="Importar solicitudes desde CSV Anita">
+                            <i class="fa fa-upload"></i> Carga masiva
+                        </button>
+                    @endif
                     @if (!empty($puedeVerTodas) && !empty($alcanceToggleUrl))
                         @if (($alcanceListado ?? 'todas') === 'mi_cc')
                             <a href="{{ $alcanceToggleUrl }}"
@@ -204,4 +212,7 @@
 </div>
 {{ $coleccion->appends($filtrosQuery ?? [])->links() }}
 @include('includes.solicitudpago.modal_familia_vinculos')
+@if (can('crear-solicitud-pago', false))
+    @include('solicitudpago.solicitudpago.partials.modal_carga_masiva')
+@endif
 @endsection

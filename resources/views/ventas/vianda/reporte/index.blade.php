@@ -11,7 +11,22 @@
     if (!$form.length) {
         return;
     }
+
+    function syncPresentacionColumnas() {
+        var columnas = $('#presentacion_columnas').is(':checked');
+        $('#presentacion_columnas_hidden').val(columnas ? '1' : '0');
+        $('#btn_toggle_orden_vianda').prop('disabled', columnas);
+        if (columnas) {
+            $('#orden_row_vianda').addClass('text-muted');
+        } else {
+            $('#orden_row_vianda').removeClass('text-muted');
+        }
+    }
+
     $form.on('click', '.btn-toggle-orden-vianda', function () {
+        if ($('#presentacion_columnas').is(':checked')) {
+            return;
+        }
         var $btn = $(this);
         var $input = $($btn.data('input'));
         if (!$input.length) {
@@ -22,6 +37,10 @@
         $btn.toggleClass('btn-success', porCentrocosto);
         $btn.toggleClass('btn-outline-secondary', !porCentrocosto);
     });
+
+    $('#presentacion_columnas').on('change', syncPresentacionColumnas);
+    $form.on('submit', syncPresentacionColumnas);
+    syncPresentacionColumnas();
 })();
 </script>
 @endsection
@@ -31,7 +50,19 @@
     $estadoActual = $filtros['estado'] ?? 'A';
     $ordenPorCentrocosto = \App\Support\Ventas\Vianda\ViandaConsumoListadoFiltros::normalizarOrden($filtros['orden_por'] ?? 'centrocosto')
         === \App\Support\Ventas\Vianda\ViandaConsumoListadoFiltros::ORDEN_CENTROCOSTO;
-    $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion($filas->getCollection());
+    $usaColumnas = ! empty($usa_columnas);
+    $logosVista = [];
+    if (! $usaColumnas && $filas) {
+        $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion($filas->getCollection());
+    } elseif ($usaColumnas) {
+        $empresaLogo = optional($empresa_query->firstWhere('id', (int) ($filtros['empresa_id'] ?? 0)))->nombre
+            ?? optional($empresa_query->first())->nombre;
+        if ($empresaLogo) {
+            $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
+                collect([(object) ['nombreempresa' => $empresaLogo]])
+            );
+        }
+    }
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -102,7 +133,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group row">
+                    <div class="form-group row" id="orden_row_vianda">
                         <label class="col-lg-2 control-label text-right pr-2">Orden</label>
                         <div class="col-lg-8">
                             <input type="hidden" name="orden_por" id="orden_por_input"
@@ -115,7 +146,23 @@
                                 <i class="fa fa-check mr-1"></i>
                                 Ordenar por centro de costo
                             </button>
-                            <small class="text-muted d-inline-block ml-2">Off = por usuario</small>
+                            <small class="text-muted d-inline-block ml-2">Off = por usuario (solo detalle por consumo)</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label class="col-lg-2 control-label text-right pr-2">Presentación</label>
+                        <div class="col-lg-8">
+                            <div class="custom-control custom-checkbox">
+                                <input type="hidden" name="presentacion_columnas" id="presentacion_columnas_hidden"
+                                    value="{{ ! empty($filtros['presentacion_columnas']) ? '1' : '0' }}">
+                                <input type="checkbox" class="custom-control-input" id="presentacion_columnas" value="1"
+                                    @checked(! empty($filtros['presentacion_columnas']))>
+                                <label class="custom-control-label" for="presentacion_columnas">
+                                    Vista consolidada: artículos abiertos por cada centro de costo
+                                    (unidades, costo unitario / total y venta)
+                                </label>
+                            </div>
                         </div>
                     </div>
 
@@ -140,11 +187,18 @@
                         ])
                     </div>
                     <div class="small mb-1 mb-md-0 text-md-right">
-                        <span class="text-muted">Consumos:</span>
-                        <strong>{{ (int) ($totales['consumos'] ?? 0) }}</strong>
-                        · Ítems <strong>{{ (int) ($totales['items'] ?? 0) }}</strong>
-                        · Costo <strong>{{ number_format((float) ($totales['costo'] ?? 0), 2, ',', '.') }}</strong>
-                        · Venta <strong>{{ number_format((float) ($totales['venta'] ?? 0), 2, ',', '.') }}</strong>
+                        @if ($usaColumnas)
+                            <span class="text-muted">Unidades:</span>
+                            <strong>{{ number_format((float) ($totales['items'] ?? 0), 0, ',', '.') }}</strong>
+                            · Costo <strong>{{ number_format((float) ($totales['costo'] ?? 0), 2, ',', '.') }}</strong>
+                            · Venta <strong>{{ number_format((float) ($totales['venta'] ?? 0), 2, ',', '.') }}</strong>
+                        @else
+                            <span class="text-muted">Consumos:</span>
+                            <strong>{{ (int) ($totales['consumos'] ?? 0) }}</strong>
+                            · Ítems <strong>{{ (int) ($totales['items'] ?? 0) }}</strong>
+                            · Costo <strong>{{ number_format((float) ($totales['costo'] ?? 0), 2, ',', '.') }}</strong>
+                            · Venta <strong>{{ number_format((float) ($totales['venta'] ?? 0), 2, ',', '.') }}</strong>
+                        @endif
                     </div>
                 </div>
 
@@ -156,65 +210,170 @@
                     </div>
                 @endif
 
-                <style>
-                    #tabla-paginada thead tr { background-color: #85C1E9; color: #17202A; }
-                    #tabla-paginada thead th { font-weight: 600; border-color: #7fb3d5; }
-                </style>
-                <div class="table-responsive">
-                    <table id="tabla-paginada" class="table table-striped table-bordered table-hover table-sm mb-0" style="font-size: 0.82rem;">
-                        <thead>
-                            <tr>
-                                <th>Código</th>
-                                <th>Fecha</th>
-                                <th>Hora</th>
-                                <th>Login</th>
-                                <th>Empleado</th>
-                                <th>Centro de costo</th>
-                                <th>Empresa</th>
-                                <th class="text-right">Ítems</th>
-                                <th class="text-right">Costo</th>
-                                <th class="text-right">Venta</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($filas as $fila)
-                                <tr @class(['text-muted' => $fila->estado === 'N'])>
-                                    <td>{{ $fila->codigo_retiro }}</td>
-                                    <td>{{ optional($fila->fecha)->format('d/m/Y') }}</td>
-                                    <td>{{ $fila->hora }}</td>
-                                    <td>{{ $fila->login_usuario }}</td>
-                                    <td>{{ $fila->nombre_usuario }}</td>
-                                    <td>{{ optional($fila->centrocosto)->nombre }}</td>
-                                    <td>{{ optional($fila->empresa)->nombre }}</td>
-                                    <td class="text-right">{{ (int) $fila->cantidad_items }}</td>
-                                    <td class="text-right">{{ number_format((float) $fila->total_costo, 2, ',', '.') }}</td>
-                                    <td class="text-right">{{ number_format((float) $fila->total_venta, 2, ',', '.') }}</td>
-                                    <td>{{ $fila->etiquetaEstado() }}</td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="11" class="text-center text-muted py-3">Sin consumos para el filtro seleccionado.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="card-footer clearfix d-flex flex-wrap align-items-center justify-content-between">
-                    <span class="small text-muted mb-2 mb-md-0">
-                        @if ($filas->total() > 0)
-                            Mostrando {{ $filas->firstItem() }}–{{ $filas->lastItem() }} de {{ $filas->total() }} consumos
-                        @else
-                            Sin registros
+                @if ($usaColumnas)
+                    <style>
+                        #tabla-paginada thead tr { background-color: #85C1E9; color: #17202A; }
+                        #tabla-paginada thead th { font-weight: 600; border-color: #7fb3d5; }
+                        .descuento-reporte-columnas-wrap {
+                            max-height: 70vh;
+                            overflow: auto;
+                        }
+                        .tabla-descuento-reporte-col-fijas {
+                            border-collapse: separate;
+                            border-spacing: 0;
+                        }
+                        .descuento-reporte-columnas-wrap .col-fija-1 {
+                            position: sticky;
+                            left: 0;
+                            z-index: 2;
+                            min-width: 90px;
+                            background: #fff;
+                        }
+                        .descuento-reporte-columnas-wrap .col-fija-2 {
+                            position: sticky;
+                            left: 90px;
+                            z-index: 2;
+                            min-width: 180px;
+                            background: #fff;
+                        }
+                        .descuento-reporte-columnas-wrap .col-fija-3 {
+                            position: sticky;
+                            left: 270px;
+                            z-index: 2;
+                            min-width: 80px;
+                            background: #fff;
+                        }
+                        .descuento-reporte-columnas-wrap .col-fija-4 {
+                            position: sticky;
+                            left: 350px;
+                            z-index: 2;
+                            min-width: 80px;
+                            background: #fff;
+                            box-shadow: 2px 0 4px rgba(0,0,0,.08);
+                        }
+                        .descuento-reporte-columnas-wrap thead .col-fija-1,
+                        .descuento-reporte-columnas-wrap thead .col-fija-2,
+                        .descuento-reporte-columnas-wrap thead .col-fija-3,
+                        .descuento-reporte-columnas-wrap thead .col-fija-4 {
+                            background-color: #85C1E9;
+                            z-index: 3;
+                        }
+                        .descuento-reporte-columnas-wrap tbody tr:nth-of-type(odd) .col-fija-1,
+                        .descuento-reporte-columnas-wrap tbody tr:nth-of-type(odd) .col-fija-2,
+                        .descuento-reporte-columnas-wrap tbody tr:nth-of-type(odd) .col-fija-3,
+                        .descuento-reporte-columnas-wrap tbody tr:nth-of-type(odd) .col-fija-4 {
+                            background-color: #f8f9fa;
+                        }
+                        .descuento-reporte-columnas-wrap tbody tr:nth-of-type(even) .col-fija-1,
+                        .descuento-reporte-columnas-wrap tbody tr:nth-of-type(even) .col-fija-2,
+                        .descuento-reporte-columnas-wrap tbody tr:nth-of-type(even) .col-fija-3,
+                        .descuento-reporte-columnas-wrap tbody tr:nth-of-type(even) .col-fija-4 {
+                            background-color: #fff;
+                        }
+                        .descuento-reporte-columnas-wrap tbody tr:hover .col-fija-1,
+                        .descuento-reporte-columnas-wrap tbody tr:hover .col-fija-2,
+                        .descuento-reporte-columnas-wrap tbody tr:hover .col-fija-3,
+                        .descuento-reporte-columnas-wrap tbody tr:hover .col-fija-4 {
+                            background-color: #eef6fb;
+                        }
+                        .descuento-reporte-columnas-wrap tfoot .col-fija-grupo-total {
+                            position: sticky;
+                            left: 0;
+                            background: #eaf2f8;
+                            z-index: 2;
+                        }
+                    </style>
+                    <div class="p-2">
+                        @php
+                            $resultadoColumnas = $resultado_columnas ?? [];
+                            if (! empty($vista_columnas_pag)) {
+                                $resultadoColumnas = array_merge($resultadoColumnas, ['vista_columnas' => $vista_columnas_pag]);
+                            }
+                        @endphp
+                        @include('ventas.gastronomia.descuento_reporte.partials.tabla_columnas', [
+                            'resultado' => $resultadoColumnas,
+                            'puede_ver_articulo' => $puede_ver_articulo ?? false,
+                            'table_class' => 'table table-sm table-striped table-bordered table-hover mb-0',
+                        ])
+                        @if ($filas_columnas_pag ?? null)
+                            <div class="d-flex flex-wrap align-items-center justify-content-between mt-2 px-1">
+                                <span class="small text-muted">
+                                    @if ($filas_columnas_pag->total() > 0)
+                                        Artículos {{ $filas_columnas_pag->firstItem() }}–{{ $filas_columnas_pag->lastItem() }}
+                                        de {{ $filas_columnas_pag->total() }}
+                                    @else
+                                        Sin artículos
+                                    @endif
+                                </span>
+                                {{ $filas_columnas_pag->links() }}
+                            </div>
+                        @elseif (empty(($resultado_columnas['vista_columnas']['columnas'] ?? [])))
+                            <div class="text-center text-muted py-3">Sin consumos para el filtro seleccionado.</div>
                         @endif
-                    </span>
-                    {{ $filas->appends($filtrosQuery ?? [])->links() }}
-                </div>
+                    </div>
+                @else
+                    <style>
+                        #tabla-paginada thead tr { background-color: #85C1E9; color: #17202A; }
+                        #tabla-paginada thead th { font-weight: 600; border-color: #7fb3d5; }
+                    </style>
+                    <div class="table-responsive">
+                        <table id="tabla-paginada" class="table table-striped table-bordered table-hover table-sm mb-0" style="font-size: 0.82rem;">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Fecha</th>
+                                    <th>Hora</th>
+                                    <th>Login</th>
+                                    <th>Empleado</th>
+                                    <th>Centro de costo</th>
+                                    <th>Empresa</th>
+                                    <th class="text-right">Ítems</th>
+                                    <th class="text-right">Costo</th>
+                                    <th class="text-right">Venta</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($filas as $fila)
+                                    <tr @class(['text-muted' => $fila->estado === 'N'])>
+                                        <td>{{ $fila->codigo_retiro }}</td>
+                                        <td>{{ optional($fila->fecha)->format('d/m/Y') }}</td>
+                                        <td>{{ $fila->hora }}</td>
+                                        <td>{{ $fila->login_usuario }}</td>
+                                        <td>{{ $fila->nombre_usuario }}</td>
+                                        <td>{{ optional($fila->centrocosto)->nombre }}</td>
+                                        <td>{{ optional($fila->empresa)->nombre }}</td>
+                                        <td class="text-right">{{ (int) $fila->cantidad_items }}</td>
+                                        <td class="text-right">{{ number_format((float) $fila->total_costo, 2, ',', '.') }}</td>
+                                        <td class="text-right">{{ number_format((float) $fila->total_venta, 2, ',', '.') }}</td>
+                                        <td>{{ $fila->etiquetaEstado() }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="11" class="text-center text-muted py-3">Sin consumos para el filtro seleccionado.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="card-footer clearfix d-flex flex-wrap align-items-center justify-content-between">
+                        <span class="small text-muted mb-2 mb-md-0">
+                            @if ($filas && $filas->total() > 0)
+                                Mostrando {{ $filas->firstItem() }}–{{ $filas->lastItem() }} de {{ $filas->total() }} consumos
+                            @else
+                                Sin registros
+                            @endif
+                        </span>
+                        @if ($filas)
+                            {{ $filas->appends($filtrosQuery ?? [])->links() }}
+                        @endif
+                    </div>
+                @endif
             </div>
         </div>
 
-        @if (count($resumen_centrocosto) > 0)
+        @if (! $usaColumnas && count($resumen_centrocosto) > 0)
             <div class="card card-secondary">
                 <div class="card-header">
                     <h3 class="card-title">Resumen por centro de costo</h3>

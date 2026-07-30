@@ -440,6 +440,16 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Caja\AperturaGastoRepositoryInterface',
+            'App\Repositories\Caja\AperturaGastoRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\RendicionMaquinaRepositoryInterface',
+            'App\Repositories\Caja\RendicionMaquinaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepositoryInterface',
             'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepository',
         );
@@ -1042,6 +1052,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Contable\Iibb_Presentacion_Config_CuentaRepositoryInterface',
             'App\Repositories\Contable\Iibb_Presentacion_Config_CuentaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Contable\Suss_Presentacion_ConfigRepositoryInterface',
+            'App\Repositories\Contable\Suss_Presentacion_ConfigRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Contable\Suss_Presentacion_Config_CuentaRepositoryInterface',
+            'App\Repositories\Contable\Suss_Presentacion_Config_CuentaRepository',
         );
 
         $this->app->bind(

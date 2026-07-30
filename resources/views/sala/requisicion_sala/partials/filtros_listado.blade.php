@@ -1,8 +1,18 @@
 @php
     $camposFiltro = $camposFiltro ?? \App\Support\Sala\RequisicionSalaListadoFiltros::CAMPOS;
     $filtros = $filtros ?? [];
+    $fScope = $filtros['empresa_scope'] ?? 'una';
+    $fEmp = $filtros['empresa_id'] ?? null;
+    $tieneCriteriosPanel = \App\Support\Sala\RequisicionSalaListadoFiltros::tieneCriteriosTexto($filtros);
+    $limpiarUrlPanel = $limpiarUrl ?? route('consultar_requisicion_sala', \App\Support\Sala\RequisicionSalaListadoFiltros::paraQueryStringEmpresa($filtros));
 @endphp
-<div class="collapse{{ \App\Support\Sala\RequisicionSalaListadoFiltros::tieneCriteriosAplicados($filtros) ? ' show' : '' }}" id="panel-filtros-requisicion-sala">
+<div class="collapse{{ $tieneCriteriosPanel ? ' show' : '' }}" id="panel-filtros-requisicion-sala">
+    {{-- Persistencia del filtro externo de empresa al buscar por texto o aplicar el panel --}}
+    @if ($fScope === 'todas')
+        <input type="hidden" name="empresa_todas" value="1">
+    @elseif (! empty($fEmp))
+        <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
     <div class="card-body border-bottom bg-light py-3">
         <div class="row">
             <div class="col-md-3">
@@ -35,7 +45,7 @@
         </div>
         <div class="mt-2">
             <button type="submit" class="btn btn-primary btn-sm">Aplicar filtros</button>
-            <a href="{{ $limpiarUrl ?? route('consultar_requisicion_sala') }}" class="btn btn-outline-secondary btn-sm">Limpiar filtros</a>
+            <a href="{{ $limpiarUrlPanel }}" class="btn btn-outline-secondary btn-sm">Limpiar filtros</a>
         </div>
     </div>
 </div>

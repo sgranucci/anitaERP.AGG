@@ -302,7 +302,8 @@ class EfeOppComGastoResolverSupport
 
         $cuentaCom = $this->resolverCuentaGastoCom($aplicacion);
 
-        // Contaduría: en FIB/COM el concepto sale de la cuenta contable (ctaconc), no de axp_concepto.
+        // Contaduría: si hay cuenta de gasto COM/piernas, el concepto sale de la cuenta (ctaconc).
+        // Si no hay (anticipo/FIS solo IVA+114040), fallback a axp_concepto (ej. EXCELL → c24).
         $conceptoId = 0;
         $cuenta = 0;
         if ($cuentaCom > 0) {
@@ -320,8 +321,8 @@ class EfeOppComGastoResolverSupport
             $cuenta = $cuentaCom;
         }
 
-        if ($conceptoId <= 0 && $cuentaCom <= 0) {
-            return null;
+        if ($conceptoId <= 0) {
+            $conceptoId = $this->resolverConceptoDesdeAxp($aplicacion);
         }
 
         if ($conceptoId <= 0) {
@@ -446,6 +447,20 @@ class EfeOppComGastoResolverSupport
         }
 
         return (int) ($this->conceptoPorCuenta[$this->empresaId][$cuenta] ?? 0);
+    }
+
+    /**
+     * Fallback cuando no hay cuenta de gasto: concepto declarado en auxpag (axp_concepto).
+     * No usa 63 (IVA). Solo aplica si la fila EFE sigue en c0 (ver OppGastoCom::debeAjustarFila).
+     */
+    private function resolverConceptoDesdeAxp(object $aplicacion): int
+    {
+        $concepto = (int) ($aplicacion->axp_concepto ?? 0);
+        if ($concepto <= 0 || $concepto === 63) {
+            return 0;
+        }
+
+        return $concepto;
     }
 
     /**

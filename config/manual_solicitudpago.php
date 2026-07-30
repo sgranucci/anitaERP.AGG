@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.0',
+    'version' => '1.1',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Solicitudes de pago',
 
@@ -33,27 +33,27 @@ return [
         'sp_filtros' => [
             'archivo' => 'sp-filtros.png',
             'titulo' => 'Panel de filtros del listado (Madre/Hija, estado, fechas)',
-            'seccion' => '5. Filtros del listado (detalle)',
+            'seccion' => '6. Filtros del listado (detalle)',
         ],
         'sp_modal_familia' => [
             'archivo' => 'sp-modal-familia.png',
             'titulo' => 'Modal de plan / cuotas (madre e hijas)',
-            'seccion' => '6. Consulta de madres, hijas y cuotas',
+            'seccion' => '7. Consulta de madres, hijas y cuotas',
         ],
         'sp_formulario' => [
             'archivo' => 'sp-formulario.png',
             'titulo' => 'Formulario de solicitud — solapas Datos y Cuentas',
-            'seccion' => '7. Alta y edición de una SP',
+            'seccion' => '8. Alta y edición de una SP',
         ],
         'sp_cuotas' => [
             'archivo' => 'sp-cuotas.png',
             'titulo' => 'Solapa Cuotas de una SP madre',
-            'seccion' => '8. Plan de cuotas (madre)',
+            'seccion' => '9. Plan de cuotas (madre)',
         ],
         'sp_informe' => [
             'archivo' => 'sp-informe.png',
             'titulo' => 'Informe de solicitudes de pago',
-            'seccion' => '9. Informe de solicitudes de pago',
+            'seccion' => '10. Informe de solicitudes de pago',
         ],
     ],
 ];

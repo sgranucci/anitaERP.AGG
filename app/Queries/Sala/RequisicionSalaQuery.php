@@ -25,14 +25,11 @@ class RequisicionSalaQuery implements RequisicionSalaQueryInterface
     {
         if (is_string($filtros)) {
             $texto = trim($filtros);
-            $filtros = [
-                'modo' => RequisicionSalaListadoFiltros::MODO_TODOS,
-                'campo' => 'numerorequisicion',
-                'operador' => 'contiene',
+            $filtros = array_merge(RequisicionSalaListadoFiltros::filtrosVacios(), [
                 'valor' => $texto,
-                'valor_hasta' => '',
                 'busqueda' => $texto,
-            ];
+                'empresa_scope' => 'todas',
+            ]);
         } elseif (! is_array($filtros)) {
             $filtros = RequisicionSalaListadoFiltros::filtrosVacios();
         }
@@ -75,9 +72,7 @@ class RequisicionSalaQuery implements RequisicionSalaQueryInterface
             'motivo_rechazo'
         );
 
-        if (RequisicionSalaListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            RequisicionSalaListadoFiltros::aplicar($q, $filtros);
-        }
+        RequisicionSalaListadoFiltros::aplicar($q, $filtros);
 
         if ($withArticulos) {
             if ($flPaginando) {

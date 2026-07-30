@@ -8,7 +8,7 @@
 return [
     'titulo' => 'Manual de Plataforma IA',
     'subtitulo' => 'Anita ERP — Inteligencia Artificial embebida (estilo SAP / mejores sistemas)',
-    'version' => '1.0',
+    'version' => '1.1',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -142,7 +142,7 @@ return [
             'parrafos' => [
                 'El panel flotante (FAB) es el copiloto operativo: chips de intent + lenguaje natural. El router primero aplica reglas; si no alcanza, un LLM solo clasifica intent/params (no inventa saldos). El grounding lo hace AiConsultaOperativaSupport contra maestros y movimientos del ERP.',
                 'Visibilidad: permiso ejecutar-consulta-ia. Sin ese permiso el FAB no aparece. Además, cada intent exige el permiso del módulo (artículos, OC, CT, etc.). Los intents contables (mayor, saldo de cuenta, asiento) requieren también consulta-ia-contable, para que un rol de gastronomía no consulte un mayor sensible aunque tuviera el panel.',
-                'Ejemplos de frases: “saldo insumo muzarella”, “kardex 12345 este mes”, “CT proveedor 001234”, “mayor cuenta 214010013 julio”, “pedido consumo CC 93 depósito 12 últimos 60 días”, “qué hago con desvíos de conciliación”, “cómo cargo una orden de compra” (RAG).',
+                'Ejemplos de frases: “saldo insumo muzarella”, “kardex 12345 este mes”, “CT proveedor 001234”, “mayor cuenta 214010013 julio”, “mayor cuenta 214010013 CC 85 empresa 1 este mes”, “mayor de la OC 221022”, “pedido consumo CC 93 depósito 12 últimos 60 días”, “qué hago con desvíos de conciliación”, “cómo cargo una orden de compra” (RAG), “cómo hago la carga masiva de solicitudes de pago” (RAG).',
             ],
             'tabla' => [
                 'caption' => 'Intents principales',
@@ -152,7 +152,8 @@ return [
                     ['proveedor / proveedor_ctacte', 'Ficha y cuenta corriente', 'listar-proveedor / CT'],
                     ['cliente / cliente_ctacte', 'Ficha y CT cliente', 'listar-clientes / CT'],
                     ['ordencompra / arbol_oc', 'Estado OC y árbol', 'listar/editar-ordencompra'],
-                    ['mayor_cuenta / saldo_cuenta / asiento', 'Contable analítico', 'módulo + consulta-ia-contable'],
+                    ['mayor_cuenta / saldo_cuenta / asiento', 'Mayor con filtros (cuenta, CC, empresa, fechas, OC) / saldo / asiento', 'módulo + consulta-ia-contable'],
+                    ['compras_kpi_resumen + OC/RQ KPIs', 'Mediciones: pendientes firma, vencidas, lead time, top proveedores, RQ sin OC', 'listar-ordencompra / RQ / proveedor'],
                     ['pedido_consumo_sector', 'Proyecta pedido por consumo (CC + depósito) → borrador RQ compra o sala', 'artículos / crear-requisicion(-sala)'],
                     ['plan_agente', 'Plan HITL sugerido ante un evento', '(panel)'],
                     ['consultar_manual', 'Pasajes de manuales (RAG)', 'panel + RAG habilitado'],
@@ -161,7 +162,8 @@ return [
             'items' => [
                 'Exportar: el panel puede exportar tablas (Excel) respetando el mismo intent y permisos.',
                 'Typos: coincidencia flexible en artículos (ej. muzarella/mozarella) y filtro solo_insumo para gastronomía.',
-                'El mayor se arma desde asientos ERP con columnas; no es un texto plano del LLM.',
+                'El mayor se arma desde asientos ERP; admite filtros combinables (cuenta, centro de costo, empresa, rango de fechas y/o OC). No es texto plano del LLM.',
+                'KPIs de Compras: números desde ERP (OC/RQ/recepción/comprobantes). Frases: «resumen operativo de compras», «OC pendientes de firma», «OC vencidas sin recepción», «lead time OC», «top proveedores», «requisiciones sin OC».',
                 'Pedido por consumo: el depósito de consumo es obligatorio; qty = consumo_diario×cobertura − stock − pendientes. Con stock en depósito origen → RQ sala; si no → RQ compra. Confirmar con botón HITL (no auto-graba).',
             ],
         ],
@@ -222,7 +224,8 @@ return [
             'parrafos' => [
                 'A diferencia de un chatbot que “alucina procedimientos”, el RAG de anitaERP indexa los manuales oficiales en docs/manual-* (el mismo corpus del Centro de ayuda). El retrieval es léxico (tokens + score); no usa embeddings ni vector DB en esta versión — decisión deliberada para operar on-prem sin infra extra.',
                 'Comando: php artisan ai:indexar-manuales. Genera storage/app/ai/manual_rag_index.json. Conviene reindexar tras publicar o actualizar un manual (incluido este).',
-                'En el panel, frases como “cómo cargo una OC”, “manual de gastronomía cierres” o “ayuda recepción proveedor” disparan el intent consultar_manual. La respuesta cita módulo, sección, extracto y link al manual web.',
+                'En el panel, frases como “cómo cargo una OC”, “manual de gastronomía cierres”, “ayuda recepción proveedor” o “carga masiva de solicitudes de pago / SP” disparan el intent consultar_manual. La respuesta cita módulo, sección, extracto y link al manual web.',
+                'Corpus vigente incluye, entre otros: Compras, Stock (recuento / recepción-movstock), Gastronomía, Ventas, Canjes, Vending, Contable, Plataforma IA y Solicitudes de pago (listado, filtros, madre/hijas, cuotas, informe y carga masiva CSV Anita). Los operadores consultan esos textos desde el Centro de ayuda; no hace falta un botón Manual en cada index.',
             ],
             'tabla' => [
                 'caption' => 'Variables RAG',
@@ -268,7 +271,7 @@ return [
             'titulo' => '10. Permisos y roles (seguridad operativa)',
             'parrafos' => [
                 'La seguridad sigue el modelo de roles de anitaERP (permiso_rol), no Gates genéricos de Laravel. El helper can(slug) lee el rol en sesión. El rol administrador bypasea chequeos como en el resto del ERP.',
-                'Asignación recomendada: administrador (todo); Enc/Op contaduría (consulta-ia-contable + skills contables + gobernanza según política); Compras (crear-precarga + panel si aplica); gastronomía sin ejecutar-consulta-ia o sin consulta-ia-contable para aislar mayor.',
+                'Asignación recomendada: administrador (todo); Enc/Op contaduría e impuestos (ejecutar-consulta-ia + consulta-ia-contable); Enc/Op logística (ejecutar-consulta-ia); Enc-compras (ejecutar-consulta-ia + KPIs/OC/RQ; no Op-Compras salvo política local); gastronomía sin ejecutar-consulta-ia o sin consulta-ia-contable para aislar mayor.',
             ],
             'tabla' => [
                 'caption' => 'Permisos IA dedicados',

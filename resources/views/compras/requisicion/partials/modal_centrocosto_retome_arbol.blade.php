@@ -7,7 +7,7 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted mb-3" id="requisicionCentrocostoRetomeArbolTexto">
-                    La requisici&oacute;n tiene renglones con distintos centros de costo de destino. Elija con cu&aacute;l continuar el &aacute;rbol de aprobaci&oacute;n.
+                    La requisici&oacute;n tiene renglones con distintos centros de costo de destino. Elija con cu&aacute;l enviar al &aacute;rbol de aprobaci&oacute;n.
                 </p>
                 <div id="requisicionCentrocostoRetomeArbolLista"></div>
                 <div class="alert alert-danger d-none mt-2 mb-0" id="requisicionCentrocostoRetomeArbolError" role="alert"></div>

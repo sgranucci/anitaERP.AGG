@@ -30,6 +30,7 @@ class QueryRetornoListado
             'fecha_entrega_desde',
             'fecha_entrega_hasta',
             'empresa_id',
+            'empresa_todas',
         ] as $key) {
             if ($request->query->has($key)) {
                 return true;

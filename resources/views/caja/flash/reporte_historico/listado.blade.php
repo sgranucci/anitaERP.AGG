@@ -1,7 +1,8 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
     $empresaObj = $reporte['empresa'] ?? null;
-    $filaLogo = (object) ['nombreempresa' => $empresaObj->nombre ?? ''];
+    $nombreEmpresaLogo = $reporte['empresas_texto'] ?? ($empresaObj->nombre ?? '');
+    $filaLogo = (object) ['nombreempresa' => $nombreEmpresaLogo];
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion(collect([$filaLogo]));
 @endphp
 <!DOCTYPE html>
@@ -33,17 +34,17 @@
             <strong style="font-size:16px;">{{ $reporte['titulo'] ?? 'Consolidated Income' }}</strong><br>
             <span>{{ $reporte['periodo'] ?? '' }}
                 @if(!empty($reporte['through_day']))
-                    &mdash; Through day: {{ $reporte['through_day'] }}
+                    — Through day: {{ $reporte['through_day'] }}
                 @endif
             </span><br>
-            <span>{{ $reporte['cantidad_dias'] ?? 0 }} d&iacute;a(s) &mdash; Generado {{ date('d/m/Y H:i') }}</span>
+            <span>{{ $reporte['cantidad_dias'] ?? 0 }} día(s) — Generado {{ date('d/m/Y H:i') }}</span>
         </td>
-        <td style="width:20%;text-align:right;">{{ $empresaObj->nombre ?? '' }}</td>
+        <td style="width:20%;text-align:right;">{{ $nombreEmpresaLogo }}</td>
     </tr>
 </table>
 
 @if(empty($reporte['filas_diarias']))
-    <p>No hay registros flash en el per&iacute;odo seleccionado.</p>
+    <p>No hay registros flash en el período seleccionado.</p>
 @else
     @include('caja.flash.partials.tabla_consolidated_income', [
         'reporte' => $reporte,

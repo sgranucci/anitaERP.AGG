@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Stock;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionTransferenciaMercaderia;
 use App\Models\Contable\BienUso;
-use App\Models\Contable\Centrocosto;
 use App\Models\Stock\Articulo;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Depmae;
@@ -54,10 +53,6 @@ class TransferenciaMercaderiaController extends Controller
 
         $pendientesCount = count($this->transferenciaService->listarPendientes());
 
-        $centrocosto_query = Centrocosto::query()
-            ->orderBy('codigo')
-            ->get(['id', 'codigo', 'nombre']);
-
         $tipoDefault = $tipotransacciones->firstWhere('id', (int) ($defaults['tipotransaccion_stock_id'] ?? 0));
         $mostrarPanelDestinatario = TransferenciaMercaderiaAprobacionSupport::requiereAprobacion($tipoDefault)
             || TransferenciaMercaderiaAprobacionSupport::avisoOpcional($tipoDefault);
@@ -77,7 +72,6 @@ class TransferenciaMercaderiaController extends Controller
             'empresa_query',
             'empresa_id',
             'pendientesCount',
-            'centrocosto_query',
             'mostrarPanelDestinatario',
             'opcionesDestinatario',
         ));

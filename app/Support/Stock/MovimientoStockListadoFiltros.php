@@ -60,10 +60,15 @@ class MovimientoStockListadoFiltros
         'menor' => 'Menor que',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId ?? 0,
+                'empresa_scope' => $empresaScope,
+            ]);
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -89,7 +94,8 @@ class MovimientoStockListadoFiltros
         $operador = self::normalizarOperador($operador, $modo === self::MODO_CAMPO ? $campo : 'codigo');
 
         return [
-            'empresa_id' => max(0, (int) $request->input('empresa_id', 0)),
+            'empresa_id' => $empresaId ?? 0,
+            'empresa_scope' => $empresaScope,
             'deposito_id' => max(0, (int) $request->input('deposito_id', 0)),
             'modo' => $modo,
             'campo' => $campo,
@@ -101,21 +107,41 @@ class MovimientoStockListadoFiltros
         ];
     }
 
+    /**
+     * Filtro externo del index: empresa (default primera asignada) o todas (`empresa_todas=1`).
+     *
+     * @return array{0:?int,1:string}  [empresa_id, empresa_scope]
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
     public static function tieneCriteriosAplicados(array $filtros): bool
+    {
+        return self::tieneCriteriosTexto($filtros);
+    }
+
+    /**
+     * Criterios del panel / búsqueda rápida (sin el filtro externo de empresa).
+     */
+    public static function tieneCriteriosTexto(array $filtros): bool
     {
         if (self::tieneCriteriosInteligentes($filtros)) {
             return true;
         }
 
-        if (($filtros['empresa_id'] ?? 0) > 0) {
-            return true;
-        }
-
-        if (($filtros['deposito_id'] ?? 0) > 0) {
-            return true;
-        }
-
-        return false;
+        return ($filtros['deposito_id'] ?? 0) > 0;
     }
 
     public static function tieneCriteriosInteligentes(array $filtros): bool
@@ -146,6 +172,7 @@ class MovimientoStockListadoFiltros
     /**
      * @return array{
      *     empresa_id: int,
+     *     empresa_scope: string,
      *     deposito_id: int,
      *     modo: string,
      *     campo: string,
@@ -159,6 +186,7 @@ class MovimientoStockListadoFiltros
     {
         return [
             'empresa_id' => 0,
+            'empresa_scope' => 'una',
             'deposito_id' => 0,
             'modo' => self::MODO_TODOS,
             'campo' => 'codigo',
@@ -174,11 +202,7 @@ class MovimientoStockListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = [];
-
-        if (($filtros['empresa_id'] ?? 0) > 0) {
-            $params['empresa_id'] = (int) $filtros['empresa_id'];
-        }
+        $params = self::paraQueryStringEmpresa($filtros);
 
         if (($filtros['deposito_id'] ?? 0) > 0) {
             $params['deposito_id'] = (int) $filtros['deposito_id'];
@@ -201,6 +225,23 @@ class MovimientoStockListadoFiltros
         }
 
         return $params;
+    }
+
+    /**
+     * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
+     *
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (($filtros['empresa_id'] ?? 0) > 0) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     /**

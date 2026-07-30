@@ -5,16 +5,14 @@
         return n < 10 ? '0' + n : String(n);
     }
 
-    function syncPeriodoFromMonth() {
-        var $mes = $('#periodo_mes');
+    function syncPeriodoFromSelects() {
         var $periodo = $('#periodo');
-        if (!$mes.length || !$periodo.length) {
+        var mes = String($('#periodo_mes_num').val() || '');
+        var anio = String($('#periodo_anio').val() || '');
+        if (!$periodo.length || !/^\d{2}$/.test(mes) || !/^\d{4}$/.test(anio)) {
             return;
         }
-        var val = String($mes.val() || '');
-        if (/^\d{4}-\d{2}$/.test(val)) {
-            $periodo.val(val.replace('-', ''));
-        }
+        $periodo.val(anio + mes);
     }
 
     function ultimoDiaMes(anio, mes) {
@@ -22,7 +20,7 @@
     }
 
     function actualizarFechasDesdeLiquidacion() {
-        syncPeriodoFromMonth();
+        syncPeriodoFromSelects();
         var periodo = String($('#periodo').val() || '');
         var liquidacion = parseInt($('#liquidacion').val(), 10) || 0;
         if (!/^\d{6}$/.test(periodo)) {
@@ -47,7 +45,7 @@
 
     $(function () {
         actualizarFechasDesdeLiquidacion();
-        $('#periodo_mes, #liquidacion').on('change', actualizarFechasDesdeLiquidacion);
+        $('#periodo_mes_num, #periodo_anio, #liquidacion').on('change', actualizarFechasDesdeLiquidacion);
 
         var overlay = document.getElementById('ingresos-brutos-procesando-overlay');
 
@@ -71,7 +69,7 @@
 
         $('#form-ingresos-brutos').on('submit', function () {
             var form = this;
-            syncPeriodoFromMonth();
+            syncPeriodoFromSelects();
             if (typeof form.checkValidity === 'function' && !form.checkValidity()) {
                 return true;
             }

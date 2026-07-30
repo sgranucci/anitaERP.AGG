@@ -9,6 +9,7 @@ use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Support\Contable\Anita\AnitaMayorAnaliticoSupport;
 use App\Support\Contable\Anita\AnitaMovimientoDetalleModuloSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionRendgAsientosDiaSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaConciliacionVendingRendgSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaControlCtamovRendgDiaAnitaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaControlFlashSupport;
 use Carbon\Carbon;
@@ -23,6 +24,11 @@ use Illuminate\Support\Collection;
  * Mayor = neto haber (subdiario+ctamov) del día en esas cuentas, sin filtrar por nº de asiento Waitry.
  * Solo toma movimientos cuyo detalle indique gastronomía, porque las mismas cuentas
  * de ventas/IVA pueden recibir ajustes o estacionamiento.
+ *
+ * Transición Anita → ERP: Informix no discrimina vending en flash_ayb (= AyB + vending).
+ * Mientras `control_flash_ayb_incluye_vending` esté activo, se resta el vending ERP del flash
+ * antes de comparar con la facturación gastronomía. Cuando el flash viva en ERP con vending
+ * separado, desactivar ese flag y deja de restarse.
  *
  * Los asientos Waitry se resuelven igual que en el proceso de cierre
  * ({@see GastronomiaConciliacionRendgAsientosDiaSupport::auditarAsientosFacturacionJornada}).
@@ -39,6 +45,7 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
         private readonly GastronomiaConciliacionRendgAsientosDiaSupport $asientosSupport,
         private readonly GastronomiaControlCtamovRendgDiaAnitaSupport $ctamovSupport,
         private readonly AnitaMayorAnaliticoSupport $mayorSupport,
+        private readonly GastronomiaConciliacionVendingRendgSupport $vendingRendgSupport,
     ) {
     }
 
@@ -51,6 +58,7 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
      *   fecha_hasta: string,
      *   tolerancia: float,
      *   flash_offset_dias: int,
+     *   flash_ayb_incluye_vending: bool,
      *   cuentas_mayor: list<int>,
      *   dias: list<array<string, mixed>>,
      *   resumen: array<string, int>
@@ -71,10 +79,17 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
         );
         // Misma fecha de jornada: el offset del reporte diario (día anterior) no aplica acá.
         $flashOffset = 0;
+        $flashIncluyeVending = (bool) config(
+            'gastronomia.conciliacion_diaria_reporte.control_flash_ayb_incluye_vending',
+            true,
+        );
 
         $cierres = $this->cargarCierresDefinitivos($empresaId, $desde, $hasta);
         $empresaCodigo = (int) ($empresa->codigo ?? 0);
         $flashPorFecha = $this->cargarFlashAybPorFecha($empresaCodigo, $desde, $hasta);
+        $vendingPorFecha = $flashIncluyeVending
+            ? $this->cargarVendingErpPorFecha($empresaId, $desde, $hasta)
+            : [];
 
         $asientosPorFecha = $this->cargarAsientosWaitryPorFecha($empresaId, $desde, $hasta);
         $cuentasMayor = $this->codigosMayorGastronomia($empresaId);
@@ -96,10 +111,12 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
                 $fechaStr,
                 $cierres,
                 $flashPorFecha,
+                $vendingPorFecha,
                 $mayorPorFecha,
                 $asientosPorFecha[$fechaStr] ?? $this->asientosVacios(),
                 $flashOffset,
                 $tolerancia,
+                $flashIncluyeVending,
             );
 
             $sinActividad = (int) ($dia['cantidad_cierres'] ?? 0) === 0
@@ -131,6 +148,7 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
             'fecha_hasta' => $hasta,
             'tolerancia' => $tolerancia,
             'flash_offset_dias' => $flashOffset,
+            'flash_ayb_incluye_vending' => $flashIncluyeVending,
             'cuentas_mayor' => $cuentasMayor,
             'dias' => $dias,
             'resumen' => [
@@ -187,6 +205,16 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
         }
 
         return $out;
+    }
+
+    /**
+     * Ventas vending ERP por jornada (Σ MaquinavendingRendicion.total_ventas).
+     *
+     * @return array<string, float> Y-m-d => total
+     */
+    private function cargarVendingErpPorFecha(int $empresaId, string $desde, string $hasta): array
+    {
+        return $this->vendingRendgSupport->totalesMaquinavendingErpPorJornada($empresaId, $desde, $hasta);
     }
 
     /**
@@ -298,6 +326,7 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
     /**
      * @param  Collection<int, TurnoOperativoGastronomia>  $cierres
      * @param  array<string, float>  $flashPorFecha
+     * @param  array<string, float>  $vendingPorFecha
      * @param  array<string, float>  $mayorPorFecha
      * @param  array<string, mixed>  $asientos
      * @return array<string, mixed>
@@ -306,10 +335,12 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
         string $fechaJornada,
         Collection $cierres,
         array $flashPorFecha,
+        array $vendingPorFecha,
         array $mayorPorFecha,
         array $asientos,
         int $flashOffset,
         float $tolerancia,
+        bool $flashIncluyeVending,
     ): array {
         $fechaFlash = $flashOffset > 0
             ? Carbon::parse($fechaJornada)->subDays($flashOffset)->toDateString()
@@ -387,7 +418,12 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
         // del tótem ($5.400 el 16/7, $5.900 el 17/7). $totemVentas se conserva solo para el detalle informativo.
         $totalFacturacion = round($totalCierres + $postCierre + $agregadosCaea, 2);
 
-        $flashAyb = round((float) ($flashPorFecha[$fechaFlash] ?? 0), 2);
+        // Anita Informix: flash_ayb = AyB + vending. Restamos vending ERP para confrontar solo gastronomía.
+        $flashAybBruto = round((float) ($flashPorFecha[$fechaFlash] ?? 0), 2);
+        $vendingErp = $flashIncluyeVending
+            ? round((float) ($vendingPorFecha[$fechaJornada] ?? 0), 2)
+            : 0.0;
+        $flashAyb = round($flashAybBruto - $vendingErp, 2);
         $mayorNeto = round((float) ($mayorPorFecha[$fechaJornada] ?? 0), 2);
 
         $diferenciaFlash = round($totalFacturacion - $flashAyb, 2);
@@ -412,6 +448,9 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
             'total_cierres' => $totalCierres,
             'total_habilitacion' => $totalHabilitacion,
             'total_flash_ayb' => $flashAyb,
+            'total_flash_ayb_bruto' => $flashAybBruto,
+            'total_vending' => $vendingErp,
+            'flash_ayb_incluye_vending' => $flashIncluyeVending,
             'total_asientos_debe' => $totalAsientos,
             'total_mayor_neto' => $mayorNeto,
             'diferencia_flash' => $diferenciaFlash,

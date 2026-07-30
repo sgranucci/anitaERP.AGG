@@ -17,9 +17,6 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Informe de solicitudes de pago</h3>
-                <div class="card-tools">
-                    @include('includes.solicitudpago.boton-manual')
-                </div>
             </div>
             <div class="card-body">
                 <p class="text-muted mb-3">

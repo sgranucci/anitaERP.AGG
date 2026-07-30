@@ -21,7 +21,10 @@
                     <strong>C&oacute;mo leer la conciliaci&oacute;n</strong>
                     <ul class="mb-0 pl-3">
                         <li><strong>Facturaci&oacute;n</strong> = &Sigma; cierres de turno + post-cierre Waitry (+ totem / agregados CAEA si hay).</li>
-                        <li><strong>Flash</strong> = <code>flash_ayb</code> Informix (caja) de la misma fecha de jornada.</li>
+                        <li><strong>Flash</strong> = <code>flash_ayb</code> Informix (caja) de la misma fecha de jornada.
+                            Mientras Anita no discrimine vending (<code>flash_ayb</code> = AyB + vending), se resta el vending ERP
+                            antes de comparar; cuando el flash viva en ERP con vending separado, se desactiva
+                            <code>GASTRONOMIA_CONCILIACION_CONTROL_FLASH_AYB_INCLUYE_VENDING</code>.</li>
                         <li><strong>Asientos Waitry</strong> = snapshot del proceso de cierre (mismos componentes que la facturaci&oacute;n).</li>
                         <li><strong>Mayor Anita</strong> = neto haber (subdiario+ctamov) del d&iacute;a en las cuentas del control
                             (ventas / kiosco / tabaco / IVA d&eacute;bito y cr&eacute;dito fiscal), solo detalle gastronom&iacute;a;
@@ -105,6 +108,9 @@
                                 @endif
                                 @if ($offsetFlash > 0)
                                     — flash con offset {{ $offsetFlash }} d&iacute;a(s)
+                                @endif
+                                @if (! empty($resultado['flash_ayb_incluye_vending']))
+                                    — flash neto de vending ERP
                                 @endif
                                 — tolerancia {{ number_format($tol, 2, ',', '.') }}
                             </span>
@@ -196,7 +202,16 @@
                                                     </small>
                                                 @endif
                                             </td>
-                                            <td class="text-right align-middle">{{ number_format((float) ($dia['total_flash_ayb'] ?? 0), 2, ',', '.') }}</td>
+                                            <td class="text-right align-middle">
+                                                {{ number_format((float) ($dia['total_flash_ayb'] ?? 0), 2, ',', '.') }}
+                                                @if (abs((float) ($dia['total_vending'] ?? 0)) > $tol)
+                                                    <br>
+                                                    <small class="text-muted font-weight-normal">
+                                                        bruto {{ number_format((float) ($dia['total_flash_ayb_bruto'] ?? 0), 2, ',', '.') }}
+                                                        &minus; vend. {{ number_format((float) $dia['total_vending'], 2, ',', '.') }}
+                                                    </small>
+                                                @endif
+                                            </td>
                                             <td class="text-right align-middle">{{ number_format((float) ($dia['total_asientos_debe'] ?? 0), 2, ',', '.') }}</td>
                                             <td class="text-right align-middle">{{ number_format((float) ($dia['total_mayor_neto'] ?? 0), 2, ',', '.') }}</td>
                                             <td class="text-right align-middle {{ abs($difFlash) > $tol ? 'text-danger font-weight-bold' : 'text-success' }}">

@@ -42,7 +42,7 @@ window.consultaFormulaArticuloConfig = {
 <script src="{{ asset('assets/pages/scripts/stock/articulo/formula-modal.js') }}" type="text/javascript"></script>
 @endif
 @if (\App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport::puedeRecalcularDesdeArticulo())
-<script src="{{ asset('assets/pages/scripts/stock/articulo/recalcular-transferencias-formula.js') }}?v=20260720b" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/recalcular-transferencias-formula.js') }}?v=20260729a" type="text/javascript"></script>
 @endif
 @endsection
 

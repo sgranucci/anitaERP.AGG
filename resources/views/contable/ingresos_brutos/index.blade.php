@@ -34,9 +34,18 @@
                         $colInput = 'col-lg-4';
                         $empresasDisponibles = collect($empresa_query ?? []);
                         $periodoYm = (string) ($filtros['periodo'] ?? date('Ym'));
-                        $periodoMonth = strlen($periodoYm) === 6
-                            ? substr($periodoYm, 0, 4).'-'.substr($periodoYm, 4, 2)
-                            : date('Y-m');
+                        if (strlen($periodoYm) !== 6) {
+                            $periodoYm = date('Ym');
+                        }
+                        $periodoAnio = (int) substr($periodoYm, 0, 4);
+                        $periodoMes = substr($periodoYm, 4, 2);
+                        $mesesPeriodo = [
+                            '01' => 'Enero', '02' => 'Febrero', '03' => 'Marzo', '04' => 'Abril',
+                            '05' => 'Mayo', '06' => 'Junio', '07' => 'Julio', '08' => 'Agosto',
+                            '09' => 'Septiembre', '10' => 'Octubre', '11' => 'Noviembre', '12' => 'Diciembre',
+                        ];
+                        $anioMinPeriodo = 2015;
+                        $anioMaxPeriodo = (int) date('Y') + 1;
                     @endphp
 
                     <div class="form-group row">
@@ -85,11 +94,27 @@
                                 </div>
                             </div>
                         </div>
-                        <label for="periodo_mes" class="{{ $colLabel }} requerido">Período</label>
+                        <label class="{{ $colLabel }} requerido">Período</label>
                         <div class="{{ $colInput }}">
-                            <input type="month" name="periodo_mes" id="periodo_mes" class="form-control"
-                                value="{{ $periodoMonth }}" required>
                             <input type="hidden" name="periodo" id="periodo" value="{{ $periodoYm }}">
+                            <div class="form-row">
+                                <div class="col-7">
+                                    <select name="periodo_mes_num" id="periodo_mes_num" class="form-control" required
+                                        title="Mes del período" aria-label="Mes del período">
+                                        @foreach ($mesesPeriodo as $num => $nombre)
+                                            <option value="{{ $num }}" @selected($periodoMes === $num)>{{ $nombre }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-5">
+                                    <select name="periodo_anio" id="periodo_anio" class="form-control" required
+                                        title="Año del período" aria-label="Año del período">
+                                        @for ($y = $anioMaxPeriodo; $y >= $anioMinPeriodo; $y--)
+                                            <option value="{{ $y }}" @selected($periodoAnio === $y)>{{ $y }}</option>
+                                        @endfor
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

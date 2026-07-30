@@ -104,7 +104,12 @@ class RequisicionController extends Controller
             $this->requisicionService->sincronizarConAnita();
         }
 
-        $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = RequisicionListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
 
         $requisicion = $this->requisicionQuery->leeRequisicion($filtros, true, true);
 
@@ -115,6 +120,7 @@ class RequisicionController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => RequisicionListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => RequisicionListadoFiltros::CAMPOS,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
             'estado_enum' => Requisicion_Estado::$enumEstado,
             'estado_en_compras' => Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
             'estado_en_arbol_aprobacion' => Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'],
@@ -135,7 +141,12 @@ class RequisicionController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = RequisicionListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busqueda,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
 
         switch ($formato) {
             case 'PDF':
@@ -208,6 +219,14 @@ class RequisicionController extends Controller
     public function guardar(ValidacionRequisicion $request)
     {
         $ret = $this->requisicionService->guardaRequisicion($request);
+
+        if (($ret['mensaje'] ?? '') === 'seleccionar_centrocosto') {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json($ret);
+            }
+
+            return redirect()->back()->withInput()->with('mensaje', 'Debe seleccionar el centro de costo de destino para el árbol de aprobación.');
+        }
 
         if ($ret['mensaje'] == 'ok') {
             if (! empty($ret['modo_provisorio']) && ! empty($ret['requisicion_id'])) {
@@ -474,6 +493,14 @@ class RequisicionController extends Controller
 
         $ret = $this->requisicionService->actualizaRequisicion($request, $id);
 
+        if (($ret['mensaje'] ?? '') === 'seleccionar_centrocosto') {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json($ret);
+            }
+
+            return redirect()->back()->withInput()->with('mensaje', 'Debe seleccionar el centro de costo de destino para el árbol de aprobación.');
+        }
+
         if ($ret['mensaje'] == 'ok') {
             $mensaje = ! empty($ret['solo_proveedor_aprobada'])
                 ? 'Proveedor sugerido actualizado con éxito'
@@ -498,12 +525,42 @@ class RequisicionController extends Controller
         can('confirmar-requisicion');
 
         if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($id)) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['mensaje' => 'error', 'errores' => 'Requisición no encontrada o sin acceso.'], 404);
+            }
+
             return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
         }
 
-        $ret = $this->requisicionService->confirmarRequisicion($id);
+        $centrocostoArbolId = (int) $request->input('centrocostodestino_arbol_id', 0);
+        $centrocostoArbolId = $centrocostoArbolId > 0 ? $centrocostoArbolId : null;
+
+        $ret = $this->requisicionService->confirmarRequisicion($id, $centrocostoArbolId);
+
+        if (($ret['mensaje'] ?? '') === 'seleccionar_centrocosto') {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json($ret);
+            }
+
+            return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+                $request,
+                RequisicionListadoFiltros::class,
+                $id
+            ))->with('mensaje', 'Debe seleccionar el centro de costo de destino para el árbol de aprobación.');
+        }
 
         if ($ret['mensaje'] === 'ok') {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'mensaje' => 'ok',
+                    'redirect' => route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+                        $request,
+                        RequisicionListadoFiltros::class,
+                        $id
+                    )),
+                ]);
+            }
+
             return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
                 $request,
                 RequisicionListadoFiltros::class,
@@ -511,11 +568,28 @@ class RequisicionController extends Controller
             ))->with('mensaje', 'Requisición confirmada. Árbol de aprobación y Anita actualizados.');
         }
 
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json($ret, 422);
+        }
+
         return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
             $request,
             RequisicionListadoFiltros::class,
             $id
         ))->with('mensaje', $ret['errores'] ?? 'Error al confirmar la requisición.');
+    }
+
+    public function previewCentrocostoArbol(Request $request, int $id)
+    {
+        if (! can('editar-requisicion', false) && ! can('confirmar-requisicion', false) && ! can('crear-requisicion', false)) {
+            return response()->json(['mensaje' => 'error', 'errores' => 'No tiene permisos.'], 403);
+        }
+
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($id)) {
+            return response()->json(['mensaje' => 'error', 'errores' => 'Requisición no encontrada o sin acceso.'], 404);
+        }
+
+        return response()->json($this->requisicionService->previewCentrocostoArbol($id));
     }
 
     public function eliminarProvisorio(Request $request, int $id)

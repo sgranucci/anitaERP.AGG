@@ -5,6 +5,7 @@ namespace App\Services\Contable;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\InterbankingMovimiento;
 use App\Support\Caja\InterbankingSaldoResolverSupport;
+use App\Models\Contable\ConciliacionBancariaChequePendiente;
 use App\Models\Contable\ConciliacionBancariaEjecucion;
 use App\Models\Contable\ConciliacionBancariaPar;
 use App\Services\Ai\AiPolicy;
@@ -13,10 +14,15 @@ use App\Services\Ai\Skills\AiSkillRegistry;
 use App\Services\Contable\Ai\SugerirParesConciliacionBancariaSkill;
 use App\Support\Ai\AiAgenteEventoDispatcherSupport;
 use App\Support\Ai\AiAgenteOperativoSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaAnomaliaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCodificacionSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenciaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMatcher;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMovimientoBancoSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendienteSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendientesCpromaeSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReferenciaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use Carbon\Carbon;
@@ -33,6 +39,7 @@ class ConciliacionBancariaService
     }
 
     /**
+     * @param  array{pendientes_excel?: string, persistir_pendientes?: bool}  $opciones
      * @return array<string, mixed>
      */
     public function ejecutar(
@@ -42,6 +49,7 @@ class ConciliacionBancariaService
         int $anio,
         ?int $usuarioId = null,
         bool $persistirPares = true,
+        array $opciones = [],
     ): array {
         MayorPlanoCuentaRuntimeSupport::elevarLimites();
 
@@ -91,16 +99,30 @@ class ConciliacionBancariaService
         $filasMayor = $this->mayorPlanoService->aplanarFilas($resultadoMayor, [], false);
         $contablesPeriodo = $this->extraerMovimientosContables($filasMayor, $cuentacajaId);
 
+        // Histórico: desde cobertura IB (o 18 meses) — desde 2000 provoca OOM y no hay extracto para matchear.
+        // Se mantienen cheques previos a IB como pendientes de carátula (estilo Excel Contaduría).
+        $fechaMinIb = $this->resolverFechaMinimaInterbanking($empresaId, $cuentaInterbanking);
+        $diasCheque = max(30, (int) config('conciliacion_bancaria.dias_tolerancia_fecha_cheque', 30));
+        $lookbackMeses = max(6, (int) config('conciliacion_bancaria.historico_lookback_meses', 18));
+        $fechaDesdeHistorico = $fechaDesde->copy()->subMonths($lookbackMeses)->startOfDay();
+        if ($fechaMinIb) {
+            $desdeIb = $fechaMinIb->copy()->subDays($diasCheque)->startOfDay();
+            if ($desdeIb->lt($fechaDesdeHistorico)) {
+                $fechaDesdeHistorico = $desdeIb;
+            }
+        }
+        @ini_set('memory_limit', (string) config('conciliacion_bancaria.memory_limit', '2048M'));
+
         $filtrosHistorico = $filtrosMayor;
         $filtrosHistorico['modo_periodo'] = 'rango';
-        $filtrosHistorico['fecha_desde'] = '2000-01-01';
+        $filtrosHistorico['fecha_desde'] = $fechaDesdeHistorico->toDateString();
         $filtrosHistorico['fecha_hasta'] = $fechaHasta->copy()->subMonth()->endOfMonth()->format('Y-m-d');
-        if ($filtrosHistorico['fecha_hasta'] < '2000-01-01') {
-            $filtrosHistorico['fecha_hasta'] = $fechaDesde->format('Y-m-d');
+        if ($filtrosHistorico['fecha_hasta'] < $filtrosHistorico['fecha_desde']) {
+            $filtrosHistorico['fecha_hasta'] = $fechaDesde->copy()->subDay()->toDateString();
         }
 
         $contablesHistoricos = [];
-        if ($filtrosHistorico['fecha_hasta'] >= '2000-01-01') {
+        if ($filtrosHistorico['fecha_hasta'] >= $filtrosHistorico['fecha_desde']) {
             $resHist = $this->mayorPlanoService->generarDesdeFiltros($filtrosHistorico);
             $filasHist = $this->mayorPlanoService->aplanarFilas($resHist, [], false);
             $contablesHistoricos = $this->extraerMovimientosContables($filasHist, $cuentacajaId);
@@ -117,7 +139,7 @@ class ConciliacionBancariaService
         $movimientosBancoHistoricos = $this->cargarMovimientosInterbanking(
             $empresaId,
             $cuentaInterbanking,
-            Carbon::parse('2000-01-01'),
+            $fechaDesdeHistorico,
             $fechaDesde->copy()->subDay(),
             $cuentacajaId,
         );
@@ -174,18 +196,29 @@ class ConciliacionBancariaService
             $hashBancoConc,
         )['banco_pendientes'];
 
+        $partPend = ConciliacionBancariaPendienteSupport::particionarContables(
+            $pendientesContables,
+            $fechaMinIb?->copy()->subDays($diasCheque),
+        );
+        $partBanco = ConciliacionBancariaPendienteSupport::particionarBanco($pendientesBanco);
+
+        // Pendientes Contaduría: cpromae (semilla Excel o Ch: del mayor + snapshot previo).
+        $armPendientes = $this->armarPendientesCpromae(
+            (string) $cuentacaja->codigo,
+            $empresaId,
+            $cuentacajaId,
+            $fechaHasta,
+            $pendientesContables,
+            $opciones,
+        );
+        // Firmado carátula (cheques restan): -suma vencimientos del mes.
+        $sumaPendContCaratula = round(-1 * (float) $armPendientes['suma_caratula'], 2);
+        $sumaPendBancoCaratula = $partBanco['suma_caratula'];
+
         $saldoBanco = $this->resolverSaldoBanco($empresaId, $cuentaInterbanking, $fechaHasta);
         $saldoContable = $this->resolverSaldoContable($resultadoMayor, $codigoCuenta);
-        $sumaPendCont = array_sum(array_map(
-            fn (array $m) => ConciliacionBancariaHashSupport::importeFirmadoContable($m),
-            $pendientesContables,
-        ));
-        $sumaPendBanco = array_sum(array_map(
-            fn (array $m) => ConciliacionBancariaHashSupport::importeFirmadoBanco($m),
-            $pendientesBanco,
-        ));
 
-        $saldoBancoAjustado = round($saldoBanco - $sumaPendCont + $sumaPendBanco, 2);
+        $saldoBancoAjustado = round($saldoBanco + $sumaPendContCaratula - $sumaPendBancoCaratula, 2);
         $diferencia = round($saldoContable - $saldoBancoAjustado, 2);
 
         $gastosResumen = ConciliacionBancariaCodificacionSupport::resumirGastosDiarios($movimientosBanco);
@@ -199,6 +232,21 @@ class ConciliacionBancariaService
             $movimientosBanco,
             $saldoInicialPeriodo,
         );
+
+        $caratula = $this->armarCaratula(
+            $cuentacaja,
+            $cuentaContable,
+            $fechaHasta,
+            $saldoBanco,
+            $sumaPendContCaratula,
+            $sumaPendBancoCaratula,
+            $saldoBancoAjustado,
+            $saldoContable,
+            $diferencia,
+        );
+        $caratula['cheques_modo'] = (string) ($armPendientes['fuente'] ?? 'cpromae');
+        $caratula['cheques_pendientes_n'] = count($armPendientes['pendientes'] ?? []);
+        $caratula['cheques_caratula_n'] = count($armPendientes['caratula'] ?? []);
 
         $resultado = [
             'empresa_id' => $empresaId,
@@ -217,28 +265,31 @@ class ConciliacionBancariaService
             'pares_nuevos' => $nuevosPares,
             'pares_conciliados_total' => $paresPrevios->count() + count($nuevosPares),
             'pendientes_contables' => $pendientesContables,
+            'pendientes_contables_cheques' => $partPend['cheques'],
+            'pendientes_contables_otros' => $partPend['otros'],
+            'pendientes_cheques_cpromae' => $armPendientes['pendientes'],
+            'pendientes_cheques_caratula' => $armPendientes['caratula'],
+            'pendientes_cheques_fuente' => $armPendientes['fuente'],
+            'suma_pendientes_cheques' => $armPendientes['suma_pendientes'],
+            'suma_pendientes_cheques_caratula' => $armPendientes['suma_caratula'],
             'pendientes_banco' => $pendientesBanco,
+            'pendientes_banco_creditos' => $partBanco['creditos'],
+            'pendientes_banco_debitos' => $partBanco['debitos'],
+            'pendientes_banco_caratula' => $partBanco['caratula'],
             'saldo_banco' => $saldoBanco,
             'saldo_contable' => $saldoContable,
-            'suma_pendientes_contables' => round($sumaPendCont, 2),
-            'suma_pendientes_banco' => round($sumaPendBanco, 2),
+            'suma_pendientes_contables' => $sumaPendContCaratula,
+            'suma_pendientes_contables_otros' => $partPend['suma_otros'],
+            'suma_pendientes_banco' => $sumaPendBancoCaratula,
+            'suma_pendientes_banco_creditos' => $partBanco['suma_creditos'],
+            'suma_pendientes_banco_debitos' => $partBanco['suma_debitos'],
             'saldo_banco_ajustado' => $saldoBancoAjustado,
             'diferencia' => $diferencia,
             'gastos_resumen' => $gastosResumen,
-            'caratula' => $this->armarCaratula(
-                $cuentacaja,
-                $cuentaContable,
-                $fechaHasta,
-                $saldoBanco,
-                $sumaPendCont,
-                $sumaPendBanco,
-                $saldoBancoAjustado,
-                $saldoContable,
-                $diferencia,
-            ),
+            'caratula' => $caratula,
         ];
 
-        ConciliacionBancariaEjecucion::query()->create([
+        $ejecucion = ConciliacionBancariaEjecucion::query()->create([
             'empresa_id' => $empresaId,
             'cuentacaja_id' => $cuentacajaId,
             'mes' => $mes,
@@ -252,9 +303,23 @@ class ConciliacionBancariaService
                 'pares_nuevos' => count($nuevosPares),
                 'pendientes_contables' => count($pendientesContables),
                 'pendientes_banco' => count($pendientesBanco),
+                'pendientes_cheques_cpromae' => count($armPendientes['pendientes']),
+                'pendientes_cheques_caratula' => count($armPendientes['caratula']),
+                'pendientes_cheques_fuente' => $armPendientes['fuente'],
+                'suma_cheques_caratula' => $armPendientes['suma_caratula'],
             ],
             'usuario_id' => $usuarioId,
         ]);
+        $resultado['ejecucion_id'] = $ejecucion->id;
+
+        if (($opciones['persistir_pendientes'] ?? true) && $persistirPares) {
+            $this->persistirPendientesCheques(
+                (int) $ejecucion->id,
+                $empresaId,
+                $cuentacajaId,
+                $armPendientes['pendientes'],
+            );
+        }
 
         $resultado = $this->enriquecerConGobernanzaIa($resultado, $empresaId, $cuentacajaId, $mes, $anio);
 
@@ -279,11 +344,17 @@ class ConciliacionBancariaService
 
         $snapshot = [
             'pares_nuevos' => $resultado['pares_nuevos'] ?? [],
-            'pendientes_contables' => $resultado['pendientes_contables'] ?? [],
+            'pendientes_contables' => $resultado['pendientes_contables_cheques']
+                ?? $resultado['pendientes_contables']
+                ?? [],
+            'pendientes_contables_todos' => $resultado['pendientes_contables'] ?? [],
+            'pendientes_contables_otros' => $resultado['pendientes_contables_otros'] ?? [],
             'pendientes_banco' => $resultado['pendientes_banco'] ?? [],
             'diferencia' => $resultado['diferencia'] ?? 0,
             'suma_pendientes_contables' => $resultado['suma_pendientes_contables'] ?? 0,
+            'suma_pendientes_contables_otros' => $resultado['suma_pendientes_contables_otros'] ?? 0,
             'suma_pendientes_banco' => $resultado['suma_pendientes_banco'] ?? 0,
+            'excel_comparacion' => $resultado['excel_comparacion'] ?? null,
         ];
 
         $skillResult = $this->skillRegistry->ejecutar($skill, new AiSkillContext(
@@ -409,6 +480,24 @@ class ConciliacionBancariaService
         return InterbankingSaldoResolverSupport::saldoEnFecha($empresaId, $cuentaInterbanking, $fechaHasta);
     }
 
+    private function resolverFechaMinimaInterbanking(int $empresaId, string $cuentaInterbanking): ?Carbon
+    {
+        $min = InterbankingMovimiento::query()
+            ->where('empresa_id', $empresaId)
+            ->where('account_number', $cuentaInterbanking)
+            ->min('process_date');
+
+        if ($min === null || $min === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($min)->startOfDay();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     /**
      * @param  array<string, mixed>  $resultadoMayor
      */
@@ -513,11 +602,253 @@ class ConciliacionBancariaService
             'cuenta_interbanking' => $cuentacaja->cuenta_interbanking ?? '',
             'fecha_corte' => $fechaHasta->format('d.m.y'),
             'saldo_banco_extracto' => $saldoBanco,
-            'cheques_no_acreditados' => round(-$sumaPendCont, 2),
-            'movimientos_pendientes_banco' => round($sumaPendBanco, 2),
+            // Firmado contable (debe−haber): cheques emitidos quedan negativos, igual que Excel Contaduría.
+            'cheques_no_acreditados' => round($sumaPendCont, 2),
+            // Firmado banco invertido en display: créditos IB no contabilizados restan al extracto.
+            'movimientos_pendientes_banco' => round(-$sumaPendBanco, 2),
             'saldo_banco_ajustado' => $saldoBancoAjustado,
             'saldo_contable' => $saldoContable,
             'diferencia' => $diferencia,
         ];
+    }
+
+    /**
+     * Compara la carátula ERP contra el Excel de Contaduría.
+     * Si la corrida no usó semilla Excel, rearma Pendientes/carátula desde la solapa Pendientes.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    public function compararContraExcel(array $resultado, string $rutaExcel): array
+    {
+        $excel = ConciliacionBancariaExcelReferenciaSupport::leerCaratula($rutaExcel);
+        $detalle = ConciliacionBancariaExcelReferenciaSupport::leerPendientesDetalle($rutaExcel);
+
+        $fuenteActual = (string) ($resultado['pendientes_cheques_fuente'] ?? '');
+        if ($fuenteActual !== 'cpromae_semilla_excel') {
+            $cc = $resultado['cuentacaja'] ?? null;
+            $fechaHasta = Carbon::parse((string) ($resultado['fecha_hasta'] ?? 'now'));
+            $semilla = ConciliacionBancariaPendientesCpromaeSupport::semillaDesdeExcelDetalle($detalle['cheques']);
+            $arm = (new ConciliacionBancariaPendientesCpromaeSupport())->armar(
+                (string) ($cc->codigo ?? ''),
+                (int) ($resultado['empresa_id'] ?? 0),
+                $fechaHasta,
+                array_keys($semilla),
+                $semilla,
+                false,
+            );
+            $resultado['pendientes_cheques_cpromae'] = $arm['pendientes'];
+            $resultado['pendientes_cheques_caratula'] = $arm['caratula'];
+            $resultado['pendientes_cheques_fuente'] = $arm['fuente'];
+            $resultado['suma_pendientes_cheques'] = $arm['suma_pendientes'];
+            $resultado['suma_pendientes_cheques_caratula'] = $arm['suma_caratula'];
+
+            $sumaCheques = round(-1 * (float) $arm['suma_caratula'], 2);
+            $sumaBancoCar = (float) ($resultado['suma_pendientes_banco'] ?? 0);
+            $saldoBanco = (float) ($resultado['saldo_banco'] ?? 0);
+            $saldoContable = (float) ($resultado['saldo_contable'] ?? 0);
+            $saldoAjustado = round($saldoBanco + $sumaCheques - $sumaBancoCar, 2);
+            $diferencia = round($saldoContable - $saldoAjustado, 2);
+
+            $resultado['suma_pendientes_contables'] = $sumaCheques;
+            $resultado['saldo_banco_ajustado'] = $saldoAjustado;
+            $resultado['diferencia'] = $diferencia;
+            if (is_array($resultado['caratula'] ?? null)) {
+                $resultado['caratula']['cheques_no_acreditados'] = $sumaCheques;
+                $resultado['caratula']['saldo_banco_ajustado'] = $saldoAjustado;
+                $resultado['caratula']['diferencia'] = $diferencia;
+                $resultado['caratula']['cheques_modo'] = 'cpromae_semilla_excel';
+                $resultado['caratula']['cheques_pendientes_n'] = count($arm['pendientes']);
+                $resultado['caratula']['cheques_caratula_n'] = count($arm['caratula']);
+            }
+        }
+
+        $numsExcel = [];
+        foreach ($detalle['cheques'] as $ch) {
+            if ($ch['numero'] !== '') {
+                $numsExcel[$ch['numero']] = true;
+            }
+        }
+        $erpNums = [];
+        foreach ($resultado['pendientes_cheques_cpromae'] ?? [] as $ch) {
+            $n = (string) ($ch['numero_cheque'] ?? '');
+            if ($n !== '') {
+                $erpNums[$n] = true;
+            }
+        }
+        $inter = array_intersect_key($erpNums, $numsExcel);
+        $resultado['excel_pendientes_cobertura'] = [
+            'excel_n' => count($numsExcel),
+            'erp_n' => count($erpNums),
+            'interseccion_n' => count($inter),
+            'solo_excel' => array_values(array_diff_key($numsExcel, $erpNums)),
+            'solo_erp' => array_values(array_diff_key($erpNums, $numsExcel)),
+        ];
+        $resultado['excel_pendientes_detalle'] = $detalle;
+        $resultado['pendientes_contables_cheques_excel'] = $resultado['pendientes_cheques_caratula'] ?? [];
+
+        $cmp = ConciliacionBancariaExcelReferenciaSupport::comparar(
+            is_array($resultado['caratula'] ?? null) ? $resultado['caratula'] : [],
+            $excel,
+        );
+
+        $resultado['excel_referencia'] = $excel;
+        $resultado['excel_comparacion'] = $cmp;
+
+        $eval = ConciliacionBancariaAnomaliaSupport::evaluar([
+            'pares_nuevos' => $resultado['pares_nuevos'] ?? [],
+            'pendientes_contables' => $resultado['pendientes_cheques_caratula'] ?? [],
+            'pendientes_contables_otros' => $resultado['pendientes_contables_otros'] ?? [],
+            'pendientes_banco' => $resultado['pendientes_banco'] ?? [],
+            'diferencia' => (float) ($resultado['diferencia'] ?? 0),
+            'suma_pendientes_contables' => (float) ($resultado['suma_pendientes_contables'] ?? 0),
+            'suma_pendientes_contables_otros' => $resultado['suma_pendientes_contables_otros'] ?? 0,
+            'suma_pendientes_banco' => (float) ($resultado['suma_pendientes_banco'] ?? 0),
+            'excel_comparacion' => $cmp,
+        ]);
+        $resultado['ai_score'] = $eval['score'];
+        $resultado['ai_anomalias'] = $eval['anomalias'];
+        $resultado['ai_resumen'] = $eval['resumen'];
+
+        return $resultado;
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $pendientesContables
+     * @param  array<string, mixed>  $opciones
+     * @return array{
+     *   pendientes: list<array<string,mixed>>,
+     *   caratula: list<array<string,mixed>>,
+     *   suma_pendientes: float,
+     *   suma_caratula: float,
+     *   fuente: string
+     * }
+     */
+    private function armarPendientesCpromae(
+        string $codigoCuentacaja,
+        int $empresaId,
+        int $cuentacajaId,
+        Carbon $fechaCorte,
+        array $pendientesContables,
+        array $opciones,
+    ): array {
+        $support = new ConciliacionBancariaPendientesCpromaeSupport();
+        $semilla = [];
+        $rutaExcel = trim((string) ($opciones['pendientes_excel'] ?? ''));
+        if ($rutaExcel !== '') {
+            $detalle = ConciliacionBancariaExcelReferenciaSupport::leerPendientesDetalle($rutaExcel);
+            $semilla = ConciliacionBancariaPendientesCpromaeSupport::semillaDesdeExcelDetalle($detalle['cheques']);
+        }
+
+        if ($semilla === []) {
+            $semilla = $this->semillaDesdeSnapshotPrevio($empresaId, $cuentacajaId);
+        }
+
+        $numeros = array_keys($semilla);
+        if ($numeros === []) {
+            foreach ($pendientesContables as $mov) {
+                $n = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
+                if ($n !== null) {
+                    $numeros[] = $n;
+                }
+            }
+            $numeros = array_values(array_unique($numeros));
+        }
+
+        return $support->armar(
+            $codigoCuentacaja,
+            $empresaId,
+            $fechaCorte,
+            $numeros,
+            $semilla,
+            $semilla === [],
+        );
+    }
+
+    /**
+     * @return array<string, array{tip: string, importe: float, fecha_emision?: string|null, fecha_cheque?: string|null}>
+     */
+    private function semillaDesdeSnapshotPrevio(int $empresaId, int $cuentacajaId): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('conciliacion_bancaria_cheque_pendiente')) {
+            return [];
+        }
+
+        $ejecucionId = ConciliacionBancariaEjecucion::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->orderByDesc('id')
+            ->value('id');
+        if (! $ejecucionId) {
+            return [];
+        }
+
+        $rows = ConciliacionBancariaChequePendiente::query()
+            ->where('ejecucion_id', $ejecucionId)
+            ->get();
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $n = ltrim((string) preg_replace('/\D/', '', (string) $row->numero_cheque), '0');
+            if ($n === '' || $n === '0') {
+                continue;
+            }
+            $out[$n] = [
+                'tip' => (string) ($row->tip ?: 'CHP'),
+                'importe' => abs((float) $row->importe),
+                'fecha_emision' => optional($row->fecha_emision)?->toDateString(),
+                'fecha_cheque' => optional($row->fecha_cheque)?->toDateString(),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $pendientes
+     */
+    private function persistirPendientesCheques(
+        int $ejecucionId,
+        int $empresaId,
+        int $cuentacajaId,
+        array $pendientes,
+    ): void {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('conciliacion_bancaria_cheque_pendiente')) {
+            return;
+        }
+
+        $now = now();
+        $chunks = array_chunk($pendientes, 200);
+        foreach ($chunks as $chunk) {
+            $rows = [];
+            foreach ($chunk as $p) {
+                $rows[] = [
+                    'ejecucion_id' => $ejecucionId,
+                    'empresa_id' => $empresaId,
+                    'cuentacaja_id' => $cuentacajaId,
+                    'tip' => (string) ($p['tip'] ?? 'CHP'),
+                    'numero_cheque' => (string) ($p['numero_cheque'] ?? ''),
+                    'fecha_emision' => $p['fecha_emision'] ?? null,
+                    'fecha_cheque' => $p['fecha_cheque'] ?? null,
+                    'fecha_entrega' => $p['fecha_entrega'] ?? null,
+                    'fecha_conciliacion' => $p['fecha_conciliacion'] ?? null,
+                    'importe' => (float) ($p['importe'] ?? 0),
+                    'estado' => $p['estado'] ?? null,
+                    'estado_banco' => $p['estado_banco'] ?? null,
+                    'entregado_a' => $p['entregado_a'] ?? null,
+                    'proveedor_codigo' => $p['proveedor_codigo'] ?? null,
+                    'nro_op' => $p['nro_op'] ?? null,
+                    'para_dep' => $p['para_dep'] ?? null,
+                    'incluye_caratula' => ! empty($p['incluye_caratula']),
+                    'origen_json' => isset($p['origen_json']) ? json_encode($p['origen_json']) : null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+            ConciliacionBancariaChequePendiente::query()->insert($rows);
+        }
     }
 }

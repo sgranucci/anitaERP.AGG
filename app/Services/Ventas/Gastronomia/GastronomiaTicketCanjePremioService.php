@@ -435,7 +435,7 @@ final class GastronomiaTicketCanjePremioService
 
   /**
    * Busca artículo por GIFT_ID de Wigos (ERP: sku corto ej. V0277; legacy: 13 chars con dígito en pos. 12).
-   * Catálogo compartido: empresa_id null/0 aplica a cualquier PV (igual que queryArticulosCatalogo).
+   * Sin filtro por articulo.empresa_id: igual que queryArticulosCatalogo (el PV define la empresa de facturación).
    */
     private function resolverArticuloPorGiftId(string $giftId, int $empresaId): ?Articulo
     {
@@ -451,13 +451,10 @@ final class GastronomiaTicketCanjePremioService
 
         foreach ($candidatos as $skuBusqueda) {
             $skuUpper = mb_strtoupper(trim($skuBusqueda), 'UTF-8');
+            // Preferir artículo de la empresa del PV; si no, el del catálogo (otra empresa o null).
             $articulo = Articulo::query()
-                ->where(function ($q) use ($empresaId) {
-                    $q->whereNull('empresa_id')
-                        ->orWhere('empresa_id', 0)
-                        ->orWhere('empresa_id', $empresaId);
-                })
                 ->whereRaw('UPPER(TRIM(sku)) = ?', [$skuUpper])
+                ->orderByRaw('CASE WHEN empresa_id = ? THEN 0 WHEN empresa_id IS NULL OR empresa_id = 0 THEN 1 ELSE 2 END', [$empresaId])
                 ->first();
 
             if ($articulo) {

@@ -20,8 +20,8 @@ Requisiciones de sala
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-requisicion-sala',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => \App\Support\Sala\RequisicionSalaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('consultar_requisicion_sala'),
+                        'tieneCriterios' => \App\Support\Sala\RequisicionSalaListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => route('consultar_requisicion_sala', \App\Support\Sala\RequisicionSalaListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
                         'placeholder' => 'Búsqueda rápida…',
                         'toggleTarget' => '#panel-filtros-requisicion-sala',
                         'toggleId' => 'btn-toggle-filtros-requisicion-sala',
@@ -33,10 +33,9 @@ Requisiciones de sala
                 </div>
             </div>
             <form method="get" action="{{ route('consultar_requisicion_sala') }}" id="form-filtros-requisicion-sala" class="mb-0">
-                @include('sala.requisicion_sala.partials.filtros_listado', [
-                    'limpiarUrl' => route('consultar_requisicion_sala'),
-                ])
+                @include('sala.requisicion_sala.partials.filtros_listado')
             </form>
+            @include('sala.requisicion_sala.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_requisicion_sala',
@@ -46,6 +45,7 @@ Requisiciones de sala
                     <thead>
                         <tr>
                             <th>Número</th>
+                            <th>Solicitante</th>
                             <th>Fecha</th>
                             <th>Empresa</th>
                             <th>Centro costo</th>
@@ -61,6 +61,7 @@ Requisiciones de sala
                         @foreach ($requisicion_sala as $data)
                         <tr>
                             <td>{{ $data->numerorequisicion }}</td>
+                            <td><small>{{ $data->nombreusuario ?? '' }}</small></td>
                             <td>{{ date('d/m/Y', strtotime($data->fecha)) }}</td>
                             <td>{{ $data->nombreempresa }}</td>
                             <td><small>{{ $data->nombrecentrocosto }}</small></td>

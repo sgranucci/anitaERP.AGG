@@ -49,13 +49,19 @@ class RecepcionProveedorController extends Controller
     {
         can('listar-recepcion-proveedor');
 
-        $filtros = RecepcionProveedorListadoFiltros::resolverDesdeRequest($request);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = RecepcionProveedorListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
         $coleccion = $this->service->listar($filtros);
         $filtrosQuery = RecepcionProveedorListadoFiltros::paraQueryString($filtros);
         $camposFiltro = RecepcionProveedorListadoFiltros::CAMPOS;
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('stock.recepcion_proveedor.index', compact(
-            'coleccion', 'filtros', 'filtrosQuery', 'camposFiltro'
+            'coleccion', 'filtros', 'filtrosQuery', 'camposFiltro', 'empresa_query'
         ));
     }
 
@@ -376,7 +382,12 @@ class RecepcionProveedorController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = RecepcionProveedorListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = RecepcionProveedorListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busqueda,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
 
         switch ($formato) {
             case 'PDF':

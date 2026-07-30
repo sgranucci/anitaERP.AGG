@@ -1,5 +1,6 @@
 /**
- * Banner y anti-doble-submit al confirmar requisici&oacute;n provisoria.
+ * Banner y anti-doble-submit al confirmar requisición provisoria.
+ * Si hay varios CC de destino, usa el mismo modal que EN COMPRAS antes de confirmar.
  */
 (function ($) {
     'use strict';
@@ -40,9 +41,31 @@
         return true;
     }
 
-    function enviarConfirmacionRequisicion($formConfirmar) {
+    function asegurarHiddenCcArbol($form, centrocostoId) {
+        var $hidden = $form.find('input[name="centrocostodestino_arbol_id"]');
+        if (!$hidden.length) {
+            $hidden = $('<input type="hidden" name="centrocostodestino_arbol_id">');
+            $form.append($hidden);
+        }
+        $hidden.val(centrocostoId > 0 ? centrocostoId : '');
+    }
+
+    function urlPreviewCc($form) {
+        var preview = $form.data('previewCcUrl') || $form.attr('data-preview-cc-url') || '';
+        if (preview) {
+            return preview;
+        }
+        var action = $form.attr('action') || '';
+        // .../confirmar → .../centros-costo-arbol
+        return action.replace(/\/confirmar(\?.*)?$/, '/centros-costo-arbol$1');
+    }
+
+    function enviarConfirmacionRequisicion($formConfirmar, centrocostoId) {
         if (!$formConfirmar || !$formConfirmar.length) {
             return;
+        }
+        if (centrocostoId) {
+            asegurarHiddenCcArbol($formConfirmar, centrocostoId);
         }
         if (!mostrarBannerConfirmandoRequisicion()) {
             return;
@@ -50,6 +73,40 @@
         window.setTimeout(function () {
             $formConfirmar.get(0).submit();
         }, 50);
+    }
+
+    function pedirCcSiCorresponde($form, continuar) {
+        var previewUrl = urlPreviewCc($form);
+        if (!previewUrl) {
+            continuar(null);
+            return;
+        }
+
+        $.get(previewUrl)
+            .done(function (data) {
+                if (data && data.requiere_seleccion_centrocosto) {
+                    if (!window.RequisicionCentrocostoArbolModal) {
+                        alert('No se pudo abrir la selección de centro de costo.');
+                        return;
+                    }
+                    window.RequisicionCentrocostoArbolModal.abrir({
+                        centrosCosto: data.centros_costo || [],
+                        texto: 'La requisición tiene renglones con distintos centros de costo de destino. Elija con cuál enviar al árbol de aprobación.',
+                        onConfirm: function (centrocostoId) {
+                            continuar(centrocostoId);
+                        }
+                    });
+                    return;
+                }
+                continuar(data && data.centrocosto_arbol_id ? data.centrocosto_arbol_id : null);
+            })
+            .fail(function (xhr) {
+                var msg = 'No se pudo verificar los centros de costo de la requisición.';
+                if (xhr.responseJSON && xhr.responseJSON.errores) {
+                    msg = xhr.responseJSON.errores;
+                }
+                alert(msg);
+            });
     }
 
     function initConfirmacionDesdeListado() {
@@ -63,7 +120,9 @@
             if (!window.confirm(msg)) {
                 return false;
             }
-            enviarConfirmacionRequisicion($form);
+            pedirCcSiCorresponde($form, function (centrocostoId) {
+                enviarConfirmacionRequisicion($form, centrocostoId);
+            });
             return false;
         });
     }
@@ -86,7 +145,9 @@
                 return false;
             }
             var $form = $('#form-requisicion-confirmar');
-            enviarConfirmacionRequisicion($form);
+            pedirCcSiCorresponde($form, function (centrocostoId) {
+                enviarConfirmacionRequisicion($form, centrocostoId);
+            });
             return false;
         });
     });

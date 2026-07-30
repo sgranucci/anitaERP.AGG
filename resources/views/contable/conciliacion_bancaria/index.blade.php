@@ -37,8 +37,8 @@
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Cruza el mayor analítico (subdiario + ctamov vía bridge Anita) contra movimientos Interbanking
-                        persistidos. La cuenta bancaria se vincula por el campo <strong>Cuenta Interbanking</strong> en cuentas de caja.
-                        Los emparejamientos quedan guardados para períodos posteriores.
+                        persistidos. La solapa <strong>Pendientes</strong> lista cheques propios (cpromae), como Contaduría;
+                        la carátula usa los de vencimiento en el mes. Los emparejamientos quedan guardados para períodos posteriores.
                     </p>
 
                     @include('includes.form-empresa-asignada', [
@@ -110,7 +110,7 @@
                             <table class="table table-sm table-bordered">
                                 <tbody>
                                     <tr><th>Saldo banco (extracto)</th><td class="text-right">{{ number_format($c['saldo_banco_extracto'] ?? 0, 2, ',', '.') }}</td></tr>
-                                    <tr><th>Pendientes contables</th><td class="text-right">{{ number_format($c['cheques_no_acreditados'] ?? 0, 2, ',', '.') }}</td></tr>
+                                    <tr><th>Cheques no acreditados</th><td class="text-right">{{ number_format($c['cheques_no_acreditados'] ?? 0, 2, ',', '.') }}</td></tr>
                                     <tr><th>Pendientes banco</th><td class="text-right">{{ number_format($c['movimientos_pendientes_banco'] ?? 0, 2, ',', '.') }}</td></tr>
                                     <tr><th>Saldo banco ajustado</th><td class="text-right">{{ number_format($c['saldo_banco_ajustado'] ?? 0, 2, ',', '.') }}</td></tr>
                                     <tr><th>Saldo contable</th><td class="text-right">{{ number_format($c['saldo_contable'] ?? 0, 2, ',', '.') }}</td></tr>
@@ -123,7 +123,13 @@
                         </div>
                         <div class="col-md-6">
                             <p><strong>Pares conciliados en esta corrida:</strong> {{ count($resultado['pares_nuevos'] ?? []) }}</p>
-                            <p><strong>Pendientes contables (solapa Pendientes):</strong> {{ count($resultado['pendientes_contables'] ?? []) }}</p>
+                            <p><strong>Pendientes cheques (cpromae):</strong> {{ count($resultado['pendientes_cheques_cpromae'] ?? []) }}
+                                <span class="text-muted small">(fuente: {{ $resultado['pendientes_cheques_fuente'] ?? '—' }})</span>
+                            </p>
+                            <p><strong>En carátula (F.Dev del mes):</strong> {{ count($resultado['pendientes_cheques_caratula'] ?? []) }}
+                                · {{ number_format($resultado['suma_pendientes_cheques_caratula'] ?? 0, 2, ',', '.') }}
+                            </p>
+                            <p><strong>Mayor sin match (otros):</strong> {{ count($resultado['pendientes_contables_otros'] ?? []) }}</p>
                             <p><strong>Pendientes banco:</strong> {{ count($resultado['pendientes_banco'] ?? []) }}</p>
                         </div>
                     </div>
@@ -131,21 +137,53 @@
                     @include('contable.conciliacion_bancaria.partials.panel_ia_anomalias', ['resultado' => $resultado])
 
                     <ul class="nav nav-tabs mt-3" role="tablist">
-                        <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tab-pendientes">Pendientes contables</a></li>
+                        <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tab-pendientes">Pendientes (cheques)</a></li>
+                        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-mayor">Mayor sin match</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-saldo-banco">Saldo banco (codificado)</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-banco-pend">Pendientes banco</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-gastos">Gastos bancarios</a></li>
                     </ul>
                     <div class="tab-content border border-top-0 p-2">
                         <div class="tab-pane active" id="tab-pendientes">
+                            <p class="text-muted small mb-2">
+                                Solapa Contaduría: cheques propios (cpromae). La carátula toma los de F.Dev en el mes
+                                (marcados). Sin semilla Excel usa el último snapshot persistido de la cuenta.
+                            </p>
                             <table class="table table-sm table-striped" id="tabla-paginada">
+                                <thead style="background:#85C1E9;color:#17202A">
+                                    <tr>
+                                        <th>Tip</th><th>Número</th><th>F.Mov.</th><th>F.Dev.</th><th>F.Entr.</th>
+                                        <th>Detalle</th><th class="text-right">Créditos</th><th>Carátula</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse ($resultado['pendientes_cheques_cpromae'] ?? [] as $ch)
+                                        <tr class="{{ ! empty($ch['incluye_caratula']) ? 'table-warning' : '' }}">
+                                            <td>{{ $ch['tip'] ?? 'CHP' }}</td>
+                                            <td>{{ $ch['numero_cheque'] ?? '' }}</td>
+                                            <td>{{ ! empty($ch['fecha_emision']) ? \Carbon\Carbon::parse($ch['fecha_emision'])->format('d/m/Y') : '' }}</td>
+                                            <td>{{ ! empty($ch['fecha_cheque']) ? \Carbon\Carbon::parse($ch['fecha_cheque'])->format('d/m/Y') : '' }}</td>
+                                            <td>{{ ! empty($ch['fecha_entrega']) ? \Carbon\Carbon::parse($ch['fecha_entrega'])->format('d/m/Y') : '' }}</td>
+                                            <td>{{ $ch['entregado_a'] ?? '' }}</td>
+                                            <td class="text-right">{{ number_format(abs((float) ($ch['importe'] ?? 0)), 2, ',', '.') }}</td>
+                                            <td>{{ ! empty($ch['incluye_caratula']) ? 'Sí' : '' }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr><td colspan="8" class="text-muted">Sin pendientes de cheques. Ejecutá con semilla Excel Contaduría o un snapshot previo.</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="tab-pane" id="tab-mayor">
+                            <p class="text-muted small mb-2">Movimientos del mayor sin emparejar con Interbanking (no definen la carátula de cheques).</p>
+                            <table class="table table-sm table-striped">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr>
                                         <th>F.Mov.</th><th>Tip</th><th>Asiento</th><th>Detalle</th><th>Débitos</th><th>Créditos</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @forelse ($resultado['pendientes_contables'] ?? [] as $mov)
+                                    @forelse (array_slice($resultado['pendientes_contables'] ?? [], 0, 200) as $mov)
                                         @php $imp = ($mov['debe'] ?? 0) - ($mov['haber'] ?? 0); @endphp
                                         <tr>
                                             <td>{{ $mov['fecha_fmt'] ?? '' }}</td>
@@ -156,10 +194,13 @@
                                             <td class="text-right">{{ $imp < 0 ? number_format(abs($imp), 2, ',', '.') : '' }}</td>
                                         </tr>
                                     @empty
-                                        <tr><td colspan="6" class="text-muted">Sin pendientes contables.</td></tr>
+                                        <tr><td colspan="6" class="text-muted">Sin pendientes de mayor.</td></tr>
                                     @endforelse
                                 </tbody>
                             </table>
+                            @if (count($resultado['pendientes_contables'] ?? []) > 200)
+                                <p class="text-muted small">Mostrando 200 de {{ count($resultado['pendientes_contables']) }} — exporte Excel para el listado completo.</p>
+                            @endif
                         </div>
                         <div class="tab-pane" id="tab-saldo-banco">
                             <p class="text-muted small">

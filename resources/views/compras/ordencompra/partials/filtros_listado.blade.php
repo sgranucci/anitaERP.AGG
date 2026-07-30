@@ -8,11 +8,19 @@
     foreach (OrdencompraListadoFiltros::CAMPOS as $key => $meta) {
         $operadoresJson[$key] = OrdencompraListadoFiltros::operadoresParaCampo($key);
     }
-    $tieneCriteriosPanel = OrdencompraListadoFiltros::tieneCriteriosAplicados($f);
-    $limpiarUrlPanel = $limpiarUrl ?? route('consultar_ordencompra');
+    $tieneCriteriosPanel = OrdencompraListadoFiltros::tieneCriteriosTexto($f);
+    $limpiarUrlPanel = $limpiarUrl ?? route('consultar_ordencompra', OrdencompraListadoFiltros::paraQueryStringEmpresa($f));
+    $fScope = $f['empresa_scope'] ?? 'una';
+    $fEmp = $f['empresa_id'] ?? null;
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-ordencompra" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    {{-- Persistencia del filtro externo de empresa al buscar por texto o aplicar el panel --}}
+    @if ($fScope === 'todas')
+        <input type="hidden" name="empresa_todas" value="1">
+    @elseif (! empty($fEmp))
+        <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">

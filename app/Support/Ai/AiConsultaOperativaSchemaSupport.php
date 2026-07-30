@@ -14,7 +14,7 @@ final class AiConsultaOperativaSchemaSupport
     public const MAX_LINEAS_EXPORT = 500;
 
     /** @var list<string> */
-    public const CAMPOS_MAYOR = ['fecha', 'asiento', 'debe', 'haber', 'detalle', 'contraparte', 'proveedor'];
+    public const CAMPOS_MAYOR = ['fecha', 'asiento', 'cuenta', 'centrocosto', 'debe', 'haber', 'detalle', 'contraparte', 'proveedor'];
 
     /** @var list<string> */
     public const CRUZAR_CON = ['proveedor'];
@@ -94,7 +94,7 @@ final class AiConsultaOperativaSchemaSupport
     {
         $out = [];
 
-        foreach (['sku', 'codigo', 'documento', 'numero', 'valor', 'cuenta_codigo', 'deposito_codigo', 'evento', 'descripcion'] as $k) {
+        foreach (['sku', 'codigo', 'documento', 'numero', 'valor', 'cuenta_codigo', 'deposito_codigo', 'empresa_codigo', 'numero_oc', 'evento', 'descripcion'] as $k) {
             if (isset($params[$k]) && is_scalar($params[$k])) {
                 $v = trim((string) $params[$k]);
                 if ($v !== '') {
@@ -105,6 +105,9 @@ final class AiConsultaOperativaSchemaSupport
 
         if (isset($params['empresa_id']) && is_numeric($params['empresa_id']) && (int) $params['empresa_id'] > 0) {
             $out['empresa_id'] = (int) $params['empresa_id'];
+        }
+        if (isset($params['ordencompra_id']) && is_numeric($params['ordencompra_id']) && (int) $params['ordencompra_id'] > 0) {
+            $out['ordencompra_id'] = (int) $params['ordencompra_id'];
         }
         if (isset($params['deposito_id']) && is_numeric($params['deposito_id']) && (int) $params['deposito_id'] > 0) {
             $out['deposito_id'] = (int) $params['deposito_id'];
@@ -202,8 +205,8 @@ final class AiConsultaOperativaSchemaSupport
             AiConsultaOperativaSupport::INTENT_ASIENTO,
             AiConsultaOperativaSupport::INTENT_COMPROBANTE_PROVEEDOR,
             AiConsultaOperativaSupport::INTENT_FACTURA_VENTA => self::aliasValor($out, 'numero'),
-            AiConsultaOperativaSupport::INTENT_SALDO_CUENTA,
-            AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA => self::aliasValor($out, 'cuenta_codigo'),
+            AiConsultaOperativaSupport::INTENT_SALDO_CUENTA => self::aliasValor($out, 'cuenta_codigo'),
+            AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA => self::aliasMayorCuenta($out),
             AiConsultaOperativaSupport::INTENT_PLAN_AGENTE => $out,
             AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR => self::aliasValor($out, 'codigo'),
             default => $out,
@@ -221,6 +224,28 @@ final class AiConsultaOperativaSchemaSupport
         }
         if (! empty($out[$clave]) && empty($out['valor'])) {
             $out['valor'] = $out[$clave];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Mayor admite cuenta y/o OC/CC: no promover valor→cuenta si ya hay OC/CC.
+     *
+     * @param  array<string,mixed>  $out
+     * @return array<string,mixed>
+     */
+    private static function aliasMayorCuenta(array $out): array
+    {
+        $tieneFiltroSinCuenta = ! empty($out['numero_oc'])
+            || ! empty($out['ordencompra_id'])
+            || ! empty($out['centrocosto_id'])
+            || ! empty($out['centrocosto_codigo']);
+        if (empty($out['cuenta_codigo']) && ! empty($out['valor']) && ! $tieneFiltroSinCuenta) {
+            $out['cuenta_codigo'] = $out['valor'];
+        }
+        if (! empty($out['cuenta_codigo']) && empty($out['valor'])) {
+            $out['valor'] = $out['cuenta_codigo'];
         }
 
         return $out;

@@ -3,6 +3,7 @@
 namespace App\Repositories\Sala;
 
 use App\Models\Sala\RequisicionSala;
+use App\Support\Sala\RequisicionSalaNumeracionSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class RequisicionSalaRepository implements RequisicionSalaRepositoryInterface
@@ -19,7 +20,7 @@ class RequisicionSalaRepository implements RequisicionSalaRepositoryInterface
     public function create(array $data)
     {
         $data = self::limpiaPayloadCabecera($data);
-        $data['numerorequisicion'] = self::ultimaRequisicion($data['empresa_id']);
+        $data['numerorequisicion'] = RequisicionSalaNumeracionSupport::asignarSiguienteNumero();
 
         return $this->model->create($data);
     }
@@ -67,15 +68,5 @@ class RequisicionSalaRepository implements RequisicionSalaRepositoryInterface
         );
 
         return $data;
-    }
-
-    private function ultimaRequisicion(int $empresa_id): int
-    {
-        $ultimo = $this->model->select('numerorequisicion')
-            ->where('empresa_id', $empresa_id)
-            ->orderBy('numerorequisicion', 'desc')
-            ->first();
-
-        return $ultimo ? ((int) $ultimo->numerorequisicion + 1) : 1;
     }
 }

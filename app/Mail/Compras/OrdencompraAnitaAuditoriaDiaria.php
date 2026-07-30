@@ -1,0 +1,38 @@
+<?php
+
+namespace App\Mail\Compras;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Mail\Mailable;
+use Illuminate\Queue\SerializesModels;
+
+class OrdencompraAnitaAuditoriaDiaria extends Mailable
+{
+    use Queueable, SerializesModels;
+
+    /**
+     * @param  array<string, mixed>  $informe
+     */
+    public function __construct(
+        public array $informe,
+    ) {
+    }
+
+    public function build(): self
+    {
+        $fecha = (string) ($this->informe['fecha_calendario'] ?? '');
+        $discrepancias = count($this->informe['discrepancias'] ?? []);
+        $errores = count($this->informe['errores'] ?? []);
+        $estado = ($discrepancias + $errores) > 0 ? 'ALERTA' : 'OK';
+
+        $asunto = sprintf(
+            '[%s] Órdenes de compra Anita — auditoría %s — %s',
+            config('app.name', 'anitaERP'),
+            $fecha,
+            $estado,
+        );
+
+        return $this->subject($asunto)
+            ->view('mails.compras.ordencompra_anita_auditoria_diaria');
+    }
+}

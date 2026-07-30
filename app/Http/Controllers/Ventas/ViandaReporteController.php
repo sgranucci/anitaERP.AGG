@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Exports\Ventas\ViandaConsumoColumnasExport;
 use App\Exports\Ventas\ViandaConsumoListadoExport;
 use App\Http\Controllers\Controller;
 use App\Models\Contable\Centrocosto;
 use App\Models\Ventas\ViandaConsumo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Ventas\Vianda\ViandaConsumoColumnasReporteService;
+use App\Support\Ventas\GastronomiaDescuentoReportePdfSupport;
+use App\Support\Ventas\GastronomiaDescuentoReporteTipoArticuloSupport;
 use App\Support\Ventas\Vianda\ViandaConsumoListadoFiltros;
 use App\Support\Ventas\Vianda\ViandaEmpresaSupport;
 use Illuminate\Http\Request;
@@ -14,8 +18,11 @@ use Maatwebsite\Excel\Excel;
 
 class ViandaReporteController extends Controller
 {
+    private const PER_PAGE_COLUMNAS = 15;
+
     public function __construct(
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly ViandaConsumoColumnasReporteService $columnasReporteService,
     ) {
         $this->middleware('auth');
     }
@@ -27,22 +34,70 @@ class ViandaReporteController extends Controller
         $filtros = ViandaConsumoListadoFiltros::resolverDesdeRequest($request);
         $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
 
-        $filas = $this->baseQuery($filtros)->paginate(15);
-
         $filtrosQuery = ViandaConsumoListadoFiltros::paraQueryString($filtros);
-        $filas->appends($filtrosQuery);
+        if ($request->boolean('consultar') || $request->hasAny(['fecha_desde', 'fecha_hasta', 'empresa_id', 'centrocosto_id', 'texto', 'estado', 'orden_por', 'presentacion_columnas'])) {
+            $filtrosQuery['consultar'] = 1;
+        }
 
-        $resumenCentroCosto = $this->resumenPorCentroCosto($filtros);
-        $totales = $this->totalesGenerales($filtros);
+        $filas = null;
+        $filasColumnasPag = null;
+        $vistaColumnasPag = null;
+        $resultadoColumnas = null;
+        $resumenCentroCosto = [];
+        $totales = [
+            'consumos' => 0,
+            'items' => 0,
+            'costo' => 0.0,
+            'venta' => 0.0,
+        ];
+        $usaColumnas = ! empty($filtros['presentacion_columnas']);
+
+        if ($usaColumnas) {
+            ini_set('memory_limit', '-1');
+            ini_set('max_execution_time', '0');
+
+            $resultadoColumnas = $this->columnasReporteService->generar($filtros);
+            $totales = [
+                'consumos' => 0,
+                'items' => (int) round((float) ($resultadoColumnas['gran_total_unidades'] ?? 0)),
+                'costo' => (float) ($resultadoColumnas['gran_total_costo'] ?? 0),
+                'venta' => (float) ($resultadoColumnas['gran_total_venta'] ?? 0),
+            ];
+
+            if (ViandaConsumoListadoFiltros::debeUsarVistaColumnas($filtros, $resultadoColumnas)) {
+                $filasAll = $resultadoColumnas['vista_columnas']['filas'] ?? [];
+                $perPage = max(10, min(100, (int) $request->input('per_page', self::PER_PAGE_COLUMNAS)));
+                $maxPage = max(1, (int) ceil(max(1, count($filasAll)) / $perPage));
+                $page = max(1, min($maxPage, (int) $request->input('page', 1)));
+                $filasColumnasPag = $this->columnasReporteService->paginarItems($filasAll, $perPage, $page);
+                $vistaColumnasPag = $resultadoColumnas['vista_columnas'];
+                $agrupadoPagina = GastronomiaDescuentoReporteTipoArticuloSupport::agruparFilas(
+                    array_values($filasColumnasPag->items()),
+                );
+                $vistaColumnasPag['filas'] = $agrupadoPagina['filas'];
+                $vistaColumnasPag['grupos'] = $agrupadoPagina['grupos'];
+                $filasColumnasPag->appends($filtrosQuery);
+            }
+        } else {
+            $filas = $this->baseQuery($filtros)->paginate(15);
+            $filas->appends($filtrosQuery);
+            $resumenCentroCosto = $this->resumenPorCentroCosto($filtros);
+            $totales = $this->totalesGenerales($filtros);
+        }
 
         return view('ventas.vianda.reporte.index', [
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'filas' => $filas,
+            'filas_columnas_pag' => $filasColumnasPag,
+            'vista_columnas_pag' => $vistaColumnasPag,
+            'resultado_columnas' => $resultadoColumnas,
             'resumen_centrocosto' => $resumenCentroCosto,
             'totales' => $totales,
+            'usa_columnas' => $usaColumnas,
             'empresa_query' => ViandaEmpresaSupport::empresasSeleccionables(),
             'centrocosto_query' => $this->centrocostoQuery(),
+            'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
         ]);
     }
 
@@ -57,6 +112,32 @@ class ViandaReporteController extends Controller
         $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
 
         $formato = strtoupper($formato);
+        $usaColumnas = ! empty($filtros['presentacion_columnas']);
+
+        if ($usaColumnas) {
+            $resultado = $this->columnasReporteService->generar($filtros);
+            $subtitulo = ViandaConsumoListadoFiltros::subtitulo(
+                $filtros,
+                $this->nombreEmpresa($filtros),
+                $this->nombreCentrocosto($filtros),
+            );
+            $empresaNombre = $this->nombreEmpresa($filtros) ?? '';
+
+            switch ($formato) {
+                case 'PDF':
+                    return $this->exportarPdfColumnas($filtros, $resultado, $subtitulo);
+                case 'EXCEL':
+                    return (new ViandaConsumoColumnasExport())
+                        ->parametros($resultado, 'Reporte de viandas', $subtitulo, $empresaNombre)
+                        ->download('viandas_columnas.xlsx');
+                case 'CSV':
+                    return (new ViandaConsumoColumnasExport())
+                        ->parametros($resultado, 'Reporte de viandas', $subtitulo, $empresaNombre)
+                        ->download('viandas_columnas.csv', Excel::CSV);
+            }
+
+            return redirect()->route('consultar_reporte_vianda_gastronomia', ViandaConsumoListadoFiltros::paraQueryString($filtros));
+        }
 
         switch ($formato) {
             case 'PDF':
@@ -92,15 +173,39 @@ class ViandaReporteController extends Controller
             ),
         ])->render();
 
+        return $this->descargarPdfDom($view, 'listado_viandas_');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>  $resultado
+     */
+    private function exportarPdfColumnas(array $filtros, array $resultado, string $subtitulo)
+    {
+        $view = \View::make('ventas.vianda.reporte.listado_columnas', [
+            'resultado' => $resultado,
+            'filtros' => $filtros,
+            'subtitulo' => $subtitulo,
+            'particiones' => GastronomiaDescuentoReportePdfSupport::particionesVistaColumnas(
+                $resultado['vista_columnas'] ?? null,
+            ),
+            'empresa_nombre' => $this->nombreEmpresa($filtros),
+        ])->render();
+
+        return $this->descargarPdfDom($view, 'listado_viandas_columnas_');
+    }
+
+    private function descargarPdfDom(string $html, string $prefijo)
+    {
         $path = storage_path('pdf/listados');
         if (! is_dir($path)) {
             mkdir($path, 0775, true);
         }
 
-        $nombrePdf = 'listado_viandas_'.date('Ymd_His');
+        $nombrePdf = $prefijo.date('Ymd_His');
         $pdf = \App::make('dompdf.wrapper');
         $pdf->setPaper('legal', 'landscape');
-        $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombrePdf.'.pdf');
+        $pdf->loadHTML($html, 'UTF-8')->save($path.'/'.$nombrePdf.'.pdf');
 
         return response()->download($path.'/'.$nombrePdf.'.pdf');
     }

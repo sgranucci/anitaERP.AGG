@@ -436,6 +436,88 @@ class RecepcionProveedorAnitaBridgeService
     }
 
     /**
+     * Inserta aplicped faltante para una recepción CONFIRMADA vinculada a OC, sin tocar recepmov/stkmov.
+     *
+     * @return array{recepcion_id: int, com: int, acciones: list<string>, problemas: list<string>}
+     */
+    public function repararAplicpedSiFalta(Recepcion_Proveedor $recepcion): array
+    {
+        $recepcion->loadMissing([
+            'proveedores',
+            'empresas',
+            'ordencompras.ordencompra_articulos',
+            'recepcion_proveedor_articulos.articulos',
+            'recepcion_proveedor_articulos.ordencompra_articulos',
+        ]);
+
+        $result = [
+            'recepcion_id' => (int) $recepcion->id,
+            'com' => (int) $recepcion->numerorecepcion,
+            'acciones' => [],
+            'problemas' => [],
+        ];
+
+        if ((int) $recepcion->numerorecepcion <= 0) {
+            $result['problemas'][] = 'Recepción sin numerorecepcion.';
+
+            return $result;
+        }
+
+        if ((int) ($recepcion->ordencompra_id ?? 0) <= 0 || $recepcion->ordencompras === null) {
+            $result['problemas'][] = 'Recepción sin OC vinculada.';
+
+            return $result;
+        }
+
+        if ($this->cabeceraRecepmaeVinculadaDocumento($recepcion) === null) {
+            $result['problemas'][] = 'No hay recepmae Anita vinculada a la recepción.';
+
+            return $result;
+        }
+
+        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+        RecepcionProveedorAnitaClaveSupport::asignarEnRecepcion($recepcion, $clave);
+        $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+
+        if ($this->existeAplicped($codigoProveedor, $clave)) {
+            $result['acciones'][] = 'aplicped ya existía';
+
+            return $result;
+        }
+
+        $ordenesAnita = RecepcionProveedorAnitaOrdenLineaSupport::prepararOrdenesAntesDeSincronizarAnita(
+            $recepcion,
+            $this->ordencompraAnitaSync
+        );
+        $this->grabarAplicped($recepcion, $codigoProveedor, $clave, $ordenesAnita);
+        $result['acciones'][] = 'insertó aplicped';
+
+        if (! $this->existeAplicped($codigoProveedor, $clave)) {
+            $result['problemas'][] = 'No se pudo verificar aplicped tras el insert.';
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $claveCom
+     */
+    public function existeAplicped(string $codigoProveedor, array $claveCom): bool
+    {
+        $api = new ApiAnita;
+        $raw = $api->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
+            'tabla' => config('recepcion_proveedor.anita.tablas.aplicacion_oc'),
+            'campos' => 'aplp_nro,aplp_ref_nro,aplp_orden_com',
+            'whereArmado' => RecepcionProveedorAnitaWhereSupport::aplicpedCom($codigoProveedor, $claveCom),
+            'limit' => 'FIRST 1',
+        ], 'recepcion aplicped existe');
+
+        return ApiAnita::primeraFilaLista((string) $raw) !== null;
+    }
+
+    /**
      * Re-graba recepmov/aplicped/stkmov sin tocar recepmae (cabecera REF u otra ya vinculada).
      */
     public function repararDetallePreservandoCabecera(Recepcion_Proveedor $recepcion): void

@@ -55,6 +55,16 @@ final class ConciliacionBancariaMatcher
             $usadosBanco,
         );
 
+        // Pasada 3: importe único en ambos lados (candidatos IA "cercanos") con ventana ampliada.
+        self::emparejarPorImporteUnico(
+            $contablesLibres,
+            $bancoLibre,
+            $tolerancia,
+            $pares,
+            $usadosCont,
+            $usadosBanco,
+        );
+
         $contPend = [];
         foreach ($contablesLibres as $ic => $c) {
             if (! isset($usadosCont[$ic])) {
@@ -243,6 +253,85 @@ final class ConciliacionBancariaMatcher
                 $usadosCont[$ic] = true;
                 $usadosBanco[$mejorIb] = true;
             }
+        }
+    }
+
+    /**
+     * Empareja cuando el importe firmado aparece una sola vez en contable y en banco
+     * (dentro de la ventana de días configurada). Evita dejar candidatos IA sin persistir.
+     *
+     * @param  list<array<string, mixed>>  $contablesLibres
+     * @param  list<array<string, mixed>>  $bancoLibre
+     * @param  list<array{contable: array<string,mixed>, banco: array<string,mixed>, score: int}>  $pares
+     * @param  array<int, true>  $usadosCont
+     * @param  array<int, true>  $usadosBanco
+     */
+    private static function emparejarPorImporteUnico(
+        array $contablesLibres,
+        array $bancoLibre,
+        float $tolerancia,
+        array &$pares,
+        array &$usadosCont,
+        array &$usadosBanco,
+    ): void {
+        $diasMax = max(
+            (int) config('conciliacion_bancaria.dias_tolerancia_fecha_pago', 7),
+            (int) config('conciliacion_bancaria.dias_tolerancia_fecha_unico', 15),
+        );
+
+        $idxContPorImporte = [];
+        foreach ($contablesLibres as $ic => $c) {
+            if (isset($usadosCont[$ic])) {
+                continue;
+            }
+            $imp = ConciliacionBancariaHashSupport::importeFirmadoContable($c);
+            if (abs($imp) < 0.005) {
+                continue;
+            }
+            $key = number_format($imp, 2, '.', '');
+            $idxContPorImporte[$key][] = $ic;
+        }
+
+        $idxBancoPorImporte = [];
+        foreach ($bancoLibre as $ib => $b) {
+            if (isset($usadosBanco[$ib])) {
+                continue;
+            }
+            $imp = ConciliacionBancariaHashSupport::importeFirmadoBanco($b);
+            if (abs($imp) < 0.005) {
+                continue;
+            }
+            $key = number_format($imp, 2, '.', '');
+            $idxBancoPorImporte[$key][] = $ib;
+        }
+
+        foreach ($idxContPorImporte as $key => $ics) {
+            if (count($ics) !== 1) {
+                continue;
+            }
+            $ibs = $idxBancoPorImporte[$key] ?? [];
+            if (count($ibs) !== 1) {
+                // También probar signo invertido no aplica: firmados ya alineados debe-haber vs D/C.
+                continue;
+            }
+            $ic = $ics[0];
+            $ib = $ibs[0];
+            if (isset($usadosCont[$ic]) || isset($usadosBanco[$ib])) {
+                continue;
+            }
+            $c = $contablesLibres[$ic];
+            $b = $bancoLibre[$ib];
+            if (! self::fechasCompatibles($c, $b, $diasMax)) {
+                continue;
+            }
+            $score = 35 + ConciliacionBancariaReferenciaSupport::puntajeReferencia($c, $b);
+            $pares[] = [
+                'contable' => $c,
+                'banco' => $b,
+                'score' => $score,
+            ];
+            $usadosCont[$ic] = true;
+            $usadosBanco[$ib] = true;
         }
     }
 

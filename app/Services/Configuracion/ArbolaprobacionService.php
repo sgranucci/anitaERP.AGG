@@ -1690,7 +1690,7 @@ class ArbolaprobacionService
      * @param  list<int>  $idsDistintos
      * @return list<array{id: int, codigo: string, nombre: string, etiqueta: string}>
      */
-    private function armarListadoCentrosCostoDestinoArbol(array $idsDistintos): array
+    public function listadoCentrosCostoDestinoArbol(array $idsDistintos): array
     {
         if ($idsDistintos === []) {
             return [];
@@ -1712,6 +1712,15 @@ class ArbolaprobacionService
         }
 
         return $listado;
+    }
+
+    /**
+     * @param  list<int>  $idsDistintos
+     * @return list<array{id: int, codigo: string, nombre: string, etiqueta: string}>
+     */
+    private function armarListadoCentrosCostoDestinoArbol(array $idsDistintos): array
+    {
+        return $this->listadoCentrosCostoDestinoArbol($idsDistintos);
     }
 
     /**
@@ -1908,6 +1917,11 @@ class ArbolaprobacionService
             if ($req->estado !== $pendiente) {
                 return null;
             }
+            $idsDistintos = $this->centrosCostoDestinoDistintosIdsDesdeModelo($req);
+            if (count($idsDistintos) > 1 && (int) ($req->centrocostodestino_arbol_id ?? 0) <= 0) {
+                return 'La requisición tiene renglones con distintos centros de costo de destino. Al guardar deberá elegir con cuál continuar el árbol de aprobación.';
+            }
+
             try {
                 $this->validaRequisicionModeloContraArbol($req);
             } catch (\RuntimeException $e) {
@@ -1971,11 +1985,16 @@ class ArbolaprobacionService
         })->values();
     }
 
-    private function centroCostoParaArbolDesdeRequest(array $data): int
+    /**
+     * IDs de centros de costo de destino distintos en renglones válidos del request.
+     *
+     * @return list<int>
+     */
+    public function centrosCostoDestinoDistintosIdsDesdeRequest(array $data): array
     {
         $articulo_ids = $data['articulo_ids'] ?? [];
         if (! is_array($articulo_ids)) {
-            return (int) ($data['centrocosto_id'] ?? 0);
+            return [];
         }
         $headerCc = (int) ($data['centrocosto_id'] ?? 0);
         $n = count($articulo_ids);
@@ -1992,17 +2011,55 @@ class ArbolaprobacionService
             $dest = isset($data['centrocostodestino_ids'][$i]) && $data['centrocostodestino_ids'][$i] !== ''
                 ? (int) $data['centrocostodestino_ids'][$i]
                 : $headerCc;
-            $ids[] = $dest;
-        }
-        $unique = array_unique($ids);
-        if (count($unique) > 1) {
-            throw new \RuntimeException('Todos los renglones deben tener el mismo centro de costo de destino para el árbol de aprobación.');
-        }
-        if (count($unique) === 1) {
-            return (int) reset($unique);
+            if ($dest > 0) {
+                $ids[] = $dest;
+            }
         }
 
-        return $headerCc;
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * Resuelve el CC del circuito desde el request. Null si hay varios y falta selección.
+     *
+     * @param  list<int>  $idsDistintos
+     */
+    public function resolverCentroCostoArbolDesdeRequest(array $data, ?int $seleccionUsuario, array $idsDistintos): ?int
+    {
+        if ($seleccionUsuario !== null && $seleccionUsuario > 0) {
+            if ($idsDistintos !== [] && ! in_array($seleccionUsuario, $idsDistintos, true)) {
+                throw new \RuntimeException('El centro de costo de destino seleccionado no corresponde a los renglones de la requisición.');
+            }
+
+            return $seleccionUsuario;
+        }
+
+        $persistido = (int) ($data['centrocostodestino_arbol_id'] ?? 0);
+        if ($persistido > 0 && ($idsDistintos === [] || in_array($persistido, $idsDistintos, true))) {
+            return $persistido;
+        }
+
+        if (count($idsDistintos) === 0) {
+            return (int) ($data['centrocosto_id'] ?? 0);
+        }
+        if (count($idsDistintos) === 1) {
+            return (int) reset($idsDistintos);
+        }
+
+        return null;
+    }
+
+    private function centroCostoParaArbolDesdeRequest(array $data): int
+    {
+        $idsDistintos = $this->centrosCostoDestinoDistintosIdsDesdeRequest($data);
+        $seleccion = (int) ($data['centrocostodestino_arbol_id'] ?? 0);
+        $seleccion = $seleccion > 0 ? $seleccion : null;
+        $cc = $this->resolverCentroCostoArbolDesdeRequest($data, $seleccion, $idsDistintos);
+        if ($cc === null) {
+            throw new \RuntimeException('Todos los renglones deben tener el mismo centro de costo de destino para el árbol de aprobación.');
+        }
+
+        return $cc;
     }
 
     /**

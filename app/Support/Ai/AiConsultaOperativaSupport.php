@@ -8,7 +8,9 @@ use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
+use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Configuracion\Empresa;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Models\Ventas\Cliente;
@@ -20,6 +22,7 @@ use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepository;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Support\Compras\ComprasKpisOperativosSupport;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Stock\ArticuloSaldosDepositoSupport;
@@ -66,6 +69,18 @@ final class AiConsultaOperativaSupport
 
     public const INTENT_PEDIDO_CONSUMO_SECTOR = 'pedido_consumo_sector';
 
+    public const INTENT_COMPRAS_KPI_RESUMEN = 'compras_kpi_resumen';
+
+    public const INTENT_OC_PENDIENTES_FIRMA = 'oc_pendientes_firma';
+
+    public const INTENT_OC_VENCIDAS_SIN_RECEPCION = 'oc_vencidas_sin_recepcion';
+
+    public const INTENT_LEAD_TIME_OC_RECEPCION = 'lead_time_oc_recepcion';
+
+    public const INTENT_TOP_PROVEEDORES_MONTO = 'top_proveedores_monto';
+
+    public const INTENT_RQ_SIN_OC = 'rq_sin_oc';
+
     /** @return array<string, string> */
     public static function intentsEtiquetas(): array
     {
@@ -79,13 +94,19 @@ final class AiConsultaOperativaSupport
             self::INTENT_ORDENCOMPRA => 'Estado de orden de compra',
             self::INTENT_ARBOL_OC => 'Árbol de aprobación de OC',
             self::INTENT_SALDO_CUENTA => 'Saldo de cuenta contable',
-            self::INTENT_MAYOR_CUENTA => 'Mayor de cuenta contable',
+            self::INTENT_MAYOR_CUENTA => 'Mayor contable (cuenta / CC / OC / empresa / fechas)',
             self::INTENT_ASIENTO => 'Asiento contable',
             self::INTENT_COMPROBANTE_PROVEEDOR => 'Comprobante / factura de proveedor',
             self::INTENT_FACTURA_VENTA => 'Factura de venta',
             self::INTENT_PLAN_AGENTE => 'Plan agente (HITL ante desvío / deuda / firma)',
             self::INTENT_CONSULTAR_MANUAL => 'Manual / ayuda (RAG)',
             self::INTENT_PEDIDO_CONSUMO_SECTOR => 'Pedido por consumo (CC + depósito)',
+            self::INTENT_COMPRAS_KPI_RESUMEN => 'KPI / resumen operativo de Compras',
+            self::INTENT_OC_PENDIENTES_FIRMA => 'OC pendientes de firma',
+            self::INTENT_OC_VENCIDAS_SIN_RECEPCION => 'OC vencidas sin recepción',
+            self::INTENT_LEAD_TIME_OC_RECEPCION => 'Lead time OC → recepción',
+            self::INTENT_TOP_PROVEEDORES_MONTO => 'Top proveedores por monto',
+            self::INTENT_RQ_SIN_OC => 'Requisiciones con líneas sin OC',
         ];
     }
 
@@ -153,6 +174,15 @@ final class AiConsultaOperativaSupport
                 || can('crear-requisicion', false)
                 || can('listar-requisicion-sala', false)
                 || can('crear-requisicion-sala', false),
+            self::INTENT_COMPRAS_KPI_RESUMEN,
+            self::INTENT_OC_PENDIENTES_FIRMA,
+            self::INTENT_LEAD_TIME_OC_RECEPCION,
+            self::INTENT_TOP_PROVEEDORES_MONTO => can('listar-ordencompra', false)
+                || can('listar-proveedor', false)
+                || can('listar-comprobante-proveedor', false),
+            self::INTENT_OC_VENCIDAS_SIN_RECEPCION => can('listar-ordencompra', false)
+                || can('listar-recepcion-proveedor', false),
+            self::INTENT_RQ_SIN_OC => can('listar-requisicion', false) || can('listar-ordencompra', false),
             default => false,
         };
     }
@@ -202,6 +232,30 @@ final class AiConsultaOperativaSupport
             ),
             self::INTENT_CONSULTAR_MANUAL => AiManualRagSupport::consultar($params),
             self::INTENT_PEDIDO_CONSUMO_SECTOR => self::consultarPedidoConsumoSector($params),
+            self::INTENT_COMPRAS_KPI_RESUMEN => self::consultarComprasKpi(
+                self::INTENT_COMPRAS_KPI_RESUMEN,
+                fn () => ComprasKpisOperativosSupport::resumen($params)
+            ),
+            self::INTENT_OC_PENDIENTES_FIRMA => self::consultarComprasKpi(
+                self::INTENT_OC_PENDIENTES_FIRMA,
+                fn () => ComprasKpisOperativosSupport::ocPendientesFirma($params)
+            ),
+            self::INTENT_OC_VENCIDAS_SIN_RECEPCION => self::consultarComprasKpi(
+                self::INTENT_OC_VENCIDAS_SIN_RECEPCION,
+                fn () => ComprasKpisOperativosSupport::ocVencidasSinRecepcion($params)
+            ),
+            self::INTENT_LEAD_TIME_OC_RECEPCION => self::consultarComprasKpi(
+                self::INTENT_LEAD_TIME_OC_RECEPCION,
+                fn () => ComprasKpisOperativosSupport::leadTimeOcRecepcion($params)
+            ),
+            self::INTENT_TOP_PROVEEDORES_MONTO => self::consultarComprasKpi(
+                self::INTENT_TOP_PROVEEDORES_MONTO,
+                fn () => ComprasKpisOperativosSupport::topProveedoresMonto($params)
+            ),
+            self::INTENT_RQ_SIN_OC => self::consultarComprasKpi(
+                self::INTENT_RQ_SIN_OC,
+                fn () => ComprasKpisOperativosSupport::rqSinOc($params)
+            ),
             default => self::fallo($intent, 'Intent no implementado.'),
         };
     }
@@ -1073,6 +1127,8 @@ final class AiConsultaOperativaSupport
     }
 
     /**
+     * Mayor ERP con filtros combinables: cuenta, centro de costo, empresa, fechas y/o OC.
+     *
      * @param  array<string,mixed>  $params
      * @return array<string,mixed>
      */
@@ -1082,20 +1138,57 @@ final class AiConsultaOperativaSupport
             return self::fallo(self::INTENT_MAYOR_CUENTA, 'Sin permiso para consultar el mayor.');
         }
 
-        $codigo = self::normalizarCodigoCuenta((string) ($params['cuenta_codigo'] ?? $params['codigo'] ?? $params['valor'] ?? ''));
-        if ($codigo === '') {
-            return self::fallo(self::INTENT_MAYOR_CUENTA, 'Indique el código de cuenta contable.');
+        $codigoCuentaRaw = trim((string) ($params['cuenta_codigo'] ?? ''));
+        if ($codigoCuentaRaw === '' && empty($params['numero_oc']) && empty($params['ordencompra_id'])
+            && empty($params['centrocosto_id']) && empty($params['centrocosto_codigo'])) {
+            // Compat: "valor"/"codigo" solo si no hay filtros OC/CC (evita tomar nro OC como cuenta)
+            $codigoCuentaRaw = trim((string) ($params['codigo'] ?? $params['valor'] ?? ''));
+        }
+        $codigo = self::normalizarCodigoCuenta($codigoCuentaRaw);
+
+        $cuenta = null;
+        if ($codigo !== '') {
+            $cuenta = Cuentacontable::query()->where('codigo', $codigo)->first()
+                ?? Cuentacontable::query()->where('codigo', (int) $codigo)->first();
+            if (! $cuenta) {
+                return self::fallo(self::INTENT_MAYOR_CUENTA, 'No se encontró la cuenta «'.$codigo.'».');
+            }
         }
 
-        $cuenta = Cuentacontable::query()->where('codigo', $codigo)->first()
-            ?? Cuentacontable::query()->where('codigo', (int) $codigo)->first();
-        if (! $cuenta) {
-            return self::fallo(self::INTENT_MAYOR_CUENTA, 'No se encontró la cuenta «'.$codigo.'».');
+        $cc = self::resolverCentrocostoMayor($params);
+        if (($params['centrocosto_id'] ?? null) || ($params['centrocosto_codigo'] ?? null)) {
+            if (! $cc) {
+                $ref = (string) ($params['centrocosto_codigo'] ?? $params['centrocosto_id'] ?? '');
+
+                return self::fallo(self::INTENT_MAYOR_CUENTA, 'No se encontró el centro de costo «'.$ref.'».');
+            }
         }
 
-        $empresaId = isset($params['empresa_id']) && (int) $params['empresa_id'] > 0
-            ? (int) $params['empresa_id']
-            : null;
+        $empresaId = self::resolverEmpresaIdMayor($params);
+        if (($params['empresa_id'] ?? null) || ($params['empresa_codigo'] ?? null)) {
+            if (! $empresaId) {
+                $ref = (string) ($params['empresa_codigo'] ?? $params['empresa_id'] ?? '');
+
+                return self::fallo(self::INTENT_MAYOR_CUENTA, 'No se encontró la empresa «'.$ref.'».');
+            }
+        }
+
+        $pidioOc = trim((string) ($params['numero_oc'] ?? '')) !== ''
+            || (int) ($params['ordencompra_id'] ?? 0) > 0;
+        $oc = self::resolverOrdencompraMayor($params);
+        if ($pidioOc && ! $oc) {
+            $ref = (string) ($params['numero_oc'] ?? $params['ordencompra_id'] ?? '');
+
+            return self::fallo(self::INTENT_MAYOR_CUENTA, 'No se encontró la OC «'.$ref.'».');
+        }
+
+        if (! $cuenta && ! $oc && ! $cc) {
+            return self::fallo(
+                self::INTENT_MAYOR_CUENTA,
+                'Indique al menos cuenta contable, centro de costo u orden de compra.'
+            );
+        }
+
         $fechaDesde = (string) ($params['fecha_desde'] ?? date('Y-m-01'));
         $fechaHasta = (string) ($params['fecha_hasta'] ?? date('Y-m-d'));
         $modoExport = ! empty($params['modo_export']);
@@ -1107,15 +1200,34 @@ final class AiConsultaOperativaSupport
         $max = max(1, min($tope, $max > 0 ? $max : $defaultMax));
         $excluir = is_array($params['campos_excluir'] ?? null) ? $params['campos_excluir'] : [];
         $cruzar = (string) ($params['cruzar_con'] ?? '');
+        $ordencompraId = $oc ? (int) $oc->id : 0;
 
         $base = Asiento_Movimiento::query()
-            ->where('cuentacontable_id', $cuenta->id)
             ->whereHas('asientos', function ($aq) use ($fechaDesde, $fechaHasta, $empresaId) {
                 $aq->whereBetween('fecha', [$fechaDesde, $fechaHasta]);
                 if ($empresaId) {
                     $aq->where('empresa_id', $empresaId);
                 }
             });
+        if ($cuenta) {
+            $base->where('cuentacontable_id', $cuenta->id);
+        }
+        if ($cc) {
+            $base->where('centrocosto_id', (int) $cc->id);
+        }
+        if ($ordencompraId > 0) {
+            $base->where(function ($q) use ($ordencompraId) {
+                $q->whereHas('asientos', fn ($aq) => $aq->where('ordencompra_id', $ordencompraId))
+                    ->orWhereHas(
+                        'asientos.comprobante_proveedores',
+                        fn ($cp) => $cp->where('ordencompra_id', $ordencompraId)
+                    )
+                    ->orWhereHas(
+                        'comprobante_proveedores',
+                        fn ($cp) => $cp->where('ordencompra_id', $ordencompraId)
+                    );
+            });
+        }
         if ($cruzar === 'proveedor') {
             $base->whereNotNull('comprobante_proveedor_id');
         }
@@ -1132,12 +1244,18 @@ final class AiConsultaOperativaSupport
         $debePeriodo = (float) ($totalesPeriodo->debe ?? 0);
         $haberPeriodo = (float) ($totalesPeriodo->haber ?? 0);
 
+        $with = [
+            'asientos:id,fecha,empresa_id,numeroasiento,ordencompra_id',
+            'centrocostos:id,codigo,nombre',
+            'comprobante_proveedores:id,proveedor_id,letra,sucursal,numerocomprobante,ordencompra_id',
+            'comprobante_proveedores.proveedores:id,codigo,nombre',
+        ];
+        if (! $cuenta) {
+            $with[] = 'cuentacontables:id,codigo,nombre';
+        }
+
         $movs = (clone $base)
-            ->with([
-                'asientos:id,fecha,empresa_id,numeroasiento',
-                'comprobante_proveedores:id,proveedor_id,letra,sucursal,numerocomprobante',
-                'comprobante_proveedores.proveedores:id,codigo,nombre',
-            ])
+            ->with($with)
             ->orderBy(
                 DB::raw('(select fecha from asiento where asiento.id = asiento_movimiento.asiento_id)')
             )
@@ -1145,12 +1263,20 @@ final class AiConsultaOperativaSupport
             ->limit($max)
             ->get();
 
+        $mostrarCuenta = ! $cuenta || ! in_array('cuenta', $excluir, true);
+        $mostrarCc = $cc !== null || ! in_array('centrocosto', $excluir, true);
         $columnas = [];
         if (! in_array('fecha', $excluir, true)) {
             $columnas[] = ['key' => 'fecha', 'label' => 'Fecha'];
         }
         if (! in_array('asiento', $excluir, true)) {
             $columnas[] = ['key' => 'asiento', 'label' => 'Asiento'];
+        }
+        if (! $cuenta && $mostrarCuenta) {
+            $columnas[] = ['key' => 'cuenta', 'label' => 'Cuenta'];
+        }
+        if ($mostrarCc && ($cc || $movs->contains(fn ($m) => (int) ($m->centrocosto_id ?? 0) > 0))) {
+            $columnas[] = ['key' => 'centrocosto', 'label' => 'CC'];
         }
         if (! in_array('debe', $excluir, true)) {
             $columnas[] = ['key' => 'debe', 'label' => 'Debe'];
@@ -1181,6 +1307,8 @@ final class AiConsultaOperativaSupport
                         ? date('d/m/Y', strtotime((string) $mov->asientos->fecha))
                         : '—',
                     'asiento' => (string) ($mov->asientos->numeroasiento ?? $mov->asiento_id ?? '—'),
+                    'cuenta' => trim(($mov->cuentacontables->codigo ?? '').' '.($mov->cuentacontables->nombre ?? '')) ?: '—',
+                    'centrocosto' => trim(($mov->centrocostos->codigo ?? '').' '.($mov->centrocostos->nombre ?? '')) ?: '—',
                     'debe' => $debe > 0 ? number_format($debe, 2, ',', '.') : '',
                     'haber' => $haber > 0 ? number_format($haber, 2, ',', '.') : '',
                     'detalle' => (string) ($mov->observacion ?? ''),
@@ -1191,16 +1319,29 @@ final class AiConsultaOperativaSupport
             $filas[] = $fila;
         }
 
-        $parrafos = [
-            'Mayor cuenta '.$cuenta->codigo.' — '.($cuenta->nombre ?? ''),
-            'Período: '.date('d/m/Y', strtotime($fechaDesde))
-                .' → '.date('d/m/Y', strtotime($fechaHasta)),
-        ];
+        $parrafos = [];
+        if ($cuenta) {
+            $parrafos[] = 'Mayor cuenta '.$cuenta->codigo.' — '.($cuenta->nombre ?? '');
+        } else {
+            $parrafos[] = 'Mayor (todas las cuentas del filtro)';
+        }
+        $parrafos[] = 'Período: '.date('d/m/Y', strtotime($fechaDesde))
+            .' → '.date('d/m/Y', strtotime($fechaHasta));
+        if ($empresaId) {
+            $empNombre = Empresa::query()->where('id', $empresaId)->value('nombre');
+            $parrafos[] = 'Empresa: '.($empNombre ?: '#'.$empresaId);
+        }
+        if ($cc) {
+            $parrafos[] = 'Centro de costo: '.$cc->codigo.' — '.($cc->nombre ?? '');
+        }
+        if ($oc) {
+            $parrafos[] = 'Orden de compra: '.($oc->numeroordencompra ?? $oc->id);
+        }
         if ($cruzar === 'proveedor') {
             $parrafos[] = 'Filtro: solo movimientos cruzados con comprobante de proveedor.';
         }
         if ($lineasPeriodo === 0) {
-            $parrafos[] = 'Sin movimientos en el período.';
+            $parrafos[] = 'Sin movimientos con esos filtros.';
         } else {
             $parrafos[] = 'Movimientos del período: '.$lineasPeriodo
                 .' — Debe '.number_format($debePeriodo, 2, ',', '.')
@@ -1223,8 +1364,13 @@ final class AiConsultaOperativaSupport
                 'filas' => $filas,
             ],
             'datos' => [
-                'cuentacontable_id' => (int) $cuenta->id,
-                'cuenta_codigo' => (string) $cuenta->codigo,
+                'cuentacontable_id' => $cuenta ? (int) $cuenta->id : null,
+                'cuenta_codigo' => $cuenta ? (string) $cuenta->codigo : null,
+                'centrocosto_id' => $cc ? (int) $cc->id : null,
+                'centrocosto_codigo' => $cc ? (string) $cc->codigo : null,
+                'empresa_id' => $empresaId,
+                'ordencompra_id' => $ordencompraId > 0 ? $ordencompraId : null,
+                'numero_oc' => $oc ? (string) ($oc->numeroordencompra ?? '') : null,
                 'fecha_desde' => $fechaDesde,
                 'fecha_hasta' => $fechaHasta,
                 'lineas_periodo' => $lineasPeriodo,
@@ -1235,6 +1381,62 @@ final class AiConsultaOperativaSupport
                 'haber' => $haberPagina,
             ],
         ];
+    }
+
+    /**
+     * @param  array<string,mixed>  $params
+     */
+    private static function resolverCentrocostoMayor(array $params): ?Centrocosto
+    {
+        $id = (int) ($params['centrocosto_id'] ?? 0);
+        if ($id > 0) {
+            return Centrocosto::query()->find($id);
+        }
+        $codigo = trim((string) ($params['centrocosto_codigo'] ?? ''));
+        if ($codigo === '') {
+            return null;
+        }
+
+        return Centrocosto::query()->where('codigo', $codigo)->first()
+            ?? Centrocosto::query()->where('codigo', (int) $codigo)->first();
+    }
+
+    /**
+     * @param  array<string,mixed>  $params
+     */
+    private static function resolverEmpresaIdMayor(array $params): ?int
+    {
+        $id = (int) ($params['empresa_id'] ?? 0);
+        if ($id > 0) {
+            return Empresa::query()->where('id', $id)->exists() ? $id : null;
+        }
+        $codigo = trim((string) ($params['empresa_codigo'] ?? ''));
+        if ($codigo === '') {
+            return null;
+        }
+        $emp = Empresa::query()->where('codigo', $codigo)->first()
+            ?? (ctype_digit($codigo) ? Empresa::query()->where('codigo', (int) $codigo)->first() : null)
+            ?? (ctype_digit($codigo) ? Empresa::query()->find((int) $codigo) : null);
+
+        return $emp ? (int) $emp->id : null;
+    }
+
+    /**
+     * @param  array<string,mixed>  $params
+     */
+    private static function resolverOrdencompraMayor(array $params): ?Ordencompra
+    {
+        $id = (int) ($params['ordencompra_id'] ?? 0);
+        if ($id > 0) {
+            return Ordencompra::query()->find($id);
+        }
+        $numero = trim((string) ($params['numero_oc'] ?? ''));
+        if ($numero === '') {
+            return null;
+        }
+
+        return Ordencompra::query()->where('numeroordencompra', $numero)->first()
+            ?? (ctype_digit($numero) ? Ordencompra::query()->find((int) $numero) : null);
     }
 
     private static function etiquetaProveedorMovimiento(Asiento_Movimiento $mov): string
@@ -1602,6 +1804,36 @@ final class AiConsultaOperativaSupport
             'tabla' => $resultado['tabla'] ?? null,
             'datos' => $resultado['datos'] ?? [],
         ];
+    }
+
+    /**
+     * @param  callable(): array<string,mixed>  $resolver
+     * @return array<string,mixed>
+     */
+    private static function consultarComprasKpi(string $intent, callable $resolver): array
+    {
+        if (! self::usuarioPuedeIntent($intent)) {
+            return self::fallo($intent, 'Sin permiso para KPIs / consultas de Compras.');
+        }
+
+        $resultado = $resolver();
+        if (! ($resultado['ok'] ?? false)) {
+            return self::fallo($intent, $resultado['error'] ?? 'No se pudo calcular el KPI.');
+        }
+
+        $out = [
+            'ok' => true,
+            'intent' => $intent,
+            'score' => 0.9,
+            'parrafos' => $resultado['parrafos'] ?? [],
+            'links' => $resultado['links'] ?? [],
+            'datos' => $resultado['datos'] ?? [],
+        ];
+        if (! empty($resultado['tabla'])) {
+            $out['tabla'] = $resultado['tabla'];
+        }
+
+        return $out;
     }
 
     private static function buscarComprobanteProveedor(string $valor, ?int $empresaId): ?Comprobante_Proveedor

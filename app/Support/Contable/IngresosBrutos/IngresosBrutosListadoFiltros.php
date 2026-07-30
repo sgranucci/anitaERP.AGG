@@ -37,11 +37,18 @@ final class IngresosBrutosListadoFiltros
         }
 
         $liquidacion = max(0, min(3, (int) $request->input('liquidacion', 1)));
-        // Acepta hidden YYYYMM o input month YYYY-MM (no depender solo del JS).
-        $periodoRaw = (string) $request->input('periodo', $request->input('periodo_mes', date('Ym')));
-        $periodo = preg_replace('/\D/', '', $periodoRaw) ?? '';
-        if (strlen($periodo) !== 6) {
-            $periodo = date('Ym');
+        // Preferir selects mes/año; aceptar también periodo (YYYYMM) o periodo_mes (YYYY-MM).
+        $anioSel = (int) $request->input('periodo_anio', 0);
+        $mesSel = preg_replace('/\D/', '', (string) $request->input('periodo_mes_num', '')) ?? '';
+        if ($anioSel >= 2000 && $anioSel <= 2100 && strlen($mesSel) >= 1 && strlen($mesSel) <= 2) {
+            $mesNum = max(1, min(12, (int) $mesSel));
+            $periodo = sprintf('%04d%02d', $anioSel, $mesNum);
+        } else {
+            $periodoRaw = (string) $request->input('periodo', $request->input('periodo_mes', date('Ym')));
+            $periodo = preg_replace('/\D/', '', $periodoRaw) ?? '';
+            if (strlen($periodo) !== 6) {
+                $periodo = date('Ym');
+            }
         }
 
         [$desde, $hasta] = self::rangoDesdeLiquidacion($periodo, $liquidacion);

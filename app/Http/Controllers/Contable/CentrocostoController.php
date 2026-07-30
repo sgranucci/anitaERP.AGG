@@ -194,6 +194,11 @@ class CentrocostoController extends Controller
             'listar-reporte-requisicion-compras',
             'crear-requisicion',
             'editar-requisicion',
+            'crear-transferencia-mercaderia',
+            'listar-transferencias-pendientes',
+            'crear-movimientos-de-stock',
+            'editar-movimientos-de-stock',
+            'listar-movimientos-de-stock',
         ] as $permiso) {
             if (can($permiso, false)) {
                 return true;

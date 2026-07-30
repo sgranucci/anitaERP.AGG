@@ -998,6 +998,17 @@ Route::get('contable/ingresos-brutos-config/{id}/editar', 'Contable\IngresosBrut
 Route::put('contable/ingresos-brutos-config/{id}', 'Contable\IngresosBrutosConfigController@actualizar')->name('actualizar_ingresos_brutos_config');
 Route::delete('contable/ingresos-brutos-config/{id}', 'Contable\IngresosBrutosConfigController@eliminar')->name('eliminar_ingresos_brutos_config');
 
+Route::get('contable/suss', 'Contable\SussReporteController@index')->name('suss');
+Route::get('contable/exportar-suss', 'Contable\SussReporteController@exportar')->name('exportar_suss');
+Route::get('contable/listar-suss/{formato?}', 'Contable\SussReporteController@listar')->name('listar_suss');
+
+Route::get('contable/suss-config', 'Contable\SussConfigController@index')->name('suss_config');
+Route::get('contable/suss-config/crear', 'Contable\SussConfigController@crear')->name('crear_suss_config');
+Route::post('contable/suss-config', 'Contable\SussConfigController@guardar')->name('guardar_suss_config');
+Route::get('contable/suss-config/{id}/editar', 'Contable\SussConfigController@editar')->name('editar_suss_config');
+Route::put('contable/suss-config/{id}', 'Contable\SussConfigController@actualizar')->name('actualizar_suss_config');
+Route::delete('contable/suss-config/{id}', 'Contable\SussConfigController@eliminar')->name('eliminar_suss_config');
+
 Route::get('contable/efe-mensual', 'Contable\EfeMensualController@index')->name('efe_mensual');
 Route::get('contable/listar-efe-mensual/{formato}', 'Contable\EfeMensualController@exportar')->name('listar_efe_mensual');
 
@@ -2412,10 +2423,33 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/flash/crear', 'Caja\Flash\FlashCajaController@crear')->name('crear_flash_caja');
     Route::post('caja/flash', 'Caja\Flash\FlashCajaController@guardar')->name('guardar_flash_caja');
     Route::post('caja/flash/api/calcular', 'Caja\Flash\FlashCajaController@apiCalcular')->name('flash_caja_api_calcular');
+    Route::get('caja/flash/api/desglose-wigos-excel', 'Caja\Flash\FlashCajaController@exportarDesgloseWigos')->name('flash_caja_desglose_wigos_excel');
     Route::get('caja/flash/{id}/editar', 'Caja\Flash\FlashCajaController@editar')->name('editar_flash_caja');
     Route::put('caja/flash/{id}', 'Caja\Flash\FlashCajaController@actualizar')->name('actualizar_flash_caja');
     Route::delete('caja/flash/{id}', 'Caja\Flash\FlashCajaController@eliminar')->name('eliminar_flash_caja');
     Route::get('caja/flash/{id}/reporte/{formato?}', 'Caja\Flash\FlashCajaController@reporte')->name('flash_caja_reporte');
+
+    Route::get('caja/apertura-gasto', 'Caja\AperturaGastoController@index')->name('apertura_gasto');
+    Route::get('caja/lista-apertura-gasto/{formato?}/{busqueda?}', 'Caja\AperturaGastoController@listar')->name('lista_apertura_gasto');
+    Route::get('caja/apertura-gasto/crear', 'Caja\AperturaGastoController@crear')->name('crear_apertura_gasto');
+    Route::post('caja/apertura-gasto', 'Caja\AperturaGastoController@guardar')->name('guardar_apertura_gasto');
+    Route::get('caja/apertura-gasto/replicar-cuentas/{empresa_id}/{cuentacontable_id}', 'Caja\AperturaGastoController@replicarCuentasPorEmpresa')
+        ->name('replicar_cuentas_apertura_gasto');
+    Route::get('caja/apertura-gasto/{id}/editar', 'Caja\AperturaGastoController@editar')->name('editar_apertura_gasto');
+    Route::put('caja/apertura-gasto/{id}', 'Caja\AperturaGastoController@actualizar')->name('actualizar_apertura_gasto');
+    Route::delete('caja/apertura-gasto/{id}', 'Caja\AperturaGastoController@eliminar')->name('eliminar_apertura_gasto');
+
+    Route::get('caja/rendicion-maquina', 'Caja\RendicionMaquinaController@index')->name('rendicion_maquina');
+    Route::get('caja/lista-rendicion-maquina/{formato?}/{busqueda?}', 'Caja\RendicionMaquinaController@listar')->name('lista_rendicion_maquina');
+    Route::get('caja/rendicion-maquina/crear', 'Caja\RendicionMaquinaController@crear')->name('crear_rendicion_maquina');
+    Route::get('caja/rendicion-maquina/{id}/imprimir', 'Caja\RendicionMaquinaController@imprimir')->name('imprimir_rendicion_maquina');
+    Route::get('caja/rendicion-maquina/{id}/editar', 'Caja\RendicionMaquinaController@editar')->name('editar_rendicion_maquina');
+    Route::post('caja/rendicion-maquina/api/calcular', 'Caja\RendicionMaquinaController@apiCalcular')->name('rendicion_maquina_api_calcular');
+    Route::post('caja/rendicion-maquina/api/guardar', 'Caja\RendicionMaquinaController@apiGuardar')->name('rendicion_maquina_api_guardar');
+    Route::post('caja/rendicion-maquina/api/traer-wigos', 'Caja\RendicionMaquinaController@apiTraerWigos')->name('rendicion_maquina_api_traer_wigos');
+    Route::post('caja/rendicion-maquina/api/lineas-empresa', 'Caja\RendicionMaquinaController@apiLineasEmpresa')->name('rendicion_maquina_api_lineas_empresa');
+    Route::match(['get', 'post'], 'caja/rendicion-maquina/api/ajustes', 'Caja\RendicionMaquinaController@apiAjustes')->name('rendicion_maquina_api_ajustes');
+    Route::delete('caja/rendicion-maquina/{id}', 'Caja\RendicionMaquinaController@eliminar')->name('eliminar_rendicion_maquina');
 
     Route::get('caja/bingo/concepto-rendicion', 'Caja\Bingo\BingoConceptoRendicionController@index')->name('bingo_concepto_rendicion');
     Route::get('caja/lista-bingo-concepto-rendicion/{formato?}/{busqueda?}', 'Caja\Bingo\BingoConceptoRendicionController@listar')->name('lista_bingo_concepto_rendicion');
@@ -2918,6 +2952,7 @@ Route::delete('compras/encuesta/{id}', 'Compras\EncuestaController@eliminar')->n
  */
 
 Route::post('compras/requisicion/{id}/confirmar', 'Compras\RequisicionController@confirmar')->name('confirmar_requisicion');
+Route::get('compras/requisicion/{id}/centros-costo-arbol', 'Compras\RequisicionController@previewCentrocostoArbol')->name('centros_costo_arbol_requisicion');
 Route::delete('compras/requisicion/{id}/provisorio', 'Compras\RequisicionController@eliminarProvisorio')->name('eliminar_requisicion_provisorio');
 Route::get('compras/requisicion', 'Compras\RequisicionController@index')->name('consultar_requisicion');
 Route::get('compras/requisicion-reporte', 'Compras\RequisicionReporteController@index')->name('reporte_requisicion_compras');
@@ -3669,6 +3704,8 @@ Route::get('solicitudpago/solicitudpago', 'Solicitudpago\SolicitudpagoController
 Route::get('solicitudpago/lista_solicitudpago/{formato?}/{busqueda?}', 'Solicitudpago\SolicitudpagoController@listar')->name('lista_solicitudpago');
 Route::get('solicitudpago/solicitudpago/crear', 'Solicitudpago\SolicitudpagoController@crear')->name('crear_solicitudpago');
 Route::post('solicitudpago/solicitudpago', 'Solicitudpago\SolicitudpagoController@guardar')->name('guardar_solicitudpago');
+Route::post('solicitudpago/solicitudpago/carga-masiva/preview', 'Solicitudpago\SolicitudpagoController@previewCargaMasiva')->name('preview_carga_masiva_solicitudpago');
+Route::post('solicitudpago/solicitudpago/carga-masiva/confirmar', 'Solicitudpago\SolicitudpagoController@confirmarCargaMasiva')->name('confirmar_carga_masiva_solicitudpago');
 Route::get('solicitudpago/solicitudpago/{id}/editar', 'Solicitudpago\SolicitudpagoController@editar')->name('editar_solicitudpago')->middleware('modo.consulta');
 Route::put('solicitudpago/solicitudpago/{id}', 'Solicitudpago\SolicitudpagoController@actualizar')->name('actualizar_solicitudpago')->middleware('modo.consulta');
 Route::get('solicitudpago/solicitudpago/{id}/familia-vinculos', 'Solicitudpago\SolicitudpagoController@familiaVinculos')->name('familia_vinculos_solicitudpago');

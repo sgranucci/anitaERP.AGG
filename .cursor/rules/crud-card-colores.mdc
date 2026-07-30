@@ -8,25 +8,27 @@ alwaysApply: false
 
 La **barra superior** de cada pantalla ABM usa la variante AdminLTE en el contenedor `card`, no clases sueltas en `card-header`.
 
-## Convención obligatoria
+Ver también `crud-ui-moderna.mdc` (UI completa de CRUD nuevos).
+
+## Convención obligatoria (módulos nuevos / migrados)
 
 | Pantalla | Clase en el contenedor | Color de barra |
 |----------|------------------------|----------------|
 | Listado / consultar (`index`, `consultar`) | `card card-info` | Celeste / info |
-| Alta (`crear`) | `card card-danger` | Rojo |
-| Modificación (`editar`) | `card card-danger` | Rojo (igual que crear) |
+| Alta (`crear`) | `card card-primary` | Azul primary |
+| Modificación (`editar`) | `card card-primary` | Azul primary (igual que crear) |
 
-Referencia: `resources/views/compras/condicionentrega/` y la mayoría de ABM en Compras / Configuración.
+Referencias: `caja/apertura_gasto`, `caja/flash`, `caja/cuentacaja` (index), `bingo/configuracion_puntoventa/editar`.
 
-## Prohibido en ABM estándar
+## Prohibido en ABM nuevo o migrado
 
-- `card card-primary` en `editar` (azul; no es el estándar del sistema).
+- `card card-danger` en `crear` / `editar` (legacy; solo procesos destructivos).
 - `card` sin variante en listados o formularios ABM.
 - Mezclar colores distintos entre `crear` y `editar` del mismo recurso.
 
 ## Pantallas operativas (no CRUD clásico)
 
-Pantallas de proceso (jornada, habilitación de turno, facturación POS) con una sola vista tipo listado: usar `card card-info` en el card principal.
+Proceso / workbench (rendición, jornada, habilitación): `card card-info` en el card principal; danger solo en bloques de cierre/anulación.
 
 ## Plantilla mínima
 
@@ -37,16 +39,17 @@ Pantallas de proceso (jornada, habilitación de turno, facturación POS) con una
 </div>
 
 {{-- crear.blade.php / editar.blade.php --}}
-<div class="card card-danger">
+<div class="card card-primary">
     <div class="card-header">...</div>
 </div>
 ```
 
-Botón «Volver al listado» en formularios: `btn btn-outline-info btn-sm`.
+Botón «Volver al listado»: `btn btn-outline-info btn-sm`.
 
 ## Comprobación rápida
 
 ```bash
-rg 'card card-primary' resources/views --glob '**/editar.blade.php'
-rg 'card card-primary' resources/views --glob '**/crear.blade.php'
+rg 'card card-danger' resources/views --glob '**/crear.blade.php'
+rg 'card card-danger' resources/views --glob '**/editar.blade.php'
+# En módulos nuevos no debe aparecer danger en crear/editar
 ```

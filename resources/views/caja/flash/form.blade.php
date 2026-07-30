@@ -24,9 +24,12 @@
                value="{{ old('fecha', optional($data->fecha)->format('Y-m-d')) }}"
                {{ $readonlyCalculo ? 'readonly' : '' }}>
     </div>
-    <div class="col-lg-3">
+    <div class="col-lg-6">
         <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="btn-flash-calcular">
             <i class="fa fa-calculator"></i> Calcular desde ERP/Wigos
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm mt-1 ml-1" id="btn-flash-desglose-wigos">
+            <i class="fa fa-list-alt"></i> Desglose Wigos
         </button>
     </div>
 </div>
@@ -38,6 +41,28 @@
     'titulo' => 'Calculando flash…',
     'subtitulo' => 'Consultando ERP, Wigos y Anita. Por favor espere. No cierre ni recargue la página.',
 ])
+
+<div class="modal fade" id="modal-flash-desglose-wigos" tabindex="-1" role="dialog" aria-labelledby="modal-flash-desglose-wigos-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-flash-desglose-wigos-titulo">Desglose Wigos — armado de totales</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="flash-desglose-wigos-body">
+                <p class="text-muted mb-0">Todavía no hay desglose. Use <strong>Calcular</strong> o este botón para consultarlo.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-success" id="btn-flash-desglose-excel">
+                    <i class="fa fa-file-excel-o"></i> Excel
+                </button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @if(isset($data->id))
 <div class="form-group row">

@@ -108,17 +108,18 @@ final class ConciliacionBancariaReferenciaSupport
      */
     public static function coincideVoucherEnTextoContable(array $contable, array $banco): bool
     {
-        $ref = trim((string) ($banco['voucher_number'] ?? ''));
-        if ($ref === '' || strlen($ref) < 5) {
+        $ref = self::normalizarNumero((string) ($banco['voucher_number'] ?? ''));
+        if ($ref === '' || $ref === '0' || strlen($ref) < 5) {
             return false;
         }
 
-        $texto = strtoupper(
-            (string) ($contable['descripcion'] ?? '').' '
-            .(string) ($contable['comprobante'] ?? '')
-        );
+        $textoDigitos = preg_replace(
+            '/\D/',
+            '',
+            (string) ($contable['descripcion'] ?? '').(string) ($contable['comprobante'] ?? '')
+        ) ?? '';
 
-        return str_contains($texto, $ref);
+        return $textoDigitos !== '' && str_contains($textoDigitos, $ref);
     }
 
     /**
@@ -217,13 +218,17 @@ final class ConciliacionBancariaReferenciaSupport
             $score += 20;
         }
 
-        $refB = trim((string) ($banco['voucher_number'] ?? ''));
-        $descC = (string) ($contable['descripcion'] ?? '');
-        $compC = (string) ($contable['comprobante'] ?? '');
-        if ($refB !== '' && (str_contains($descC, $refB) || str_contains($compC, $refB))) {
+        $refB = self::normalizarNumero((string) ($banco['voucher_number'] ?? ''));
+        $textoDigitos = preg_replace(
+            '/\D/',
+            '',
+            (string) ($contable['descripcion'] ?? '').(string) ($contable['comprobante'] ?? '')
+        ) ?? '';
+        if ($refB !== '' && $refB !== '0' && strlen($refB) >= 5 && str_contains($textoDigitos, $refB)) {
             $score += 25;
         }
 
+        $descC = (string) ($contable['descripcion'] ?? '');
         $concepto = strtoupper((string) ($banco['code_description_ib'] ?? ''));
         if ($concepto !== '' && str_contains(strtoupper($descC), $concepto)) {
             $score += 10;

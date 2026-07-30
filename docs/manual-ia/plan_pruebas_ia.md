@@ -57,6 +57,14 @@ Casilla `PRECARGA_MAIL_USUARIO` · label `PRECARGA_MAIL_CARPETA`.
 | E2 | Sin `consulta-ia-contable` | Sin mayor/asiento |
 | E3 | «cómo cargo una OC» | consultar_manual con citas |
 | E4 | Manual IA | `configuracion/manual-ia` OK |
+| E5 | Roles Contaduría/Impuestos/Logística | FAB visible (`ejecutar-consulta-ia`); Impuestos también `consulta-ia-contable` |
+| E6 | Mayor + CC | «mayor cuenta {cta} CC {cc} este mes» | Tabla filtrada por `centrocosto_id` |
+| E7 | Mayor OC | «mayor de la OC {nro}» | Movimientos de asientos/CP vinculados a la OC |
+| E8 | Mayor multi | cuenta + empresa + rango fechas | Totales del filtro completo |
+| E9 | Enc-compras | FAB visible; Op-Compras sin FAB |
+| E10 | KPI compras | «resumen operativo de compras» | Tabla KPI OC/RQ/lead time |
+| E11 | OC vencidas | «OC vencidas sin recepción» | Listado APROBADA vencida sin recepción |
+| E12 | RQ sin OC | «requisiciones sin OC» | RQ activas con líneas pendientes |
 
 ## F. MCP (opcional)
 

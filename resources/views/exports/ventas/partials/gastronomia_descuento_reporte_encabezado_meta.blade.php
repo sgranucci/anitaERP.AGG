@@ -35,7 +35,7 @@
 @if (($total_bloques ?? 0) > 0)
     <tr>
         <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">
-            Selecciones con datos: {{ (int) $total_bloques }}
+            {{ $etiqueta_bloques ?? 'Selecciones con datos' }}: {{ (int) $total_bloques }}
         </td>
     </tr>
 @endif

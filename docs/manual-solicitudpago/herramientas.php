@@ -13,15 +13,21 @@ $barraInforme = 'Formulario de filtros del informe';
 return [
     'comunes_listado' => [
         [
-            'herramienta' => 'Manual / Guía del módulo',
-            'ubicacion' => 'Esquina superior derecha del listado (ícono libro)',
-            'accion' => 'Abre este manual de usuario en una pestaña nueva.',
+            'herramienta' => 'Centro de ayuda',
+            'ubicacion' => 'Menú de ayuda del ERP (no en el listado de SP)',
+            'accion' => 'Abre el catálogo de manuales; elija Solicitudes de pago.',
             'permiso' => 'Usuario autenticado',
         ],
         [
             'herramienta' => 'Nuevo registro',
             'ubicacion' => $barraListado,
             'accion' => 'Abre el formulario de alta de una solicitud de pago.',
+            'permiso' => 'crear-solicitud-pago',
+        ],
+        [
+            'herramienta' => 'Carga masiva',
+            'ubicacion' => $barraListado.' — botón verde',
+            'accion' => 'Sube CSV Anita, muestra preview (cantidad, montos, errores) y genera SP Autorizadas.',
             'permiso' => 'crear-solicitud-pago',
         ],
         [
