@@ -173,7 +173,7 @@ final class RendicionGastronomiaRegrabarHostsAnitaService
             $cabeceras = $this->rendgastroSupport->listarCabecerasEmpresaFechaDetalle($empresaId, $fechaEntera);
 
             foreach ($cabeceras as $cab) {
-                if ($this->rendgastroSupport->esCabeceraEstacionamiento($cab)) {
+                if ($this->rendgastroSupport->esCabeceraEstacionamiento($cab, $empresaId)) {
                     $resultado['omitidas_estacionamiento']++;
 
                     continue;

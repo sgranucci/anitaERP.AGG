@@ -196,7 +196,7 @@ final class RendicionGastronomiaRepararJornadaAnitaService
                 continue;
             }
 
-            if ($this->rendgastroSupport->esCabeceraEstacionamiento($fila)) {
+            if ($this->rendgastroSupport->esCabeceraEstacionamiento($fila, $empresaId)) {
                 continue;
             }
 

@@ -18,7 +18,7 @@ final class RendicionGastronomiaAnitaRendgastroSupport
     /** @var list<string> */
     public const SECUENCIA_TURNO_PORTADORA = ['N', 'T', 'M'];
 
-    private const CAMPOS_CABECERA_DETALLE = 'rendg_nro_oper, rendg_sucursal, rendg_nro_rend_vta, rendg_turno, rendg_total_x, rendg_total_z, rendg_tot_nc, rendg_hora, rendg_fecha, rendg_fecha_alfa, rendg_host, rendg_suc_caea, rendg_tot_fc_caea, rendg_tot_nc_caea';
+    private const CAMPOS_CABECERA_DETALLE = 'rendg_nro_oper, rendg_empresa, rendg_sucursal, rendg_nro_rend_vta, rendg_turno, rendg_total_x, rendg_total_z, rendg_tot_nc, rendg_hora, rendg_fecha, rendg_fecha_alfa, rendg_host, rendg_suc_caea, rendg_tot_fc_caea, rendg_tot_nc_caea';
 
     /** @var array<int, string> */
     private array $letraTurnoPorTurnoOperativo = [];
@@ -93,13 +93,13 @@ final class RendicionGastronomiaAnitaRendgastroSupport
 
         $api = new ApiAnita;
 
-        return ApiAnita::decodificarListaFilas($api->apiCall([
+        return $this->hidratarEmpresaEnCabeceras(ApiAnita::decodificarListaFilas($api->apiCall([
             'acc' => 'list',
             'sistema' => (string) config('rendicion_gastronomia_anita.sistema', 'caja'),
             'tabla' => (string) config('rendicion_gastronomia_anita.tabla_cabecera', 'rendgastro'),
             'campos' => self::CAMPOS_CABECERA_DETALLE,
             'whereArmado' => $where,
-        ]));
+        ])), $empresaId);
     }
 
     /**
@@ -117,13 +117,13 @@ final class RendicionGastronomiaAnitaRendgastroSupport
             ." AND rendg_nro_oper = '".$nroOper."' ";
 
         $api = new ApiAnita;
-        $filas = ApiAnita::decodificarListaFilas($api->apiCall([
+        $filas = $this->hidratarEmpresaEnCabeceras(ApiAnita::decodificarListaFilas($api->apiCall([
             'acc' => 'list',
             'sistema' => (string) config('rendicion_gastronomia_anita.sistema', 'caja'),
             'tabla' => (string) config('rendicion_gastronomia_anita.tabla_cabecera', 'rendgastro'),
             'campos' => self::CAMPOS_CABECERA_DETALLE,
             'whereArmado' => $where,
-        ]));
+        ])), $empresaId);
 
         return $filas[0] ?? null;
     }
@@ -219,13 +219,13 @@ final class RendicionGastronomiaAnitaRendgastroSupport
 
         $api = new ApiAnita;
 
-        return ApiAnita::decodificarListaFilas($api->apiCall([
+        return $this->hidratarEmpresaEnCabeceras(ApiAnita::decodificarListaFilas($api->apiCall([
             'acc' => 'list',
             'sistema' => (string) config('rendicion_gastronomia_anita.sistema', 'caja'),
             'tabla' => (string) config('rendicion_gastronomia_anita.tabla_cabecera', 'rendgastro'),
             'campos' => self::CAMPOS_CABECERA_DETALLE,
             'whereArmado' => $where,
-        ]));
+        ])), $empresaId);
     }
 
     public function esCabeceraPostCierreWaitry(object $fila): bool
@@ -241,8 +241,10 @@ final class RendicionGastronomiaAnitaRendgastroSupport
     /**
      * Cabecera rendgastro de estacionamiento (tabla compartida con gastronomía).
      * No debe modificarse desde reparación / limpieza legacy de gastronomía.
+     *
+     * @param  int|null  $empresaIdContexto  Empresa del filtro/query cuando la fila no trae rendg_empresa.
      */
-    public function esCabeceraEstacionamiento(object $fila): bool
+    public function esCabeceraEstacionamiento(object $fila, ?int $empresaIdContexto = null): bool
     {
         if ($this->esCabeceraPostCierreWaitry($fila)) {
             return false;
@@ -250,6 +252,9 @@ final class RendicionGastronomiaAnitaRendgastroSupport
 
         $sucursal = (int) ($fila->rendg_sucursal ?? 0);
         $empresaId = (int) ($fila->rendg_empresa ?? 0);
+        if ($empresaId <= 0 && $empresaIdContexto !== null && $empresaIdContexto > 0) {
+            $empresaId = $empresaIdContexto;
+        }
         if ($sucursal > 0 && $this->esSucursalDeEstacionamiento($empresaId, $sucursal)) {
             return true;
         }
@@ -267,12 +272,36 @@ final class RendicionGastronomiaAnitaRendgastroSupport
             return true;
         }
 
-        // Hosts legacy estacionamiento Rebisco / Kandiko en rendgastro compartido.
-        if (in_array($host, ['192.168.40.151'], true)) {
+        // Hosts legacy estacionamiento Rebisco en rendgastro compartido (fallback sin empresa).
+        if (in_array($host, [
+            '192.168.40.151',
+            '192.168.40.152',
+            '192.168.40.153',
+            '192.168.40.154',
+        ], true)) {
             return true;
         }
 
         return str_starts_with($host, 'pc-caja');
+    }
+
+    /**
+     * @param  list<object>  $filas
+     * @return list<object>
+     */
+    private function hidratarEmpresaEnCabeceras(array $filas, int $empresaId): array
+    {
+        if ($empresaId <= 0) {
+            return $filas;
+        }
+
+        foreach ($filas as $fila) {
+            if ((int) ($fila->rendg_empresa ?? 0) <= 0) {
+                $fila->rendg_empresa = $empresaId;
+            }
+        }
+
+        return $filas;
     }
 
     public function esSucursalDeEstacionamiento(int $empresaId, int $sucursal): bool
@@ -438,7 +467,7 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         /** @var array<string, list<object>> $porHost */
         $porHost = [];
         foreach ($cabeceras as $fila) {
-            if ($this->esCabeceraEstacionamiento($fila)) {
+            if ($this->esCabeceraEstacionamiento($fila, $empresaId)) {
                 continue;
             }
 
@@ -512,7 +541,7 @@ final class RendicionGastronomiaAnitaRendgastroSupport
                 continue;
             }
 
-            if ($this->esCabeceraEstacionamiento($fila)) {
+            if ($this->esCabeceraEstacionamiento($fila, $empresaId)) {
                 continue;
             }
 
@@ -873,7 +902,7 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         $gruposEstacionamiento = [];
 
         foreach ($cabeceras as $fila) {
-            if ($this->esCabeceraEstacionamiento($fila)) {
+            if ($this->esCabeceraEstacionamiento($fila, $empresaId)) {
                 $gruposEstacionamiento[$this->claveGrupoRendgHost($fila)][] = $fila;
 
                 continue;

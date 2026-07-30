@@ -232,7 +232,7 @@ final class GastronomiaCircuitosFacturacionIntegridadService
 
         $total = 0.0;
         foreach ($filas as $fila) {
-            if ($this->rendgastroSupport->esCabeceraEstacionamiento($fila)) {
+            if ($this->rendgastroSupport->esCabeceraEstacionamiento($fila, $empresaId)) {
                 continue;
             }
             $host = mb_strtoupper(trim((string) ($fila->rendg_host ?? '')));

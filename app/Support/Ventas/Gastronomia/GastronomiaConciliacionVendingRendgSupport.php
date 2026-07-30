@@ -28,7 +28,7 @@ final class GastronomiaConciliacionVendingRendgSupport
             return false;
         }
 
-        if ($this->rendgastroSupport->esCabeceraEstacionamiento($fila)) {
+        if ($this->rendgastroSupport->esCabeceraEstacionamiento($fila, $empresaId)) {
             return false;
         }
 
@@ -55,7 +55,7 @@ final class GastronomiaConciliacionVendingRendgSupport
         }
 
         if ($this->rendgastroSupport->esCabeceraPostCierreWaitry($fila)
-            || $this->rendgastroSupport->esCabeceraEstacionamiento($fila)
+            || $this->rendgastroSupport->esCabeceraEstacionamiento($fila, $empresaId)
             || $this->rendgastroSupport->esCabeceraAgregadosCaea($fila)) {
             return false;
         }
