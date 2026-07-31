@@ -1,8 +1,83 @@
 (function ($) {
     'use strict';
 
+    var SELECTOR_BUDGET_DEC = '.flash-budget-decimal';
+    var SELECTOR_BUDGET_ENT = '.flash-budget-entero';
+
+    function parseDecimal(str, decimales) {
+        if (str == null || str === '') {
+            return 0;
+        }
+        var dec = decimales == null ? 2 : decimales;
+        var t = String(str).trim().replace(/\s/g, '');
+        if (t.indexOf(',') >= 0) {
+            t = t.replace(/\./g, '').replace(',', '.');
+        } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+            t = t.replace(/\./g, '');
+        }
+        var n = parseFloat(t);
+        if (isNaN(n)) {
+            return 0;
+        }
+        var factor = Math.pow(10, dec);
+        return Math.round(n * factor) / factor;
+    }
+
+    function parseEntero(str) {
+        return Math.round(parseDecimal(str, 0));
+    }
+
+    function fmtDecimal(n, decimales) {
+        var dec = decimales == null ? 2 : decimales;
+        return Number(n || 0).toLocaleString('es-AR', {
+            minimumFractionDigits: dec,
+            maximumFractionDigits: dec
+        });
+    }
+
+    function fmtEntero(n) {
+        return Number(n || 0).toLocaleString('es-AR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+    }
+
+    function formatearDecimalInput(el, dec) {
+        if (!el || el.value === '' || el.value == null) {
+            if (el) {
+                el.value = '';
+            }
+            return;
+        }
+        el.value = fmtDecimal(parseDecimal(el.value, dec), dec);
+    }
+
+    function formatearEnteroInput(el) {
+        if (!el || el.value === '' || el.value == null) {
+            if (el) {
+                el.value = '';
+            }
+            return;
+        }
+        el.value = fmtEntero(parseEntero(el.value));
+    }
+
+    function desformatearDecimalInput(el, dec) {
+        if (!el || el.value === '') {
+            return;
+        }
+        el.value = String(parseDecimal(el.value, dec));
+    }
+
+    function desformatearEnteroInput(el) {
+        if (!el || el.value === '') {
+            return;
+        }
+        el.value = String(parseEntero(el.value));
+    }
+
     function fmt(n) {
-        return (Math.round((n || 0) * 10000) / 10000).toFixed(4).replace('.', ',');
+        return fmtDecimal(n, 4);
     }
 
     function recalcularTotales() {
@@ -74,8 +149,57 @@
         });
     }
 
+    function normalizarBudgetsAntesDeEnviar(form) {
+        $(form).find(SELECTOR_BUDGET_DEC).each(function () {
+            if (this.value === '' || this.value == null) {
+                this.value = '0';
+                return;
+            }
+            this.value = String(parseDecimal(this.value, 2));
+        });
+        $(form).find(SELECTOR_BUDGET_ENT).each(function () {
+            if (this.value === '' || this.value == null) {
+                this.value = '0';
+                return;
+            }
+            this.value = String(parseEntero(this.value));
+        });
+    }
+
+    function initFormatoBudgets() {
+        $(SELECTOR_BUDGET_DEC).each(function () {
+            formatearDecimalInput(this, 2);
+        });
+        $(SELECTOR_BUDGET_ENT).each(function () {
+            formatearEnteroInput(this);
+        });
+    }
+
     $(function () {
-        if (!$('#tabla-indices-flash').length) { return; }
+        initFormatoBudgets();
+
+        $(document).on('focus', SELECTOR_BUDGET_DEC, function () {
+            desformatearDecimalInput(this, 2);
+            this.select();
+        });
+        $(document).on('blur', SELECTOR_BUDGET_DEC, function () {
+            formatearDecimalInput(this, 2);
+        });
+        $(document).on('focus', SELECTOR_BUDGET_ENT, function () {
+            desformatearEnteroInput(this);
+            this.select();
+        });
+        $(document).on('blur', SELECTOR_BUDGET_ENT, function () {
+            formatearEnteroInput(this);
+        });
+
+        $(document).on('submit', '#form-general', function () {
+            normalizarBudgetsAntesDeEnviar(this);
+        });
+
+        if (!$('#tabla-indices-flash').length) {
+            return;
+        }
 
         $(document).on('input change', '#tbody-indices-flash .idx-season', recalcularTotales);
         $('#btn-generar-dias').on('click', generarDias);

@@ -17,7 +17,7 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Crear Cuenta de Caja</h3>
                 <div class="card-tools">

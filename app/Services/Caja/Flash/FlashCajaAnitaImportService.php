@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\DB;
  *   sala 38 → empresa_id 2
  *   sala 43 → empresa_id 3
  *
- * Poker/EGA no se persisten (vending queda 0; show = flash_show).
+ * Poker/EGA no se persisten. Vending es exclusivo de anitaERP: en altas va 0;
+ * en actualizaciones se conserva el valor ya cargado en flash_caja.
  */
 final class FlashCajaAnitaImportService
 {
@@ -120,6 +121,8 @@ final class FlashCajaAnitaImportService
 
                         return 'creado';
                     }
+                    // Vending solo vive en anitaERP: no pisar con el 0 del bridge Anita.
+                    unset($payload['vending']);
                     $this->repository->update($payload, $existente->id);
 
                     return 'actualizado';

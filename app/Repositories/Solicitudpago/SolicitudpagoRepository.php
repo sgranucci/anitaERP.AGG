@@ -250,7 +250,9 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             'moneda_id' => $this->nullableInt($data['moneda_id'] ?? null),
             'beneficiario' => $this->recortar(trim((string) ($data['beneficiario'] ?? '')), 80) ?: null,
             'endoso' => $this->recortar(trim((string) ($data['endoso'] ?? '')), 80) ?: null,
-            'fecha_entrega' => $data['fecha_entrega'] ?? null,
+            'fecha_entrega' => ! empty($data['fecha_entrega'])
+                ? $data['fecha_entrega']
+                : ($data['fecha'] ?? now()->toDateString()),
             'fecha_vencimiento' => $data['fecha_vencimiento'] ?? null,
             'monto' => (float) str_replace(',', '.', (string) ($data['monto'] ?? 0)),
             'observacion' => $this->recortar(trim((string) ($data['observacion'] ?? '')), 160) ?: null,

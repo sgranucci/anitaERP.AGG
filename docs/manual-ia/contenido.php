@@ -140,8 +140,9 @@ return [
                 ['clave' => 'panel_fab', 'titulo' => 'Panel FAB (esquina)'],
             ],
             'parrafos' => [
-                'El panel flotante (FAB) es el copiloto operativo: chips de intent + lenguaje natural. El router primero aplica reglas; si no alcanza, un LLM solo clasifica intent/params (no inventa saldos). El grounding lo hace AiConsultaOperativaSupport contra maestros y movimientos del ERP.',
+                'El panel flotante (FAB) es el copiloto operativo: lenguaje natural + botón Herramientas (consultas tipadas por módulo). El router primero aplica reglas; si no alcanza, un LLM solo clasifica intent/params (no inventa saldos). El grounding lo hace AiConsultaOperativaSupport contra maestros y movimientos del ERP.',
                 'Visibilidad: permiso ejecutar-consulta-ia. Sin ese permiso el FAB no aparece. Además, cada intent exige el permiso del módulo (artículos, OC, CT, etc.). Los intents contables (mayor, saldo de cuenta, asiento) requieren también consulta-ia-contable, para que un rol de gastronomía no consulte un mayor sensible aunque tuviera el panel.',
+                'UI: el chat prioriza el resultado (tabla scrolleable); Excel queda fijo en la cabecera tras una consulta exportable. Los atajos no se listan todos a la vez: se agrupan en Herramientas (Compras, Contable, Stock…). Los KPIs de Compras se ejecutan al instante al tocar el botón.',
                 'Ejemplos de frases: “saldo insumo muzarella”, “kardex 12345 este mes”, “CT proveedor 001234”, “mayor cuenta 214010013 julio”, “mayor cuenta 214010013 CC 85 empresa 1 este mes”, “mayor de la OC 221022”, “pedido consumo CC 93 depósito 12 últimos 60 días”, “qué hago con desvíos de conciliación”, “cómo cargo una orden de compra” (RAG), “cómo hago la carga masiva de solicitudes de pago” (RAG).',
             ],
             'tabla' => [

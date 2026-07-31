@@ -41,12 +41,15 @@ class AiConsultaController extends Controller
                 'intent' => $clave,
                 'etiqueta' => $etiqueta,
                 'placeholder' => $this->placeholderIntent($clave),
+                'grupo' => $this->grupoIntent($clave),
+                'auto_pregunta' => $this->autoPreguntaIntent($clave),
             ];
         }
 
         return response()->json([
             'ok' => true,
             'intents' => $items,
+            'grupos' => $this->gruposEtiquetas(),
             'ejemplos' => AiConsultaOperativaRouterSupport::ejemplosPermitidos(),
             'llm_router' => filter_var(config('ai.skills.consultar_contexto_operativo.llm_router', false), FILTER_VALIDATE_BOOLEAN),
             'skill' => ConsultarContextoOperativoSkill::NOMBRE,
@@ -332,10 +335,71 @@ class AiConsultaController extends Controller
             AiConsultaOperativaSupport::INTENT_COMPROBANTE_PROVEEDOR => 'Nº o A-sucursal-número',
             AiConsultaOperativaSupport::INTENT_FACTURA_VENTA => 'Nº o punto de venta-número',
             AiConsultaOperativaSupport::INTENT_SALDO_CUENTA,
-            AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA => 'Código de cuenta contable',
+            AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA => 'Código de cuenta (opc. CC / OC / empresa)',
             AiConsultaOperativaSupport::INTENT_PLAN_AGENTE => 'desvío / deuda proveedor 475 / firmar OC 1234',
             AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR => 'CC 93 depósito 12 (últimos 60 días)',
+            AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_RESUMEN => 'Opcional: empresa 1 / este mes',
+            AiConsultaOperativaSupport::INTENT_OC_PENDIENTES_FIRMA,
+            AiConsultaOperativaSupport::INTENT_OC_VENCIDAS_SIN_RECEPCION,
+            AiConsultaOperativaSupport::INTENT_RQ_SIN_OC => 'Opcional: empresa 1',
+            AiConsultaOperativaSupport::INTENT_LEAD_TIME_OC_RECEPCION => 'Opcional: últimos 90 días / empresa 1',
+            AiConsultaOperativaSupport::INTENT_TOP_PROVEEDORES_MONTO => 'Opcional: este mes / julio / empresa 1',
             default => 'Valor a consultar',
+        };
+    }
+
+    private function grupoIntent(string $intent): string
+    {
+        return match ($intent) {
+            AiConsultaOperativaSupport::INTENT_PROVEEDOR,
+            AiConsultaOperativaSupport::INTENT_PROVEEDOR_CTACTE,
+            AiConsultaOperativaSupport::INTENT_ORDENCOMPRA,
+            AiConsultaOperativaSupport::INTENT_ARBOL_OC,
+            AiConsultaOperativaSupport::INTENT_COMPROBANTE_PROVEEDOR,
+            AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_RESUMEN,
+            AiConsultaOperativaSupport::INTENT_OC_PENDIENTES_FIRMA,
+            AiConsultaOperativaSupport::INTENT_OC_VENCIDAS_SIN_RECEPCION,
+            AiConsultaOperativaSupport::INTENT_LEAD_TIME_OC_RECEPCION,
+            AiConsultaOperativaSupport::INTENT_TOP_PROVEEDORES_MONTO,
+            AiConsultaOperativaSupport::INTENT_RQ_SIN_OC,
+            AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR => 'compras',
+            AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA,
+            AiConsultaOperativaSupport::INTENT_SALDO_CUENTA,
+            AiConsultaOperativaSupport::INTENT_ASIENTO => 'contable',
+            AiConsultaOperativaSupport::INTENT_ARTICULO_SALDO,
+            AiConsultaOperativaSupport::INTENT_ARTICULO_KARDEX => 'stock',
+            AiConsultaOperativaSupport::INTENT_CLIENTE,
+            AiConsultaOperativaSupport::INTENT_CLIENTE_CTACTE,
+            AiConsultaOperativaSupport::INTENT_FACTURA_VENTA => 'ventas',
+            AiConsultaOperativaSupport::INTENT_PLAN_AGENTE,
+            AiConsultaOperativaSupport::INTENT_CONSULTAR_MANUAL => 'ayuda',
+            default => 'otros',
+        };
+    }
+
+    /** @return array<string, string> */
+    private function gruposEtiquetas(): array
+    {
+        return [
+            'compras' => 'Compras',
+            'contable' => 'Contable',
+            'stock' => 'Stock',
+            'ventas' => 'Ventas',
+            'ayuda' => 'Ayuda',
+            'otros' => 'Otros',
+        ];
+    }
+
+    private function autoPreguntaIntent(string $intent): ?string
+    {
+        return match ($intent) {
+            AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_RESUMEN => 'resumen operativo de compras',
+            AiConsultaOperativaSupport::INTENT_OC_PENDIENTES_FIRMA => 'OC pendientes de firma',
+            AiConsultaOperativaSupport::INTENT_OC_VENCIDAS_SIN_RECEPCION => 'OC vencidas sin recepción',
+            AiConsultaOperativaSupport::INTENT_LEAD_TIME_OC_RECEPCION => 'lead time OC recepción últimos 90 días',
+            AiConsultaOperativaSupport::INTENT_TOP_PROVEEDORES_MONTO => 'top proveedores por monto este mes',
+            AiConsultaOperativaSupport::INTENT_RQ_SIN_OC => 'requisiciones sin OC',
+            default => null,
         };
     }
 }

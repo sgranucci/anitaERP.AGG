@@ -14,10 +14,21 @@ class Cuentacaja extends Model implements Auditable
     use CuentacajaTrait;
     use \OwenIt\Auditing\Auditable;
 
-    protected $fillable = ['nombre', 'codigo', 'tipocuenta', 'banco_id',
+    protected $fillable = ['nombre', 'descripcion_operaciones', 'codigo', 'tipocuenta', 'banco_id',
         'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu', 'cuenta_interbanking'];
 
     protected $table = 'cuentacaja';
+
+    /**
+     * Etiqueta corta para pantallas operativas (rendición máquinas, etc.).
+     * Usa descripcion_operaciones si está cargada; si no, el nombre maestro.
+     */
+    public function etiquetaOperaciones(): string
+    {
+        $desc = trim((string) ($this->descripcion_operaciones ?? ''));
+
+        return $desc !== '' ? $desc : trim((string) ($this->nombre ?? ''));
+    }
 
     public function bancos()
     {

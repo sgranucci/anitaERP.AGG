@@ -183,9 +183,13 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
             );
         }
 
-        // Guardrail: validar que lo grabado por medio de cobro coincida con el Informe Z.
-        // Si queda un residual (asiento MP != Z), se avisa (log + payload); no bloquea el cierre.
+        // Guardrail: Z ↔ contabilizado por medio. Si hay DIF por Z corto (órdenes tardías) y el
+        // recomputo del proceso confirma el MP contab, alinea el Informe Z solo — no bloquea el proceso.
         $guardrail = $this->guardrailMediosZ($empresaId, $fechaJornada);
+        $alineacionZ = $this->autoAlinearInformeZSiCorresponde($jornadaId, $empresaId, $fechaJornada, $guardrail);
+        if (($alineacionZ['persistido'] ?? false) === true) {
+            $guardrail = $this->guardrailMediosZ($empresaId, $fechaJornada);
+        }
 
         return [
             'ok' => true,
@@ -197,7 +201,80 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
             'asientos' => $grabados,
             'rendicion_anita' => $rendicionAnita,
             'guardrail_medios_z' => $guardrail,
+            'alineacion_z_proceso' => $alineacionZ,
         ];
+    }
+
+    /**
+     * Si el guardrail detectó DIF y el recomputo Waitry confirma el MP contabilizado, regenera el Z.
+     * Nunca bloquea: si no es auto-alineable, solo deja el aviso del guardrail.
+     *
+     * @param  array<string, mixed>|null  $guardrail
+     * @return array<string, mixed>|null
+     */
+    private function autoAlinearInformeZSiCorresponde(
+        int $jornadaId,
+        int $empresaId,
+        string $fechaJornada,
+        ?array $guardrail,
+    ): ?array {
+        if (($guardrail['estado'] ?? 'OK') !== 'DIF') {
+            return null;
+        }
+
+        if (! filter_var(
+            config('gastronomia.regenerar_z_desde_proceso.auto_alinear_al_grabar', true),
+            FILTER_VALIDATE_BOOLEAN,
+        )) {
+            return ['decision' => 'omitido_config', 'persistido' => false];
+        }
+
+        $tolerancia = max(0.0, (float) config(
+            'gastronomia.regenerar_z_desde_proceso.tolerancia',
+            config('gastronomia.cierre_totem_informe_z_tolerancia', 0.02),
+        ));
+
+        try {
+            $resultado = app(GastronomiaCierreTotemInformeZService::class)
+                ->regenerarInformeZDesdeProceso($jornadaId, $tolerancia, true);
+        } catch (Throwable $e) {
+            Log::warning('Cierre jornada gastro: auto-alineación Z desde proceso falló', [
+                'empresa_id' => $empresaId,
+                'jornada_id' => $jornadaId,
+                'fecha_jornada' => $fechaJornada,
+                'mensaje' => $e->getMessage(),
+            ]);
+
+            return [
+                'decision' => 'error',
+                'persistido' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+
+        $decision = (string) ($resultado['decision'] ?? '');
+        if ($decision === 'regenerar' && ($resultado['persistido'] ?? false)) {
+            Log::info('Cierre jornada gastro: Informe Z auto-alineado desde proceso (sin bloquear)', [
+                'empresa_id' => $empresaId,
+                'jornada_id' => $jornadaId,
+                'fecha_jornada' => $fechaJornada,
+                'mp_z_antes' => $resultado['mp_z'] ?? null,
+                'mp_contabilizado' => $resultado['mp_contabilizado'] ?? null,
+                'z_recomputado' => $resultado['z_recomputado'] ?? null,
+                'z_nuevo' => $resultado['z_nuevo'] ?? null,
+            ]);
+        } elseif ($decision === 'revisar_asiento') {
+            Log::warning('Cierre jornada gastro: DIF medios no auto-alineable (revisar asiento)', [
+                'empresa_id' => $empresaId,
+                'jornada_id' => $jornadaId,
+                'fecha_jornada' => $fechaJornada,
+                'mp_z' => $resultado['mp_z'] ?? null,
+                'mp_contabilizado' => $resultado['mp_contabilizado'] ?? null,
+                'z_recomputado' => $resultado['z_recomputado'] ?? null,
+            ]);
+        }
+
+        return $resultado;
     }
 
     /**

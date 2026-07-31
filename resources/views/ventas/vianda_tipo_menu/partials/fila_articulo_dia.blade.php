@@ -3,17 +3,18 @@
     $sku = $linea->sku ?? optional($linea->articulo ?? null)->sku ?? '';
     $descripcion = $linea->descripcion ?? optional($linea->articulo ?? null)->descripcion ?? '';
 @endphp
-<div class="vianda-articulo-fila mb-2 item-vianda-articulo-dia" data-dia="{{ $dia }}">
+<div class="vianda-articulo-fila mb-2 item-vianda-articulo-dia tm-articulo-campo" data-dia="{{ $dia }}">
     <input type="hidden" class="articulo_id" name="articulo_por_dia[{{ $dia }}][]"
            value="{{ old('articulo_por_dia.'.$dia.'.'.$idxLinea, $articuloId) }}">
     <div class="input-group input-group-sm mb-1">
         <div class="input-group-prepend">
-            <button type="button" title="Consulta art&iacute;culos" class="btn btn-outline-primary btn-sm consultaarticulo">
+            <button type="button" title="Consulta art&iacute;culos (F1)" class="btn btn-outline-primary btn-sm consultaarticulo">
                 <i class="fa fa-search"></i>
             </button>
         </div>
         <input type="text" class="form-control form-control-sm codigoarticulo" name="codigoarticulos_dia[{{ $dia }}][]"
-               value="{{ old('codigoarticulos_dia.'.$dia.'.'.$idxLinea, $sku) }}" placeholder="SKU">
+               value="{{ old('codigoarticulos_dia.'.$dia.'.'.$idxLinea, $sku) }}"
+               placeholder="SKU" title="Enter valida el SKU; F1 abre la consulta">
     </div>
     <input type="text" class="form-control form-control-sm descripcionarticulo mb-1" name="descripcionarticulos_dia[{{ $dia }}][]"
            value="{{ old('descripcionarticulos_dia.'.$dia.'.'.$idxLinea, $descripcion) }}" readonly placeholder="Descripci&oacute;n">

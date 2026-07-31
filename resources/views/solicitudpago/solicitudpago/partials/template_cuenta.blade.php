@@ -42,12 +42,12 @@
             </select>
         </td>
         <td>
-            <input type="number" step="0.01" min="0" name="montos_debe[]"
-                   class="form-control text-right monto-debe" value="" placeholder="0">
+            <input type="text" inputmode="decimal" name="montos_debe[]"
+                   class="form-control text-right js-monto-ar monto-debe" value="" placeholder="0,00" autocomplete="off">
         </td>
         <td>
-            <input type="number" step="0.01" min="0" name="montos_haber[]"
-                   class="form-control text-right monto-haber bg-light" value="" placeholder="0" readonly>
+            <input type="text" inputmode="decimal" name="montos_haber[]"
+                   class="form-control text-right js-monto-ar monto-haber bg-light" value="" placeholder="0,00" readonly autocomplete="off">
         </td>
         <td class="text-center">
             <button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar_sp_cuenta tooltipsC">

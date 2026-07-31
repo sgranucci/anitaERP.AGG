@@ -20,6 +20,12 @@
         @endif
     @elseif ($tipoArbol == 'Solicitudes de pago')
         <p>Hola! Tiene una Solicitud de pago para aprobación</p>
+        @php $mx = $mailExtras ?? []; @endphp
+        @if (!empty($mx['estado_tras_aprobar']))
+            <p>Al <strong>aprobar este paso</strong>, la solicitud de pago quedará en estado <strong>{{ $mx['estado_tras_aprobar'] }}</strong>.</p>
+        @else
+            <p>En este nivel del árbol <strong>no se cambia</strong> el estado de cabecera al aprobar; solo avanzará la aprobación del flujo.</p>
+        @endif
     @else
         <p>Hola! Tiene una Requisición para aprobación</p>
         @php $mx = $mailExtras ?? []; @endphp
@@ -162,28 +168,75 @@
         <label for="Visualizar">Visualizar:</label>
         <div><p><a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a></p></div>
     @elseif ($tipoArbol == 'Solicitudes de pago')
-        @php $mx = $mailExtras ?? []; @endphp
-        <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle y podrá gestionar la aprobación.</p>
-        <ul>
-            <li>Empresa: {{ $datosComprobante->empresas->nombre ?? '' }}</li>
-            <li>Código SP: {{ $datosComprobante->codigo ?? $datosComprobante->id }}</li>
-            <li>Fecha: {{ date('d/m/Y', strtotime($datosComprobante->fecha ?? '')) }}</li>
-            <li>Monto: {{ $mx['moneda_abrev_items'] ?? (optional($datosComprobante->monedas)->abreviatura ?? '') }} {{ number_format((float) ($mx['monto_items'] ?? $datosComprobante->monto ?? 0), 2, ',', '.') }}</li>
-            <li>Proveedor: {{ optional($datosComprobante->proveedores)->nombre ?? '—' }}</li>
-            <li>Beneficiario: {{ $datosComprobante->beneficiario ?? '—' }}</li>
-            <li>Estado: {{ $datosComprobante->estado ?? '—' }}</li>
-            <li>Detalle: {{ $datosComprobante->detalle ?? '' }}</li>
-            <li>Observación: {{ $datosComprobante->observacion ?? '' }}</li>
+        @php
+            $mx = $mailExtras ?? [];
+            $monedaAbr = trim((string) ($mx['moneda_abrev_items'] ?? (optional($datosComprobante->monedas)->abreviatura ?? '')));
+            $montoFmt = $mx['monto_items_fmt']
+                ?? number_format((float) ($mx['monto_items'] ?? $datosComprobante->monto ?? 0), 2, ',', '.');
+            $conceptoLabel = optional($datosComprobante->conceptos)->codigo
+                ? trim((optional($datosComprobante->conceptos)->codigo).' — '.(optional($datosComprobante->conceptos)->nombre ?? ''))
+                : (optional($datosComprobante->conceptos)->nombre ?? '—');
+            $sectorLabel = optional($datosComprobante->sectores)->codigo
+                ? trim((optional($datosComprobante->sectores)->codigo).' — '.(optional($datosComprobante->sectores)->nombre ?? ''))
+                : (optional($datosComprobante->sectores)->nombre ?? '—');
+            $formaPagoLabel = optional($datosComprobante->formapagosol)->nombre ?? '—';
+            $estadoLabel = \App\Support\Solicitudpago\SolicitudpagoEstados::label($datosComprobante->estado ?? '');
+            $linkDescarga = $mx['link_descarga_paquete'] ?? null;
+        @endphp
+        <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle en una pantalla adaptable a celular y podrá cargar observaciones antes de confirmar.</p>
+        <ul style="line-height:1.5;">
+            <li><strong>Empresa:</strong> {{ $datosComprobante->empresas->nombre ?? '' }}</li>
+            <li><strong>Código SP:</strong> {{ $datosComprobante->codigo ?? $datosComprobante->id }}</li>
+            <li><strong>Fecha:</strong> {{ date('d/m/Y', strtotime($datosComprobante->fecha ?? '')) }}</li>
+            <li><strong>Monto:</strong> {{ $monedaAbr !== '' ? $monedaAbr.' ' : '' }}{{ $montoFmt }}</li>
+            <li><strong>Concepto:</strong> {{ $conceptoLabel }}</li>
+            <li><strong>Sector:</strong> {{ $sectorLabel }}</li>
+            <li><strong>Forma de pago:</strong> {{ $formaPagoLabel }}</li>
+            <li><strong>Proveedor:</strong> {{ optional($datosComprobante->proveedores)->nombre ?? '—' }}</li>
+            <li><strong>Beneficiario:</strong> {{ $datosComprobante->beneficiario ?? '—' }}</li>
+            <li><strong>Estado:</strong> {{ $estadoLabel !== '' ? $estadoLabel : ($datosComprobante->estado ?? '—') }}</li>
+            <li><strong>Detalle:</strong> {{ $datosComprobante->detalle ?? '' }}</li>
+            <li><strong>Observación:</strong> {{ $datosComprobante->observacion ?? '' }}</li>
         </ul>
-        <br>
-        <label for="Autorizar">Autorizar:</label>
-        <div><p><a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a></p></div>
-        <br>
-        <label for="Rechazar">Rechazar:</label>
-        <div><p><a href="{{ $linkRechazo }}">{{ $linkRechazo }}</a></p></div>
-        <br>
-        <label for="Visualizar">Visualizar:</label>
-        <div><p><a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a></p></div>
+        <p style="margin-top:18px;">
+            <a href="{{ $linkAprobacion }}" style="background:#28a745; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; margin-right:8px; display:inline-block;">Autorizar</a>
+            <a href="{{ $linkRechazo }}" style="background:#dc3545; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; margin-right:8px; display:inline-block;">Rechazar</a>
+            <a href="{{ $linkVisualizar }}" style="background:#007bff; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; margin-right:8px; display:inline-block;">Visualizar</a>
+            @if (!empty($linkDescarga))
+                <a href="{{ $linkDescarga }}" style="background:#6c757d; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; display:inline-block;">Descargar PDF + adjuntos</a>
+            @endif
+        </p>
+        <p style="font-size:12px;color:#666;margin-top:10px;">
+            @if (!empty($mx['adjuntos_mail_cantidad']))
+                Este correo incluye como <strong>adjuntos</strong> el PDF de la solicitud
+                @if (!empty($mx['tiene_archivos']))
+                    y los archivos asociados
+                @endif
+                ({{ (int) $mx['adjuntos_mail_cantidad'] }} archivo(s)).
+            @else
+                Si el tamaño lo permite, este correo adjunta el PDF de la solicitud y los archivos asociados.
+            @endif
+            El botón <strong>Descargar PDF + adjuntos</strong> sigue disponible para bajar un único PDF unificado
+            @if (!empty($mx['tiene_archivos']))
+                con la impresión y todos los archivos.
+            @else
+                con la impresión de la solicitud.
+            @endif
+        </p>
+        @if (!empty($mx['adjuntos_mail_omitidos']) && is_array($mx['adjuntos_mail_omitidos']))
+            <p style="font-size:11px;color:#a66;margin-top:6px;">
+                No se adjuntaron al mail (usar descarga): {{ implode('; ', $mx['adjuntos_mail_omitidos']) }}.
+            </p>
+        @endif
+        <p style="font-size:11px;color:#888;margin-top:8px;">
+            Enlaces directos:<br>
+            Autorizar: <a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a><br>
+            Rechazar: <a href="{{ $linkRechazo }}">{{ $linkRechazo }}</a><br>
+            Visualizar: <a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a>
+            @if (!empty($linkDescarga))
+                <br>Descargar: <a href="{{ $linkDescarga }}">{{ $linkDescarga }}</a>
+            @endif
+        </p>
     @elseif ($tipoArbol == 'Requisiciones')
         @php $mx = $mailExtras ?? []; @endphp
         <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle en una pantalla adaptable a celular y podrá cargar observaciones antes de confirmar.</p>

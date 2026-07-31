@@ -50,6 +50,18 @@ class Kernel extends ConsoleKernel
         $schedule->command('padron-iibb-arba:purge')->monthlyOn(10, '03:05');
         $schedule->command('padron-iibb-caba:purge')->monthlyOn(10, '03:10');
 
+        // Descarga DFE ARBA + encola import: último día del mes, padrón del mes siguiente.
+        $horaArbaSync = (string) config('padrones_iibb.arba.sync_hora', '22:00');
+        $periodoArbaSync = (string) config('padrones_iibb.arba.sync_periodo', 'siguiente');
+        $schedule->command('padron-iibb-arba:sincronizar', [
+                '--periodo' => $periodoArbaSync,
+            ])
+            ->lastDayOfMonth($horaArbaSync)
+            ->runInBackground()
+            ->withoutOverlapping(7200)
+            ->appendOutputTo(storage_path('logs/padron-iibb-arba-sincronizar-schedule.log'))
+            ->when(fn () => (bool) config('padrones_iibb.arba.sync_habilitado', true));
+
         $schedule->command('bitacora-acceso:purge')
             ->dailyAt('03:20')
             ->withoutOverlapping(60)

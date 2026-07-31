@@ -16,6 +16,8 @@ use App\Services\Solicitudpago\SolicitudpagoArchivosFusionService;
 use App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService;
 use App\Services\Solicitudpago\SolicitudpagoCargaMasivaCsvService;
 use App\Services\Solicitudpago\SolicitudpagoComprobantePdfService;
+use App\Services\Solicitudpago\SolicitudpagoPaqueteMailPdfService;
+use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoListadoFiltros;
@@ -38,6 +40,7 @@ class SolicitudpagoController extends Controller
         private SolicitudpagoArbolIntegracionService $arbolIntegracionService,
         private SolicitudpagoArchivosFusionService $archivosFusionService,
         private SolicitudpagoComprobantePdfService $comprobantePdfService,
+        private SolicitudpagoPaqueteMailPdfService $paqueteMailPdfService,
         private SolicitudpagoCargaMasivaCsvService $cargaMasivaCsvService,
     ) {
     }
@@ -95,16 +98,23 @@ class SolicitudpagoController extends Controller
     {
         can('listar-solicitud-pago');
 
-        // Limpiar filtros: borra recuerdo de sesión
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $empresaDefault = $empresaDefault ? (int) $empresaDefault : null;
+
+        // Limpiar filtros de texto: borra recuerdo de sesión y conserva empresa externa
         if ($request->boolean('limpiar_filtros')) {
             session()->forget(self::SESSION_FILTROS);
+            $filtrosEmpresa = SolicitudpagoListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
 
-            return redirect()->route('consultar_solicitudpago');
+            return redirect()->route(
+                'consultar_solicitudpago',
+                SolicitudpagoListadoFiltros::paraQueryStringEmpresa($filtrosEmpresa)
+            );
         }
 
         // Memoria de filtros: con query se persiste; sin query se restaura el último filtro
         if ($this->requestTraeFiltrosListado($request)) {
-            $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest($request);
+            $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
             if (! SolicitudpagoVisibilidadSupport::puedeVerTodasSinRestriccion()) {
                 $filtros['alcance'] = SolicitudpagoVisibilidadSupport::ALCANCE_TODAS;
             }
@@ -116,6 +126,7 @@ class SolicitudpagoController extends Controller
             if (
                 SolicitudpagoListadoFiltros::tieneCriteriosAplicados($filtros)
                 || SolicitudpagoListadoFiltros::tieneAlcanceMiCentrocosto($filtros)
+                || SolicitudpagoListadoFiltros::paraQueryStringEmpresa($filtros) !== []
                 || $page > 1
             ) {
                 session([self::SESSION_FILTROS => $filtrosQuery]);
@@ -127,15 +138,18 @@ class SolicitudpagoController extends Controller
             if (is_array($guardados) && $guardados !== []) {
                 return redirect()->route('consultar_solicitudpago', $guardados);
             }
-            $filtros = SolicitudpagoListadoFiltros::filtrosVacios();
-            $filtrosQuery = [];
+            $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+            $filtrosQuery = SolicitudpagoListadoFiltros::paraQueryString($filtros);
         }
 
         $camposFiltro = SolicitudpagoListadoFiltros::CAMPOS;
         $coleccion = $this->repository->leeSolicitudpago($filtros, true);
         $estado_enum = SolicitudpagoEstados::opciones();
         $tratamiento_enum = SolicitudpagoTratamientos::opciones();
-        $limpiarFiltrosUrl = route('consultar_solicitudpago', ['limpiar_filtros' => 1]);
+        $limpiarFiltrosUrl = route(
+            'consultar_solicitudpago',
+            array_merge(SolicitudpagoListadoFiltros::paraQueryStringEmpresa($filtros), ['limpiar_filtros' => 1])
+        );
         $puedeVerTodas = SolicitudpagoVisibilidadSupport::puedeVerTodasSinRestriccion();
         $alcanceListado = $filtros['alcance'] ?? SolicitudpagoVisibilidadSupport::ALCANCE_TODAS;
         $alcanceToggleUrl = null;
@@ -148,6 +162,7 @@ class SolicitudpagoController extends Controller
                 : SolicitudpagoVisibilidadSupport::ALCANCE_MI_CC;
             $alcanceToggleUrl = route('consultar_solicitudpago', $paramsToggle);
         }
+        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('solicitudpago.solicitudpago.index', compact(
             'coleccion',
@@ -159,7 +174,8 @@ class SolicitudpagoController extends Controller
             'limpiarFiltrosUrl',
             'puedeVerTodas',
             'alcanceListado',
-            'alcanceToggleUrl'
+            'alcanceToggleUrl',
+            'empresa_query'
         ));
     }
 
@@ -179,6 +195,9 @@ class SolicitudpagoController extends Controller
             'fecha_desde',
             'fecha_hasta',
             'alcance',
+            'empresa_id',
+            'empresa_todas',
+            'empresa_scope',
             'page',
         ] as $key) {
             if ($request->query->has($key)) {
@@ -195,7 +214,12 @@ class SolicitudpagoController extends Controller
         ini_set('memory_limit', '1024M');
         ini_set('max_execution_time', '300');
 
-        $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $filtros = SolicitudpagoListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busqueda,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
         if (! SolicitudpagoVisibilidadSupport::puedeVerTodasSinRestriccion()) {
             $filtros['alcance'] = SolicitudpagoVisibilidadSupport::ALCANCE_TODAS;
         }
@@ -289,6 +313,55 @@ class SolicitudpagoController extends Controller
         return view('solicitudpago.solicitudpago.editar', array_merge(
             $this->datosFormulario($data),
             compact('data', 'soloConsulta', 'ocultarVolver', 'puedeActualizar', 'tienePendientesCorreoArbol', 'arbolMovimientos')
+        ));
+    }
+
+    /**
+     * Visualización desde enlace del árbol de aprobación (correo).
+     * Acceso por hashvisualizar: no exige permiso de edición ni filtro de visibilidad del ABM.
+     */
+    public function visualizar($id, $hash = null)
+    {
+        $hash = is_string($hash) ? $hash : '';
+        $flEncontro = $hash === '';
+        if ($hash !== '') {
+            foreach ($this->arbolIntegracionService->findPorSolicitudpago((int) $id) as $movimiento) {
+                if (ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, (string) ($movimiento->hashvisualizar ?? ''))) {
+                    $flEncontro = true;
+                    break;
+                }
+            }
+        }
+
+        if (! $flEncontro) {
+            return redirect()->route('inicio')
+                ->with('mensaje', 'No tiene permisos para visualizar la solicitud de pago');
+        }
+
+        if ($hash === '') {
+            can('editar-solicitud-pago');
+            $this->asegurarAccesoSolicitud((int) $id);
+        }
+
+        $data = $this->repository->findOrFail($id);
+        $soloConsulta = true;
+        $ocultarVolver = false;
+        $puedeActualizar = false;
+        $acceso_visualizacion_por_hash = $hash !== '';
+        $tienePendientesCorreoArbol = $this->arbolIntegracionService->tienePendientesConCorreo((int) $id);
+        $arbolMovimientos = $this->arbolIntegracionService->findPorSolicitudpago((int) $id);
+
+        return view('solicitudpago.solicitudpago.editar', array_merge(
+            $this->datosFormulario($data),
+            compact(
+                'data',
+                'soloConsulta',
+                'ocultarVolver',
+                'puedeActualizar',
+                'acceso_visualizacion_por_hash',
+                'tienePendientesCorreoArbol',
+                'arbolMovimientos'
+            )
         ));
     }
 
@@ -436,6 +509,35 @@ class SolicitudpagoController extends Controller
         }
 
         return $resultado['pdf']->stream($resultado['nombre']);
+    }
+
+    /**
+     * Descarga pública desde el mail del árbol: comprobante PDF + adjuntos (autorizada por hash).
+     */
+    public function descargarPaqueteMail($id, $hash)
+    {
+        $hash = is_string($hash) ? $hash : '';
+        if (! $this->arbolIntegracionService->hashAutorizaDescargaPaquete((int) $id, $hash)) {
+            return redirect()->route('inicio')
+                ->with('mensaje', 'No tiene permisos para descargar la solicitud de pago o el enlace ya no es válido.');
+        }
+
+        try {
+            $resultado = $this->paqueteMailPdfService->generar((int) $id);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response(
+                'No se pudo generar el PDF de la solicitud: '.$e->getMessage(),
+                500,
+                ['Content-Type' => 'text/plain; charset=UTF-8']
+            );
+        }
+
+        return response($resultado['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$resultado['nombre'].'"',
+        ]);
     }
 
     public function descargarArchivo(Request $request, $id, $archivoId)

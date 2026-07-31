@@ -71,6 +71,18 @@ function urlEditarArticuloConsulta(articuloId) {
     return carpetaBase + '/stock/articulo/' + id + '/editar' + CONSULTA_ARTICULO_URL_EDITAR_QUERY;
 }
 
+/**
+ * Contenedor de la línea de artículo (no el <tr> de semana/tabla ancha).
+ * En menús de vianda hay un solo <tr> con todos los días: closest('tr') pisaría todos los SKU.
+ */
+function consultaArticuloContextoLinea($el) {
+    var $ctx = $($el).closest('.tm-articulo-campo, .item-vianda-articulo-dia, .cm-campo-articulo-carga, #cm-campo-articulo-carga');
+    if (!$ctx.length) {
+        $ctx = $($el).closest('tr');
+    }
+    return $ctx;
+}
+
 function actualizarLinkEditarArticulo($ctx, articuloId) {
     if (!$ctx || !$ctx.length) {
         return;
@@ -297,6 +309,9 @@ $(document).off('keydown.ocNoEnterSubmitArticulo', 'input').on('keydown.ocNoEnte
     if ($(this).closest('#tabla-articulos-requisicion-sala').length) {
         return;
     }
+    if ($(this).closest('#tabla-vianda-semana').length && $(this).hasClass('codigoarticulo')) {
+        return;
+    }
 	// Resto del form OC (fuera de la grilla de artículos): no bloquear Enter.
 	if ($(this).closest('#form-ordencompra-general').length) {
 		return;
@@ -346,19 +361,13 @@ function activa_eventos_consultaarticulo()
             $('#consultaarticuloModal').removeData('articuloSoloInsumoGastronomia');
         }
 
-        var $ctxConsulta = $(this).closest('tr');
-        if (!$ctxConsulta.length) {
-            $ctxConsulta = $(this).closest('.cm-campo-articulo-carga');
-        }
-        if (!$ctxConsulta.length) {
-            $ctxConsulta = $(this).closest('.tm-articulo-campo');
-        }
-        ptrarticulo_id = $ctxConsulta.find('.articulo_id');
-        ptrcodigoarticulo = $ctxConsulta.find('.codigoarticulo');
-        ptrnombrearticulo = $ctxConsulta.find('.descripcionarticulo');
-        ptrunidadmedida = $ctxConsulta.find('.unidadmedida');
-        ptrcategoria_id = $ctxConsulta.find('.categoria_id');
-        ptrsubcategoria_id = $ctxConsulta.find('.subcategoria_id');
+        var $ctxConsulta = consultaArticuloContextoLinea(this);
+        ptrarticulo_id = $ctxConsulta.find('.articulo_id').first();
+        ptrcodigoarticulo = $ctxConsulta.find('.codigoarticulo').first();
+        ptrnombrearticulo = $ctxConsulta.find('.descripcionarticulo').first();
+        ptrunidadmedida = $ctxConsulta.find('.unidadmedida').first();
+        ptrcategoria_id = $ctxConsulta.find('.categoria_id').first();
+        ptrsubcategoria_id = $ctxConsulta.find('.subcategoria_id').first();
         // Abre modal de consulta
         $("#consultaarticuloModal").modal('show');
     });
@@ -439,7 +448,10 @@ function activa_eventos_consultaarticulo()
         let categoria_id = $(this).parents("tr").find(".categoria_id").val();
         let subcategoria_id = $(this).parents("tr").find(".subcategoria_id").val();
 
-        $(ptrarticulo_id).parents("tr").find(".unidadmedida_id").val(unidadmedida_id);
+        var $ctxArt = (ptrarticulo_id && ptrarticulo_id.length)
+            ? consultaArticuloContextoLinea(ptrarticulo_id)
+            : $();
+        $ctxArt.find('.unidadmedida_id').val(unidadmedida_id);
 
         $(ptrarticulo_id).val(seleccion);
         $(ptrcodigoarticulo).val(codigo);
@@ -448,13 +460,6 @@ function activa_eventos_consultaarticulo()
         $(ptrcategoria_id).val(categoria_id);
         $(ptrsubcategoria_id).val(subcategoria_id);
 
-        var $ctxArt = $();
-        if (ptrarticulo_id && ptrarticulo_id.length) {
-            $ctxArt = $(ptrarticulo_id).closest('tr');
-            if (!$ctxArt.length) {
-                $ctxArt = $(ptrarticulo_id).closest('.tm-articulo-campo');
-            }
-        }
         actualizarLinkEditarArticulo($ctxArt, seleccion);
 
         $("#articulo_id").val(seleccion);
@@ -472,7 +477,9 @@ function activa_eventos_consultaarticulo()
         if (window.onArticuloSeleccionado) {
             $.get(carpetaBase + '/stock/leerunarticulo/' + seleccion, function (dataArticulo) {
                 if (dataArticulo) {
-                    var $trModal = $(ptrarticulo_id).closest('tr');
+                    var $trModal = (ptrarticulo_id && ptrarticulo_id.length)
+                        ? consultaArticuloContextoLinea(ptrarticulo_id)
+                        : $();
                     window.onArticuloSeleccionado(dataArticulo, { row: $trModal });
                     if ($trModal.closest('#tabla-articulos-requisicion').length) {
                         $trModal.trigger('req:articulo-linea-cargado', [dataArticulo]);
@@ -481,13 +488,9 @@ function activa_eventos_consultaarticulo()
             });
         }
 
-        var $trElegida = $();
-        if (ptrarticulo_id && ptrarticulo_id.length) {
-            $trElegida = $(ptrarticulo_id).closest('tr');
-            if (!$trElegida.length) {
-                $trElegida = $(ptrarticulo_id).closest('.cm-campo-articulo-carga, #cm-campo-articulo-carga');
-            }
-        }
+        var $trElegida = (ptrarticulo_id && ptrarticulo_id.length)
+            ? consultaArticuloContextoLinea(ptrarticulo_id)
+            : $();
         var esPosGastronomia = $trElegida.is('#tr-gastro-linea-articulo')
             || $trElegida.closest('#tr-gastro-linea-articulo').length > 0
             || $trElegida.closest('.cm-campo-articulo-carga, #cm-campo-articulo-carga').length > 0;
@@ -542,6 +545,7 @@ function activa_eventos_consultaarticulo()
     $(document).off('change.ocArticuloIdLinea', '.articulo_id').on('change.ocArticuloIdLinea', '.articulo_id', function (event) {
         event.preventDefault();
         var ptrrenglon = this;
+        var $ctx = consultaArticuloContextoLinea(ptrrenglon);
 
         // Lee concepto gasto
         let articulo_id = $(this).val();
@@ -550,12 +554,12 @@ function activa_eventos_consultaarticulo()
         $.get(url_res, function(data){
             if (data)
             {
-                $(ptrrenglon).parents("tr").find(".articulo_id").val(data.id);
-			    $(ptrrenglon).parents("tr").find(".descripcionarticulo").val(data.descripcion);
+                $ctx.find('.articulo_id').val(data.id);
+                $ctx.find('.descripcionarticulo').val(data.descripcion);
 
                 $.each(data.unidadesdemedidas, function(index,value){
                     if (index == 'abreviatura')
-                        $(ptrrenglon).parents("tr").find(".unidadmedida").val(value);
+                        $ctx.find('.unidadmedida').val(value);
                 });
 
                 $("#articulo_id").val(data.id);
@@ -572,7 +576,7 @@ function activa_eventos_consultaarticulo()
     $(document).off('change.ocCodigoArticuloLinea', '.codigoarticulo').on('change.ocCodigoArticuloLinea', '.codigoarticulo', function (event) {
         event.preventDefault();
         var ptrrenglon = this;
-        var $tr = $(ptrrenglon).closest('tr');
+        var $tr = consultaArticuloContextoLinea(ptrrenglon);
 
         let sku = ($(this).val() || '').trim();
         if (!sku) {

@@ -5,6 +5,7 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/contable/asiento/montos_formato.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/solicitudpago/concepto_solicitudpago/consulta.js")}}" type="text/javascript"></script>

@@ -54,17 +54,27 @@
         </select>
     </td>
     <td>
-        <input type="number" step="0.01" min="0" name="montos_debe[]"
-               class="form-control text-right monto-debe{{ $dh !== 'D' ? ' bg-light' : '' }}"
-               value="{{ $dh === 'D' && $montoDebe > 0 ? $montoDebe : '' }}"
-               placeholder="0"
+        @php
+            $debeTxt = ($dh === 'D' && (float) $montoDebe > 0)
+                ? number_format((float) $montoDebe, 2, ',', '.')
+                : '';
+            $haberTxt = ($dh === 'H' && (float) $montoHaber > 0)
+                ? number_format((float) $montoHaber, 2, ',', '.')
+                : '';
+        @endphp
+        <input type="text" inputmode="decimal" name="montos_debe[]"
+               class="form-control text-right js-monto-ar monto-debe{{ $dh !== 'D' ? ' bg-light' : '' }}"
+               value="{{ $debeTxt }}"
+               placeholder="0,00"
+               autocomplete="off"
                @if($dh !== 'D') readonly @endif>
     </td>
     <td>
-        <input type="number" step="0.01" min="0" name="montos_haber[]"
-               class="form-control text-right monto-haber{{ $dh !== 'H' ? ' bg-light' : '' }}"
-               value="{{ $dh === 'H' && $montoHaber > 0 ? $montoHaber : '' }}"
-               placeholder="0"
+        <input type="text" inputmode="decimal" name="montos_haber[]"
+               class="form-control text-right js-monto-ar monto-haber{{ $dh !== 'H' ? ' bg-light' : '' }}"
+               value="{{ $haberTxt }}"
+               placeholder="0,00"
+               autocomplete="off"
                @if($dh !== 'H') readonly @endif>
     </td>
     <td class="text-center">

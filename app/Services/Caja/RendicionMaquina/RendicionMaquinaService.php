@@ -500,15 +500,18 @@ final class RendicionMaquinaService
             ->whereHas('usocuentacajas', fn ($q) => $q->where('usocuentacaja.id', $usoId))
             ->orderBy('codigo')
             ->orderBy('nombre')
-            ->get(['id', 'codigo', 'nombre', 'moneda_id']);
+            ->get(['id', 'codigo', 'nombre', 'descripcion_operaciones', 'moneda_id']);
 
         $lineas = [];
         foreach ($cuentas as $cuenta) {
             $saved = $montosGuardados[(int) $cuenta->id] ?? null;
+            $etiqueta = $cuenta->etiquetaOperaciones();
             $lineas[] = [
                 'cuentacaja_id' => (int) $cuenta->id,
                 'codigo' => (string) $cuenta->codigo,
-                'nombre' => (string) $cuenta->nombre,
+                'nombre' => $etiqueta,
+                'descripcion_operaciones' => trim((string) ($cuenta->descripcion_operaciones ?? '')),
+                'nombre_maestro' => (string) $cuenta->nombre,
                 'monto' => $saved['monto'] ?? 0.0,
                 'cotizacion' => $saved['cotizacion'] ?? null,
                 'codigo_valormae' => $saved['codigo_valormae'] ?? null,

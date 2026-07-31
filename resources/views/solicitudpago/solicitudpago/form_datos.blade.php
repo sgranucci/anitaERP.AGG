@@ -150,8 +150,17 @@
         <div class="form-group row">
             <label for="monto" class="col-lg-4 col-form-label requerido">Monto</label>
             <div class="col-lg-5">
-                <input type="number" step="0.01" min="0" name="monto" id="monto" class="form-control" required
-                       value="{{ old('monto', $data->monto ?? '0') }}"/>
+                @php
+                    $montoSpVal = old('monto', isset($data) ? $data->monto : null);
+                    if ($montoSpVal === null || $montoSpVal === '') {
+                        $montoSpTxt = '';
+                    } else {
+                        $montoSpTxt = number_format((float) str_replace(',', '.', (string) $montoSpVal), 2, ',', '.');
+                    }
+                @endphp
+                <input type="text" inputmode="decimal" name="monto" id="monto"
+                       class="form-control text-right js-monto-ar" required autocomplete="off"
+                       value="{{ $montoSpTxt }}" placeholder="0,00"/>
             </div>
         </div>
 
@@ -174,8 +183,17 @@
         <div class="form-group row">
             <label for="fecha_entrega" class="col-lg-4 col-form-label">Fecha entrega</label>
             <div class="col-lg-5">
+                @php
+                    $fechaSpForm = old('fecha', isset($data) && $data->fecha ? $data->fecha->format('Y-m-d') : date('Y-m-d'));
+                    $fechaEntregaForm = old(
+                        'fecha_entrega',
+                        isset($data) && $data->fecha_entrega
+                            ? $data->fecha_entrega->format('Y-m-d')
+                            : $fechaSpForm
+                    );
+                @endphp
                 <input type="date" name="fecha_entrega" id="fecha_entrega" class="form-control"
-                       value="{{ old('fecha_entrega', isset($data) && $data->fecha_entrega ? $data->fecha_entrega->format('Y-m-d') : '') }}"/>
+                       value="{{ $fechaEntregaForm }}"/>
             </div>
         </div>
 

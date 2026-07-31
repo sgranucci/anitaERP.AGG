@@ -69,6 +69,7 @@
                     'limpiarUrl' => $limpiarFiltrosUrl ?? route('consultar_solicitudpago', ['limpiar_filtros' => 1]),
                 ])
             </form>
+            @include('solicitudpago.solicitudpago.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @if (!empty($puedeVerTodas) && ($alcanceListado ?? '') === 'mi_cc')
                     <div class="alert alert-warning py-2 mb-0 mx-3 mt-3 small">
@@ -91,6 +92,7 @@
                     <thead>
                         <tr>
                             <th>C&oacute;digo</th>
+                            <th>Empresa</th>
                             <th>Fecha</th>
                             <th>Concepto</th>
                             <th>Proveedor / Beneficiario</th>
@@ -128,6 +130,7 @@
                                     <span class="badge badge-light border ml-1" title="SP hija de un plan">Hija</span>
                                 @endif
                             </td>
+                            <td>{{ optional($data->empresas)->nombre ?? '—' }}</td>
                             <td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
                             <td>{{ optional($data->conceptos)->nombre ?? '—' }}</td>
                             <td>

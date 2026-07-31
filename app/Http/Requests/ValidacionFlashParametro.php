@@ -16,8 +16,32 @@ class ValidacionFlashParametro extends FormRequest
     protected function prepareForValidation(): void
     {
         $periodo = FlashParametro::periodoDesdeInput($this->input('periodo'));
+        $merge = [];
         if ($periodo !== '') {
-            $this->merge(['periodo' => $periodo]);
+            $merge['periodo'] = $periodo;
+        }
+
+        foreach ([
+            'budget_total',
+            'budget_slot',
+            'budget_rul',
+            'budget_poker',
+            'budget_bingo',
+            'budget_f_b',
+            'budget_estac',
+        ] as $campo) {
+            if (! $this->exists($campo)) {
+                continue;
+            }
+            $merge[$campo] = ValidacionFlashCaja::parseNumeroAr($this->input($campo), 2);
+        }
+
+        if ($this->exists('budget_pos')) {
+            $merge['budget_pos'] = (int) round(ValidacionFlashCaja::parseNumeroAr($this->input('budget_pos'), 0));
+        }
+
+        if ($merge !== []) {
+            $this->merge($merge);
         }
     }
 

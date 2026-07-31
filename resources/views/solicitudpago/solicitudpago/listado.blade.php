@@ -65,14 +65,15 @@
 	<table class="data">
 		<thead>
 			<tr>
-				<th style="width: 8%;">C&oacute;digo</th>
-				<th style="width: 9%;">Fecha</th>
-				<th style="width: 18%;">Concepto</th>
-				<th style="width: 18%;">Proveedor / Benef.</th>
-				<th style="width: 10%;">Monto</th>
-				<th style="width: 10%;">Tratamiento</th>
-				<th style="width: 10%;">Estado</th>
-				<th style="width: 8%;">SP madre</th>
+				<th style="width: 7%;">C&oacute;digo</th>
+				<th style="width: 12%;">Empresa</th>
+				<th style="width: 8%;">Fecha</th>
+				<th style="width: 15%;">Concepto</th>
+				<th style="width: 15%;">Proveedor / Benef.</th>
+				<th style="width: 9%;">Monto</th>
+				<th style="width: 9%;">Tratamiento</th>
+				<th style="width: 9%;">Estado</th>
+				<th style="width: 7%;">SP madre</th>
 				<th style="width: 9%;">Cuotas pend.</th>
 			</tr>
 		</thead>
@@ -80,6 +81,7 @@
 			@foreach ($datas as $data)
 				<tr>
 					<td>{{ $data->codigo }}</td>
+					<td>{{ $data->nombreempresa ?? (optional($data->empresas)->nombre ?? '') }}</td>
 					<td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
 					<td>{{ optional($data->conceptos)->nombre ?? '' }}</td>
 					<td>{{ optional($data->proveedores)->nombre ?? ($data->beneficiario ?? '') }}</td>

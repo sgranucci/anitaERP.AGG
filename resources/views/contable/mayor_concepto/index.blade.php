@@ -166,7 +166,7 @@
                         throw new Error('Sesión expirada. Recargue la página (F5) e intente de nuevo.');
                     }
                     if (res.status === 404 || res.status === 502 || res.status === 504) {
-                        throw new Error('El servidor cortó el request (HTTP ' + res.status + '). Reintente; si persiste, consulte de a una empresa.');
+                        throw new Error('El servidor cortó el request por tiempo o carga (HTTP ' + res.status + '). Reintente; si persiste, consulte de a una empresa o un mes a la vez.');
                     }
                     if (! res.ok) {
                         return res.json().catch(function () { return {}; }).then(function (body) {

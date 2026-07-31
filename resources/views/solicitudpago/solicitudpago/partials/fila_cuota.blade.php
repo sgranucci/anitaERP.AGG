@@ -14,7 +14,8 @@
         <input type="date" name="fecha_vencimientos_cuota[]" class="form-control" value="{{ $vto }}">
     </td>
     <td>
-        <input type="number" step="0.01" name="montos_cuota[]" class="form-control" value="{{ $fila->monto ?? 0 }}">
+        <input type="text" inputmode="decimal" name="montos_cuota[]" class="form-control text-right js-monto-ar"
+               value="{{ number_format((float) ($fila->monto ?? 0), 2, ',', '.') }}" autocomplete="off" placeholder="0,00">
     </td>
     <td>
         <input type="hidden" name="solicitudpago_hija_ids[]" value="{{ $fila->solicitudpago_hija_id ?? '' }}">

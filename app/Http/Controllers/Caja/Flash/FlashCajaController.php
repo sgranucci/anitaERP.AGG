@@ -552,7 +552,11 @@ class FlashCajaController extends Controller
             }
         } else {
             $calculado = $this->calculoService->calcular($empresaId, $fecha);
-            unset($calculado['advertencias_wigos'], $calculado['desglose_wigos']);
+            unset(
+                $calculado['advertencias_wigos'],
+                $calculado['desglose_wigos'],
+                $calculado['impuestos_rendicion'],
+            );
             $payload = array_merge($payload, $calculado);
         }
 

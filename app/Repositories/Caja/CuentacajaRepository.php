@@ -542,6 +542,11 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             $data['cbu'] = $cbu;
         }
 
+        if (array_key_exists('descripcion_operaciones', $data)) {
+            $desc = trim((string) ($data['descripcion_operaciones'] ?? ''));
+            $data['descripcion_operaciones'] = $desc !== '' ? mb_substr($desc, 0, 60) : null;
+        }
+
         return $data;
     }
 

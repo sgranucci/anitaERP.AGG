@@ -62,16 +62,17 @@
 		<thead>
 			<tr>
 				<th style="width: 4%;">ID</th>
-				<th style="width: 14%;">Nombre</th>
-				<th style="width: 6%;">C&oacute;digo</th>
-				<th style="width: 7%;">Tipo cuenta</th>
-				<th style="width: 10%;">Banco</th>
-				<th style="width: 8%;">Empresa</th>
-				<th style="width: 14%;">Cuenta contable</th>
-				<th style="width: 6%;">Moneda</th>
-				<th style="width: 12%;">CBU</th>
-				<th style="width: 9%;">Cuenta Interbanking</th>
-				<th style="width: 10%;">Usos</th>
+				<th style="width: 12%;">Nombre</th>
+				<th style="width: 10%;">Desc. operaciones</th>
+				<th style="width: 5%;">C&oacute;digo</th>
+				<th style="width: 6%;">Tipo cuenta</th>
+				<th style="width: 9%;">Banco</th>
+				<th style="width: 7%;">Empresa</th>
+				<th style="width: 12%;">Cuenta contable</th>
+				<th style="width: 5%;">Moneda</th>
+				<th style="width: 10%;">CBU</th>
+				<th style="width: 8%;">Cuenta Interbanking</th>
+				<th style="width: 12%;">Usos</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -79,6 +80,7 @@
 				<tr>
 					<td>{{ $data->id }}</td>
 					<td>{{ $data->nombre }}</td>
+					<td>{{ $data->descripcion_operaciones }}</td>
 					<td>{{ $data->codigo }}</td>
 					<td>
 						@foreach($tipocuenta_enum as $tipocuenta)

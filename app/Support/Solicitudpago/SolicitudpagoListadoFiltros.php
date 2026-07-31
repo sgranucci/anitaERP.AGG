@@ -50,7 +50,9 @@ final class SolicitudpagoListadoFiltros
      *     tratamiento: string,
      *     fecha_desde: string,
      *     fecha_hasta: string,
-     *     alcance: string
+     *     alcance: string,
+     *     empresa_id: ?int,
+     *     empresa_scope: string
      * }
      */
     public static function filtrosVacios(): array
@@ -66,11 +68,15 @@ final class SolicitudpagoListadoFiltros
             'fecha_desde' => '',
             'fecha_hasta' => '',
             'alcance' => SolicitudpagoVisibilidadSupport::ALCANCE_TODAS,
+            'empresa_id' => null,
+            'empresa_scope' => 'una',
         ];
     }
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
         $filtros = self::filtrosVacios();
         $filtros['valor'] = (string) FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
         $filtros['campo'] = $request->input('filtro_campo') ?: null;
@@ -82,8 +88,30 @@ final class SolicitudpagoListadoFiltros
         $filtros['fecha_desde'] = (string) $request->input('fecha_desde', '');
         $filtros['fecha_hasta'] = (string) $request->input('fecha_hasta', '');
         $filtros['alcance'] = self::normalizarAlcance($request->input('alcance'));
+        $filtros['empresa_id'] = $empresaId;
+        $filtros['empresa_scope'] = $empresaScope;
 
         return $filtros;
+    }
+
+    /**
+     * Filtro externo del index: empresa (default primera asignada) o todas (`empresa_todas=1`).
+     *
+     * @return array{0:?int,1:string}  [empresa_id, empresa_scope]
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
     }
 
     public static function normalizarAlcance(mixed $valor): string
@@ -116,7 +144,7 @@ final class SolicitudpagoListadoFiltros
 
     public static function paraQueryString(array $filtros): array
     {
-        $out = [];
+        $out = self::paraQueryStringEmpresa($filtros);
         if (trim((string) ($filtros['valor'] ?? '')) !== '') {
             $out['filtro_valor'] = $filtros['valor'];
         }
@@ -141,8 +169,29 @@ final class SolicitudpagoListadoFiltros
         return $out;
     }
 
+    /**
+     * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
+     *
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
+    }
+
     public static function aplicar($query, array $filtros)
     {
+        if (! empty($filtros['empresa_id'])) {
+            $query->where('solicitudpago.empresa_id', (int) $filtros['empresa_id']);
+        }
+
         if (! self::tieneCriteriosAplicados($filtros)) {
             return $query;
         }

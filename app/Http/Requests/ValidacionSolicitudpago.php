@@ -17,6 +17,61 @@ class ValidacionSolicitudpago extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        if ($this->has('monto')) {
+            $merge['monto'] = $this->parseMontoAr($this->input('monto'));
+        }
+
+        foreach (['montos_debe', 'montos_haber', 'montos_cuenta', 'montos_cuota'] as $campo) {
+            $arr = $this->input($campo);
+            if (! is_array($arr)) {
+                continue;
+            }
+            $merge[$campo] = array_map(fn ($v) => $this->parseMontoAr($v), $arr);
+        }
+
+        // Fecha entrega vacía → misma fecha de la SP.
+        $fechaEntrega = trim((string) $this->input('fecha_entrega', ''));
+        $fechaSp = trim((string) $this->input('fecha', ''));
+        if ($fechaEntrega === '' && $fechaSp !== '') {
+            $merge['fecha_entrega'] = $fechaSp;
+        }
+
+        if ($merge !== []) {
+            $this->merge($merge);
+        }
+    }
+
+    /**
+     * Acepta 1234.56 / 1.234,56 / 1234,56 y devuelve float (o null si vacío).
+     */
+    private function parseMontoAr($valor): ?float
+    {
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+        if (is_int($valor) || is_float($valor)) {
+            return round((float) $valor, 2);
+        }
+        $t = trim(str_replace(' ', '', (string) $valor));
+        if ($t === '') {
+            return null;
+        }
+        if (str_contains($t, ',')) {
+            $t = str_replace('.', '', $t);
+            $t = str_replace(',', '.', $t);
+        } elseif (preg_match('/^\d{1,3}(\.\d{3})+$/', $t)) {
+            $t = str_replace('.', '', $t);
+        }
+        if (! is_numeric($t)) {
+            return null;
+        }
+
+        return round((float) $t, 2);
+    }
+
     public function rules()
     {
         $id = $this->route('id');
@@ -104,15 +159,15 @@ class ValidacionSolicitudpago extends FormRequest
                 continue;
             }
             if (is_array($montosDebe) || is_array($montosHaber)) {
-                $debe = (float) str_replace(',', '.', (string) (($montosDebe[$i] ?? '') !== '' ? ($montosDebe[$i] ?? 0) : 0));
-                $haber = (float) str_replace(',', '.', (string) (($montosHaber[$i] ?? '') !== '' ? ($montosHaber[$i] ?? 0) : 0));
+                $debe = (float) ($montosDebe[$i] ?? 0);
+                $haber = (float) ($montosHaber[$i] ?? 0);
                 $totalDebe += max(0, $debe);
                 $totalHaber += max(0, $haber);
                 if ($debe > 0 || $haber > 0) {
                     $ok = true;
                 }
             } else {
-                $monto = (float) str_replace(',', '.', (string) ($montos[$i] ?? 0));
+                $monto = (float) ($montos[$i] ?? 0);
                 $dh = strtoupper((string) ($dhs[$i] ?? 'D'));
                 if ($monto > 0 && in_array($dh, ['D', 'H'], true)) {
                     $ok = true;
@@ -139,6 +194,19 @@ class ValidacionSolicitudpago extends FormRequest
                 'montos_debe',
                 'El asiento no balancea: Debe ('.number_format($totalDebe, 2, ',', '.').') debe ser igual a Haber ('.number_format($totalHaber, 2, ',', '.').').'
             );
+
+            return;
+        }
+
+        // Con asiento balanceado, Debe (= Haber) debe coincidir con el monto de la SP.
+        $montoSp = (float) ($this->input('monto') ?? 0);
+        $totalAsiento = $totalDebe;
+        if (abs($totalAsiento - $montoSp) >= 0.009) {
+            $validator->errors()->add(
+                'monto',
+                'El total del asiento contable ('.number_format($totalAsiento, 2, ',', '.').') '
+                .'debe ser igual al monto de la solicitud ('.number_format($montoSp, 2, ',', '.').').'
+            );
         }
     }
 
@@ -162,7 +230,7 @@ class ValidacionSolicitudpago extends FormRequest
         $n = max(count($vtos), count($montos));
         for ($i = 0; $i < $n; $i++) {
             $vto = trim((string) ($vtos[$i] ?? ''));
-            $monto = (float) str_replace(',', '.', (string) ($montos[$i] ?? 0));
+            $monto = (float) ($montos[$i] ?? 0);
             if ($vto !== '' && $monto > 0) {
                 $ok = true;
                 break;

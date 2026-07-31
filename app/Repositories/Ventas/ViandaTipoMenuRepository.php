@@ -78,6 +78,60 @@ class ViandaTipoMenuRepository implements ViandaTipoMenuRepositoryInterface
         return $this->model->with(['empresa', 'articulos.articulo'])->findOrFail($id);
     }
 
+    public function replicarAEmpresa(int $origenId, int $empresaDestinoId): ViandaTipoMenu
+    {
+        return DB::transaction(function () use ($origenId, $empresaDestinoId) {
+            $origen = $this->findOrFail($origenId);
+            $empresaOrigenId = (int) $origen->empresa_id;
+            if ($empresaOrigenId === $empresaDestinoId) {
+                throw new \InvalidArgumentException('La empresa destino debe ser distinta a la del menú origen.');
+            }
+
+            $destino = $this->buscarDestinoParaReplica($origen, $empresaDestinoId);
+            if ($destino === null) {
+                $destino = $this->model->create([
+                    'empresa_id' => $empresaDestinoId,
+                    'codigo_anita' => $origen->codigo_anita,
+                    'nombre' => $origen->nombre,
+                    'estado' => $origen->estado,
+                ]);
+            } else {
+                $destino->update([
+                    'nombre' => $origen->nombre,
+                    'estado' => $origen->estado,
+                ]);
+            }
+
+            $lineas = [];
+            foreach ($origen->articulos as $linea) {
+                $articuloId = (int) $linea->articulo_id;
+                if ($articuloId <= 0) {
+                    continue;
+                }
+                $lineas[] = [
+                    'dia_semana' => (int) $linea->dia_semana,
+                    'articulo_id' => $articuloId,
+                    'orden' => (int) $linea->orden,
+                ];
+            }
+
+            $this->sincronizarArticulos((int) $destino->id, $lineas);
+
+            return $destino->fresh(['empresa', 'articulos.articulo']);
+        });
+    }
+
+    private function buscarDestinoParaReplica(ViandaTipoMenu $origen, int $empresaDestinoId): ?ViandaTipoMenu
+    {
+        $query = $this->model->newQuery()->where('empresa_id', $empresaDestinoId);
+        $codigoAnita = $origen->codigo_anita;
+        if ($codigoAnita !== null && $codigoAnita !== '') {
+            return $query->where('codigo_anita', $codigoAnita)->first();
+        }
+
+        return $query->where('nombre', $origen->nombre)->first();
+    }
+
     /**
      * @return array<int, Collection<int, ViandaTipoMenuArticulo>>
      */

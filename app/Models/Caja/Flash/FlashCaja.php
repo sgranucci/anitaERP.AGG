@@ -104,11 +104,11 @@ class FlashCaja extends Model implements Auditable
 
     public function getTotalRevenuesAttribute(): float
     {
+        // Misma fórmula que l-flash.c Net Revenues (sin vending; EGA ≈ show).
         return round(
             $this->total_gaming
             + (float) $this->ayb
             + (float) $this->estac
-            + (float) $this->vending
             + (float) $this->show,
             2
         );

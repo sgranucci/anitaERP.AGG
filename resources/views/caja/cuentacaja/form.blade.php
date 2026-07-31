@@ -5,6 +5,16 @@
     </div>
 </div>
 <div class="form-group row">
+    <label for="descripcion_operaciones" class="col-lg-3 col-form-label">Descripci&oacute;n operaciones</label>
+    <div class="col-lg-8">
+        <input type="text" name="descripcion_operaciones" id="descripcion_operaciones" class="form-control"
+               maxlength="60"
+               value="{{ old('descripcion_operaciones', $data->descripcion_operaciones ?? '') }}"
+               placeholder="Etiqueta corta en rendiciones y pantallas operativas"/>
+        <small class="form-text text-muted">Se muestra en rendici&oacute;n de m&aacute;quinas (origen Anita valormae).</small>
+    </div>
+</div>
+<div class="form-group row">
     <label for="codigo" class="col-lg-3 col-form-label requerido">Código</label>
     <div class="col-lg-2">
     <input type="text" name="codigo" id="codigo" class="form-control" value="{{old('codigo', $data->codigo ?? '')}}" required/>
