@@ -1014,6 +1014,8 @@ Route::get('contable/listar-efe-mensual/{formato}', 'Contable\EfeMensualControll
 
 Route::get('contable/mayor-plano-cuenta', 'Contable\MayorPlanoCuentaController@index')->name('mayor_plano_cuenta');
 Route::get('contable/listar-mayor-plano-cuenta/{formato}', 'Contable\MayorPlanoCuentaController@exportar')->name('listar_mayor_plano_cuenta');
+Route::get('contable/cc-vs-mayor-anita', 'Contable\CcVsMayorAnitaController@index')->name('cc_vs_mayor_anita');
+Route::get('contable/listar-cc-vs-mayor-anita/{formato}', 'Contable\CcVsMayorAnitaController@exportar')->name('listar_cc_vs_mayor_anita');
 Route::get('contable/sumas-saldos', 'Contable\SumasSaldosController@index')->name('sumas_saldos');
 Route::get('contable/listar-sumas-saldos/{formato}', 'Contable\SumasSaldosController@exportar')->name('listar_sumas_saldos');
 

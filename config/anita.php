@@ -18,6 +18,14 @@ return [
 
     'bdd_path' => env('ANITA_BDD_PATH', ''),
 
+    /**
+     * Sistema Informix donde vive subdiario para controles/mayor de ventas.
+     * El Bierzo: ventas. AGG / otros: suele ser contab.
+     */
+    'subdiario_sistema' => env('ANITA_SUBDIARIO_SISTEMA', 'ventas'),
+
+    'bridge_list_reintentos' => (int) env('ANITA_BRIDGE_LIST_REINTENTOS', 6),
+
     'ifx_server' => env('IFX_SERVER', ''),
 
     'ifx_server_local' => env('IFX_SERVER_LOCAL', ''),
