@@ -9,10 +9,10 @@ use App\Services\Configuracion\CotizacionService;
 use App\Repositories\Configuracion\Cotizacion_MonedaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Queries\Configuracion\CotizacionQueryInterface;
-use App\Exports\Configuracion\CotizacionExport;
+use App\Exports\Configuracion\CotizacionListadoExport;
+use App\Support\Configuracion\CotizacionListadoColumnas;
+use App\Support\Configuracion\CotizacionListadoFiltros;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Carbon\Carbon;
 use Exception;
 use DB;
 
@@ -46,61 +46,63 @@ class CotizacionController extends Controller
     public function index(Request $request)
     {
         can('listar-cotizacion');
-		
+
         $haycotizaciones = $this->cotizacionQuery->first();
 
-		if (!$haycotizaciones)
-			$this->cotizacionRepository->sincronizarConAnita();
+        if (! $haycotizaciones) {
+            $this->cotizacionRepository->sincronizarConAnita();
+        }
 
-        $busqueda = $request->busqueda;
+        $filtros = CotizacionListadoFiltros::resolverDesdeRequest($request);
+        $datas = $this->cotizacionQuery->leeCotizacion($filtros, true);
+        $monedasColumnas = CotizacionListadoColumnas::monedasParaColumnas();
 
-		$cotizaciones = $this->cotizacionQuery->leeCotizacion($busqueda, true);
-
-        $datas = ['cotizaciones' => $cotizaciones, 'busqueda' => $busqueda];
-
-        return view('configuracion.cotizacion.index', $datas);
+        return view('configuracion.cotizacion.index', [
+            'datas' => $datas,
+            'monedasColumnas' => $monedasColumnas,
+            'filtros' => $filtros,
+            'filtrosQuery' => CotizacionListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => CotizacionListadoFiltros::CAMPOS,
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-cotizacion'); 
+        can('listar-cotizacion');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        switch($formato)
-        {
-        case 'PDF':
-            $cotizaciones = $this->cotizacionQuery->leeCotizacion($busqueda, false);
+        $filtros = CotizacionListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $monedasColumnas = CotizacionListadoColumnas::monedasParaColumnas();
 
-            $view =  \View::make('configuracion.cotizacion.listado', compact('cotizaciones'))
-                        ->render();
-            $path = storage_path('pdf/listados');
-            $nombre_pdf = 'listado_cotizacion';
+        switch ($formato) {
+            case 'PDF':
+                $datas = $this->cotizacionQuery->leeCotizacion($filtros, false);
 
-            $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+                $view = \View::make('configuracion.cotizacion.listado', compact('datas', 'monedasColumnas'))
+                    ->render();
+                $path = storage_path('pdf/listados');
+                $nombre_pdf = 'listado_cotizacion';
 
-            return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
-        case 'EXCEL':
-            return (new cotizacionExport($this->cotizacionQuery))
-                        ->parametros($busqueda)
-                        ->download('cotizacion.xlsx');
-            break;
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
 
-        case 'CSV':
-            return (new cotizacionExport($this->cotizacionQuery))
-                        ->parametros($busqueda)
-                        ->download('cotizacion.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
-        }   
+            case 'EXCEL':
+                return (new CotizacionListadoExport($this->cotizacionQuery))
+                    ->parametros($filtros)
+                    ->download('cotizacion.xlsx');
 
-        $datas = ['cotizaciones' => $cotizaciones, 'busqueda' => $busqueda];
+            case 'CSV':
+                return (new CotizacionListadoExport($this->cotizacionQuery))
+                    ->parametros($filtros)
+                    ->download('cotizacion.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
 
-		return view('configuracion.cotizacion.indexp', $datas);       
+        return redirect()->route('cotizacion', CotizacionListadoFiltros::paraQueryString($filtros));
     }
 
     /**

@@ -10,7 +10,9 @@ use Illuminate\Support\Collection;
 
 /**
  * Cálculos del Flash Report (réplica de l-flash.c / imprime_una_fecha / calcula_coef_season).
- * Sin EGA: vending + show entran en revenues como “otros”.
+ *
+ * Net Revenues (l-flash.c): gaming + ayb + estac + simulador + play + arcade + show.
+ * Sin EGA en ERP: solo entra `show` (no vending — Anita no lo suma al Net Revenues).
  */
 final class FlashCajaLFlashCalculoSupport
 {
@@ -43,7 +45,8 @@ final class FlashCajaLFlashCalculoSupport
         $winOnline = round($slotOl + $rulOl, 2);
         $winFinancial = round($slotFin + $rulFin, 2);
         $gaming = round($winOnline + $bingoWin, 2);
-        $otros = round($vending + $show, 2);
+        // Columna “Otros” del L-Flash ≈ arcade+show de Anita; sin EGA solo show.
+        $otros = round($show, 2);
         $revenues = round($gaming + $ayb + $estac + $otros, 2);
         $elPos = $slotUnits + $rulUnits;
 
@@ -435,8 +438,11 @@ final class FlashCajaLFlashCalculoSupport
         $m['bingo_win_cust'] = self::div($bingoWin, $custom);
         $m['ayb_cust'] = self::div($ayb, $custom);
         $m['estac_cust'] = self::div($estac, $custom);
-        $m['revenues_cust'] = self::div($revenues, $custom);
         $m['gaming'] = round((float) $m['win_online'] + $bingoWin, 2);
+        // l-flash: Net Revenues = gaming + ayb + estac + EGA/show (sin vending)
+        $m['otros'] = round((float) ($m['show'] ?? 0), 2);
+        $m['revenues'] = round((float) $m['gaming'] + $ayb + $estac + (float) $m['otros'], 2);
+        $m['revenues_cust'] = self::div((float) $m['revenues'], $custom);
 
         return $m;
     }

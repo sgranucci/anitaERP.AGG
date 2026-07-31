@@ -1627,6 +1627,7 @@ Route::get('ventas/gastronomia/viandas/tipos-menu/crear', 'Ventas\ViandaTipoMenu
 Route::post('ventas/gastronomia/viandas/tipos-menu', 'Ventas\ViandaTipoMenuController@guardar')->name('guardar_vianda_tipo_menu_gastronomia');
 Route::get('ventas/gastronomia/viandas/tipos-menu/{id}/editar', 'Ventas\ViandaTipoMenuController@editar')->name('editar_vianda_tipo_menu_gastronomia');
 Route::put('ventas/gastronomia/viandas/tipos-menu/{id}', 'Ventas\ViandaTipoMenuController@actualizar')->name('actualizar_vianda_tipo_menu_gastronomia');
+Route::post('ventas/gastronomia/viandas/tipos-menu/{id}/replicar', 'Ventas\ViandaTipoMenuController@replicar')->name('replicar_vianda_tipo_menu_gastronomia');
 Route::delete('ventas/gastronomia/viandas/tipos-menu/{id}', 'Ventas\ViandaTipoMenuController@eliminar')->name('eliminar_vianda_tipo_menu_gastronomia');
 
 Route::get('ventas/gastronomia/viandas/usuarios', 'Ventas\ViandaUsuarioController@index')->name('consultar_vianda_usuario_gastronomia');
@@ -3708,6 +3709,8 @@ Route::get('solicitudpago/solicitudpago/crear', 'Solicitudpago\SolicitudpagoCont
 Route::post('solicitudpago/solicitudpago', 'Solicitudpago\SolicitudpagoController@guardar')->name('guardar_solicitudpago');
 Route::post('solicitudpago/solicitudpago/carga-masiva/preview', 'Solicitudpago\SolicitudpagoController@previewCargaMasiva')->name('preview_carga_masiva_solicitudpago');
 Route::post('solicitudpago/solicitudpago/carga-masiva/confirmar', 'Solicitudpago\SolicitudpagoController@confirmarCargaMasiva')->name('confirmar_carga_masiva_solicitudpago');
+Route::get('solicitudpago/solicitudpago/visualizar/{id}/{hash}', 'Solicitudpago\SolicitudpagoController@visualizar')->name('visualizar_solicitudpago');
+Route::get('solicitudpago/solicitudpago/{id}/descargar-paquete/{hash}', 'Solicitudpago\SolicitudpagoController@descargarPaqueteMail')->name('descargar_paquete_mail_solicitudpago');
 Route::get('solicitudpago/solicitudpago/{id}/editar', 'Solicitudpago\SolicitudpagoController@editar')->name('editar_solicitudpago')->middleware('modo.consulta');
 Route::put('solicitudpago/solicitudpago/{id}', 'Solicitudpago\SolicitudpagoController@actualizar')->name('actualizar_solicitudpago')->middleware('modo.consulta');
 Route::get('solicitudpago/solicitudpago/{id}/familia-vinculos', 'Solicitudpago\SolicitudpagoController@familiaVinculos')->name('familia_vinculos_solicitudpago');
@@ -3722,6 +3725,8 @@ Route::get('solicitudpago/solicitudpago/{id}/unir-archivos', 'Solicitudpago\Soli
 Route::post('solicitudpago/solicitudpago/{id}/importar-cuotas', 'Solicitudpago\SolicitudpagoController@importarCuotas')->name('importar_cuotas_solicitudpago');
 Route::post('solicitudpago/solicitudpago/{id}/marcar-pagada', 'Solicitudpago\SolicitudpagoController@marcarPagada')->name('marcar_pagada_solicitudpago');
 Route::get('solicitudpago/solicitudpago/{id}/ir-a-pago', 'Solicitudpago\SolicitudpagoController@irAPago')->name('ir_a_pago_solicitudpago');
+// Compatibilidad: correos del árbol previos a la ruta /visualizar/{id}/{hash}
+Route::get('solicitudpago/solicitudpago/{id}/{hash}', 'Solicitudpago\SolicitudpagoController@visualizar');
 
 /*
  * Informe de solicitudes de pago (Anita l-solpagomae.c)

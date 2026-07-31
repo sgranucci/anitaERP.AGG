@@ -279,12 +279,13 @@
                                         @endphp
                                         <div class="form-group col-md-6 col-lg-4 mb-2">
                                             <label class="small mb-0" for="input_{{ $clave }}">{{ $etiqueta }}</label>
-                                            <input type="number" step="0.01"
+                                            <input type="text" inputmode="decimal"
                                                    id="input_{{ $clave }}"
-                                                   class="form-control form-control-sm js-input-wigos text-right"
+                                                   class="form-control form-control-sm js-input-wigos js-monto-ar text-right"
                                                    data-campo="{{ $campoRuta }}"
                                                    data-clave="{{ $clave }}"
-                                                   value="{{ number_format((float) $valorInput, 2, '.', '') }}">
+                                                   autocomplete="off"
+                                                   value="{{ number_format((float) $valorInput, 2, ',', '.') }}">
                                         </div>
                                     @endforeach
                                     @foreach ($camposManuales as $claveManual)
@@ -296,11 +297,12 @@
                                         @endphp
                                         <div class="form-group col-md-6 col-lg-4 mb-2">
                                             <label class="small mb-0" for="input_{{ $claveManual }}">{{ ucfirst(str_replace('_', ' ', $claveManual)) }}</label>
-                                            <input type="number" step="0.01"
+                                            <input type="text" inputmode="decimal"
                                                    id="input_{{ $claveManual }}"
-                                                   class="form-control form-control-sm js-input-manual text-right"
+                                                   class="form-control form-control-sm js-input-manual js-monto-ar text-right"
                                                    data-clave="{{ $claveManual }}"
-                                                   value="{{ number_format((float) $valorManual, 2, '.', '') }}">
+                                                   autocomplete="off"
+                                                   value="{{ number_format((float) $valorManual, 2, ',', '.') }}">
                                         </div>
                                     @endforeach
                                 </div>
@@ -326,9 +328,10 @@
                                                 <td class="text-muted col-codigo">{{ $linea['codigo'] ?? '' }}</td>
                                                 <td class="col-desc" title="{{ $linea['nombre'] ?? '' }}">{{ $linea['nombre'] ?? '' }}</td>
                                                 <td class="col-monto">
-                                                    <input type="number" step="0.01"
-                                                           class="form-control form-control-sm text-right js-valor-monto"
-                                                           value="{{ number_format((float) ($linea['monto'] ?? 0), 2, '.', '') }}">
+                                                    <input type="text" inputmode="decimal"
+                                                           class="form-control form-control-sm text-right js-valor-monto js-monto-ar"
+                                                           autocomplete="off"
+                                                           value="{{ number_format((float) ($linea['monto'] ?? 0), 2, ',', '.') }}">
                                                 </td>
                                             </tr>
                                         @empty
@@ -356,9 +359,10 @@
                                                 <td class="text-muted col-codigo">{{ $linea['codigo'] ?? '' }}</td>
                                                 <td class="col-desc" title="{{ $linea['nombre'] ?? '' }}">{{ $linea['nombre'] ?? '' }}</td>
                                                 <td class="col-monto">
-                                                    <input type="number" step="0.01"
-                                                           class="form-control form-control-sm text-right js-gasto-monto"
-                                                           value="{{ number_format((float) ($linea['monto'] ?? 0), 2, '.', '') }}">
+                                                    <input type="text" inputmode="decimal"
+                                                           class="form-control form-control-sm text-right js-gasto-monto js-monto-ar"
+                                                           autocomplete="off"
+                                                           value="{{ number_format((float) ($linea['monto'] ?? 0), 2, ',', '.') }}">
                                                 </td>
                                             </tr>
                                         @empty
@@ -375,13 +379,17 @@
                                 <div class="form-row">
                                     <div class="form-group col-md-6 mb-md-0">
                                         <label for="calc_comprobante">Comprobante</label>
-                                        <input type="number" step="0.01" id="calc_comprobante" class="form-control form-control-sm text-right js-calc-orq"
-                                               value="{{ number_format((float) ($calcOrq['comprobante'] ?? 0), 2, '.', '') }}">
+                                        <input type="text" inputmode="decimal" id="calc_comprobante"
+                                               class="form-control form-control-sm text-right js-calc-orq js-monto-ar"
+                                               autocomplete="off"
+                                               value="{{ number_format((float) ($calcOrq['comprobante'] ?? 0), 2, ',', '.') }}">
                                     </div>
                                     <div class="form-group col-md-6 mb-0">
                                         <label for="calc_vale_rep_fondo">Vale rep. fondo</label>
-                                        <input type="number" step="0.01" id="calc_vale_rep_fondo" class="form-control form-control-sm text-right js-calc-orq"
-                                               value="{{ number_format((float) ($calcOrq['vale_rep_fondo'] ?? 0), 2, '.', '') }}">
+                                        <input type="text" inputmode="decimal" id="calc_vale_rep_fondo"
+                                               class="form-control form-control-sm text-right js-calc-orq js-monto-ar"
+                                               autocomplete="off"
+                                               value="{{ number_format((float) ($calcOrq['vale_rep_fondo'] ?? 0), 2, ',', '.') }}">
                                     </div>
                                 </div>
                             </div>

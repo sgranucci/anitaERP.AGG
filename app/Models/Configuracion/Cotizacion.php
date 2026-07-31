@@ -2,10 +2,8 @@
 
 namespace App\Models\Configuracion;
 
+use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use Auth;
 
 class Cotizacion extends Model
 {
@@ -13,10 +11,10 @@ class Cotizacion extends Model
     protected $table = 'cotizacion';
 
     public function cotizacion_monedas()
-	{
-    	return $this->hasMany(Cotizacion_Moneda::class, 'cotizacion_id')
-                        ->with('monedas');
-	}
+    {
+        return $this->hasMany(Cotizacion_Moneda::class, 'cotizacion_id')
+            ->with('monedas');
+    }
 
     public function usuarios()
     {

@@ -17,8 +17,56 @@
     }
 
     function parseNum(val) {
-        var n = parseFloat(String(val || '').replace(',', '.'));
-        return isNaN(n) ? 0 : n;
+        if (val == null || val === '') {
+            return 0;
+        }
+        if (typeof val === 'number') {
+            return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+        }
+        var t = String(val).trim().replace(/\s/g, '');
+        if (t.indexOf(',') >= 0) {
+            t = t.replace(/\./g, '').replace(',', '.');
+        } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+            t = t.replace(/\./g, '');
+        }
+        var n = parseFloat(t);
+        return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+    }
+
+    function formatearInputMonto(el) {
+        if (!el) {
+            return;
+        }
+        if (el.value === '' || el.value == null) {
+            el.value = '';
+            return;
+        }
+        el.value = fmtMoney(parseNum(el.value));
+    }
+
+    function desformatearInputMonto(el) {
+        if (!el || el.value === '') {
+            return;
+        }
+        el.value = String(parseNum(el.value));
+    }
+
+    function esInputMonto(el) {
+        if (!el || !el.classList) {
+            return false;
+        }
+        return el.classList.contains('js-input-wigos')
+            || el.classList.contains('js-input-manual')
+            || el.classList.contains('js-valor-monto')
+            || el.classList.contains('js-gasto-monto')
+            || el.classList.contains('js-calc-orq')
+            || el.classList.contains('js-monto-ar');
+    }
+
+    function initFormatoMontos(root) {
+        var scope = root || app;
+        scope.querySelectorAll('.js-monto-ar, .js-input-wigos, .js-input-manual, .js-valor-monto, .js-gasto-monto, .js-calc-orq')
+            .forEach(formatearInputMonto);
     }
 
     function escapeHtml(text) {
@@ -120,11 +168,11 @@
             var id = parseInt(linea.cuentacaja_id, 10) || 0;
             var codigo = escapeHtml(linea.codigo || '');
             var nombre = escapeHtml(linea.nombre || '');
-            var monto = Number(linea.monto || 0).toFixed(2);
+            var monto = fmtMoney(linea.monto || 0);
             return '<tr data-cuentacaja-id="' + id + '">'
                 + '<td class="text-muted col-codigo">' + codigo + '</td>'
                 + '<td class="col-desc" title="' + nombre + '">' + nombre + '</td>'
-                + '<td class="col-monto"><input type="number" step="0.01" class="form-control form-control-sm text-right js-valor-monto" value="' + monto + '"></td>'
+                + '<td class="col-monto"><input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-valor-monto js-monto-ar" autocomplete="off" value="' + monto + '"></td>'
                 + '</tr>';
         }).join('');
     }
@@ -142,11 +190,11 @@
             var id = parseInt(linea.apertura_gasto_id, 10) || 0;
             var codigo = escapeHtml(linea.codigo || '');
             var nombre = escapeHtml(linea.nombre || '');
-            var monto = Number(linea.monto || 0).toFixed(2);
+            var monto = fmtMoney(linea.monto || 0);
             return '<tr data-apertura-gasto-id="' + id + '">'
                 + '<td class="text-muted col-codigo">' + codigo + '</td>'
                 + '<td class="col-desc" title="' + nombre + '">' + nombre + '</td>'
-                + '<td class="col-monto"><input type="number" step="0.01" class="form-control form-control-sm text-right js-gasto-monto" value="' + monto + '"></td>'
+                + '<td class="col-monto"><input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-gasto-monto js-monto-ar" autocomplete="off" value="' + monto + '"></td>'
                 + '</tr>';
         }).join('');
     }
@@ -303,7 +351,7 @@
             var clave = inp.dataset.clave;
             var campo = inp.dataset.campo;
             var val = inputs[clave] !== undefined ? inputs[clave] : 0;
-            inp.value = Number(val).toFixed(2);
+            inp.value = fmtMoney(val);
             if (campo) {
                 wigosOriginales[campo] = parseNum(val);
             }
@@ -417,6 +465,23 @@
     }
 
     // Delegación: sobrevive al regenerar filas de valores/gastos
+    app.addEventListener('focusin', function (event) {
+        var el = event.target;
+        if (esInputMonto(el)) {
+            desformatearInputMonto(el);
+            if (typeof el.select === 'function') {
+                el.select();
+            }
+        }
+    });
+
+    app.addEventListener('focusout', function (event) {
+        var el = event.target;
+        if (esInputMonto(el)) {
+            formatearInputMonto(el);
+        }
+    });
+
     app.addEventListener('input', function (event) {
         var el = event.target;
         if (!el || !el.classList) {
@@ -452,5 +517,6 @@
         document.getElementById('wrap-dif-caja')?.classList.remove('d-none');
     }
 
+    initFormatoMontos(app);
     calcularDebounced();
 })();

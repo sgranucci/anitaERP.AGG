@@ -18,9 +18,15 @@ use App\Repositories\Ventas\ClienteRepositoryInterface;
 use Illuminate\Support\Facades\App;
 use Illuminate\Validation\Rule;
 use App\Jobs\Padron_Iibb;
+use App\Jobs\Configuracion\ImportarPadronIibbArbaJob;
+use App\Jobs\Configuracion\ImportarPadronIibbCabaJob;
+use App\Support\Configuracion\PadronIibbArchivoRutaSupport;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Log;
 use DB;
 use DateTime;
+use InvalidArgumentException;
+use Throwable;
 
 class Padron_IibbController extends Controller
 {
@@ -187,7 +193,7 @@ class Padron_IibbController extends Controller
 
     public function crearImportacionPadron_Iibb()
     {
-        can('importar-cliente-congelado-uif');
+        can('importar-padron-iibb');
 
         $tipopadron_enum = [
             'T' => 'Tasas',
@@ -199,25 +205,26 @@ class Padron_IibbController extends Controller
 
 	public function importarPadron_Iibb(Request $request)
     {
+        can('importar-padron-iibb');
+
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
         $tipoPadron = '';
-        if (isset($request->tipopadron))
-        {
+        $rules = [
+            'provincia_id' => 'required',
+            'file' => 'nullable|file|mimes:csv,txt,zip',
+            'ruta_servidor' => 'nullable|string|max:500',
+        ];
+        if ($request->filled('tipopadron')) {
             $tipoPadron = $request->tipopadron;
-            $this->validate(request(), [
-                'file' => 'mimes:csv,txt,zip',
-                'tipopadron' => ['required', Rule::in(['T', 'C'])]
-            ]);
+            $rules['tipopadron'] = ['required', Rule::in(['T', 'C'])];
         }
-        else
-            $this->validate(request(), [
-                'file' => 'mimes:csv,txt,zip'
-            ]);
+        $this->validate($request, $rules);
 
-        if (isset($request->tipopadron))
-            $tipoPadron = $request->tipopadron;
+        if (! $request->hasFile('file') && ! $request->filled('ruta_servidor')) {
+            return back()->withErrors(['file' => 'Indique un archivo a subir o una ruta en el servidor.']);
+        }
 
         // Lee provincia y arma archivos en funcion de jurisdiccion
         $provincia = $this->provinciaRepository->find($request->provincia_id);
@@ -226,21 +233,44 @@ class Padron_IibbController extends Controller
         {
             switch ($provincia->jurisdiccion)
             {
-            case 902:
-                // Borra tasas actuales
-                $this->padron_iibb_tasaRepository->deletePorProvinciaId($provincia->id);
-                
-                // Descomprime archivos
-                $carpetaComprimida = Self::descomprimirArchivo($request);
+            case 901: // CABA → padron_iibb_caba (cola padrones)
+                try {
+                    [$archivo, $borrarAlTerminar] = $this->resolverArchivoPadronMasivo($request, ['txt', 'csv']);
+                } catch (InvalidArgumentException | Throwable $e) {
+                    return back()->withErrors(['file' => $e->getMessage()]);
+                }
 
-                $files = File::files(Storage::path($carpetaComprimida));
+                ImportarPadronIibbCabaJob::dispatch(
+                    $archivo,
+                    (int) config('padrones_iibb.batch_caba', 2000),
+                    (int) config('padrones_iibb.pause_ms', 20),
+                    false,
+                    $borrarAlTerminar
+                );
 
-                $batch = Bus::batch([])->dispatch();
-                $batch->add(new Padron_Iibb($files[0]->getPathname(), $provincia->jurisdiccion, $provincia->id));
+                return back()->with(
+                    'mensaje',
+                    'Importación CABA (AGIP) encolada. Se procesa en background (cola padrones); no hace falta dejar esta pantalla abierta.'
+                );
 
-                return back()
-                    ->with('mensaje', 'Padrón IIBB ARBA importado correctamente');
-                break;
+            case 902: // ARBA → padron_iibb_arba (cola padrones)
+                try {
+                    [$archivo, $borrarAlTerminar] = $this->resolverArchivoPadronMasivo($request, ['txt', 'csv', 'zip']);
+                } catch (InvalidArgumentException | Throwable $e) {
+                    return back()->withErrors(['file' => $e->getMessage()]);
+                }
+
+                ImportarPadronIibbArbaJob::dispatch(
+                    $archivo,
+                    (int) config('padrones_iibb.batch_arba', 5000),
+                    (int) config('padrones_iibb.pause_ms', 20),
+                    $borrarAlTerminar
+                );
+
+                return back()->with(
+                    'mensaje',
+                    'Importación ARBA encolada. Se procesa en background (cola padrones); no hace falta dejar esta pantalla abierta.'
+                );
 
             case 914: // Misiones
                 // Borra tasas actuales
@@ -499,6 +529,34 @@ class Padron_IibbController extends Controller
         $rutaAbsolutaDefault = storage_path('app/'.$rutaTemporal); 
 
         return $rutaAbsolutaDefault;
+    }
+
+    /**
+     * @param list<string> $extensiones
+     * @return array{0:string,1:bool} [ruta absoluta, borrar al terminar]
+     */
+    private function resolverArchivoPadronMasivo(Request $request, array $extensiones): array
+    {
+        if ($request->filled('ruta_servidor')) {
+            $ruta = PadronIibbArchivoRutaSupport::validarRutaServidor((string) $request->input('ruta_servidor'));
+            PadronIibbArchivoRutaSupport::extensionPermitida($ruta, $extensiones);
+
+            return [$ruta, false];
+        }
+
+        if (! $request->hasFile('file')) {
+            throw new InvalidArgumentException('Indique un archivo a subir o una ruta en el servidor.');
+        }
+
+        $upload = $request->file('file');
+        $ext = strtolower($upload->getClientOriginalExtension() ?: pathinfo($upload->getClientOriginalName(), PATHINFO_EXTENSION));
+        if (! in_array($ext, $extensiones, true)) {
+            throw new InvalidArgumentException('Extensión no permitida: .' . $ext);
+        }
+
+        $ruta = PadronIibbArchivoRutaSupport::guardarUpload($upload);
+
+        return [$ruta, true];
     }
 
 }

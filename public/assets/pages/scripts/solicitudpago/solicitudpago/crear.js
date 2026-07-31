@@ -1,4 +1,8 @@
 $(function () {
+    if (window.AsientoMontosFormato) {
+        AsientoMontosFormato.initEnContenedor('#form-general');
+    }
+
     $('#agrega_renglon_sp_cuenta').on('click', function (e) {
         agregaRenglonCuenta(e);
         spActualizarEstadoAsiento();
@@ -24,18 +28,49 @@ $(function () {
         spAplicarLadoDebeHaber($(this).closest('tr'), true);
         spActualizarEstadoAsiento();
     });
+    $(document).on('input change blur', '#monto', function () {
+        spActualizarEstadoAsiento();
+    });
 
     $('#tratamiento').on('change', actualizarVisibilidadCuotas);
     $(document).on('change.spConcepto', '#concepto_solicitudpago_id', onConceptoSolicitudpagoChange);
     $('#sector_solicitudpago_id').on('change', onSectorSolicitudpagoChange);
 
+    // Fecha entrega: por defecto igual a la fecha SP; si el usuario no la tocó, sigue a la fecha.
+    (function initFechaEntregaDefault() {
+        var $fecha = $('#fecha');
+        var $entrega = $('#fecha_entrega');
+        if (!$fecha.length || !$entrega.length) {
+            return;
+        }
+        var entregaManual = false;
+        var ultimaFechaSp = String($fecha.val() || '');
+        if (!String($entrega.val() || '').trim() && ultimaFechaSp) {
+            $entrega.val(ultimaFechaSp);
+        }
+        $entrega.on('input change', function () {
+            entregaManual = String($entrega.val() || '') !== String($fecha.val() || '');
+        });
+        $fecha.on('change', function () {
+            var nueva = String($fecha.val() || '');
+            var actualEntrega = String($entrega.val() || '');
+            if (!entregaManual || actualEntrega === '' || actualEntrega === ultimaFechaSp) {
+                $entrega.val(nueva);
+                entregaManual = false;
+            }
+            ultimaFechaSp = nueva;
+        });
+    })();
+
     $('#form-general').on('submit', function (e) {
         // Antes de validar HTML5 / funciones.js: deshabilitar cuotas si no aplican.
         actualizarVisibilidadCuotas();
+        spNormalizarMontosAntesDeEnviar();
         spSincronizarHiddenTodas();
         if (!spAsientoValido()) {
             e.preventDefault();
             e.stopImmediatePropagation();
+            spFormatearMontosEnPantalla();
             spActualizarEstadoAsiento();
             var $tabCuentas = $('#tab-cuentas-link');
             if ($tabCuentas.length && typeof $tabCuentas.tab === 'function') {
@@ -49,6 +84,7 @@ $(function () {
         if (!spAsientoBalanceado()) {
             e.preventDefault();
             e.stopImmediatePropagation();
+            spFormatearMontosEnPantalla();
             spActualizarEstadoAsiento();
             var $tabBal = $('#tab-cuentas-link');
             if ($tabBal.length && typeof $tabBal.tab === 'function') {
@@ -59,9 +95,31 @@ $(function () {
             alert('El asiento no balancea: el total Debe debe ser igual al total Haber.');
             return false;
         }
+        if (!spAsientoIgualMontoSp()) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            spFormatearMontosEnPantalla();
+            spActualizarEstadoAsiento();
+            var $tabMonto = $('#tab-cuentas-link');
+            if ($tabMonto.length && typeof $tabMonto.tab === 'function') {
+                $tabMonto.tab('show');
+            } else if ($tabMonto.length) {
+                $tabMonto.trigger('click');
+            }
+            var tAsiento = spTotalesAsiento();
+            var montoSp = spLeerMontoCabecera();
+            var fmt = function (n) {
+                return spFmtMonto(n);
+            };
+            alert(
+                'El total del asiento contable (' + fmt(tAsiento.debe) + ') debe ser igual al monto de la solicitud (' + fmt(montoSp) + ').'
+            );
+            return false;
+        }
         if (!spCuotasValidas()) {
             e.preventDefault();
             e.stopImmediatePropagation();
+            spFormatearMontosEnPantalla();
             var $tabCuotas = $('#tab-cuotas-link');
             if ($tabCuotas.length && typeof $tabCuotas.tab === 'function') {
                 $tabCuotas.tab('show');
@@ -374,7 +432,7 @@ function spCuotasValidas() {
     $('#tbody-solicitudpago-cuota-table tr.item-sp-cuota').each(function () {
         var $row = $(this);
         var vto = String($row.find('input[name="fecha_vencimientos_cuota[]"]').val() || '').trim();
-        var monto = parseFloat(String($row.find('input[name="montos_cuota[]"]').val() || '0').replace(',', '.')) || 0;
+        var monto = spParseMontoValor($row.find('input[name="montos_cuota[]"]').val());
         if (vto !== '' && monto > 0) {
             ok = true;
             return false;
@@ -508,7 +566,7 @@ window.spAplicarCuentasDesdeConcepto = function (cuentas) {
         return;
     }
 
-    var montoCabecera = parseFloat(String($('#monto').val() || '0').replace(',', '.')) || 0;
+    var montoCabecera = spLeerMontoCabecera();
     var agregadas = 0;
 
     lista.forEach(function (cta, idx) {
@@ -540,7 +598,7 @@ window.spAplicarCuentasDesdeConcepto = function (cuentas) {
         var dh = (String(cta.debe_haber || 'D').toUpperCase() === 'H') ? 'H' : 'D';
         // La plantilla del concepto suele mandar monto 0: usar cabecera en la 1ª línea.
         var montoRaw = cta.monto;
-        var montoNum = parseFloat(String(montoRaw != null ? montoRaw : '').replace(',', '.'));
+        var montoNum = spParseMontoValor(montoRaw);
         var montoFila;
         if (!isFinite(montoNum) || montoNum === 0) {
             montoFila = idx === 0 ? montoCabecera : 0;
@@ -549,8 +607,8 @@ window.spAplicarCuentasDesdeConcepto = function (cuentas) {
         }
 
         $row.find('select.debe_haber').val(dh);
-        $row.find('.monto-debe').val(dh === 'D' && montoFila > 0 ? montoFila : '');
-        $row.find('.monto-haber').val(dh === 'H' && montoFila > 0 ? montoFila : '');
+        $row.find('.monto-debe').val(dh === 'D' && montoFila > 0 ? spFmtMonto(montoFila) : '');
+        $row.find('.monto-haber').val(dh === 'H' && montoFila > 0 ? spFmtMonto(montoFila) : '');
         spAplicarLadoDebeHaber($row, false);
 
         agregadas++;
@@ -564,8 +622,66 @@ window.spAplicarCuentasDesdeConcepto = function (cuentas) {
     spActualizarEstadoAsiento();
 };
 
+function spParseMontoValor(valor) {
+    if (window.AsientoMontosFormato && typeof AsientoMontosFormato.parseDecimal === 'function') {
+        return AsientoMontosFormato.parseDecimal(valor);
+    }
+    if (valor == null || valor === '') {
+        return 0;
+    }
+    var t = String(valor).trim().replace(/\s/g, '');
+    if (t.indexOf(',') >= 0) {
+        t = t.replace(/\./g, '').replace(',', '.');
+    } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+        t = t.replace(/\./g, '');
+    }
+    var n = parseFloat(t);
+    return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+}
+
+function spFmtMonto(n) {
+    if (window.AsientoMontosFormato && typeof AsientoMontosFormato.fmt === 'function') {
+        return AsientoMontosFormato.fmt(n);
+    }
+    return Number(n || 0).toLocaleString('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+function spLeerMontoCabecera() {
+    return spParseMontoValor($('#monto').val());
+}
+
+function spNormalizarMontosAntesDeEnviar() {
+    if (window.AsientoMontosFormato) {
+        AsientoMontosFormato.normalizarAntesDeEnviar('#form-general');
+        return;
+    }
+    $('#form-general').find('.js-monto-ar').each(function () {
+        if (this.value === '' || this.value == null) {
+            this.value = '';
+            return;
+        }
+        this.value = String(spParseMontoValor(this.value));
+    });
+}
+
+function spFormatearMontosEnPantalla() {
+    if (window.AsientoMontosFormato) {
+        AsientoMontosFormato.initEnContenedor('#form-general');
+        return;
+    }
+    $('#form-general').find('.js-monto-ar').each(function () {
+        if (this.value === '' || this.value == null) {
+            return;
+        }
+        this.value = spFmtMonto(spParseMontoValor(this.value));
+    });
+}
+
 function spParseMonto($input) {
-    return parseFloat(String($input.val() || '0').replace(',', '.')) || 0;
+    return spParseMontoValor($input.val());
 }
 
 /**
@@ -648,6 +764,12 @@ function spAsientoBalanceado() {
     return Math.abs(t.debe - t.haber) < 0.009;
 }
 
+function spAsientoIgualMontoSp() {
+    var t = spTotalesAsiento();
+    var montoSp = spLeerMontoCabecera();
+    return Math.abs(t.debe - montoSp) < 0.009;
+}
+
 function spActualizarEstadoAsiento() {
     var totalDebe = 0;
     var totalHaber = 0;
@@ -659,15 +781,14 @@ function spActualizarEstadoAsiento() {
         spSincronizarHiddenFila($row);
     });
 
-    var fmt = function (n) {
-        return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
-    $('#sp-total-debe').text(fmt(totalDebe));
-    $('#sp-total-haber').text(fmt(totalHaber));
+    $('#sp-total-debe').text(spFmtMonto(totalDebe));
+    $('#sp-total-haber').text(spFmtMonto(totalHaber));
 
     var valido = spAsientoValido();
     var balanceado = spAsientoBalanceado();
+    var igualMonto = spAsientoIgualMontoSp();
     $('#sp-aviso-asiento-vacio').toggleClass('d-none', valido);
     $('#sp-aviso-asiento-desbalance').toggleClass('d-none', !valido || balanceado);
-    $('#sp-badge-asiento').toggleClass('d-none', valido && balanceado);
+    $('#sp-aviso-asiento-monto').toggleClass('d-none', !valido || !balanceado || igualMonto);
+    $('#sp-badge-asiento').toggleClass('d-none', valido && balanceado && igualMonto);
 }

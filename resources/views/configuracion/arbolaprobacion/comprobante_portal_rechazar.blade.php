@@ -13,7 +13,13 @@
             <dt class="col-sm-4">Tipo</dt>
             <dd class="col-sm-8">{{ $etiqueta_tipo }} ({{ $tipocomprobante }})</dd>
             <dt class="col-sm-4">Monto</dt>
-            <dd class="col-sm-8">{{ number_format((float) ($monto_items ?? 0), 2, ',', '.') }}</dd>
+            <dd class="col-sm-8">
+                @php
+                    $monedaPortal = trim((string) ($moneda_abrev_items ?? optional($documento->monedas ?? null)->abreviatura ?? ''));
+                    $montoPortal = number_format((float) ($monto_items ?? 0), 2, ',', '.');
+                @endphp
+                {{ $monedaPortal !== '' ? $monedaPortal.' ' : '' }}{{ $montoPortal }}
+            </dd>
         </dl>
     </div>
 </div>

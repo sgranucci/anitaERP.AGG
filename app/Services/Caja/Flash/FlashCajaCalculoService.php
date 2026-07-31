@@ -4,6 +4,7 @@ namespace App\Services\Caja\Flash;
 
 use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Support\Caja\Flash\FlashCajaBingoTotalesSupport;
+use App\Support\Caja\Flash\FlashCajaImpuestosRendicionSupport;
 use App\Models\Configuracion\Sala;
 use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
@@ -16,7 +17,8 @@ use Throwable;
 /**
  * Calcula campos del flash diario desde Wigos (slots/ruletas) + venta directa ERP
  * (AyB, estacionamiento y vending netos = facturas − NC) + ERP (bingo/vehículos).
- * No consulta rendgastro/Anita: la venta del flash sale íntegramente del ERP.
+ * Drop/win slots: resta impuesto_drop + impuesto_venta del turno completo (C)
+ * de rendmaquina Anita (fallback ERP rendicion_maquina). AyB/estac/vending del ERP.
  */
 final class FlashCajaCalculoService
 {
@@ -78,11 +80,20 @@ final class FlashCajaCalculoService
             $acumulado['advertencias_wigos'] = $erroresWigos;
         }
 
+        $impuestos = FlashCajaImpuestosRendicionSupport::resolverDia($empresaId, $fechaSql);
+        $descuentoImpuestos = (float) ($impuestos['total'] ?? 0);
+        if ($descuentoImpuestos != 0.0) {
+            $acumulado['slot_d'] = round((float) $acumulado['slot_d'] - $descuentoImpuestos, 2);
+            $acumulado['slot_r'] = round((float) $acumulado['slot_r'] - $descuentoImpuestos, 2);
+        }
+        $acumulado['impuestos_rendicion'] = $impuestos;
+
         $acumulado['desglose_wigos'] = $this->armarDesgloseWigos(
             $desgloseSalas,
             $acumulado,
             $empresaId,
             $fechaSql,
+            $impuestos,
         );
 
         return $acumulado;
@@ -94,13 +105,14 @@ final class FlashCajaCalculoService
      * 1) Turno M: bill (spDropDiarioPorTerminal), coin/win (SP_QlickView_Win_per_EGM),
      *    tickets (spTicketsDrop venta/pago), QR (SP_TransferenciasExternasAnita).
      * 2) Turnos T/N: solo pagos_manuales y tito de sesión; bill/tickets/QR en 0.
-     * 3) Fórmulas:
-     *    slot_d = Bill + VentasSlots + VentasCaja + MontoNetoQR
-     *    slot_r = Bill + VentasSlots + VentasCaja + MontoNetoQR − PagosSlots − PagosCaja − PagosManuales
+     * 3) Fórmulas (por sala; luego a nivel empresa se restan impuestos rendición C):
+     *    slot_d = Bill + VentasSlots + VentasCaja + MontoNetoQR − ImpDrop − ImpVenta
+     *    slot_r = Bill + VentasSlots + VentasCaja + MontoNetoQR − Pagos… − ImpDrop − ImpVenta
      *    rul_d  = BillRul + VentasRuletas
      *    rul_r  = BillRul + VentasRuletas − PagosRuletas
      *
      * MontoNetoQR (MontoTotal − Impuesto) al drop y win de slots; no a ruletas.
+     * ImpDrop/ImpVenta: una sola vez por día desde turno completo rendmaquina.
      *
      * @return array{flash: array<string, float|int>, desglose: array<string, mixed>}
      */
@@ -292,9 +304,10 @@ final class FlashCajaCalculoService
      * Documentación de origen Wigos de cada componente (para modal / Excel desglose).
      *
      * @param  array<string, float>  $componentes
+     * @param  array<string, mixed>  $impuestos
      * @return list<array<string, mixed>>
      */
-    private function origenComponentesWigos(array $componentes, string $fechaSql): array
+    private function origenComponentesWigos(array $componentes, string $fechaSql, array $impuestos = []): array
     {
         $fechaHasta = Carbon::parse($fechaSql)->addDay()->format('Y-m-d');
         $ventasCaja = round((float) ($componentes['ventas_caja'] ?? 0), 2);
@@ -306,6 +319,10 @@ final class FlashCajaCalculoService
         $montoQr = round((float) ($componentes['monto_qr'] ?? 0), 2);
         $montoNetoQr = round((float) ($componentes['monto_neto_qr'] ?? 0), 2);
         $impuestoQr = round((float) ($componentes['impuesto_qr'] ?? 0), 2);
+        $impDrop = round((float) ($impuestos['impuesto_drop'] ?? 0), 2);
+        $impVenta = round((float) ($impuestos['impuesto_venta'] ?? 0), 2);
+        $origenImp = (string) ($impuestos['origen'] ?? 'ninguno');
+        $nroOper = $impuestos['nro_oper'] ?? null;
 
         return [
             [
@@ -317,7 +334,7 @@ final class FlashCajaCalculoService
                 'campo_monto' => 'Suma de denominaciones B1+B2+…+B20000 (= columna Total)',
                 'base' => 'BRUTO',
                 'nota' => 'El SP no expone impuesto_drop ni columna neto. soft_count = bill_slots − bill_poker. '
-                    .'En rendición de máquinas el neto es drop_billete − impuesto_drop (impuesto manual); Flash aún no descuenta ese impuesto.',
+                    .'El neto de drop se obtiene restando impuesto_drop del turno C de rendmaquina (ver Impuesto drop).',
                 'valor' => $billSlots,
             ],
             [
@@ -350,8 +367,8 @@ final class FlashCajaCalculoService
                 'filtro' => 'TerminalType = 0 (caja)',
                 'campo_monto' => 'TicketAmount',
                 'base' => 'BRUTO',
-                'nota' => 'Solo turno M. Rango [fecha, fecha+1). El SP no trae columna de impuesto por ticket; se suma TicketAmount tal cual. '
-                    .'Pagos caja usan el mismo SP con @pVentaPago = 1 y TerminalTypeCreated = 0.',
+                'nota' => 'Solo turno M. Rango [fecha, fecha+1). Entra bruto a slot_d / slot_r; '
+                    .'impuesto_venta del turno C se resta una sola vez a nivel día.',
                 'valor' => $ventasCaja,
             ],
             [
@@ -362,8 +379,7 @@ final class FlashCajaCalculoService
                 'filtro' => 'TerminalType = 1 (slots)',
                 'campo_monto' => 'TicketAmount',
                 'base' => 'BRUTO',
-                'nota' => 'Solo turno M. Rango [fecha, fecha+1). Suma TicketAmount de tickets de venta emitidos/asociados a terminal slot. '
-                    .'Entra en slot_d / slot_r junto con ventas_caja, bill_slots y MontoNetoQR.',
+                'nota' => 'Solo turno M. Entra bruto a slot_d / slot_r; impuesto_venta del turno C se resta aparte.',
                 'valor' => $ventasSlots,
             ],
             [
@@ -374,7 +390,7 @@ final class FlashCajaCalculoService
                 'filtro' => 'TerminalType = 2 (ruletas)',
                 'campo_monto' => 'TicketAmount',
                 'base' => 'BRUTO',
-                'nota' => 'Solo turno M. Rango [fecha, fecha+1). Entra en rul_d / rul_r con bill_rul. No usa MontoNetoQR.',
+                'nota' => 'Solo turno M. Entra en rul_d / rul_r con bill_rul. Impuesto rendmaquina se aplica a slots, no a ruletas.',
                 'valor' => $ventasRuletas,
             ],
             [
@@ -385,8 +401,7 @@ final class FlashCajaCalculoService
                 'filtro' => 'TerminalType ∈ {0,1,2}',
                 'campo_monto' => 'TicketAmount',
                 'base' => 'BRUTO',
-                'nota' => 'ventas_caja + ventas_slots + ventas_ruletas. Si el impuesto de ventas del día es un monto aparte '
-                    .'(ej. planilla / rendición), el neto sería esta suma menos ese impuesto; Flash hoy no lo descuenta.',
+                'nota' => 'ventas_caja + ventas_slots + ventas_ruletas. El impuesto_venta del turno C se resta de slot_d / slot_r.',
                 'valor' => round($ventasCaja + $ventasSlots + $ventasRuletas, 2),
             ],
             [
@@ -401,16 +416,53 @@ final class FlashCajaCalculoService
                     .'Se suma a slot_d / slot_r; no a ruletas.',
                 'valor' => $montoNetoQr,
             ],
+            [
+                'clave' => 'impuesto_drop',
+                'etiqueta' => 'Impuesto drop (rendición máquinas turno C)',
+                'sp' => $origenImp === 'erp' ? 'rendicion_maquina.inputs_json' : 'rendmaquina.rendm_imp_drop',
+                'params' => 'empresa/fecha · turno C · origen='.$origenImp
+                    .($nroOper !== null ? ' · nro_oper='.$nroOper : ''),
+                'filtro' => 'Solo turno completo (C); no suma M+T+N',
+                'campo_monto' => 'rendm_imp_drop / inputs.impuesto_drop',
+                'base' => 'DESCUENTO',
+                'nota' => 'Se resta una vez del día a slot_d y slot_r. Preferencia Anita; si no hay C en Anita, ERP.',
+                'valor' => $impDrop,
+            ],
+            [
+                'clave' => 'impuesto_venta',
+                'etiqueta' => 'Impuesto venta (rendición máquinas turno C)',
+                'sp' => $origenImp === 'erp' ? 'rendicion_maquina.inputs_json' : 'rendmaquina.rendm_imp_venta',
+                'params' => 'empresa/fecha · turno C · origen='.$origenImp
+                    .($nroOper !== null ? ' · nro_oper='.$nroOper : ''),
+                'filtro' => 'Solo turno completo (C); no suma M+T+N',
+                'campo_monto' => 'rendm_imp_venta / inputs.impuesto_venta',
+                'base' => 'DESCUENTO',
+                'nota' => 'Se resta una vez del día a slot_d y slot_r junto con impuesto_drop.',
+                'valor' => $impVenta,
+            ],
         ];
     }
 
     /**
      * @param  list<array<string, mixed>>  $desgloseSalas
      * @param  array<string, mixed>  $acumulado
+     * @param  array{
+     *   impuesto_drop?: float,
+     *   impuesto_venta?: float,
+     *   total?: float,
+     *   origen?: string,
+     *   nro_oper?: ?int,
+     *   rendicion_id?: ?int
+     * }  $impuestos
      * @return array<string, mixed>
      */
-    private function armarDesgloseWigos(array $desgloseSalas, array $acumulado, int $empresaId, string $fechaSql): array
-    {
+    private function armarDesgloseWigos(
+        array $desgloseSalas,
+        array $acumulado,
+        int $empresaId,
+        string $fechaSql,
+        array $impuestos = [],
+    ): array {
         $componentes = $this->estructuraComponentesWigos();
         foreach ($desgloseSalas as $salaDesglose) {
             foreach ($salaDesglose['componentes_aplicados'] ?? [] as $clave => $valor) {
@@ -422,14 +474,17 @@ final class FlashCajaCalculoService
         }
 
         $c = $componentes;
-        $origen = $this->origenComponentesWigos($c, $fechaSql);
+        $impDrop = round((float) ($impuestos['impuesto_drop'] ?? 0), 2);
+        $impVenta = round((float) ($impuestos['impuesto_venta'] ?? 0), 2);
+        $impTotal = round((float) ($impuestos['total'] ?? ($impDrop + $impVenta)), 2);
+        $origen = $this->origenComponentesWigos($c, $fechaSql, $impuestos);
 
         return [
             'empresa_id' => $empresaId,
             'fecha' => $fechaSql,
             'formulas' => [
-                'slot_d' => 'BillSlots(bruto) + VentasSlots(bruto) + VentasCaja(bruto) + MontoNetoQR',
-                'slot_r' => 'BillSlots(bruto) + VentasSlots(bruto) + VentasCaja(bruto) + MontoNetoQR − PagosSlots − PagosCaja − PagosManuales(M+T+N)',
+                'slot_d' => 'BillSlots(bruto) + VentasSlots(bruto) + VentasCaja(bruto) + MontoNetoQR − ImpDrop − ImpVenta (turno C)',
+                'slot_r' => 'BillSlots(bruto) + VentasSlots(bruto) + VentasCaja(bruto) + MontoNetoQR − PagosSlots − PagosCaja − PagosManuales(M+T+N) − ImpDrop − ImpVenta (turno C)',
                 'slot_coin_in' => 'CoinInSlots − CoinInPoker (solo turno M)',
                 'win_ol_slot' => 'WinSlots (solo turno M)',
                 'soft_count' => 'BillSlots(bruto) − BillPoker (solo turno M) — soft count / drop efectivo billetes',
@@ -441,25 +496,39 @@ final class FlashCajaCalculoService
                 'soft_rul' => 'BillRul(bruto) (solo turno M)',
                 'hard_rul' => 'TitoRul (M+T+N)',
                 'nota' => 'Bill / tickets / QR solo turno M. Pagos manuales y tito acumulan M+T+N. '
-                    .'Drop efectivo (bill_slots / soft_count) y ventas tickets usan TicketAmount/Total BRUTO del SP (sin columna impuesto). '
-                    .'Solo el QR entra como NETO (MontoTotal − Impuesto). Ver sección Origen de componentes.',
+                    .'Drop efectivo y ventas tickets entran BRUTO desde Wigos; luego se restan una sola vez '
+                    .'impuesto_drop + impuesto_venta del turno completo (C) de rendmaquina (Anita, fallback ERP). '
+                    .'Solo el QR entra ya neto desde el SP. Ver sección Origen de componentes.',
+            ],
+            'impuestos_rendicion' => [
+                'impuesto_drop' => $impDrop,
+                'impuesto_venta' => $impVenta,
+                'total' => $impTotal,
+                'origen' => (string) ($impuestos['origen'] ?? 'ninguno'),
+                'nro_oper' => $impuestos['nro_oper'] ?? null,
+                'rendicion_id' => $impuestos['rendicion_id'] ?? null,
             ],
             'origen_componentes' => $origen,
             'componentes_aplicados' => $c,
             'verificacion' => [
                 'slot_d' => [
-                    'formula' => 'BillSlots + VentasSlots + VentasCaja + MontoNetoQR',
+                    'formula' => 'BillSlots + VentasSlots + VentasCaja + MontoNetoQR − ImpDrop − ImpVenta',
                     'partes' => [
                         'bill_slots' => $c['bill_slots'],
                         'ventas_slots' => $c['ventas_slots'],
                         'ventas_caja' => $c['ventas_caja'],
                         'monto_neto_qr' => $c['monto_neto_qr'],
+                        'impuesto_drop' => -$impDrop,
+                        'impuesto_venta' => -$impVenta,
                     ],
-                    'suma_partes' => round($c['bill_slots'] + $c['ventas_slots'] + $c['ventas_caja'] + $c['monto_neto_qr'], 2),
+                    'suma_partes' => round(
+                        $c['bill_slots'] + $c['ventas_slots'] + $c['ventas_caja'] + $c['monto_neto_qr'] - $impTotal,
+                        2
+                    ),
                     'total_flash' => round((float) ($acumulado['slot_d'] ?? 0), 2),
                 ],
                 'slot_r' => [
-                    'formula' => 'BillSlots + VentasSlots + VentasCaja + MontoNetoQR − PagosSlots − PagosCaja − PagosManuales',
+                    'formula' => 'BillSlots + VentasSlots + VentasCaja + MontoNetoQR − PagosSlots − PagosCaja − PagosManuales − ImpDrop − ImpVenta',
                     'partes' => [
                         'bill_slots' => $c['bill_slots'],
                         'ventas_slots' => $c['ventas_slots'],
@@ -468,10 +537,12 @@ final class FlashCajaCalculoService
                         'pagos_slots' => $c['pagos_slots'],
                         'pagos_caja' => $c['pagos_caja'],
                         'pagos_manuales' => $c['pagos_manuales'],
+                        'impuesto_drop' => -$impDrop,
+                        'impuesto_venta' => -$impVenta,
                     ],
                     'suma_partes' => round(
                         $c['bill_slots'] + $c['ventas_slots'] + $c['ventas_caja'] + $c['monto_neto_qr']
-                        - $c['pagos_slots'] - $c['pagos_caja'] - $c['pagos_manuales'],
+                        - $c['pagos_slots'] - $c['pagos_caja'] - $c['pagos_manuales'] - $impTotal,
                         2
                     ),
                     'total_flash' => round((float) ($acumulado['slot_r'] ?? 0), 2),

@@ -71,6 +71,16 @@ final class ArbolAprobacionEnlaceSupport
         return self::enlaceAbsoluto($ipBase, $rutaVisualizar.'/'.$comprobanteId, $hash);
     }
 
+    /** Descarga pública (mail árbol SP): comprobante PDF + adjuntos, autorizada por hashvisualizar. */
+    public static function enlaceDescargaPaqueteSolicitudpago(string $ipBase, int $solicitudpagoId, string $hash): string
+    {
+        return self::enlaceAbsoluto(
+            $ipBase,
+            'solicitudpago/solicitudpago/'.$solicitudpagoId.'/descargar-paquete',
+            $hash
+        );
+    }
+
     /**
      * @param  iterable<int, Arbolaprobacion_Movimiento>|Collection<int, Arbolaprobacion_Movimiento>  $movimientos
      */

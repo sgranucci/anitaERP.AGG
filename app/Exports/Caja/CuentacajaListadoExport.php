@@ -23,7 +23,7 @@ class CuentacajaListadoExport implements FromView, ShouldAutoSize, WithColumnFor
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'K';
+    private const COL_ULTIMA = 'L';
 
     private CuentacajaRepositoryInterface $cuentacajaRepository;
 
@@ -121,16 +121,17 @@ class CuentacajaListadoExport implements FromView, ShouldAutoSize, WithColumnFor
         if ($this->flDesdeIndex) {
             return [
                 'A' => 8,
-                'B' => 30,
-                'C' => 12,
-                'D' => 14,
-                'E' => 22,
-                'F' => 18,
-                'G' => 28,
-                'H' => 12,
-                'I' => 24,
-                'J' => 18,
-                'K' => 32,
+                'B' => 28,
+                'C' => 22,
+                'D' => 12,
+                'E' => 14,
+                'F' => 20,
+                'G' => 16,
+                'H' => 26,
+                'I' => 12,
+                'J' => 22,
+                'K' => 18,
+                'L' => 32,
             ];
         }
 
@@ -188,7 +189,7 @@ class CuentacajaListadoExport implements FromView, ShouldAutoSize, WithColumnFor
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
 
                 $primera = $this->filaPrimeraDatosExcel;
-                $sheet->getStyle('K'.$primera.':K'.$sheet->getHighestRow())
+                $sheet->getStyle('L'.$primera.':L'.$sheet->getHighestRow())
                     ->getAlignment()
                     ->setWrapText(true)
                     ->setVertical(Alignment::VERTICAL_TOP);

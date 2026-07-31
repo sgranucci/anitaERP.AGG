@@ -239,12 +239,23 @@ class Concepto_SolicitudpagoController extends Controller
     private function payloadConceptoOperativo($concepto, ?int $empresaId = null): array
     {
         $sector = $concepto->sectores;
+        if (! $concepto->relationLoaded('formapagos')) {
+            $concepto->load('formapagos');
+        }
+        $formapagosolIds = $concepto->formapagos
+            ->pluck('formapagosol_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn ($id) => $id > 0)
+            ->values()
+            ->all();
 
         return [
             'id' => (int) $concepto->id,
             'codigo' => (int) $concepto->codigo,
             'nombre' => (string) $concepto->nombre,
             'forma_pago' => (string) ($concepto->forma_pago ?? ''),
+            'formapagosol_ids' => $formapagosolIds,
+            'formapagosol_id' => $formapagosolIds[0] ?? null,
             'sector_solicitudpago_id' => $concepto->sector_solicitudpago_id
                 ? (int) $concepto->sector_solicitudpago_id
                 : null,

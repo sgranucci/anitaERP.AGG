@@ -38,9 +38,9 @@ return [
             'driver' => 'database',
             'table' => 'jobs',
             'queue' => 'default',
-            // Debe ser > timeout del job más largo (CAEA informe ~1800s). Si es menor, Laravel
-            // reencola el mismo job y dispara MaxAttemptsExceeded + mail de error falso.
-            'retry_after' => (int) env('QUEUE_RETRY_AFTER', 2000),
+            // Debe ser > timeout del job más largo (padrones IIBB ~7200s; CAEA ~1800s).
+            // Si es menor, Laravel reencola el mismo job y dispara MaxAttemptsExceeded.
+            'retry_after' => (int) env('QUEUE_RETRY_AFTER', 7500),
             'after_commit' => false,
         ],
 

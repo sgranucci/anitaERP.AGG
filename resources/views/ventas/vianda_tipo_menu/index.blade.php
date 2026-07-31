@@ -5,6 +5,7 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/vianda_tipo_menu/replicar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/vianda_tipo_menu/replicar.js')) }}" type="text/javascript"></script>
 <script>
 (function ($) {
     'use strict';
@@ -18,6 +19,10 @@
 @endsection
 
 @section('contenido')
+@php
+    $puedeReplicar = ! empty($puede_replicar_vianda_tipo_menu)
+        && ($empresa_query_replicar ?? collect())->count() > 1;
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -66,7 +71,7 @@
                             @foreach ($diasSemana as $dia => $etiqueta)
                             <th>{{ $etiqueta }}</th>
                             @endforeach
-                            <th class="width120 text-nowrap" data-orderable="false"></th>
+                            <th class="text-nowrap" data-orderable="false" style="min-width: 160px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -103,11 +108,23 @@
                             </td>
                             @endforeach
                             <td class="text-nowrap">
-                                <span class="d-inline-flex flex-nowrap align-items-center">
+                                <span class="d-inline-flex flex-nowrap align-items-center" style="gap: 4px;">
                                 @if (can('editar-vianda-tipo-menu-gastronomia', false))
                                     <a href="{{ route('editar_vianda_tipo_menu_gastronomia', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
                                     </a>
+                                @endif
+                                @if ($puedeReplicar)
+                                    <button type="button"
+                                       class="btn btn-outline-primary btn-xs btn-replicar-vianda-tipo-menu"
+                                       title="Replicar men&uacute; a otras empresas"
+                                       data-id="{{ $data->id }}"
+                                       data-nombre="{{ $data->nombre }}"
+                                       data-empresa-id="{{ (int) $data->empresa_id }}"
+                                       data-empresa-nombre="{{ optional($data->empresa)->nombre }}"
+                                       data-url="{{ route('replicar_vianda_tipo_menu_gastronomia', ['id' => $data->id]) }}">
+                                        <i class="fa fa-copy"></i> Replicar
+                                    </button>
                                 @endif
                                 @if (can('borrar-vianda-tipo-menu-gastronomia', false))
                                 <form action="{{ route('eliminar_vianda_tipo_menu_gastronomia', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
@@ -127,4 +144,6 @@
         </div>
     </div>
 </div>
+
+@include('ventas.vianda_tipo_menu.partials.modal_replicar')
 @endsection

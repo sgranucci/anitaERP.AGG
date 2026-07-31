@@ -1,5 +1,5 @@
 /**
- * Diálogo operativo IA (Fase C): NL + atajos + export Excel.
+ * Copiloto IA: NL + herramientas agrupadas + Excel en cabecera.
  */
 (function (window, $) {
 	'use strict';
@@ -14,7 +14,11 @@
 		placeholder: '',
 		busy: false,
 		ultimaExport: null,
-		ultimoPedido: null
+		ultimoPedido: null,
+		intents: [],
+		grupos: {},
+		grupoActivo: null,
+		toolsOpen: false
 	};
 
 	function escapeHtml(s) {
@@ -23,6 +27,10 @@
 			.replace(/</g, '&lt;')
 			.replace(/>/g, '&gt;')
 			.replace(/"/g, '&quot;');
+	}
+
+	function csrf() {
+		return $('meta[name="csrf-token"]').attr('content') || '';
 	}
 
 	function renderTabla(tabla) {
@@ -44,7 +52,9 @@
 			tabla.columnas.forEach(function (col) {
 				var key = col.key || '';
 				var val = fila && fila[key] != null ? fila[key] : '';
-				var align = (key === 'debe' || key === 'haber' || key === 'entrada' || key === 'salida' || key === 'total')
+				var align = (key === 'debe' || key === 'haber' || key === 'entrada' || key === 'salida'
+					|| key === 'total' || key === 'monto' || key === 'dias' || key === 'lineas'
+					|| key === 'valor' || key === 'comprobantes' || key === 'ranking')
 					? ' class="text-right"'
 					: '';
 				html += '<td' + align + '>' + escapeHtml(val) + '</td>';
@@ -59,7 +69,7 @@
 		if (!datos || !Array.isArray(datos.pasos) || !datos.pasos.length) {
 			return '';
 		}
-		var html = '<div class="anita-ai-consulta__plan mt-1"><div class="small text-muted mb-1">Pasos del plan (click para consultar):</div>';
+		var html = '<div class="anita-ai-consulta__plan"><div class="small text-muted mb-1">Pasos del plan:</div>';
 		datos.pasos.forEach(function (paso, idx) {
 			var frase = paso && paso.frase ? String(paso.frase) : '';
 			if (!frase || frase.indexOf('[') !== -1) {
@@ -88,7 +98,7 @@
 		if (!CFG.urlConfirmarPedido) {
 			return '<div class="small text-muted mt-1">Borradores listos (use Alta RQ si no aparece el botón de confirmar).</div>';
 		}
-		var html = '<div class="anita-ai-consulta__pedido-acciones mt-2">';
+		var html = '<div class="anita-ai-consulta__pedido-acciones">';
 		if (state.ultimoPedido.borrador_compra && state.ultimoPedido.puede_compra) {
 			html += '<button type="button" class="btn btn-sm btn-success mr-1 anita-ai-consulta__btn-confirmar-pedido" data-tipo="compra">'
 				+ '<i class="fa fa-check"></i> Crear RQ compra</button>';
@@ -137,16 +147,37 @@
 		});
 	}
 
-	function csrf() {
-		return $('meta[name="csrf-token"]').attr('content') || '';
-	}
-
 	function setOpen(open) {
 		var $root = $('#anita-ai-consulta');
 		$root.toggleClass('is-open', !!open);
 		$root.attr('aria-hidden', open ? 'false' : 'true');
 		if (open) {
 			$('#anita-ai-consulta-pregunta').trigger('focus');
+		} else {
+			setToolsOpen(false);
+		}
+	}
+
+	function setExpanded(expanded) {
+		var $root = $('#anita-ai-consulta');
+		$root.toggleClass('is-expanded', !!expanded);
+		$('#anita-ai-consulta-expandir')
+			.attr('aria-pressed', expanded ? 'true' : 'false')
+			.find('i')
+			.attr('class', expanded ? 'fa fa-compress' : 'fa fa-expand');
+	}
+
+	function setToolsOpen(open) {
+		state.toolsOpen = !!open;
+		var $tools = $('#anita-ai-consulta-tools');
+		if (open) {
+			$tools.prop('hidden', false);
+			$('#anita-ai-consulta-tools-toggle').addClass('is-open');
+			renderToolsTabs();
+			renderToolsGrid(state.grupoActivo);
+		} else {
+			$tools.prop('hidden', true);
+			$('#anita-ai-consulta-tools-toggle').removeClass('is-open');
 		}
 	}
 
@@ -186,9 +217,20 @@
 		return fuente ? String(fuente) : '';
 	}
 
+	function setExcelReady(ready) {
+		var $btn = $('#anita-ai-consulta-excel');
+		if (ready && CFG.urlExportar) {
+			$btn.removeClass('d-none').addClass('is-ready');
+			setTimeout(function () { $btn.removeClass('is-ready'); }, 1300);
+		} else {
+			$btn.addClass('d-none').removeClass('is-ready');
+		}
+	}
+
 	function guardarExport(data, preguntaUsuario) {
 		if (!data || !data.exportable || !data.intent) {
 			state.ultimaExport = null;
+			setExcelReady(false);
 			return;
 		}
 		state.ultimaExport = {
@@ -198,6 +240,7 @@
 			interpretacion: data.interpretacion || '',
 			fuente: data.fuente || ''
 		};
+		setExcelReady(true);
 	}
 
 	function exportarExcel() {
@@ -223,26 +266,21 @@
 		}
 		$form.appendTo('body').trigger('submit');
 		setTimeout(function () { $form.remove(); }, 1000);
-		appendMsg('bot', '<span class="text-muted small">Descarga de Excel iniciada (hasta 200 líneas en mayor/CT).</span>');
+		appendMsg('bot', '<span class="text-muted small">Descarga de Excel iniciada.</span>');
 	}
 
 	function renderRespuestaBot(data) {
 		var html = '';
 		if (data.interpretacion) {
-			html += '<div class="anita-ai-consulta__interp small text-muted mb-1"><strong>Entendí:</strong> '
+			html += '<div class="anita-ai-consulta__interp text-muted mb-1"><strong>Entendí:</strong> '
 				+ escapeHtml(data.interpretacion);
 			if (data.fuente) {
 				html += ' <span class="anita-ai-consulta__fuente">(' + escapeHtml(etiquetaFuente(data.fuente)) + ')</span>';
 			}
 			html += '</div>';
 		} else if (data.fuente) {
-			html += '<div class="anita-ai-consulta__interp small text-muted mb-1">'
+			html += '<div class="anita-ai-consulta__interp text-muted mb-1">'
 				+ escapeHtml(etiquetaFuente(data.fuente)) + '</div>';
-		}
-		if (data.score != null && isFinite(Number(data.score))) {
-			html += '<div class="anita-ai-consulta__score text-muted mb-1">score '
-				+ Number(data.score).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-				+ '</div>';
 		}
 		var parrafos = Array.isArray(data.parrafos) ? data.parrafos : [];
 		if (parrafos.length) {
@@ -263,14 +301,14 @@
 					return;
 				}
 				html += '<a class="text-primary" href="' + escapeHtml(l.url) + '" target="_blank" rel="noopener">'
-					+ escapeHtml(l.etiqueta || 'Abrir') + '</a> ';
+					+ escapeHtml(l.etiqueta || 'Abrir') + '</a>';
 			});
 			html += '</div>';
 		}
 		if (data.exportable && CFG.urlExportar) {
-			html += '<div class="mt-2">'
-				+ '<button type="button" class="btn btn-sm btn-outline-success anita-ai-consulta__btn-excel">'
-				+ '<i class="fa fa-file-excel-o"></i> Excel</button></div>';
+			html += '<div class="anita-ai-consulta__result-actions">'
+				+ '<button type="button" class="anita-ai-consulta__btn-excel">'
+				+ '<i class="fa fa-file-excel-o"></i> Exportar Excel</button></div>';
 		}
 		if (!html) {
 			html = 'Sin detalle para mostrar.';
@@ -283,39 +321,106 @@
 		if (!ejemplos || !ejemplos.length) {
 			return;
 		}
-		$box.append('<div class="mb-1">Ejemplos:</div>');
-		ejemplos.forEach(function (ej) {
-			var $a = $('<a href="#" class="anita-ai-consulta__ejemplo d-inline-block mr-2"></a>').text(ej);
+		ejemplos.slice(0, 4).forEach(function (ej) {
+			var $a = $('<a href="#" class="anita-ai-consulta__ejemplo"></a>').text(ej);
 			$box.append($a);
 		});
 	}
 
-	function renderChips(intents) {
-		var $chips = $('#anita-ai-consulta-chips').empty();
-		(intents || []).forEach(function (item) {
-			var $btn = $('<button type="button" class="anita-ai-consulta__chip"></button>')
-				.text(item.etiqueta || item.intent)
-				.attr('data-intent', item.intent)
-				.attr('data-placeholder', item.placeholder || '');
-			$chips.append($btn);
+	function gruposOrdenados() {
+		var order = ['compras', 'contable', 'stock', 'ventas', 'ayuda', 'otros'];
+		var present = {};
+		state.intents.forEach(function (item) {
+			present[item.grupo || 'otros'] = true;
+		});
+		return order.filter(function (g) { return present[g]; });
+	}
+
+	function renderToolsTabs() {
+		var $tabs = $('#anita-ai-consulta-tools-tabs').empty();
+		var grupos = gruposOrdenados();
+		if (!state.grupoActivo || grupos.indexOf(state.grupoActivo) === -1) {
+			state.grupoActivo = grupos[0] || 'otros';
+		}
+		grupos.forEach(function (g) {
+			var label = state.grupos[g] || g;
+			var $btn = $('<button type="button" class="anita-ai-consulta__tools-tab" role="tab"></button>')
+				.text(label)
+				.attr('data-grupo', g)
+				.toggleClass('is-active', g === state.grupoActivo);
+			$tabs.append($btn);
 		});
 	}
 
-	function selectIntent($btn) {
-		$('.anita-ai-consulta__chip').removeClass('is-active');
-		$btn.addClass('is-active');
-		state.intent = $btn.data('intent');
-		state.placeholder = $btn.data('placeholder') || '';
+	function renderToolsGrid(grupo) {
+		var $grid = $('#anita-ai-consulta-tools-grid').empty();
+		var items = state.intents.filter(function (it) {
+			return (it.grupo || 'otros') === grupo;
+		});
+		if (!items.length) {
+			$grid.append('<div class="small text-muted">No hay herramientas en este grupo.</div>');
+			return;
+		}
+		items.forEach(function (item) {
+			var instant = !!item.auto_pregunta;
+			var $btn = $('<button type="button" class="anita-ai-consulta__tool"></button>')
+				.toggleClass('is-instant', instant)
+				.attr('data-intent', item.intent)
+				.attr('data-placeholder', item.placeholder || '')
+				.attr('data-auto', item.auto_pregunta || '')
+				.append($('<span class="anita-ai-consulta__tool-label"></span>').text(item.etiqueta || item.intent))
+				.append($('<span class="anita-ai-consulta__tool-meta"></span>')
+					.text(instant ? 'Ejecutar ahora' : (item.placeholder || 'Completar dato')));
+			$grid.append($btn);
+		});
+	}
+
+	function showIntentPill(etiqueta) {
+		if (!etiqueta) {
+			$('#anita-ai-consulta-intent-pill').addClass('d-none');
+			$('#anita-ai-consulta-intent-label').text('');
+			return;
+		}
+		$('#anita-ai-consulta-intent-label').text(etiqueta);
+		$('#anita-ai-consulta-intent-pill').removeClass('d-none');
+	}
+
+	function clearIntent() {
+		state.intent = null;
+		state.placeholder = '';
+		showIntentPill('');
+		$('#anita-ai-consulta-pregunta').attr('placeholder', 'Escriba su consulta…');
+	}
+
+	function selectTool(item, autoRun) {
+		state.intent = item.intent || null;
+		state.placeholder = item.placeholder || '';
+		showIntentPill(item.etiqueta || item.intent || '');
 		var $ta = $('#anita-ai-consulta-pregunta');
 		if (state.placeholder) {
-			$ta.attr('placeholder', state.placeholder + ' (o escriba la consulta completa)');
+			$ta.attr('placeholder', state.placeholder);
 		}
+		setToolsOpen(false);
 		showError('');
+		if (autoRun && item.auto_pregunta) {
+			$ta.val(item.auto_pregunta);
+			consultar();
+			return;
+		}
 		$ta.trigger('focus');
 	}
 
 	function textoPregunta() {
 		return $.trim($('#anita-ai-consulta-pregunta').val() || '');
+	}
+
+	function autoResizeInput() {
+		var el = document.getElementById('anita-ai-consulta-pregunta');
+		if (!el) {
+			return;
+		}
+		el.style.height = 'auto';
+		el.style.height = Math.min(110, Math.max(42, el.scrollHeight)) + 'px';
 	}
 
 	function consultar() {
@@ -324,12 +429,12 @@
 		}
 		var pregunta = textoPregunta();
 		if (!pregunta) {
-			showError('Escriba una consulta o use un atajo e indique el código.');
+			showError('Escriba una consulta o elija una herramienta.');
 			return;
 		}
 
 		state.busy = true;
-		$('#anita-ai-consulta-enviar').prop('disabled', true).text('Pensando…');
+		$('#anita-ai-consulta-enviar').prop('disabled', true);
 		showError('');
 		appendMsg('user', escapeHtml(pregunta));
 
@@ -356,6 +461,7 @@
 		}).done(function (resp) {
 			if (!resp || !resp.ok) {
 				state.ultimaExport = null;
+				setExcelReady(false);
 				var err = (resp && (resp.clarification || resp.error)) || 'Sin resultado.';
 				var pref = (resp && resp.needs_clarification) ? '<strong>Necesito aclarar:</strong> ' : '';
 				appendMsg('bot', '<span class="text-warning">' + pref + escapeHtml(err) + '</span>');
@@ -367,8 +473,11 @@
 			guardarExport(resp, pregunta);
 			renderRespuestaBot(resp);
 			$('#anita-ai-consulta-pregunta').val('');
+			autoResizeInput();
+			clearIntent();
 		}).fail(function (xhr) {
 			state.ultimaExport = null;
+			setExcelReady(false);
 			var json = xhr && xhr.responseJSON ? xhr.responseJSON : null;
 			var msg = (json && (json.clarification || json.error)) || 'No se pudo completar la consulta.';
 			var pref = (json && json.needs_clarification) ? '<strong>Necesito aclarar:</strong> ' : '';
@@ -378,7 +487,7 @@
 			}
 		}).always(function () {
 			state.busy = false;
-			$('#anita-ai-consulta-enviar').prop('disabled', false).text('Enviar');
+			$('#anita-ai-consulta-enviar').prop('disabled', false);
 		});
 	}
 
@@ -396,10 +505,35 @@
 		$('#anita-ai-consulta-cerrar').on('click', function () {
 			setOpen(false);
 		});
-		$('#anita-ai-consulta-chips').on('click', '.anita-ai-consulta__chip', function () {
-			selectIntent($(this));
+		$('#anita-ai-consulta-expandir').on('click', function () {
+			setExpanded(!$('#anita-ai-consulta').hasClass('is-expanded'));
 		});
+		$('#anita-ai-consulta-tools-toggle').on('click', function () {
+			setToolsOpen(!state.toolsOpen);
+		});
+		$('#anita-ai-consulta-tools-cerrar').on('click', function () {
+			setToolsOpen(false);
+		});
+		$('#anita-ai-consulta-tools-tabs').on('click', '.anita-ai-consulta__tools-tab', function () {
+			state.grupoActivo = $(this).attr('data-grupo') || 'otros';
+			renderToolsTabs();
+			renderToolsGrid(state.grupoActivo);
+		});
+		$('#anita-ai-consulta-tools-grid').on('click', '.anita-ai-consulta__tool', function () {
+			var $btn = $(this);
+			selectTool({
+				intent: $btn.attr('data-intent'),
+				placeholder: $btn.attr('data-placeholder') || '',
+				etiqueta: $btn.find('.anita-ai-consulta__tool-label').text(),
+				auto_pregunta: $btn.attr('data-auto') || ''
+			}, !!$btn.attr('data-auto'));
+		});
+		$('#anita-ai-consulta-intent-clear').on('click', clearIntent);
 		$('#anita-ai-consulta-enviar').on('click', consultar);
+		$('#anita-ai-consulta-excel').on('click', function (e) {
+			e.preventDefault();
+			exportarExcel();
+		});
 		$('#anita-ai-consulta-chat').on('click', '.anita-ai-consulta__btn-excel', function (e) {
 			e.preventDefault();
 			exportarExcel();
@@ -415,6 +549,7 @@
 				return;
 			}
 			$('#anita-ai-consulta-pregunta').val(frase);
+			autoResizeInput();
 			consultar();
 		});
 		$('#anita-ai-consulta-pregunta').on('keydown', function (e) {
@@ -422,10 +557,11 @@
 				e.preventDefault();
 				consultar();
 			}
-		});
+		}).on('input', autoResizeInput);
 		$('#anita-ai-consulta-ejemplos').on('click', '.anita-ai-consulta__ejemplo', function (e) {
 			e.preventDefault();
 			$('#anita-ai-consulta-pregunta').val($(this).text());
+			autoResizeInput();
 			consultar();
 		});
 
@@ -434,13 +570,20 @@
 			method: 'GET',
 			headers: { 'Accept': 'application/json' }
 		}).done(function (resp) {
-			if (resp && resp.ok) {
-				if (Array.isArray(resp.intents)) {
-					renderChips(resp.intents);
-				}
-				if (Array.isArray(resp.ejemplos)) {
-					renderEjemplos(resp.ejemplos);
-				}
+			if (!resp || !resp.ok) {
+				return;
+			}
+			state.intents = Array.isArray(resp.intents) ? resp.intents : [];
+			state.grupos = resp.grupos && typeof resp.grupos === 'object' ? resp.grupos : {
+				compras: 'Compras',
+				contable: 'Contable',
+				stock: 'Stock',
+				ventas: 'Ventas',
+				ayuda: 'Ayuda',
+				otros: 'Otros'
+			};
+			if (Array.isArray(resp.ejemplos)) {
+				renderEjemplos(resp.ejemplos);
 			}
 		});
 	}

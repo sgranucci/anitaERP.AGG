@@ -27,11 +27,14 @@ final class GastronomiaCierreTotemInformeZService
      * Regenera el Informe Z desde las LÍNEAS DEL PROCESO (fuente del asiento) y lo iguala al Sistema.
      *
      * Clasifica la jornada:
-     *  - `ok`: el Z ya refleja las líneas del proceso (nada que hacer).
-     *  - `regenerar`: el Z estaba desactualizado (órdenes tardías) y el recomputo COINCIDE con lo contabilizado
-     *    → seguro regenerarlo (mismo criterio que el fix de la jornada 124).
-     *  - `revisar_asiento`: el recomputo NO coincide con lo contabilizado → el asiento no refleja las órdenes
-     *    reales (p. ej. reclasificación de cobranzas); NO se toca el Z, se marca para revisión del asiento.
+     *  - `ok`: totales Z ↔ contabilizado ya cuadran (nada que hacer).
+     *  - `regenerar`: el Informe Z (MP/QR tótem) quedó corto/desactualizado (órdenes tardías) y el
+     *    recomputo desde el proceso COINCIDE con lo contabilizado en esas mismas cuentas → seguro regenerar.
+     *  - `revisar_asiento`: hay DIF pero el recomputo Waitry no confirma el MP contabilizado
+     *    (p. ej. reclasificación de cobranzas); NO se toca el Z.
+     *
+     * Importante: el recomputo del proceso es solo medios del Informe Z (MP/QR). Se compara contra el
+     * contabilizado de esas cuentas (`fuente_z=informe_z`), no contra el total de todos los medios.
      *
      * @return array<string, mixed>
      */
@@ -76,23 +79,36 @@ final class GastronomiaCierreTotemInformeZService
         $zActual = round((float) ($conc['total_z'] ?? 0), 2);
         $contabZ = round((float) ($conc['total_contabilizado_z'] ?? 0), 2);
 
-        // El objetivo es que el Z coincida con lo contabilizado.
+        $mpZ = 0.0;
+        $mpContab = 0.0;
+        foreach ($conc['medios'] ?? [] as $medio) {
+            if (! is_array($medio) || (string) ($medio['fuente_z'] ?? '') !== 'informe_z') {
+                continue;
+            }
+            $mpZ = round($mpZ + (float) ($medio['z'] ?? 0), 2);
+            $mpContab = round($mpContab + (float) ($medio['contabilizado'] ?? 0), 2);
+        }
+
         $zYaCoincide = abs($zActual - $contabZ) <= $tolerancia;
-        // El recomputo desde el proceso confirma el número contabilizado → regenerar es seguro.
-        $recomputadoConfirmaAsiento = abs($recomputado - $contabZ) <= $tolerancia;
+        $mpZDesfasado = abs($mpZ - $mpContab) > $tolerancia;
+        // Seguro regenerar solo si el hueco es del Informe Z (MP/QR) y el proceso confirma ese MP contab.
+        $recomputadoConfirmaMpContab = abs($recomputado - $mpContab) <= $tolerancia;
 
         $base += [
             'z_actual' => $zActual,
             'z_recomputado' => $recomputado,
             'contabilizado' => $contabZ,
-            'diff_recomputado_contab' => round($recomputado - $contabZ, 2),
+            'mp_z' => $mpZ,
+            'mp_contabilizado' => $mpContab,
+            'diff_recomputado_contab' => round($recomputado - $mpContab, 2),
+            'diff_recomputado_total_contab' => round($recomputado - $contabZ, 2),
         ];
 
         if ($zYaCoincide) {
             return $base + ['decision' => 'ok', 'persistido' => false];
         }
 
-        if (! $recomputadoConfirmaAsiento) {
+        if (! $mpZDesfasado || ! $recomputadoConfirmaMpContab) {
             return $base + ['decision' => 'revisar_asiento', 'persistido' => false];
         }
 
@@ -100,14 +116,14 @@ final class GastronomiaCierreTotemInformeZService
             return $base + ['decision' => 'regenerar', 'persistido' => false];
         }
 
-        // Regeneración segura (asiento correcto, Z desactualizado): setear Sistema recomputado + igualar Z = Sistema.
+        // Regeneración segura (asiento MP correcto, Z desactualizado): Sistema recomputado + Z = Sistema.
         $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
         $sistemaAnterior = (float) ($detalle['resumen_informe_z']['total_general']['total_ingreso'] ?? 0);
         $detalle['resumen_informe_z'] = $resumen;
         $aud = is_array($detalle['auditoria'] ?? null) ? $detalle['auditoria'] : [];
         $aud['resumen_informe_z_recomputado_proceso_en'] = now()->format('Y-m-d H:i:s');
         $aud['resumen_informe_z_sistema_anterior'] = round($sistemaAnterior, 2);
-        $aud['resumen_informe_z_motivo'] = 'Regeneración desde líneas del proceso (Z desactualizado por órdenes tardías; recomputo = contabilizado).';
+        $aud['resumen_informe_z_motivo'] = 'Regeneración desde líneas del proceso (Z MP/QR desactualizado por órdenes tardías; recomputo = MP contabilizado).';
         $detalle['auditoria'] = $aud;
         $cierre->detalle_json = $detalle;
         $cierre->save();
@@ -121,6 +137,8 @@ final class GastronomiaCierreTotemInformeZService
             'aplicada_en' => now()->format('Y-m-d H:i:s'),
             'z_anterior' => round((float) ($out['z_anterior'] ?? $zActual), 2),
             'z_nuevo' => round((float) ($out['z_nuevo'] ?? $recomputado), 2),
+            'mp_z_anterior' => $mpZ,
+            'mp_contabilizado' => $mpContab,
         ];
         $cierre->informe_z_json = $iz;
         $cierre->save();

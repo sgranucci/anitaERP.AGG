@@ -58,43 +58,51 @@
         <div class="row">
             <div class="form-group col-md-4">
                 <label for="budget_total">Budget total</label>
-                <input type="number" step="0.01" min="0" name="budget_total" id="budget_total" class="form-control text-right"
-                       value="{{ old('budget_total', $data->budget_total ?? 0) }}">
+                <input type="text" inputmode="decimal" name="budget_total" id="budget_total"
+                       class="form-control text-right js-monto-ar flash-budget-decimal" autocomplete="off"
+                       value="{{ number_format((float) old('budget_total', $data->budget_total ?? 0), 2, ',', '.') }}">
             </div>
             <div class="form-group col-md-4">
                 <label for="budget_slot">Budget slots</label>
-                <input type="number" step="0.01" min="0" name="budget_slot" id="budget_slot" class="form-control text-right"
-                       value="{{ old('budget_slot', $data->budget_slot ?? 0) }}">
+                <input type="text" inputmode="decimal" name="budget_slot" id="budget_slot"
+                       class="form-control text-right js-monto-ar flash-budget-decimal" autocomplete="off"
+                       value="{{ number_format((float) old('budget_slot', $data->budget_slot ?? 0), 2, ',', '.') }}">
             </div>
             <div class="form-group col-md-4">
                 <label for="budget_rul">Budget ruleta</label>
-                <input type="number" step="0.01" min="0" name="budget_rul" id="budget_rul" class="form-control text-right"
-                       value="{{ old('budget_rul', $data->budget_rul ?? 0) }}">
+                <input type="text" inputmode="decimal" name="budget_rul" id="budget_rul"
+                       class="form-control text-right js-monto-ar flash-budget-decimal" autocomplete="off"
+                       value="{{ number_format((float) old('budget_rul', $data->budget_rul ?? 0), 2, ',', '.') }}">
             </div>
             <div class="form-group col-md-4">
                 <label for="budget_poker">Budget poker</label>
-                <input type="number" step="0.01" min="0" name="budget_poker" id="budget_poker" class="form-control text-right"
-                       value="{{ old('budget_poker', $data->budget_poker ?? 0) }}">
+                <input type="text" inputmode="decimal" name="budget_poker" id="budget_poker"
+                       class="form-control text-right js-monto-ar flash-budget-decimal" autocomplete="off"
+                       value="{{ number_format((float) old('budget_poker', $data->budget_poker ?? 0), 2, ',', '.') }}">
             </div>
             <div class="form-group col-md-4">
                 <label for="budget_bingo">Budget bingo</label>
-                <input type="number" step="0.01" min="0" name="budget_bingo" id="budget_bingo" class="form-control text-right"
-                       value="{{ old('budget_bingo', $data->budget_bingo ?? 0) }}">
+                <input type="text" inputmode="decimal" name="budget_bingo" id="budget_bingo"
+                       class="form-control text-right js-monto-ar flash-budget-decimal" autocomplete="off"
+                       value="{{ number_format((float) old('budget_bingo', $data->budget_bingo ?? 0), 2, ',', '.') }}">
             </div>
             <div class="form-group col-md-4">
                 <label for="budget_f_b">Budget F&amp;B (AyB)</label>
-                <input type="number" step="0.01" min="0" name="budget_f_b" id="budget_f_b" class="form-control text-right"
-                       value="{{ old('budget_f_b', $data->budget_f_b ?? 0) }}">
+                <input type="text" inputmode="decimal" name="budget_f_b" id="budget_f_b"
+                       class="form-control text-right js-monto-ar flash-budget-decimal" autocomplete="off"
+                       value="{{ number_format((float) old('budget_f_b', $data->budget_f_b ?? 0), 2, ',', '.') }}">
             </div>
             <div class="form-group col-md-4">
                 <label for="budget_estac">Budget estacionamiento</label>
-                <input type="number" step="0.01" min="0" name="budget_estac" id="budget_estac" class="form-control text-right"
-                       value="{{ old('budget_estac', $data->budget_estac ?? 0) }}">
+                <input type="text" inputmode="decimal" name="budget_estac" id="budget_estac"
+                       class="form-control text-right js-monto-ar flash-budget-decimal" autocomplete="off"
+                       value="{{ number_format((float) old('budget_estac', $data->budget_estac ?? 0), 2, ',', '.') }}">
             </div>
             <div class="form-group col-md-4">
                 <label for="budget_pos">Budget positions (POS)</label>
-                <input type="number" step="1" min="0" name="budget_pos" id="budget_pos" class="form-control text-right"
-                       value="{{ old('budget_pos', $data->budget_pos ?? 0) }}">
+                <input type="text" inputmode="numeric" name="budget_pos" id="budget_pos"
+                       class="form-control text-right flash-budget-entero" autocomplete="off"
+                       value="{{ number_format((int) old('budget_pos', $data->budget_pos ?? 0), 0, ',', '.') }}">
             </div>
         </div>
 

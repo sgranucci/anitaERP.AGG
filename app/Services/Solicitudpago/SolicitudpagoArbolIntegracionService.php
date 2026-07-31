@@ -50,6 +50,26 @@ class SolicitudpagoArbolIntegracionService
             ->get();
     }
 
+    /** Valida hashvisualizar (o hash de aprobación/rechazo) para descarga pública desde el mail. */
+    public function hashAutorizaDescargaPaquete(int $solicitudpagoId, string $hash): bool
+    {
+        $hash = ArbolAprobacionEnlaceSupport::normalizarHashRecibido($hash);
+        if ($hash === '') {
+            return false;
+        }
+
+        foreach ($this->findPorSolicitudpago($solicitudpagoId) as $movimiento) {
+            foreach (['hashvisualizar', 'hashaprobacion', 'hashrechazo'] as $campo) {
+                $almacenado = (string) ($movimiento->{$campo} ?? '');
+                if ($almacenado !== '' && ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, $almacenado)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public function dispararAlGuardar(int $solicitudpagoId): int
     {
         return app(\App\Services\Configuracion\ArbolaprobacionService::class)
@@ -155,7 +175,9 @@ class SolicitudpagoArbolIntegracionService
         $nivelActual = (int) $pendientes->max('nivel');
         $delNivel = $pendientes->where('nivel', $nivelActual)->values();
 
-        $spMail = Solicitudpago::query()->with(['monedas', 'empresas', 'proveedores'])->find($solicitudpagoId);
+        $spMail = Solicitudpago::query()
+            ->with(['monedas', 'empresas', 'proveedores', 'conceptos', 'formapagosol', 'sectores'])
+            ->find($solicitudpagoId);
         if (! $spMail) {
             return [
                 'ok' => false,
@@ -166,10 +188,6 @@ class SolicitudpagoArbolIntegracionService
         $tipoarbol = $this->nombreTipoArbol();
         $ip = (string) config('arbolaprobacion.ip_link');
         $arbolService = app(\App\Services\Configuracion\ArbolaprobacionService::class);
-        $extras = [
-            'monto_items' => (float) $spMail->monto,
-            'moneda_abrev_items' => optional($spMail->monedas)->abreviatura ?? '',
-        ];
 
         $enviados = 0;
         $errores = [];
@@ -185,6 +203,7 @@ class SolicitudpagoArbolIntegracionService
                 continue;
             }
 
+            $hashVis = (string) ($mov->hashvisualizar ?? $mov->hashaprobacion);
             $linkAprobacion = ArbolAprobacionEnlaceSupport::enlaceAprobar(
                 $ip,
                 self::TIPO_COMPROBANTE,
@@ -199,10 +218,11 @@ class SolicitudpagoArbolIntegracionService
             );
             $linkVisualizar = ArbolAprobacionEnlaceSupport::enlaceVisualizar(
                 $ip,
-                'solicitudpago/solicitudpago',
+                'solicitudpago/solicitudpago/visualizar',
                 $solicitudpagoId,
-                (string) ($mov->hashvisualizar ?? $mov->hashaprobacion)
+                $hashVis
             );
+            $extras = $this->armaExtrasMail($spMail, $nivelActual, $hashVis, $ip);
 
             try {
                 $arbolService->enviaCorreo(
@@ -268,7 +288,7 @@ class SolicitudpagoArbolIntegracionService
         unset($buscaProximoNivel); // El árbol SP no usa niveles del ABM global.
 
         $sp = Solicitudpago::query()
-            ->with(['monedas', 'empresas', 'proveedores', 'conceptos.usuarios'])
+            ->with(['monedas', 'empresas', 'proveedores', 'conceptos.usuarios', 'formapagosol', 'sectores', 'archivos'])
             ->find($comprobanteId);
         if (! $sp) {
             return 0;
@@ -317,10 +337,12 @@ class SolicitudpagoArbolIntegracionService
                 return 0;
             }
 
-            $ip = config('arbolaprobacion.ip_link');
+            $ip = (string) config('arbolaprobacion.ip_link');
             $ref = (string) ($sp->codigo ?? $sp->id);
             $hashVisualizar = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make('VIS'.$comprobanteId.$sp->fecha.$ref));
-            $linkVisualizar = ArbolAprobacionEnlaceSupport::enlaceVisualizar($ip, 'solicitudpago/solicitudpago', (int) $comprobanteId, $hashVisualizar);
+            $linkVisualizar = ArbolAprobacionEnlaceSupport::enlaceVisualizar($ip, 'solicitudpago/solicitudpago/visualizar', (int) $comprobanteId, $hashVisualizar);
+            $sp->loadMissing(['monedas', 'empresas', 'proveedores', 'conceptos', 'formapagosol', 'sectores']);
+            $mailExtras = $this->armaExtrasMail($sp, (int) $proximoNivel['proximonivel'], $hashVisualizar, $ip);
 
             $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
             $ya = Arbolaprobacion_Movimiento::query()
@@ -347,10 +369,7 @@ class SolicitudpagoArbolIntegracionService
                 $linkAprobacion = ArbolAprobacionEnlaceSupport::enlaceAprobar($ip, self::TIPO_COMPROBANTE, (int) $comprobanteId, $hashAprobacion);
                 $linkRechazo = ArbolAprobacionEnlaceSupport::enlaceRechazo($ip, self::TIPO_COMPROBANTE, (int) $comprobanteId, $hashRechazo);
 
-                $enviaCorreo($uid, $tipoarbol, $sp, $linkAprobacion, $linkRechazo, $linkVisualizar, [
-                    'monto_items' => $monto,
-                    'moneda_abrev_items' => optional($sp->monedas)->abreviatura ?? '',
-                ]);
+                $enviaCorreo($uid, $tipoarbol, $sp, $linkAprobacion, $linkRechazo, $linkVisualizar, $mailExtras);
 
                 $this->arbolaprobacionMovimientoRepository->create([
                     'arbolaprobacion_id' => $arbolShell->id,
@@ -390,6 +409,63 @@ class SolicitudpagoArbolIntegracionService
         );
     }
 
+    /**
+     * Tras aprobar un nivel del árbol del concepto:
+     * - si queda otro nivel → CONTROLADA
+     * - si era el último → AUTORIZADA (procesaArbol también lo asegura vía finalizaTrasArbolCompleto)
+     */
+    public function aplicaEstadoTrasAprobarNivel(int $solicitudpagoId, int $nivelAprobado, $usuarioId = null): void
+    {
+        unset($usuarioId);
+        $sp = Solicitudpago::query()->find($solicitudpagoId);
+        if (! $sp) {
+            return;
+        }
+
+        if (in_array($sp->estado, [
+            SolicitudpagoEstados::AUTORIZADA,
+            SolicitudpagoEstados::PAGADA,
+            SolicitudpagoEstados::RECHAZADA,
+            SolicitudpagoEstados::TERMINADA,
+            SolicitudpagoEstados::SUSPENDIDA,
+        ], true)) {
+            return;
+        }
+
+        $destino = $this->estadoTrasAprobarNivel($sp, $nivelAprobado);
+        if ($destino === null || $destino === $sp->estado) {
+            return;
+        }
+
+        $leyenda = $destino === SolicitudpagoEstados::AUTORIZADA
+            ? 'Autorizada por árbol del concepto'
+            : 'Árbol de aprobación: control intermedio (nivel '.$nivelAprobado.')';
+
+        $this->solicitudpagoRepository->cambiarEstado($solicitudpagoId, $destino, $leyenda);
+    }
+
+    /**
+     * Estado de cabecera esperado al aprobar el nivel indicado (para mail / portal).
+     */
+    public function estadoTrasAprobarNivel(Solicitudpago $sp, int $nivelQueSeAprueba): ?string
+    {
+        $siguiente = $this->buscaProximoNivelDesdeConcepto(
+            $sp,
+            $nivelQueSeAprueba,
+            (float) ($sp->monto ?? 0),
+            (int) ($sp->empresa_id ?? 0)
+        );
+        $prox = (int) ($siguiente['proximonivel'] ?? 0);
+        if ($prox === -1) {
+            return SolicitudpagoEstados::AUTORIZADA;
+        }
+        if ($prox > 0) {
+            return SolicitudpagoEstados::CONTROLADA;
+        }
+
+        return null;
+    }
+
     public function rechazaPorRechazo(int $solicitudpagoId, $usuarioId, string $observacion): void
     {
         $this->solicitudpagoRepository->cambiarEstado(
@@ -397,6 +473,37 @@ class SolicitudpagoArbolIntegracionService
             SolicitudpagoEstados::RECHAZADA,
             mb_substr(trim($observacion) !== '' ? $observacion : 'Rechazada en árbol', 0, 80)
         );
+    }
+
+    /**
+     * Extras del mail de aprobación (alineado a RS/OC: estado destino, monto formateado, descarga).
+     *
+     * @return array<string, mixed>
+     */
+    private function armaExtrasMail(Solicitudpago $sp, int $nivelQueSeEnvia, string $hashVisualizar, string $ip): array
+    {
+        $estadoCodigo = $this->estadoTrasAprobarNivel($sp, $nivelQueSeEnvia);
+        $estadoTras = $estadoCodigo !== null ? SolicitudpagoEstados::label($estadoCodigo) : null;
+
+        $monto = (float) ($sp->monto ?? 0);
+        $monedaAbr = trim((string) (optional($sp->monedas)->abreviatura ?? ''));
+        // AR: miles con punto, decimales con coma (igual que requisiciones de sala).
+        $montoFmt = number_format($monto, 2, ',', '.');
+
+        return [
+            'estado_tras_aprobar' => $estadoTras,
+            'monto_items' => $monto,
+            'monto_items_fmt' => $montoFmt,
+            'moneda_abrev_items' => $monedaAbr,
+            'link_descarga_paquete' => ArbolAprobacionEnlaceSupport::enlaceDescargaPaqueteSolicitudpago(
+                $ip,
+                (int) $sp->id,
+                $hashVisualizar
+            ),
+            'tiene_archivos' => $sp->relationLoaded('archivos')
+                ? $sp->archivos->isNotEmpty()
+                : $sp->archivos()->exists(),
+        ];
     }
 
     /**

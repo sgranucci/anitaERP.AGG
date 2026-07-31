@@ -15,6 +15,33 @@ use Illuminate\Support\Facades\Session;
 final class ViandaEmpresaSupport
 {
     /**
+     * IDs de empresas del módulo vianda (config), sin filtrar por sesión.
+     *
+     * @return list<int>
+     */
+    public static function idsModulo(): array
+    {
+        $modulo = array_values(array_unique(array_filter(array_map(
+            static fn ($valor): int => (int) $valor,
+            (array) config('vianda_anita.empresas_sync', [1])
+        ), static fn (int $valor): bool => $valor > 0)));
+
+        return $modulo === [] ? [1] : $modulo;
+    }
+
+    /**
+     * Empresas del módulo vianda (1=Biyemas, 2=Kandiko, 3=Rebisco por defecto).
+     *
+     * @return Collection<int, Empresa>
+     */
+    public static function empresasModulo(): Collection
+    {
+        $ids = self::idsModulo();
+
+        return Empresa::query()->whereIn('id', $ids)->orderBy('id')->get(['id', 'nombre']);
+    }
+
+    /**
      * IDs de empresas del módulo vianda (config) intersectadas con las asignadas al usuario.
      * Sin empresas asignadas (acceso total) → todas las del módulo.
      *
@@ -22,14 +49,7 @@ final class ViandaEmpresaSupport
      */
     public static function idsSeleccionables(): array
     {
-        $modulo = array_values(array_unique(array_filter(array_map(
-            static fn ($valor): int => (int) $valor,
-            (array) config('vianda_anita.empresas_sync', [1])
-        ), static fn (int $valor): bool => $valor > 0)));
-
-        if ($modulo === []) {
-            $modulo = [1];
-        }
+        $modulo = self::idsModulo();
 
         $asignadas = collect(Session::get('usuario_empresas'))
             ->pluck('id')

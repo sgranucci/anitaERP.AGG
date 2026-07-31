@@ -332,6 +332,25 @@ class SolicitudpagoCargaMasivaCsvService
             $errores[] = 'Sin cuentas contables válidas';
         }
 
+        if ($errores === [] && $cuentaIds !== []) {
+            $totalDebe = 0.0;
+            $totalHaber = 0.0;
+            foreach ($montos as $i => $importeCta) {
+                if (($dhs[$i] ?? 'D') === 'H') {
+                    $totalHaber += (float) $importeCta;
+                } else {
+                    $totalDebe += (float) $importeCta;
+                }
+            }
+            if (abs($totalDebe - $totalHaber) >= 0.009) {
+                $errores[] = 'Asiento no balancea: Debe ('.number_format($totalDebe, 2, ',', '.').') '
+                    .'≠ Haber ('.number_format($totalHaber, 2, ',', '.').')';
+            } elseif (abs($totalDebe - $monto) >= 0.009) {
+                $errores[] = 'Total asiento ('.number_format($totalDebe, 2, ',', '.').') '
+                    .'≠ monto SP ('.number_format($monto, 2, ',', '.').')';
+            }
+        }
+
         $vista = [
             'nro_linea' => $raw['nro_linea'],
             'ok' => $errores === [],

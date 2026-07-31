@@ -1,179 +1,483 @@
-/* Diálogo operativo IA — panel flotante Fase C (estilo asistente) */
+/* Copiloto IA — panel amplio, resultado primero, herramientas agrupadas */
 .anita-ai-consulta {
+    --ai-bg: #f7f9fc;
+    --ai-surface: #ffffff;
+    --ai-ink: #1c2430;
+    --ai-muted: #5d6d7e;
+    --ai-line: #dce3ea;
+    --ai-accent: #1a5276;
+    --ai-accent-2: #148f77;
+    --ai-header: #85c1e9;
+    --ai-user: #d6eaf8;
+    --ai-bot: #eef2f6;
+    --ai-radius: 14px;
+    --ai-shadow: 0 16px 40px rgba(23, 32, 42, 0.18);
     position: fixed;
     z-index: 1040;
-    right: 1.25rem;
-    bottom: 1.25rem;
+    right: 1.1rem;
+    bottom: 1.1rem;
     font-family: inherit;
+    color: var(--ai-ink);
 }
 
 .anita-ai-consulta__fab {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.4rem;
     border: 0;
     border-radius: 999px;
-    background: #1a5276;
+    background: linear-gradient(135deg, #1a5276 0%, #148f77 100%);
     color: #fff;
-    padding: 0.65rem 1rem;
-    box-shadow: 0 4px 14px rgba(26, 82, 118, 0.35);
+    padding: 0.7rem 1.05rem;
+    box-shadow: 0 8px 22px rgba(26, 82, 118, 0.35);
     cursor: pointer;
-    transition: transform 0.15s ease, background 0.15s ease;
+    transition: transform 0.15s ease, filter 0.15s ease;
 }
 
 .anita-ai-consulta__fab:hover,
 .anita-ai-consulta__fab:focus {
-    background: #154360;
     color: #fff;
     outline: none;
+    filter: brightness(1.06);
     transform: translateY(-1px);
 }
 
 .anita-ai-consulta__fab-label {
-    font-weight: 600;
-    font-size: 0.85rem;
-    letter-spacing: 0.02em;
+    font-weight: 700;
+    font-size: 0.86rem;
+    letter-spacing: 0.04em;
 }
 
 .anita-ai-consulta__drawer {
     display: none;
     position: absolute;
     right: 0;
-    bottom: 3.4rem;
-    width: min(400px, calc(100vw - 2rem));
-    max-height: min(78vh, 640px);
+    bottom: 3.55rem;
+    width: min(520px, calc(100vw - 1.5rem));
+    height: min(82vh, 720px);
+    background: var(--ai-surface);
+    border: 1px solid var(--ai-line);
+    border-radius: var(--ai-radius);
+    box-shadow: var(--ai-shadow);
     overflow: hidden;
-    background: #fff;
-    border: 1px solid #d5d8dc;
-    border-radius: 8px;
-    box-shadow: 0 10px 28px rgba(23, 32, 42, 0.18);
+    flex-direction: column;
 }
 
 .anita-ai-consulta.is-open .anita-ai-consulta__drawer {
     display: flex;
-    flex-direction: column;
 }
 
-.anita-ai-consulta.is-open .anita-ai-consulta__fab {
-    background: #117a65;
+.anita-ai-consulta.is-expanded .anita-ai-consulta__drawer {
+    width: min(780px, calc(100vw - 1.5rem));
+    height: min(90vh, 860px);
 }
 
 .anita-ai-consulta__header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    padding: 0.65rem 0.85rem;
-    background: #85C1E9;
-    color: #17202A;
-    border-bottom: 1px solid #a9cce3;
+    gap: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    background: linear-gradient(180deg, #85c1e9 0%, #76b4df 100%);
+    border-bottom: 1px solid #6fa8cf;
     flex: 0 0 auto;
 }
 
 .anita-ai-consulta__titulo {
     margin: 0;
-    font-size: 0.95rem;
+    font-size: 1rem;
     font-weight: 700;
+    color: #17202a;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
 }
 
-.anita-ai-consulta__cerrar {
+.anita-ai-consulta__titulo-icon {
+    display: inline-flex;
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 8px;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.55);
+    font-size: 0.8rem;
+}
+
+.anita-ai-consulta__subtitulo {
+    margin: 0.15rem 0 0;
+    font-size: 0.72rem;
+    color: #2c3e50;
+    opacity: 0.85;
+}
+
+.anita-ai-consulta__header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+}
+
+.anita-ai-consulta__btn-icon {
     border: 0;
-    background: transparent;
-    font-size: 1.4rem;
-    line-height: 1;
-    color: #17202A;
+    background: rgba(255, 255, 255, 0.45);
+    color: #17202a;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 8px;
     cursor: pointer;
-    padding: 0 0.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+}
+
+.anita-ai-consulta__btn-icon:hover,
+.anita-ai-consulta__btn-icon:focus {
+    background: rgba(255, 255, 255, 0.85);
+    outline: none;
+}
+
+.anita-ai-consulta__btn-action {
+    border: 0;
+    background: #117a65;
+    color: #fff;
+    border-radius: 8px;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    box-shadow: 0 2px 8px rgba(17, 122, 101, 0.25);
+}
+
+.anita-ai-consulta__btn-action:hover,
+.anita-ai-consulta__btn-action:focus {
+    background: #0e6655;
+    color: #fff;
+    outline: none;
+}
+
+.anita-ai-consulta__btn-action.is-ready {
+    animation: anita-ai-pulse 1.2s ease 1;
+}
+
+@keyframes anita-ai-pulse {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.05); }
+    100% { transform: scale(1); }
 }
 
 .anita-ai-consulta__body {
-    padding: 0.75rem 0.85rem 0.85rem;
+    position: relative;
     display: flex;
     flex-direction: column;
     min-height: 0;
-    overflow: hidden;
     flex: 1 1 auto;
+    background: var(--ai-bg);
 }
 
 .anita-ai-consulta__chat {
     flex: 1 1 auto;
-    min-height: 160px;
-    max-height: 280px;
+    min-height: 0;
     overflow-y: auto;
-    margin-bottom: 0.65rem;
-    padding-right: 0.25rem;
+    padding: 0.85rem 0.9rem 1rem;
+    scroll-behavior: smooth;
 }
 
 .anita-ai-consulta__msg {
-    border-radius: 10px;
-    padding: 0.55rem 0.7rem;
-    margin-bottom: 0.45rem;
-    font-size: 0.86rem;
-    line-height: 1.35;
+    border-radius: 12px;
+    padding: 0.7rem 0.8rem;
+    margin-bottom: 0.55rem;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    max-width: 100%;
 }
 
 .anita-ai-consulta__msg--bot {
-    background: #f4f6f7;
-    color: #17202A;
-    margin-right: 1.5rem;
+    background: var(--ai-bot);
+    color: var(--ai-ink);
+    margin-right: 1.25rem;
+    border: 1px solid #e1e7ee;
 }
 
 .anita-ai-consulta__msg--user {
-    background: #d6eaf8;
-    color: #17202A;
-    margin-left: 1.5rem;
+    background: var(--ai-user);
+    color: var(--ai-ink);
+    margin-left: 1.75rem;
+    border: 1px solid #b7d4ea;
 }
 
-.anita-ai-consulta__ejemplos a {
-    color: #1a5276;
-    text-decoration: underline;
+.anita-ai-consulta__msg--welcome .anita-ai-consulta__hint {
+    font-size: 0.78rem;
+    color: var(--ai-muted);
 }
 
-.anita-ai-consulta__atajos {
-    flex: 0 0 auto;
-    margin-bottom: 0.5rem;
-}
-
-.anita-ai-consulta__chips {
+.anita-ai-consulta__ejemplos {
+    margin-top: 0.55rem;
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
 }
 
-.anita-ai-consulta__chip {
-    border: 1px solid #aeb6bf;
-    background: #f8f9f9;
-    color: #17202A;
+.anita-ai-consulta__ejemplos:empty {
+    display: none;
+}
+
+.anita-ai-consulta__ejemplo {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--ai-line);
+    background: #fff;
+    color: var(--ai-accent);
     border-radius: 999px;
-    padding: 0.25rem 0.65rem;
+    padding: 0.22rem 0.65rem;
     font-size: 0.72rem;
+    text-decoration: none !important;
+    max-width: 100%;
+}
+
+.anita-ai-consulta__ejemplo:hover {
+    background: #eaf4fb;
+    color: #154360;
+}
+
+.anita-ai-consulta__tools {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    background: var(--ai-surface);
+    padding: 0.75rem 0.9rem 0.9rem;
+}
+
+.anita-ai-consulta__tools[hidden] {
+    display: none !important;
+}
+
+.anita-ai-consulta__tools-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.55rem;
+}
+
+.anita-ai-consulta__tools-title {
+    font-weight: 700;
+    font-size: 0.92rem;
+}
+
+.anita-ai-consulta__tools-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.65rem;
+}
+
+.anita-ai-consulta__tools-tab {
+    border: 1px solid var(--ai-line);
+    background: #f4f7fa;
+    color: var(--ai-ink);
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
     cursor: pointer;
 }
 
-.anita-ai-consulta__chip.is-active {
-    background: #1a5276;
-    border-color: #1a5276;
+.anita-ai-consulta__tools-tab.is-active {
+    background: var(--ai-accent);
+    border-color: var(--ai-accent);
     color: #fff;
 }
 
-.anita-ai-consulta__composer {
+.anita-ai-consulta__tools-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding-bottom: 0.35rem;
+}
+
+.anita-ai-consulta__tool {
+    border: 1px solid var(--ai-line);
+    background: #fff;
+    color: var(--ai-ink);
+    border-radius: 10px;
+    padding: 0.65rem 0.7rem;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+    min-height: 3.2rem;
+}
+
+.anita-ai-consulta__tool:hover,
+.anita-ai-consulta__tool:focus {
+    border-color: #85c1e9;
+    box-shadow: 0 4px 12px rgba(26, 82, 118, 0.12);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.anita-ai-consulta__tool-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.anita-ai-consulta__tool-meta {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.68rem;
+    color: var(--ai-muted);
+}
+
+.anita-ai-consulta__tool.is-instant .anita-ai-consulta__tool-meta {
+    color: var(--ai-accent-2);
+    font-weight: 600;
+}
+
+.anita-ai-consulta__tools-hint {
+    margin: 0.45rem 0 0;
+    font-size: 0.72rem;
+    color: var(--ai-muted);
+}
+
+.anita-ai-consulta__footer {
     flex: 0 0 auto;
+    border-top: 1px solid var(--ai-line);
+    background: var(--ai-surface);
+    padding: 0.55rem 0.75rem 0.7rem;
 }
 
-.anita-ai-consulta__composer textarea {
-    resize: vertical;
-    min-height: 68px;
+.anita-ai-consulta__intent-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: #eaf4fb;
+    border: 1px solid #b7d4ea;
+    color: var(--ai-accent);
+    border-radius: 999px;
+    padding: 0.15rem 0.45rem 0.15rem 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    max-width: 100%;
 }
 
-.anita-ai-consulta__composer-actions {
-    display: flex;
-    justify-content: flex-end;
+.anita-ai-consulta__intent-clear {
+    border: 0;
+    background: transparent;
+    color: var(--ai-accent);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.2rem;
+}
+
+.anita-ai-consulta__composer {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.4rem;
+    align-items: end;
+}
+
+.anita-ai-consulta__btn-tools {
+    border: 1px solid var(--ai-line);
+    background: #f4f7fa;
+    color: var(--ai-ink);
+    border-radius: 10px;
+    padding: 0.55rem 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    line-height: 1.1;
+    min-width: 4.5rem;
+}
+
+.anita-ai-consulta__btn-tools.is-open,
+.anita-ai-consulta__btn-tools:hover,
+.anita-ai-consulta__btn-tools:focus {
+    background: #eaf4fb;
+    border-color: #85c1e9;
+    color: var(--ai-accent);
+    outline: none;
+}
+
+.anita-ai-consulta__input {
+    width: 100%;
+    border: 1px solid var(--ai-line);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.88rem;
+    resize: none;
+    min-height: 42px;
+    max-height: 110px;
+    line-height: 1.35;
+    background: #fff;
+    color: var(--ai-ink);
+}
+
+.anita-ai-consulta__input:focus {
+    outline: none;
+    border-color: #85c1e9;
+    box-shadow: 0 0 0 3px rgba(133, 193, 233, 0.35);
+}
+
+.anita-ai-consulta__btn-send {
+    border: 0;
+    background: var(--ai-accent);
+    color: #fff;
+    width: 2.55rem;
+    height: 2.55rem;
+    border-radius: 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.anita-ai-consulta__btn-send:hover,
+.anita-ai-consulta__btn-send:focus {
+    background: #154360;
+    outline: none;
+}
+
+.anita-ai-consulta__btn-send:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+.anita-ai-consulta__error {
     margin-top: 0.4rem;
+    background: #fef5e7;
+    border: 1px solid #f5cba7;
+    color: #7e5109;
+    border-radius: 8px;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.78rem;
+}
+
+.anita-ai-consulta__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.45rem;
 }
 
 .anita-ai-consulta__links a {
-    display: inline-block;
-    margin-right: 0.5rem;
-    margin-bottom: 0.25rem;
+    font-size: 0.78rem;
+    font-weight: 600;
 }
 
 .anita-ai-consulta__score,
@@ -185,39 +489,68 @@
     font-style: italic;
 }
 
+.anita-ai-consulta__result-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+}
+
+.anita-ai-consulta__btn-excel {
+    border: 1px solid #117a65;
+    background: #e8f8f5;
+    color: #0e6655;
+    border-radius: 8px;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.anita-ai-consulta__btn-excel:hover,
+.anita-ai-consulta__btn-excel:focus {
+    background: #117a65;
+    color: #fff;
+    outline: none;
+}
+
 .anita-ai-consulta__tabla-wrap {
-    max-height: 220px;
+    max-height: min(42vh, 360px);
     overflow: auto;
-    margin: 0.4rem 0 0.55rem;
-    border: 1px solid #d5d8dc;
-    border-radius: 4px;
+    margin: 0.5rem 0 0.35rem;
+    border: 1px solid var(--ai-line);
+    border-radius: 8px;
     background: #fff;
+}
+
+.anita-ai-consulta.is-expanded .anita-ai-consulta__tabla-wrap {
+    max-height: min(52vh, 480px);
 }
 
 .anita-ai-consulta__tabla {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     margin: 0;
 }
 
 .anita-ai-consulta__tabla th {
     position: sticky;
     top: 0;
-    background: #85C1E9;
-    color: #17202A;
+    background: #85c1e9;
+    color: #17202a;
     font-weight: 700;
-    padding: 0.3rem 0.35rem;
+    padding: 0.35rem 0.4rem;
     border-bottom: 1px solid #aeb6bf;
     white-space: nowrap;
     z-index: 1;
 }
 
 .anita-ai-consulta__tabla td {
-    padding: 0.25rem 0.35rem;
+    padding: 0.3rem 0.4rem;
     border-bottom: 1px solid #eceff1;
     vertical-align: top;
-    color: #17202A;
+    color: #17202a;
 }
 
 .anita-ai-consulta__tabla tbody tr:nth-child(even) {
@@ -229,13 +562,42 @@
     white-space: nowrap;
 }
 
+.anita-ai-consulta__pedido-acciones,
+.anita-ai-consulta__plan {
+    margin-top: 0.45rem;
+}
+
 @media (max-width: 576px) {
     .anita-ai-consulta {
-        right: 0.75rem;
-        bottom: 0.75rem;
+        right: 0.5rem;
+        bottom: 0.5rem;
     }
 
-    .anita-ai-consulta__drawer {
-        width: calc(100vw - 1.5rem);
+    .anita-ai-consulta__drawer,
+    .anita-ai-consulta.is-expanded .anita-ai-consulta__drawer {
+        width: calc(100vw - 1rem);
+        height: min(88vh, 720px);
+        bottom: 3.4rem;
+    }
+
+    .anita-ai-consulta__tools-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .anita-ai-consulta__btn-tools span {
+        display: none;
+    }
+
+    .anita-ai-consulta__btn-tools {
+        min-width: 2.55rem;
+        padding: 0.55rem;
+    }
+
+    .anita-ai-consulta__composer {
+        grid-template-columns: auto 1fr auto;
+    }
+
+    .anita-ai-consulta__btn-action span {
+        display: none;
     }
 }

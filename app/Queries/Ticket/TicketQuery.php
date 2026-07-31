@@ -140,16 +140,16 @@ class TicketQuery implements TicketQueryInterface
 
         $tickets->where('deleted_at', null);
 
-        // Filtra tickets por tipo de usuario
-        if ($flEncargado) // Encargado ve todo lo de su area
-            $tickets->where('ticket.areadestino_id', $areadestino_id);
-
-        if ($flTecnico) // Tecnico ve solo sus tickets de su area
-            $tickets->where('ticket.areadestino_id', $areadestino_id)
-                    ->where('ticket.usuario_id', $usuario_id);
-
-        if ($flUsuario) // Usuario ve solo sus tickets de cualquier area
+        // Carga de Tickets: usuario-ticket manda (solo emitidos por el usuario).
+        // Sin ese permiso: encargado / tecnico por área; supervisor sin filtro.
+        if ($flUsuario) {
             $tickets->where('ticket.usuario_id', $usuario_id);
+        } elseif ($flEncargado) {
+            $tickets->where('ticket.areadestino_id', $areadestino_id);
+        } elseif ($flTecnico) {
+            $tickets->where('ticket.areadestino_id', $areadestino_id)
+                ->where('ticket.usuario_id', $usuario_id);
+        }
 
         $tickets->where(function ($query) use ($count, $busqueda, $columns, $flSupervisor, $flTecnico, $flUsuario, $flEncargado,
                                                 $usuario_id, $areadestino_id) {
@@ -265,6 +265,8 @@ class TicketQuery implements TicketQueryInterface
         $tecnicoUsuarioFiltro = (int) ($filtros['tecnico_usuario_id'] ?? 0);
         $sistemasAreaId = (int) config('ticket.administracion_sistemas_areadestino_id', 1);
 
+        // Adm. de Tickets: no aplica usuario-ticket (ese alcance es solo en Carga).
+        // Prioridad: filtro técnico UI > encargado > tecnico > supervisor (todo) > área sistemas.
         if ($tecnicoUsuarioFiltro > 0) {
             $tickets->whereHas('ticket_tareas.tecnicos', function ($query) use ($tecnicoUsuarioFiltro) {
                 $query->where('usuario_id', $tecnicoUsuarioFiltro);
@@ -275,10 +277,6 @@ class TicketQuery implements TicketQueryInterface
             $tickets->where('ticket.areadestino_id', $areadestino_id);
         } elseif (! $flSupervisor) {
             $tickets->where('ticket.areadestino_id', $sistemasAreaId);
-        }
-
-        if ($flUsuario) {
-            $tickets->where('ticket.usuario_id', $usuario_id);
         }
 
         \App\Support\Ticket\AdministracionTicketListadoFiltros::aplicar($tickets, $filtros);

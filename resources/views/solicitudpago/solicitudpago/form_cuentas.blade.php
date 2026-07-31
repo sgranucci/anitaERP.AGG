@@ -12,6 +12,10 @@
     <i class="fa fa-balance-scale"></i>
     El asiento no balancea: el total <strong>Debe</strong> debe ser igual al total <strong>Haber</strong>.
 </div>
+<div id="sp-aviso-asiento-monto" class="alert alert-danger mb-3 d-none" role="alert">
+    <i class="fa fa-exclamation-circle"></i>
+    El total del asiento contable debe ser igual al <strong>monto</strong> de la solicitud.
+</div>
 <div class="table-responsive">
     <table class="table table-sm table-bordered" id="solicitudpago-cuenta-table">
         <thead class="thead-light">

@@ -20,6 +20,7 @@ class CuentacajaListadoFiltros
     public const CAMPOS = [
         'id' => ['column' => 'cuentacaja.id', 'type' => 'entero', 'label' => 'ID'],
         'nombre' => ['column' => 'cuentacaja.nombre', 'type' => 'texto', 'label' => 'Nombre'],
+        'descripcion_operaciones' => ['column' => 'cuentacaja.descripcion_operaciones', 'type' => 'texto', 'label' => 'Desc. operaciones'],
         'codigo' => ['column' => 'cuentacaja.codigo', 'type' => 'texto', 'label' => 'Código'],
         'tipocuenta' => ['column' => 'cuentacaja.tipocuenta', 'type' => 'texto', 'label' => 'Tipo cuenta'],
         'banco' => ['column' => 'banco.nombre', 'type' => 'texto', 'label' => 'Banco'],
@@ -35,6 +36,7 @@ class CuentacajaListadoFiltros
     /** @var list<string> */
     private const COLUMNAS_COINCIDENCIA_FLEXIBLE = [
         'cuentacaja.nombre',
+        'cuentacaja.descripcion_operaciones',
         'banco.nombre',
         'empresa.nombre',
         'cuentacontable.nombre',
@@ -215,6 +217,7 @@ class CuentacajaListadoFiltros
             }
             $textCols = [
                 'cuentacaja.nombre',
+                'cuentacaja.descripcion_operaciones',
                 'cuentacaja.codigo',
                 'cuentacaja.tipocuenta',
                 'cuentacaja.cbu',

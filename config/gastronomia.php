@@ -540,9 +540,9 @@ return [
 
     /**
      * Límite de memoria PHP para cierre Waitry (Informe Z jornada, analizar tramo, recalcular %, detalle).
-     * Jornadas con alto volumen de órdenes/emisiones pueden superar 512M.
+     * Biyemas con tótems suele superar 1024M (pico ~1.1–1.3G); default 2048M.
      */
-    'cierre_jornada_proceso_memory_limit' => env('GASTRONOMIA_CIERRE_JORNADA_PROCESO_MEMORY_LIMIT', '1024M'),
+    'cierre_jornada_proceso_memory_limit' => env('GASTRONOMIA_CIERRE_JORNADA_PROCESO_MEMORY_LIMIT', '2048M'),
 
     /**
      * Tipo transacción stock (tipotransaccion_stock.id) para ajuste por consumo de insumos
@@ -598,15 +598,24 @@ return [
      * Deshabilitado por defecto hasta validar en producción con el botón de prueba.
      */
     /**
-     * Auto-sanado diario del Informe Z desde el proceso (idempotente).
-     * Regenera el Z solo cuando el recomputo desde las órdenes del proceso coincide con lo contabilizado
-     * (Z desactualizado por órdenes tardías post-cierre). Las jornadas donde no coincide se dejan intactas
-     * y quedan marcadas para revisión del asiento en la conciliación diaria.
+     * Auto-sanado del Informe Z desde el proceso (idempotente).
+     * Regenera el Z solo cuando el recomputo Waitry (MP/QR) coincide con lo contabilizado en esas cuentas
+     * (Z desactualizado por órdenes tardías). Si no coincide → no toca el Z (revisar asiento).
+     * - Job diario (hora/dias_atras): red de seguridad.
+     * - auto_alinear_al_grabar: al grabar asientos del proceso (botón automático / schedule), sin bloquear.
      */
     'regenerar_z_desde_proceso' => [
         'habilitado' => filter_var(env('GASTRONOMIA_REGENERAR_Z_PROCESO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
         'hora' => env('GASTRONOMIA_REGENERAR_Z_PROCESO_HORA', '07:45'),
         'dias_atras' => max(1, (int) env('GASTRONOMIA_REGENERAR_Z_PROCESO_DIAS_ATRAS', 2)),
+        'auto_alinear_al_grabar' => filter_var(
+            env('GASTRONOMIA_REGENERAR_Z_AUTO_ALINEAR_AL_GRABAR', true),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+        'tolerancia' => max(0.0, (float) env(
+            'GASTRONOMIA_REGENERAR_Z_PROCESO_TOLERANCIA',
+            env('GASTRONOMIA_CIERRE_TOTEM_INFORME_Z_TOLERANCIA', 0.02),
+        )),
     ],
 
     /**

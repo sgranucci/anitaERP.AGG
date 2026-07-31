@@ -8,10 +8,20 @@
         $operadoresJson[$key] = SolicitudpagoListadoFiltros::operadoresParaCampo($key);
     }
     $tieneCriteriosPanel = SolicitudpagoListadoFiltros::tieneCriteriosAplicados($f);
-    $limpiarUrlPanel = $limpiarUrl ?? route('consultar_solicitudpago');
+    $limpiarUrlPanel = $limpiarUrl ?? route(
+        'consultar_solicitudpago',
+        array_merge(SolicitudpagoListadoFiltros::paraQueryStringEmpresa($f), ['limpiar_filtros' => 1])
+    );
+    $fEmp = (int) ($f['empresa_id'] ?? 0);
+    $fScope = $f['empresa_scope'] ?? 'una';
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-solicitudpago" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    @if ($fScope === 'todas')
+        <input type="hidden" name="empresa_todas" value="1">
+    @elseif ($fEmp > 0)
+        <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">

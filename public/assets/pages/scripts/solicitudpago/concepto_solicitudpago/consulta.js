@@ -94,6 +94,30 @@ function limpiarConceptoSolicitudpagoManteniendoCodigo() {
     actualizarLinkEditarConceptoSolicitudpago(0);
 }
 
+function aplicarFormapagosolDesdeConcepto(data) {
+    var $sel = $('#formapagosol_id');
+    if (!$sel.length) {
+        return;
+    }
+    var ids = [];
+    if (data && Array.isArray(data.formapagosol_ids)) {
+        ids = data.formapagosol_ids
+            .map(function (id) { return parseInt(id, 10); })
+            .filter(function (id) { return id > 0; });
+    }
+    var preferido = parseInt((data && data.formapagosol_id) || 0, 10);
+    if (preferido > 0 && ids.indexOf(preferido) === -1) {
+        ids.unshift(preferido);
+    }
+    if (ids.length === 0) {
+        return;
+    }
+    var elegido = ids[0];
+    if ($sel.find('option[value="' + elegido + '"]').length) {
+        $sel.val(String(elegido)).trigger('change');
+    }
+}
+
 function aplicarConceptoSolicitudpagoEnPantalla(data) {
     if (!data || !data.id) {
         limpiarConceptoSolicitudpagoEnPantalla();
@@ -111,6 +135,7 @@ function aplicarConceptoSolicitudpagoEnPantalla(data) {
     $('#concepto_solicitudpago_id_nombre').val(data.nombre || '');
     $('#concepto_forma_pago').val(String(data.forma_pago || '').toUpperCase());
     actualizarLinkEditarConceptoSolicitudpago(data.id);
+    aplicarFormapagosolDesdeConcepto(data);
 
     if (data.sector_solicitudpago_id) {
         var $sector = $('#sector_solicitudpago_id');

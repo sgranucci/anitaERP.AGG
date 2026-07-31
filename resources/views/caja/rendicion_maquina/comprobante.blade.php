@@ -105,7 +105,7 @@
             @forelse ($rendicion->valores as $valor)
                 <tr>
                     <td>{{ $valor->cuentacaja?->codigo }}</td>
-                    <td>{{ $valor->cuentacaja?->nombre }}</td>
+                    <td>{{ $valor->cuentacaja?->etiquetaOperaciones() }}</td>
                     <td class="num">{{ $fmt($valor->monto) }}</td>
                 </tr>
             @empty

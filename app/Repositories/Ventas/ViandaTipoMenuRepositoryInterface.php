@@ -2,6 +2,8 @@
 
 namespace App\Repositories\Ventas;
 
+use App\Models\Ventas\ViandaTipoMenu;
+
 interface ViandaTipoMenuRepositoryInterface
 {
     public function all(?int $empresaId = null);
@@ -17,4 +19,10 @@ interface ViandaTipoMenuRepositoryInterface
     public function find($id);
 
     public function findOrFail($id);
+
+    /**
+     * Copia artículos (y cabecera nombre/estado) del menú origen al de la empresa destino.
+     * Si ya existe menú con el mismo código Anita (o mismo nombre sin código), lo pisa.
+     */
+    public function replicarAEmpresa(int $origenId, int $empresaDestinoId): ViandaTipoMenu;
 }

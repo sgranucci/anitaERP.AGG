@@ -10,9 +10,9 @@ use Illuminate\Console\Command;
 use Throwable;
 
 /**
- * Regenera el Informe Z de las jornadas cuyo Z quedó desactualizado (órdenes tardías post-cierre)
- * y cuyo recomputo desde el proceso COINCIDE con lo contabilizado. Las que no coinciden se listan
- * aparte para revisión del asiento (no se toca el Z).
+ * Regenera el Informe Z de las jornadas cuyo Z MP/QR quedó desactualizado (órdenes tardías)
+ * y cuyo recomputo Waitry COINCIDE con lo contabilizado en esas cuentas. Las que no coinciden
+ * se listan aparte para revisión del asiento (no se toca el Z).
  */
 class GastronomiaRegenerarZDesdeProceso extends Command
 {
@@ -87,23 +87,26 @@ class GastronomiaRegenerarZDesdeProceso extends Command
         }
 
         $this->newLine();
-        $this->info(sprintf('== Z REGENERADOS (recomputo = contabilizado)%s: %d ==', $persistir ? '' : ' [dry-run]', count($regenerar)));
+        $this->info(sprintf('== Z REGENERADOS (recomputo Waitry = MP contabilizado)%s: %d ==', $persistir ? '' : ' [dry-run]', count($regenerar)));
         foreach ($regenerar as $r) {
             $this->line(sprintf(
-                '  emp %d · %s (j#%d): Z %s → %s  (contab %s)%s',
+                '  emp %d · %s (j#%d): MP Z %s → recomputo %s  (MP contab %s | total Z %s)%s',
                 $r['empresa_id'], $r['fecha_jornada'], $r['jornada_id'],
-                $this->fmt($r['z_actual']), $this->fmt($r['z_recomputado']), $this->fmt($r['contabilizado']),
+                $this->fmt($r['mp_z'] ?? $r['z_actual']), $this->fmt($r['z_recomputado']),
+                $this->fmt($r['mp_contabilizado'] ?? $r['contabilizado']),
+                $this->fmt($r['z_actual']),
                 $persistir ? ('  '.(($r['conciliacion_ok'] ?? false) ? 'OK' : 'DIF')) : '',
             ));
         }
 
         $this->newLine();
-        $this->warn(sprintf('== A REVISAR EN EL ASIENTO (recomputo ≠ contabilizado): %d ==', count($revisar)));
+        $this->warn(sprintf('== A REVISAR EN EL ASIENTO (recomputo Waitry ≠ MP contabilizado): %d ==', count($revisar)));
         foreach ($revisar as $r) {
             $this->warn(sprintf(
-                '  emp %d · %s (j#%d): Z actual %s | recomputo proceso %s | contabilizado %s | Δ recomputo↔contab %s',
+                '  emp %d · %s (j#%d): MP Z %s | recomputo %s | MP contab %s | total Z %s | Δ recomputo↔MP contab %s',
                 $r['empresa_id'], $r['fecha_jornada'], $r['jornada_id'],
-                $this->fmt($r['z_actual']), $this->fmt($r['z_recomputado']), $this->fmt($r['contabilizado']),
+                $this->fmt($r['mp_z'] ?? null), $this->fmt($r['z_recomputado']),
+                $this->fmt($r['mp_contabilizado'] ?? null), $this->fmt($r['z_actual']),
                 $this->fmt($r['diff_recomputado_contab']),
             ));
         }

@@ -15,12 +15,15 @@
     ];
 
     var CAMPOS_ENTERO = [
-        'cant_vehic', 'bingo_cant_carton', 'cant_slots', 'cant_rul'
+        'att', 'pos_online', 'cant_vehic', 'bingo_cant_carton', 'cant_slots', 'cant_rul'
     ];
+
+    var CAMPOS_COTIZACION = ['cotizacion'];
 
     var SELECTOR_DECIMAL = CAMPOS_DECIMAL.map(function (c) { return '#' + c; }).join(', ');
     var SELECTOR_ENTERO = CAMPOS_ENTERO.map(function (c) { return '#' + c; }).join(', ');
-    var SELECTOR_TODOS = [SELECTOR_DECIMAL, SELECTOR_ENTERO].filter(Boolean).join(', ');
+    var SELECTOR_COTIZACION = CAMPOS_COTIZACION.map(function (c) { return '#' + c; }).join(', ');
+    var SELECTOR_TODOS = [SELECTOR_DECIMAL, SELECTOR_ENTERO, SELECTOR_COTIZACION].filter(Boolean).join(', ');
 
     var ultimoDesgloseWigos = null;
 
@@ -65,10 +68,11 @@
         cant_rul: 'Cant. ruletas'
     };
 
-    function parseDecimal(str) {
+    function parseDecimal(str, decimales) {
         if (str == null || str === '') {
             return 0;
         }
+        var dec = decimales == null ? 2 : decimales;
         var t = String(str).trim().replace(/\s/g, '');
         if (t.indexOf(',') >= 0) {
             t = t.replace(/\./g, '').replace(',', '.');
@@ -76,17 +80,22 @@
             t = t.replace(/\./g, '');
         }
         var n = parseFloat(t);
-        return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+        if (isNaN(n)) {
+            return 0;
+        }
+        var factor = Math.pow(10, dec);
+        return Math.round(n * factor) / factor;
     }
 
     function parseEntero(str) {
-        return Math.round(parseDecimal(str));
+        return Math.round(parseDecimal(str, 0));
     }
 
-    function fmtDecimal(n) {
+    function fmtDecimal(n, decimales) {
+        var dec = decimales == null ? 2 : decimales;
         return Number(n || 0).toLocaleString('es-AR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
+            minimumFractionDigits: dec,
+            maximumFractionDigits: dec
         });
     }
 
@@ -97,7 +106,7 @@
         });
     }
 
-    function formatearDecimalInput(el) {
+    function formatearDecimalInput(el, decimales) {
         if (!el) {
             return;
         }
@@ -105,7 +114,7 @@
             el.value = '';
             return;
         }
-        el.value = fmtDecimal(parseDecimal(el.value));
+        el.value = fmtDecimal(parseDecimal(el.value, decimales), decimales);
     }
 
     function formatearEnteroInput(el) {
@@ -119,11 +128,11 @@
         el.value = fmtEntero(parseEntero(el.value));
     }
 
-    function desformatearDecimalInput(el) {
+    function desformatearDecimalInput(el, decimales) {
         if (!el || el.value === '') {
             return;
         }
-        var n = parseDecimal(el.value);
+        var n = parseDecimal(el.value, decimales);
         el.value = String(n);
     }
 
@@ -164,7 +173,14 @@
                 this.value = '0';
                 return;
             }
-            this.value = String(parseDecimal(this.value));
+            this.value = String(parseDecimal(this.value, 2));
+        });
+        $(form).find(SELECTOR_COTIZACION).each(function () {
+            if (this.value === '' || this.value == null) {
+                this.value = '0';
+                return;
+            }
+            this.value = String(parseDecimal(this.value, 4));
         });
         $(form).find(SELECTOR_ENTERO).each(function () {
             if (this.value === '' || this.value == null) {
@@ -177,7 +193,10 @@
 
     function initFormatoCampos() {
         $(SELECTOR_DECIMAL).each(function () {
-            formatearDecimalInput(this);
+            formatearDecimalInput(this, 2);
+        });
+        $(SELECTOR_COTIZACION).each(function () {
+            formatearDecimalInput(this, 4);
         });
         $(SELECTOR_ENTERO).each(function () {
             formatearEnteroInput(this);
@@ -428,12 +447,21 @@
     }
 
     $(document).on('focus', SELECTOR_DECIMAL, function () {
-        desformatearDecimalInput(this);
+        desformatearDecimalInput(this, 2);
         this.select();
     });
 
     $(document).on('blur', SELECTOR_DECIMAL, function () {
-        formatearDecimalInput(this);
+        formatearDecimalInput(this, 2);
+    });
+
+    $(document).on('focus', SELECTOR_COTIZACION, function () {
+        desformatearDecimalInput(this, 4);
+        this.select();
+    });
+
+    $(document).on('blur', SELECTOR_COTIZACION, function () {
+        formatearDecimalInput(this, 4);
     });
 
     $(document).on('focus', SELECTOR_ENTERO, function () {

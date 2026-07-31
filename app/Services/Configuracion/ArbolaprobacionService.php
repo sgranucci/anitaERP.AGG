@@ -909,6 +909,15 @@ class ArbolaprobacionService
                 }
             }
 
+            if ($tipocomprobante === 'SP') {
+                app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
+                    ->aplicaEstadoTrasAprobarNivel(
+                        (int) $comprobante_id,
+                        (int) $movimientoPre->nivel,
+                        (int) $usuario_id
+                    );
+            }
+
             if ($tipocomprobante === 'RE') {
                 $reqActual = $this->requisicionRepository->find($comprobante_id);
                 $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
@@ -2650,7 +2659,15 @@ class ArbolaprobacionService
         $snapshot = $this->snapshotDocumentoArbol($tipo, $documento);
         $estadoTras = null;
         if ($modo === 'aprobacion' && $snapshot) {
-            $estadoTras = $this->estadoTrasAprobarDesdeSnapshot($mov, $snapshot);
+            if ($tipo === 'SP' && $documento) {
+                $estadoCodigo = app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
+                    ->estadoTrasAprobarNivel($documento, (int) $mov->nivel);
+                $estadoTras = $estadoCodigo !== null
+                    ? \App\Support\Solicitudpago\SolicitudpagoEstados::label($estadoCodigo)
+                    : null;
+            } else {
+                $estadoTras = $this->estadoTrasAprobarDesdeSnapshot($mov, $snapshot);
+            }
         }
 
         return [
@@ -2659,6 +2676,7 @@ class ArbolaprobacionService
             'movimiento' => $mov,
             'estado_tras_aprobar' => $estadoTras,
             'monto_items' => (float) ($snapshot['monto'] ?? 0),
+            'moneda_abrev_items' => optional($documento->monedas ?? null)->abreviatura ?? '',
             'etiqueta_tipo' => $snapshot['etiqueta_tipo'] ?? ArbolAprobacionContextoSupport::etiquetaTipo($tipo),
             'numero_comprobante' => $snapshot['numero'] ?? null,
             'ai_contexto_arbol' => $this->panelIaContextoArbol($tipo, $documento, $mov, $estadoTras),

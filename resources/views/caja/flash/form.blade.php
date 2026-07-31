@@ -82,23 +82,26 @@
 <div class="form-group row">
     <label for="att" class="col-lg-3 col-form-label text-right">Asistencia (att)</label>
     <div class="col-lg-3">
-        <input type="number" name="att" id="att" class="form-control" min="0" value="{{ old('att', $data->att) }}">
+        <input type="text" inputmode="numeric" name="att" id="att" class="form-control text-right flash-campo-entero" autocomplete="off"
+               value="{{ number_format((int) old('att', $data->att ?? 0), 0, ',', '.') }}">
     </div>
     <label for="pos_online" class="col-lg-2 col-form-label text-right">POS on-line</label>
     <div class="col-lg-2">
-        <input type="number" name="pos_online" id="pos_online" class="form-control" min="0" value="{{ old('pos_online', $data->pos_online ?? 0) }}">
+        <input type="text" inputmode="numeric" name="pos_online" id="pos_online" class="form-control text-right flash-campo-entero" autocomplete="off"
+               value="{{ number_format((int) old('pos_online', $data->pos_online ?? 0), 0, ',', '.') }}">
     </div>
 </div>
 
 <div class="form-group row">
     <label for="show" class="col-lg-3 col-form-label text-right">Show</label>
     <div class="col-lg-3">
-        <input type="text" inputmode="decimal" name="show" id="show" class="form-control flash-campo-decimal" autocomplete="off"
+        <input type="text" inputmode="decimal" name="show" id="show" class="form-control text-right flash-campo-decimal" autocomplete="off"
                value="{{ number_format((float) old('show', $data->show ?? 0), 2, ',', '.') }}">
     </div>
     <label for="cotizacion" class="col-lg-2 col-form-label text-right">Cotizaci&oacute;n</label>
     <div class="col-lg-2">
-        <input type="number" step="0.0001" name="cotizacion" id="cotizacion" class="form-control" value="{{ old('cotizacion', $data->cotizacion) }}">
+        <input type="text" inputmode="decimal" name="cotizacion" id="cotizacion" class="form-control text-right flash-campo-cotizacion" autocomplete="off"
+               value="{{ number_format((float) old('cotizacion', $data->cotizacion ?? 0), 4, ',', '.') }}">
     </div>
 </div>
 

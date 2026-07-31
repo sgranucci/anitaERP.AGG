@@ -48,10 +48,11 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                     'queryparams' => $filtrosQuery ?? [],
                 ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Desc. operaciones</th>
                             <th>Código</th>
                             <th>Tipo cuenta</th>
                             <th>Banco</th>
@@ -69,6 +70,7 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
+                            <td>{{ $data->descripcion_operaciones }}</td>
                             <td>{{$data->codigo}}</td>
                             <td>@foreach($tipocuenta_enum as $tipocuenta)
 									@if ($tipocuenta['valor'] == $data->tipocuenta)
