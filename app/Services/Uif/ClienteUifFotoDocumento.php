@@ -4,6 +4,7 @@ namespace App\Services\Uif;
 
 use App\Models\Uif\Cliente_Archivo_Uif;
 use App\Repositories\Uif\AnitaUifArchivosSync;
+use App\Support\Uif\ClienteUifArchivoStorage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 
@@ -13,6 +14,12 @@ class ClienteUifFotoDocumento
 
     public static function basePath(): string
     {
+        // Con withOrigen() escribe en fotos_clientes / _KSA / _RSA según la PC.
+        $desdeOrigen = ClienteUifArchivoStorage::dirFotosPremio();
+        if ($desdeOrigen !== '') {
+            return $desdeOrigen;
+        }
+
         return rtrim((string) config('uif.FOTOS_CLIENTES_PATH', '/scan/tesoreria/fotos_clientes'), DIRECTORY_SEPARATOR);
     }
 
@@ -108,10 +115,13 @@ class ClienteUifFotoDocumento
      */
     public static function storagePathsForRead(): array
     {
-        $paths = array_filter([
-            self::basePath(),
-            self::fallbackPath(),
-        ]);
+        $paths = array_filter(array_merge(
+            ClienteUifArchivoStorage::dirsFotosPremioTodos(),
+            [
+                self::basePath(),
+                self::fallbackPath(),
+            ]
+        ));
 
         return array_values(array_unique($paths));
     }
@@ -507,8 +517,8 @@ class ClienteUifFotoDocumento
             if ($n === '' || ! preg_match('/\.(jpe?g|png|gif|webp)$/i', $n)) {
                 continue;
             }
-            $src = public_path('storage/archivos/clientes_uif/'.$clienteUifId.'/'.$n);
-            if (! is_file($src)) {
+            $src = ClienteUifArchivoStorage::absoluteClienteAdjunto($clienteUifId, $n);
+            if ($src === null || ! is_file($src)) {
                 continue;
             }
             $bn = strtolower(basename($n));

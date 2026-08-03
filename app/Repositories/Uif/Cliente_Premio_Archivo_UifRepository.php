@@ -3,6 +3,9 @@
 namespace App\Repositories\Uif;
 
 use App\Models\Uif\Cliente_Premio_Archivo_Uif;
+use App\Models\Uif\Cliente_Premio_Uif;
+use App\Support\Uif\ClienteUifArchivoStorage;
+use App\Support\Uif\ClienteUifOrigenPcSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_UifRepositoryInterface
@@ -54,6 +57,17 @@ class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_Uif
 
 	private function guardaCliente_Premio_Archivo_Uif($request, $funcion, $id = null)
 	{
+		$clienteUifId = (int) Cliente_Premio_Uif::query()->whereKey($id)->value('cliente_uif_id');
+		$origen = ClienteUifOrigenPcSupport::origenDeClienteId($clienteUifId)
+			?? ClienteUifOrigenPcSupport::resolverObligatorio()['origen'];
+
+		return ClienteUifArchivoStorage::withOrigen($origen, function () use ($request, $funcion, $id) {
+			return $this->guardaCliente_Premio_Archivo_UifEnOrigen($request, $funcion, $id);
+		});
+	}
+
+	private function guardaCliente_Premio_Archivo_UifEnOrigen($request, $funcion, $id = null)
+	{
 		if ($funcion == 'update')
 		{
 			// Borra los registros antes de grabar nuevamente
@@ -68,16 +82,15 @@ class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_Uif
 			{
 		  		if ($archivo)
 				{
-					$destDir = public_path().'/storage/archivos/clientes_premios_uif/'.$id;
-					if (! is_dir($destDir)) {
-						@mkdir($destDir, 0775, true);
+					$destDir = ClienteUifArchivoStorage::dirPremios();
+					if (! ClienteUifArchivoStorage::ensureDir($destDir)) {
+						continue;
 					}
     				$file = $archivo->getClientOriginalName();
     				$destName = $id.'-'.$file;
 
     				$archivo->move($destDir, $destName);
 
-					// Guarda en ERP
 					$cliente_premio_archivo_uif = $this->model->create([
 									'cliente_premio_uif_id' => $id,
 									'nombrearchivo' => $destName,
@@ -154,12 +167,11 @@ class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_Uif
 		}
 	}
 
-	/**
-	 * Nombre físico en storage: "{cliente_premio_uif_id}-{basename}" salvo que Anita ya traiga
-	 * "{id}-..." con el mismo id numérico que el premio en el ERP (evita "12-12-doc.pdf").
-	 */
-	private function nombreDestinoImportPremioUif(int $premioLocalId, string $nombreArchivo): string
+	private function nombreDestinoImportPremioUif(int $premioLocalId, string $nombreArchivo, bool $usarBasenameOrigen): string
 	{
+		if ($usarBasenameOrigen) {
+			return basename($nombreArchivo);
+		}
 		if (preg_match('/^(\d+)-/', $nombreArchivo, $m)) {
 			if ((int) $m[1] === $premioLocalId) {
 				return $nombreArchivo;
@@ -181,29 +193,39 @@ class Cliente_Premio_Archivo_UifRepository implements Cliente_Premio_Archivo_Uif
 			return;
 		}
 
-		$destNombre = $this->nombreDestinoImportPremioUif($premioLocalId, $nombreArchivo);
-		if ($this->model->newQuery()
-			->where('cliente_premio_uif_id', $premioLocalId)
-			->where('nombrearchivo', $destNombre)
-			->exists()) {
-			return;
-		}
-
-		$origen = AnitaUifArchivosSync::primeraRutaExistente(
-			AnitaUifArchivosSync::rutasOrigenCandidatasPremio($mount, $inroclienteid, $inropremioid, $nombreArchivo)
-		);
+		$directo = ClienteUifArchivoStorage::dirPremios().DIRECTORY_SEPARATOR.$nombreArchivo;
+		$origen = (is_file($directo) && is_readable($directo))
+			? $directo
+			: AnitaUifArchivosSync::primeraRutaExistente(
+				AnitaUifArchivosSync::rutasOrigenCandidatasPremio($mount, $inroclienteid, $inropremioid, $nombreArchivo)
+			);
 		if ($origen === null) {
 			return;
 		}
 
-		$destDir = public_path('storage/archivos/clientes_premios_uif/'.$premioLocalId);
-		if (! is_dir($destDir) && ! @mkdir($destDir, 0775, true) && ! is_dir($destDir)) {
+		$copiar = ClienteUifArchivoStorage::syncDebeCopiar();
+		$destNombre = $this->nombreDestinoImportPremioUif($premioLocalId, basename($origen), ! $copiar);
+
+		$yaExiste = $this->model->newQuery()
+			->where('cliente_premio_uif_id', $premioLocalId)
+			->where(function ($q) use ($destNombre, $nombreArchivo) {
+				$q->where('nombrearchivo', $destNombre)
+					->orWhere('nombrearchivo', $nombreArchivo);
+			})
+			->exists();
+		if ($yaExiste) {
 			return;
 		}
 
-		$destFile = $destDir.'/'.$destNombre;
-		if (! @copy($origen, $destFile)) {
-			return;
+		if ($copiar) {
+			$destDir = public_path('storage/archivos/clientes_premios_uif/'.$premioLocalId);
+			if (! is_dir($destDir) && ! @mkdir($destDir, 0775, true) && ! is_dir($destDir)) {
+				return;
+			}
+			$destFile = $destDir.'/'.$destNombre;
+			if (! @copy($origen, $destFile)) {
+				return;
+			}
 		}
 
 		$this->model->create([

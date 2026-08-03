@@ -36,7 +36,7 @@
                     @endif
                 </p>
                 @if (! empty($data->foto))
-                    @php $fotoUrl = asset('storage/imagenes/fotos_uif/'.$data->foto); @endphp
+                    @php $fotoUrl = \App\Support\Uif\ClienteUifArchivoStorage::urlFotoPremio($data->foto) ?? '#'; @endphp
                     <figure class="premio-foto-viewer-figure">
                         <img
                             src="{{ $fotoUrl }}"

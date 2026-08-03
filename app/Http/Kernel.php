@@ -67,6 +67,7 @@ class Kernel extends HttpKernel
         'modo.consulta' => \App\Http\Middleware\PreservarModoConsulta::class,
         'estacionamiento.habilitado' => \App\Http\Middleware\EstacionamientoHabilitado::class,
         'bingo.habilitado' => \App\Http\Middleware\BingoHabilitado::class,
+        'uif.pc_configurada' => \App\Http\Middleware\UifPcConfigurada::class,
     ];
 
     /**

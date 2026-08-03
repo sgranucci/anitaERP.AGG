@@ -437,6 +437,26 @@
             });
     }
 
+    window.CIERRE_REND_abrirRangoDesdePendientes = function (empresaId, desde, hasta) {
+        var empRango = document.getElementById('rango-empresa-id');
+        var inputDesde = document.getElementById('rango-fecha-desde');
+        var inputHasta = document.getElementById('rango-fecha-hasta');
+        if (empRango) {
+            empRango.value = String(empresaId || '');
+        }
+        if (inputDesde) {
+            inputDesde.value = desde || '';
+        }
+        if (inputHasta) {
+            inputHasta.value = hasta || '';
+        }
+        rangoEjecutando = false;
+        setBotonEjecutarRango(false);
+        limpiarPreviewRango();
+        $('#modal-cierre-rango-rend-est').modal('show');
+        previewCierreRango();
+    };
+
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.js-toggle-grupo-detalle').forEach(function (btn) {
             btn.addEventListener('click', function () {
@@ -469,6 +489,7 @@
             btnConfirmar.addEventListener('click', ejecutarCierre);
         }
 
+
         var btnAbrirRango = document.getElementById('btn-abrir-cierre-rango');
         if (btnAbrirRango) {
             btnAbrirRango.addEventListener('click', function () {
@@ -492,5 +513,16 @@
         if (btnEjecutarRango) {
             btnEjecutarRango.addEventListener('click', ejecutarCierreRango);
         }
+
+        // Si cambian empresa/fechas, invalidar preview viejo para no confirmar otro rango.
+        ['rango-empresa-id', 'rango-fecha-desde', 'rango-fecha-hasta'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (!el) {
+                return;
+            }
+            el.addEventListener('change', function () {
+                limpiarPreviewRango();
+            });
+        });
     });
 })();

@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Support\Solicitudpago\ConceptoSolicitudpagoEstados;
 use App\Support\Solicitudpago\ConceptoSolicitudpagoFormaPago;
+use App\Support\Solicitudpago\SolicitudpagoEstados;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -41,6 +42,13 @@ class ValidacionConcepto_Solicitudpago extends FormRequest
             'usuario_ids.*' => 'nullable|exists:usuario,id',
             'desdemontos' => 'nullable|array',
             'desdemontos.*' => 'nullable|numeric|min:0',
+            'documento_estado_al_aprobar' => 'nullable|array',
+            'documento_estado_al_aprobar.*' => [
+                'nullable',
+                'string',
+                'max:50',
+                Rule::in(array_merge([''], SolicitudpagoEstados::valoresArbolAprobacion())),
+            ],
             'empresa_ids' => 'nullable|array',
             'empresa_ids.*' => 'nullable|exists:empresa,id',
             'cuentacontable_ids' => 'nullable|array',

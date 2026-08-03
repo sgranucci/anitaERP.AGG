@@ -7,7 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\CierreRendicionBingoService;
 use App\Support\Contable\CierreRendicionBingoListadoFiltros;
-use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -76,6 +75,94 @@ class CierreRendicionBingoController extends Controller
             'cierre_rendicion_bingo_contable',
             CierreRendicionBingoListadoFiltros::paraQueryString($filtros),
         );
+    }
+
+    public function apiPendientesCierre(Request $request): JsonResponse
+    {
+        can('listar-cierre-rendicion-bingo-contable');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique empresa.'], 422);
+        }
+
+        $permitidas = $this->empresaRepository->allFiltrado()
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+        if (! in_array($empresaId, $permitidas, true)) {
+            return response()->json(['ok' => false, 'mensaje' => 'Empresa no autorizada.'], 403);
+        }
+
+        try {
+            $resumen = $this->service->resumenPendientesCierre($empresaId);
+
+            return response()->json(['ok' => true, 'resumen' => $resumen]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiPreviewCierreRango(Request $request): JsonResponse
+    {
+        can('ejecutar-cierre-rendicion-bingo-contable');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+
+        if ($empresaId <= 0 || $fechaDesde === '' || $fechaHasta === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique empresa y rango de fechas.'], 422);
+        }
+
+        try {
+            $preview = $this->service->previewCierreRango($empresaId, $fechaDesde, $fechaHasta);
+
+            return response()->json(['ok' => true, 'preview' => $preview]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiEjecutarCierreRango(Request $request): JsonResponse
+    {
+        can('ejecutar-cierre-rendicion-bingo-contable');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+
+        if ($empresaId <= 0 || $fechaDesde === '' || $fechaHasta === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique empresa y rango de fechas.'], 422);
+        }
+
+        if (! $request->boolean('confirmar')) {
+            return response()->json(['ok' => false, 'mensaje' => 'Debe confirmar el cierre del rango.'], 422);
+        }
+
+        try {
+            $resultado = $this->service->ejecutarCierreRango($empresaId, $fechaDesde, $fechaHasta);
+            $cantOk = count($resultado['ok']);
+            $cantErr = count($resultado['errores']);
+            $mensaje = 'Cierre contable: '.$cantOk.' jornada(s) cerrada(s).';
+            if ($cantErr > 0) {
+                $mensaje .= ' '.$cantErr.' con error.';
+            }
+
+            return response()->json([
+                'ok' => true,
+                'mensaje' => $mensaje,
+                'resultado' => $resultado,
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
     }
 
     public function apiPreviewAsiento(Request $request): JsonResponse
@@ -170,29 +257,37 @@ class CierreRendicionBingoController extends Controller
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $filtros = CierreRendicionBingoListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaDefault = $this->resolverEmpresaDefaultId($empresaQuery);
         $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
+
+        $filtros = CierreRendicionBingoListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault,
+        );
         $filtros['empresas_asignadas'] = $asignadas;
 
-        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return $filtros;
-        }
-
-        $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-
-        if ($empresaId <= 0 && count($asignadas) === 1 && ! $request->has('empresa_id')) {
-            $primera = $empresaQuery->first();
-            if ($primera !== null) {
-                $filtros['empresa_id'] = (int) $primera->id;
-            }
-        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
-            $primera = $empresaQuery->first();
-            if ($primera !== null) {
-                $filtros['empresa_id'] = (int) $primera->id;
+        if (
+            ($filtros['empresa_scope'] ?? 'una') === 'una'
+            && $empresaId > 0
+            && count($asignadas) >= 1
+            && ! in_array($empresaId, $asignadas, true)
+        ) {
+            $filtros['empresa_id'] = $empresaDefault > 0 ? $empresaDefault : 0;
+            if ((int) $filtros['empresa_id'] <= 0) {
+                $filtros['empresa_scope'] = 'todas';
             }
         }
 
         return $filtros;
+    }
+
+    private function resolverEmpresaDefaultId($empresaQuery): int
+    {
+        $first = $empresaQuery->first();
+
+        return $first !== null ? (int) $first->id : 0;
     }
 }

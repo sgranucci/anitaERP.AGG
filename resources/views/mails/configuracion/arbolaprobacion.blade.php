@@ -19,12 +19,18 @@
             <p>En este nivel del árbol <strong>no está definido</strong> un estado destino al aprobar; solo avanzará la aprobación del flujo.</p>
         @endif
     @elseif ($tipoArbol == 'Solicitudes de pago')
-        <p>Hola! Tiene una Solicitud de pago para aprobación</p>
         @php $mx = $mailExtras ?? []; @endphp
-        @if (!empty($mx['estado_tras_aprobar']))
-            <p>Al <strong>aprobar este paso</strong>, la solicitud de pago quedará en estado <strong>{{ $mx['estado_tras_aprobar'] }}</strong>.</p>
+        @if (!empty($mx['es_aviso_pago']))
+            <p>Hola! Tiene una Solicitud de pago <strong>autorizada</strong> lista para pagar</p>
+            <p>Este correo es un <strong>aviso a pagadores</strong>: la SP no cambia a Pagada desde el árbol.
+                El estado <strong>Pagada</strong> se registra al emitir el ingreso/egreso (orden de pago).</p>
         @else
-            <p>En este nivel del árbol <strong>no se cambia</strong> el estado de cabecera al aprobar; solo avanzará la aprobación del flujo.</p>
+            <p>Hola! Tiene una Solicitud de pago para aprobación</p>
+            @if (!empty($mx['estado_tras_aprobar']))
+                <p>Al <strong>aprobar este paso</strong>, la solicitud de pago quedará en estado <strong>{{ $mx['estado_tras_aprobar'] }}</strong>.</p>
+            @else
+                <p>En este nivel del árbol <strong>no se cambia</strong> el estado de cabecera al aprobar; solo avanzará la aprobación del flujo.</p>
+            @endif
         @endif
     @else
         <p>Hola! Tiene una Requisición para aprobación</p>
@@ -170,6 +176,8 @@
     @elseif ($tipoArbol == 'Solicitudes de pago')
         @php
             $mx = $mailExtras ?? [];
+            $esAvisoPago = ! empty($mx['es_aviso_pago']);
+            $linkPago = $mx['link_pago'] ?? null;
             $monedaAbr = trim((string) ($mx['moneda_abrev_items'] ?? (optional($datosComprobante->monedas)->abreviatura ?? '')));
             $montoFmt = $mx['monto_items_fmt']
                 ?? number_format((float) ($mx['monto_items'] ?? $datosComprobante->monto ?? 0), 2, ',', '.');
@@ -183,7 +191,12 @@
             $estadoLabel = \App\Support\Solicitudpago\SolicitudpagoEstados::label($datosComprobante->estado ?? '');
             $linkDescarga = $mx['link_descarga_paquete'] ?? null;
         @endphp
-        <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle en una pantalla adaptable a celular y podrá cargar observaciones antes de confirmar.</p>
+        @if ($esAvisoPago)
+            <p style="font-size:14px;color:#444;">Use <strong>Ir a pagar</strong> para abrir Ingresos y egresos con la solicitud precargada (requiere iniciar sesi&oacute;n).
+                <strong>Rechazar</strong> deja la SP en estado Rechazada si no corresponde pagar.</p>
+        @else
+            <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle en una pantalla adaptable a celular y podrá cargar observaciones antes de confirmar.</p>
+        @endif
         <ul style="line-height:1.5;">
             <li><strong>Empresa:</strong> {{ $datosComprobante->empresas->nombre ?? '' }}</li>
             <li><strong>Código SP:</strong> {{ $datosComprobante->codigo ?? $datosComprobante->id }}</li>
@@ -199,7 +212,11 @@
             <li><strong>Observación:</strong> {{ $datosComprobante->observacion ?? '' }}</li>
         </ul>
         <p style="margin-top:18px;">
-            <a href="{{ $linkAprobacion }}" style="background:#28a745; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; margin-right:8px; display:inline-block;">Autorizar</a>
+            @if ($esAvisoPago && ! empty($linkPago))
+                <a href="{{ $linkPago }}" style="background:#28a745; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; margin-right:8px; display:inline-block;">Ir a pagar</a>
+            @elseif (! $esAvisoPago)
+                <a href="{{ $linkAprobacion }}" style="background:#28a745; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; margin-right:8px; display:inline-block;">Autorizar</a>
+            @endif
             <a href="{{ $linkRechazo }}" style="background:#dc3545; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; margin-right:8px; display:inline-block;">Rechazar</a>
             <a href="{{ $linkVisualizar }}" style="background:#007bff; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; margin-right:8px; display:inline-block;">Visualizar</a>
             @if (!empty($linkDescarga))
@@ -230,7 +247,11 @@
         @endif
         <p style="font-size:11px;color:#888;margin-top:8px;">
             Enlaces directos:<br>
-            Autorizar: <a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a><br>
+            @if ($esAvisoPago && ! empty($linkPago))
+                Ir a pagar: <a href="{{ $linkPago }}">{{ $linkPago }}</a><br>
+            @elseif (! $esAvisoPago)
+                Autorizar: <a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a><br>
+            @endif
             Rechazar: <a href="{{ $linkRechazo }}">{{ $linkRechazo }}</a><br>
             Visualizar: <a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a>
             @if (!empty($linkDescarga))

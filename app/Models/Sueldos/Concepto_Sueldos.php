@@ -25,6 +25,8 @@ class Concepto_Sueldos extends Model implements Auditable
         'mes_retroactivo',
         'leyenda_recibo',
         'concepto_afip',
+        'rubro_costo_laboral',
+        'unidad_medida',
         'activo',
         'orden',
     ];
@@ -47,5 +49,10 @@ class Concepto_Sueldos extends Model implements Auditable
     public function acumuladoresOverride()
     {
         return $this->hasMany(Concepto_Acumulador_Sueldos::class, 'concepto_id');
+    }
+
+    public function reglasElegibilidad()
+    {
+        return $this->hasMany(Concepto_Elegibilidad_Sueldos::class, 'concepto_id');
     }
 }

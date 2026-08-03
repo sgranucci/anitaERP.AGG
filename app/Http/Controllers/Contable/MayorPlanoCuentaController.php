@@ -112,6 +112,15 @@ class MayorPlanoCuentaController extends Controller
             'puede_ver_proveedor' => can('listar-proveedor', false) || can('editar-proveedor', false),
             'puede_ver_comprobante_proveedor' => can('listar-comprobante-proveedor', false) || can('editar-comprobante-proveedor', false),
             'puede_ver_factura' => can('listar-factura', false) || can('editar-factura', false),
+            'puede_ver_remesa' => can('listar-remesa', false) || can('editar-remesa', false),
+            'puede_ver_jornada_gastronomia' => can('listar-waitry-cierre-jornada-caja', false),
+            'puede_ver_rendicion_estacionamiento' => can('listar-rendicion-estacionamiento-caja', false) || can('editar-rendicion-estacionamiento-caja', false),
+            'puede_ver_transferencia_mercaderia' => can('crear-transferencia-mercaderia', false) || can('listar-transferencias-pendientes', false),
+            'puede_ver_cobranza' => can('listar-cobranza', false) || can('editar-cobranza', false),
+            'puede_ver_pagoproveedor' => can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false),
+            'puede_ver_recepcion_proveedor' => can('listar-recepcion-proveedor', false) || can('editar-recepcion-proveedor', false),
+            'puede_ver_movimientostock' => can('listar-movimientos-de-stock', false) || can('editar-movimientos-de-stock', false),
+            'puede_ver_caja_movimiento' => can('listar-ingresos-egresos-caja', false) || can('editar-ingresos-egresos-caja', false),
             'multiempresa' => count($filtros['empresa_ids'] ?? []) > 1
                 || empty($filtros['consolidar_empresas']),
         ]);

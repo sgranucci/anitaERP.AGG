@@ -22,13 +22,20 @@ final class CierreTurnoGastronomiaContableListadoFiltros
     /** @var array<string, array{prop: string, type: string, label: string}> */
     public const CAMPOS = GastronomiaCierresTurnoListadoFiltros::CAMPOS;
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId ?? 0,
+                'empresa_scope' => $empresaScope,
+            ]);
         }
 
         $filtros = GastronomiaCierresTurnoListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $filtros['empresa_id'] = $empresaId ?? 0;
+        $filtros['empresa_scope'] = $empresaScope;
         $filtros['todas_terminales'] = true;
         $filtros['identificador_pc'] = '';
 
@@ -42,6 +49,24 @@ final class CierreTurnoGastronomiaContableListadoFiltros
     }
 
     /**
+     * @return array{0:?int,1:string}
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function filtrosVacios(): array
@@ -51,6 +76,7 @@ final class CierreTurnoGastronomiaContableListadoFiltros
         $filtros['identificador_pc'] = '';
         $filtros['fecha_desde'] = Carbon::today()->subDays(7)->toDateString();
         $filtros['fecha_hasta'] = Carbon::today()->toDateString();
+        $filtros['empresa_scope'] = 'una';
 
         return $filtros;
     }
@@ -61,10 +87,58 @@ final class CierreTurnoGastronomiaContableListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $qs = GastronomiaCierresTurnoListadoFiltros::paraQueryString($filtros);
-        unset($qs['identificador_pc'], $qs['todas_terminales']);
+        $params = self::paraQueryStringEmpresa($filtros);
 
-        return $qs;
+        $qs = GastronomiaCierresTurnoListadoFiltros::paraQueryString($filtros);
+        unset($qs['identificador_pc'], $qs['todas_terminales'], $qs['empresa_id'], $qs['empresa_todas']);
+
+        return array_merge($params, $qs);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
+    }
+
+    /**
+     * Criterios del panel / búsqueda (sin el filtro externo de empresa).
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function tieneCriteriosUsuario(array $filtros): bool
+    {
+        if (trim((string) ($filtros['tipo'] ?? '')) !== '') {
+            return true;
+        }
+        if (trim((string) ($filtros['fecha_desde'] ?? '')) !== ''
+            || trim((string) ($filtros['fecha_hasta'] ?? '')) !== '') {
+            return true;
+        }
+        if (($filtros['operador'] ?? '') === 'vacio') {
+            return true;
+        }
+        if (trim((string) ($filtros['valor'] ?? '')) !== '') {
+            return true;
+        }
+        if (($filtros['modo'] ?? self::MODO_TODOS) === self::MODO_CAMPO) {
+            return true;
+        }
+        if (($filtros['operador'] ?? 'contiene') !== 'contiene') {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -72,15 +146,7 @@ final class CierreTurnoGastronomiaContableListadoFiltros
      */
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
-        return GastronomiaCierresTurnoListadoFiltros::tieneCriteriosAplicados($filtros);
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     */
-    public static function tieneCriteriosUsuario(array $filtros): bool
-    {
-        return self::tieneCriteriosAplicados($filtros);
+        return self::tieneCriteriosUsuario($filtros);
     }
 
     public static function operadoresParaCampo(string $campo): array
@@ -94,7 +160,9 @@ final class CierreTurnoGastronomiaContableListadoFiltros
     public static function textoCabeceraExport(array $filtros): string
     {
         $partes = [];
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas' || (int) ($filtros['empresa_id'] ?? 0) <= 0) {
+            $partes[] = 'Empresa: todas (asignadas)';
+        } elseif ((int) ($filtros['empresa_id'] ?? 0) > 0) {
             $partes[] = 'Empresa ID '.$filtros['empresa_id'];
         }
         $desde = trim((string) ($filtros['fecha_desde'] ?? ''));

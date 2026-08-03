@@ -9,12 +9,18 @@
         $operadoresJson[$key] = CierreRendicionMaquinavendingListadoFiltros::operadoresParaCampo($key);
     }
     $estadoCierre = $f['estado_cierre'] ?? CierreRendicionMaquinavendingListadoFiltros::ESTADO_TODOS;
+    $fScope = $f['empresa_scope'] ?? 'una';
+    $fEmp = (int) ($f['empresa_id'] ?? 0);
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-cierre-rend-vending" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    @if ($fScope === 'todas')
+        <input type="hidden" name="empresa_todas" value="1">
+    @elseif ($fEmp > 0)
+        <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         <div class="form-row align-items-end">
-            @include('includes.listado.filtro_empresa_asignada', ['f' => $f])
             <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="estado_cierre">Estado cierre contable</label>
                 <select name="estado_cierre" id="estado_cierre" class="form-control form-control-sm">

@@ -3,6 +3,7 @@
 namespace App\Services\Contable;
 
 use App\Models\Caja\RendicionEstacionamientoCaja;
+use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
@@ -178,9 +179,10 @@ class CierreRendicionEstacionamientoService
             $observacion,
         );
 
-        $tipoAsientoId = $this->resolverTipoAsientoId();
+        $sinMovimientos = ($payload['cuentacontable_ids'] ?? []) === [];
+        $tipoAsientoId = $sinMovimientos ? 0 : $this->resolverTipoAsientoId();
 
-        return DB::transaction(function () use ($rendiciones, $payload, $tipoAsientoId, $ids) {
+        return DB::transaction(function () use ($rendiciones, $payload, $tipoAsientoId, $ids, $sinMovimientos) {
             $rendicionIds = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->all();
             $bloqueadas = RendicionEstacionamientoCaja::query()
                 ->whereIn('id', $rendicionIds)
@@ -195,7 +197,32 @@ class CierreRendicionEstacionamientoService
                 }
             }
 
+            $ahora = now();
+            $usuarioId = Auth::id();
+
+            // Turnos en cero / sin emisiones: no hay líneas contables. Se marca el grupo como
+            // cerrado sin asiento (legacy) para que no vuelva a fallar en el cierre por rango.
+            if ($sinMovimientos) {
+                foreach ($bloqueadas as $rendicion) {
+                    $rendicion->update([
+                        'asiento_id' => null,
+                        'cierre_contable_en' => $ahora,
+                        'cierre_contable_usuario_id' => $usuarioId,
+                        'cierre_contable_legacy' => true,
+                    ]);
+                }
+
+                return [
+                    'asiento_id' => 0,
+                    'numeroasiento' => '',
+                    'rendicion_ids' => $ids,
+                    'sin_asiento' => true,
+                ];
+            }
+
             $payload['tipoasiento_id'] = $tipoAsientoId;
+            // Una FK representativa del grupo (primera rendición) para links del mayor.
+            $payload['rendicion_estacionamiento_caja_id'] = (int) ($ids[0] ?? $bloqueadas->first()->id ?? 0) ?: null;
             $asiento = $this->asientoRepository->create($payload);
             if ($asiento === 'Error' || $asiento === null) {
                 throw new RuntimeException('Error al grabar asiento en Anita (bridge ctamov).');
@@ -203,8 +230,6 @@ class CierreRendicionEstacionamientoService
 
             $this->asientoMovimientoRepository->create($payload, $asiento->id);
 
-            $ahora = now();
-            $usuarioId = Auth::id();
             foreach ($bloqueadas as $rendicion) {
                 $rendicion->update([
                     'asiento_id' => (int) $asiento->id,
@@ -332,9 +357,10 @@ class CierreRendicionEstacionamientoService
             .' #'.$rendicion->id.' '.$rendicion->codigo,
         );
 
-        $tipoAsientoId = $this->resolverTipoAsientoId();
+        $sinMovimientos = ($payload['cuentacontable_ids'] ?? []) === [];
+        $tipoAsientoId = $sinMovimientos ? 0 : $this->resolverTipoAsientoId();
 
-        return DB::transaction(function () use ($rendicion, $payload, $tipoAsientoId) {
+        return DB::transaction(function () use ($rendicion, $payload, $tipoAsientoId, $sinMovimientos) {
             $rendicion = RendicionEstacionamientoCaja::query()
                 ->lockForUpdate()
                 ->findOrFail($rendicion->id);
@@ -343,7 +369,23 @@ class CierreRendicionEstacionamientoService
                 throw new InvalidArgumentException('La rendición ya fue cerrada contablemente.');
             }
 
+            if ($sinMovimientos) {
+                $rendicion->update([
+                    'asiento_id' => null,
+                    'cierre_contable_en' => now(),
+                    'cierre_contable_usuario_id' => Auth::id(),
+                    'cierre_contable_legacy' => true,
+                ]);
+
+                return [
+                    'asiento_id' => 0,
+                    'numeroasiento' => '',
+                    'sin_asiento' => true,
+                ];
+            }
+
             $payload['tipoasiento_id'] = $tipoAsientoId;
+            $payload['rendicion_estacionamiento_caja_id'] = (int) $rendicion->id;
             $asiento = $this->asientoRepository->create($payload);
             if ($asiento === 'Error' || $asiento === null) {
                 throw new RuntimeException('Error al grabar asiento en Anita (bridge ctamov).');
@@ -587,6 +629,172 @@ class CierreRendicionEstacionamientoService
         $fecha = Carbon::parse($fechaJornada)->toDateString();
 
         return $this->ejecutarCierreRango($empresaId, $fecha, $fecha);
+    }
+
+    /**
+     * Resumen vivo de turnos pendientes de cierre contable (sin filtro de fechas).
+     *
+     * @return array{
+     *   empresa_id: int,
+     *   empresa_nombre: string,
+     *   cantidad_rendiciones: int,
+     *   cantidad_grupos: int,
+     *   cantidad_jornadas: int,
+     *   fecha_desde: string|null,
+     *   fecha_hasta: string|null,
+     *   fecha_desde_fmt: string|null,
+     *   fecha_hasta_fmt: string|null,
+     *   total_cobrado: float,
+     *   total_factura: float,
+     *   generado_en: string,
+     *   generado_en_fmt: string,
+     *   grupos: list<array{
+     *     clave: string,
+     *     empresa_id: int,
+     *     fecha_dia: string,
+     *     fecha_dia_fmt: string,
+     *     puntoventa_cae_id: int,
+     *     puntoventa_label: string,
+     *     cantidad_rendiciones: int,
+     *     total_cobrado: float,
+     *     total_factura: float
+     *   }>,
+     *   por_dia: list<array{
+     *     fecha_jornada: string,
+     *     fecha_jornada_fmt: string,
+     *     cantidad: int,
+     *     cantidad_grupos: int,
+     *     total_cobrado: float
+     *   }>
+     * }
+     */
+    public function resumenPendientesCierre(int $empresaId): array
+    {
+        if ($empresaId <= 0) {
+            throw new InvalidArgumentException('Indique empresa.');
+        }
+
+        $empresaNombre = (string) (Empresa::query()->whereKey($empresaId)->value('nombre') ?? ('Empresa #'.$empresaId));
+        $rendiciones = $this->listarPendientesEmpresa($empresaId);
+        $gruposRaw = CierreRendicionEstacionamientoGrupoSupport::agrupar(
+            new EloquentCollection($rendiciones->all()),
+        );
+
+        $totalCobrado = 0.0;
+        $totalFactura = 0.0;
+        $porDia = [];
+        $fechas = [];
+
+        foreach ($rendiciones as $r) {
+            $fecha = CierreRendicionEstacionamientoGrupoSupport::fechaDiaDesdeRendicion($r);
+            if ($fecha !== '') {
+                $fechas[$fecha] = true;
+            }
+            if (! isset($porDia[$fecha])) {
+                $porDia[$fecha] = [
+                    'fecha_jornada' => $fecha,
+                    'fecha_jornada_fmt' => $fecha !== '' ? Carbon::parse($fecha)->format('d/m/Y') : '',
+                    'cantidad' => 0,
+                    'cantidad_grupos' => 0,
+                    'total_cobrado' => 0.0,
+                ];
+            }
+            $cobrado = round((float) ($r->totalcobrado ?? 0), 2);
+            $factura = round((float) ($r->totalfactura ?? 0), 2);
+            $porDia[$fecha]['cantidad']++;
+            $porDia[$fecha]['total_cobrado'] = round($porDia[$fecha]['total_cobrado'] + $cobrado, 2);
+            $totalCobrado = round($totalCobrado + $cobrado, 2);
+            $totalFactura = round($totalFactura + $factura, 2);
+        }
+
+        $grupos = [];
+        foreach ($gruposRaw as $grupo) {
+            $fecha = (string) ($grupo['fecha_dia'] ?? '');
+            if ($fecha !== '' && isset($porDia[$fecha])) {
+                $porDia[$fecha]['cantidad_grupos']++;
+            }
+
+            $cobradoGrupo = 0.0;
+            $facturaGrupo = 0.0;
+            /** @var Collection<int, RendicionEstacionamientoCaja> $rends */
+            $rends = $grupo['rendiciones'] ?? collect();
+            foreach ($rends as $r) {
+                $cobradoGrupo = round($cobradoGrupo + (float) ($r->totalcobrado ?? 0), 2);
+                $facturaGrupo = round($facturaGrupo + (float) ($r->totalfactura ?? 0), 2);
+            }
+
+            $pv = $rends->first()?->puntoventaCae;
+            $pvLabel = trim(((string) ($pv->codigo ?? '')).' '.((string) ($pv->nombre ?? '')));
+            if ($pvLabel === '') {
+                $pvLabel = 'PV #'.(int) ($grupo['puntoventa_cae_id'] ?? 0);
+            }
+
+            $grupos[] = [
+                'clave' => (string) ($grupo['clave'] ?? ''),
+                'empresa_id' => (int) ($grupo['empresa_id'] ?? $empresaId),
+                'fecha_dia' => $fecha,
+                'fecha_dia_fmt' => $fecha !== '' ? Carbon::parse($fecha)->format('d/m/Y') : '',
+                'puntoventa_cae_id' => (int) ($grupo['puntoventa_cae_id'] ?? 0),
+                'puntoventa_label' => $pvLabel,
+                'cantidad_rendiciones' => $rends->count(),
+                'total_cobrado' => $cobradoGrupo,
+                'total_factura' => $facturaGrupo,
+            ];
+        }
+
+        usort($grupos, static function (array $a, array $b): int {
+            $cmp = strcmp((string) ($a['fecha_dia'] ?? ''), (string) ($b['fecha_dia'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+
+            return strcmp((string) ($a['puntoventa_label'] ?? ''), (string) ($b['puntoventa_label'] ?? ''));
+        });
+
+        ksort($porDia);
+        $fechasOrden = array_keys($fechas);
+        sort($fechasOrden);
+        $fechaDesde = $fechasOrden[0] ?? null;
+        $fechaHasta = $fechasOrden === [] ? null : $fechasOrden[array_key_last($fechasOrden)];
+        $ahora = now();
+
+        return [
+            'empresa_id' => $empresaId,
+            'empresa_nombre' => $empresaNombre,
+            'cantidad_rendiciones' => $rendiciones->count(),
+            'cantidad_grupos' => count($grupos),
+            'cantidad_jornadas' => count($porDia),
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'fecha_desde_fmt' => $fechaDesde ? Carbon::parse($fechaDesde)->format('d/m/Y') : null,
+            'fecha_hasta_fmt' => $fechaHasta ? Carbon::parse($fechaHasta)->format('d/m/Y') : null,
+            'total_cobrado' => $totalCobrado,
+            'total_factura' => $totalFactura,
+            'generado_en' => $ahora->toDateTimeString(),
+            'generado_en_fmt' => $ahora->format('d/m/Y H:i:s'),
+            'grupos' => $grupos,
+            'por_dia' => array_values($porDia),
+        ];
+    }
+
+    /**
+     * @return Collection<int, RendicionEstacionamientoCaja>
+     */
+    private function listarPendientesEmpresa(int $empresaId): Collection
+    {
+        $q = RendicionEstacionamientoCaja::query()
+            ->with([
+                'turnoOperativo.jornada:id,fecha_jornada',
+                'puntoventaCae:id,codigo,nombre',
+            ])
+            ->where('empresa_id', $empresaId);
+
+        CierreRendicionEstacionamientoListadoFiltros::aplicarScopeTurno($q);
+        CierreRendicionEstacionamientoListadoFiltros::aplicarEstadoCierre($q, [
+            'estado_cierre' => CierreRendicionEstacionamientoListadoFiltros::ESTADO_PENDIENTE,
+        ]);
+
+        return $q->orderBy('fecharendicion')->orderBy('id')->get();
     }
 
     /**

@@ -117,12 +117,15 @@
             'col_label' => 'col-lg-4',
             'col_input' => 'col-lg-8',
         ])
+    </div>
 
+    {{-- Columna derecha: importe / forma de pago / destinatario / fechas --}}
+    <div class="col-lg-6">
         <div class="form-group row">
-            <label for="formapagosol_id" class="col-lg-4 col-form-label">Forma de pago</label>
+            <label for="formapagosol_id" class="col-lg-4 col-form-label requerido">Forma de pago</label>
             <div class="col-lg-8">
-                <select name="formapagosol_id" id="formapagosol_id" class="form-control">
-                    <option value="">-- Sin forma --</option>
+                <select name="formapagosol_id" id="formapagosol_id" class="form-control" required>
+                    <option value="">-- Seleccione --</option>
                     @foreach ($formapagosol_query as $fp)
                         @php $sel = (int) old('formapagosol_id', $data->formapagosol_id ?? 0) === (int) $fp->id; @endphp
                         <option value="{{ $fp->id }}" @selected($sel)>{{ $fp->codigo }} — {{ $fp->nombre }}</option>
@@ -130,15 +133,12 @@
                 </select>
             </div>
         </div>
-    </div>
 
-    {{-- Columna derecha: importe / destinatario / fechas --}}
-    <div class="col-lg-6">
         <div class="form-group row">
-            <label for="moneda_id" class="col-lg-4 col-form-label">Moneda</label>
+            <label for="moneda_id" class="col-lg-4 col-form-label requerido">Moneda</label>
             <div class="col-lg-8">
-                <select name="moneda_id" id="moneda_id" class="form-control">
-                    <option value="">-- Sin moneda --</option>
+                <select name="moneda_id" id="moneda_id" class="form-control" required>
+                    <option value="">-- Seleccione --</option>
                     @foreach ($moneda_query as $m)
                         @php $sel = (int) old('moneda_id', $data->moneda_id ?? 0) === (int) $m->id; @endphp
                         <option value="{{ $m->id }}" @selected($sel)>{{ $m->nombre }}</option>
@@ -198,9 +198,9 @@
         </div>
 
         <div class="form-group row">
-            <label for="fecha_vencimiento" class="col-lg-4 col-form-label">Vencimiento</label>
+            <label for="fecha_vencimiento" class="col-lg-4 col-form-label requerido">Vencimiento</label>
             <div class="col-lg-5">
-                <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" class="form-control"
+                <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" class="form-control" required
                        value="{{ old('fecha_vencimiento', isset($data) && $data->fecha_vencimiento ? $data->fecha_vencimiento->format('Y-m-d') : '') }}"/>
             </div>
         </div>

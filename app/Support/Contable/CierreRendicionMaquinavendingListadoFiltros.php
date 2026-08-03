@@ -3,7 +3,6 @@
 namespace App\Support\Contable;
 
 use App\Models\Caja\RendicionMaquinavendingCaja;
-use App\Support\Caja\RendicionMaquinavendingCajaListadoFiltros;
 use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -39,14 +38,25 @@ class CierreRendicionMaquinavendingListadoFiltros
     /**
      * @return array<string, mixed>
      */
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId ?? '',
+                'empresa_scope' => $empresaScope,
+            ]);
         }
 
-        $filtros = [
-            'empresa_id' => $request->input('empresa_id'),
+        $estado = (string) $request->input('estado_cierre', self::ESTADO_TODOS);
+        if (! in_array($estado, [self::ESTADO_TODOS, self::ESTADO_PENDIENTE, self::ESTADO_CERRADA], true)) {
+            $estado = self::ESTADO_TODOS;
+        }
+
+        return [
+            'empresa_id' => $empresaId ?? '',
+            'empresa_scope' => $empresaScope,
             'valor' => FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta),
             'filtro_busqueda_rapida' => $request->input('filtro_busqueda_rapida'),
             'modo' => $request->input('filtro_modo', self::MODO_TODOS),
@@ -55,15 +65,26 @@ class CierreRendicionMaquinavendingListadoFiltros
             'valor_hasta' => $request->input('filtro_valor_hasta'),
             'fecha_jornada_desde' => trim((string) $request->input('fecha_jornada_desde', '')),
             'fecha_jornada_hasta' => trim((string) $request->input('fecha_jornada_hasta', '')),
+            'estado_cierre' => $estado,
         ];
+    }
 
-        $estado = (string) $request->input('estado_cierre', self::ESTADO_TODOS);
-        if (! in_array($estado, [self::ESTADO_TODOS, self::ESTADO_PENDIENTE, self::ESTADO_CERRADA], true)) {
-            $estado = self::ESTADO_TODOS;
+    /**
+     * @return array{0:?int,1:string}
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
         }
-        $filtros['estado_cierre'] = $estado;
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
 
-        return $filtros;
+        return [null, 'todas'];
     }
 
     /**
@@ -73,6 +94,7 @@ class CierreRendicionMaquinavendingListadoFiltros
     {
         return [
             'empresa_id' => '',
+            'empresa_scope' => 'una',
             'valor' => '',
             'filtro_busqueda_rapida' => '',
             'modo' => self::MODO_TODOS,
@@ -94,8 +116,14 @@ class CierreRendicionMaquinavendingListadoFiltros
             || trim((string) ($filtros['fecha_jornada_hasta'] ?? '')) !== '') {
             return true;
         }
+        if (trim((string) ($filtros['valor'] ?? '')) !== '') {
+            return true;
+        }
+        if (($filtros['modo'] ?? self::MODO_TODOS) === self::MODO_CAMPO) {
+            return true;
+        }
 
-        return RendicionMaquinavendingCajaListadoFiltros::tieneCriteriosUsuario($filtros);
+        return false;
     }
 
     public static function tieneCriteriosAplicados(array $filtros): bool
@@ -108,8 +136,9 @@ class CierreRendicionMaquinavendingListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = array_filter([
-            'empresa_id' => $filtros['empresa_id'] ?? null,
+        $params = self::paraQueryStringEmpresa($filtros);
+
+        $resto = array_filter([
             'filtro_valor' => $filtros['valor'] ?? null,
             'filtro_busqueda_rapida' => $filtros['filtro_busqueda_rapida'] ?? null,
             'filtro_modo' => $filtros['modo'] ?? null,
@@ -120,11 +149,28 @@ class CierreRendicionMaquinavendingListadoFiltros
             'fecha_jornada_hasta' => $filtros['fecha_jornada_hasta'] ?? null,
         ], static fn ($v) => $v !== null && $v !== '');
 
+        $params = array_merge($params, $resto);
+
         if (($filtros['estado_cierre'] ?? self::ESTADO_TODOS) !== self::ESTADO_TODOS) {
             $params['estado_cierre'] = $filtros['estado_cierre'];
         }
 
         return $params;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     /**
@@ -225,16 +271,6 @@ class CierreRendicionMaquinavendingListadoFiltros
         if ($valor === '' && ($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_CAMPO) {
             return;
         }
-
-        $adaptados = [
-            'empresa_id' => $filtros['empresa_id'] ?? null,
-            'valor' => $valor,
-            'filtro_busqueda_rapida' => $filtros['filtro_busqueda_rapida'] ?? null,
-            'filtro_campo' => $filtros['campo'] ?? 'codigo',
-            'filtro_operador' => $filtros['operador'] ?? 'contiene',
-            'fecha_desde' => '',
-            'fecha_hasta' => '',
-        ];
 
         if (($filtros['modo'] ?? self::MODO_TODOS) === self::MODO_TODOS && $valor !== '') {
             $query->where(function ($q) use ($valor) {

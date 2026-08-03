@@ -82,6 +82,32 @@ final class ArbolAprobacionEnlaceSupport
     }
 
     /**
+     * Alta de Ingresos/Egresos precargada con la SP (requiere sesión; mismo destino que irAPago).
+     *
+     * @param  array{empresa_id?: int|null, proveedor_id?: int|null, detalle?: string|null}  $params
+     */
+    public static function enlaceCrearIngresoEgresoDesdeSp(string $ipBase, int $solicitudpagoId, array $params = []): string
+    {
+        $ipBase = trim($ipBase);
+        if ($ipBase !== '' && ! preg_match('#^https?://#i', $ipBase)) {
+            $ipBase = 'http://'.$ipBase;
+        }
+
+        $query = array_filter([
+            'solicitudpago_id' => $solicitudpagoId > 0 ? $solicitudpagoId : null,
+            'empresa_id' => ! empty($params['empresa_id']) ? (int) $params['empresa_id'] : null,
+            'proveedor_id' => ! empty($params['proveedor_id']) ? (int) $params['proveedor_id'] : null,
+            'detalle' => trim((string) ($params['detalle'] ?? '')) !== ''
+                ? (string) $params['detalle']
+                : null,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        $base = rtrim($ipBase, '/').'/anitaERP/public/caja/ingresoegreso/crear';
+
+        return $query === [] ? $base : $base.'?'.http_build_query($query);
+    }
+
+    /**
      * @param  iterable<int, Arbolaprobacion_Movimiento>|Collection<int, Arbolaprobacion_Movimiento>  $movimientos
      */
     public static function mensajeEnlaceNoDisponible(iterable $movimientos, string $hashRecibido, string $modo): string

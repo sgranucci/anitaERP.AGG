@@ -5,6 +5,7 @@ namespace App\Exports\Uif;
 use App\Repositories\Uif\Cliente_Premio_UifRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Export\ExcelFormatoNumero;
+use App\Support\Uif\ClientePremioUifListadoFiltros;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -15,6 +16,7 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
@@ -25,14 +27,15 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 {
 	use Exportable;
 
-	private const COL_ULTIMA = 'I';
+	private const COL_ULTIMA = 'J';
 
-	/** Congela ID y Nombre (A y B): freeze arranca en C. */
-	private const COL_FREEZE = 'C';
+	/** Congela ID, Origen y Nombre (A–C): freeze arranca en D. */
+	private const COL_FREEZE = 'D';
 
 	private $cliente_premio_uifRepository;
 
-	private $busqueda;
+	/** @var array<string, mixed>|string|null */
+	private $filtros;
 
 	private bool $flDesdeIndex = false;
 
@@ -42,7 +45,9 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 
 	private int $filaTituloExcel = 1;
 
-	private int $filaSubtituloExcel = 2;
+	private int $filaGeneradoExcel = 2;
+
+	private ?int $filaFiltrosExcel = null;
 
 	private int $filaCabecerasExcel = 3;
 
@@ -58,31 +63,53 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 
 	public function view(): View
 	{
+		$filtrosArr = is_array($this->filtros) ? $this->filtros : [];
+		$subtituloFiltros = $this->flDesdeIndex
+			? ClientePremioUifListadoFiltros::subtituloFiltros($filtrosArr)
+			: '';
+
 		if (! $this->flDesdeIndex) {
+			$this->hayFilaLogos = false;
+			$this->calcularFilasEncabezado('');
+
 			return view('exports.uif.cliente_premio_uifindex', [
 				'cliente_premio_uifs' => collect(),
 				'esExcel' => true,
 				'reservarFilaLogoExcel' => false,
 				'formatoNumero' => $this->formatoNumeroEfectivo(),
+				'subtituloFiltros' => '',
 			]);
 		}
 
-		$busqueda = is_string($this->busqueda ?? null) ? trim($this->busqueda) : '';
-		$cliente_premio_uifs = $this->cliente_premio_uifRepository->leeCliente_Premio_Uif($busqueda, false);
+		$cliente_premio_uifs = $this->cliente_premio_uifRepository->leeCliente_Premio_Uif($this->filtros ?? [], false);
 
 		$this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($cliente_premio_uifs);
 		$this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
-		$this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-		$this->filaSubtituloExcel = $this->filaTituloExcel + 1;
-		$this->filaCabecerasExcel = $this->filaSubtituloExcel + 1;
-		$this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+		$this->calcularFilasEncabezado($subtituloFiltros);
 
 		return view('exports.uif.cliente_premio_uifindex', [
 			'cliente_premio_uifs' => $cliente_premio_uifs,
 			'esExcel' => true,
 			'reservarFilaLogoExcel' => $this->hayFilaLogos,
 			'formatoNumero' => $this->formatoNumeroEfectivo(),
+			'subtituloFiltros' => $subtituloFiltros,
 		]);
+	}
+
+	private function calcularFilasEncabezado(string $subtituloFiltros): void
+	{
+		$offsetLogo = $this->hayFilaLogos ? 1 : 0;
+		$this->filaTituloExcel = $offsetLogo + 1;
+		$this->filaGeneradoExcel = $this->filaTituloExcel + 1;
+		$fila = $this->filaGeneradoExcel;
+		if (trim($subtituloFiltros) !== '') {
+			$fila++;
+			$this->filaFiltrosExcel = $fila;
+		} else {
+			$this->filaFiltrosExcel = null;
+		}
+		$this->filaCabecerasExcel = $fila + 1;
+		$this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 	}
 
 	public function columnFormats(): array
@@ -91,11 +118,14 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 			return [];
 		}
 
-		// A ID como texto; F = Monto con máscara neutra (sumable/adaptable).
+		// Texto: ID, Origen, Posición, TITO (TITO >15 dígitos no admite float de Excel).
+		// G = Monto numérico sumable.
 		return [
 			'A' => NumberFormat::FORMAT_TEXT,
-			'F' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+			'B' => NumberFormat::FORMAT_TEXT,
+			'G' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
 			'H' => NumberFormat::FORMAT_TEXT,
+			'I' => NumberFormat::FORMAT_TEXT,
 		];
 	}
 
@@ -112,14 +142,15 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 
 		return [
 			'A' => 10,
-			'B' => 36,
-			'C' => 22,
-			'D' => 22,
-			'E' => 20,
-			'F' => 14,
-			'G' => 12,
-			'H' => 18,
-			'I' => 22,
+			'B' => 16,
+			'C' => 36,
+			'D' => 14,
+			'E' => 24,
+			'F' => 16,
+			'G' => 14,
+			'H' => 12,
+			'I' => 24,
+			'J' => 18,
 		];
 	}
 
@@ -156,15 +187,44 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 				}
 
 				$sheet->mergeCells('A'.$this->filaTituloExcel.':'.$col.$this->filaTituloExcel);
-				$sheet->mergeCells('A'.$this->filaSubtituloExcel.':'.$col.$this->filaSubtituloExcel);
+				$sheet->mergeCells('A'.$this->filaGeneradoExcel.':'.$col.$this->filaGeneradoExcel);
 				$sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
 				$sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setName('Arial')->setSize(16)->setBold(true)->getColor()->setRGB('17202A');
-				$sheet->getStyle('A'.$this->filaSubtituloExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+				$sheet->getStyle('A'.$this->filaGeneradoExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+				if ($this->filaFiltrosExcel !== null) {
+					$sheet->mergeCells('A'.$this->filaFiltrosExcel.':'.$col.$this->filaFiltrosExcel);
+					$sheet->getRowDimension($this->filaFiltrosExcel)->setRowHeight(36);
+					$sheet->getStyle('A'.$this->filaFiltrosExcel)->getFont()->setName('Arial')->setSize(10)->setBold(true)->getColor()->setRGB('444444');
+					$sheet->getStyle('A'.$this->filaFiltrosExcel)->getAlignment()->setWrapText(true);
+				}
 
 				$rangoCab = 'A'.$this->filaCabecerasExcel.':'.$col.$this->filaCabecerasExcel;
 				$sheet->getStyle($rangoCab)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('85C1E9');
 				$sheet->getStyle($rangoCab)->getFont()->setName('Arial')->setSize(11)->setBold(true)->getColor()->setRGB('17202A');
 				$sheet->getStyle($rangoCab)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+				$ultimaFila = max($this->filaPrimeraDatosExcel, (int) $sheet->getHighestRow());
+				if ($ultimaFila >= $this->filaPrimeraDatosExcel) {
+					$rangoDatos = 'A'.$this->filaPrimeraDatosExcel.':'.$col.$ultimaFila;
+					$sheet->getStyle($rangoDatos)->getFont()->setName('Arial')->setSize(10);
+					$sheet->getStyle('G'.$this->filaPrimeraDatosExcel.':G'.$ultimaFila)
+						->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+					// ID / Posición / TITO: texto explícito (evita notación científica en TITO).
+					foreach (['A', 'H', 'I'] as $colTexto) {
+						$sheet->getStyle($colTexto.$this->filaPrimeraDatosExcel.':'.$colTexto.$ultimaFila)
+							->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
+						for ($row = $this->filaPrimeraDatosExcel; $row <= $ultimaFila; $row++) {
+							$cell = $sheet->getCell($colTexto.$row);
+							$raw = $cell->getValue();
+							if ($raw === null || $raw === '') {
+								continue;
+							}
+							$texto = ltrim((string) $raw, "\t'");
+							$cell->setValueExplicit($texto, DataType::TYPE_STRING);
+						}
+					}
+				}
 
 				$sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
 			},
@@ -176,9 +236,12 @@ class Cliente_Premio_UifExport implements FromView, WithColumnFormatting, Should
 		return 'Premios UIF';
 	}
 
-	public function parametros($busqueda, bool $esCsv = false)
+	/**
+	 * @param  array<string, mixed>|string|null  $filtros
+	 */
+	public function parametros($filtros, bool $esCsv = false)
 	{
-		$this->busqueda = $busqueda;
+		$this->filtros = $filtros;
 		$this->esCsv = $esCsv;
 		$this->flDesdeIndex = true;
 

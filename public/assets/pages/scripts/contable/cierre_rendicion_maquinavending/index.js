@@ -452,12 +452,40 @@
 
         var btnPreviewRango = document.getElementById('btn-rango-preview');
         if (btnPreviewRango) {
-            btnPreviewRango.addEventListener('click', previewCierreRango);
+            btnPreviewRango.addEventListener('click', function () {
+                this.blur();
+                previewCierreRango();
+            });
         }
 
         var btnEjecutarRango = document.getElementById('btn-rango-ejecutar');
         if (btnEjecutarRango) {
             btnEjecutarRango.addEventListener('click', ejecutarCierreRango);
         }
+
+        ['rango-empresa-id', 'rango-fecha-desde', 'rango-fecha-hasta'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', limpiarPreviewRango);
+            }
+        });
     });
+
+    window.CIERRE_REND_abrirRangoDesdePendientes = function (empresaId, desde, hasta) {
+        var empRango = document.getElementById('rango-empresa-id');
+        var inputDesde = document.getElementById('rango-fecha-desde');
+        var inputHasta = document.getElementById('rango-fecha-hasta');
+        if (empRango) {
+            empRango.value = String(empresaId || '');
+        }
+        if (inputDesde) {
+            inputDesde.value = desde || '';
+        }
+        if (inputHasta) {
+            inputHasta.value = hasta || '';
+        }
+        limpiarPreviewRango();
+        $('#modal-cierre-rango-rend-vending').modal('show');
+        previewCierreRango();
+    };
 })();

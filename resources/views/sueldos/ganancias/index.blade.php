@@ -17,13 +17,13 @@
             <div class="card-body">
                 <form method="get" action="{{ route('consultar_ganancias_sueldos') }}" class="form-inline flex-wrap mb-3">
                     <input type="hidden" name="consultar" value="1">
-                    <label class="mr-2">Empresa</label>
-                    <select name="empresa_id" class="form-control form-control-sm mr-3" style="min-width:200px">
-                        <option value="">— Todas —</option>
-                        @foreach($empresas as $e)
-                            <option value="{{ $e->id }}" {{ (int)$empresaId === (int)$e->id ? 'selected' : '' }}>{{ $e->nombre }}</option>
-                        @endforeach
-                    </select>
+                    @include('includes.listado.filtro_empresa_asignada_inline', [
+                        'empresa_query' => $empresa_query ?? collect(),
+                        'empresa_id' => $empresaId,
+                        'permite_todas' => true,
+                        'opcion_todas' => '— Todas —',
+                        'select_class' => 'form-control-sm mr-3',
+                    ])
                     <label class="mr-2">Legajo</label>
                     <input type="number" name="legajo" class="form-control form-control-sm mr-3" value="{{ $legajo }}" required style="width:120px">
                     <label class="mr-2">A&ntilde;o</label>

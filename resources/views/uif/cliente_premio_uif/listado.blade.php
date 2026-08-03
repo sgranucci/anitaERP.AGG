@@ -44,36 +44,47 @@
 				</td>
 				<td style="width: 40%; text-align: center;">
 					<h2 style="margin: 0;">Premios UIF</h2>
+					<div style="font-size: 8px; color: #444; margin-top: 4px;">
+						Generado {{ date('d/m/Y H:i') }}
+						@if (is_countable($cliente_premio_uifs ?? null))
+							— {{ count($cliente_premio_uifs) }} registro(s)
+						@endif
+					</div>
+					@if (! empty($subtituloFiltros))
+						<div style="font-size: 8px; color: #444; margin-top: 4px;"><strong>Filtros:</strong> {{ $subtituloFiltros }}</div>
+					@endif
 				</td>
 				<td style="width: 25%;"></td>
 			</tr>
 		</table>
-		<table class="table table-striped table-bordered table-hover">
+		<table class="data" style="width:100%; border-collapse:collapse; font-size:8px; font-family:DejaVu Sans, sans-serif;">
 			<thead>
-				<tr>
-					<th class="width20">ID</th>
-					<th>Nombre</th>
-					<th>Sala</th>
-					<th>Juego</th>
-					<th>Fecha Entrega</th>
-					<th style="text-align: right;">Monto</th>
-					<th>Posición</th>
-					<th>Número TITO</th>
-					<th>Forma de Pago</th>
+				<tr style="background:#85C1E9;color:#17202A;">
+					<th style="border:1px solid #cccccc;padding:4px;">ID</th>
+					<th style="border:1px solid #cccccc;padding:4px;">Origen</th>
+					<th style="border:1px solid #cccccc;padding:4px;">Nombre</th>
+					<th style="border:1px solid #cccccc;padding:4px;">Sala</th>
+					<th style="border:1px solid #cccccc;padding:4px;">Juego</th>
+					<th style="border:1px solid #cccccc;padding:4px;">Fecha Entrega</th>
+					<th style="border:1px solid #cccccc;padding:4px;text-align:right;">Monto</th>
+					<th style="border:1px solid #cccccc;padding:4px;">Posición</th>
+					<th style="border:1px solid #cccccc;padding:4px;">Número TITO</th>
+					<th style="border:1px solid #cccccc;padding:4px;">Forma de Pago</th>
 				</tr>
 			</thead>
 			<tbody>
 				@foreach ($cliente_premio_uifs as $data)
-				<tr>
-					<td>{{$data->id}}</td>
-					<td>{{$data->nombrecliente}}</td>
-					<td>{{$data->nombresala}}</td>
-					<td><small>{{$data->nombrejuego}}</small></td>
-					<td><small>{{$data->fechaentrega}}</small></td>
-					<td style="text-align: right;"><small>{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}</small></td>
-					<td><small>{{$data->posicion ?? ''}}</small></td>
-					<td><small>{{$data->numerotito ?? ''}}</small></td>
-					<td><small>{{$data->nombreformapago}}</small></td>
+				<tr style="{{ $loop->even ? 'background:#f5f5f5;' : '' }}">
+					<td style="border:1px solid #cccccc;padding:4px;">{{$data->id}}</td>
+					<td style="border:1px solid #cccccc;padding:4px;">{{ \App\Support\Uif\ClienteUifOrigenPcSupport::labelOrigen((string) ($data->anita_origen ?? '')) }}</td>
+					<td style="border:1px solid #cccccc;padding:4px;">{{$data->nombrecliente}}</td>
+					<td style="border:1px solid #cccccc;padding:4px;">{{$data->nombresala}}</td>
+					<td style="border:1px solid #cccccc;padding:4px;">{{$data->nombrejuego}}</td>
+					<td style="border:1px solid #cccccc;padding:4px;">{{$data->fechaentrega}}</td>
+					<td style="border:1px solid #cccccc;padding:4px;text-align:right;">{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}</td>
+					<td style="border:1px solid #cccccc;padding:4px;">{{$data->posicion ?? ''}}</td>
+					<td style="border:1px solid #cccccc;padding:4px;">{{$data->numerotito ?? ''}}</td>
+					<td style="border:1px solid #cccccc;padding:4px;">{{$data->nombreformapago}}</td>
 				</tr>
 				@endforeach
 			</tbody>

@@ -15,11 +15,17 @@
         puedeEjecutar: @json(can('ejecutar-cierre-rendicion-maquinavending-contable', false)),
         puedeAnular: @json(can('anular-cierre-rendicion-maquinavending-contable', false)),
     };
+    window.CIERRE_REND_PENDIENTES = {
+        urlPendientes: @json(route('api_cierre_rendicion_maquinavending_pendientes')),
+        empresaIdFiltro: @json((int) ($filtros['empresa_id'] ?? 0)),
+        modalRangoId: 'modal-cierre-rango-rend-vending',
+    };
 </script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cierre_rendicion_maquinavending/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cierre_rendicion_maquinavending/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cierre_rendicion_maquinavending/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cierre_rendicion_maquinavending/index.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/includes/pendientes_cierre_modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/includes/pendientes_cierre_modal.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @php
@@ -30,6 +36,10 @@
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route(
+        'cierre_rendicion_maquinavending_contable',
+        CierreRendicionMaquinavendingListadoFiltros::paraQueryStringEmpresa($filtros ?? [])
+    );
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -45,6 +55,11 @@
                         }
                     @endphp
                     @if (can('listar-cierre-rendicion-maquinavending-contable', false))
+                        <button type="button" class="btn btn-sm btn-warning mr-2 mb-1" id="btn-abrir-pendientes-cierre"
+                                title="Ver turnos pendientes de cierre contable">
+                            <i class="fa fa-hourglass-half"></i> Pendientes de cerrar
+                            <span class="badge badge-dark ml-1 d-none" id="badge-pendientes-cierre">0</span>
+                        </button>
                         <a href="{{ route('cierre_rendicion_maquinavending_conciliacion_flash', $retornoConciliacion) }}"
                            class="btn btn-sm btn-outline-info mr-2 mb-1" title="Conciliar rendiciones vs flash / rendgastro">
                             <i class="fa fa-balance-scale"></i> Conciliaci&oacute;n flash
@@ -65,7 +80,7 @@
                         'formId' => 'form-filtros-cierre-rend-vending',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => CierreRendicionMaquinavendingListadoFiltros::tieneCriteriosUsuario($filtros ?? []),
-                        'limpiarUrl' => route('cierre_rendicion_maquinavending_contable'),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (ticket, ID, empresa…)',
                         'toggleTarget' => '#panel-filtros-cierre-rend-vending',
                         'toggleId' => 'btn-toggle-filtros-cierre-rend-vending',
@@ -76,6 +91,7 @@
             <form method="get" action="{{ route('cierre_rendicion_maquinavending_contable') }}" id="form-filtros-cierre-rend-vending" class="mb-0">
                 @include('contable.cierre_rendicion_maquinavending.partials.filtros_listado')
             </form>
+            @include('contable.cierre_rendicion_maquinavending.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_cierre_rendicion_maquinavending_contable',
@@ -204,6 +220,19 @@
 </div>
 
 @include('contable.cierre_rendicion_maquinavending.modal_preview_asiento')
+@if (can('listar-cierre-rendicion-maquinavending-contable', false))
+    @include('contable.partials.modal_pendientes_cierre', [
+        'rutaListado' => route('cierre_rendicion_maquinavending_contable'),
+        'estadoPendiente' => \App\Support\Contable\CierreRendicionMaquinavendingListadoFiltros::ESTADO_PENDIENTE,
+        'permisoEjecutar' => 'ejecutar-cierre-rendicion-maquinavending-contable',
+        'textoIntro' => 'Rendiciones vending presentadas en caja sin asiento contable. Un cierre genera <strong>un asiento por fecha jornada + punto de venta</strong>. Los datos se consultan en vivo al abrir y al actualizar.',
+        'mostrarPuntoventa' => true,
+        'mostrarFacturado' => true,
+        'labelTurnos' => 'Turnos',
+        'labelCobrado' => 'Total cobrado',
+        'exigeCorrelatividad' => false,
+    ])
+@endif
 @if (can('ejecutar-cierre-rendicion-maquinavending-contable', false))
     @include('contable.cierre_rendicion_maquinavending.modal_cierre_rango')
 @endif

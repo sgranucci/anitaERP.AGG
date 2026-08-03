@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Support\Sueldos\ConceptoTipo;
+use App\Support\Sueldos\RubroCostoLaboral;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -36,6 +37,8 @@ class ValidacionConcepto_Sueldos extends FormRequest
             'mes_retroactivo' => 'nullable|integer|min:-99|max:12',
             'leyenda_recibo' => 'nullable|string|max:2000',
             'concepto_afip' => 'nullable|string|max:6',
+            'rubro_costo_laboral' => ['nullable', 'string', Rule::in(RubroCostoLaboral::todos())],
+            'unidad_medida' => 'nullable|string|max:4',
             'activo' => 'nullable|boolean',
             'orden' => 'nullable|integer|min:0',
             'acumuladores_override' => 'nullable|array',

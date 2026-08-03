@@ -12,6 +12,20 @@
         text-align: center;
         font-weight: 600;
     }
+    #tabla-paginada th.rendmaq-col-acciones,
+    #tabla-paginada td.rendmaq-col-acciones {
+        width: 7.5rem;
+        min-width: 7.5rem;
+        white-space: nowrap;
+        text-align: center;
+        vertical-align: middle;
+    }
+    #tabla-paginada td.rendmaq-col-acciones .btn-accion-tabla,
+    #tabla-paginada td.rendmaq-col-acciones .form-eliminar {
+        display: inline-block;
+        vertical-align: middle;
+        margin: 0 1px;
+    }
 </style>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
@@ -26,6 +40,7 @@
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route('rendicion_maquina', RendicionMaquinaListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -37,8 +52,8 @@
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-rendicion-maquina',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => RendicionMaquinaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('rendicion_maquina'),
+                        'tieneCriterios' => RendicionMaquinaListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'B&uacute;squeda r&aacute;pida (tolera errores de tipeo)&hellip;',
                         'toggleTarget' => '#panel-filtros-rendicion-maquina',
                         'toggleId' => 'btn-toggle-filtros-rendicion-maquina',
@@ -58,9 +73,10 @@
             </div>
             <form method="get" action="{{ route('rendicion_maquina') }}" id="form-filtros-rendicion-maquina" class="mb-0">
                 @include('caja.rendicion_maquina.partials.filtros_listado', [
-                    'limpiarUrl' => route('rendicion_maquina'),
+                    'limpiarUrl' => $limpiarUrl,
                 ])
             </form>
+            @include('caja.rendicion_maquina.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_rendicion_maquina',
@@ -77,7 +93,7 @@
                             <th class="text-right">Resultado</th>
                             <th class="text-right">Transferencia</th>
                             <th class="width120">Estado</th>
-                            <th class="width80" data-orderable="false"></th>
+                            <th class="rendmaq-col-acciones" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -109,7 +125,7 @@
                             <td class="text-right font-weight-bold">{{ number_format((float) $data->resultado_turno, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format((float) $data->transferencia, 2, ',', '.') }}</td>
                             <td><span class="badge {{ $badgeEstado }}">{{ $data->estado_label }}</span></td>
-                            <td>
+                            <td class="rendmaq-col-acciones">
                                 @if (can('imprimir-rendicion-maquina', false))
                                     <a href="{{ route('imprimir_rendicion_maquina', ['id' => $data->id, 'inline' => 1]) }}"
                                        target="_blank" rel="noopener"

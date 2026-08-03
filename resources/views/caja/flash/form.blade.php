@@ -64,6 +64,25 @@
     </div>
 </div>
 
+<div class="modal fade" id="modal-flash-origen-total" tabindex="-1" role="dialog" aria-labelledby="modal-flash-origen-total-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-flash-origen-total-titulo">Origen del total</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="flash-origen-total-body">
+                <p class="text-muted mb-0">Seleccione el &iacute;cono de lupa junto a un total.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @if(isset($data->id))
 <div class="form-group row">
     <label class="col-lg-3 col-form-label text-right"></label>

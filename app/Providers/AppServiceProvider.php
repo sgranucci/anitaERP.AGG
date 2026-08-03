@@ -450,6 +450,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Caja\RemesaRepositoryInterface',
+            'App\Repositories\Caja\RemesaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepositoryInterface',
             'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepository',
         );
@@ -1888,6 +1893,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Sueldos\Liquidacion_SueldosRepositoryInterface',
             'App\Repositories\Sueldos\Liquidacion_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Novedad_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Novedad_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Grupo_Concepto_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Grupo_Concepto_SueldosRepository',
         );
 
         $this->app->bind(

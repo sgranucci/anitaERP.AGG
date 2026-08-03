@@ -17,6 +17,7 @@ use App\Exports\Contable\AsientoExport;
 use App\Models\Contable\Asiento;
 use App\Services\Contable\AsientoAprobacionService;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
+use App\Support\Contable\AsientoOrigenProcesoSupport;
 use App\Support\Contable\AsientoReferenciaAnitaSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -353,7 +354,17 @@ class AsientoController extends Controller
         if (isset($request->revierte))
             $flRevierte = true;
 
-        $data = $this->asientoRepository->find($id)->toArray();
+        $origen = $this->asientoRepository->find($id);
+        $data = $origen->toArray();
+
+        if ($flRevierte && AsientoOrigenProcesoSupport::tieneOrigenProceso($origen)) {
+            return [
+                'errores' => AsientoOrigenProcesoSupport::mensajeBloqueo($origen, 'revertir'),
+            ];
+        }
+
+        // Copia/reversión desde ABM no hereda FKs de proceso (evita vínculos fantasma).
+        $data = AsientoOrigenProcesoSupport::limpiarFksOrigenEnPayload($data);
 
         $centrocosto_ids = [];
         $debes = [];
@@ -460,6 +471,16 @@ class AsientoController extends Controller
     public function eliminar(Request $request, $id)
     {
         can('borrar-asiento');
+
+        $asiento = Asiento::query()->find($id);
+        if ($asiento && AsientoOrigenProcesoSupport::tieneOrigenProceso($asiento)) {
+            $mensaje = AsientoOrigenProcesoSupport::mensajeBloqueo($asiento, 'borrar');
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'ng', 'errores' => $mensaje]);
+            }
+
+            return redirect('contable/asiento')->with('mensaje_error', $mensaje);
+        }
 
         if ($request->ajax()) 
 		{

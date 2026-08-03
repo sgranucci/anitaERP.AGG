@@ -146,6 +146,9 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
             $out['numero'] = (int) ($data['numero'] ?? 0);
             $out['estado'] = $data['estado'] ?? 'borrador';
             $out['usuario_id'] = $data['usuario_id'] ?? auth()->id();
+            if (! array_key_exists('alcance', $data)) {
+                $out['alcance'] = 'todos';
+            }
         }
 
         $periodo = preg_replace('/\D+/', '', (string) ($data['periodo'] ?? ''));

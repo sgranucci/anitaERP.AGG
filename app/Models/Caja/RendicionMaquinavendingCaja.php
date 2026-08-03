@@ -8,6 +8,7 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Maquinavending;
 use App\Models\Ventas\MaquinavendingRendicion;
 use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\Venta;
 use Illuminate\Database\Eloquent\Model;
 
 class RendicionMaquinavendingCaja extends Model
@@ -34,6 +35,7 @@ class RendicionMaquinavendingCaja extends Model
         'sobrantefaltante',
         'observacion',
         'asiento_id',
+        'venta_id',
         'cierre_contable_en',
         'cierre_contable_usuario_id',
         'cierre_contable_legacy',
@@ -96,6 +98,11 @@ class RendicionMaquinavendingCaja extends Model
     public function asiento()
     {
         return $this->belongsTo(Asiento::class, 'asiento_id');
+    }
+
+    public function venta()
+    {
+        return $this->belongsTo(Venta::class, 'venta_id');
     }
 
     public function cierreContableUsuario()

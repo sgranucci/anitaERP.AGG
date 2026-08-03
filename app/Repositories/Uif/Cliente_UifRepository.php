@@ -97,6 +97,8 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         }
 
         $cliente_uifs = $this->model->select('cliente_uif.id as id',
+            'cliente_uif.anita_origen as anita_origen',
+            'cliente_uif.estado as estado',
             'cliente_uif.nombre as nombre',
             'tipodocumento.abreviatura as abreviaturatipodocumento',
             'cliente_uif.numerodocumento as numerodocumento',
@@ -114,11 +116,10 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             ->join('provincia_uif', 'provincia_uif.id', '=', 'cliente_uif.provincia_uif_id')
             ->join('pais_uif', 'pais_uif.id', '=', 'cliente_uif.pais_uif_id')
             ->whereNull('cliente_uif.deleted_at')
-            ->orderby('id', 'DESC');
+            ->orderBy('cliente_uif.id', 'DESC');
 
-        if (ClienteUifListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            ClienteUifListadoFiltros::aplicar($cliente_uifs, $filtros);
-        }
+        // Siempre aplicar: incluye default de origen PC aunque no haya texto de búsqueda.
+        ClienteUifListadoFiltros::aplicar($cliente_uifs, $filtros);
 
         if (isset($flPaginando)) {
             if ($flPaginando) {
@@ -238,14 +239,25 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
     }
 
     /**
-     * Localiza un cliente ya importado: primero por ID Anita (inroclienteid), si no por tipo + número de documento.
+     * Localiza un cliente ya importado dentro del mismo origen Anita (biyemas|kandiko|rebisco).
      */
-    private function buscarClienteUifParaUpsertDesdeAnita($inroclienteid, int $tipodocumento_id, string $numerodocumento): ?Cliente_Uif
-    {
+    private function buscarClienteUifParaUpsertDesdeAnita(
+        $inroclienteid,
+        int $tipodocumento_id,
+        string $numerodocumento,
+        string $anitaOrigen = 'biyemas'
+    ): ?Cliente_Uif {
+        $anitaOrigen = strtolower(trim($anitaOrigen)) ?: 'biyemas';
         $anitaId = filter_var($inroclienteid, FILTER_VALIDATE_INT);
         if ($anitaId !== false && $anitaId > 0) {
             $porAnita = $this->model->newQuery()
                 ->where('inroclienteid', $anitaId)
+                ->where(function ($q) use ($anitaOrigen) {
+                    $q->where('anita_origen', $anitaOrigen);
+                    if ($anitaOrigen === 'biyemas') {
+                        $q->orWhereNull('anita_origen');
+                    }
+                })
                 ->first();
             if ($porAnita !== null) {
                 return $porAnita;
@@ -255,20 +267,43 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         return $this->model->newQuery()
             ->where('tipodocumento_id', $tipodocumento_id)
             ->where('numerodocumento', $numerodocumento)
+            ->where(function ($q) use ($anitaOrigen) {
+                $q->where('anita_origen', $anitaOrigen);
+                if ($anitaOrigen === 'biyemas') {
+                    $q->orWhereNull('anita_origen');
+                }
+            })
             ->orderBy('id')
             ->first();
     }
 
-    public function traerRegistroDeAnita($key)
+    /**
+     * Importa/actualiza un cliente UIF desde Anita.
+     *
+     * @param  object|null  $clientePreload  fila ya leída (bulk cache); si null, consulta bridge
+     * @param  list<object>|null  $premiosPreload  premios ya leídos; si null, consulta bridge; [] = sin premios
+     * @param  array{anita_origen?:string,sala_id?:int,servidor?:string}  $opciones
+     */
+    public function traerRegistroDeAnita($key, $clientePreload = null, $premiosPreload = null, array $opciones = [])
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $apiAnita = new ApiAnita;
-        $data = [
-            'acc' => 'list', 'tabla' => $this->tableAnita.', outer profesion',
-            'sistema' => 'base_admin',
-            'campos' => '
+        $anitaOrigen = strtolower(trim((string) ($opciones['anita_origen'] ?? 'biyemas'))) ?: 'biyemas';
+        $salaId = (int) ($opciones['sala_id'] ?? 1);
+        if ($salaId <= 0) {
+            $salaId = 1;
+        }
+        $servidorOpt = isset($opciones['servidor']) ? trim((string) $opciones['servidor']) : '';
+
+        if ($clientePreload !== null) {
+            $data = $clientePreload;
+        } else {
+            $apiAnita = new ApiAnita;
+            $payloadCliente = [
+                'acc' => 'list', 'tabla' => $this->tableAnita.', outer profesion',
+                'sistema' => 'base_admin',
+                'campos' => '
 			    inroclienteid,
 				ctipodocumento,
 				inrodocumento,
@@ -321,12 +356,19 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 				cdecljur,
 				ifevtoactividad
             ',
-            'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' AND clientes_uif.iprofesion=profesion.iprofesionid",
-        ];
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        if (count($dataAnita) > 0) {
+                'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' AND clientes_uif.iprofesion=profesion.iprofesionid",
+            ];
+            if ($servidorOpt !== '') {
+                $payloadCliente['servidor'] = $servidorOpt;
+            }
+            $dataAnita = json_decode($apiAnita->apiCall($payloadCliente));
+            if (! is_array($dataAnita) || count($dataAnita) === 0) {
+                return;
+            }
             $data = $dataAnita[0];
+        }
+
+        if ($data) {
 
             // Busca tipo de documento
             $tipodocumento = $this->tipodocumentoRepository->findPorAbreviatura($data->ctipodocumento);
@@ -543,6 +585,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 
             $payload = [
                 'inroclienteid' => $inroclienteidParaGuardar,
+                'anita_origen' => $anitaOrigen,
                 'nombre' => $data->cnombre,
                 'tipodocumento_id' => $tipodocumento_id,
                 'numerodocumento' => $nroDocumento,
@@ -580,7 +623,12 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 'usuario_id' => Auth::user()->id,
             ];
 
-            $existente = $this->buscarClienteUifParaUpsertDesdeAnita($inroclienteid, $tipodocumento_id, $nroDocumento);
+            $existente = $this->buscarClienteUifParaUpsertDesdeAnita(
+                $inroclienteid,
+                $tipodocumento_id,
+                $nroDocumento,
+                $anitaOrigen
+            );
 
             if ($existente !== null) {
                 $existente->update($payload);
@@ -589,12 +637,15 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 $cliente_uif = $this->model->create($payload);
             }
 
-            // Lee los premios
-            $apiAnita = new ApiAnita;
-            $data = [
-                'acc' => 'list', 'tabla' => 'premios_uif',
-                'sistema' => 'base_admin',
-                'campos' => '
+            // Lee los premios (bridge o preload bulk)
+            if ($premiosPreload !== null) {
+                $dataAnita = $premiosPreload;
+            } else {
+                $apiAnita = new ApiAnita;
+                $payloadPremios = [
+                    'acc' => 'list', 'tabla' => 'premios_uif',
+                    'sistema' => 'base_admin',
+                    'campos' => '
 					inropremioid,
 					inroclienteid,
 					ctipodocumento,
@@ -619,9 +670,13 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 					crecibo_pago,
 					cextfoto
 				',
-                'whereArmado' => " WHERE inroclienteid = '".$inroclienteid."' ",
-            ];
-            $dataAnita = json_decode($apiAnita->apiCall($data));
+                    'whereArmado' => " WHERE inroclienteid = '".$inroclienteid."' ",
+                ];
+                if ($servidorOpt !== '') {
+                    $payloadPremios['servidor'] = $servidorOpt;
+                }
+                $dataAnita = json_decode($apiAnita->apiCall($payloadPremios));
+            }
 
             if (is_array($dataAnita) && count($dataAnita) > 0) {
                 foreach ($dataAnita as $premioAnita) {
@@ -638,7 +693,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                     $premioLocal = $this->cliente_premio_uifRepository->createUnique([
                         'anita_inropremioid' => (int) $premioAnita->inropremioid,
                         'cliente_uif_id' => $cliente_uif->id,
-                        'sala_id' => 1,
+                        'sala_id' => $salaId,
                         'juego_uif_id' => $juego_id,
                         'fechaentrega' => $fechaEntrega.' '.$horaEntrega,
                         'detalle' => $premioAnita->cdescpremio,

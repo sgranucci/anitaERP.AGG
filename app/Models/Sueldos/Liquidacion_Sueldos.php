@@ -4,6 +4,7 @@ namespace App\Models\Sueldos;
 
 use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
+use App\Support\Sueldos\LiquidacionAlcanceRecibo;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -109,6 +110,9 @@ class Liquidacion_Sueldos extends Model implements Auditable
     // Estados en los que la cabecera aun puede editarse / recalcularse.
     public const ESTADOS_EDITABLES = ['borrador', 'calculada', 'revisada'];
 
+    /** @see LiquidacionAlcanceRecibo */
+    public const ALCANCES = LiquidacionAlcanceRecibo::ETIQUETAS;
+
     public function empresa()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
@@ -147,6 +151,17 @@ class Liquidacion_Sueldos extends Model implements Auditable
     public function tipoLabel(): string
     {
         return self::TIPOS[$this->tipo] ?? (string) $this->tipo;
+    }
+
+    public function alcanceLabel(): string
+    {
+        return LiquidacionAlcanceRecibo::ETIQUETAS[LiquidacionAlcanceRecibo::normalizar($this->alcance)]
+            ?? LiquidacionAlcanceRecibo::ETIQUETAS[LiquidacionAlcanceRecibo::TODOS];
+    }
+
+    public function esAlcanceMultiempresa(): bool
+    {
+        return LiquidacionAlcanceRecibo::esMultiempresa($this->alcance);
     }
 
     public function esEditable(): bool

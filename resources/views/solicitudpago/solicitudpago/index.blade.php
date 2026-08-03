@@ -196,10 +196,10 @@
                                         <i class="fa fa-edit"></i>
                                     </a>
                                 @endif
-                                @if (can('borrar-solicitud-pago', false))
+                                @if (can('borrar-solicitud-pago', false) && \App\Support\Solicitudpago\SolicitudpagoEstados::esAdministradorSesion())
                                     <form action="{{ route('eliminar_solicitudpago', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
                                         @csrf @method("delete")
-                                        <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar">
+                                        <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar (solo administrador)">
                                             <i class="fa fa-times-circle text-danger"></i>
                                         </button>
                                     </form>

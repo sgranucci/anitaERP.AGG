@@ -4,6 +4,7 @@ namespace App\Support\Contable;
 
 use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Support\Caja\RendicionEstacionamientoCajaListadoFiltros;
+use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -44,9 +45,21 @@ class CierreRendicionEstacionamientoListadoFiltros
     /**
      * @return array<string, mixed>
      */
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
+        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId ?? 0,
+                'empresa_scope' => $empresaScope,
+            ]);
+        }
+
         $filtros = RendicionEstacionamientoCajaListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $filtros['empresa_id'] = $empresaId ?? 0;
+        $filtros['empresa_scope'] = $empresaScope;
+
         $estado = (string) $request->input('estado_cierre', self::ESTADO_TODOS);
         if (! in_array($estado, [self::ESTADO_TODOS, self::ESTADO_PENDIENTE, self::ESTADO_CERRADA], true)) {
             $estado = self::ESTADO_TODOS;
@@ -60,6 +73,36 @@ class CierreRendicionEstacionamientoListadoFiltros
         $filtros['vista'] = $vista;
 
         return $filtros;
+    }
+
+    /**
+     * @return array{0:?int,1:string}
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function filtrosVacios(): array
+    {
+        return array_merge(RendicionEstacionamientoCajaListadoFiltros::filtrosVacios(), [
+            'estado_cierre' => self::ESTADO_TODOS,
+            'vista' => self::VISTA_AGRUPADO,
+            'empresa_scope' => 'una',
+        ]);
     }
 
     public static function tieneCriteriosUsuario(array $filtros): bool
@@ -86,7 +129,12 @@ class CierreRendicionEstacionamientoListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = RendicionEstacionamientoCajaListadoFiltros::paraQueryString($filtros);
+        $params = self::paraQueryStringEmpresa($filtros);
+
+        $resto = RendicionEstacionamientoCajaListadoFiltros::paraQueryString($filtros);
+        unset($resto['empresa_id'], $resto['empresa_todas']);
+        $params = array_merge($params, $resto);
+
         if (($filtros['estado_cierre'] ?? self::ESTADO_TODOS) !== self::ESTADO_TODOS) {
             $params['estado_cierre'] = $filtros['estado_cierre'];
         }
@@ -96,6 +144,21 @@ class CierreRendicionEstacionamientoListadoFiltros
         }
 
         return $params;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     public static function esVistaPorTurno(array $filtros): bool
@@ -111,14 +174,14 @@ class CierreRendicionEstacionamientoListadoFiltros
         $partes = [];
         $partes[] = 'Generado '.now()->format('d/m/Y H:i');
 
-        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-        if ($empresaId > 0) {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas' || (int) ($filtros['empresa_id'] ?? 0) <= 0) {
+            $partes[] = 'Empresa: todas (asignadas al usuario)';
+        } else {
+            $empresaId = (int) $filtros['empresa_id'];
             $nombreEmpresa = (string) (\App\Models\Configuracion\Empresa::query()
                 ->whereKey($empresaId)
                 ->value('nombre') ?? '');
             $partes[] = 'Empresa: '.($nombreEmpresa !== '' ? $nombreEmpresa : '#'.$empresaId);
-        } else {
-            $partes[] = 'Empresa: todas (asignadas al usuario)';
         }
 
         $desde = trim((string) ($filtros['fecha_jornada_desde'] ?? ''));

@@ -15,6 +15,7 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route('cuentacaja', CuentacajaListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -26,8 +27,8 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-cuentacaja',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => CuentacajaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('cuentacaja'),
+                        'tieneCriterios' => CuentacajaListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-cuentacaja',
                         'toggleId' => 'btn-toggle-filtros-cuentacaja',
@@ -39,9 +40,10 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
             </div>
             <form method="get" action="{{ route('cuentacaja') }}" id="form-filtros-cuentacaja" class="mb-0">
                 @include('caja.cuentacaja.partials.filtros_listado', [
-                    'limpiarUrl' => route('cuentacaja'),
+                    'limpiarUrl' => $limpiarUrl,
                 ])
             </form>
+            @include('caja.cuentacaja.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_cuentacaja',

@@ -145,8 +145,9 @@ final class IvaVentasListadoFiltros
 
         return match ($subdiario) {
             self::SUBDIARIO_VENTAS_A => $l === 'A' || $l === 'C',
-            self::SUBDIARIO_VENTAS_B => $l === 'B',
-            self::SUBDIARIO_VENTAS_A_B => in_array($l, ['A', 'B', 'C'], true),
+            // Z = RMV interno vending (p-vtagastro); entra al libro IVA ventas ERP.
+            self::SUBDIARIO_VENTAS_B => $l === 'B' || $l === 'Z',
+            self::SUBDIARIO_VENTAS_A_B => in_array($l, ['A', 'B', 'C', 'Z'], true),
             default => true,
         };
     }

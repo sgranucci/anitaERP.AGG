@@ -11,8 +11,8 @@
             @php
                 $safeName = $arch->nombrearchivo;
                 $ext = strtolower(pathinfo($safeName, PATHINFO_EXTENSION));
-                $urlInline = asset('storage/archivos/clientes_uif/'.$data->id.'/'.$safeName);
-                $urlDescarga = $urlInline;
+                $urlInline = \App\Support\Uif\ClienteUifArchivoStorage::urlClienteAdjunto((int) $data->id, $safeName);
+                $urlDescarga = $urlInline.(str_contains($urlInline, '?') ? '&' : '?').'disposition=attachment';
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
             @endphp

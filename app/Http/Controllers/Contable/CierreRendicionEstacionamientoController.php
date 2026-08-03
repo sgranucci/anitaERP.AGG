@@ -9,7 +9,6 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\CierreRendicionEstacionamientoService;
 use App\Support\Contable\CierreRendicionEstacionamientoListadoFiltros;
-use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -422,6 +421,34 @@ class CierreRendicionEstacionamientoController extends Controller
         }
     }
 
+    public function apiPendientesCierre(Request $request): JsonResponse
+    {
+        can('listar-cierre-rendicion-estacionamiento-contable');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique empresa.'], 422);
+        }
+
+        $permitidas = $this->empresaRepository->allFiltrado()
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+        if (! in_array($empresaId, $permitidas, true)) {
+            return response()->json(['ok' => false, 'mensaje' => 'Empresa no autorizada.'], 403);
+        }
+
+        try {
+            $resumen = $this->service->resumenPendientesCierre($empresaId);
+
+            return response()->json(['ok' => true, 'resumen' => $resumen]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+    }
+
     public function apiPreviewCierreRango(Request $request): JsonResponse
     {
         can('ejecutar-cierre-rendicion-estacionamiento-contable');
@@ -563,30 +590,38 @@ class CierreRendicionEstacionamientoController extends Controller
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $filtros = CierreRendicionEstacionamientoListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaDefault = $this->resolverEmpresaDefaultId($empresaQuery);
         $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
+
+        $filtros = CierreRendicionEstacionamientoListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault,
+        );
         $filtros['empresas_asignadas'] = $asignadas;
 
-        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return $filtros;
-        }
-
-        $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-
-        if ($empresaId <= 0 && count($asignadas) === 1 && ! $request->has('empresa_id')) {
-            $primera = $empresaQuery->first();
-            if ($primera !== null) {
-                $filtros['empresa_id'] = (int) $primera->id;
-            }
-        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
-            $primera = $empresaQuery->first();
-            if ($primera !== null) {
-                $filtros['empresa_id'] = (int) $primera->id;
+        if (
+            ($filtros['empresa_scope'] ?? 'una') === 'una'
+            && $empresaId > 0
+            && count($asignadas) >= 1
+            && ! in_array($empresaId, $asignadas, true)
+        ) {
+            $filtros['empresa_id'] = $empresaDefault > 0 ? $empresaDefault : 0;
+            if ((int) $filtros['empresa_id'] <= 0) {
+                $filtros['empresa_scope'] = 'todas';
             }
         }
 
         return $filtros;
+    }
+
+    private function resolverEmpresaDefaultId($empresaQuery): int
+    {
+        $first = $empresaQuery->first();
+
+        return $first !== null ? (int) $first->id : 0;
     }
 
     /**

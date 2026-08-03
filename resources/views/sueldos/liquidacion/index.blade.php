@@ -29,6 +29,17 @@
             <div class="card-header">
                 <h3 class="card-title">Corridas de liquidaci&oacute;n</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('crear-liquidacion-sueldos', false))
+                        <form action="{{ route('sincronizar_liquidacion_sueldos') }}" method="POST" class="d-inline mr-1"
+                              onsubmit="return confirm('¿Sincronizar liquidaciones maeliq + novedades desde Anita?\nEmpresa 1 · mael_fecha_liq &gt;= 20260700');">
+                            @csrf
+                            <input type="hidden" name="empresa_id" value="1">
+                            <input type="hidden" name="fecha_liq_desde" value="20260700">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm" title="Trae maeliq y luego novedades">
+                                <i class="fa fa-cloud-download-alt"></i> Sync Anita (julio)
+                            </button>
+                        </form>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-liquidacion-sueldos',
                         'filtroValor' => $filtros['valor'] ?? '',

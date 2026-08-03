@@ -4,6 +4,7 @@ namespace App\Support\Sueldos\Formula;
 
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
+use App\Support\Sueldos\NovedadSueldosVigencia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -40,11 +41,24 @@ class ContextoLiquidacion implements EntornoFormula
     /** @var array<int, array{periodo: int, cod: string, valor: float, tipo: string}> Historico de acumuladores. */
     private array $historico = [];
 
+    /** @var array<int, float> Valor1 de novedades de la corrida/período actual (concepto_codigo => suma). */
+    private array $novedadesV1 = [];
+
+    /** @var array<int, float> Valor2 de novedades de la corrida/período actual. */
+    private array $novedadesV2 = [];
+
+    /** @var list<array{periodo: int, cod: int, v1: float, v2: float}> Histórico de novedades del empleado. */
+    private array $novedadesHist = [];
+
     private ParametroSueldosResolver $parametros;
 
     private int $empleadoId = 0;
 
     private ?int $empresaId = null;
+
+    private int $liquidacionId = 0;
+
+    private int $periodoYm = 0;
 
     private int $anio = 0;
 
@@ -76,8 +90,11 @@ class ContextoLiquidacion implements EntornoFormula
             $this->acum[strtoupper($def['codigo'])] = 0.0;
         }
         $this->cargarVariables($empleado, $liquidacion);
+        $this->liquidacionId = (int) ($liquidacion->id ?? 0);
+        $this->periodoYm = (int) ($liquidacion->periodo ?: ($this->anio * 100 + $this->mes));
         $this->cargarBases($this->empleadoId);
-        $this->cargarHistorico($this->empleadoId, (int) ($liquidacion->id ?? 0));
+        $this->cargarHistorico($this->empleadoId, $this->liquidacionId);
+        $this->cargarNovedades();
     }
 
     private function cargarVariables(Empleado_Sueldos $emp, Liquidacion_Sueldos $liq): void
@@ -97,6 +114,14 @@ class ContextoLiquidacion implements EntornoFormula
         [$antAnios, $antMeses] = $this->calcularAntiguedad($emp, $fechaRef);
         $dias = $this->diasPeriodo($liq);
         $claseEgreso = $this->claseMotivoEgreso($emp->motivoegreso_id ? (int) $emp->motivoegreso_id : 0);
+        $diaEgreso = 0;
+        if ($this->fechaEgreso
+            && (int) $this->fechaEgreso->year === $this->anio
+            && (int) $this->fechaEgreso->month === $this->mes) {
+            $diaEgreso = (int) $this->fechaEgreso->day;
+        }
+        $codigos = $this->codigosMaestrosEmpleado($emp);
+        $tipoVac = $this->tipoCorrida === 'vacaciones' ? 1 : 0;
 
         $this->vars = [
             'empleado.sueldo_basico' => (float) $emp->sueldo_basico,
@@ -107,24 +132,92 @@ class ContextoLiquidacion implements EntornoFormula
             'empleado.legajo' => (int) $emp->legajo,
             'empleado.sexo' => (string) $emp->sexo,
             'empleado.categoria_id' => (int) $emp->categoria_id,
+            'empleado.categoria_codigo' => $codigos['categoria'],
             'empleado.agrupamiento_id' => (int) $emp->agrupamiento_id,
+            'empleado.agrupamiento_codigo' => $codigos['agrupamiento'],
+            'empleado.sindicato_codigo' => $codigos['sindicato'],
+            'empleado.obrasocial_codigo' => $codigos['obrasocial'],
+            'empleado.lugartrabajo_codigo' => $codigos['lugartrabajo'],
+            'empleado.empresa_codigo' => $codigos['empresa'],
+            'empleado.agrupamiento_var1' => 0.0,
+            'empleado.agrupamiento_var2' => 0.0,
+            'empleado.agrupamiento_var3' => 0.0,
+            'empleado.agrupamiento_var4' => 0.0,
+            'empleado.modalidad_sijp' => 0,
+            'empleado.mano_obra' => 0,
+            // Anita GRRE/GRDE / emp_grp*: espejo de los primeros 3 del pivot N (o códigos sync)
+            'empleado.grupo_remuneracion' => (int) ($emp->grupo_concepto_1_codigo ?? 0),
+            'empleado.grupo_deduccion' => (int) ($emp->grupo_concepto_2_codigo ?? 0),
+            'empleado.grupo_concepto_1' => (int) ($emp->grupo_concepto_1_codigo ?? 0),
+            'empleado.grupo_concepto_2' => (int) ($emp->grupo_concepto_2_codigo ?? 0),
+            'empleado.grupo_concepto_3' => (int) ($emp->grupo_concepto_3_codigo ?? 0),
+            'empleado.grupo_aporte' => 0,
             'empleado.centrocosto_id' => (int) $emp->centrocosto_id,
             'empleado.motivo_egreso_id' => (int) ($emp->motivoegreso_id ?? 0),
             'empleado.motivo_egreso_clase' => $claseEgreso,
             'empleado.tiene_egreso' => $this->fechaEgreso !== null ? 1 : 0,
             'empleado.egreso_anio' => $this->fechaEgreso ? (int) $this->fechaEgreso->year : 0,
             'empleado.egreso_mes' => $this->fechaEgreso ? (int) $this->fechaEgreso->month : 0,
+            'empleado.dia_egreso' => $diaEgreso,
+            'empleado.fecha_ingreso_n' => $this->fechaIngreso ? (int) $this->fechaIngreso->format('Ymd') : 0,
+            'empleado.fecha_egreso_n' => $this->fechaEgreso ? (int) $this->fechaEgreso->format('Ymd') : 0,
             'periodo.dias' => $dias,
             'periodo.dias_trabajados' => $dias,
             'periodo.anio' => $this->anio,
             'periodo.mes' => $this->mes,
             'periodo.periodo' => $this->anio * 100 + $this->mes,
+            'periodo.fecha_liq' => (int) $fechaRef->format('Ymd'),
+            'periodo.tipo_vacaciones' => $tipoVac,
+            'periodo.tipo_liq_n' => match ((string) $liq->tipo) {
+                'quincena_1' => 1,
+                'quincena_2' => 2,
+                'sac' => 3,
+                'vacaciones' => 4,
+                'final' => 5,
+                default => 0,
+            },
             'corrida.tipo' => (string) $liq->tipo,
             // Escalares del concepto en curso (los setea el calculador)
             'cantidad' => 0.0,
             'valor' => 0.0,
             'factor' => 0.0,
         ];
+    }
+
+    /**
+     * Códigos Anita de maestros vinculados al empleado (SIND/OSOC/LUGT/CATE/AGRU/EACT).
+     *
+     * @return array{categoria: int, agrupamiento: int, sindicato: int, obrasocial: int, lugartrabajo: int, empresa: int}
+     */
+    private function codigosMaestrosEmpleado(Empleado_Sueldos $emp): array
+    {
+        $out = [
+            'categoria' => 0,
+            'agrupamiento' => 0,
+            'sindicato' => 0,
+            'obrasocial' => 0,
+            'lugartrabajo' => 0,
+            'empresa' => (int) ($emp->empresa_id ?? 0),
+        ];
+        $map = [
+            'categoria' => ['categoria_sueldos', (int) ($emp->categoria_id ?? 0)],
+            'agrupamiento' => ['agrupamiento_sueldos', (int) ($emp->agrupamiento_id ?? 0)],
+            'sindicato' => ['sindicato_sueldos', (int) ($emp->sindicato_id ?? 0)],
+            'obrasocial' => ['obrasocial_sueldos', (int) ($emp->obrasocial_id ?? 0)],
+            'lugartrabajo' => ['lugartrabajo_sueldos', (int) ($emp->lugartrabajo_id ?? 0)],
+        ];
+        foreach ($map as $clave => [$tabla, $id]) {
+            if ($id <= 0) {
+                continue;
+            }
+            try {
+                $out[$clave] = (int) (DB::table($tabla)->where('id', $id)->value('codigo') ?? 0);
+            } catch (\Throwable $e) {
+                $out[$clave] = 0;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -209,6 +302,153 @@ class ContextoLiquidacion implements EntornoFormula
         }
     }
 
+    /**
+     * Carga novedades del empleado: mapa de la corrida/período actual + histórico por período.
+     */
+    private function cargarNovedades(): void
+    {
+        if ($this->empleadoId <= 0) {
+            return;
+        }
+        try {
+            $rows = DB::table('novedad_sueldos')
+                ->where('empleado_id', $this->empleadoId)
+                ->where('estado', '!=', 'anulada')
+                ->get([
+                    'liquidacion_id', 'concepto_codigo', 'valor1', 'valor2',
+                    'periodo', 'fecha_desde', 'fecha_hasta',
+                ]);
+            foreach ($rows as $r) {
+                $cod = (int) $r->concepto_codigo;
+                if ($cod <= 0) {
+                    continue;
+                }
+                $v1 = (float) $r->valor1;
+                $v2 = (float) $r->valor2;
+                if (NovedadSueldosVigencia::aplicaACorrida($r, $this->liquidacionId, $this->periodoYm)) {
+                    $this->novedadesV1[$cod] = ($this->novedadesV1[$cod] ?? 0.0) + $v1;
+                    $this->novedadesV2[$cod] = ($this->novedadesV2[$cod] ?? 0.0) + $v2;
+                }
+                // Histórico: one-shot por su período; recurrentes expandidas al período actual
+                // y a su período base si lo tienen (VC/IC resuelven por período pedido).
+                $perHist = (int) ($r->periodo ?? 0);
+                if ($perHist > 0 && NovedadSueldosVigencia::aplicaAPeriodoHistorico($r, $perHist)) {
+                    $this->novedadesHist[] = [
+                        'periodo' => $perHist,
+                        'cod' => $cod,
+                        'v1' => $v1,
+                        'v2' => $v2,
+                    ];
+                }
+                // Para recurrentes: también registrar el período de la corrida en curso
+                // si aplica (permite VC con meses atrás sobre vigencia viva).
+                if (! empty($r->fecha_desde)
+                    && $this->periodoYm > 0
+                    && $this->periodoYm !== $perHist
+                    && NovedadSueldosVigencia::aplicaAPeriodoHistorico($r, $this->periodoYm)
+                ) {
+                    $this->novedadesHist[] = [
+                        'periodo' => $this->periodoYm,
+                        'cod' => $cod,
+                        'v1' => $v1,
+                        'v2' => $v2,
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+            // Tabla ausente o sin migrar: novedad() queda en 0.
+        }
+    }
+
+    private function novedadValor(int $conceptoCodigo, int $cual): float
+    {
+        if ($conceptoCodigo <= 0) {
+            return 0.0;
+        }
+
+        return $cual === 2
+            ? (float) ($this->novedadesV2[$conceptoCodigo] ?? 0.0)
+            : (float) ($this->novedadesV1[$conceptoCodigo] ?? 0.0);
+    }
+
+    private function novedadRango(int $desde, int $hasta): float
+    {
+        if ($desde <= 0 || $hasta < $desde) {
+            return 0.0;
+        }
+        $suma = 0.0;
+        foreach ($this->novedadesV1 as $cod => $valor) {
+            if ($cod >= $desde && $cod <= $hasta) {
+                $suma += $valor;
+            }
+        }
+
+        return $suma;
+    }
+
+    private function novedadEnPeriodo(int $conceptoCodigo, int $periodoYm, int $cual): float
+    {
+        if ($conceptoCodigo <= 0 || $periodoYm <= 0) {
+            return 0.0;
+        }
+        // Primero el mapa histórico ya expandido.
+        $suma = 0.0;
+        $vioHist = false;
+        foreach ($this->novedadesHist as $h) {
+            if ($h['cod'] === $conceptoCodigo && $h['periodo'] === $periodoYm) {
+                $suma += $cual === 2 ? $h['v2'] : $h['v1'];
+                $vioHist = true;
+            }
+        }
+        if ($vioHist) {
+            return $suma;
+        }
+
+        // Recurrentes: evaluar vigencia on-the-fly para el período pedido (VC/IC).
+        try {
+            $rows = DB::table('novedad_sueldos')
+                ->where('empleado_id', $this->empleadoId)
+                ->where('concepto_codigo', $conceptoCodigo)
+                ->where('estado', '!=', 'anulada')
+                ->whereNotNull('fecha_desde')
+                ->get(['liquidacion_id', 'periodo', 'fecha_desde', 'fecha_hasta', 'valor1', 'valor2']);
+            foreach ($rows as $r) {
+                if (NovedadSueldosVigencia::aplicaAPeriodoHistorico($r, $periodoYm)) {
+                    $suma += $cual === 2 ? (float) $r->valor2 : (float) $r->valor1;
+                }
+            }
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+
+        return $suma;
+    }
+
+    /**
+     * VC(concepto, mesesAtras|periodoYYYYMM): valor1 histórico.
+     * Si el 2º arg >= 190001 se interpreta como período YYYYMM; si no, meses hacia atrás.
+     */
+    private function novedadHist(int $conceptoCodigo, int $mesesOPeriodo): float
+    {
+        if ($conceptoCodigo <= 0) {
+            return 0.0;
+        }
+        if ($mesesOPeriodo >= 190001) {
+            return $this->novedadEnPeriodo($conceptoCodigo, $mesesOPeriodo, 1);
+        }
+        $meses = max(1, $mesesOPeriodo);
+        $anio = (int) floor($this->periodoYm / 100);
+        $mes = $this->periodoYm % 100;
+        $mes -= $meses;
+        while ($mes <= 0) {
+            $mes += 12;
+            $anio--;
+        }
+        $periodo = $anio * 100 + $mes;
+
+        return $this->novedadEnPeriodo($conceptoCodigo, $periodo, 1);
+    }
+
     // ---- API que usa el calculador ----
 
     /**
@@ -261,6 +501,38 @@ class ContextoLiquidacion implements EntornoFormula
         return $this->acum;
     }
 
+    /**
+     * Snapshot para el debugger de fórmulas (no muta estado).
+     *
+     * @return array{
+     *   variables: array<string, float|int|string>,
+     *   acumuladores: array<string, float>,
+     *   conceptos_calculados: array<int, float>,
+     *   novedades_v1: array<int, float>,
+     *   novedades_v2: array<int, float>,
+     *   bases: array<string, float>
+     * }
+     */
+    public function snapshotDebug(): array
+    {
+        ksort($this->vars);
+        $acum = $this->acum;
+        ksort($acum);
+        $conceptos = $this->conceptos;
+        ksort($conceptos);
+        $bases = $this->bases;
+        ksort($bases);
+
+        return [
+            'variables' => $this->vars,
+            'acumuladores' => $acum,
+            'conceptos_calculados' => $conceptos,
+            'novedades_v1' => $this->novedadesV1,
+            'novedades_v2' => $this->novedadesV2,
+            'bases' => $bases,
+        ];
+    }
+
     // ---- EntornoFormula ----
 
     public function variable(string $ruta)
@@ -278,6 +550,17 @@ class ContextoLiquidacion implements EntornoFormula
             'antiguedad_245', 'antiguedad_meses',
             // Ganancias 4ta
             'ganancias', 'ganancia_linea',
+            // Dominio Anita (stubs / parciales hasta tener novedades y tablas auxiliares)
+            'novedad', 'novedad2', 'novedad_rango', 'novedad_periodo', 'novedad_hist',
+            'novedad_empresa', 'novedad2_empresa',
+            'dias_trabajados', 'dias_no_trabajados', 'dias_del_mes', 'meses_trabajados',
+            'im_liquidacion', 'im_empresa', 'valor_liquidacion', 'cantidad_liquidacion',
+            'aux_rango', 'acum_periodos', 'acum_variable_periodos', 'acum_anio', 'mejor_mes_acum',
+            'acum_cantidad_concepto', 'acum_valor_concepto', 'acum_importe_concepto', 'acum_importe_por_concepto',
+            'aguinaldo', 'cantidad_vacaciones', 'dias_vacaciones', 'total_vacaciones',
+            'cantidad_asignacion', 'importe_asignacion', 'tabla_empleado', 'descuento_bruto',
+            'base_categoria', 'es_empresa_madre', 'es_asociacion', 'im_concepto_rem', 'val',
+            'antiguedad_tabla',
         ], true);
     }
 
@@ -356,6 +639,61 @@ class ContextoLiquidacion implements EntornoFormula
                 return $this->gananciaLineaResultado('RET_GANANCIAS');
             case 'ganancia_linea':
                 return $this->gananciaLineaResultado((string) ($args[0] ?? 'RET_GANANCIAS'));
+
+            case 'novedad':
+                return $this->novedadValor((int) ($args[0] ?? 0), 1);
+            case 'novedad2':
+                return $this->novedadValor((int) ($args[0] ?? 0), 2);
+            case 'novedad_rango':
+                return $this->novedadRango((int) ($args[0] ?? 0), (int) ($args[1] ?? 0));
+            case 'novedad_periodo':
+                return $this->novedadEnPeriodo((int) ($args[0] ?? 0), (int) ($args[1] ?? 0), 1);
+            case 'novedad_hist':
+                return $this->novedadHist((int) ($args[0] ?? 0), (int) ($args[1] ?? 1));
+            // ---- Dominio Anita: stubs seguros (0) hasta cablear aux / otras tablas ----
+            case 'novedad_empresa':
+            case 'novedad2_empresa':
+            case 'im_liquidacion':
+            case 'im_empresa':
+            case 'valor_liquidacion':
+            case 'cantidad_liquidacion':
+            case 'aux_rango':
+            case 'acum_periodos':
+            case 'acum_variable_periodos':
+            case 'acum_anio':
+            case 'mejor_mes_acum':
+            case 'acum_cantidad_concepto':
+            case 'acum_valor_concepto':
+            case 'acum_importe_concepto':
+            case 'acum_importe_por_concepto':
+            case 'aguinaldo':
+            case 'cantidad_vacaciones':
+            case 'dias_vacaciones':
+            case 'total_vacaciones':
+            case 'cantidad_asignacion':
+            case 'importe_asignacion':
+            case 'tabla_empleado':
+            case 'descuento_bruto':
+            case 'base_categoria':
+            case 'im_concepto_rem':
+            case 'antiguedad_tabla':
+                return 0.0;
+            case 'dias_trabajados':
+                return (float) ($this->vars['periodo.dias_trabajados'] ?? $this->vars['periodo.dias'] ?? 0);
+            case 'dias_no_trabajados':
+                $tot = (float) ($this->vars['periodo.dias'] ?? 30);
+                $trab = (float) ($this->vars['periodo.dias_trabajados'] ?? $tot);
+
+                return max(0.0, $tot - $trab);
+            case 'dias_del_mes':
+                return (float) ($this->vars['periodo.dias'] ?? 30);
+            case 'meses_trabajados':
+                return (float) ($this->vars['empleado.antiguedad_meses'] ?? 0);
+            case 'es_empresa_madre':
+            case 'es_asociacion':
+                return 0.0;
+            case 'val':
+                return 1.0;
         }
 
         return 0.0;

@@ -41,6 +41,9 @@
         }
         $.get(url).done(function (resp) {
             host().html(resp.html || '');
+            if (typeof window.focusSolapaEmpleado === 'function') {
+                window.focusSolapaEmpleado('#tab-familiares');
+            }
         }).fail(function () {
             host().html('<div class="alert alert-danger">No se pudo cargar el panel de familiares.</div>');
         });

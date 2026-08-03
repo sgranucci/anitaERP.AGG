@@ -5,16 +5,25 @@
     $basesEditables = ! ($usaTabla ?? true);
 @endphp
 
+<div class="row">
+<div class="col-lg-5 mb-3 mb-lg-0">
+
+<div id="host-set-conceptos" class="mb-3"
+     data-url="{{ route('set_conceptos_empleado_sueldos', ['empleado' => $data->id]) }}">
+    <div class="text-center text-muted py-3 small">
+        <i class="fa fa-spinner fa-spin"></i> Cargando grupos / set efectivo…
+    </div>
+</div>
+
 @if ($usaTabla)
-    <div class="alert alert-info">
+    <div class="alert alert-info py-2">
         <i class="fa fa-table"></i>
-        Esta categoría toma las bases <strong>desde la tabla de la categoría</strong> (solo lectura aquí).
-        Los valores vigentes se muestran heredados.
+        Bases desde la <strong>tabla de la categoría</strong> (solo lectura).
     </div>
 @else
-    <div class="alert alert-warning">
+    <div class="alert alert-warning py-2">
         <i class="fa fa-user"></i>
-        Esta categoría carga las bases <strong>en cada empleado</strong>, con vigencia (igual que en categorías).
+        Bases cargadas <strong>en el empleado</strong>, con vigencia.
     </div>
 @endif
 
@@ -101,13 +110,10 @@
             </tbody>
         </table>
     </div>
-
-    @if ($puedeEditarBases)
-        <div class="row mt-3">
-            <div class="col-lg-3"></div>
-            <div class="col-lg-6">
-                <button type="submit" form="form-general" class="btn botonsubmit btn-success">Actualizar</button>
-            </div>
-        </div>
-    @endif
 </div>
+
+</div>{{-- /col-lg-5 bases --}}
+<div class="col-lg-7">
+    @include('sueldos.empleado.partials.liquidacion_preview')
+</div>
+</div>{{-- /row split --}}

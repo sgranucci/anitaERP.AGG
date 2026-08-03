@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Sueldos\Liquidacion_Sueldos;
+use App\Support\Sueldos\LiquidacionAlcanceRecibo;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,6 +20,7 @@ class ValidacionLiquidacion_Sueldos extends FormRequest
 
         return [
             'empresa_id' => [Rule::requiredIf($esAlta), 'integer', 'exists:empresa,id'],
+            'alcance' => ['nullable', 'string', Rule::in(LiquidacionAlcanceRecibo::permitidos())],
             'descripcion' => 'required|string|max:60',
             'tipo' => ['required', 'string', Rule::in(array_keys(Liquidacion_Sueldos::TIPOS))],
             'motivoegreso_id' => 'nullable|integer|exists:motivoegreso_sueldos,id',
@@ -54,6 +56,7 @@ class ValidacionLiquidacion_Sueldos extends FormRequest
             'periodo' => preg_replace('/\D+/', '', (string) $this->input('periodo')),
             'simulacion' => $this->boolean('simulacion'),
             'acumula_novedades' => $this->has('acumula_novedades') ? $this->boolean('acumula_novedades') : true,
+            'alcance' => LiquidacionAlcanceRecibo::normalizar($this->input('alcance')),
         ]);
     }
 }

@@ -34,12 +34,7 @@ class PadronIibbArbaDescargaService
         if ($dir === '') {
             $dir = storage_path('app/padrones/arba');
         }
-        if (! is_dir($dir) && ! mkdir($dir, 0775, true) && ! is_dir($dir)) {
-            throw new RuntimeException("No se pudo crear directorio: {$dir}");
-        }
-        if (! is_writable($dir)) {
-            throw new RuntimeException("Directorio no escribible: {$dir}");
-        }
+        $this->asegurarDirectorioEscribible($dir);
 
         $ref = $periodo === 'actual'
             ? Carbon::now()
@@ -163,6 +158,33 @@ class PadronIibbArbaDescargaService
         if (! $process->isSuccessful()) {
             throw new RuntimeException(
                 'curl ARBA falló: ' . trim($process->getErrorOutput() . ' ' . $process->getOutput())
+            );
+        }
+    }
+
+    /**
+     * El schedule/cron corre como www-data; el directorio puede haber sido creado por sergio.
+     * Crear con 0777 (como storage/) y reintentar chmod si no es escribible.
+     */
+    private function asegurarDirectorioEscribible(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            if (! @mkdir($dir, 0777, true) && ! is_dir($dir)) {
+                throw new RuntimeException("No se pudo crear directorio: {$dir}");
+            }
+        }
+
+        @chmod($dir, 0777);
+        $parent = dirname($dir);
+        if (is_dir($parent) && str_contains($parent, DIRECTORY_SEPARATOR . 'padrones')) {
+            @chmod($parent, 0777);
+        }
+
+        if (! is_writable($dir)) {
+            throw new RuntimeException(
+                "Directorio no escribible: {$dir}. "
+                . 'Ejecutar: sudo chown -R www-data:www-data ' . dirname($dir)
+                . ' && sudo chmod -R ug+rwX ' . dirname($dir)
             );
         }
     }

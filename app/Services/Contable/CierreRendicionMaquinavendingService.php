@@ -3,6 +3,7 @@
 namespace App\Services\Contable;
 
 use App\Models\Caja\RendicionMaquinavendingCaja;
+use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
@@ -15,6 +16,7 @@ use App\Support\Contable\CierreRendicionMaquinavendingListadoFiltros;
 use App\Support\Contable\MaquinavendingDiarioPuntoventaReporteSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\RendicionMaquinavendingCajaListadoFiltros;
+use App\Services\Ventas\MaquinavendingRmvEmisionService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -31,6 +33,7 @@ class CierreRendicionMaquinavendingService
         private readonly AsientoRepositoryInterface $asientoRepository,
         private readonly Asiento_MovimientoRepositoryInterface $asientoMovimientoRepository,
         private readonly TipoasientoRepositoryInterface $tipoasientoRepository,
+        private readonly MaquinavendingRmvEmisionService $rmvEmisionService,
     ) {
     }
 
@@ -178,9 +181,10 @@ class CierreRendicionMaquinavendingService
             $observacion,
         );
 
-        $tipoAsientoId = $this->resolverTipoAsientoId();
+        $sinMovimientos = ($payload['cuentacontable_ids'] ?? []) === [];
+        $tipoAsientoId = $sinMovimientos ? 0 : $this->resolverTipoAsientoId();
 
-        return DB::transaction(function () use ($rendiciones, $payload, $tipoAsientoId, $ids) {
+        return DB::transaction(function () use ($rendiciones, $payload, $tipoAsientoId, $ids, $fechaDia, $sinMovimientos) {
             $rendicionIds = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->all();
             $bloqueadas = RendicionMaquinavendingCaja::query()
                 ->whereIn('id', $rendicionIds)
@@ -195,6 +199,38 @@ class CierreRendicionMaquinavendingService
                 }
             }
 
+            $ahora = now();
+            $usuarioId = Auth::id();
+
+            // Rendiciones en cero / sin movimientos: cerrar sin asiento ni RMV (mismo criterio
+            // que estacionamiento) para no disparar asiento vacío / Undefined variable.
+            if ($sinMovimientos) {
+                foreach ($bloqueadas as $rendicion) {
+                    $rendicion->update([
+                        'asiento_id' => null,
+                        'cierre_contable_en' => $ahora,
+                        'cierre_contable_usuario_id' => $usuarioId,
+                        'cierre_contable_legacy' => true,
+                    ]);
+                }
+
+                return [
+                    'asiento_id' => 0,
+                    'numeroasiento' => '',
+                    'venta_id' => 0,
+                    'venta_codigo' => '',
+                    'rendicion_ids' => $ids,
+                    'sin_asiento' => true,
+                ];
+            }
+
+            // RMV interno (p-vtagastro.c) antes del asiento, para IVA ventas.
+            $bloqueadas->loadMissing([
+                'maquinavendingRendicion.articulos.articulo',
+                'puntoventaCae',
+            ]);
+            $rmv = $this->rmvEmisionService->emitirParaGrupo($bloqueadas, $fechaDia);
+
             $payload['tipoasiento_id'] = $tipoAsientoId;
             $asiento = $this->asientoRepository->create($payload);
             if ($asiento === 'Error' || $asiento === null) {
@@ -203,11 +239,10 @@ class CierreRendicionMaquinavendingService
 
             $this->asientoMovimientoRepository->create($payload, $asiento->id);
 
-            $ahora = now();
-            $usuarioId = Auth::id();
             foreach ($bloqueadas as $rendicion) {
                 $rendicion->update([
                     'asiento_id' => (int) $asiento->id,
+                    'venta_id' => (int) $rmv['venta_id'],
                     'cierre_contable_en' => $ahora,
                     'cierre_contable_usuario_id' => $usuarioId,
                 ]);
@@ -216,6 +251,8 @@ class CierreRendicionMaquinavendingService
             return [
                 'asiento_id' => (int) $asiento->id,
                 'numeroasiento' => (string) ($asiento->numeroasiento ?? ''),
+                'venta_id' => (int) $rmv['venta_id'],
+                'venta_codigo' => (string) $rmv['codigo'],
                 'rendicion_ids' => $ids,
             ];
         });
@@ -279,12 +316,25 @@ class CierreRendicionMaquinavendingService
                 ->lockForUpdate()
                 ->get();
 
+            $ventaIds = $bloqueadas
+                ->pluck('venta_id')
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn (int $id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+
             $this->asientoRepository->delete($asientoId);
+
+            foreach ($ventaIds as $ventaId) {
+                $this->rmvEmisionService->anularSiExiste($ventaId);
+            }
 
             foreach ($bloqueadas as $rendicion) {
                 if ((int) ($rendicion->asiento_id ?? 0) === $asientoId) {
                     $rendicion->update([
                         'asiento_id' => null,
+                        'venta_id' => null,
                         'cierre_contable_en' => null,
                         'cierre_contable_usuario_id' => null,
                     ]);
@@ -456,6 +506,139 @@ class CierreRendicionMaquinavendingService
         $fecha = Carbon::parse($fechaJornada)->toDateString();
 
         return $this->ejecutarCierreRango($empresaId, $fecha, $fecha);
+    }
+
+    /**
+     * Resumen vivo de pendientes de cierre contable (sin filtro de fechas).
+     *
+     * @return array<string, mixed>
+     */
+    public function resumenPendientesCierre(int $empresaId): array
+    {
+        if ($empresaId <= 0) {
+            throw new InvalidArgumentException('Indique empresa.');
+        }
+
+        $empresaNombre = (string) (Empresa::query()->whereKey($empresaId)->value('nombre') ?? ('Empresa #'.$empresaId));
+        $rendiciones = $this->listarPendientesEmpresa($empresaId);
+        $gruposRaw = CierreRendicionMaquinavendingGrupoSupport::agrupar(
+            new EloquentCollection($rendiciones->all()),
+        );
+
+        $totalCobrado = 0.0;
+        $totalFactura = 0.0;
+        $porDia = [];
+        $fechas = [];
+
+        foreach ($rendiciones as $r) {
+            $fecha = CierreRendicionMaquinavendingGrupoSupport::fechaDiaDesdeRendicion($r);
+            if ($fecha !== '') {
+                $fechas[$fecha] = true;
+            }
+            if (! isset($porDia[$fecha])) {
+                $porDia[$fecha] = [
+                    'fecha_jornada' => $fecha,
+                    'fecha_jornada_fmt' => $fecha !== '' ? Carbon::parse($fecha)->format('d/m/Y') : '',
+                    'cantidad' => 0,
+                    'cantidad_grupos' => 0,
+                    'total_cobrado' => 0.0,
+                ];
+            }
+            $cobrado = round((float) ($r->totalcobrado ?? 0), 2);
+            $factura = round((float) ($r->totalfactura ?? 0), 2);
+            $porDia[$fecha]['cantidad']++;
+            $porDia[$fecha]['total_cobrado'] = round($porDia[$fecha]['total_cobrado'] + $cobrado, 2);
+            $totalCobrado = round($totalCobrado + $cobrado, 2);
+            $totalFactura = round($totalFactura + $factura, 2);
+        }
+
+        $grupos = [];
+        foreach ($gruposRaw as $grupo) {
+            $fecha = (string) ($grupo['fecha_dia'] ?? '');
+            if ($fecha !== '' && isset($porDia[$fecha])) {
+                $porDia[$fecha]['cantidad_grupos']++;
+            }
+
+            $cobradoGrupo = 0.0;
+            $facturaGrupo = 0.0;
+            /** @var Collection<int, RendicionMaquinavendingCaja> $rends */
+            $rends = $grupo['rendiciones'] ?? collect();
+            foreach ($rends as $r) {
+                $cobradoGrupo = round($cobradoGrupo + (float) ($r->totalcobrado ?? 0), 2);
+                $facturaGrupo = round($facturaGrupo + (float) ($r->totalfactura ?? 0), 2);
+            }
+
+            $pv = $rends->first()?->puntoventaCae;
+            $pvLabel = trim(((string) ($pv->codigo ?? '')).' '.((string) ($pv->nombre ?? '')));
+            if ($pvLabel === '') {
+                $pvLabel = 'PV #'.(int) ($grupo['puntoventa_cae_id'] ?? 0);
+            }
+
+            $grupos[] = [
+                'clave' => (string) ($grupo['clave'] ?? ''),
+                'empresa_id' => (int) ($grupo['empresa_id'] ?? $empresaId),
+                'fecha_dia' => $fecha,
+                'fecha_dia_fmt' => $fecha !== '' ? Carbon::parse($fecha)->format('d/m/Y') : '',
+                'puntoventa_cae_id' => (int) ($grupo['puntoventa_cae_id'] ?? 0),
+                'puntoventa_label' => $pvLabel,
+                'cantidad_rendiciones' => $rends->count(),
+                'total_cobrado' => $cobradoGrupo,
+                'total_factura' => $facturaGrupo,
+            ];
+        }
+
+        usort($grupos, static function (array $a, array $b): int {
+            $cmp = strcmp((string) ($a['fecha_dia'] ?? ''), (string) ($b['fecha_dia'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+
+            return strcmp((string) ($a['puntoventa_label'] ?? ''), (string) ($b['puntoventa_label'] ?? ''));
+        });
+
+        ksort($porDia);
+        $fechasOrden = array_keys($fechas);
+        sort($fechasOrden);
+        $fechaDesde = $fechasOrden[0] ?? null;
+        $fechaHasta = $fechasOrden === [] ? null : $fechasOrden[array_key_last($fechasOrden)];
+        $ahora = now();
+
+        return [
+            'empresa_id' => $empresaId,
+            'empresa_nombre' => $empresaNombre,
+            'cantidad_rendiciones' => $rendiciones->count(),
+            'cantidad_grupos' => count($grupos),
+            'cantidad_jornadas' => count($porDia),
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'fecha_desde_fmt' => $fechaDesde ? Carbon::parse($fechaDesde)->format('d/m/Y') : null,
+            'fecha_hasta_fmt' => $fechaHasta ? Carbon::parse($fechaHasta)->format('d/m/Y') : null,
+            'total_cobrado' => $totalCobrado,
+            'total_factura' => $totalFactura,
+            'generado_en' => $ahora->toDateTimeString(),
+            'generado_en_fmt' => $ahora->format('d/m/Y H:i:s'),
+            'grupos' => $grupos,
+            'por_dia' => array_values($porDia),
+        ];
+    }
+
+    /**
+     * @return Collection<int, RendicionMaquinavendingCaja>
+     */
+    private function listarPendientesEmpresa(int $empresaId): Collection
+    {
+        $q = RendicionMaquinavendingCaja::query()
+            ->with([
+                'maquinavendingRendicion:id,fecha_jornada',
+                'puntoventaCae:id,codigo,nombre',
+            ])
+            ->where('empresa_id', $empresaId);
+
+        CierreRendicionMaquinavendingListadoFiltros::aplicarEstadoCierre($q, [
+            'estado_cierre' => CierreRendicionMaquinavendingListadoFiltros::ESTADO_PENDIENTE,
+        ]);
+
+        return $q->orderBy('fecharendicion')->orderBy('id')->get();
     }
 
     /**

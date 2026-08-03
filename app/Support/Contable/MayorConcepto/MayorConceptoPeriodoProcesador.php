@@ -1550,9 +1550,26 @@ class MayorConceptoPeriodoProcesador
             return [];
         }
 
-        // Venta máquinas (Anita): cada cuenta > límite va a su concepto; no exige ancla ≤ límite.
+        // Venta máquinas / gastro / estacionamiento (Anita): cada cuenta > límite va a su
+        // concepto nativo; no se toman cuentas ≤ límite ni se ancla a caja/banco.
         if ($this->debeProcesarAsientoCtamovVentaMaquinas($lineasAsiento, $lineasOp)) {
             $lineas = $this->procesarAsientoCtamovVentaMaquinasPorConcepto(
+                $empresaId,
+                $lineasOp,
+                $monedaConverter,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+            );
+            if ($lineas !== []) {
+                $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
+                $opsProcesadas[$this->claveAsientoContable($nroAsiento, $fecha)] = true;
+            }
+
+            return $lineas;
+        }
+
+        if ($this->debeProcesarAsientoCtamovVentaMultibanco($lineasAsiento, $lineasOp)) {
+            $lineas = $this->procesarAsientoCtamovVentaMultibanco(
                 $empresaId,
                 $lineasOp,
                 $monedaConverter,
@@ -1578,24 +1595,6 @@ class MayorConceptoPeriodoProcesador
                 $lineasOp,
                 $monedaConverter,
                 $monedaReporteId,
-            );
-            if ($lineas !== []) {
-                $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
-                $opsProcesadas[$this->claveAsientoContable($nroAsiento, $fecha)] = true;
-            }
-
-            return $lineas;
-        }
-
-        // Gastro/estacionamiento con medios 111+113(+211): ventas/IVA al concepto de cada
-        // cuenta (plano); 113/211 también a su concepto (ctaconc). Caja 111 queda analítica.
-        if ($this->debeProcesarAsientoCtamovVentaMultibanco($lineasAsiento, $lineasOp)) {
-            $lineas = $this->procesarAsientoCtamovVentaMultibanco(
-                $empresaId,
-                $lineasOp,
-                $monedaConverter,
-                $monedaReporteId,
-                $soloMonedaOrigen,
             );
             if ($lineas !== []) {
                 $opsProcesadas[$this->claveOperacionCtamov($nroAsiento, $fecha)] = true;
@@ -1823,6 +1822,20 @@ class MayorConceptoPeriodoProcesador
         $anclas = $this->anclasDisponibilidadMayorAnaliticoCtamovSistemaB($lineasOp);
         if ($anclas === []) {
             return [];
+        }
+
+        // Con 113/medios fuera del límite el prorrateo parcial dejaba el crédito en analítico
+        // y solo una fracción en concepto (ej. Dif caja tc 222347). Misma regla que máquinas/
+        // gastro: piernas literales; ≤ límite solo analítico.
+        if ($this->esAsientoCtamovSistemaBLiteralPorConcepto($lineasOp)) {
+            return $this->procesarAsientoCtamovPiernasLiteralPorConcepto(
+                $empresaId,
+                $lineasOp,
+                $monedaConverter,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+                'Ctamov sistema B',
+            );
         }
 
         $lineas = [];
@@ -2744,6 +2757,12 @@ class MayorConceptoPeriodoProcesador
      * @param  list<object>  $lineasOp
      * @return list<array<string, mixed>>
      */
+    /**
+     * Gastro/estacionamiento: misma regla que venta máquinas (piernas literales; ≤ límite fuera).
+     *
+     * @param  list<object>  $lineasOp
+     * @return list<array<string, mixed>>
+     */
     private function procesarAsientoCtamovVentaMultibanco(
         int $empresaId,
         array $lineasOp,
@@ -2751,158 +2770,14 @@ class MayorConceptoPeriodoProcesador
         int $monedaReporteId,
         bool $soloMonedaOrigen,
     ): array {
-        $mediosCobranza = $this->mediosCobranzaDebeAsientoVentaGastro($lineasOp);
-        $totalMedios = array_sum($mediosCobranza);
-        if ($totalMedios <= 0) {
-            return [];
-        }
-
-        // Ancla analítica: solo caja/banco dentro del límite mayor concepto (111…).
-        // 113/211 salen como líneas de concepto (ctaconc de cada cuenta).
-        $mediosAncla = $this->mediosCobranzaDentroLimiteMayorConcepto($mediosCobranza);
-        $cuentaAncla = $this->cuentaMedioCobranzaPrincipal(
-            $mediosAncla !== [] ? $mediosAncla : $mediosCobranza
+        return $this->procesarAsientoCtamovPiernasLiteralPorConcepto(
+            $empresaId,
+            $lineasOp,
+            $monedaConverter,
+            $monedaReporteId,
+            $soloMonedaOrigen,
+            'Ctamov venta cobranza',
         );
-
-        $lineas = [];
-
-        foreach ($lineasOp as $linea) {
-            if (! $this->lineaVisible($linea, $monedaConverter, $monedaReporteId, $soloMonedaOrigen)) {
-                continue;
-            }
-
-            $cuenta = (int) ($linea->subd_cuenta ?? 0);
-            $importe = (float) ($linea->subd_importe ?? 0);
-            if ($importe <= 0 || $cuenta <= 0) {
-                continue;
-            }
-
-            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
-            if (! in_array($mov, ['D', 'H'], true)) {
-                continue;
-            }
-
-            // Caja/banco ≤ límite: solo analítico (no línea de concepto).
-            if ($this->motor->esDisponibilidad($cuenta)) {
-                continue;
-            }
-
-            // Crédito comercial 113 / cupones 211: al concepto de la propia cuenta.
-            if ($this->esMedioCobranzaImputableConceptoVentaCtamov($cuenta, $mov)) {
-                $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
-                $lineas[] = $this->lineaReporte(
-                    $linea,
-                    $cuenta,
-                    $concepto,
-                    round($importe, 2),
-                    $mov,
-                    $monedaConverter,
-                    $monedaReporteId,
-                    'Ctamov venta cobranza',
-                    [
-                        'cuenta_disponibilidad' => $cuenta,
-                        'emisor' => trim((string) ($linea->subd_emisor ?? '')),
-                    ],
-                );
-
-                continue;
-            }
-
-            $esVentaOIva = $this->esCuentaVentaCtamovMultibanco($cuenta);
-            if (! $esVentaOIva && ! $this->esCuentaVisibleAsientoMultilinea($cuenta)) {
-                continue;
-            }
-
-            $importeImputable = round($importe, 2);
-            if ($importeImputable <= 0 || $cuentaAncla <= 0) {
-                continue;
-            }
-
-            // Ventas/IVA y ajustes (dif. caja): importe ctamov completo, ancla = caja.
-            $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
-            $lineas[] = $this->lineaReporte(
-                $linea,
-                $cuenta,
-                $concepto,
-                $importeImputable,
-                $mov,
-                $monedaConverter,
-                $monedaReporteId,
-                'Ctamov venta cobranza',
-                [
-                    'cuenta_disponibilidad' => $cuentaAncla,
-                    'emisor' => trim((string) ($linea->subd_emisor ?? '')),
-                ],
-            );
-        }
-
-        return $lineas;
-    }
-
-    /**
-     * Medios de cobranza que deben salir en el mayor por concepto (no son analítico de caja).
-     * 113xxx crédito comercial; 211xxx cupones / moneda en poder del público.
-     */
-    private function esMedioCobranzaImputableConceptoVentaCtamov(int $cuenta, string $mov): bool
-    {
-        if ($cuenta <= 0 || strtoupper(trim($mov)) !== 'D') {
-            return false;
-        }
-
-        if ($this->motor->esDisponibilidad($cuenta)) {
-            return false;
-        }
-
-        if ($this->esCuentaPasivaPublicoCtamovSistemaB($cuenta)) {
-            return true;
-        }
-
-        return $this->esMedioCobranzaCtamovVenta($cuenta, $mov);
-    }
-
-    /**
-     * Medio de cobranza de mayor peso (caja suele dominar sobre tarjetas/cupones).
-     *
-     * @param  array<int, float>  $mediosCobranza
-     */
-    private function cuentaMedioCobranzaPrincipal(array $mediosCobranza): int
-    {
-        $cuentaPrincipal = 0;
-        $importeMax = 0.0;
-
-        foreach ($mediosCobranza as $cuenta => $importe) {
-            $importe = (float) $importe;
-            if ($importe > $importeMax) {
-                $importeMax = $importe;
-                $cuentaPrincipal = (int) $cuenta;
-            }
-        }
-
-        return $cuentaPrincipal;
-    }
-
-    /**
-     * Medios de cobro de venta gastro/estacionamiento: 111/113 y también 211 (cupones / cta. cte. público).
-     *
-     * @param  list<object>  $lineasOp
-     * @return array<int, float>
-     */
-    private function mediosCobranzaDebeAsientoVentaGastro(array $lineasOp): array
-    {
-        $porCuenta = $this->mediosCobranzaDebeAsiento($lineasOp);
-
-        foreach ($lineasOp as $linea) {
-            $cuenta = (int) ($linea->subd_cuenta ?? 0);
-            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
-            $importe = (float) ($linea->subd_importe ?? 0);
-            if ($importe <= 0 || $mov !== 'D' || ! $this->esCuentaPasivaPublicoCtamovSistemaB($cuenta)) {
-                continue;
-            }
-
-            $porCuenta[$cuenta] = ($porCuenta[$cuenta] ?? 0.0) + $importe;
-        }
-
-        return $porCuenta;
     }
 
     /**
@@ -2926,74 +2801,6 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
-     * Ajusta el neto imputado por medio al Debe nativo del ctamov (prorrateo venta gastronomía).
-     *
-     * @param  list<array<string, mixed>>  $lineas
-     * @param  array<int, float>  $mediosCobranza
-     * @return list<array<string, mixed>>
-     */
-    private function reconciliarImputacionMediosVentaCtamov(array $lineas, array $mediosCobranza): array
-    {
-        if ($lineas === [] || $mediosCobranza === []) {
-            return $lineas;
-        }
-
-        foreach ($mediosCobranza as $cuentaMedio => $importeNativo) {
-            $importeNativo = round((float) $importeNativo, 2);
-            if ($importeNativo <= 0) {
-                continue;
-            }
-
-            $indices = [];
-            $netoImputado = 0.0;
-
-            foreach ($lineas as $i => $ln) {
-                if (($ln['origen'] ?? '') !== 'Ctamov venta cobranza') {
-                    continue;
-                }
-
-                if ((int) ($ln['cuenta_disponibilidad'] ?? 0) !== (int) $cuentaMedio) {
-                    continue;
-                }
-
-                $indices[] = $i;
-                $netoImputado += round((float) ($ln['disp_debe'] ?? 0) - (float) ($ln['disp_haber'] ?? 0), 2);
-            }
-
-            if ($indices === []) {
-                continue;
-            }
-
-            $delta = round($importeNativo - $netoImputado, 2);
-            if (abs($delta) < 0.01) {
-                continue;
-            }
-
-            if ($delta > 0) {
-                $ultimo = $indices[array_key_last($indices)];
-                $lineas[$ultimo]['disp_debe'] = round((float) ($lineas[$ultimo]['disp_debe'] ?? 0) + $delta, 2);
-
-                continue;
-            }
-
-            $restante = abs($delta);
-            for ($j = count($indices) - 1; $j >= 0 && $restante >= 0.01; $j--) {
-                $idx = $indices[$j];
-                $dispDebe = (float) ($lineas[$idx]['disp_debe'] ?? 0);
-                if ($dispDebe <= 0) {
-                    continue;
-                }
-
-                $quita = min($dispDebe, $restante);
-                $lineas[$idx]['disp_debe'] = round($dispDebe - $quita, 2);
-                $restante = round($restante - $quita, 2);
-            }
-        }
-
-        return $lineas;
-    }
-
-    /**
      * @param  list<object>  $lineasOp
      * @return array<int, float>
      */
@@ -3013,27 +2820,6 @@ class MayorConceptoPeriodoProcesador
         }
 
         return $porCuenta;
-    }
-
-    /**
-     * Medios de cobranza dentro del límite mayor por concepto (111–112 ≤ config).
-     *
-     * @param  array<int, float>  $mediosCobranza
-     * @return array<int, float>
-     */
-    private function mediosCobranzaDentroLimiteMayorConcepto(array $mediosCobranza): array
-    {
-        $filtrados = [];
-
-        foreach ($mediosCobranza as $cuenta => $importe) {
-            if ($importe <= 0 || ! $this->motor->esDisponibilidad((int) $cuenta)) {
-                continue;
-            }
-
-            $filtrados[(int) $cuenta] = (float) $importe;
-        }
-
-        return $filtrados;
     }
 
     /**
@@ -3068,43 +2854,6 @@ class MayorConceptoPeriodoProcesador
                 $porcion = round($importe - $acumulado, 2);
             } else {
                 $porcion = round($importe * ($peso / $totalBase), 2);
-                $acumulado += $porcion;
-            }
-
-            if ($porcion <= 0) {
-                continue;
-            }
-
-            $porciones[] = [
-                'cuenta' => (int) $cuentaMedio,
-                'importe' => $porcion,
-            ];
-        }
-
-        return $porciones;
-    }
-
-    /**
-     * @param  array<int, float>  $mediosCobranza
-     * @return list<array{cuenta: int, importe: float}>
-     */
-    private function prorratearImportePorMediosCobranza(float $importe, array $mediosCobranza): array
-    {
-        $totalMedios = array_sum($mediosCobranza);
-        if ($importe <= 0 || $totalMedios <= 0 || $mediosCobranza === []) {
-            return [];
-        }
-
-        $cuentasMedio = array_keys($mediosCobranza);
-        $ultimoIndice = count($cuentasMedio) - 1;
-        $acumulado = 0.0;
-        $porciones = [];
-
-        foreach ($cuentasMedio as $indice => $cuentaMedio) {
-            if ($indice === $ultimoIndice) {
-                $porcion = round($importe - $acumulado, 2);
-            } else {
-                $porcion = round($importe * ((float) $mediosCobranza[$cuentaMedio] / $totalMedios), 2);
                 $acumulado += $porcion;
             }
 
@@ -4481,6 +4230,31 @@ class MayorConceptoPeriodoProcesador
         int $monedaReporteId,
         bool $soloMonedaOrigen,
     ): array {
+        return $this->procesarAsientoCtamovPiernasLiteralPorConcepto(
+            $empresaId,
+            $lineasOp,
+            $monedaConverter,
+            $monedaReporteId,
+            $soloMonedaOrigen,
+            'Ctamov venta maquinas',
+        );
+    }
+
+    /**
+     * Ctamov venta (máquinas / gastro / estacionamiento): piernas nativas al concepto de cada
+     * cuenta; omitir solo disponibilidad ≤ límite mayor concepto (caja/banco ancla).
+     *
+     * @param  list<object>  $lineasOp
+     * @return list<array<string, mixed>>
+     */
+    private function procesarAsientoCtamovPiernasLiteralPorConcepto(
+        int $empresaId,
+        array $lineasOp,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+        bool $soloMonedaOrigen,
+        string $origen,
+    ): array {
         $lineas = [];
 
         foreach ($lineasOp as $linea) {
@@ -4513,7 +4287,7 @@ class MayorConceptoPeriodoProcesador
                 $mov,
                 $monedaConverter,
                 $monedaReporteId,
-                'Ctamov venta maquinas',
+                $origen,
                 [
                     'cuenta_disponibilidad' => $cuenta,
                     'emisor' => trim((string) ($linea->subd_emisor ?? '')),
@@ -6960,9 +6734,9 @@ class MayorConceptoPeriodoProcesador
     ): array {
         $porCuenta = [];
         $asientosDentroLimite = $this->indexarAsientosDentroLimiteMayorConcepto($subdiario, $ctamovLista);
-        // Venta máquinas se imputa por cuenta concepto (disp = misma cuenta > tope).
-        // Sus piernas de caja/banco no deben generar "Ajuste mayor plano".
-        $asientosVentaMaquinas = $this->indexarAsientosVentaMaquinas($ctamovLista);
+        // Venta máquinas / gastro / estacionamiento: imputan por cuenta concepto (disp = misma
+        // cuenta > tope). Sus piernas de caja/banco no deben generar "Ajuste mayor plano".
+        $asientosVentaLiteralPorConcepto = $this->indexarAsientosVentaLiteralPorConcepto($ctamovLista);
 
         foreach ($ctamovLista as $lineaCtamov) {
             $adaptada = $this->ctamovComoSubdiario($lineaCtamov);
@@ -6974,7 +6748,7 @@ class MayorConceptoPeriodoProcesador
             if ($nroAsiento <= 0 || ! isset($asientosDentroLimite[$nroAsiento])) {
                 continue;
             }
-            if (isset($asientosVentaMaquinas[$nroAsiento])) {
+            if (isset($asientosVentaLiteralPorConcepto[$nroAsiento])) {
                 continue;
             }
 
@@ -7004,7 +6778,7 @@ class MayorConceptoPeriodoProcesador
             if ($nroOperacion <= 0 || ! isset($asientosDentroLimite[$nroOperacion])) {
                 continue;
             }
-            if (isset($asientosVentaMaquinas[$nroOperacion])) {
+            if (isset($asientosVentaLiteralPorConcepto[$nroOperacion])) {
                 continue;
             }
 
@@ -7074,6 +6848,48 @@ class MayorConceptoPeriodoProcesador
         }
 
         return $index;
+    }
+
+    /**
+     * Asientos ctamov con imputación literal por concepto (máquinas + gastro/estacionamiento
+     * + sistema B con medios fuera de límite). Fuera del mayor plano de disponibilidad.
+     *
+     * @param  list<object>  $ctamovLista
+     * @return array<int, true>
+     */
+    private function indexarAsientosVentaLiteralPorConcepto(array $ctamovLista): array
+    {
+        $index = $this->indexarAsientosVentaMaquinas($ctamovLista);
+
+        foreach ($this->agruparCtamovPorAsiento($ctamovLista) as $lineasAsiento) {
+            if ($lineasAsiento === []) {
+                continue;
+            }
+
+            $nro = (int) ($lineasAsiento[0]->ctav_nro_asiento ?? 0);
+            if ($nro <= 0 || isset($index[$nro])) {
+                continue;
+            }
+
+            $lineasOp = $this->ctamovAsientoComoLineasOp($lineasAsiento);
+            if ($this->debeProcesarAsientoCtamovVentaMultibanco($lineasAsiento, $lineasOp)
+                || ($this->debeProcesarAsientoCtamovSistemaB($lineasAsiento, $lineasOp)
+                    && $this->esAsientoCtamovSistemaBLiteralPorConcepto($lineasOp))) {
+                $index[$nro] = true;
+            }
+        }
+
+        return $index;
+    }
+
+    /**
+     * Sistema B con crédito/medios fuera del límite analítico: prorrateo parcial → literal.
+     *
+     * @param  list<object>  $lineasOp
+     */
+    private function esAsientoCtamovSistemaBLiteralPorConcepto(array $lineasOp): bool
+    {
+        return $this->factorProrrateoAnaliticoControlContrapartidas($lineasOp, false) < 1.0 - 1e-9;
     }
 
     /**
@@ -7294,6 +7110,7 @@ class MayorConceptoPeriodoProcesador
         $porAsiento = [];
         $asientosCtamovMediosAnalitico = $this->indexarAsientosCtamovMediosAnalitico($ctamovLista);
         $asientosCtamovVentaGastro = $this->indexarAsientosCtamovVentaCobranza($ctamovLista);
+        $asientosVentaLiteralPorConcepto = $this->indexarAsientosVentaLiteralPorConcepto($ctamovLista);
         $asientosVentaMaquinasCtamov = $this->indexarAsientosCtamovVentaMaquinas($ctamovLista);
 
         $subdiarioPorOperacion = [];
@@ -7425,6 +7242,7 @@ class MayorConceptoPeriodoProcesador
             $lineasOp = $this->ctamovAsientoComoLineasOp($lineasAsiento);
             $incluirMediosCtamov = isset($asientosCtamovMediosAnalitico[$nro]);
             $esVentaGastro = isset($asientosCtamovVentaGastro[$nro]);
+            $esLiteralPorConcepto = isset($asientosVentaLiteralPorConcepto[$nro]);
             $esSistemaBCtamov = $this->esCtamovAsientoSistemaB($lineasAsiento);
             $esSistemaB = $this->debeProcesarAsientoCtamovSistemaB($lineasAsiento, $lineasOp);
             $esReclasificacionDispContra = $esSistemaBCtamov
@@ -7449,8 +7267,12 @@ class MayorConceptoPeriodoProcesador
                 );
                 $fecha = (int) ($lineaCtamov->ctav_fecha ?? 0);
 
-                if ($esVentaGastro && ! $esReclasificacionDispContra && ! $esVentaMaquinas) {
-                    // Gastro: 113/211 van a concepto; analítico solo caja/banco ≤ límite.
+                if ($esLiteralPorConcepto && ! $esReclasificacionDispContra) {
+                    // Literal por concepto (máquinas/gastro/sistema B parcial): analítico ≤ límite.
+                    if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
+                        continue;
+                    }
+                } elseif ($esVentaGastro && ! $esReclasificacionDispContra && ! $esVentaMaquinas) {
                     if (! $this->motor->esDisponibilidad($cuenta) || ! $this->motor->esCuentaAnaliticoControl($cuenta)) {
                         continue;
                     }
@@ -7475,7 +7297,7 @@ class MayorConceptoPeriodoProcesador
                     continue;
                 }
 
-                // Gastro ya no amplía analítico a 113/211 (salen por concepto).
+                // Literal/gastro: 113/211 van a concepto; no ampliar analítico.
                 $this->acumularAnaliticoPorAsientoControl(
                     $porAsiento,
                     $nro,
@@ -7483,7 +7305,8 @@ class MayorConceptoPeriodoProcesador
                     $cuenta,
                     $mov,
                     $importe,
-                    $incluirMediosCtamov && ! $esVentaGastro && ! $esReclasificacionDispContra && ! $esVentaMaquinas,
+                    $incluirMediosCtamov && ! $esLiteralPorConcepto && ! $esVentaGastro
+                        && ! $esReclasificacionDispContra && ! $esVentaMaquinas,
                 );
             }
         }

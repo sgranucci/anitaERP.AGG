@@ -40,15 +40,12 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div class="form-group col-md-3">
-                            <label class="mb-1">Empresa</label>
-                            <select name="empresa_id" class="form-control form-control-sm">
-                                <option value="">Todas</option>
-                                @foreach ($empresas as $e)
-                                    <option value="{{ $e->id }}" {{ (int) $filtros['empresa_id'] === (int) $e->id ? 'selected' : '' }}>{{ $e->nombre }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                        @include('includes.listado.filtro_empresa_asignada', [
+                            'empresa_query' => $empresa_query ?? $empresas ?? collect(),
+                            'empresa_id' => $filtros['empresa_id'] ?? null,
+                            'col_class' => 'col-md-3 mb-2',
+                            'opcion_todas' => 'Todas',
+                        ])
                     </div>
                     <div class="form-row">
                         <div class="form-group col-md-6">

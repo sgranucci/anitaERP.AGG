@@ -26,6 +26,7 @@
     var SELECTOR_TODOS = [SELECTOR_DECIMAL, SELECTOR_ENTERO, SELECTOR_COTIZACION].filter(Boolean).join(', ');
 
     var ultimoDesgloseWigos = null;
+    var cacheOrigenTotal = {};
 
     var LABELS_COMPONENTE = {
         bill_slots: 'Drop efectivo billetes slots (BRUTO)',
@@ -397,6 +398,192 @@
         $('#modal-flash-desglose-wigos').modal('show');
     }
 
+    function renderOrigenTotal(origen) {
+        if (!origen) {
+            return '<p class="text-muted mb-0">Sin datos de origen.</p>';
+        }
+        var html = '';
+        html += '<p class="mb-2"><strong>' + escaparHtml(origen.titulo || origen.campo) + '</strong>';
+        html += ' <span class="badge badge-secondary">' + escaparHtml(origen.origen || '') + '</span>';
+        html += ' · Empresa ' + escaparHtml(origen.empresa_id) + ' · ' + escaparHtml(origen.fecha) + '</p>';
+        html += '<div class="alert alert-info py-2 mb-3">' + escaparHtml(origen.explicacion || '') + '</div>';
+
+        if (origen.aviso) {
+            html += '<div class="alert alert-warning py-2 mb-3">' + escaparHtml(origen.aviso) + '</div>';
+        }
+
+        html += '<div class="table-responsive mb-3"><table class="table table-sm table-bordered mb-0">';
+        html += '<thead style="background:#85C1E9;color:#17202A;"><tr><th>Referencia</th><th class="text-right">Monto</th></tr></thead><tbody>';
+        if (origen.valor_pantalla != null) {
+            html += '<tr><td>Valor en pantalla (formulario)</td><td class="text-right text-monospace">'
+                + escaparHtml(fmtDecimal(origen.valor_pantalla)) + '</td></tr>';
+        }
+        html += '<tr><td>Valor según fórmula ERP actual (Wigos'
+            + (String(origen.origen || '').indexOf('rendicion') >= 0 ? ' − impuestos turno C' : '')
+            + ')</td><td class="text-right text-monospace">'
+            + escaparHtml(fmtDecimal(origen.total_formula != null ? origen.total_formula : origen.total_flash))
+            + '</td></tr>';
+        if (origen.diferencia_pantalla != null && Math.abs(Number(origen.diferencia_pantalla)) >= 0.02) {
+            html += '<tr class="table-warning"><td>Diferencia (pantalla − fórmula)</td><td class="text-right text-monospace">'
+                + escaparHtml(fmtDecimal(origen.diferencia_pantalla)) + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+
+        html += '<h6 class="mb-1">Fórmula</h6>';
+        html += '<p class="small text-monospace mb-3">' + escaparHtml(origen.formula || '') + '</p>';
+
+        html += '<h6 class="mb-2">Cuenta que arma el total (fórmula ERP)</h6>';
+        html += '<div class="table-responsive mb-2"><table class="table table-sm table-bordered mb-0">';
+        html += '<thead style="background:#85C1E9;color:#17202A;"><tr><th>Concepto</th><th class="text-right">Monto</th></tr></thead><tbody>';
+        (origen.cuenta || []).forEach(function (linea) {
+            html += '<tr><td>' + escaparHtml(linea.signo || '') + ' ' + escaparHtml(linea.label || '')
+                + '</td><td class="text-right text-monospace">' + escaparHtml(fmtDecimal(linea.valor)) + '</td></tr>';
+        });
+        html += '<tr class="font-weight-bold"><td>Suma cuenta</td><td class="text-right text-monospace">'
+            + escaparHtml(fmtDecimal(origen.suma_cuenta)) + '</td></tr>';
+        html += '<tr class="font-weight-bold"><td>Total fórmula ERP</td><td class="text-right text-monospace">'
+            + escaparHtml(fmtDecimal(origen.total_formula != null ? origen.total_formula : origen.total_flash))
+            + '</td></tr>';
+        html += '</tbody></table></div>';
+        html += '<p class="mb-3"><span class="badge badge-' + (origen.coincide ? 'success' : 'warning') + '">'
+            + (origen.coincide ? 'Cuenta = fórmula ERP' : 'Diferencia entre cuenta y fórmula ERP') + '</span></p>';
+
+        if (origen.impuestos_rendicion && (Number(origen.impuestos_rendicion.total || 0) !== 0
+            || origen.impuestos_rendicion.origen)) {
+            var imp = origen.impuestos_rendicion;
+            html += '<div class="small text-muted mb-3">Impuestos turno C ('
+                + escaparHtml(imp.origen || 'ninguno') + '): drop '
+                + escaparHtml(fmtDecimal(imp.impuesto_drop)) + ' + venta '
+                + escaparHtml(fmtDecimal(imp.impuesto_venta)) + ' = '
+                + escaparHtml(fmtDecimal(imp.total));
+            if (imp.nro_oper) {
+                html += ' · nro_oper ' + escaparHtml(imp.nro_oper);
+            }
+            html += '</div>';
+        }
+
+        (origen.secciones || []).forEach(function (sec) {
+            html += '<hr><h6 class="mb-1">' + escaparHtml(sec.titulo || 'Detalle') + '</h6>';
+            if (sec.sp) {
+                html += '<div class="small text-muted mb-1"><code>' + escaparHtml(sec.sp) + '</code>';
+                if (sec.params) {
+                    html += ' · ' + escaparHtml(sec.params);
+                }
+                html += '</div>';
+            }
+            if (sec.nota) {
+                html += '<p class="small text-muted mb-2">' + escaparHtml(sec.nota) + '</p>';
+            }
+            if (!sec.columnas || !sec.columnas.length || !sec.filas || !sec.filas.length) {
+                if (sec.subtotal != null) {
+                    html += '<p class="mb-2">Subtotal: <strong class="text-monospace">'
+                        + escaparHtml(fmtDecimal(sec.subtotal)) + '</strong></p>';
+                }
+                return;
+            }
+            html += '<div class="table-responsive mb-2" style="max-height:22rem;overflow:auto;">';
+            html += '<table class="table table-sm table-bordered mb-0"><thead style="background:#85C1E9;color:#17202A;"><tr>';
+            (sec.columnas || []).forEach(function (col) {
+                html += '<th' + (col.num ? ' class="text-right"' : '') + '>'
+                    + escaparHtml(col.label || col.key) + '</th>';
+            });
+            html += '</tr></thead><tbody>';
+            (sec.filas || []).forEach(function (fila) {
+                html += '<tr>';
+                (sec.columnas || []).forEach(function (col) {
+                    var val = fila[col.key];
+                    if (col.num) {
+                        html += '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(val)) + '</td>';
+                    } else {
+                        html += '<td>' + escaparHtml(val == null ? '' : val) + '</td>';
+                    }
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+            html += '<div class="small mb-2">' + escaparHtml(fmtEntero((sec.filas || []).length)) + ' movimiento(s)';
+            if (sec.subtotal != null) {
+                html += ' · Subtotal listado: <strong class="text-monospace">'
+                    + escaparHtml(fmtDecimal(sec.subtotal)) + '</strong>';
+            }
+            if (sec.truncado) {
+                html += ' · <span class="text-danger">Listado truncado (máx. filas)</span>';
+            }
+            html += '</div>';
+        });
+
+        return html;
+    }
+
+    function mostrarModalOrigenTotal(origen) {
+        $('#modal-flash-origen-total-titulo').text(origen && origen.titulo
+            ? ('Origen — ' + origen.titulo)
+            : 'Origen del total');
+        $('#flash-origen-total-body').html(renderOrigenTotal(origen));
+        $('#modal-flash-origen-total').modal('show');
+    }
+
+    function valorCampoPantalla(campo) {
+        var $el = $('#' + campo);
+        if (!$el.length) {
+            return null;
+        }
+        if ($el.hasClass('flash-campo-entero')) {
+            return parseEntero($el.val());
+        }
+        return parseDecimal($el.val(), 2);
+    }
+
+    function consultarOrigenTotal(campo) {
+        var empresaId = $('#empresa_id').val();
+        var fecha = $('#fecha').val();
+        if (!empresaId || !fecha) {
+            alert('Seleccione empresa y fecha.');
+            return;
+        }
+        var valorPantalla = valorCampoPantalla(campo);
+        var cacheKey = empresaId + '|' + fecha + '|' + campo + '|' + String(valorPantalla);
+        if (cacheOrigenTotal[cacheKey]) {
+            mostrarModalOrigenTotal(cacheOrigenTotal[cacheKey]);
+            return;
+        }
+
+        var $btns = $('.flash-btn-origen').prop('disabled', true);
+        mostrarAvisoCalculo(true, 'Consultando origen…', 'Recalculando el total y listando movimientos Wigos/ERP. No cierre la página.');
+
+        var data = {
+            _token: $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val(),
+            empresa_id: empresaId,
+            fecha: fecha,
+            campo: campo
+        };
+        if (valorPantalla != null && !isNaN(valorPantalla)) {
+            data.valor_pantalla = valorPantalla;
+        }
+
+        $.ajax({
+            url: window.flashOrigenTotalUrl || '/caja/flash/api/origen-total',
+            method: 'POST',
+            timeout: 300000,
+            data: data
+        }).done(function (resp) {
+            if (resp && resp.ok && resp.origen) {
+                cacheOrigenTotal[cacheKey] = resp.origen;
+                mostrarModalOrigenTotal(resp.origen);
+            } else {
+                alert((resp && resp.message) ? resp.message : 'No se pudo obtener el origen del total.');
+            }
+        }).fail(function (xhr) {
+            var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                ? xhr.responseJSON.message
+                : 'Error al consultar origen del total.';
+            alert(msg);
+        }).always(function () {
+            mostrarAvisoCalculo(false);
+            $btns.prop('disabled', false);
+        });
+    }
+
     function calcularFlash(opciones) {
         opciones = opciones || {};
         var empresaId = $('#empresa_id').val();
@@ -421,6 +608,7 @@
             }
         }).done(function (resp) {
             if (resp && resp.ok && resp.datos) {
+                cacheOrigenTotal = {};
                 if (!opciones.soloDesglose) {
                     aplicarDatos(resp.datos);
                 }
@@ -504,6 +692,15 @@
 
     $('#empresa_id, #fecha').on('change', function () {
         ultimoDesgloseWigos = null;
+        cacheOrigenTotal = {};
+    });
+
+    $(document).on('click', '.flash-btn-origen', function () {
+        var campo = $(this).data('campo');
+        if (!campo) {
+            return;
+        }
+        consultarOrigenTotal(String(campo));
     });
 
     $('#btn-flash-desglose-excel').on('click', function () {

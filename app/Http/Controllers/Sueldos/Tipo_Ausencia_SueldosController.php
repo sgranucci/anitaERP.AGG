@@ -94,6 +94,7 @@ class Tipo_Ausencia_SueldosController extends Controller
     {
         can('editar-tipo-ausencia-sueldos');
         $data = $this->repository->findOrFail($id);
+        $data->load('concepto');
 
         return view('sueldos.tipo_ausencia.editar', ['data' => $data, 'conceptos' => $this->conceptos()]);
     }

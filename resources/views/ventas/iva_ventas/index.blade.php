@@ -270,6 +270,7 @@
 
                     @include('ventas.iva_ventas.partials.conciliacion_unidad_negocio', [
                         'resultado' => $resultado,
+                        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                     ])
 
                     @include('ventas.iva_ventas.partials.auditoria_diaria', [

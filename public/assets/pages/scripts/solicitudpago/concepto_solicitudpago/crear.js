@@ -49,6 +49,23 @@ function actualizaRenglonesUsuario() {
     });
 }
 
+/** Convención árbol SP: 1=EMITIDA, 2=CONTROLADA, 3=AUTORIZADA, 4=aviso pago (IE). */
+var ESTADO_ARBOL_POR_NIVEL = {
+    1: 'EMITIDA',
+    2: 'CONTROLADA',
+    3: 'AUTORIZADA',
+    4: 'PAGADA' // valor config = aviso a pagadores; PAGADA real la pone el IE
+};
+
+$(document).on('change', '#tbody-concepto-usuario-table .nivel', function () {
+    var nivel = parseInt($(this).val(), 10) || 0;
+    var estado = ESTADO_ARBOL_POR_NIVEL[nivel] || '';
+    var $sel = $(this).closest('tr').find('.documento_estado_al_aprobar');
+    if ($sel.length && estado !== '') {
+        $sel.val(estado);
+    }
+});
+
 function agregaRenglonCuenta(event) {
     event.preventDefault();
     var html = $('#template-renglon-concepto-cuenta').html();

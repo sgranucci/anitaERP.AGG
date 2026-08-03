@@ -300,6 +300,15 @@
                                 'puede_ver_proveedor' => $puede_ver_proveedor ?? false,
                                 'puede_ver_comprobante_proveedor' => $puede_ver_comprobante_proveedor ?? false,
                                 'puede_ver_factura' => $puede_ver_factura ?? false,
+                                'puede_ver_remesa' => $puede_ver_remesa ?? false,
+                                'puede_ver_jornada_gastronomia' => $puede_ver_jornada_gastronomia ?? false,
+                                'puede_ver_rendicion_estacionamiento' => $puede_ver_rendicion_estacionamiento ?? false,
+                                'puede_ver_transferencia_mercaderia' => $puede_ver_transferencia_mercaderia ?? false,
+                                'puede_ver_cobranza' => $puede_ver_cobranza ?? false,
+                                'puede_ver_pagoproveedor' => $puede_ver_pagoproveedor ?? false,
+                                'puede_ver_recepcion_proveedor' => $puede_ver_recepcion_proveedor ?? false,
+                                'puede_ver_movimientostock' => $puede_ver_movimientostock ?? false,
+                                'puede_ver_caja_movimiento' => $puede_ver_caja_movimiento ?? false,
                                 'multiempresa' => $multiempresa ?? false,
                             ])
                         </table>

@@ -12,17 +12,17 @@
             <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta"
                    value="{{ $filtros['fecha_hasta'] ?? '' }}">
         </div>
-        <div class="form-group col-md-3">
-            <label for="usuario_id">Usuario</label>
-            <select class="form-control" id="usuario_id" name="usuario_id">
-                <option value="">Todos</option>
-                @foreach ($usuarios as $u)
-                    <option value="{{ $u->id }}" @selected((int) ($filtros['usuario_id'] ?? 0) === (int) $u->id)>
-                        {{ $u->nombre }} ({{ $u->usuario }})
-                    </option>
-                @endforeach
-            </select>
-        </div>
+        @include('configuracion.auditoria_sesion.partials.campo_filtro_usuario', [
+            'label' => 'Usuario',
+            'colClass' => 'col-md-3',
+            'campoId' => 'usuario_id',
+            'campoCodigoId' => 'usuario_codigo',
+            'campoNombreId' => 'nombreusuario',
+            'usuarioIdVal' => $usuarioFiltro->id ?? ($filtros['usuario_id'] ?? ''),
+            'usuarioCodigoVal' => $usuarioFiltro->usuario ?? '',
+            'usuarioNombreVal' => $usuarioFiltro->nombre ?? '',
+            'omitirFiltroEmpresa' => true,
+        ])
         <div class="form-group col-md-2">
             <label for="tipo">Tipo</label>
             <select class="form-control" id="tipo" name="tipo">

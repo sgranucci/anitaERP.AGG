@@ -59,7 +59,9 @@
                     <td>
                         @if ($cerrada)
                             @if ($row->esCierreContableLegacy())
-                                <span class="badge badge-secondary">Hist&oacute;rico</span>
+                                <span class="badge badge-secondary" title="Cerrada sin asiento porque no hubo montos a imputar">
+                                    {{ \App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport::ETIQUETA_ESTADO_LEGACY }}
+                                </span>
                             @else
                                 <span class="badge badge-success">Cerrada</span>
                             @endif

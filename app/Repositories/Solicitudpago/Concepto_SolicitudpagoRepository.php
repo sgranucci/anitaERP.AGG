@@ -9,6 +9,7 @@ use App\Models\Solicitudpago\Concepto_Solicitudpago_Usuario;
 use App\Services\Solicitudpago\ConceptoSolicitudpagoAnitaSyncService;
 use App\Support\Solicitudpago\ConceptoSolicitudpagoEstados;
 use App\Support\Solicitudpago\ConceptoSolicitudpagoFormaPago;
+use App\Support\Solicitudpago\SolicitudpagoEstados;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
@@ -234,8 +235,9 @@ class Concepto_SolicitudpagoRepository implements Concepto_SolicitudpagoReposito
         $niveles = $data['niveles'] ?? [];
         $usuarioIds = $data['usuario_ids'] ?? [];
         $desdeMontos = $data['desdemontos'] ?? [];
+        $estadosDoc = $data['documento_estado_al_aprobar'] ?? [];
 
-        $count = max(count($niveles), count($usuarioIds), count($desdeMontos));
+        $count = max(count($niveles), count($usuarioIds), count($desdeMontos), count($estadosDoc));
         for ($i = 0; $i < $count; $i++) {
             $nivel = (int) ($niveles[$i] ?? 0);
             $usuarioId = $usuarioIds[$i] ?? null;
@@ -247,12 +249,21 @@ class Concepto_SolicitudpagoRepository implements Concepto_SolicitudpagoReposito
                 $nivel = $i + 1;
             }
 
+            $estadoDoc = strtoupper(trim((string) ($estadosDoc[$i] ?? '')));
+            if ($estadoDoc === '') {
+                $estadoDoc = SolicitudpagoEstados::estadoArbolPorNivel($nivel) ?? '';
+            }
+            if ($estadoDoc !== '' && ! in_array($estadoDoc, SolicitudpagoEstados::valoresArbolAprobacion(), true)) {
+                $estadoDoc = '';
+            }
+
             Concepto_Solicitudpago_Usuario::query()->create([
                 'concepto_solicitudpago_id' => $concepto->id,
                 'nivel' => $nivel,
                 'usuario_id' => $usuarioId,
                 'usuario_orig_id' => null,
                 'desde_monto' => (float) str_replace(',', '.', (string) ($desdeMontos[$i] ?? 0)),
+                'documento_estado_al_aprobar' => $estadoDoc !== '' ? $estadoDoc : null,
             ]);
         }
     }

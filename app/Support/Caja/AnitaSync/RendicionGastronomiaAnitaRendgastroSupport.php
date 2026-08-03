@@ -9,6 +9,7 @@ use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRendicionAnitaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionCaeaCompartidoRendgSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionVendingRendgSupport;
+use App\Support\Ventas\MaquinavendingRendicionAnitaContextBuilder;
 
 /**
  * Lectura y reglas de portadora Z/NC en Informix rendgastro (bridge Anita).
@@ -502,8 +503,11 @@ final class RendicionGastronomiaAnitaRendgastroSupport
     }
 
     /**
-     * Cabeceras rendgastro fuera de PCs configuradas (hosts legacy: pc-caja*, bingo, etc.)
-     * o IPs no registradas. Anita puede sumarlas además del Z de la portadora IP → doble conteo.
+     * Cabeceras rendgastro fuera de PCs de gastronomía configuradas (IPs no registradas, bingo, etc.).
+     * Anita puede sumarlas además del Z de la portadora IP → doble conteo.
+     *
+     * No son huérfanas: estacionamiento, Waitry/post-cierre, agregados CAEA, ni rendiciones
+     * vending ERP (host VENDING NRO.* / VEND NRO.* escritas desde tesorería).
      *
      * @param  list<string>  $hostsConfigurados
      * @return array{
@@ -525,6 +529,7 @@ final class RendicionGastronomiaAnitaRendgastroSupport
         )));
 
         $cabeceras = $this->listarCabecerasEmpresaFechaDetalle($empresaId, $fechaEntera);
+        $vendingSupport = app(GastronomiaConciliacionVendingRendgSupport::class);
         $legacyZ = 0.0;
         $fcCaeaDuplicado = 0.0;
         $pvCaeaZInflado = 0.0;
@@ -549,12 +554,22 @@ final class RendicionGastronomiaAnitaRendgastroSupport
                 continue;
             }
 
+            // Vending ERP (tesorería → Anita): circuito propio, no limpiar ni alertar como legacy.
+            if ($vendingSupport->esCabeceraVendingCuadreJornada($fila, $empresaId)) {
+                continue;
+            }
+
             $host = trim((string) ($fila->rendg_host ?? ''));
             if ($host === '') {
                 if ($this->esSucursalVendingRendg($empresaId, (int) ($fila->rendg_sucursal ?? 0))) {
                     continue;
                 }
 
+                continue;
+            }
+
+            // Defensa: cualquier host VENDING NRO.* aunque no mapee a PV ERP del día.
+            if (MaquinavendingRendicionAnitaContextBuilder::esHostVending($host)) {
                 continue;
             }
 

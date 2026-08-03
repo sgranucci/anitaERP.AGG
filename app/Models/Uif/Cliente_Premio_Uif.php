@@ -3,7 +3,6 @@
 namespace App\Models\Uif;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 use OwenIt\Auditing\Contracts\Auditable;
 use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
@@ -12,8 +11,9 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Sala;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Formapago;
+use App\Services\Uif\ClientePremioUifFotoTesoreria;
+use App\Support\Uif\ClienteUifArchivoStorage;
 use App\Traits\Uif\Cliente_Premio_UifTrait;
-use Auth;
 
 class Cliente_Premio_Uif extends Model implements Auditable
 {
@@ -72,16 +72,20 @@ class Cliente_Premio_Uif extends Model implements Auditable
     {
         if ($foto) {
             if ($actual) {
-                Storage::disk('public')->delete("imagenes/fotos_uif/$actual");
+                ClientePremioUifFotoTesoreria::deletePublicFotoIfUnused((string) $actual);
+            }
+            $dir = ClienteUifArchivoStorage::dirFotosPremio();
+            if (! ClienteUifArchivoStorage::ensureDir($dir)) {
+                return false;
             }
             $imageName = Str::random(20) . '.jpg';
             $image = Image::decode($foto)
                 ->resizeDown(300, 300);
-
-            Storage::disk('public')->put(
-                "imagenes/fotos_uif/$imageName",
+            file_put_contents(
+                $dir.DIRECTORY_SEPARATOR.$imageName,
                 $image->encodeUsingFileExtension('jpg', quality: 75)
             );
+
             return $imageName;
         } else {
             return false;

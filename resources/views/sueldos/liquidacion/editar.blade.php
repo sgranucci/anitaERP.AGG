@@ -16,6 +16,11 @@
             <div class="card-header">
                 <h3 class="card-title">Editar corrida N&deg; {{ $data->numero }} <span class="badge badge-info">{{ $data->estadoLabel() }}</span></h3>
                 <div class="card-tools">
+                    @if (can('listar-novedad-sueldos', false))
+                        <a href="{{ route('novedades_liquidacion_sueldos', ['id' => $data->id]) }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-bolt"></i> Novedades
+                        </a>
+                    @endif
                     <a href="{{route('consultar_liquidacion_sueldos')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>

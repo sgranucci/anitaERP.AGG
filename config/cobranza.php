@@ -72,10 +72,11 @@ return [
     /**
      * tipotransaccion_caja_id que usan numerador secuencial (MAX+1 solo dígitos).
      * Gastronomía (p. ej. id 2) queda fuera: numerotransaccion = B-00008-00807543 desde venta.codigo.
+     * Incluir REM (remesa externa) y RMI (remesa interna) además de COB (id 1).
      */
     'tipotransaccion_caja_ids_secuencial' => array_values(array_filter(array_map(
         'intval',
-        explode(',', (string) env('COBRANZA_TIPOTRANSACCION_SECUENCIAL_IDS', '1')),
+        explode(',', (string) env('COBRANZA_TIPOTRANSACCION_SECUENCIAL_IDS', '1,5,6')),
     ))),
 
     "VALORES_A_DEPOSITAR" => [

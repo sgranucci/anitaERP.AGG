@@ -9,7 +9,7 @@
         'borrador' => 'secondary', 'calculada' => 'info', 'revisada' => 'primary',
         'cerrada' => 'success', 'contabilizada' => 'dark', 'pagada' => 'success', 'anulada' => 'danger',
     ];
-    $columnaBadge = ['haber' => 'success', 'descuento' => 'danger', 'neto' => 'primary', 'informativo' => 'secondary'];
+    $columnaBadge = ['haber' => 'success', 'descuento' => 'danger', 'neto' => 'primary', 'informativo' => 'secondary', 'contribucion' => 'warning'];
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -23,6 +23,11 @@
                     <span class="badge badge-{{ $estadoBadge[$liq->estado] ?? 'secondary' }} ml-1">{{ $liq->estadoLabel() }}</span>
                 </h3>
                 <div class="card-tools">
+                    @if (can('listar-novedad-sueldos', false))
+                        <a href="{{ route('novedades_liquidacion_sueldos', ['id' => $liq->id]) }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fa fa-bolt"></i> Novedades
+                        </a>
+                    @endif
                     <a href="{{ route('consultar_liquidacion_sueldos') }}" class="btn btn-sm btn-secondary">
                         <i class="fa fa-arrow-left"></i> Volver
                     </a>
@@ -37,11 +42,22 @@
             <div class="card-body">
                 <div class="row text-center mb-2">
                     <div class="col"><small class="text-muted d-block">Empresa</small>{{ optional($liq->empresa)->nombre }}</div>
+                    <div class="col"><small class="text-muted d-block">Alcance</small>{{ $liq->alcanceLabel() }}</div>
                     <div class="col"><small class="text-muted d-block">Per&iacute;odo</small>{{ $liq->periodo_mes ? sprintf('%02d/%04d', $liq->periodo_mes, $liq->periodo_anio) : $liq->periodo }}</div>
                     <div class="col"><small class="text-muted d-block">Recibos</small>{{ $liq->cantidad_recibos }}</div>
                     <div class="col"><small class="text-muted d-block">Remunerativo</small>$ {{ number_format((float) $liq->total_remunerativo, 2, ',', '.') }}</div>
                     <div class="col"><small class="text-muted d-block">Descuentos</small>$ {{ number_format((float) $liq->total_descuentos, 2, ',', '.') }}</div>
                     <div class="col"><small class="text-muted d-block">Neto</small><strong>$ {{ number_format((float) $liq->total_neto, 2, ',', '.') }}</strong></div>
+                </div>
+                <div class="mb-2 d-flex align-items-center flex-wrap">
+                    <div class="custom-control custom-checkbox mr-3">
+                        <input type="checkbox" class="custom-control-input" id="chk-multiempresa-emision"
+                               {{ $liq->esAlcanceMultiempresa() ? 'checked' : '' }}>
+                        <label class="custom-control-label" for="chk-multiempresa-emision">
+                            Emitir multiempresa
+                            <small class="text-muted">(incluir recibos del mismo legajo en otras empresas del per&iacute;odo)</small>
+                        </label>
+                    </div>
                 </div>
 
                 <div class="table-responsive p-0">
@@ -72,6 +88,16 @@
                                         <button class="btn btn-xs btn-outline-secondary" type="button" data-toggle="collapse" data-target="#det-{{ $rec->id }}">
                                             <i class="fa fa-list"></i> Detalle
                                         </button>
+                                        <a href="{{ route('preview_recibo_liquidacion_sueldos', ['id' => $liq->id, 'reciboId' => $rec->id]) }}"
+                                           class="btn btn-xs btn-outline-primary btn-recibo-emision" data-base="{{ route('preview_recibo_liquidacion_sueldos', ['id' => $liq->id, 'reciboId' => $rec->id]) }}"
+                                           target="_blank" rel="noopener" title="Vista previa recibo Anexo III">
+                                            <i class="fa fa-file-alt"></i> Recibo
+                                        </a>
+                                        <a href="{{ route('pdf_recibo_liquidacion_sueldos', ['id' => $liq->id, 'reciboId' => $rec->id]) }}"
+                                           class="btn btn-xs btn-outline-danger btn-recibo-emision" data-base="{{ route('pdf_recibo_liquidacion_sueldos', ['id' => $liq->id, 'reciboId' => $rec->id]) }}"
+                                           target="_blank" rel="noopener" title="PDF Anexo III">
+                                            <i class="fa fa-file-pdf"></i>
+                                        </a>
                                         <a href="{{ route('trazar_liquidacion_sueldos', ['id' => $liq->id, 'empleadoId' => $rec->empleado_id]) }}"
                                            class="btn btn-xs btn-outline-info" target="_blank" rel="noopener" title="Depurar cálculo paso a paso">
                                             <i class="fa fa-bug"></i> Trazar
@@ -117,4 +143,19 @@
         </div>
     </div>
 </div>
+<script>
+(function () {
+    var chk = document.getElementById('chk-multiempresa-emision');
+    if (!chk) return;
+    function sync() {
+        var on = chk.checked ? '1' : '0';
+        document.querySelectorAll('a.btn-recibo-emision').forEach(function (a) {
+            var base = a.getAttribute('data-base') || a.href.split('?')[0];
+            a.href = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'multiempresa=' + on;
+        });
+    }
+    chk.addEventListener('change', sync);
+    sync();
+})();
+</script>
 @endsection

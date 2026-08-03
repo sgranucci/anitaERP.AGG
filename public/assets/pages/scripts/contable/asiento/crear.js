@@ -73,7 +73,15 @@
 						id: $('#id').val(),
 						fecha: $('#fechacopia').val(),
 						revierte: 1}, function(data)
-						{ 
+						{
+							if (data && data.errores) {
+								alert(data.errores);
+								return;
+							}
+							if (!data || !data.asiento_id) {
+								alert('No se pudo revertir el asiento.');
+								return;
+							}
 							alert("ASIENTO REVERTIDO CORRECTAMENTE GENERO EL ASIENTO CON ID:"+data.asiento_id+" NUMERO: "+data.numeroasiento); 
 						});
     	});

@@ -83,6 +83,10 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 
 	private function guardarAsiento_Movimiento($data, $funcion, $id = null)
 	{
+		// En create, si todas las líneas se omiten (monto ~0 / sin cuenta), no se asignaba
+		// y el return disparaba "Undefined variable $asiento_movimiento".
+		$asiento_movimiento = null;
+
 		if ($funcion == 'update')
 		{
 			// Trae todos los id

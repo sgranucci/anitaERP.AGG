@@ -2,18 +2,62 @@
 
 namespace App\Services\Uif;
 
-use Illuminate\Support\Facades\Storage;
+use App\Support\Uif\ClienteUifArchivoStorage;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
 
 /**
- * Fotos de pago guardadas por tesorería en {@see ClienteUifFotoDocumento::basePath()}
- * típicamente con nombre {@code pago_}{@code inropremioid}.{@code ext}.
+ * Fotos de pago en file server (/scan/tesoreria/fotos_clientes), patrón pago_{inropremioid}.*
+ * Sync: solo resuelve basename; no copia a /var del ERP.
  */
 class ClientePremioUifFotoTesoreria
 {
+    /** @var array<int, string>|null inropremioid => path absoluto */
+    private static ?array $indicePagoPorPremio = null;
+
     private static function acceptedImageExtensions(): array
     {
         return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff'];
+    }
+
+    /**
+     * Escanea una vez dirFotosPremio (pago_*) para sync bulk.
+     *
+     * @return array{fotos_pago:int}
+     */
+    public static function warmIndicePago(): array
+    {
+        self::$indicePagoPorPremio = [];
+        $dir = ClienteUifArchivoStorage::dirFotosPremio();
+        if ($dir === '' || ! is_dir($dir) || ! is_readable($dir)) {
+            return ['fotos_pago' => 0];
+        }
+        $ds = DIRECTORY_SEPARATOR;
+        foreach (scandir($dir, SCANDIR_SORT_NONE) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            if (! preg_match('/^pago_(\d+)\./i', $entry, $m)) {
+                continue;
+            }
+            $path = $dir.$ds.$entry;
+            if (! self::isAcceptedImagePath($path)) {
+                continue;
+            }
+            $pid = (int) $m[1];
+            // Preferir la primera encontrada; si hay varias ext, conservar la ya indexada
+            if (! isset(self::$indicePagoPorPremio[$pid])) {
+                self::$indicePagoPorPremio[$pid] = $path;
+            }
+        }
+
+        return ['fotos_pago' => count(self::$indicePagoPorPremio)];
+    }
+
+    public static function clearIndicePago(): void
+    {
+        self::$indicePagoPorPremio = null;
     }
 
     /**
@@ -25,7 +69,11 @@ class ClientePremioUifFotoTesoreria
             return null;
         }
 
-        $dir = ClienteUifFotoDocumento::basePath();
+        if (self::$indicePagoPorPremio !== null) {
+            return self::$indicePagoPorPremio[$inropremioid] ?? null;
+        }
+
+        $dir = ClienteUifArchivoStorage::dirFotosPremio();
         if ($dir === '' || ! is_dir($dir) || ! is_readable($dir)) {
             return null;
         }
@@ -39,23 +87,6 @@ class ClientePremioUifFotoTesoreria
             }
         }
 
-        foreach (@scandir($dir, SCANDIR_SORT_NONE) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $path = $dir.$ds.$entry;
-            if (! is_file($path) || ! is_readable($path)) {
-                continue;
-            }
-            $baseFile = pathinfo($entry, PATHINFO_FILENAME);
-            if (strcasecmp((string) $baseFile, $stem) !== 0) {
-                continue;
-            }
-            if (self::isAcceptedImagePath($path)) {
-                return $path;
-            }
-        }
-
         if ($hintExtension !== null && $hintExtension !== '') {
             $ext = ltrim(strtolower($hintExtension), '.');
             if (in_array($ext, self::acceptedImageExtensions(), true)) {
@@ -63,10 +94,6 @@ class ClientePremioUifFotoTesoreria
                     $candidate = $dir.$ds.$stem.'.'.$tryExt;
                     if (is_file($candidate) && is_readable($candidate)) {
                         return $candidate;
-                    }
-                    $candidateCi = self::findCaseInsensitiveStemExt($dir, $stem, $tryExt);
-                    if ($candidateCi !== null) {
-                        return $candidateCi;
                     }
                 }
             }
@@ -107,11 +134,10 @@ class ClientePremioUifFotoTesoreria
     }
 
     /**
-     * Copia desde tesorería a {@code storage/app/public/imagenes/fotos_uif}.
-     * Si el procesamiento a JPG tiene éxito, el archivo destino será {@code pago_{inropremioid}.jpg}.
-     * Si falla Intervention, copia binaria conservando la extensión del origen.
+     * Resuelve foto en /scan (o legacy local). No copia a disco del ERP salvo
+     * {@see config('uif.SYNC_COPIAR_ARCHIVOS')}.
      *
-     * @return string|null nombre de archivo dentro de imagenes/fotos_uif/ (basename), o null
+     * @return string|null basename a guardar en cliente_premio_uif.foto
      */
     public static function importToPublicStorage(int $inropremioid, ?string $hintExtension = null): ?string
     {
@@ -120,15 +146,23 @@ class ClientePremioUifFotoTesoreria
             return null;
         }
 
+        if (! ClienteUifArchivoStorage::syncDebeCopiar()) {
+            return basename($src);
+        }
+
         $relPrefix = 'imagenes/fotos_uif';
         $stem = 'pago_'.$inropremioid;
+        $destDir = storage_path('app/public/'.$relPrefix);
+        if (! is_dir($destDir)) {
+            File::makeDirectory($destDir, 0775, true, true);
+        }
 
         try {
             $image = Image::decodePath($src)
                 ->resizeDown(300, 300);
             $destName = $stem.'.jpg';
-            Storage::disk('public')->put(
-                $relPrefix.'/'.$destName,
+            file_put_contents(
+                $destDir.DIRECTORY_SEPARATOR.$destName,
                 $image->encodeUsingFileExtension('jpg', quality: 75)
             );
 
@@ -144,7 +178,7 @@ class ClientePremioUifFotoTesoreria
                     $ext = 'jpg';
                 }
                 $destName = $stem.'.'.$ext;
-                Storage::disk('public')->put($relPrefix.'/'.$destName, $raw);
+                file_put_contents($destDir.DIRECTORY_SEPARATOR.$destName, $raw);
 
                 return $destName;
             } catch (\Throwable $e2) {
@@ -153,12 +187,20 @@ class ClientePremioUifFotoTesoreria
         }
     }
 
-    /** Elimina un archivo previo del disco público si era distinto al nuevo basename. */
+    /**
+     * Elimina foto previa solo si es generada por el ERP (no pago_* compartidos en /scan).
+     */
     public static function deletePublicFotoIfUnused(?string $basename): void
     {
         if ($basename === null || $basename === '' || strpos($basename, '/') !== false || strpos($basename, '\\') !== false) {
             return;
         }
-        Storage::disk('public')->delete('imagenes/fotos_uif/'.$basename);
+        if (ClienteUifArchivoStorage::esFotoPremioCompartidaAnita($basename)) {
+            return;
+        }
+        $path = ClienteUifArchivoStorage::absoluteFotoPremio($basename);
+        if ($path !== null && is_file($path) && Str::startsWith($path, storage_path('app/public'))) {
+            @unlink($path);
+        }
     }
 }

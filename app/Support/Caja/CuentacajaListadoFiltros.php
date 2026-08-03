@@ -61,10 +61,15 @@ class CuentacajaListadoFiltros
         'menor' => 'Menor que',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId,
+                'empresa_scope' => $empresaScope,
+            ]);
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -97,10 +102,35 @@ class CuentacajaListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
+            'empresa_id' => $empresaId,
+            'empresa_scope' => $empresaScope,
         ];
     }
 
-    public static function tieneCriteriosAplicados(array $filtros): bool
+    /**
+     * Filtro externo del index: empresa (default primera asignada) o todas (`empresa_todas=1`).
+     *
+     * @return array{0:?int,1:string}  [empresa_id, empresa_scope]
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
+    /**
+     * Criterios del panel / búsqueda rápida (sin el filtro externo de empresa).
+     */
+    public static function tieneCriteriosTexto(array $filtros): bool
     {
         if (($filtros['operador'] ?? '') === 'vacio') {
             return true;
@@ -125,8 +155,13 @@ class CuentacajaListadoFiltros
         return false;
     }
 
+    public static function tieneCriteriosAplicados(array $filtros): bool
+    {
+        return self::tieneCriteriosTexto($filtros);
+    }
+
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, empresa_id: ?int, empresa_scope: string}
      */
     public static function filtrosVacios(): array
     {
@@ -137,6 +172,8 @@ class CuentacajaListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'busqueda' => '',
+            'empresa_id' => null,
+            'empresa_scope' => 'una',
         ];
     }
 
@@ -145,7 +182,8 @@ class CuentacajaListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = [];
+        $params = self::paraQueryStringEmpresa($filtros);
+
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
         }
@@ -166,15 +204,41 @@ class CuentacajaListadoFiltros
     }
 
     /**
+     * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
+     *
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
+    }
+
+    /**
      * @param  Builder<\App\Models\Caja\Cuentacaja>  $query
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
-        $valor = trim((string) ($filtros['valor'] ?? ''));
-        if ($valor === '' && ($filtros['operador'] ?? '') !== 'vacio') {
+        if (! empty($filtros['empresa_id'])) {
+            // Incluye cuentas multiempresa (empresa_id null).
+            $eid = (int) $filtros['empresa_id'];
+            $query->where(function ($q) use ($eid) {
+                $q->where('cuentacaja.empresa_id', $eid)
+                    ->orWhereNull('cuentacaja.empresa_id');
+            });
+        }
+
+        if (! self::tieneCriteriosTexto($filtros)) {
             return;
         }
 
+        $valor = trim((string) ($filtros['valor'] ?? ''));
         $modo = $filtros['modo'] ?? self::MODO_TODOS;
         $operador = $filtros['operador'] ?? 'contiene';
 

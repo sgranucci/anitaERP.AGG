@@ -26,6 +26,17 @@
         setTimeout(function () { $box.alert('close'); }, 4000);
     }
 
+    function focusConcepto() {
+        if (typeof window.focusSolapaEmpleado === 'function') {
+            window.focusSolapaEmpleado('#tab-planes-cuota');
+            return;
+        }
+        var $inp = $('#tab-planes-cuota .codigoconcepto_sueldos').filter(':visible').first();
+        if ($inp.length) {
+            setTimeout(function () { $inp.trigger('focus').trigger('select'); }, 60);
+        }
+    }
+
     function pintar(resp) {
         if (resp && resp.html) {
             var $panel = host().find('#planes-cuota-panel');
@@ -37,6 +48,7 @@
         }
         aviso(resp && resp.mensaje ? resp.mensaje : null, 'ok');
         sincronizarTipoValor();
+        focusConcepto();
     }
 
     function cargarPanel() {
@@ -47,6 +59,7 @@
         $.get(url).done(function (resp) {
             host().html(resp.html || '');
             sincronizarTipoValor();
+            focusConcepto();
         }).fail(function () {
             host().html('<div class="alert alert-danger">No se pudo cargar el panel de préstamos/cuotas.</div>');
         });
@@ -70,6 +83,11 @@
         }
         $f[0].reset();
         $f.find('[name="plan_id"]').val('');
+        if (typeof window.limpiarConceptoSueldosEnCampo === 'function') {
+            window.limpiarConceptoSueldosEnCampo($f.find('.tm-concepto-sueldos-campo'), false);
+        } else {
+            $f.find('[name="concepto_id"]').val('');
+        }
         $('#plan-cuota-form-titulo').text('Nuevo plan de cuotas');
         $('#btn-plan-cuota-cancelar-edicion').addClass('d-none');
         $f.find('[name="corridas_afecta[]"]').prop('checked', false);
@@ -81,7 +99,9 @@
         if (!cargado) {
             cargado = true;
             cargarPanel();
+            return;
         }
+        focusConcepto();
     });
 
     $(document).on('change', '#plan-cuota-tipo-valor', sincronizarTipoValor);
@@ -118,7 +138,16 @@
         var $tr = $(this).closest('tr');
         var $f = $('#form-plan-cuota');
         $f.find('[name="plan_id"]').val($tr.data('id'));
-        $f.find('[name="concepto_id"]').val($tr.data('concepto'));
+        var $campoConcepto = $f.find('.tm-concepto-sueldos-campo');
+        if (typeof window.aplicarConceptoSueldosEnCampo === 'function' && $tr.data('concepto')) {
+            window.aplicarConceptoSueldosEnCampo($campoConcepto, {
+                id: $tr.data('concepto'),
+                codigo: $tr.data('concepto-codigo'),
+                descripcion: $tr.attr('data-concepto-descripcion') || ''
+            });
+        } else {
+            $f.find('[name="concepto_id"]').val($tr.data('concepto'));
+        }
         $f.find('[name="descripcion"]').val($tr.data('descripcion'));
         $f.find('[name="tipo_valor"]').val($tr.data('tipo-valor'));
         $f.find('[name="cuota_valor"]').val($tr.data('cuota-valor'));
@@ -143,10 +172,12 @@
         $('#btn-plan-cuota-cancelar-edicion').removeClass('d-none');
         sincronizarTipoValor();
         $('html, body').animate({ scrollTop: $f.offset().top - 120 }, 200);
+        focusConcepto();
     });
 
     $(document).on('click', '#btn-plan-cuota-cancelar-edicion', function () {
         resetForm();
+        focusConcepto();
     });
 
     $(document).on('click', '.btn-plan-cuota-estado', function () {

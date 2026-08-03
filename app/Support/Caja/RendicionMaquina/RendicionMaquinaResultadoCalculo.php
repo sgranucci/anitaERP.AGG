@@ -41,6 +41,11 @@ final class RendicionMaquinaResultadoCalculo
             'fondo_inicial' => $this->get('inputs.fondo_inicial'),
             'comprobante' => $this->get('calc.comprobante'),
             'fondo_fijo' => $this->get('calc.fondo_fijo'),
+            'drop_billete_bruto' => $this->get('inputs.drop_billete_bruto') > 0
+                ? $this->get('inputs.drop_billete_bruto')
+                : round($this->get('inputs.drop_billete') + $this->get('inputs.impuesto_drop'), 2),
+            'impuesto_drop' => $this->get('inputs.impuesto_drop'),
+            'drop_bill_rodillo' => $this->get('calc.drop_bill_rodillo'),
             'total_ingreso' => $this->get('calc.total_ingreso'),
             'total_salida' => $this->get('calc.total_salida'),
             'resultado_turno' => $this->get('calc.resultado_turno'),
@@ -48,6 +53,7 @@ final class RendicionMaquinaResultadoCalculo
             'transferencia' => $this->get('calc.transferencia'),
             'saldo_ingreso' => $this->get('calc.saldo_ingreso'),
             'dif_caja' => $this->get('calc.dif_caja'),
+            'deposito' => $this->get('calc.deposito'),
             'deposito_efectivo' => $this->get('calc.deposito_efectivo'),
             'deposito_pesos' => $this->get('calc.deposito_pesos'),
             'gastos_total' => $this->get('gastos.total'),
@@ -85,6 +91,7 @@ final class RendicionMaquinaResultadoCalculo
             'vale_rep_fondo' => $this->get('calc.vale_rep_fondo'),
             'salida_ruleta' => $this->get('inputs.salida_ruleta'),
             'pago_manual' => $this->get('inputs.pago_manual'),
+            'deposito' => $this->get('calc.deposito'),
             'deposito_efectivo' => $this->get('calc.deposito_efectivo'),
             'hopper' => $this->get('inputs.hopper'),
             'total_salida' => $this->get('calc.total_salida'),

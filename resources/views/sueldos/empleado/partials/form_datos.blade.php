@@ -14,19 +14,19 @@
             'empresa_query' => $empresa_query,
             'empresa_id' => old('empresa_id', $data->empresa_id ?? null),
             'solo_lectura' => $esEdicion,
-            'col_label' => 'col-lg-4',
+            'col_label' => 'col-lg-4 control-label text-right pr-2',
             'col_input' => 'col-lg-6',
         ])
 
         <div class="form-group row">
-            <label for="legajo" class="col-lg-4 control-label">Legajo</label>
+            <label for="legajo" class="col-lg-4 control-label text-right pr-2">Legajo</label>
             <div class="col-lg-4">
                 <input type="number" name="legajo" id="legajo" class="form-control"
                        value="{{ old('legajo', $data->legajo ?? '') }}"
                        placeholder="Automático" {{ $esEdicion ? 'readonly' : '' }}>
             </div>
             @if ($esEdicion)
-                <div class="col-lg-4">
+                <div class="col-lg-4 d-flex align-items-center">
                     <span class="badge badge-{{ ($data->estado ?? '') === 'A' ? 'success' : (($data->estado ?? '') === 'P' ? 'warning' : 'secondary') }} p-2">
                         {{ $estadosLabels[$data->estado] ?? $data->estado }}
                     </span>
@@ -35,7 +35,7 @@
         </div>
 
         <div class="form-group row">
-            <label for="cuil" class="col-lg-4 control-label">CUIL / CUIT</label>
+            <label for="cuil" class="col-lg-4 control-label text-right pr-2">CUIL / CUIT</label>
             <div class="col-lg-8">
                 <div class="input-group">
                     <input type="text" name="cuil" id="cuil" class="form-control" maxlength="13"
@@ -52,7 +52,7 @@
         </div>
 
         <div class="form-group row">
-            <label for="nombre" class="col-lg-4 control-label requerido">Nombre</label>
+            <label for="nombre" class="col-lg-4 control-label text-right pr-2 requerido">Nombre</label>
             <div class="col-lg-8">
                 <input type="text" name="nombre" id="nombre" class="form-control" maxlength="80" required
                        value="{{ old('nombre', $data->nombre ?? '') }}">
@@ -60,15 +60,22 @@
         </div>
 
         <div class="form-group row">
-            <label for="documento" class="col-lg-4 control-label">Documento</label>
-            <div class="col-lg-6">
+            <label for="documento" class="col-lg-4 control-label text-right pr-2">Documento</label>
+            <div class="col-lg-5">
                 <input type="text" name="documento" id="documento" class="form-control" maxlength="30"
                        value="{{ old('documento', $data->documento ?? '') }}">
+            </div>
+            <div class="col-lg-3 d-flex align-items-center pl-1">
+                <div class="custom-control custom-checkbox mb-0">
+                    <input type="checkbox" class="custom-control-input" name="confidencial" id="confidencial" value="1"
+                           {{ old('confidencial', $data->confidencial ?? false) ? 'checked' : '' }}>
+                    <label class="custom-control-label small text-muted" for="confidencial" title="Legajo confidencial">Confidencial</label>
+                </div>
             </div>
         </div>
 
         <div class="form-group row">
-            <label for="fecha_nacimiento" class="col-lg-4 control-label">F. nacimiento</label>
+            <label for="fecha_nacimiento" class="col-lg-4 control-label text-right pr-2">F. nacimiento</label>
             <div class="col-lg-5">
                 <input type="date" name="fecha_nacimiento" id="fecha_nacimiento" class="form-control"
                        value="{{ old('fecha_nacimiento', optional($data->fecha_nacimiento ?? null)->format('Y-m-d')) }}">
@@ -76,7 +83,7 @@
         </div>
 
         <div class="form-group row">
-            <label for="sexo" class="col-lg-4 control-label">Sexo</label>
+            <label for="sexo" class="col-lg-4 control-label text-right pr-2">Sexo</label>
             <div class="col-lg-5">
                 <select name="sexo" id="sexo" class="form-control">
                     <option value="">—</option>
@@ -87,7 +94,7 @@
         </div>
 
         <div class="form-group row">
-            <label for="estado_civil" class="col-lg-4 control-label">Estado civil</label>
+            <label for="estado_civil" class="col-lg-4 control-label text-right pr-2">Estado civil</label>
             <div class="col-lg-5">
                 <select name="estado_civil" id="estado_civil" class="form-control">
                     <option value="">—</option>
@@ -97,20 +104,20 @@
                 </select>
             </div>
         </div>
-
-        <div class="form-group row">
-            <label for="nacionalidad" class="col-lg-4 control-label">Nacionalidad</label>
-            <div class="col-lg-6">
-                <input type="text" name="nacionalidad" id="nacionalidad" class="form-control" maxlength="40"
-                       value="{{ old('nacionalidad', $data->nacionalidad ?? '') }}">
-            </div>
-        </div>
     </div>
 
     {{-- ===================== Columna derecha: contacto / obra social ===================== --}}
     <div class="col-lg-6">
         <div class="form-group row">
-            <label for="telefono" class="col-lg-4 control-label">Teléfono</label>
+            <label for="nacionalidad" class="col-lg-4 control-label text-right pr-2">Nacionalidad</label>
+            <div class="col-lg-6">
+                <input type="text" name="nacionalidad" id="nacionalidad" class="form-control" maxlength="40"
+                       value="{{ old('nacionalidad', $data->nacionalidad ?? '') }}">
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label for="telefono" class="col-lg-4 control-label text-right pr-2">Teléfono</label>
             <div class="col-lg-6">
                 <input type="text" name="telefono" id="telefono" class="form-control" maxlength="40"
                        value="{{ old('telefono', $data->telefono ?? '') }}">
@@ -118,7 +125,7 @@
         </div>
 
         <div class="form-group row">
-            <label for="telefono_emergencia" class="col-lg-4 control-label">Tel. emerg.</label>
+            <label for="telefono_emergencia" class="col-lg-4 control-label text-right pr-2">Tel. emerg.</label>
             <div class="col-lg-6">
                 <input type="text" name="telefono_emergencia" id="telefono_emergencia" class="form-control" maxlength="40"
                        value="{{ old('telefono_emergencia', $data->telefono_emergencia ?? '') }}">
@@ -126,7 +133,7 @@
         </div>
 
         <div class="form-group row">
-            <label for="email" class="col-lg-4 control-label">E-mail</label>
+            <label for="email" class="col-lg-4 control-label text-right pr-2">E-mail</label>
             <div class="col-lg-8">
                 <input type="email" name="email" id="email" class="form-control" maxlength="120"
                        value="{{ old('email', $data->email ?? '') }}">
@@ -134,7 +141,7 @@
         </div>
 
         <div class="form-group row">
-            <label for="obrasocial_id" class="col-lg-4 control-label">Obra social</label>
+            <label for="obrasocial_id" class="col-lg-4 control-label text-right pr-2">Obra social</label>
             <div class="col-lg-8">
                 <select name="obrasocial_id" id="obrasocial_id" class="form-control">
                     <option value="">—</option>
@@ -148,7 +155,7 @@
         </div>
 
         <div class="form-group row">
-            <label for="afiliacion_os" class="col-lg-4 control-label">Afiliación O.S.</label>
+            <label for="afiliacion_os" class="col-lg-4 control-label text-right pr-2">Afiliación O.S.</label>
             <div class="col-lg-6">
                 <input type="text" name="afiliacion_os" id="afiliacion_os" class="form-control" maxlength="30"
                        value="{{ old('afiliacion_os', $data->afiliacion_os ?? '') }}">
@@ -156,7 +163,7 @@
         </div>
 
         <div class="form-group row">
-            <label for="sindicato_id" class="col-lg-4 control-label">Sindicato</label>
+            <label for="sindicato_id" class="col-lg-4 control-label text-right pr-2">Sindicato</label>
             <div class="col-lg-8">
                 <select name="sindicato_id" id="sindicato_id" class="form-control">
                     <option value="">—</option>
@@ -166,17 +173,6 @@
                         </option>
                     @endforeach
                 </select>
-            </div>
-        </div>
-
-        <div class="form-group row">
-            <div class="col-lg-4"></div>
-            <div class="col-lg-8">
-                <div class="form-check">
-                    <input type="checkbox" class="form-check-input" name="confidencial" id="confidencial" value="1"
-                           {{ old('confidencial', $data->confidencial ?? false) ? 'checked' : '' }}>
-                    <label class="form-check-label" for="confidencial">Confidencial</label>
-                </div>
             </div>
         </div>
     </div>

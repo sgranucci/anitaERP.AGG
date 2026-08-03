@@ -22,7 +22,21 @@ final class CierreRendicionEstacionamientoGrupoSupport
 
     public const ESTADO_LEGACY = 'legacy';
 
+    /** Cierre sin asiento (montos en cero / sin líneas contables). */
+    public const ETIQUETA_ESTADO_LEGACY = 'Cerrada (sin asiento / $0)';
+
     public const GRUPOS_POR_PAGINA = 10;
+
+    public static function etiquetaEstado(?string $estado): string
+    {
+        return match ((string) $estado) {
+            self::ESTADO_CERRADA => 'Cerrado',
+            self::ESTADO_LEGACY => self::ETIQUETA_ESTADO_LEGACY,
+            self::ESTADO_PARCIAL => 'Parcial',
+            self::ESTADO_PENDIENTE => 'Pendiente',
+            default => 'Pendiente',
+        };
+    }
 
     public static function fechaDiaDesdeRendicion(RendicionEstacionamientoCaja $rendicion): string
     {

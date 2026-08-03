@@ -45,17 +45,22 @@ final class WigosSqlServerProcess
     }
 
     /**
+     * Datos WIGOS por turno (mismos SP que calc_datos_wigos.php / on_line.fc).
+     * Usado por Flash caja y por rendición de máquinas (RENDM_lee_on_line).
+     *
      * @return array<string, float|int>
      */
     public static function ejecutarCalcDatosFlashTurno(string $fechaYmd, string $turno, int $empresaId = 0): array
     {
         $alias = WigosConfigResolver::currWigos($empresaId);
         $timeoutFlash = (int) config('wigos.flash_process_timeout', 90);
+        $fecha = self::normalizarFechaYmd($fechaYmd);
+        $turnoNorm = strtoupper(trim($turno));
         try {
             $decoded = self::ejecutar($alias, [
                 'action' => 'calcDatosFlashTurno',
-                'fecha' => $fechaYmd,
-                'turno' => strtoupper($turno),
+                'fecha' => $fecha,
+                'turno' => $turnoNorm,
             ], $empresaId, $timeoutFlash);
         } catch (RuntimeException $e) {
             // Timeout de SP flash no reintenta B: suele ser el mismo volumen y B (Biyemas) sin wgdb_000.
@@ -68,8 +73,8 @@ final class WigosSqlServerProcess
             }
             $decoded = self::ejecutar($secundario, [
                 'action' => 'calcDatosFlashTurno',
-                'fecha' => $fechaYmd,
-                'turno' => strtoupper($turno),
+                'fecha' => $fecha,
+                'turno' => $turnoNorm,
             ], $empresaId, $timeoutFlash);
         }
 
@@ -79,6 +84,69 @@ final class WigosSqlServerProcess
         }
 
         return $datos;
+    }
+
+    /**
+     * Alias semántico para rendición de máquinas (misma action / mismos SP).
+     *
+     * @return array<string, float|int>
+     */
+    public static function ejecutarCalcDatosRendicionMaquina(string $fechaYmd, string $turno, int $empresaId = 0): array
+    {
+        return self::ejecutarCalcDatosFlashTurno($fechaYmd, $turno, $empresaId);
+    }
+
+    /**
+     * Listados de movimientos Wigos que originan totales del Flash (modal origen).
+     *
+     * @param  list<string>  $grupos  drop|tickets_venta|tickets_pago|win_egm|qr|sesiones
+     * @return array<string, mixed>
+     */
+    public static function ejecutarDetalleMovimientosFlash(
+        string $fechaYmd,
+        int $empresaId = 0,
+        array $grupos = [],
+    ): array {
+        $alias = WigosConfigResolver::currWigos($empresaId);
+        $timeoutFlash = (int) config('wigos.flash_process_timeout', 90);
+        $fecha = self::normalizarFechaYmd($fechaYmd);
+        $extra = [
+            'action' => 'detalleMovimientosFlash',
+            'fecha' => $fecha,
+        ];
+        if ($grupos !== []) {
+            $extra['grupos'] = array_values($grupos);
+        }
+
+        try {
+            $decoded = self::ejecutar($alias, $extra, $empresaId, $timeoutFlash);
+        } catch (RuntimeException $e) {
+            if (! self::debeIntentarServidorWigosSecundario($e) || self::esTimeoutEjecucionSubproceso($e)) {
+                throw $e;
+            }
+            $secundario = $alias === 'A' ? 'B' : 'A';
+            if (! WigosConfigResolver::conexionConfigurada($secundario, $empresaId)) {
+                throw $e;
+            }
+            $decoded = self::ejecutar($secundario, $extra, $empresaId, $timeoutFlash);
+        }
+
+        $datos = $decoded['datos'] ?? [];
+
+        return is_array($datos) ? $datos : [];
+    }
+
+    private static function normalizarFechaYmd(string $fecha): string
+    {
+        $fecha = trim($fecha);
+        if (preg_match('/^\d{8}$/', $fecha)) {
+            return $fecha;
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            return str_replace('-', '', $fecha);
+        }
+
+        throw new RuntimeException('fecha inválida para WIGOS (esperado Ymd o Y-m-d)');
     }
 
     /**

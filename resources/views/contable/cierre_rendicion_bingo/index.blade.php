@@ -10,14 +10,22 @@
         urlPreview: @json(route('api_cierre_rendicion_bingo_preview')),
         urlEjecutar: @json(route('api_cierre_rendicion_bingo_ejecutar')),
         urlAnular: @json(route('api_cierre_rendicion_bingo_anular')),
+        urlPreviewRango: @json(route('api_cierre_rendicion_bingo_preview_rango')),
+        urlEjecutarRango: @json(route('api_cierre_rendicion_bingo_ejecutar_rango')),
         puedeEjecutar: @json(can('ejecutar-cierre-rendicion-bingo-contable', false)),
         puedeAnular: @json(can('anular-cierre-rendicion-bingo-contable', false)),
+    };
+    window.CIERRE_REND_PENDIENTES = {
+        urlPendientes: @json(route('api_cierre_rendicion_bingo_pendientes')),
+        empresaIdFiltro: @json((int) ($filtros['empresa_id'] ?? 0)),
+        modalRangoId: 'modal-cierre-rango-rend-bingo',
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cierre_rendicion_bingo/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cierre_rendicion_bingo/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cierre_rendicion_bingo/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cierre_rendicion_bingo/index.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/includes/pendientes_cierre_modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/includes/pendientes_cierre_modal.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @php
@@ -26,6 +34,12 @@
 @endphp
 
 @section('contenido')
+@php
+    $limpiarUrl = route(
+        'cierre_rendicion_bingo_contable',
+        CierreRendicionBingoListadoFiltros::paraQueryStringEmpresa($filtros ?? [])
+    );
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -33,11 +47,24 @@
             <div class="card-header">
                 <h3 class="card-title">Cierre Bingo</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('listar-cierre-rendicion-bingo-contable', false))
+                        <button type="button" class="btn btn-sm btn-warning mr-2 mb-1" id="btn-abrir-pendientes-cierre"
+                                title="Ver jornadas pendientes de cierre contable">
+                            <i class="fa fa-hourglass-half"></i> Pendientes de cerrar
+                            <span class="badge badge-dark ml-1 d-none" id="badge-pendientes-cierre">0</span>
+                        </button>
+                    @endif
+                    @if (can('ejecutar-cierre-rendicion-bingo-contable', false))
+                        <button type="button" class="btn btn-sm btn-success mr-2 mb-1" id="btn-abrir-cierre-rango"
+                                title="Cerrar jornadas pendientes por rango de fechas">
+                            <i class="fa fa-calendar-check-o"></i> Cierre por rango
+                        </button>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-cierre-rend-bingo',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => CierreRendicionBingoListadoFiltros::tieneCriteriosUsuario($filtros ?? []),
-                        'limpiarUrl' => route('cierre_rendicion_bingo_contable'),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (ticket, ID, empresa…)',
                         'toggleTarget' => '#panel-filtros-cierre-rend-bingo',
                         'toggleId' => 'btn-toggle-filtros-cierre-rend-bingo',
@@ -48,6 +75,7 @@
             <form method="get" action="{{ route('cierre_rendicion_bingo_contable') }}" id="form-filtros-cierre-rend-bingo" class="mb-0">
                 @include('contable.cierre_rendicion_bingo.partials.filtros_listado')
             </form>
+            @include('contable.cierre_rendicion_bingo.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_cierre_rendicion_bingo_contable',
@@ -165,4 +193,20 @@
 </div>
 
 @include('contable.cierre_rendicion_bingo.modal_preview_asiento')
+@if (can('listar-cierre-rendicion-bingo-contable', false))
+    @include('contable.partials.modal_pendientes_cierre', [
+        'rutaListado' => route('cierre_rendicion_bingo_contable'),
+        'estadoPendiente' => \App\Support\Contable\CierreRendicionBingoListadoFiltros::ESTADO_PENDIENTE,
+        'permisoEjecutar' => 'ejecutar-cierre-rendicion-bingo-contable',
+        'textoIntro' => 'Jornadas de bingo presentadas en caja sin cierre contable. Un cierre diario genera <strong>FBI + asientos</strong>. El cierre debe ser <strong>correlativo por fecha</strong>.',
+        'mostrarPuntoventa' => false,
+        'mostrarFacturado' => false,
+        'labelTurnos' => 'Rendiciones',
+        'labelCobrado' => 'Recaudación',
+        'exigeCorrelatividad' => true,
+    ])
+@endif
+@if (can('ejecutar-cierre-rendicion-bingo-contable', false))
+    @include('contable.cierre_rendicion_bingo.modal_cierre_rango')
+@endif
 @endsection

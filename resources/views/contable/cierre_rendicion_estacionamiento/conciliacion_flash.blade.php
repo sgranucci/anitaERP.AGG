@@ -199,7 +199,7 @@
                                                     <br><small class="text-warning">{{ (int) $dia['cantidad_pendiente'] }} sin asiento</small>
                                                 @endif
                                                 @if ((int) ($dia['cantidad_legacy'] ?? 0) > 0)
-                                                    <br><small class="text-muted">{{ (int) $dia['cantidad_legacy'] }} hist&oacute;rico(s)</small>
+                                                    <br><small class="text-muted">{{ (int) $dia['cantidad_legacy'] }} sin asiento / $0</small>
                                                 @endif
                                             </td>
                                             <td class="text-center align-middle">
@@ -299,7 +299,9 @@
                                                                                 @if ((float) ($pv['total_asientos_debe'] ?? 0) > 0)
                                                                                     {{ number_format((float) $pv['total_asientos_debe'], 2, ',', '.') }}
                                                                                 @elseif ((int) ($pv['cantidad_legacy'] ?? 0) > 0 && (int) ($pv['cantidad_asientos'] ?? 0) === 0 && (int) ($pv['cantidad_pendiente'] ?? 0) === 0)
-                                                                                    <span class="badge badge-secondary">Hist&oacute;rico</span>
+                                                                                    <span class="badge badge-secondary" title="Cerrada sin asiento porque no hubo montos a imputar">
+                                                                                        {{ \App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport::ETIQUETA_ESTADO_LEGACY }}
+                                                                                    </span>
                                                                                 @elseif ((int) ($pv['cantidad_pendiente'] ?? 0) > 0)
                                                                                     <span class="badge badge-warning">Pendiente</span>
                                                                                 @else
@@ -309,7 +311,7 @@
                                                                                     <br><small>
                                                                                         @foreach ($pv['asientos'] as $asi)
                                                                                             @if (! empty($asi['legacy']))
-                                                                                                <span class="text-muted" title="Rend. #{{ $asi['rendicion_id'] ?? '' }}">Hist.</span>@if (! $loop->last), @endif
+                                                                                                <span class="text-muted" title="Rend. #{{ $asi['rendicion_id'] ?? '' }} — cerrada sin asiento / $0">$0</span>@if (! $loop->last), @endif
                                                                                             @elseif (! empty($asi['asiento_id']) && can('listar-asiento', false))
                                                                                                 <a href="{{ route('editar_asiento', ['id' => $asi['asiento_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
                                                                                                    class="text-primary" target="_blank" rel="noopener"

@@ -12,6 +12,7 @@ use App\Models\Sueldos\Agrupamiento_Sueldos;
 use App\Models\Sueldos\Art_Sueldos;
 use App\Models\Sueldos\Categoria_Sueldos;
 use App\Models\Sueldos\Empleado_Base_Sueldos;
+use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Lugartrabajo_Sueldos;
 use App\Models\Sueldos\Motivoegreso_Sueldos;
 use App\Models\Sueldos\Nombrebase_Sueldos;
@@ -22,11 +23,15 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Sueldos\Empleado_SueldosRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Sueldos\CategoriaBaseSueldosService;
+use App\Services\Sueldos\DevengamientoVacacionesService;
 use App\Services\Sueldos\EmpleadoBaseSueldosService;
 use App\Services\Sueldos\EmpleadoIngresoService;
+use App\Services\Sueldos\LiquidacionCalculadorService;
 use App\Support\Sueldos\CategoriaOrigenBases;
 use App\Support\Sueldos\EmpleadoEstados;
 use App\Support\Sueldos\EmpleadoSueldosListadoFiltros;
+use App\Support\Sueldos\Formula\FormulaException;
+use App\Models\Sueldos\Liquidacion_Sueldos;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
@@ -40,6 +45,7 @@ class Empleado_SueldosController extends Controller
         private CategoriaBaseSueldosService $categoriaBaseService,
         private EmpleadoIngresoService $ingresoService,
         private ModuloAvisoService $moduloAvisoService,
+        private DevengamientoVacacionesService $devengamientoVacaciones,
     ) {
     }
 
@@ -165,6 +171,10 @@ class Empleado_SueldosController extends Controller
     {
         can('editar-empleado-sueldos');
         $data = $this->repository->findOrFail($id);
+
+        // Motor de vacaciones al abrir el legajo: la solapa solo lee el ledger.
+        $this->sincronizarSaldosVacaciones($data);
+
         $usaTabla = $data->categoria
             ? CategoriaOrigenBases::usaTablaCategoria($data->categoria->origen_bases)
             : true;
@@ -192,6 +202,7 @@ class Empleado_SueldosController extends Controller
         $data['nombresanteriores'] = $request->input('nombresanteriores', []);
         $data['foto_archivo'] = $request->file('foto_archivo');
         $this->repository->update($data, $id);
+        $this->sincronizarSaldosVacaciones($this->repository->findOrFail($id));
 
         return redirect()->route('consultar_empleado_sueldos')
             ->with('mensaje', 'Empleado actualizado con éxito');
@@ -255,6 +266,7 @@ class Empleado_SueldosController extends Controller
                 $request->input('motivoegreso_id') ? (int) $request->input('motivoegreso_id') : null,
                 $request->input('comentario_baja')
             );
+            $this->sincronizarSaldosVacaciones($this->repository->findOrFail($id));
         } catch (InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -271,6 +283,7 @@ class Empleado_SueldosController extends Controller
         try {
             $emp = $this->repository->findOrFail($id);
             $this->ingresoService->reincorporar($emp, $request->input('fecha_ingreso'));
+            $this->sincronizarSaldosVacaciones($this->repository->findOrFail($id));
         } catch (InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -335,6 +348,64 @@ class Empleado_SueldosController extends Controller
         return response()->json([
             'grilla' => $this->baseService->resumenBasesGrilla((int) $emp->id),
         ]);
+    }
+
+    /**
+     * Preview JSON de conceptos que liquidarían para el legajo (no persiste).
+     */
+    public function simularLiquidacion(Request $request, LiquidacionCalculadorService $calculador, $id)
+    {
+        can('editar-empleado-sueldos');
+        $emp = $this->repository->findOrFail($id);
+
+        $periodo = (string) $request->input('periodo', now()->format('Y-m'));
+        $tipo = (string) $request->input('tipo', 'mensual');
+        if (! isset(Liquidacion_Sueldos::TIPOS[$tipo])) {
+            $tipo = 'mensual';
+        }
+
+        try {
+            $resultado = $calculador->simularEmpleado($emp, $periodo, $tipo);
+        } catch (FormulaException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'lineas' => [],
+                'totales' => ['haber' => 0, 'descuento' => 0, 'contribucion' => 0, 'neto' => 0, 'cantidad' => 0],
+                'errores' => [$e->getMessage()],
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'No se pudo simular: '.$e->getMessage(),
+                'lineas' => [],
+                'errores' => [$e->getMessage()],
+            ], 500);
+        }
+
+        return response()->json($resultado);
+    }
+
+    /**
+     * Debugger de fórmulas del legajo (rastro paso a paso). No persiste.
+     */
+    public function depurarFormulas(Request $request, LiquidacionCalculadorService $calculador, $id)
+    {
+        can('editar-empleado-sueldos');
+        $emp = $this->repository->findOrFail($id);
+
+        $periodo = (string) $request->input('periodo', now()->format('Y-m'));
+        $tipo = (string) $request->input('tipo', 'mensual');
+        $solo = $request->input('concepto_codigo');
+        $soloCodigo = ($solo !== null && $solo !== '') ? (int) $solo : null;
+
+        try {
+            $resultado = $calculador->depurarEmpleado($emp, $periodo, $tipo, $soloCodigo);
+
+            return response()->json($resultado);
+        } catch (FormulaException $e) {
+            return response()->json(['message' => $e->getMessage(), 'pasos' => []], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'No se pudo depurar: '.$e->getMessage(), 'pasos' => []], 500);
+        }
     }
 
     public function historialBases(Request $request, $id)
@@ -407,5 +478,15 @@ class Empleado_SueldosController extends Controller
         if ($emp->categoria && CategoriaOrigenBases::usaTablaCategoria($emp->categoria->origen_bases)) {
             abort(422, 'Las bases se heredan de la categoría (tabla).');
         }
+    }
+
+    /** Actualiza el ledger de vacaciones (devengado + consumos) del empleado. */
+    private function sincronizarSaldosVacaciones(Empleado_Sueldos $empleado): void
+    {
+        $usuarioId = Auth::id();
+        $this->devengamientoVacaciones->recalcularEmpleado(
+            $empleado,
+            $usuarioId !== null ? (int) $usuarioId : null
+        );
     }
 }

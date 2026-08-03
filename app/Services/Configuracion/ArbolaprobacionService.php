@@ -767,6 +767,17 @@ class ArbolaprobacionService
         try {
             $movimientoPre = Arbolaprobacion_Movimiento::findOrFail($aprobacion_id);
 
+            if (strtoupper((string) $tipocomprobante) === 'SP') {
+                $spAviso = \App\Models\Solicitudpago\Solicitudpago::query()->find((int) $comprobante_id);
+                if ($spAviso
+                    && app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
+                        ->esNivelAvisoPago($spAviso, (int) $movimientoPre->nivel)) {
+                    throw new \RuntimeException(
+                        'Nivel aviso a pagadores: no se aprueba por el árbol. Use Ingresos/egresos o Rechazar.'
+                    );
+                }
+            }
+
             $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
             $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
             $nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
@@ -952,6 +963,11 @@ class ArbolaprobacionService
                 $opcionesProceso['circuito_sector'] = true;
             }
             $this->procesaArbolaprobacion($tipocomprobante, $comprobante_id, 'self', $opcionesProceso);
+
+            if ($tipocomprobante === 'SP') {
+                app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
+                    ->asegurarEstadoTrasProcesarArbol((int) $comprobante_id);
+            }
 
             $this->logArbolAprobacion('aprobacion_ok', [
                 'tipocomprobante' => $tipocomprobante,

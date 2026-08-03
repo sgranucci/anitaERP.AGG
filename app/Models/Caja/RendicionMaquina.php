@@ -3,6 +3,7 @@
 namespace App\Models\Caja;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -52,6 +53,17 @@ class RendicionMaquina extends Model implements Auditable
         'fondo_inicial',
         'dif_caja',
         'anita_sincronizado_en',
+        'asiento_id',
+        'asientos_cierre_ids_json',
+        'cierre_contable_en',
+        'cierre_contable_usuario_id',
+        'cierre_contable_legacy',
+        'factura_tipo',
+        'factura_letra',
+        'factura_sucursal',
+        'factura_nro',
+        'factura_fecha',
+        'estado_facturacion',
     ];
 
     protected $casts = [
@@ -68,6 +80,12 @@ class RendicionMaquina extends Model implements Auditable
         'fondo_inicial' => 'decimal:2',
         'dif_caja' => 'decimal:2',
         'anita_sincronizado_en' => 'datetime',
+        'asientos_cierre_ids_json' => 'array',
+        'cierre_contable_en' => 'datetime',
+        'cierre_contable_legacy' => 'boolean',
+        'factura_sucursal' => 'integer',
+        'factura_nro' => 'integer',
+        'factura_fecha' => 'date',
     ];
 
     protected $attributes = [
@@ -112,6 +130,37 @@ class RendicionMaquina extends Model implements Auditable
     public function ajustesWigos(): HasMany
     {
         return $this->hasMany(RendicionMaquinaAjusteWigos::class);
+    }
+
+    public function asiento()
+    {
+        return $this->belongsTo(Asiento::class, 'asiento_id');
+    }
+
+    public function cierreContableUsuario()
+    {
+        return $this->belongsTo(Usuario::class, 'cierre_contable_usuario_id');
+    }
+
+    public function tieneCierreContable(): bool
+    {
+        if ((bool) ($this->cierre_contable_legacy ?? false)) {
+            return true;
+        }
+
+        return (int) ($this->asiento_id ?? 0) > 0 && $this->cierre_contable_en !== null;
+    }
+
+    public function esCierreContableLegacy(): bool
+    {
+        return (bool) ($this->cierre_contable_legacy ?? false);
+    }
+
+    public function puedeCerrarContablemente(): bool
+    {
+        return (string) ($this->turno ?? '') === 'C'
+            && (string) ($this->estado ?? '') === self::ESTADO_CONFIRMADA
+            && ! $this->tieneCierreContable();
     }
 
     public function getEstadoLabelAttribute(): string

@@ -51,7 +51,7 @@ class CuentacajaController extends Controller
     {
         can('listar-cuentas-de-caja');
 
-        $filtros = CuentacajaListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltrosListado($request);
         $datas = $this->repository->leeCuentacaja($filtros, true);
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
 
@@ -61,6 +61,7 @@ class CuentacajaController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => CuentacajaListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => CuentacajaListadoFiltros::CAMPOS,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
         ]);
     }
 
@@ -71,7 +72,7 @@ class CuentacajaController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = CuentacajaListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
 
         switch ($formato) {
@@ -309,6 +310,20 @@ class CuentacajaController extends Controller
         }
 
         return $cuenta;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+
+        return CuentacajaListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
     }
 
 }

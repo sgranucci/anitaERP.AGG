@@ -10,11 +10,19 @@
     }
 @endphp
 @php
-    $tieneCriteriosPanel = ClienteUifListadoFiltros::tieneCriteriosAplicados($f);
-    $limpiarUrlPanel = $limpiarUrl ?? route('consulta_cliente_uif');
+    $tieneCriteriosPanel = ClienteUifListadoFiltros::tieneCriteriosTexto($f);
+    $limpiarUrlPanel = $limpiarUrl ?? route('consulta_cliente_uif', ClienteUifListadoFiltros::paraQueryStringEmpresa($f));
+    $fScope = $f['empresa_scope'] ?? 'todas';
+    $fEmp = (int) ($f['empresa_id'] ?? 0);
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-cliente-uif" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    {{-- Persistencia del filtro externo de empresa al buscar por texto o aplicar el panel --}}
+    @if ($fScope === 'todas')
+        <input type="hidden" name="empresa_todas" value="1">
+    @elseif ($fEmp > 0)
+        <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">
@@ -64,6 +72,35 @@
                 <input type="text" name="filtro_valor_hasta" id="filtro_valor_hasta" class="form-control form-control-sm"
                        value="{{ $f['valor_hasta'] ?? '' }}"
                        placeholder="dd/mm/aaaa">
+            </div>
+            @php
+                $uifCtxFiltro = \App\Support\Uif\ClienteUifOrigenPcSupport::contexto();
+                $origenesFiltro = \App\Support\Uif\ClienteUifOrigenPcSupport::opcionesOrigen(
+                    $uifCtxFiltro['origenes_permitidos'] ?: null
+                );
+                // Con empresa externa elegida el origen ya está fijado; el select solo aplica en "Todas".
+                $mostrarOrigenPanel = ($fScope === 'todas');
+                $origenSeleccionado = (string) ($f['anita_origen'] ?? '');
+            @endphp
+            @if ($mostrarOrigenPanel)
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="filtro_anita_origen">Origen / sala</label>
+                <select name="filtro_anita_origen" id="filtro_anita_origen" class="form-control form-control-sm">
+                    <option value="todos" {{ $origenSeleccionado === '' ? 'selected' : '' }}>Todos</option>
+                    @foreach($origenesFiltro as $origenKey => $origenLabel)
+                        <option value="{{ $origenKey }}" {{ $origenSeleccionado === $origenKey ? 'selected' : '' }}>{{ $origenLabel }}</option>
+                    @endforeach
+                </select>
+            </div>
+            @endif
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="filtro_estado">Estado</label>
+                <select name="filtro_estado" id="filtro_estado" class="form-control form-control-sm">
+                    <option value="">Todos</option>
+                    @foreach(\App\Models\Uif\Cliente_Uif::$enumEstado as $est)
+                        <option value="{{ $est['valor'] }}" {{ ($f['estado'] ?? '') === $est['valor'] ? 'selected' : '' }}>{{ $est['nombre'] }}</option>
+                    @endforeach
+                </select>
             </div>
             <div class="form-group col-md-1 col-sm-4 mb-2">
                 <div class="custom-control custom-checkbox mt-4">

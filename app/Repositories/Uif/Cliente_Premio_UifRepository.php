@@ -3,6 +3,7 @@
 namespace App\Repositories\Uif;
 
 use App\Models\Uif\Cliente_Premio_Uif;
+use App\Support\Uif\ClientePremioUifListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -21,62 +22,65 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
         $this->model = $cliente_premio_uif;
     }
 
-	public function leeCliente_Premio_Uif($busqueda, $flPaginando = null)
+	public function leeCliente_Premio_Uif($filtros, $flPaginando = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $busqueda = is_string($busqueda) ? trim($busqueda) : '';
-
-        $cliente_premio_uifs = $this->model->select('cliente_premio_uif.id as id',
-                                        'cliente_uif.nombre as nombrecliente',
-										'sala.nombre as nombresala',
-										'juego_uif.nombre as nombrejuego',
-										'cliente_premio_uif.fechaentrega as fechaentrega',
-										'cliente_premio_uif.monto as monto',
-                                        'cliente_premio_uif.posicion as posicion',
-										'cliente_premio_uif.numerotito as numerotito',
-										'formapago.nombre as nombreformapago',
-                                        'cliente_premio_uif.foto as foto')
-                                ->join('cliente_uif', 'cliente_uif.id', '=', 'cliente_premio_uif.cliente_uif_id')
-                                ->leftjoin('sala', 'sala.id', '=', 'cliente_premio_uif.sala_id')
-                                ->leftjoin('juego_uif', 'juego_uif.id', '=', 'cliente_premio_uif.juego_uif_id')
-								->leftjoin('formapago', 'formapago.id', '=', 'cliente_premio_uif.formapago_id')
-								->whereNull('cliente_uif.deleted_at');
-
-        if ($busqueda !== '') {
-            $cliente_premio_uifs->where(function ($q) use ($busqueda) {
-                $like = '%'.$busqueda.'%';
-                $q->where('cliente_uif.nombre', 'like', $like)
-                    ->orWhere('sala.nombre', 'like', $like)
-                    ->orWhere('juego_uif.nombre', 'like', $like)
-                    ->orWhere('formapago.nombre', 'like', $like)
-                    ->orWhere('cliente_premio_uif.monto', 'like', $like)
-                    ->orWhere('cliente_premio_uif.posicion', 'like', $like)
-                    ->orWhere('cliente_premio_uif.numerotito', 'like', $like)
-                    ->orWhereRaw('CAST(cliente_premio_uif.fechaentrega AS CHAR) LIKE ?', [$like]);
-
-                if (ctype_digit($busqueda)) {
-                    $id = (int) $busqueda;
-                    $q->orWhere('cliente_premio_uif.id', $id)
-                        ->orWhere('cliente_uif.id', $id);
-                }
-            });
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => ClientePremioUifListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = [
+                'modo' => ClientePremioUifListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => '',
+                'valor_hasta' => '',
+                'busqueda' => '',
+            ];
         }
 
-        $cliente_premio_uifs = $cliente_premio_uifs->orderBy('cliente_premio_uif.id', 'DESC');
-                                
-        if (isset($flPaginando))
-        {
-            if ($flPaginando)
+        $cliente_premio_uifs = $this->model->select(
+            'cliente_premio_uif.id as id',
+            'cliente_uif.anita_origen as anita_origen',
+            'cliente_uif.nombre as nombrecliente',
+            'sala.nombre as nombresala',
+            'juego_uif.nombre as nombrejuego',
+            'cliente_premio_uif.fechaentrega as fechaentrega',
+            'cliente_premio_uif.monto as monto',
+            'cliente_premio_uif.posicion as posicion',
+            'cliente_premio_uif.numerotito as numerotito',
+            'formapago.nombre as nombreformapago',
+            'cliente_premio_uif.foto as foto'
+        )
+            ->join('cliente_uif', 'cliente_uif.id', '=', 'cliente_premio_uif.cliente_uif_id')
+            ->leftjoin('sala', 'sala.id', '=', 'cliente_premio_uif.sala_id')
+            ->leftjoin('juego_uif', 'juego_uif.id', '=', 'cliente_premio_uif.juego_uif_id')
+            ->leftjoin('formapago', 'formapago.id', '=', 'cliente_premio_uif.formapago_id')
+            ->whereNull('cliente_uif.deleted_at')
+            ->orderBy('cliente_premio_uif.id', 'DESC');
+
+        ClientePremioUifListadoFiltros::aplicar($cliente_premio_uifs, $filtros);
+
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
                 $cliente_premio_uifs = $cliente_premio_uifs->paginate(10);
-            else
+            } else {
                 $cliente_premio_uifs = $cliente_premio_uifs->get();
-        }
-        else
+            }
+        } else {
             $cliente_premio_uifs = $cliente_premio_uifs->get();
+        }
 
-		return $cliente_premio_uifs;
+        return $cliente_premio_uifs;
     }
 
     /**
@@ -119,11 +123,16 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
         $cid = isset($data['cliente_uif_id']) ? filter_var($data['cliente_uif_id'], FILTER_VALIDATE_INT) : false;
         $anita = isset($data['anita_inropremioid']) ? filter_var($data['anita_inropremioid'], FILTER_VALIDATE_INT) : false;
 
+        $salaId = isset($data['sala_id']) ? (int) $data['sala_id'] : 0;
+
         if ($cid !== false && $cid > 0 && $anita !== false && $anita > 0) {
-            $exist = $this->model->newQuery()
+            $existQ = $this->model->newQuery()
                 ->where('cliente_uif_id', $cid)
-                ->where('anita_inropremioid', $anita)
-                ->first();
+                ->where('anita_inropremioid', $anita);
+            if ($salaId > 0) {
+                $existQ->where('sala_id', $salaId);
+            }
+            $exist = $existQ->first();
             if ($exist !== null) {
                 $exist->update($data);
 
@@ -135,6 +144,7 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
                 ->whereNull('anita_inropremioid')
                 ->where('fechaentrega', $data['fechaentrega'] ?? null)
                 ->where('monto', $data['monto'] ?? null)
+                ->when($salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
                 ->orderBy('id')
                 ->first();
             if ($legacy !== null) {

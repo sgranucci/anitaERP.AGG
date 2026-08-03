@@ -4,6 +4,7 @@ namespace App\Support\Contable;
 
 use App\Models\Caja\Bingo\RendicionBingoCaja;
 use App\Support\Caja\Bingo\RendicionBingoCajaListadoFiltros;
+use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -32,9 +33,21 @@ final class CierreRendicionBingoListadoFiltros
     /**
      * @return array<string, mixed>
      */
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
+        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId ?? 0,
+                'empresa_scope' => $empresaScope,
+            ]);
+        }
+
         $filtros = RendicionBingoCajaListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $filtros['empresa_id'] = $empresaId ?? 0;
+        $filtros['empresa_scope'] = $empresaScope;
+
         $estado = (string) $request->input('estado_cierre', self::ESTADO_TODOS);
         if (! in_array($estado, [self::ESTADO_TODOS, self::ESTADO_PENDIENTE, self::ESTADO_CERRADA], true)) {
             $estado = self::ESTADO_TODOS;
@@ -42,6 +55,35 @@ final class CierreRendicionBingoListadoFiltros
         $filtros['estado_cierre'] = $estado;
 
         return $filtros;
+    }
+
+    /**
+     * @return array{0:?int,1:string}
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function filtrosVacios(): array
+    {
+        return array_merge(RendicionBingoCajaListadoFiltros::filtrosVacios(), [
+            'estado_cierre' => self::ESTADO_TODOS,
+            'empresa_scope' => 'una',
+        ]);
     }
 
     public static function tieneCriteriosUsuario(array $filtros): bool
@@ -68,12 +110,32 @@ final class CierreRendicionBingoListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = RendicionBingoCajaListadoFiltros::paraQueryString($filtros);
+        $params = self::paraQueryStringEmpresa($filtros);
+
+        $resto = RendicionBingoCajaListadoFiltros::paraQueryString($filtros);
+        unset($resto['empresa_id'], $resto['empresa_todas']);
+        $params = array_merge($params, $resto);
+
         if (($filtros['estado_cierre'] ?? self::ESTADO_TODOS) !== self::ESTADO_TODOS) {
             $params['estado_cierre'] = $filtros['estado_cierre'];
         }
 
         return $params;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     /**

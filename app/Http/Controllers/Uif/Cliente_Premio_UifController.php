@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Uif;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCliente_Premio_Uif;
 use App\Services\Uif\Cliente_UifService;
+use App\Services\Uif\ClientePremioUifFotoTesoreria;
 use App\Services\Uif\ClienteUifFotoDocumento;
+use App\Support\Uif\ClienteUifArchivoStorage;
 use App\Exports\Uif\Cliente_Premio_UifExport;
 use App\Models\Uif\Cliente_Uif;
 use App\Models\Uif\Cliente_Congelado_Uif;
@@ -17,8 +19,9 @@ use App\Repositories\Configuracion\SalaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Repositories\Uif\Juego_UifRepositoryInterface;
+use App\Support\Uif\ClientePremioUifListadoFiltros;
+use App\Support\Uif\ClienteUifOrigenPcSupport;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Arr;
 use Jurosh\PDFMerge\PDFMerger;
 use Carbon\Carbon;
@@ -63,55 +66,56 @@ class Cliente_Premio_UifController extends Controller
     {
         can('listar-cliente-premio-uif');
 
-        $busqueda = $request->busqueda;
+        $filtros = ClientePremioUifListadoFiltros::resolverDesdeRequest($request);
+        $cliente_premio_uifs = $this->cliente_premio_uifRepository->leeCliente_Premio_Uif($filtros, true);
 
-		$cliente_premio_uifs = $this->cliente_premio_uifRepository->leeCliente_Premio_Uif($busqueda, true);
-
-        $datas = ['cliente_premio_uifs' => $cliente_premio_uifs, 'busqueda' => $busqueda];
-
-        return view('uif.cliente_premio_uif.index', $datas);
+        return view('uif.cliente_premio_uif.index', [
+            'cliente_premio_uifs' => $cliente_premio_uifs,
+            'busqueda' => $filtros['busqueda'] ?? '',
+            'filtros' => $filtros,
+            'filtrosQuery' => ClientePremioUifListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => ClientePremioUifListadoFiltros::CAMPOS,
+            'empresa_query' => ClienteUifOrigenPcSupport::empresasUifAsignadas(),
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-cliente-premio-uif'); 
+        can('listar-cliente-premio-uif');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        switch($formato)
-        {
-        case 'PDF':
-            $cliente_premio_uifs = $this->cliente_premio_uifRepository->leeCliente_Premio_Uif($busqueda, false);
+        $filtros = ClientePremioUifListadoFiltros::resolverDesdeRequest($request, $busqueda);
 
-            $view =  \View::make('uif.cliente_premio_uif.listado', compact('cliente_premio_uifs'))
-                        ->render();
-            $path = storage_path('pdf/listados');
-            $nombre_pdf = 'listado_cliente_premio_uif';
+        switch ($formato) {
+            case 'PDF':
+                $cliente_premio_uifs = $this->cliente_premio_uifRepository->leeCliente_Premio_Uif($filtros, false);
+                $subtituloFiltros = ClientePremioUifListadoFiltros::subtituloFiltros($filtros);
 
-            $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
+                $view = \View::make('uif.cliente_premio_uif.listado', compact('cliente_premio_uifs', 'subtituloFiltros'))
+                    ->render();
+                $path = storage_path('pdf/listados');
+                $nombre_pdf = 'listado_cliente_premio_uif';
 
-            return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
 
-        case 'EXCEL':
-            return (new Cliente_Premio_UifExport($this->cliente_premio_uifRepository))
-                        ->parametros($busqueda)
-                        ->download('cliente_premio_uif.xlsx');
-            break;
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
 
-        case 'CSV':
-            return (new Cliente_Premio_UifExport($this->cliente_premio_uifRepository))
-                        ->parametros($busqueda, true)
-                        ->download('cliente_premio_uif.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
-        }   
+            case 'EXCEL':
+                return (new Cliente_Premio_UifExport($this->cliente_premio_uifRepository))
+                    ->parametros($filtros)
+                    ->download('cliente_premio_uif.xlsx');
 
-        $datas = ['cliente_premio_uifs' => $cliente_premio_uifs, 'busqueda' => $busqueda];
+            case 'CSV':
+                return (new Cliente_Premio_UifExport($this->cliente_premio_uifRepository))
+                    ->parametros($filtros, true)
+                    ->download('cliente_premio_uif.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
 
-        return view('uif.cliente_premio_uif.index', $datas);       
+        return redirect()->route('consulta_cliente_premio_uif', ClientePremioUifListadoFiltros::paraQueryString($filtros));
     }
 
     /**
@@ -124,6 +128,13 @@ class Cliente_Premio_UifController extends Controller
         can('crear-cliente-premio-uif');
 
         $cliente_uif = $this->cliente_uifRepository->find($cliente_uif_id);
+        try {
+            \App\Support\Uif\ClienteUifOrigenPcSupport::assertClienteOperableEnPc($cliente_uif, $request);
+        } catch (\RuntimeException $e) {
+            return redirect()
+                ->route('consulta_cliente_uif')
+                ->with('mensaje-error', $e->getMessage());
+        }
 
         $referer = $this->refererPremioDesdeClienteUif($request, $cliente_uif_id ? (int) $cliente_uif_id : null);
         $volverAClienteUif = $this->premioInvocadoDesdeClienteUif($request, $cliente_uif_id ? (int) $cliente_uif_id : null);
@@ -164,10 +175,6 @@ class Cliente_Premio_UifController extends Controller
 
         if ($request->filled('empresa_id')) {
             session(['empresa_id' => $request->empresa_id]);
-        }
-
-        if ($foto = Cliente_Premio_Uif::setFoto($request->foto_up)) {
-            $request->request->add(['foto' => $foto]);
         }
 
         $result = $this->cliente_uifService->guardaCliente_Premio_Uif($request);
@@ -234,13 +241,8 @@ class Cliente_Premio_UifController extends Controller
     {
         can('actualizar-cliente-premio-uif');
 
-        $cliente_premio_uif = $this->cliente_premio_uifRepository->find($id);
-
         if ($request->filled('empresa_id')) {
             session(['empresa_id' => $request->empresa_id]);
-        }
-        if ($foto = Cliente_Premio_Uif::setFoto($request->foto_up, $cliente_premio_uif->foto)) {
-            $request->request->add(['foto' => $foto]);
         }
 
         $result = $this->cliente_uifService->actualizaCliente_Premio_Uif($request, $id);
@@ -298,7 +300,7 @@ class Cliente_Premio_UifController extends Controller
 			$fl_borro = false;
             $cliente_premio_uif = $this->cliente_premio_uifRepository->find($id);
 
-            Storage::disk('public')->delete("imagenes/fotos_uif/$cliente_premio_uif->foto");
+            ClientePremioUifFotoTesoreria::deletePublicFotoIfUnused((string) ($cliente_premio_uif->foto ?? ''));
 
 			if ($this->cliente_premio_uifRepository->delete($id))
 				$fl_borro = true;
@@ -329,12 +331,11 @@ class Cliente_Premio_UifController extends Controller
 			$fl_borro = false;
             $cliente_premio_uif = $this->cliente_premio_uifRepository->find($id);
 
-            Storage::disk('public')->delete("imagenes/fotos_uif/$cliente_premio_uif->foto");
+            ClientePremioUifFotoTesoreria::deletePublicFotoIfUnused((string) ($cliente_premio_uif->foto ?? ''));
 
 			if ($this->cliente_premio_uifRepository->delete($id))
             {
 				$fl_borro = true;
-                Storage::disk('public')->delete("imagenes/fotos_uif/$cliente_premio_uif->foto");
             }
 
             if ($fl_borro) {
@@ -361,6 +362,45 @@ class Cliente_Premio_UifController extends Controller
         $referer = $request->header('referer');
 
         return view('uif.cliente_premio_uif.mostrar_foto', compact('data', 'referer'));
+    }
+
+    /** Sirve adjunto de premio desde /scan (o legacy local). */
+    public function mostrarArchivo($id, $archivo)
+    {
+        if (! can('editar-cliente-premio-uif', false) && ! can('listar-cliente-premio-uif', false) && ! can('editar-cliente-uif', false)) {
+            abort(403);
+        }
+
+        $premio = $this->cliente_premio_uifRepository->find($id);
+        if ($premio === null) {
+            abort(404);
+        }
+
+        $path = ClienteUifArchivoStorage::absolutePremioAdjunto((int) $id, (string) $archivo);
+        if ($path === null || ! is_file($path)) {
+            abort(404);
+        }
+
+        if (request()->query('disposition') === 'attachment') {
+            return response()->download($path, basename($path));
+        }
+
+        return response()->file($path);
+    }
+
+    /** Sirve foto pago_* / foto ERP desde /scan (o legacy). */
+    public function mostrarFotoArchivo($archivo)
+    {
+        if (! can('editar-cliente-premio-uif', false) && ! can('listar-cliente-premio-uif', false) && ! can('editar-cliente-uif', false) && ! can('listar-cliente-uif', false)) {
+            abort(403);
+        }
+
+        $path = ClienteUifArchivoStorage::absoluteFotoPremio((string) $archivo);
+        if ($path === null || ! is_file($path)) {
+            abort(404);
+        }
+
+        return response()->file($path);
     }
 
     public function listarUnPremio(Request $request, $id)

@@ -14,6 +14,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\Flash\FlashCajaCalculoService;
 use App\Support\Caja\Flash\FlashCajaHistoricoFiltros;
 use App\Support\Caja\Flash\FlashCajaListadoFiltros;
+use App\Support\Caja\Flash\FlashCajaOrigenTotalSupport;
 use App\Support\Caja\Flash\FlashCajaReporteSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Reportes\ReportePreferenciasUsuario;
@@ -184,6 +185,49 @@ class FlashCajaController extends Controller
         return response()->json([
             'ok' => true,
             'datos' => $calculado,
+        ]);
+    }
+
+    public function apiOrigenTotal(Request $request)
+    {
+        if (! can('crear-flash-caja', false) && ! can('actualizar-flash-caja', false)) {
+            abort(403);
+        }
+
+        ini_set('max_execution_time', '300');
+        ini_set('memory_limit', '512M');
+
+        $request->validate([
+            'empresa_id' => ['required', 'integer', 'min:1'],
+            'fecha' => ['required', 'date'],
+            'campo' => ['required', 'string', 'in:'.implode(',', FlashCajaOrigenTotalSupport::camposSoportados())],
+            'valor_pantalla' => ['nullable', 'numeric'],
+        ]);
+
+        $empresaId = (int) $request->input('empresa_id');
+        $this->assertAccesoEmpresa($empresaId);
+
+        $valorPantalla = $request->filled('valor_pantalla')
+            ? (float) $request->input('valor_pantalla')
+            : null;
+
+        try {
+            $origen = FlashCajaOrigenTotalSupport::armar(
+                $empresaId,
+                (string) $request->input('fecha'),
+                (string) $request->input('campo'),
+                $valorPantalla,
+            );
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'origen' => $origen,
         ]);
     }
 

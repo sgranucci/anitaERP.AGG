@@ -13,6 +13,10 @@
     use App\Support\Contable\CierreTurnoGastronomiaContableListadoFiltros;
     use App\Support\Listado\QueryRetornoListado;
     $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route(
+        'cierres_turno_gastronomia_contable',
+        CierreTurnoGastronomiaContableListadoFiltros::paraQueryStringEmpresa($filtros ?? [])
+    );
 @endphp
 
 @section('contenido')
@@ -37,7 +41,7 @@
                         'formId' => 'form-filtros-cierres-gastro-contable',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => CierreTurnoGastronomiaContableListadoFiltros::tieneCriteriosUsuario($filtros ?? []),
-                        'limpiarUrl' => route('cierres_turno_gastronomia_contable'),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (referencia, PV, turno…)',
                         'toggleTarget' => '#panel-filtros-cierres-gastro-contable',
                         'toggleId' => 'btn-toggle-filtros-cierres-gastro-contable',
@@ -48,6 +52,7 @@
             <form method="get" action="{{ route('cierres_turno_gastronomia_contable') }}" id="form-filtros-cierres-gastro-contable" class="mb-0">
                 @include('contable.cierre_turno_gastronomia.partials.filtros_listado')
             </form>
+            @include('contable.cierre_turno_gastronomia.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_cierres_turno_gastronomia_contable',

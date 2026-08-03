@@ -13,16 +13,19 @@
         <div class="card-body py-2">
             <form id="form-plan-cuota" class="form-row align-items-end">
                 <input type="hidden" name="plan_id" value="">
-                <div class="form-group col-md-4 mb-2">
-                    <label class="small mb-0">Concepto con el que liquida <span class="text-danger">*</span></label>
-                    <select name="concepto_id" class="form-control form-control-sm" required>
-                        <option value="">— elegir —</option>
-                        @foreach ($conceptos as $c)
-                            <option value="{{ $c->id }}">{{ str_pad((string) $c->codigo, 4, '0', STR_PAD_LEFT) }} · {{ $c->descripcion }} ({{ $c->tipo }})</option>
-                        @endforeach
-                    </select>
+                <div class="col-md-5 mb-2">
+                    @include('sueldos.partials.campo_consulta_concepto_sueldos', [
+                        'layout' => 'compact',
+                        'label' => 'Concepto con el que liquida',
+                        'inputName' => 'concepto_id',
+                        'inputId' => 'concepto_sueldos_id',
+                        'conceptoId' => '',
+                        'codigo' => '',
+                        'descripcion' => '',
+                        'required' => true,
+                    ])
                 </div>
-                <div class="form-group col-md-4 mb-2">
+                <div class="form-group col-md-3 mb-2">
                     <label class="small mb-0">Descripción / leyenda <span class="text-danger">*</span></label>
                     <input type="text" name="descripcion" class="form-control form-control-sm" maxlength="120" placeholder="Ej.: Préstamo heladera" required>
                 </div>
@@ -106,6 +109,8 @@
                     @endphp
                     <tr data-id="{{ $p->id }}" data-estado="{{ $p->estado }}"
                         data-concepto="{{ $p->concepto_id }}"
+                        data-concepto-codigo="{{ optional($p->concepto)->codigo }}"
+                        data-concepto-descripcion="{{ e(optional($p->concepto)->descripcion) }}"
                         data-descripcion="{{ e($p->descripcion) }}"
                         data-tipo-valor="{{ $p->tipo_valor }}"
                         data-cuota-valor="{{ $p->cuota_valor }}"

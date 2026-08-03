@@ -14,6 +14,7 @@ use App\Support\Caja\RendicionMaquina\RendicionMaquinaPreviasSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaResultadoCalculo;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaVariables;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaWigosLeeOnlineSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -76,6 +77,8 @@ final class RendicionMaquinaService
         $totales = $resultado->totalesCierre();
 
         $inputs = is_array($payload['inputs'] ?? null) ? $payload['inputs'] : [];
+        // Paridad Anita: deposito se calcula (D25), no se tipea
+        $inputs['deposito'] = $resultado->get('calc.deposito');
         $wigosJson = is_array($payload['wigos_json'] ?? null) ? $payload['wigos_json'] : null;
         $lineasValor = is_array($payload['valores'] ?? null) ? $payload['valores'] : [];
         $lineasGasto = is_array($payload['gastos'] ?? null) ? $payload['gastos'] : [];
@@ -164,7 +167,13 @@ final class RendicionMaquinaService
         $rendicion = null;
         if ($id !== null && $id > 0) {
             $rendicion = RendicionMaquina::query()
-                ->with(['valores.cuentacaja', 'gastos.aperturaGasto'])
+                ->with([
+                    'valores.cuentacaja',
+                    'gastos.aperturaGasto',
+                    'supervisorUsuario:id,nombre,usuario',
+                    'auxiliarUsuario:id,nombre,usuario',
+                    'cajeroUsuario:id,nombre,usuario',
+                ])
                 ->findOrFail($id);
             $empresaId = (int) $rendicion->empresa_id;
             $fechaYmd = $rendicion->fecha?->format('Y-m-d') ?? $fechaYmd;
@@ -209,7 +218,9 @@ final class RendicionMaquinaService
 
         $calculo = null;
         $totales = [];
-        if ($empresaId > 0) {
+        // Alta: pie en cero hasta Traer WIGOS / editar (Ctrl+R no debe dejar totales viejos).
+        // Edición: sí precalcular con lo grabado.
+        if ($empresaId > 0 && $rendicion !== null) {
             try {
                 $calculo = $this->calcularDesdePayload($payloadDemo);
                 $totales = $calculo->totalesCierre();
@@ -233,7 +244,9 @@ final class RendicionMaquinaService
             'turnos' => $this->enumTurnos(),
             'estados' => RendicionMaquina::$enumEstado,
             'usuarios' => $this->usuarioRepository->listadoOperativoParaSelector($empresaId > 0 ? $empresaId : null),
-            'campos_wigos_ajustables' => RendicionMaquinaAjusteWigosSupport::CAMPOS_AJUSTABLES,
+            'campos_wigos' => RendicionMaquinaAjusteWigosSupport::CAMPOS_WIGOS,
+            'campos_impuestos' => RendicionMaquinaAjusteWigosSupport::CAMPOS_IMPUESTOS,
+            'campos_wigos_ajustables' => RendicionMaquinaAjusteWigosSupport::camposAjustables(),
             'campos_manuales' => $this->camposManualesInputs(),
             'previas' => $previas,
         ];
@@ -262,16 +275,32 @@ final class RendicionMaquinaService
         $inputs = is_array($payload['inputs'] ?? null) ? $payload['inputs'] : [];
         $orq = is_array($payload['calc_orquestador'] ?? null) ? $payload['calc_orquestador'] : [];
 
-        $fondoEnviado = array_key_exists('fondo_inicial', $inputs) || array_key_exists('inputs.fondo_inicial', $inputs);
-        if (! $fondoEnviado) {
+        // 0 / ausente = no cargado: completar desde previas (ERP o Anita)
+        $fondoActual = (float) ($inputs['fondo_inicial'] ?? $inputs['inputs.fondo_inicial'] ?? 0);
+        if (abs($fondoActual) < 0.00001 && abs((float) ($previas['fondo_inicial'] ?? 0)) > 0.00001) {
             $inputs['fondo_inicial'] = $previas['fondo_inicial'];
         }
 
-        if (! array_key_exists('comprobante', $orq)) {
-            $orq['comprobante'] = $previas['comprobante'];
+        // Impuesto drop: no pisar 0 manual (antes 0 = “vacío” y volvía la previa del C).
+        // Solo completar si el cliente no envió la clave, y solo en mañana.
+        $turnoPayload = RendicionMaquinaTurno::normalizar($turno);
+        $tieneImpDrop = array_key_exists('impuesto_drop', $inputs)
+            || array_key_exists('inputs.impuesto_drop', $inputs);
+        if (! $tieneImpDrop
+            && RendicionMaquinaTurno::esManiana($turnoPayload)
+            && abs((float) ($previas['impuesto_drop'] ?? 0)) > 0.00001) {
+            $inputs['impuesto_drop'] = $previas['impuesto_drop'];
         }
-        if (! array_key_exists('vale_rep_fondo', $orq)) {
-            $orq['vale_rep_fondo'] = $previas['vale_rep_fondo'];
+
+        // Si vienen en 0 (cambio de fecha blanqueó inputs), completar desde previas.
+        // Tras Traer WIGOS el JS ya carga vale/comprobante de la fecha.
+        if (abs((float) ($orq['comprobante'] ?? 0)) < 0.00001
+            && abs((float) ($previas['comprobante'] ?? 0)) > 0.00001) {
+            $orq['comprobante'] = round((float) $previas['comprobante'], 2);
+        }
+        if (abs((float) ($orq['vale_rep_fondo'] ?? 0)) < 0.00001
+            && abs((float) ($previas['vale_rep_fondo'] ?? 0)) > 0.00001) {
+            $orq['vale_rep_fondo'] = round((float) $previas['vale_rep_fondo'], 2);
         }
 
         $payload['inputs'] = $inputs;
@@ -280,33 +309,125 @@ final class RendicionMaquinaService
         return $payload;
     }
 
-    public function stubTraerWigos(int $empresaId, string $fechaYmd, string $turno): array
+    /**
+     * Trae drop/tito/venta/QR desde WIGOS (RENDM_lee_on_line / calc_datos_wigos).
+     * Conserva fondo_inicial y campos manuales del payload actual si se pasan.
+     *
+     * @param  array<string, float|int|string>|null  $inputsActuales
+     * @return array{inputs: array<string, float>, wigos_json: array<string, float>, meta: array<string, mixed>}
+     */
+    public function traerWigos(int $empresaId, string $fechaYmd, string $turno, ?array $inputsActuales = null): array
     {
         $turnoNorm = RendicionMaquinaTurno::normalizar($turno);
-        $inputs = [];
-        foreach (RendicionMaquinaVariables::INPUTS as $ruta) {
-            $inputs[$this->claveInputCorta($ruta)] = 0.0;
+
+        try {
+            $resultado = RendicionMaquinaWigosLeeOnlineSupport::traer($empresaId, $fechaYmd, $turnoNorm);
+        } catch (\Throwable $e) {
+            Log::warning('RendicionMaquina Traer WIGOS falló', [
+                'empresa_id' => $empresaId,
+                'fecha' => $fechaYmd,
+                'turno' => $turnoNorm,
+                'error' => $e->getMessage(),
+            ]);
+
+            $inputs = [];
+            foreach (RendicionMaquinaVariables::INPUTS as $ruta) {
+                $inputs[$this->claveInputCorta($ruta)] = 0.0;
+            }
+            $previasStub = RendicionMaquinaPreviasSupport::resolver($empresaId, $fechaYmd, $turnoNorm);
+            $inputs['fondo_inicial'] = round((float) ($previasStub['fondo_inicial'] ?? 0), 2);
+            // Solo M trae impuesto drop del C anterior; T/N = 0 (Anita).
+            $inputs['impuesto_drop'] = RendicionMaquinaTurno::esManiana($turnoNorm)
+                ? round((float) ($previasStub['impuesto_drop'] ?? 0), 2)
+                : 0.0;
+            $inputs['drop_billete_bruto'] = 0.0;
+
+            return [
+                'inputs' => $inputs,
+                'wigos_json' => $inputs,
+                'previas' => $previasStub,
+                'calc_orquestador' => [
+                    'comprobante' => round((float) ($previasStub['comprobante'] ?? 0), 2),
+                    'vale_rep_fondo' => round((float) ($previasStub['vale_rep_fondo'] ?? 0), 2),
+                ],
+                'meta' => [
+                    'modo_wigos' => RendicionMaquinaTurno::modoWigos($turnoNorm),
+                    'turno_wigos' => RendicionMaquinaTurno::letraWigos($turnoNorm),
+                    'stub' => true,
+                    'error' => $e->getMessage(),
+                    'origen_fondo' => $previasStub['origen_fondo'],
+                    'origen_vale_rep_fondo' => $previasStub['origen_vale_rep_fondo'],
+                    'mensaje' => 'No se pudo leer WIGOS: '.$e->getMessage()
+                        .'. Se dejaron ceros; complete manualmente o reintente.',
+                ],
+            ];
         }
 
-        // Integración real: falta action calcDatosRendicionMaquina en WigosSqlServerProcess
-        // (hoy solo existe calcDatosFlashTurno). Hasta entonces se devuelven ceros.
-        Log::info('RendicionMaquina Traer WIGOS: stub (sin action calcDatosRendicionMaquina)', [
-            'empresa_id' => $empresaId,
-            'fecha' => $fechaYmd,
-            'turno' => $turnoNorm,
-        ]);
+        $inputs = $resultado['inputs'];
 
-        return [
-            'inputs' => $inputs,
-            'wigos_json' => $inputs,
-            'meta' => [
-                'modo_wigos' => RendicionMaquinaTurno::modoWigos($turnoNorm),
-                'turno_wigos' => RendicionMaquinaTurno::letraWigos($turnoNorm),
-                'stub' => true,
-                'mensaje' => 'WIGOS aún no está conectado: se cargaron ceros. '
-                    .'Ingrese los datos manualmente o espere la action calcDatosRendicionMaquina.',
-            ],
+        // Manuales que no vienen de WIGOS. fondo_inicial NUNCA se conserva del cliente:
+        // al cambiar fecha/turno quedaba el fondo del día anterior (ej. 796.5M del 02/08
+        // al pasar al 30/07). Siempre se resuelve por previas de la fecha pedida.
+        $conservar = [
+            'sobrantes',
+            'variacion_ff',
+            'pago_diferido',
+            'vale_anterior',
+            'vales',
+            'reintegros',
+            'vta_ant_gastro',
         ];
+        if (is_array($inputsActuales)) {
+            foreach ($conservar as $clave) {
+                if (array_key_exists($clave, $inputsActuales)) {
+                    $inputs[$clave] = is_numeric($inputsActuales[$clave])
+                        ? (float) $inputsActuales[$clave]
+                        : 0.0;
+                } elseif (array_key_exists('inputs.'.$clave, $inputsActuales)) {
+                    $inputs[$clave] = (float) $inputsActuales['inputs.'.$clave];
+                }
+            }
+        }
+
+        $previas = RendicionMaquinaPreviasSupport::resolver($empresaId, $fechaYmd, $turnoNorm);
+        $inputs['fondo_inicial'] = round((float) ($previas['fondo_inicial'] ?? 0), 2);
+
+        // Impuesto drop del C anterior solo en M → neto Anita dr_bill_rod.
+        // T/N en Anita van con imp_drop = 0.
+        if (RendicionMaquinaTurno::esManiana($turnoNorm)) {
+            $inputs['impuesto_drop'] = round((float) ($previas['impuesto_drop'] ?? 0), 2);
+        } elseif (! RendicionMaquinaTurno::esCompleto($turnoNorm)) {
+            $inputs['impuesto_drop'] = 0.0;
+        }
+
+        // Pantalla: drop_billete = neto (como Anita dr_bill_rod); bruto aparte.
+        // drop_bill_ant / drop_rul_ant NUNCA se netean: en M/T/N son bruto WIGOS;
+        // en C se pisan con el neto del M (lee_rendiciones_del_dia / previas).
+        $bruto = round((float) ($inputs['drop_billete'] ?? 0), 2);
+        $imp = round((float) ($inputs['impuesto_drop'] ?? 0), 2);
+        $inputs['drop_billete_bruto'] = $bruto;
+        $inputs['drop_billete'] = round($bruto - $imp, 2);
+
+        $resultado['inputs'] = $inputs;
+        $resultado['wigos_json'] = $inputs;
+        $resultado['previas'] = $previas;
+        $resultado['calc_orquestador'] = [
+            'comprobante' => round((float) ($previas['comprobante'] ?? 0), 2),
+            'vale_rep_fondo' => round((float) ($previas['vale_rep_fondo'] ?? 0), 2),
+        ];
+        $resultado['meta']['origen_fondo'] = $previas['origen_fondo'];
+        $resultado['meta']['origen_comprobante'] = $previas['origen_comprobante'] ?? 'ninguno';
+        $resultado['meta']['origen_impuesto_drop'] = $previas['origen_impuesto_drop'];
+        $resultado['meta']['origen_vale_rep_fondo'] = $previas['origen_vale_rep_fondo'];
+        $resultado['meta']['origen_drop_ant_completo'] = $previas['origen_drop_ant_completo'] ?? 'ninguno';
+
+        return $resultado;
+    }
+
+    /** @deprecated usar traerWigos */
+    public function stubTraerWigos(int $empresaId, string $fechaYmd, string $turno): array
+    {
+        return $this->traerWigos($empresaId, $fechaYmd, $turno);
     }
 
     public function sincronizarDespuesDeGuardar(RendicionMaquina $rendicion): void
@@ -498,8 +619,6 @@ final class RendicionMaquinaService
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
             ->whereHas('usocuentacajas', fn ($q) => $q->where('usocuentacaja.id', $usoId))
-            ->orderBy('codigo')
-            ->orderBy('nombre')
             ->get(['id', 'codigo', 'nombre', 'descripcion_operaciones', 'moneda_id']);
 
         $lineas = [];
@@ -518,6 +637,36 @@ final class RendicionMaquinaService
                 'tipo_valormae' => null,
             ];
         }
+
+        return $this->ordenarLineasPorCodigoNumerico($lineas);
+    }
+
+    /**
+     * Códigos numéricos primero (25, 100, 121…); alfanuméricos al final (M0QR).
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function ordenarLineasPorCodigoNumerico(array $lineas): array
+    {
+        usort($lineas, static function (array $a, array $b): int {
+            $ca = trim((string) ($a['codigo'] ?? ''));
+            $cb = trim((string) ($b['codigo'] ?? ''));
+            $na = ctype_digit($ca) ? (int) $ca : null;
+            $nb = ctype_digit($cb) ? (int) $cb : null;
+
+            if ($na !== null && $nb !== null && $na !== $nb) {
+                return $na <=> $nb;
+            }
+            if ($na !== null && $nb === null) {
+                return -1;
+            }
+            if ($na === null && $nb !== null) {
+                return 1;
+            }
+
+            return strnatcasecmp($ca, $cb);
+        });
 
         return $lineas;
     }
@@ -541,7 +690,6 @@ final class RendicionMaquinaService
         $conceptos = AperturaGasto::query()
             ->where('estado', AperturaGasto::ESTADO_ACTIVO)
             ->whereHas('empresas', fn ($q) => $q->where('empresa_id', $empresaId))
-            ->orderBy('codigo')
             ->get(['id', 'codigo', 'nombre']);
 
         $lineas = [];
@@ -554,7 +702,7 @@ final class RendicionMaquinaService
             ];
         }
 
-        return $lineas;
+        return $this->ordenarLineasPorCodigoNumerico($lineas);
     }
 
     /**
@@ -575,13 +723,15 @@ final class RendicionMaquinaService
      */
     private function camposManualesInputs(): array
     {
+        // Manuales visibles (abajo del bloque WIGOS/impuestos).
+        // vta_ant_gastro sigue en fórmulas (D25) pero no en pantalla Anita ventana2.
         return [
-            'sobrantes',
-            'deposito',
+            'fondo_inicial',
             'variacion_ff',
             'pago_diferido',
-            'impuestos',
-            'fondo_inicial',
+            'sobrantes',
+            'vales',
+            'reintegros',
         ];
     }
 

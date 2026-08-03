@@ -306,6 +306,23 @@ class ArbolaprobacionController extends Controller
             ]));
         }
 
+        if ($flEncontro && $tipocomprobante === 'SP') {
+            $movSp = $arbolaprobacion_movimiento->first(function ($movimiento) use ($hash, $nombrePendiente) {
+                return $movimiento->estado == $nombrePendiente
+                    && ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, (string) $movimiento->hashaprobacion);
+            });
+            $spDoc = \App\Models\Solicitudpago\Solicitudpago::query()->find((int) $comprobante_id);
+            if ($movSp && $spDoc
+                && app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
+                    ->esNivelAvisoPago($spDoc, (int) $movSp->nivel)) {
+                return $this->portalFinComprobante(
+                    false,
+                    'Este nivel es un aviso a pagadores: no se aprueba por este enlace. '
+                    .'Use «Ir a pagar» del correo para abrir Ingresos y egresos con la SP, o Rechazar si no corresponde.'
+                );
+            }
+        }
+
         if ($flEncontro && in_array($tipocomprobante, ['OV', 'SP', 'PE'], true)) {
             $datos = $this->arbolaprobacionService->portalDatosComprobantePorHash(
                 (string) $tipocomprobante,
@@ -528,6 +545,19 @@ class ArbolaprobacionController extends Controller
         ]);
 
         $tipo = strtoupper((string) $request->tipocomprobante);
+        if ($tipo === 'SP') {
+            $spDoc = \App\Models\Solicitudpago\Solicitudpago::query()->find((int) $request->comprobante_id);
+            $movCheck = \App\Models\Configuracion\Arbolaprobacion_Movimiento::query()->find((int) $request->aprobacion_id);
+            if ($spDoc && $movCheck
+                && app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
+                    ->esNivelAvisoPago($spDoc, (int) $movCheck->nivel)) {
+                return $this->portalFinComprobante(
+                    false,
+                    'Este nivel es un aviso a pagadores: no se aprueba por este enlace. Use «Ir a pagar» del correo.'
+                );
+            }
+        }
+
         $datos = $this->arbolaprobacionService->portalDatosComprobantePorHash(
             $tipo,
             (int) $request->comprobante_id,

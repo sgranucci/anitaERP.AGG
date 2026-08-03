@@ -987,7 +987,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 			if ($tipoasiento) {
 				return match (strtoupper((string) ($tipoasiento->abreviatura ?? ''))) {
 					'VTA' => PeriodoContableCierreSupport::ALCANCE_FACTURACION,
-					'TES' => PeriodoContableCierreSupport::ALCANCE_CAJA,
+					'TES', 'REM' => PeriodoContableCierreSupport::ALCANCE_CAJA,
 					'COM', 'STK' => PeriodoContableCierreSupport::ALCANCE_STOCK,
 					default => PeriodoContableCierreSupport::ALCANCE_CONTABLE,
 				};

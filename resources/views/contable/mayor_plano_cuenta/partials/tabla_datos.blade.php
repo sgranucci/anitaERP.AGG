@@ -118,18 +118,57 @@
                         $textoComprobante = $fila['comprobante'] ?? '';
                         $cpIdFila = (int) ($fila['comprobante_proveedor_id'] ?? 0);
                         $ventaIdFila = (int) ($fila['venta_id'] ?? 0);
+                        $remesaIdFila = (int) ($fila['remesa_id'] ?? 0);
+                        $jornadaGastroIdFila = (int) ($fila['jornada_gastronomia_id'] ?? 0);
+                        $rendicionEstacIdFila = (int) ($fila['rendicion_estacionamiento_caja_id'] ?? 0);
+                        $tmIdFila = (int) ($fila['transferencia_mercaderia_id'] ?? 0);
+                        $cobranzaIdFila = (int) ($fila['cobranza_id'] ?? 0);
+                        $pagoIdFila = (int) ($fila['pagoproveedor_id'] ?? 0);
+                        $recepcionIdFila = (int) ($fila['recepcionproveedor_id'] ?? 0);
+                        $movStockIdFila = (int) ($fila['movimientostock_id'] ?? 0);
+                        $cajaMovIdFila = (int) ($fila['caja_movimiento_id'] ?? 0);
                         $puedeVerCp = $puede_ver_comprobante_proveedor ?? false;
                         $puedeVerFactura = $puede_ver_factura ?? false;
+                        $puedeVerRemesa = $puede_ver_remesa ?? false;
+                        $puedeVerJornadaGastro = $puede_ver_jornada_gastronomia ?? false;
+                        $puedeVerRendicionEstac = $puede_ver_rendicion_estacionamiento ?? false;
+                        $puedeVerTm = $puede_ver_transferencia_mercaderia ?? false;
+                        $puedeVerCobranza = $puede_ver_cobranza ?? false;
+                        $puedeVerPago = $puede_ver_pagoproveedor ?? false;
+                        $puedeVerRecepcion = $puede_ver_recepcion_proveedor ?? false;
+                        $puedeVerMovStock = $puede_ver_movimientostock ?? false;
+                        $puedeVerCajaMov = $puede_ver_caja_movimiento ?? false;
+                        $hrefComprobante = null;
+                        if ($puedeVerCp && $cpIdFila > 0) {
+                            $hrefComprobante = route('editar_comprobante_proveedor', ['id' => $cpIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        } elseif ($puedeVerFactura && $ventaIdFila > 0) {
+                            $hrefComprobante = route('editar_factura', ['id' => $ventaIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        } elseif ($puedeVerRemesa && $remesaIdFila > 0) {
+                            $hrefComprobante = route('editar_remesa', ['id' => $remesaIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        } elseif ($puedeVerJornadaGastro && $jornadaGastroIdFila > 0) {
+                            $hrefComprobante = route('waitry_cierre_jornada', ['jornada_id' => $jornadaGastroIdFila, 'origen' => 'modal_consulta']);
+                        } elseif ($puedeVerRendicionEstac && $rendicionEstacIdFila > 0) {
+                            $hrefComprobante = route('editar_rendicionestacionamiento', ['id' => $rendicionEstacIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        } elseif ($puedeVerTm && $tmIdFila > 0) {
+                            $hrefComprobante = route('transferencia_mercaderia', ['id' => $tmIdFila, 'origen' => 'modal_consulta']);
+                        } elseif ($puedeVerCobranza && $cobranzaIdFila > 0) {
+                            $hrefComprobante = route('editar_cobranza', ['id' => $cobranzaIdFila, 'origen' => 'modal_consulta']);
+                        } elseif ($puedeVerPago && $pagoIdFila > 0) {
+                            $hrefComprobante = route('editar_pagoproveedor', ['id' => $pagoIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        } elseif ($puedeVerRecepcion && $recepcionIdFila > 0) {
+                            $hrefComprobante = route('editar_recepcion_proveedor', ['id' => $recepcionIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        } elseif ($puedeVerMovStock && $movStockIdFila > 0) {
+                            $hrefComprobante = route('editar_movimientostock', ['id' => $movStockIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        } elseif ($puedeVerCajaMov && $cajaMovIdFila > 0) {
+                            $hrefComprobante = route('editar_ingresoegreso', ['id' => $cajaMovIdFila, 'origen' => 'modal_consulta']);
+                        }
+                        if ($textoComprobante === '' && $hrefComprobante) {
+                            $textoComprobante = 'Ver origen';
+                        }
                     @endphp
                     @if ($textoComprobante !== '')
-                        @if ($puedeVerCp && $cpIdFila > 0)
-                            <a href="{{ route('editar_comprobante_proveedor', ['id' => $cpIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                               target="_blank" rel="noopener" class="text-primary">
-                                {{ $textoComprobante }}
-                            </a>
-                        @elseif ($puedeVerFactura && $ventaIdFila > 0)
-                            <a href="{{ route('editar_factura', ['id' => $ventaIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                               target="_blank" rel="noopener" class="text-primary">
+                        @if ($hrefComprobante)
+                            <a href="{{ $hrefComprobante }}" target="_blank" rel="noopener" class="text-primary">
                                 {{ $textoComprobante }}
                             </a>
                         @else

@@ -55,6 +55,10 @@ class Empleado_Sueldos extends Model implements Auditable
         'sindicato_id',
         'vacacion_id',
         'art_id',
+        // Espejo Anita emp_grp1/2/3 (solo sync/fórmulas); el set N vive en pivot.
+        'grupo_concepto_1_codigo',
+        'grupo_concepto_2_codigo',
+        'grupo_concepto_3_codigo',
         'sueldo_basico',
         'jornal_dia',
         'jornal_hora',
@@ -161,6 +165,29 @@ class Empleado_Sueldos extends Model implements Auditable
     public function art()
     {
         return $this->belongsTo(Art_Sueldos::class, 'art_id');
+    }
+
+    /** N grupos de conceptos (sin límite). */
+    public function gruposConcepto()
+    {
+        return $this->belongsToMany(
+            Grupo_Concepto_Sueldos::class,
+            'empleado_grupo_concepto_sueldos',
+            'empleado_id',
+            'grupo_concepto_id'
+        )->withPivot(['id', 'orden', 'origen'])
+            ->withTimestamps()
+            ->orderBy('empleado_grupo_concepto_sueldos.orden');
+    }
+
+    public function empleadoGruposConcepto()
+    {
+        return $this->hasMany(Empleado_Grupo_Concepto_Sueldos::class, 'empleado_id')->orderBy('orden');
+    }
+
+    public function conceptosAsignados()
+    {
+        return $this->hasMany(Empleado_Concepto_Sueldos::class, 'empleado_id');
     }
 
     public function motivoegreso()

@@ -5,6 +5,7 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/concepto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/concepto/consulta.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')
@@ -38,4 +39,5 @@
         </div>
     </div>
 </div>
+@include('includes.sueldos.modalconsultaconcepto_sueldos')
 @endsection

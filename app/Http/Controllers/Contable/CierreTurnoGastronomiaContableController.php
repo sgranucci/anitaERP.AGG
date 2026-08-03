@@ -32,7 +32,7 @@ class CierreTurnoGastronomiaContableController extends Controller
     {
         can('listar-cierres-turno-gastronomia-contable');
 
-        $filtros = CierreTurnoGastronomiaContableListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltrosListado($request);
         $coleccion = $this->service->listar($filtros, true);
 
         return view('contable.cierre_turno_gastronomia.index', [
@@ -51,7 +51,7 @@ class CierreTurnoGastronomiaContableController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = CierreTurnoGastronomiaContableListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
         $filas = $this->service->listar($filtros, false);
 
         switch ($formato) {
@@ -431,5 +431,43 @@ class CierreTurnoGastronomiaContableController extends Controller
         }
 
         return $pdf->download($nombre);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaDefault = $this->resolverEmpresaDefaultId($empresaQuery);
+        $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
+
+        $filtros = CierreTurnoGastronomiaContableListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault,
+        );
+
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        if (
+            ($filtros['empresa_scope'] ?? 'una') === 'una'
+            && $empresaId > 0
+            && count($asignadas) >= 1
+            && ! in_array($empresaId, $asignadas, true)
+        ) {
+            $filtros['empresa_id'] = $empresaDefault > 0 ? $empresaDefault : 0;
+            if ((int) $filtros['empresa_id'] <= 0) {
+                $filtros['empresa_scope'] = 'todas';
+            }
+        }
+
+        return $filtros;
+    }
+
+    private function resolverEmpresaDefaultId($empresaQuery): int
+    {
+        $first = $empresaQuery->first();
+
+        return $first !== null ? (int) $first->id : 0;
     }
 }

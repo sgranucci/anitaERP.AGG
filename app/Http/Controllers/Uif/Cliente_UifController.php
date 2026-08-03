@@ -27,8 +27,10 @@ use App\Repositories\Uif\Pais_UifRepositoryInterface;
 use App\Repositories\Uif\Pep_UifRepositoryInterface;
 use App\Repositories\Uif\So_UifRepositoryInterface;
 use App\Services\Uif\ClienteUifFotoDocumento;
+use App\Support\Uif\ClienteUifArchivoStorage;
 use App\Support\Uif\ClienteUifInformeReportablesSupport;
 use App\Support\Uif\ClienteUifListadoFiltros;
+use App\Support\Uif\ClienteUifOrigenPcSupport;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -122,6 +124,7 @@ class Cliente_UifController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => ClienteUifListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => ClienteUifListadoFiltros::CAMPOS,
+            'empresa_query' => ClienteUifOrigenPcSupport::empresasUifAsignadas(),
         ]);
     }
 
@@ -138,18 +141,18 @@ class Cliente_UifController extends Controller
         {
         case 'PDF':
             $cliente_uifs = $this->cliente_uifRepository->leeCliente_Uif($filtros, false);
+            $subtituloFiltros = ClienteUifListadoFiltros::subtituloFiltros($filtros);
 
-            $view =  \View::make('uif.cliente_uif.listado', compact('cliente_uifs'))
-                        ->render();
+            $view = \View::make('uif.cliente_uif.listado', compact('cliente_uifs', 'subtituloFiltros'))
+                ->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_cliente_uif';
 
             $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
+            $pdf->setPaper('legal', 'landscape');
             $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombre_pdf.'.pdf');
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
 
         case 'EXCEL':
             return (new Cliente_UifExport($this->cliente_uifRepository))
@@ -181,7 +184,8 @@ class Cliente_UifController extends Controller
         $localidad_uif_query = $this->localidad_uifRepository->all();
         $provincia_uif_query = $this->provincia_uifRepository->all();
         $actividad_uif_query = $this->actividad_uifRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $uifContexto = ClienteUifOrigenPcSupport::contexto($request);
+        $empresa_query = $uifContexto['empresas_uif'];
         $sala_query = $this->salaRepository->allFiltrado();
         $estadocivil_uif_query = $this->estadocivil_uifRepository->all();
         $factorriesgo_uif_query = $this->factorriesgo_uifRepository->all();
@@ -211,7 +215,8 @@ class Cliente_UifController extends Controller
                                                             'pais_uif_query', 'pep_uif_query', 'so_uif_query', 'tipodocumento_query',
                                                             'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
                                                             'cumplenormativaso_enum', 'firmodeclaracionjurada_enum',
-                                                            'riesgopep_enum', 'essupervisor', 'uifPerfil', 'sexo_aprendizaje_map', 'filtrosQuery'));
+                                                            'riesgopep_enum', 'essupervisor', 'uifPerfil', 'sexo_aprendizaje_map',
+                                                            'filtrosQuery', 'uifContexto'));
     }
 
     /**
@@ -261,11 +266,19 @@ class Cliente_UifController extends Controller
         $soloSolapaPremios = $ocultarVolver && $request->query('uif_tab') === '3';
 
 		$data = $this->cliente_uifRepository->find($id);
+        try {
+            ClienteUifOrigenPcSupport::assertClienteOperableEnPc($data, $request);
+        } catch (\RuntimeException $e) {
+            return redirect()
+                ->route('consulta_cliente_uif')
+                ->with('mensaje-error', $e->getMessage());
+        }
 
         $localidad_uif_query = $this->localidad_uifRepository->all();
         $provincia_uif_query = $this->provincia_uifRepository->all();
         $actividad_uif_query = $this->actividad_uifRepository->all();
-        $empresa_query = $this->empresaRepository->all();
+        $uifContexto = ClienteUifOrigenPcSupport::contexto($request);
+        $empresa_query = $uifContexto['empresas_uif'];
         $sala_query = $this->salaRepository->allFiltrado();
         $estadocivil_uif_query = $this->estadocivil_uifRepository->all();
         $factorriesgo_uif_query = $this->factorriesgo_uifRepository->all();
@@ -297,7 +310,7 @@ class Cliente_UifController extends Controller
                                                     'sexo_enum', 'resideparaisofiscal_enum', 'resideexterior_enum',
                                                     'cumplenormativaso_enum', 'firmodeclaracionjurada_enum', 'riesgopep_enum',
                                                     'essupervisor', 'uifPerfil', 'sexo_aprendizaje_map',
-                                                    'ocultarVolver', 'soloSolapaPremios', 'filtrosQuery'));
+                                                    'ocultarVolver', 'soloSolapaPremios', 'filtrosQuery', 'uifContexto'));
     }
 
     /**
@@ -342,6 +355,32 @@ class Cliente_UifController extends Controller
             (string) $cliente_uif->numerodocumento,
             $cliente_uif->inroclienteid !== null ? (int) $cliente_uif->inroclienteid : null
         );
+        if ($path === null || ! is_file($path)) {
+            abort(404);
+        }
+
+        if (request()->query('disposition') === 'attachment') {
+            return response()->download($path, basename($path));
+        }
+
+        return response()->file($path);
+    }
+
+    /**
+     * Sirve un adjunto del cliente desde /scan (o legacy local).
+     */
+    public function mostrarArchivo($id, $archivo)
+    {
+        if (! can('editar-cliente-uif', false) && ! can('listar-cliente-uif', false)) {
+            abort(403);
+        }
+
+        $cliente_uif = $this->cliente_uifRepository->find($id);
+        if ($cliente_uif === null) {
+            abort(404);
+        }
+
+        $path = ClienteUifArchivoStorage::absoluteClienteAdjunto((int) $id, (string) $archivo);
         if ($path === null || ! is_file($path)) {
             abort(404);
         }
@@ -474,7 +513,8 @@ class Cliente_UifController extends Controller
     {
         can('exportar-operacion-uif');
 
-        $empresa_query = $this->empresaRepository->allFiltrado();
+        // Encargadas/operadores: BSA/KSA/RSA; cajeros: empresas asignadas / PC.
+        $empresa_query = ClienteUifOrigenPcSupport::empresasUifAsignadas();
 
         return view('uif.exportaoperacion.crear', compact('empresa_query'));
     }

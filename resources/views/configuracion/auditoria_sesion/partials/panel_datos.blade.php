@@ -167,17 +167,17 @@
         </div>
     @endif
     <div class="form-row align-items-end">
-        <div class="form-group col-md-4">
-            <label for="usuario_id_datos">Usuario que modificó</label>
-            <select class="form-control" id="usuario_id_datos" name="usuario_id">
-                <option value="">Todos</option>
-                @foreach ($usuarios as $u)
-                    <option value="{{ $u->id }}" @selected((int) ($filtros['usuario_id'] ?? 0) === (int) $u->id)>
-                        {{ $u->nombre }} ({{ $u->usuario }})
-                    </option>
-                @endforeach
-            </select>
-        </div>
+        @include('configuracion.auditoria_sesion.partials.campo_filtro_usuario', [
+            'label' => 'Usuario que modificó',
+            'colClass' => 'col-md-4',
+            'campoId' => 'usuario_id_datos',
+            'campoCodigoId' => 'usuario_codigo_datos',
+            'campoNombreId' => 'nombreusuario_datos',
+            'usuarioIdVal' => $usuarioFiltro->id ?? ($filtros['usuario_id'] ?? ''),
+            'usuarioCodigoVal' => $usuarioFiltro->usuario ?? '',
+            'usuarioNombreVal' => $usuarioFiltro->nombre ?? '',
+            'omitirFiltroEmpresa' => true,
+        ])
         <div class="form-group col-md-3">
             <label for="campo">Campo (opcional)</label>
             <input type="text" class="form-control" id="campo" name="campo"

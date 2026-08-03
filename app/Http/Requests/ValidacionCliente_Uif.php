@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Uif\Cliente_Uif;
 use App\Repositories\Uif\Cliente_Riesgo_UifRepository;
+use App\Support\Uif\ClienteUifOrigenPcSupport;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ValidacionCliente_Uif extends FormRequest
@@ -25,7 +26,8 @@ class ValidacionCliente_Uif extends FormRequest
      */
     public function rules()
     {
-        return [
+        $uifCtx = ClienteUifOrigenPcSupport::contexto($this);
+        $rules = [
             'nombre' => 'required|max:255',
             'localidad_uif_id' => 'required|integer|exists:localidad_uif,id',
             'provincia_uif_id' => 'required|integer|exists:provincia_uif,id',
@@ -33,6 +35,9 @@ class ValidacionCliente_Uif extends FormRequest
             'actividad_uif_id' => 'required|integer|exists:actividad_uif,id',
             'pep_uif_id' => 'required|integer|exists:pep_uif,id',
             'so_uif_id' => 'required|integer|exists:so_uif,id',
+            'empresa_id' => $uifCtx['origen_fijo']
+                ? 'nullable|integer|exists:empresa,id'
+                : 'required|integer|exists:empresa,id',
             'numerodocumento' => [
                 'required',
                 'max:50',
@@ -40,8 +45,17 @@ class ValidacionCliente_Uif extends FormRequest
                     $nro = trim((string) $value);
                     $ignoreId = $this->resolveClienteUifIdForValidation();
 
-                    // Comparar con TRIM para alinear con prepareForValidation() y valores guardados con espacios.
-                    $query = Cliente_Uif::query()->whereRaw('TRIM(numerodocumento) = ?', [$nro]);
+                    // Unicidad por origen (BSA/KSA/RSA): el mismo DNI puede existir en las 3 salas.
+                    $origen = $this->resolveAnitaOrigenForValidation($ignoreId);
+                    if ($origen === null || $origen === '') {
+                        $fail('No se pudo determinar el origen UIF (empresa/sala) para validar el documento.');
+
+                        return;
+                    }
+
+                    $query = Cliente_Uif::query()
+                        ->whereRaw('TRIM(numerodocumento) = ?', [$nro])
+                        ->where('anita_origen', $origen);
 
                     if ($this->filled('tipodocumento_id')) {
                         $query->where('tipodocumento_id', (int) $this->input('tipodocumento_id'));
@@ -52,7 +66,8 @@ class ValidacionCliente_Uif extends FormRequest
                     }
 
                     if ($query->exists()) {
-                        $fail(__('validation.unique', ['attribute' => $this->attributes()[$attribute] ?? $attribute]));
+                        $fail(__('validation.unique', ['attribute' => $this->attributes()[$attribute] ?? $attribute])
+                            .' (origen '.$origen.').');
                     }
                 },
             ],
@@ -77,6 +92,30 @@ class ValidacionCliente_Uif extends FormRequest
                 },
             ],
         ];
+
+        return $rules;
+    }
+
+    /**
+     * Origen de la ficha en edición, o el de la PC en altas.
+     */
+    private function resolveAnitaOrigenForValidation(?int $ignoreId): ?string
+    {
+        if ($ignoreId !== null) {
+            $origenCliente = ClienteUifOrigenPcSupport::origenDeClienteId($ignoreId);
+            if ($origenCliente !== null) {
+                return $origenCliente;
+            }
+        }
+
+        try {
+            return ClienteUifOrigenPcSupport::resolverParaEscritura(
+                $this,
+                (int) $this->input('empresa_id', 0) ?: null
+            )['origen'];
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

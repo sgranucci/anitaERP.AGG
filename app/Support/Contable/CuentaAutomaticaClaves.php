@@ -53,6 +53,54 @@ final class CuentaAutomaticaClaves
 
     public const CIERRE_BINGO_CONT_HOSPITAL = 'cierre_bingo.cont_hospital';
 
+    public const CIERRE_MAQUINA_CAJA_PESOS = 'cierre_maquina.caja_pesos';
+
+    public const CIERRE_MAQUINA_TARJETAS = 'cierre_maquina.tarjetas';
+
+    public const CIERRE_MAQUINA_DOLARES = 'cierre_maquina.dolares';
+
+    public const CIERRE_MAQUINA_EUROS = 'cierre_maquina.euros';
+
+    public const CIERRE_MAQUINA_CAJA_TRANSITORIA = 'cierre_maquina.caja_transitoria';
+
+    public const CIERRE_MAQUINA_DIFERENCIA_CAJA = 'cierre_maquina.diferencia_caja';
+
+    public const CIERRE_MAQUINA_VENTAS_RULETA = 'cierre_maquina.ventas_ruleta';
+
+    public const CIERRE_MAQUINA_CANON_LOTERIA = 'cierre_maquina.canon_loteria';
+
+    public const CIERRE_MAQUINA_CONT_CANON_LOTERIA = 'cierre_maquina.cont_canon_loteria';
+
+    public const CIERRE_MAQUINA_CANON_HOSPITAL = 'cierre_maquina.canon_hospital';
+
+    public const CIERRE_MAQUINA_CONT_CANON_HOSPITAL = 'cierre_maquina.cont_canon_hospital';
+
+    public const CIERRE_MAQUINA_TICKET_PROM_DEBE = 'cierre_maquina.ticket_prom_debe';
+
+    public const CIERRE_MAQUINA_TICKET_PROM_HABER = 'cierre_maquina.ticket_prom_haber';
+
+    public const CIERRE_MAQUINA_GASTOS = 'cierre_maquina.gastos';
+
+    public const CIERRE_MAQUINA_VENTAS = 'cierre_maquina.ventas';
+
+    public const CIERRE_MAQUINA_TICKET_GASTRO = 'cierre_maquina.ticket_gastro';
+
+    public const CIERRE_MAQUINA_PODER_PUBLICO = 'cierre_maquina.poder_publico';
+
+    public const CIERRE_MAQUINA_IMPUESTO_ESP = 'cierre_maquina.impuesto_esp';
+
+    public const CIERRE_MAQUINA_FF_MAQUINA = 'cierre_maquina.ff_maquina';
+
+    public const CIERRE_MAQUINA_PARTIDA_PENDIENTE = 'cierre_maquina.partida_pendiente';
+
+    public const CIERRE_MAQUINA_CRIPTO = 'cierre_maquina.cripto';
+
+    public const CIERRE_MAQUINA_TOTALCOIN = 'cierre_maquina.totalcoin';
+
+    public const CIERRE_MAQUINA_MEP = 'cierre_maquina.mep';
+
+    public const CIERRE_MAQUINA_PAGO24 = 'cierre_maquina.pago24';
+
     /** IVA fiscal general (todas las ventas / cierres que lo consumen). */
     public const VENTAS_IVA_DEBITO_FISCAL = 'ventas.iva_debito_fiscal';
 
@@ -236,6 +284,174 @@ final class CuentaAutomaticaClaves
             self::CIERRE_BINGO_CONT_HOSPITAL => [
                 'grupo' => 'Cierre rendiciones bingo',
                 'descripcion' => 'Contribución hospital (impcont 460 → 215010003)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_CAJA_PESOS => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Caja pesos / efectivo (impcont 473)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_TARJETAS => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Tarjetas a cobrar (impcont 474)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_DOLARES => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Dólares en pesos (impcont 475)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_EUROS => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Euros en pesos (impcont 476)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_CAJA_TRANSITORIA => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Caja transitoria (impcont 477)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_DIFERENCIA_CAJA => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Diferencia de caja (impcont 478)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_VENTAS_RULETA => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Venta ruletas (impcont 479)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_CANON_LOTERIA => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Canon lotería 34% (impcont 480)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_CONT_CANON_LOTERIA => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Contrapartida canon lotería (impcont 481)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_CANON_HOSPITAL => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Canon hospital 1% (impcont 482)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_CONT_CANON_HOSPITAL => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Contrapartida canon hospital (impcont 483)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_TICKET_PROM_DEBE => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Tickets promocionales debe (impcont 484)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_TICKET_PROM_HABER => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Tickets promocionales haber (impcont 485)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_GASTOS => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Vales / reintegros (impcont 492)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_VENTAS => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Venta máquinas online (impcont 493)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_TICKET_GASTRO => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Ticket gastronomía (impcont 494)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_PODER_PUBLICO => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Poder público / pago diferido (impcont 495)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_IMPUESTO_ESP => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Impuesto específico (impcont 467)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_FF_MAQUINA => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Fondo fijo máquinas / variación FF (impcont 461)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_PARTIDA_PENDIENTE => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Partida pendiente de cuadre (impcont 466)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_CRIPTO => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Cripto en pesos (impcont 943)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_TOTALCOIN => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Totalcoin máquina (impcont 950)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_MEP => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'MEP (impcont 940)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::CIERRE_MAQUINA_PAGO24 => [
+                'grupo' => 'Cierre rendiciones máquinas',
+                'descripcion' => 'Pago 24 / venta ant. gastro (impcont 499)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,

@@ -17,7 +17,9 @@ use App\Services\Configuracion\CotizacionService;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Uif\ClienteUifFotoDocumento;
 use App\Services\Uif\ClienteUifSexoAprendizajeService;
+use App\Support\Uif\ClienteUifArchivoStorage;
 use App\Support\Uif\ClienteUifCamposPorDefecto;
+use App\Support\Uif\ClienteUifOrigenPcSupport;
 use App\Models\Uif\Cliente_Uif;
 use App\Models\Uif\Cliente_Premio_Uif;
 use Illuminate\Support\Facades\Storage;
@@ -79,14 +81,23 @@ class Cliente_UifService
 		DB::beginTransaction();
 		try
 		{
+			$ctx = ClienteUifOrigenPcSupport::resolverParaEscritura(
+				$request,
+				(int) $request->input('empresa_id', 0) ?: null
+			);
 			$data = $request->except(['fotodocumento']);
 			$estado = Cliente_Uif::$enumEstado[array_search('A', array_column(Cliente_Uif::$enumEstado, 'valor'))]['nombre'];
 			$data['estado'] = $estado;
+			$data['anita_origen'] = $ctx['origen'];
+			session(['empresa_id' => $ctx['empresa_id']]);
 			$fotodocumento = $request->file('fotodocumento');
 			if ($fotodocumento) {
-				$data['fotodocumento'] = ClienteUifFotoDocumento::storeUploadedFile(
-					$fotodocumento,
-					trim((string) $request->input('numerodocumento'))
+				$data['fotodocumento'] = ClienteUifArchivoStorage::withOrigen(
+					$ctx['origen'],
+					fn () => ClienteUifFotoDocumento::storeUploadedFile(
+						$fotodocumento,
+						trim((string) $request->input('numerodocumento'))
+					)
 				);
 			}
 
@@ -133,21 +144,39 @@ class Cliente_UifService
 		DB::beginTransaction();
 		try
 		{
-			$data = $request->except(['fotodocumento']);
+			$data = $request->except(['fotodocumento', 'anita_origen']);
 			$existente = $this->cliente_uifRepository->find($id);
+			ClienteUifOrigenPcSupport::assertClienteOperable($existente, $request);
+			if (ClienteUifOrigenPcSupport::origenDeCliente($existente) === null) {
+				$data['anita_origen'] = ClienteUifOrigenPcSupport::resolverParaEscritura(
+					$request,
+					(int) $request->input('empresa_id', 0) ?: null
+				)['origen'];
+			}
+			$origenArchivos = ClienteUifOrigenPcSupport::origenDeCliente($existente)
+				?? ($data['anita_origen'] ?? ClienteUifOrigenPcSupport::resolverParaEscritura(
+					$request,
+					(int) $request->input('empresa_id', 0) ?: null
+				)['origen']);
 
 			$fotodocumento = $request->file('fotodocumento');
 			if ($fotodocumento) {
-				$data['fotodocumento'] = ClienteUifFotoDocumento::storeUploadedFile(
-					$fotodocumento,
-					trim((string) $request->input('numerodocumento')),
-					$existente->fotodocumento
+				$data['fotodocumento'] = ClienteUifArchivoStorage::withOrigen(
+					$origenArchivos,
+					fn () => ClienteUifFotoDocumento::storeUploadedFile(
+						$fotodocumento,
+						trim((string) $request->input('numerodocumento')),
+						$existente->fotodocumento
+					)
 				);
 			} else {
-				$renombrado = ClienteUifFotoDocumento::renameIfDocNumberChanged(
-					(string) $existente->numerodocumento,
-					trim((string) $request->input('numerodocumento')),
-					$existente->fotodocumento
+				$renombrado = ClienteUifArchivoStorage::withOrigen(
+					$origenArchivos,
+					fn () => ClienteUifFotoDocumento::renameIfDocNumberChanged(
+						(string) $existente->numerodocumento,
+						trim((string) $request->input('numerodocumento')),
+						$existente->fotodocumento
+					)
 				);
 				if ($renombrado !== null) {
 					$data['fotodocumento'] = $renombrado;
@@ -199,14 +228,26 @@ class Cliente_UifService
 		DB::beginTransaction();
 		try
 		{
-			$data = $this->normalizarDatosPremio($request->all());
-			$cliente_premio_uif = $this->cliente_premio_uifRepository->createUnique($data);
+			$cliente = $this->cliente_uifRepository->find((int) $request->input('cliente_uif_id'));
+			ClienteUifOrigenPcSupport::assertClienteOperable($cliente, $request);
+			$origen = ClienteUifOrigenPcSupport::origenDeCliente($cliente)
+				?? ClienteUifOrigenPcSupport::resolverParaEscritura($request)['origen'];
+			$salaId = ClienteUifArchivoStorage::salaId($origen);
+			$request->merge(['sala_id' => $salaId]);
 
-			if ($cliente_premio_uif == 'Error' || ! $cliente_premio_uif) {
-				throw new Exception('Error en grabacion');
-			}
+			$cliente_premio_uif = ClienteUifArchivoStorage::withOrigen($origen, function () use ($request) {
+				if ($foto = Cliente_Premio_Uif::setFoto($request->foto_up)) {
+					$request->merge(['foto' => $foto]);
+				}
+				$data = $this->normalizarDatosPremio($request->all());
+				$premio = $this->cliente_premio_uifRepository->createUnique($data);
+				if ($premio == 'Error' || ! $premio) {
+					throw new Exception('Error en grabacion');
+				}
+				$this->cliente_premio_archivo_uifRepository->create($request, $premio->id);
 
-			$this->cliente_premio_archivo_uifRepository->create($request, $cliente_premio_uif->id);
+				return $premio;
+			});
 
 			DB::commit();
 		} catch (\Exception $e) {
@@ -227,14 +268,24 @@ class Cliente_UifService
 		DB::beginTransaction();
 		try
 		{
-			$data = $this->normalizarDatosPremio($request->all());
-			$cliente_premio_uif = $this->cliente_premio_uifRepository->updateUnique($data, $id);
+			$premioExistente = $this->cliente_premio_uifRepository->find($id);
+			$cliente = $this->cliente_uifRepository->find((int) $premioExistente->cliente_uif_id);
+			ClienteUifOrigenPcSupport::assertClienteOperable($cliente, $request);
+			$origen = ClienteUifOrigenPcSupport::origenDeCliente($cliente)
+				?? ClienteUifOrigenPcSupport::resolverParaEscritura($request)['origen'];
+			$request->merge(['sala_id' => ClienteUifArchivoStorage::salaId($origen)]);
 
-			if ($cliente_premio_uif == 'Error') {
-				throw new Exception('Error en grabacion');
-			}
-
-			$this->cliente_premio_archivo_uifRepository->update($request, $id);
+			ClienteUifArchivoStorage::withOrigen($origen, function () use ($request, $id, $premioExistente) {
+				if ($foto = Cliente_Premio_Uif::setFoto($request->foto_up, $premioExistente->foto ?? false)) {
+					$request->merge(['foto' => $foto]);
+				}
+				$data = $this->normalizarDatosPremio($request->all());
+				$cliente_premio_uif = $this->cliente_premio_uifRepository->updateUnique($data, $id);
+				if ($cliente_premio_uif == 'Error') {
+					throw new Exception('Error en grabacion');
+				}
+				$this->cliente_premio_archivo_uifRepository->update($request, $id);
+			});
 
 			DB::commit();
 		} catch (\Exception $e) {

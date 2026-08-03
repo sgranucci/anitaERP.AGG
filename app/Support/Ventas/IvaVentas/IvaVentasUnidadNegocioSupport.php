@@ -100,9 +100,9 @@ final class IvaVentasUnidadNegocioSupport
     {
         return match ($key) {
             self::GASTRONOMIA => 'Gastronomía',
-            self::VENDING => 'Vending',
+            self::VENDING => 'Máquinas (vending)',
             self::ESTACIONAMIENTO => 'Estacionamiento',
-            default => 'Administración / Otros',
+            default => 'Administración',
         };
     }
 }

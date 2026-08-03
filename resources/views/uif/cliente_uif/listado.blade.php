@@ -46,34 +46,39 @@
 			</td>
 			<td style="width: 40%; text-align: center;">
 				<h2 style="margin: 0; font-size: 20px; font-weight: bold;">Listado de clientes UIF</h2>
-				<div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
-			</td>
-			<td style="width: 25%; text-align: right; font-size: 8px;">
-				@if ($totalFilas > 0)
-					Registros: {{ $totalFilas }}
+				<div class="meta">Generado {{ date('d/m/Y H:i') }}
+					@if ($totalFilas > 0)
+						— {{ $totalFilas }} registro(s)
+					@endif
+				</div>
+				@if (! empty($subtituloFiltros))
+					<div class="meta" style="margin-top: 4px;"><strong>Filtros:</strong> {{ $subtituloFiltros }}</div>
 				@endif
 			</td>
+			<td style="width: 25%;"></td>
 		</tr>
 	</table>
 	<table class="data">
 		<thead>
 			<tr>
-				<th style="width: 5%;">ID</th>
-				<th style="width: 16%;">Nombre</th>
-				<th style="width: 6%;">Tipo</th>
-				<th style="width: 9%;">N&uacute;mero de doc.</th>
-				<th style="width: 16%;">Domicilio</th>
-				<th style="width: 12%;">Localidad</th>
-				<th style="width: 10%;">Provincia</th>
-				<th style="width: 8%;">Pa&iacute;s</th>
+				<th style="width: 4%;">ID</th>
+				<th style="width: 8%;">Origen</th>
+				<th style="width: 14%;">Nombre</th>
+				<th style="width: 5%;">Tipo</th>
+				<th style="width: 8%;">N&uacute;mero de doc.</th>
+				<th style="width: 14%;">Domicilio</th>
+				<th style="width: 11%;">Localidad</th>
+				<th style="width: 9%;">Provincia</th>
+				<th style="width: 7%;">Pa&iacute;s</th>
 				<th style="width: 8%;">Tel&eacute;fono</th>
-				<th style="width: 10%;">Email</th>
+				<th style="width: 12%;">Email</th>
 			</tr>
 		</thead>
 		<tbody>
 			@foreach ($cliente_uifs as $data)
 				<tr>
 					<td>{{ $data->id }}</td>
+					<td>{{ \App\Support\Uif\ClienteUifOrigenPcSupport::labelOrigen((string) ($data->anita_origen ?? '')) }}</td>
 					<td>{{ $data->nombre }}</td>
 					<td>{{ $data->abreviaturatipodocumento }}</td>
 					<td>{{ $data->numerodocumento }}</td>

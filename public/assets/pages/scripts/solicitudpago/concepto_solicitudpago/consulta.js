@@ -113,8 +113,24 @@ function aplicarFormapagosolDesdeConcepto(data) {
         return;
     }
     var elegido = ids[0];
-    if ($sel.find('option[value="' + elegido + '"]').length) {
-        $sel.val(String(elegido)).trigger('change');
+    var $opt = $sel.find('option[value="' + elegido + '"]');
+    if (!$opt.length && data && data.formapagosol_nombre) {
+        $sel.append(
+            $('<option></option>')
+                .attr('value', String(elegido))
+                .text(String(data.formapagosol_nombre))
+        );
+        $opt = $sel.find('option[value="' + elegido + '"]');
+    }
+    if ($opt.length) {
+        $sel.val(String(elegido));
+        // Algunos selects con plugins escuchan change; forzar valor visible.
+        if ($sel.val() !== String(elegido)) {
+            $sel.find('option').prop('selected', false);
+            $opt.prop('selected', true);
+            $sel.val(String(elegido));
+        }
+        $sel.trigger('change');
     }
 }
 

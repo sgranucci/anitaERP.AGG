@@ -22,6 +22,29 @@
             <div class="card-header">
                 <h3 class="card-title">Conceptos de liquidaci&oacute;n</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('actualizar-concepto-sueldos', false))
+                        <form action="{{ route('sincronizar_concepto_sueldos') }}" method="POST" class="d-inline mr-1"
+                              onsubmit="return confirm('¿Sincronizar conceptos desde Anita (haberes + habformula)? Se agregarán los faltantes y se refrescarán los seeds sin fórmulas Anita importadas.');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-primary btn-sm">
+                                <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
+                            </button>
+                        </form>
+                        <form action="{{ route('retraducir_formulas_concepto_sueldos') }}" method="POST" class="d-inline mr-1"
+                              onsubmit="return confirm('¿Retraducir las fórmulas Anita ya importadas a sintaxis ERP? Actualiza formula/cantidad/valor de cada concepto con líneas.');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                <i class="fa fa-fw fa-magic"></i> Retraducir f&oacute;rmulas
+                            </button>
+                        </form>
+                        <form action="{{ route('reclasificar_papo_concepto_sueldos') }}" method="POST" class="d-inline mr-1"
+                              onsubmit="return confirm('¿Reclasificar conceptos ≥3000 según Anita? Contribución empleador (va al recibo CE) vs informativo (solo reportes). Corrige también va_recibo.');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-warning btn-sm">
+                                <i class="fa fa-fw fa-tags"></i> Reclasificar papo (recibo CE)
+                            </button>
+                        </form>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-concepto-sueldos',
                         'filtroValor' => $filtros['valor'] ?? '',

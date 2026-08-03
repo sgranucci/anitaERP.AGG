@@ -19,21 +19,22 @@ final class RendicionMaquinaAnitaSyncService
 
     public function sincronizacionHabilitada(): bool
     {
-        return filter_var(config('rendicion_maquina_anita.sincronizar', true), FILTER_VALIDATE_BOOLEAN);
+        return filter_var(config('rendicion_maquina_anita.sincronizar', false), FILTER_VALIDATE_BOOLEAN);
     }
 
     public function sincronizarDespuesDeGuardar(RendicionMaquina $rendicion): void
     {
-        if (! $this->sincronizacionHabilitada()) {
-            return;
-        }
-
         $rendicion->loadMissing(['valores.cuentacaja', 'gastos.aperturaGasto', 'empresa']);
 
+        // Numeración siempre (local ERP o unificada Anita según flag).
         if ((int) ($rendicion->nro_oper_anita ?? 0) <= 0) {
             $propuesta = $this->proponerSiguienteNroOper((int) $rendicion->empresa_id);
             $rendicion->update(['nro_oper_anita' => $propuesta['nro_oper']]);
             $rendicion->refresh();
+        }
+
+        if (! $this->sincronizacionHabilitada()) {
+            return;
         }
 
         if ($this->existsCabeceraEnAnita($rendicion)) {
@@ -62,12 +63,23 @@ final class RendicionMaquinaAnitaSyncService
     }
 
     /**
+     * Flag off: serie local ERP desde 1 (max nro_oper_anita en ERP + 1).
+     * Flag on: max(Anita unificado, ERP) + 1 (paridad con la numeración reciente).
+     *
      * @return array{nro_oper: int, fuente: string}
      */
     public function proponerSiguienteNroOper(int $empresaId): array
     {
         if ($empresaId <= 0) {
             throw new \InvalidArgumentException('Empresa inválida para numeración Anita máquinas.');
+        }
+
+        if (! $this->sincronizacionHabilitada()) {
+            // Serie local ERP (paralelo): solo nros aún no sincronizados a Anita → arranca en 1.
+            return [
+                'nro_oper' => $this->ultimoNroOperSerieLocalEnErp() + 1,
+                'fuente' => 'erp_local',
+            ];
         }
 
         $api = new ApiAnita;
@@ -111,6 +123,18 @@ final class RendicionMaquinaAnitaSyncService
     {
         return max(0, (int) (RendicionMaquina::withTrashed()
             ->whereNotNull('nro_oper_anita')
+            ->max('nro_oper_anita') ?? 0));
+    }
+
+    /**
+     * Máximo nro_oper de rendiciones ERP que nunca se escribieron en Anita
+     * (anita_sincronizado_en null). Sirve para la serie local desde 1.
+     */
+    public function ultimoNroOperSerieLocalEnErp(): int
+    {
+        return max(0, (int) (RendicionMaquina::withTrashed()
+            ->whereNotNull('nro_oper_anita')
+            ->whereNull('anita_sincronizado_en')
             ->max('nro_oper_anita') ?? 0));
     }
 

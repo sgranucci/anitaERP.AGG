@@ -268,7 +268,7 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
                 $cantidadLegacy++;
                 $porPv[$key]['asientos'][] = [
                     'asiento_id' => null,
-                    'numeroasiento' => 'Histórico',
+                    'numeroasiento' => CierreRendicionEstacionamientoGrupoSupport::ETIQUETA_ESTADO_LEGACY,
                     'rendicion_id' => (int) $r->id,
                     'total_debe' => 0.0,
                     'legacy' => true,

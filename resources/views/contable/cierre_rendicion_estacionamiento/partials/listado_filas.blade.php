@@ -43,7 +43,9 @@
         <td>{{ $row->fecharendicion?->format('d/m/Y H:i') }}</td>
         <td>
             @if ($row->tieneCierreContable())
-                {{ $row->esCierreContableLegacy() ? 'Cerrada (hist.)' : 'Cerrada' }}
+                {{ $row->esCierreContableLegacy()
+                    ? \App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport::ETIQUETA_ESTADO_LEGACY
+                    : 'Cerrada' }}
             @else
                 Pendiente
             @endif
@@ -73,12 +75,7 @@
     @forelse ($grupos ?? [] as $grupo)
     @php
         $estado = $grupo['estado_grupo'] ?? '';
-        $estadoTxt = match ($estado) {
-            CierreRendicionEstacionamientoGrupoSupport::ESTADO_CERRADA => 'Cerrado',
-            CierreRendicionEstacionamientoGrupoSupport::ESTADO_LEGACY => 'Histórico',
-            CierreRendicionEstacionamientoGrupoSupport::ESTADO_PARCIAL => 'Parcial',
-            default => 'Pendiente',
-        };
+        $estadoTxt = CierreRendicionEstacionamientoGrupoSupport::etiquetaEstado($estado);
         $mediosFila = is_array($grupo['medios_cobro'] ?? null)
             ? $grupo['medios_cobro']
             : CierreRendicionEstacionamientoMediosCobroSupport::agregarDesdeRendiciones($grupo['rendiciones'] ?? []);

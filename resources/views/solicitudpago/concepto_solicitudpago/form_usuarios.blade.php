@@ -1,16 +1,20 @@
 <p class="text-muted mb-3">
     &Aacute;rbol de aprobaci&oacute;n de las solicitudes de pago con este concepto:
-    nivel, usuario firmante y monto desde el cual aplica el nivel.
-    Al emitir una SP se notifica a los firmantes del primer nivel aplicable al monto.
+    nivel, usuario firmante, monto desde el cual aplica y estado al aprobar
+    (convenci&oacute;n: 1=Emitida auto, 2=Controlada, 3=Autorizada, 4=Aviso pago / IE).
+    El nivel <strong>Aviso pago (IE)</strong> solo notifica a pagadores (mail con link a Ingresos/egresos);
+    el estado <strong>Pagada</strong> lo registra el IE/OP, no el &aacute;rbol.
+    Varios firmantes del mismo nivel: alcanza con que uno apruebe (como el &aacute;rbol general).
 </p>
 <div class="table-responsive">
     <table class="table table-sm table-bordered" id="concepto-usuario-table">
         <thead class="thead-light">
             <tr>
-                <th style="width: 6%;">#</th>
-                <th style="width: 10%;">Nivel</th>
-                <th style="width: 54%;">Usuario</th>
-                <th style="width: 18%;">Desde monto</th>
+                <th style="width: 5%;">#</th>
+                <th style="width: 8%;">Nivel</th>
+                <th style="width: 42%;">Usuario</th>
+                <th style="width: 14%;">Desde monto</th>
+                <th style="width: 18%;">Estado al aprobar</th>
                 <th style="width: 8%;"></th>
             </tr>
         </thead>
@@ -22,6 +26,7 @@
                             'nivel' => $nivel,
                             'usuario_id' => old('usuario_ids.'.$i),
                             'desde_monto' => old('desdemontos.'.$i),
+                            'documento_estado_al_aprobar' => old('documento_estado_al_aprobar.'.$i),
                             'usuarios' => null,
                         ];
                     })

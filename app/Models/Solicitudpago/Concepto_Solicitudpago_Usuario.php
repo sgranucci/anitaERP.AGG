@@ -18,6 +18,7 @@ class Concepto_Solicitudpago_Usuario extends Model implements Auditable
         'usuario_id',
         'usuario_orig_id',
         'desde_monto',
+        'documento_estado_al_aprobar',
     ];
 
     protected $casts = [

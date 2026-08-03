@@ -66,10 +66,11 @@ final class LibroIvaDigitalMapeosSupport
 
     public static function letraDesdeCodigoVenta(string $codigoVenta): string
     {
-        if (preg_match('/\b([ABCEMT])\b/i', $codigoVenta, $m)) {
+        // Incluye Z (RMV / informe Z interno Anita p-vtagastro).
+        if (preg_match('/\b([ABCEMTZ])\b/i', $codigoVenta, $m)) {
             return strtoupper($m[1]);
         }
-        if (preg_match('/\s([ABCEMT])-/i', $codigoVenta, $m)) {
+        if (preg_match('/\s([ABCEMTZ])-/i', $codigoVenta, $m)) {
             return strtoupper($m[1]);
         }
 

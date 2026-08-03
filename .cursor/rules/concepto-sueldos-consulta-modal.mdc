@@ -1,0 +1,43 @@
+---
+description: Modal compartido de consulta de conceptos de liquidación (sueldos) con F1/Enter/lupa
+globs: resources/views/sueldos/**/*.blade.php,resources/views/includes/sueldos/modalconsultaconcepto_sueldos.blade.php,public/assets/pages/scripts/sueldos/concepto/consulta.js,app/Http/Controllers/Sueldos/Concepto_SueldosController.php
+alwaysApply: false
+---
+
+# Concepto sueldos: modal de consulta
+
+Patrón **obligatorio** para elegir `concepto_sueldos` en formularios. **No usar `<select name="concepto_id">`** con listados masivos.
+
+Referencias: `sueldos/empleado` (préstamos/cuotas), `sueldos/tipo_ausencia`.
+
+## UI
+
+| Elemento | Implementación |
+|---|---|
+| Partial campo | `resources/views/sueldos/partials/campo_consulta_concepto_sueldos.blade.php` |
+| Modal | `@include('includes.sueldos.modalconsultaconcepto_sueldos')` |
+| JS | `public/assets/pages/scripts/sueldos/concepto/consulta.js` + `activa_eventos_consultaconcepto_sueldos()` |
+| Layout ABM | `layout => 'form_row'` |
+| Layout compacto | `layout => 'compact'` (planes cuota / forms inline) |
+
+Campos: hidden `.concepto_sueldos_id`, código `.codigoconcepto_sueldos`, descripción readonly `.nombreconcepto_sueldos`, lupa `.consultaconcepto_sueldos`, lápiz ABM `.btn-link-editar-concepto-sueldos`.
+
+Contenedor: `.tm-concepto-sueldos-campo`.
+
+## UX
+
+- Código + **Enter** → resuelve por código (activos).
+- **F1** o lupa → modal búsqueda.
+- Modal: **Elegir** + **Consultar** (ABM `origen=modal_consulta&vista=consulta`).
+
+## Backend
+
+- `POST sueldos/concepto/consultaconcepto`
+- `GET sueldos/concepto/leerporcodigo/{codigo}`
+- `GET sueldos/concepto/leer/{id}`
+- Permisos operativos en `Concepto_SueldosController::puedeConsultarConceptoOperativo()`.
+
+## Prohibido
+
+- `<select name="concepto_id">` con todos los conceptos en pantallas nuevas o migradas.
+- Duplicar modal/JS por módulo: reutilizar partial + `consulta.js`.

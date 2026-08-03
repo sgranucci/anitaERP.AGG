@@ -18,6 +18,9 @@
     $soloConsulta = ! empty($soloConsulta);
     $ocultarVolver = ! empty($ocultarVolver);
     $puedeActualizar = ! empty($puedeActualizar);
+    $bloqueaEdicion = ! empty($bloqueaEdicion)
+        || \App\Support\Solicitudpago\SolicitudpagoEstados::bloqueaEdicion($data->estado ?? '');
+    $puedeAccionesEstado = can('actualizar-solicitud-pago', false);
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -41,11 +44,13 @@
                             <i class="fa fa-print"></i> Emitir
                         </a>
                     @endif
-                    @if (! $soloConsulta && can('actualizar-solicitud-pago', false))
+                    @if ($puedeAccionesEstado)
                         @if ($data->estado !== 'SUSPENDIDA')
                             <form action="{{ route('suspender_solicitudpago', $data->id) }}" method="POST" class="d-inline">
                                 @csrf
-                                <button type="submit" class="btn btn-outline-warning btn-sm" onclick="return confirm('¿Suspender esta solicitud?');">
+                                <button type="submit" class="btn btn-outline-warning btn-sm"
+                                        onclick="return confirm('¿Suspender esta solicitud? (vía de anulación; no se borra)');"
+                                        title="Anular / sacar de circuito">
                                     <i class="fa fa-pause"></i> Suspender
                                 </button>
                             </form>
@@ -102,6 +107,13 @@
                     @endif
                 </div>
             </div>
+            @if ($bloqueaEdicion)
+                <div class="alert alert-warning mb-0 mx-3 mt-3 py-2 small">
+                    <i class="fa fa-lock"></i>
+                    Esta solicitud est&aacute; en estado <strong>Controlada</strong> y no puede modificarse.
+                    Para anularla use <strong>Suspender</strong>.
+                </div>
+            @endif
             <form action="{{route('actualizar_solicitudpago', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
                   @if ($soloConsulta && ! $puedeActualizar) onsubmit="return false;" @endif>
                 @csrf

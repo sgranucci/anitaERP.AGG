@@ -11,7 +11,7 @@ use App\Support\Configuracion\AuditoriaDatosListadoFiltros;
 use App\Support\Configuracion\AuditoriaDatosRegistroResolver;
 use App\Support\Configuracion\BitacoraAccesoDiscoSupport;
 use App\Support\Configuracion\BitacoraAccesoListadoFiltros;
-use App\Support\Seguridad\UsuarioOperativoSupport;
+use App\Models\Seguridad\Usuario;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Schema;
@@ -144,9 +144,14 @@ class AuditoriaSesionController extends Controller
             }
         }
 
-        $usuarios = UsuarioOperativoSupport::query()
-            ->orderBy('nombre')
-            ->get(['id', 'nombre', 'usuario']);
+        // Precarga del filtro (incluye suspendidos: histórico de auditoría).
+        $usuarioFiltro = null;
+        $usuarioFiltroId = (int) ($filtros['usuario_id'] ?? 0);
+        if ($usuarioFiltroId > 0) {
+            $usuarioFiltro = Usuario::query()
+                ->select(['id', 'nombre', 'usuario'])
+                ->find($usuarioFiltroId);
+        }
 
         return view('configuracion.auditoria_sesion.index', [
             'filtros' => $filtros,
@@ -155,7 +160,7 @@ class AuditoriaSesionController extends Controller
             'coleccion' => $coleccion,
             'coleccionDatos' => $coleccionDatos,
             'contenidoLog' => $contenidoLog,
-            'usuarios' => $usuarios,
+            'usuarioFiltro' => $usuarioFiltro,
             'archivosLog' => ArchivoLogSupport::listar(),
             'catalogoDatos' => $catalogoDatos,
             'favoritosAnclados' => $favoritosAnclados,

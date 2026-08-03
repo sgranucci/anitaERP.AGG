@@ -48,7 +48,7 @@ class AsientoReferenciaAnitaSupport
             return $data;
         }
 
-        foreach (['recepcionproveedor_id', 'movimientostock_id', 'compra_id', 'caja_movimiento_id', 'cobranza_id', 'pagoproveedor_id'] as $fk) {
+        foreach (['recepcionproveedor_id', 'movimientostock_id', 'compra_id', 'caja_movimiento_id', 'remesa_id', 'cobranza_id', 'pagoproveedor_id'] as $fk) {
             $actual = (int) ($data[$fk] ?? 0);
             $existente = (int) ($asientoExistente->{$fk} ?? 0);
             if ($actual <= 0 && $existente > 0) {

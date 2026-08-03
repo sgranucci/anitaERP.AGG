@@ -51,20 +51,27 @@
         </div>
     </div>
     <div class="col-lg-6">
-        <div class="form-group row">
-            <label for="concepto_id" class="col-lg-4 col-form-label">Concepto liquidaci&oacute;n</label>
-            <div class="col-lg-8">
-                <select name="concepto_id" id="concepto_id" class="form-control">
-                    <option value="">— Ninguno —</option>
-                    @foreach ($conceptos ?? [] as $concepto)
-                        <option value="{{ $concepto->id }}" {{ (int) old('concepto_id', $data->concepto_id ?? 0) === (int) $concepto->id ? 'selected' : '' }}>
-                            {{ $concepto->codigo }} - {{ $concepto->descripcion }}
-                        </option>
-                    @endforeach
-                </select>
-                <small class="form-text text-muted">Concepto que liquida esta ausencia (opcional).</small>
-            </div>
-        </div>
+        @php
+            $conceptoSelId = old('concepto_id', $data->concepto_id ?? '');
+            $conceptoModel = null;
+            if ((int) $conceptoSelId > 0) {
+                $conceptoModel = isset($data) && (int) ($data->concepto_id ?? 0) === (int) $conceptoSelId
+                    ? ($data->concepto ?? null)
+                    : collect($conceptos ?? [])->firstWhere('id', (int) $conceptoSelId);
+            }
+        @endphp
+        @include('sueldos.partials.campo_consulta_concepto_sueldos', [
+            'layout' => 'form_row',
+            'label' => 'Concepto liquidación',
+            'inputName' => 'concepto_id',
+            'inputId' => 'concepto_sueldos_id',
+            'conceptoId' => $conceptoSelId,
+            'codigo' => $conceptoModel->codigo ?? '',
+            'descripcion' => $conceptoModel->descripcion ?? '',
+            'required' => false,
+            'col_label' => 'col-lg-4',
+            'col_input' => 'col-lg-8',
+        ])
         <div class="form-group row">
             <label for="color" class="col-lg-4 col-form-label">Color</label>
             <div class="col-lg-3">

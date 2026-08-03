@@ -15,7 +15,7 @@ class Cliente_Uif extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     use SoftDeletes;
 
-    protected $fillable = ['inroclienteid', 'nombre', 'tipodocumento_id', 'numerodocumento', 'cuit',
+    protected $fillable = ['inroclienteid', 'anita_origen', 'nombre', 'tipodocumento_id', 'numerodocumento', 'cuit',
         'fechanacimiento', 'provincianacimiento_id', 'localidadnacimiento_id', 'paisnacimiento_id',
         'sexo', 'estadocivil_uif_id',
         'domicilio', 'piso', 'departamento', 'localidad_uif_id', 'codigopostal', 'provincia_uif_id',

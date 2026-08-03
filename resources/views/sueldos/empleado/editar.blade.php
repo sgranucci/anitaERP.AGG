@@ -11,10 +11,17 @@
 @if (! ($usaTabla ?? true))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/bases.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/bases.js')) ?: time() }}"></script>
 @endif
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/set_conceptos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/set_conceptos.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/formula_debugger.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/formula_debugger.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/liquidacion_preview.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/liquidacion_preview.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/ausencias.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/ausencias.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/indumentaria.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/indumentaria.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/familiares.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/familiares.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/concepto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/concepto/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/planes_cuota.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/planes_cuota.js')) ?: time() }}"></script>
+@if (can('listar-novedad-sueldos', false) || can('editar-empleado-sueldos', false))
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/novedades.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/novedades.js')) ?: time() }}"></script>
+@endif
 @if (can('listar-siradig-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/siradig.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/siradig.js')) ?: time() }}"></script>
 @endif
@@ -67,70 +74,49 @@
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-historia" role="tab"><i class="fa fa-history"></i> Baja / reingreso</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-familiares" role="tab"><i class="fa fa-users"></i> Familiares (Ganancias)</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-planes-cuota" role="tab"><i class="fa fa-hand-holding-usd"></i> Préstamos / Cuotas</a></li>
+                        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-novedades" role="tab"><i class="fa fa-bolt"></i> Novedades</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-siradig" role="tab"><i class="fa fa-file-invoice-dollar"></i> SiRADIG (F572)</a></li>
                     </ul>
                 </div>
 
-                <form action="{{route('actualizar_empleado_sueldos', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
-                    @csrf @method("put")
-                    <div class="tab-content pt-3">
-                        <div class="tab-pane fade show active" id="tab-datos" role="tabpanel">
-                            @include('sueldos.empleado.partials.form_datos')
-                            @if ($puedeEditar)
-                                <div class="row mt-3"><div class="col-lg-3"></div><div class="col-lg-6">@include('includes.boton-form-editar')</div></div>
-                            @endif
-                        </div>
-                        <div class="tab-pane fade" id="tab-laborales" role="tabpanel">
-                            @include('sueldos.empleado.partials.form_laborales')
-                            @if ($puedeEditar)
-                                <div class="row mt-3"><div class="col-lg-3"></div><div class="col-lg-6"><button type="submit" class="btn botonsubmit btn-success">Actualizar</button></div></div>
-                            @endif
-                        </div>
-                        <div class="tab-pane fade" id="tab-bases" role="tabpanel">
-                            {{-- bases AJAX; botón Actualizar cabecera --}}
-                        </div>
-                        <div class="tab-pane fade" id="tab-leyendas" role="tabpanel">
-                            @include('sueldos.empleado.partials.form_leyendas')
-                            @if ($puedeEditar)
-                                <div class="row mt-3"><div class="col-lg-3"></div><div class="col-lg-6"><button type="submit" class="btn botonsubmit btn-success">Actualizar</button></div></div>
-                            @endif
-                        </div>
-                        <div class="tab-pane fade" id="tab-foto" role="tabpanel">
-                            @include('sueldos.empleado.partials.form_foto')
-                            @if ($puedeEditar)
-                                <div class="row mt-3"><div class="col-lg-3"></div><div class="col-lg-6"><button type="submit" class="btn botonsubmit btn-success">Actualizar</button></div></div>
-                            @endif
-                        </div>
-                        <div class="tab-pane fade" id="tab-archivos" role="tabpanel">
-                            @include('sueldos.empleado.partials.form_archivos')
-                            @if ($puedeEditar)
-                                <div class="row mt-3"><div class="col-lg-3"></div><div class="col-lg-6"><button type="submit" class="btn botonsubmit btn-success">Actualizar</button></div></div>
-                            @endif
-                        </div>
-                        <div class="tab-pane fade" id="tab-ausencias" role="tabpanel">
-                            {{-- vacaciones/ausencias fuera del form: se inyecta abajo vía AJAX --}}
-                        </div>
-                        <div class="tab-pane fade" id="tab-indumentaria" role="tabpanel">
-                            {{-- indumentaria fuera del form: se inyecta abajo vía AJAX --}}
-                        </div>
-                        <div class="tab-pane fade" id="tab-historia" role="tabpanel">
-                            {{-- historia fuera del form: se inyecta abajo --}}
-                        </div>
-                        <div class="tab-pane fade" id="tab-familiares" role="tabpanel">
-                            {{-- familiares Ganancias fuera del form: se inyecta abajo vía AJAX --}}
-                        </div>
-                        <div class="tab-pane fade" id="tab-planes-cuota" role="tabpanel">
-                            {{-- préstamos/cuotas fuera del form: se inyecta abajo vía AJAX --}}
-                        </div>
-                        <div class="tab-pane fade" id="tab-siradig" role="tabpanel">
-                            {{-- SiRADIG fuera del form: se inyecta abajo vía AJAX --}}
-                        </div>
-                    </div>
+                {{-- Formulario del legajo (fuera del tab-content: los campos de cabecera se asocian con form="form-general") --}}
+                <form action="{{ route('actualizar_empleado_sueldos', ['id' => $data->id]) }}"
+                      id="form-general"
+                      class="d-none"
+                      method="POST"
+                      enctype="multipart/form-data"
+                      autocomplete="off">
+                    @csrf
+                    @method('put')
                 </form>
 
-                <div class="tab-content">
-                    <div class="tab-pane fade" id="tab-bases-content-host" style="display:none"></div>
+                {{-- Un solo tab-content: Bootstrap solo oculta bien hermanos del mismo contenedor --}}
+                <div class="tab-content pt-3 pb-2" id="empleado-tab-content">
+                    <div class="tab-pane fade show active" id="tab-datos" role="tabpanel" data-form-general="1">
+                        @include('sueldos.empleado.partials.form_datos')
+                    </div>
+                    <div class="tab-pane fade" id="tab-laborales" role="tabpanel" data-form-general="1">
+                        @include('sueldos.empleado.partials.form_laborales')
+                    </div>
+                    <div class="tab-pane fade" id="tab-bases" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="tab-leyendas" role="tabpanel" data-form-general="1">
+                        @include('sueldos.empleado.partials.form_leyendas')
+                    </div>
+                    <div class="tab-pane fade" id="tab-foto" role="tabpanel" data-form-general="1">
+                        @include('sueldos.empleado.partials.form_foto')
+                    </div>
+                    <div class="tab-pane fade" id="tab-archivos" role="tabpanel" data-form-general="1">
+                        @include('sueldos.empleado.partials.form_archivos')
+                    </div>
+                    <div class="tab-pane fade" id="tab-ausencias" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="tab-indumentaria" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="tab-historia" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="tab-familiares" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="tab-planes-cuota" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="tab-novedades" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="tab-siradig" role="tabpanel"></div>
                 </div>
+
                 <div id="host-bases" class="pt-3 d-none">
                     @include('sueldos.empleado.partials.form_bases')
                 </div>
@@ -153,6 +139,10 @@
                      data-url="{{ route('planes_cuota_empleado_sueldos', ['empleado' => $data->id]) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando préstamos/cuotas…</div>
                 </div>
+                <div id="host-novedades" class="pt-3 d-none"
+                     data-url="{{ route('novedades_empleado_sueldos', ['empleado' => $data->id]) }}">
+                    <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando novedades…</div>
+                </div>
                 @if (can('listar-siradig-sueldos', false))
                 <div id="host-siradig" class="pt-3 d-none"
                      data-url="{{ route('siradig_empleado_sueldos', ['empleado' => $data->id]) }}">
@@ -160,62 +150,92 @@
                 </div>
                 @endif
             </div>
+
+            {{-- Barra de acciones fija: Actualizar legajo visible en todas las solapas --}}
+            @if ($puedeEditar)
+                <div class="card-footer empleado-acciones-legajo">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between">
+                        <div class="text-muted small mb-2 mb-md-0 pr-md-3">
+                            <i class="fa fa-info-circle text-info"></i>
+                            Guarda datos personales, laborales, leyendas, foto y archivos.
+                            Las solapas con alta propia (ausencias, familiares, etc.) se graban con sus botones.
+                        </div>
+                        <div class="d-flex flex-wrap align-items-center">
+                            <a href="{{ route('consultar_empleado_sueldos') }}" class="btn btn-outline-info btn-sm mr-2 mb-1 mb-md-0">
+                                <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                            </a>
+                            <button type="submit" form="form-general" class="btn botonsubmit btn-success mb-1 mb-md-0">
+                                <i class="fa fa-save"></i> Actualizar empleado
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 </div>
 
+<style>
+    .empleado-acciones-legajo {
+        position: sticky;
+        bottom: 0;
+        z-index: 20;
+        background: #fff;
+        border-top: 1px solid #dee2e6;
+        box-shadow: 0 -4px 12px rgba(23, 32, 42, 0.08);
+    }
+</style>
+
 @if (! ($usaTabla ?? true))
     @include('sueldos.empleado.modal_vigencias_base')
 @endif
+@include('includes.sueldos.modalconsultaconcepto_sueldos')
 @include('compras.proveedor.arca-cuit-entry-modal')
 @include('compras.proveedor.arca-padron-modals')
 
 <script>
 (function () {
-    function moveHosts() {
-        var basesPane = document.getElementById('tab-bases');
-        var histPane = document.getElementById('tab-historia');
-        var hostBases = document.getElementById('host-bases');
-        var hostHist = document.getElementById('host-historia');
-        if (basesPane && hostBases) {
-            basesPane.appendChild(hostBases);
-            hostBases.classList.remove('d-none');
+    function asociarCamposFormGeneral(root) {
+        if (!root) {
+            return;
         }
-        if (histPane && hostHist) {
-            histPane.appendChild(hostHist);
-            hostHist.classList.remove('d-none');
-        }
-        var ausPane = document.getElementById('tab-ausencias');
-        var hostAus = document.getElementById('host-ausencias');
-        if (ausPane && hostAus) {
-            ausPane.appendChild(hostAus);
-            hostAus.classList.remove('d-none');
-        }
-        var indPane = document.getElementById('tab-indumentaria');
-        var hostInd = document.getElementById('host-indumentaria');
-        if (indPane && hostInd) {
-            indPane.appendChild(hostInd);
-            hostInd.classList.remove('d-none');
-        }
-        var famPane = document.getElementById('tab-familiares');
-        var hostFam = document.getElementById('host-familiares');
-        if (famPane && hostFam) {
-            famPane.appendChild(hostFam);
-            hostFam.classList.remove('d-none');
-        }
-        var pcPane = document.getElementById('tab-planes-cuota');
-        var hostPc = document.getElementById('host-planes-cuota');
-        if (pcPane && hostPc) {
-            pcPane.appendChild(hostPc);
-            hostPc.classList.remove('d-none');
-        }
-        var sirPane = document.getElementById('tab-siradig');
-        var hostSir = document.getElementById('host-siradig');
-        if (sirPane && hostSir) {
-            sirPane.appendChild(hostSir);
-            hostSir.classList.remove('d-none');
-        }
+        root.querySelectorAll('input, select, textarea').forEach(function (el) {
+            if (el.getAttribute('form')) {
+                return;
+            }
+            // No asociar controles de paneles AJAX/históricos que tengan su propio form
+            if (el.closest('form') && el.closest('form').id !== 'form-general') {
+                return;
+            }
+            el.setAttribute('form', 'form-general');
+        });
     }
+
+    function moveHosts() {
+        var map = [
+            ['tab-bases', 'host-bases'],
+            ['tab-historia', 'host-historia'],
+            ['tab-ausencias', 'host-ausencias'],
+            ['tab-indumentaria', 'host-indumentaria'],
+            ['tab-familiares', 'host-familiares'],
+            ['tab-planes-cuota', 'host-planes-cuota'],
+            ['tab-novedades', 'host-novedades'],
+            ['tab-siradig', 'host-siradig']
+        ];
+        map.forEach(function (pair) {
+            var pane = document.getElementById(pair[0]);
+            var host = document.getElementById(pair[1]);
+            if (pane && host) {
+                pane.appendChild(host);
+                host.classList.remove('d-none');
+            }
+        });
+
+        document.querySelectorAll('#empleado-tab-content [data-form-general="1"]').forEach(function (pane) {
+            asociarCamposFormGeneral(pane);
+        });
+    }
+
     moveHosts();
 })();
 </script>

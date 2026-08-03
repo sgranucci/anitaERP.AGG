@@ -1,6 +1,6 @@
 @php
     $fotoUrl = ! empty($foto ?? null)
-        ? asset('storage/imagenes/fotos_uif/'.$foto)
+        ? \App\Support\Uif\ClienteUifArchivoStorage::urlFotoPremio($foto)
         : null;
     $premioId = $premioId ?? null;
     $mostrarEnlace = ($mostrarEnlace ?? true)

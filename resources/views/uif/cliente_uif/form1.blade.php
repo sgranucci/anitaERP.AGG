@@ -1,6 +1,43 @@
 <div class="form1">
+	@php
+		$uifCtxForm = $uifContexto ?? \App\Support\Uif\ClienteUifOrigenPcSupport::contexto();
+		$empresasUifForm = $uifCtxForm['empresas_uif'] ?? collect();
+		$origenClienteForm = \App\Support\Uif\ClienteUifOrigenPcSupport::origenDeCliente($data ?? null);
+		$empresaDesdeCliente = $origenClienteForm
+			? \App\Support\Uif\ClienteUifOrigenPcSupport::empresaIdDesdeOrigen($origenClienteForm)
+			: null;
+		$empresaFormId = old('empresa_id', $empresaDesdeCliente ?? $uifCtxForm['empresa_id'] ?? '');
+		$empresaSoloLectura = !empty($uifCtxForm['origen_fijo']) || !empty($origenClienteForm);
+	@endphp
 		<div class="row">
 			<div class="col-sm-6">
+				@if ($empresaSoloLectura)
+					@php
+						$empIdLock = (int) ($empresaDesdeCliente ?? $uifCtxForm['empresa_id'] ?? 0);
+						$empLabelLock = $origenClienteForm
+							? \App\Support\Uif\ClienteUifOrigenPcSupport::labelOrigen($origenClienteForm)
+							: ($uifCtxForm['label'] ?? '');
+						$empNombreLock = $empresasUifForm->firstWhere('id', $empIdLock)->nombre
+							?? ($uifCtxForm['empresa_nombre'] ?? '');
+					@endphp
+					<input type="hidden" name="empresa_id" value="{{ $empIdLock }}">
+					<div class="form-group row">
+						<label class="col-lg-3 col-form-label">Empresa / origen</label>
+						<div class="col-lg-6">
+							<input type="text" class="form-control" value="{{ $empLabelLock }} — {{ $empNombreLock }}" readonly>
+						</div>
+					</div>
+				@else
+					@include('includes.form-empresa-asignada', [
+						'empresa_query' => $empresasUifForm,
+						'empresa_id' => $empresaFormId,
+						'label' => 'Empresa / sala',
+						'col_label' => 'col-lg-3',
+						'col_input' => 'col-lg-6',
+						'required' => true,
+						'permite_vacio' => false,
+					])
+				@endif
 				<div class="form-group row">
     				<label for="nombre" class="col-lg-3 col-form-label requerido">Nombre</label>
     				<div class="col-lg-6">

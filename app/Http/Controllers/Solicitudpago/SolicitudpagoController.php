@@ -306,13 +306,17 @@ class SolicitudpagoController extends Controller
         $data = $this->repository->findOrFail($id);
         $this->asegurarAccesoSolicitud((int) $id);
         $ocultarVolver = $soloConsulta;
-        $puedeActualizar = can('actualizar-solicitud-pago', false);
+        $bloqueaEdicion = SolicitudpagoEstados::bloqueaEdicion($data->estado ?? '');
+        $puedeActualizar = can('actualizar-solicitud-pago', false) && ! $bloqueaEdicion;
+        if ($bloqueaEdicion) {
+            $soloConsulta = true;
+        }
         $tienePendientesCorreoArbol = $this->arbolIntegracionService->tienePendientesConCorreo((int) $id);
         $arbolMovimientos = $this->arbolIntegracionService->findPorSolicitudpago((int) $id);
 
         return view('solicitudpago.solicitudpago.editar', array_merge(
             $this->datosFormulario($data),
-            compact('data', 'soloConsulta', 'ocultarVolver', 'puedeActualizar', 'tienePendientesCorreoArbol', 'arbolMovimientos')
+            compact('data', 'soloConsulta', 'ocultarVolver', 'puedeActualizar', 'bloqueaEdicion', 'tienePendientesCorreoArbol', 'arbolMovimientos')
         ));
     }
 
@@ -369,6 +373,12 @@ class SolicitudpagoController extends Controller
     {
         can('actualizar-solicitud-pago');
         $this->asegurarAccesoSolicitud((int) $id);
+        $actual = $this->repository->findOrFail($id);
+        if (SolicitudpagoEstados::bloqueaEdicion($actual->estado ?? '')) {
+            return redirect()
+                ->route('editar_solicitudpago', $id)
+                ->with('mensaje_error', 'La solicitud en estado Controlada no puede modificarse. Para anularla use Suspender.');
+        }
 
         try {
             $data = $request->validated();
@@ -428,6 +438,18 @@ class SolicitudpagoController extends Controller
     public function eliminar(Request $request, $id)
     {
         can('borrar-solicitud-pago');
+        if (! SolicitudpagoEstados::esAdministradorSesion()) {
+            if ($request->ajax()) {
+                return response()->json([
+                    'mensaje' => 'ng',
+                    'error' => 'Solo el rol administrador puede borrar. Para anular use Suspender.',
+                ], 403);
+            }
+
+            return redirect()
+                ->route('consultar_solicitudpago')
+                ->with('mensaje_error', 'Solo el rol administrador puede borrar solicitudes. Para anular use Suspender.');
+        }
         $this->asegurarAccesoSolicitud((int) $id);
 
         if ($request->ajax()) {

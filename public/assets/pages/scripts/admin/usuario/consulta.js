@@ -3,6 +3,11 @@ var ptrusuario_codigo;
 var ptrnombreusuario;
 
 function contenedorUsuarioConsulta($el) {
+    var $tm = $el.closest('.tm-usuario-campo');
+    if ($tm.length) {
+        return $tm;
+    }
+
     var $tr = $el.closest('tr');
     if ($tr.length) {
         return $tr;
@@ -11,12 +16,43 @@ function contenedorUsuarioConsulta($el) {
     return $el.closest('.form-group');
 }
 
+function esTeclaF1Usuario(e) {
+    return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function resolverUsuarioDesdeCodigo($input) {
+    var $cont = contenedorUsuarioConsulta($input);
+    var valor = $.trim($input.val());
+
+    if (!valor) {
+        limpiarCamposUsuarioConsulta($cont);
+        return;
+    }
+
+    $.getJSON(carpetaBase + '/configuracion/resolverusuario', paramsResolverUsuario(valor, $cont))
+        .done(function (data) {
+            if (!aplicarUsuarioResuelto($cont, data)) {
+                limpiarCamposUsuarioConsulta($cont);
+            }
+        });
+}
+
 function omitirFiltroEmpresaUsuarioConsulta($cont) {
     if (window._consultaUsuarioOmitirFiltroEmpresa) {
         return true;
     }
 
-    return $cont && $cont.length && $cont.closest('#ms_panel_destinatario').length > 0;
+    if (! $cont || ! $cont.length) {
+        return false;
+    }
+
+    if ($cont.closest('#ms_panel_destinatario').length > 0) {
+        return true;
+    }
+
+    var omitirBtn = $cont.find('.consultausuario').first().data('omitir_filtro_empresa');
+
+    return omitirBtn === 1 || omitirBtn === '1';
 }
 
 function paramsConsultaUsuario(consulta) {
@@ -24,6 +60,10 @@ function paramsConsultaUsuario(consulta) {
         consulta: consulta || '',
         empresa_id: $('#empresa_id').val(),
     };
+
+    if (window._consultaUsuarioOmitirFiltroEmpresa) {
+        params.omitir_filtro_empresa = 1;
+    }
 
     if (typeof window.payloadExtraConsultaUsuario === 'function') {
         $.extend(params, window.payloadExtraConsultaUsuario() || {});
@@ -127,20 +167,24 @@ function limpiarCamposUsuarioConsulta($cont) {
 }
 
 $(document).on('blur', '.usuario_codigo_arbol', function () {
-    var $cont = contenedorUsuarioConsulta($(this));
-    var valor = $.trim($(this).val());
+    resolverUsuarioDesdeCodigo($(this));
+});
 
-    if (!valor) {
-        limpiarCamposUsuarioConsulta($cont);
-        return;
+$(document).on('keydown', '.usuario_codigo_arbol', function (e) {
+    if (esTeclaF1Usuario(e)) {
+        e.preventDefault();
+        var $btn = contenedorUsuarioConsulta($(this)).find('.consultausuario').first();
+        if ($btn.length) {
+            $btn.trigger('click');
+        }
+        return false;
     }
 
-    $.getJSON(carpetaBase + '/configuracion/resolverusuario', paramsResolverUsuario(valor, $cont))
-        .done(function (data) {
-            if (!aplicarUsuarioResuelto($cont, data)) {
-                limpiarCamposUsuarioConsulta($cont);
-            }
-        });
+    if (e.which === 13 || e.key === 'Enter') {
+        e.preventDefault();
+        resolverUsuarioDesdeCodigo($(this));
+        return false;
+    }
 });
 
 $(document).on('change', '.usuario_id', function (event) {
@@ -221,7 +265,8 @@ $('#usuario_id').on('change', function (event) {
 
 function activa_eventos_consultausuario()
 {
-    $('.consultausuario').on('click', function (event) {
+    $('.consultausuario').off('click.consultaUsuario').on('click.consultaUsuario', function (event) {
+        event.preventDefault();
         var $btn = $(this);
         window._consultaUsuarioOmitirFiltroEmpresa = $btn.data('omitir_filtro_empresa') === 1
             || $btn.data('omitir_filtro_empresa') === '1'
@@ -236,33 +281,29 @@ function activa_eventos_consultausuario()
             ptrnombreusuario = ptrNom;
             ptrusuario_codigo = ptrCod || null;
         } else {
-            ptrusuario_id = $btn.closest('tr').find('.usuario_id_arbol, .usuario_id').first();
-            ptrusuario_codigo = $btn.closest('tr').find('.usuario_codigo_arbol');
-            ptrnombreusuario = $btn.closest('tr').find('.nombreusuario');
+            var $contBtn = contenedorUsuarioConsulta($btn);
+            ptrusuario_id = $contBtn.find('.usuario_id_arbol, .usuario_id').first();
+            ptrusuario_codigo = $contBtn.find('.usuario_codigo_arbol');
+            ptrnombreusuario = $contBtn.find('.nombreusuario');
         }
-
-        var usuario_id = $('#usuario_id').val();
 
         $('#consultausuarioModal').modal('show');
-
-        if ($.isNumeric(usuario_id)) {
-            buscar_datos_usuario();
-        }
+        buscar_datos_usuario();
     });
 
-    $('#consultausuarioModal').on('shown.bs.modal', function () {
+    $('#consultausuarioModal').off('shown.bs.modal.consultaUsuario').on('shown.bs.modal.consultaUsuario', function () {
         $(this).find('[autofocus]').focus();
     });
 
-    $('#consultausuarioModal').on('hidden.bs.modal', function () {
+    $('#consultausuarioModal').off('hidden.bs.modal.consultaUsuario').on('hidden.bs.modal.consultaUsuario', function () {
         window._consultaUsuarioOmitirFiltroEmpresa = false;
     });
 
-    $('#aceptaconsultausuarioModal').on('click', function () {
+    $('#aceptaconsultausuarioModal').off('click.consultaUsuario').on('click.consultaUsuario', function () {
         $('#consultausuarioModal').modal('hide');
     });
 
-    $('#empresa_id').on('change', function (event) {
+    $('#empresa_id').off('change.consultaUsuario').on('change.consultaUsuario', function (event) {
         event.preventDefault();
 
         $("#datosusuario").html("");

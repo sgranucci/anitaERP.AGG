@@ -68,14 +68,15 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
 
         if (is_string($filtros)) {
             $texto = trim($filtros);
-            $filtros = [
+            $filtros = array_merge(CuentacajaListadoFiltros::filtrosVacios(), [
                 'modo' => CuentacajaListadoFiltros::MODO_TODOS,
                 'campo' => 'nombre',
                 'operador' => 'contiene',
                 'valor' => $texto,
                 'valor_hasta' => '',
                 'busqueda' => $texto,
-            ];
+                'empresa_scope' => 'todas',
+            ]);
         } elseif (! is_array($filtros)) {
             $filtros = CuentacajaListadoFiltros::filtrosVacios();
         }
@@ -87,11 +88,11 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             ->leftJoin('moneda', 'moneda.id', '=', 'cuentacaja.moneda_id')
             ->with(['empresas', 'cuentacontables', 'bancos', 'monedas', 'usocuentacajas']);
 
+        // Seguridad: solo empresas asignadas (+ cuentas sin empresa = multiempresa).
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'cuentacaja.empresa_id', true);
 
-        if (CuentacajaListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            CuentacajaListadoFiltros::aplicar($query, $filtros);
-        }
+        // Empresa externa + texto (empresa aún sin texto).
+        CuentacajaListadoFiltros::aplicar($query, $filtros);
 
         $query->orderBy('cuentacaja.nombre');
 

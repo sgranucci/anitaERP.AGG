@@ -41,7 +41,8 @@ Volver al listado: `btn btn-outline-info btn-sm` + `fa-reply-all`.
 
 - Layout: `@extends("theme.$theme.layout")`, `form-horizontal`, `@include('includes.form-error')` + `mensaje`.
 - Scripts: `admin/crear.js` + JS propio del módulo si hay grilla/modales.
-- Empresa: `includes.form-empresa-asignada` / `-control` (nunca select crudo de todas las empresas).
+- Empresa: `includes.form-empresa-asignada` / `-control` con `EmpresaRepository::allFiltrado()` (nunca `Empresa::query()` de todas las empresas).
+- Labels: `control-label text-right pr-2` (ver `forms-labels-derecha.mdc`).
 - Cuentas / depósitos / CC / artículos: **modales de consulta** del ERP (`tm-*-campo` + `consulta.js`), no inventar selects masivos.
 - Grillas hijas (N empresas, N líneas): tabla `table-sm table-bordered`, thead `#85C1E9`, template `<template>` + botón outline `Agregar…`; replicar a otras empresas resolviendo ID por código (patrón apertura-gasto / artículo).
 

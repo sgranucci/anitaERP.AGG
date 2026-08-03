@@ -160,10 +160,15 @@ final class RendicionMaquinaAnitaContextBuilder
             'estado' => (string) config('rendicion_maquina_anita.estado_pendiente', ' '),
             'observacion' => (string) ($rendicion->observacion ?? ''),
             'sobrantes' => $input('sobrantes'),
-            'deposito' => $input('deposito'),
+            'deposito' => (array_key_exists('calc.deposito', $calcVars) || array_key_exists('deposito', $calcVars))
+                ? $calc('deposito')
+                : $input('deposito'),
             'venta_ficha' => $input('venta_ficha'),
             'drop_bill_ant' => $input('drop_bill_ant'),
-            'drop_billete' => $input('drop_billete'),
+            // Anita rendm_drop_billete = bruto WIGOS; dr_bill_rod = neto
+            'drop_billete' => abs($input('drop_billete_bruto')) > 0.00001
+                ? $input('drop_billete_bruto')
+                : round($input('drop_billete') + $input('impuesto_drop'), 4),
             'pago_manual' => $input('pago_manual'),
             'tito' => $input('tito'),
             'hopper' => $input('hopper'),
@@ -178,7 +183,7 @@ final class RendicionMaquinaAnitaContextBuilder
             'impuesto_drop' => $input('impuesto_drop'),
             'impuesto_venta' => $input('impuesto_venta'),
             'impuesto_qr' => $input('impuesto_qr'),
-            'ajuste_wigosd' => $input('ajuste_wigosd'),
+            'ajuste_wigosd' => 0.0,
             'billem_rodillo' => $input('billem_rodillo'),
             'billem_ruleta' => $input('billem_ruleta'),
             'dropqr_rodillo' => $input('dropqr_rodillo'),

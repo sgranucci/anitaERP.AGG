@@ -7,6 +7,7 @@ use App\Http\Requests\ValidacionEmpleadoAusencia_Sueldos;
 use App\Models\Sueldos\Empleado_Ausencia_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Tipo_Ausencia_Sueldos;
+use App\Services\Sueldos\AusenciaNovedadSyncService;
 use App\Services\Sueldos\DevengamientoVacacionesService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -15,12 +16,20 @@ class Empleado_AusenciaSueldosController extends Controller
 {
     private DevengamientoVacacionesService $devengamiento;
 
-    public function __construct(DevengamientoVacacionesService $devengamiento)
-    {
+    private AusenciaNovedadSyncService $novedadSync;
+
+    public function __construct(
+        DevengamientoVacacionesService $devengamiento,
+        AusenciaNovedadSyncService $novedadSync
+    ) {
         $this->devengamiento = $devengamiento;
+        $this->novedadSync = $novedadSync;
     }
 
-    /** Panel HTML de la solapa (saldos + eventos + form). */
+    /**
+     * Panel HTML de la solapa (saldos + eventos + form).
+     * Solo lectura del ledger: el motor corre al abrir/guardar el empleado o al mutar ausencias.
+     */
     public function panel($empleadoId)
     {
         can('editar-empleado-sueldos');
@@ -35,9 +44,10 @@ class Empleado_AusenciaSueldosController extends Controller
         $empleado = Empleado_Sueldos::findOrFail($empleadoId);
 
         $datos = $this->normalizar($request, $empleado);
-        Empleado_Ausencia_Sueldos::create($datos);
+        $ausencia = Empleado_Ausencia_Sueldos::create($datos);
 
         $this->devengamiento->recalcularEmpleado($empleado, $this->usuarioId());
+        $this->novedadSync->sincronizar($ausencia->fresh(['tipo.concepto', 'empleado']));
 
         return $this->responderPanel($empleado, 'Ausencia registrada con éxito');
     }
@@ -51,6 +61,7 @@ class Empleado_AusenciaSueldosController extends Controller
         $ausencia->update($this->normalizar($request, $empleado));
 
         $this->devengamiento->recalcularEmpleado($empleado, $this->usuarioId());
+        $this->novedadSync->sincronizar($ausencia->fresh(['tipo.concepto', 'empleado']));
 
         return $this->responderPanel($empleado, 'Ausencia actualizada con éxito');
     }
@@ -60,8 +71,10 @@ class Empleado_AusenciaSueldosController extends Controller
         can('actualizar-empleado-sueldos');
         $ausencia = Empleado_Ausencia_Sueldos::findOrFail($id);
         $empleado = Empleado_Sueldos::findOrFail($ausencia->empleado_id);
+        $ausenciaId = (int) $ausencia->id;
         $ausencia->delete();
 
+        $this->novedadSync->anularPorAusencia($ausenciaId);
         $this->devengamiento->recalcularEmpleado($empleado, $this->usuarioId());
 
         return $this->responderPanel($empleado, 'Ausencia eliminada');

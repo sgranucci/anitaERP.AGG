@@ -13,18 +13,25 @@
 					<input type="date" name="fecha" id="fecha" class="form-control" value="{{ old('fecha', date('Y-m-d')) }}">
 				</div>
 			</div>
+			@php
+				$clientePremioId = (int) ($cliente_uif_id ?? ($data->cliente_uif_id ?? 0));
+				$origenClientePremio = \App\Support\Uif\ClienteUifOrigenPcSupport::origenDeClienteId($clientePremioId);
+				$salaClienteId = $origenClientePremio
+					? \App\Support\Uif\ClienteUifArchivoStorage::salaId($origenClientePremio)
+					: (int) (\App\Support\Uif\ClienteUifOrigenPcSupport::intentarResolver()['sala_id'] ?? $premioOldId('sala_id'));
+			@endphp
 			<div class="form-group row">
 				<label for="sala_id" class="col-lg-3 col-form-label requerido">Sala</label>
 				<div class="col-lg-9">
-					<select name="sala_id" id="sala_id" data-placeholder="Sala" class="form-control required" data-fouc required>
+					<input type="hidden" name="sala_id" id="sala_id" value="{{ $salaClienteId }}">
+					<select class="form-control" disabled>
 						@foreach($sala_query as $key => $value)
-							@if ((int) $value->id == (int) $premioOldId('sala_id'))
-								<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
-							@else
-								<option value="{{ $value->id }}">{{ $value->nombre }}</option>
-							@endif
+							<option value="{{ $value->id }}" @selected((int) $value->id === (int) $salaClienteId)>{{ $value->nombre }}</option>
 						@endforeach
 					</select>
+					@if ($origenClientePremio)
+						<small class="form-text text-muted">Sala del origen del cliente: {{ \App\Support\Uif\ClienteUifOrigenPcSupport::labelOrigen($origenClientePremio) }}</small>
+					@endif
 				</div>
 			</div>
 			<div class="form-group row">
@@ -79,7 +86,7 @@
 					@if (! empty($premioData->foto ?? null) && ! empty($premioData->id ?? null))
 						<div class="premio-foto-actual mb-2">
 							<a href="{{ route('muestra_foto_cliente_premio_uif', ['id' => $premioData->id]) }}" target="_blank" rel="noopener" class="premio-foto-preview-link tooltipsC" title="Ver en tamaño completo">
-								<img src="{{ asset('storage/imagenes/fotos_uif/'.$premioData->foto) }}" alt="Foto actual del jugador" class="premio-foto-preview-img">
+								<img src="{{ \App\Support\Uif\ClienteUifArchivoStorage::urlFotoPremio($premioData->foto) }}" alt="Foto actual del jugador" class="premio-foto-preview-img">
 							</a>
 							<div>
 								<small class="text-muted d-block">Foto actual del jugador.</small>
@@ -92,7 +99,7 @@
 						$fotoPreviewFileinput = $tieneFotoActual
 							? ''
 							: (! empty($premioData->foto ?? null)
-								? asset('storage/imagenes/fotos_uif/'.$premioData->foto)
+								? (\App\Support\Uif\ClienteUifArchivoStorage::urlFotoPremio($premioData->foto) ?? asset('assets/'.$theme.'/dist/img/user2-160x160.jpg'))
 								: asset('assets/'.$theme.'/dist/img/user2-160x160.jpg'));
 					@endphp
 					<input type="file" name="foto_up" id="foto" data-initial-preview="{{ $fotoPreviewFileinput }}" accept="image/*"/>

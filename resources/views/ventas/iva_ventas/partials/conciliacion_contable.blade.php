@@ -43,7 +43,7 @@
             </p>
         @endif
 
-        <p class="small font-weight-bold text-muted mb-1">Cuadre general por rubro (incluye cierres agrupados)</p>
+        <p class="small font-weight-bold text-muted mb-1">Cuadre general por unidad de negocio (incluye cierres agrupados)</p>
         @php $resumenExento = (float) ($resumen['erp_exento'] ?? 0); @endphp
         @if (abs($resumenExento) > 0.009)
             <p class="small text-muted mb-1">
@@ -51,6 +51,11 @@
                 Incluye {{ $formatear($resumenExento) }} exento, imputado a Ventas sin IVA (no genera d&eacute;bito fiscal).
             </p>
         @endif
+        <p class="small text-muted mb-1">
+            <i class="fa fa-info-circle"></i>
+            Cada unidad cuadra contra sus cuentas de cierre (gastronomía, estacionamiento, vending, administración).
+            El detalle Tabaco controla la cuenta kiosco dentro de gastronomía.
+        </p>
 
         <div class="table-responsive mb-3">
             <table class="table table-sm table-bordered mb-0" style="font-size: 0.78rem;">
@@ -65,14 +70,28 @@
                 </thead>
                 <tbody>
                     @foreach ($lineas as $linea)
-                        @php $cuadra = ! empty($linea['cuadra']); @endphp
-                        <tr @if (! $cuadra) class="table-warning" @endif>
-                            <td>{{ $linea['concepto'] ?? '' }}</td>
+                        @php
+                            $cuadra = ! empty($linea['cuadra']);
+                            $tieneMov = array_key_exists('tiene_movimiento', $linea)
+                                ? ! empty($linea['tiene_movimiento'])
+                                : true;
+                            $esDetalle = ($linea['tipo'] ?? '') === 'detalle_tabaco';
+                        @endphp
+                        <tr @if (! $cuadra && $tieneMov) class="table-warning" @elseif (! $tieneMov || $esDetalle) class="text-muted" @endif>
+                            <td>
+                                @if ($esDetalle)
+                                    <span class="small">{{ $linea['concepto'] ?? '' }}</span>
+                                @else
+                                    {{ $linea['concepto'] ?? '' }}
+                                @endif
+                            </td>
                             <td class="text-right">{{ $formatear($linea['erp'] ?? 0) }}</td>
                             <td class="text-right">{{ $formatear($linea['contable'] ?? 0) }}</td>
                             <td class="text-right font-weight-bold">{{ $formatear($linea['diferencia'] ?? 0) }}</td>
                             <td class="text-center">
-                                @if ($cuadra)
+                                @if (! $tieneMov)
+                                    <span class="text-muted" title="Sin movimiento">—</span>
+                                @elseif ($cuadra)
                                     <i class="fa fa-check text-success" title="Cuadra"></i>
                                 @else
                                     <i class="fa fa-exclamation-triangle text-warning" title="Diferencia"></i>

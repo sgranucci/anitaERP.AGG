@@ -1,4 +1,7 @@
-<?php use App\Support\Sueldos\ConceptoTipo; ?>
+<?php
+use App\Support\Sueldos\ConceptoTipo;
+use App\Support\Sueldos\RubroCostoLaboral;
+?>
 <div class="row">
     <div class="col-lg-6">
         <div class="form-group row">
@@ -78,6 +81,27 @@
             </div>
         </div>
         <div class="form-group row">
+            <label for="rubro_costo_laboral" class="col-lg-4 col-form-label">Rubro costo laboral</label>
+            <div class="col-lg-8">
+                <select name="rubro_costo_laboral" id="rubro_costo_laboral" class="form-control">
+                    <option value="">— (solo contribuci&oacute;n empleador) —</option>
+                    @foreach (RubroCostoLaboral::ETIQUETAS as $val => $label)
+                        <option value="{{ $val }}" {{ old('rubro_costo_laboral', $data->rubro_costo_laboral ?? '') === $val ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
+                <small class="form-text text-muted">Anexo III / torta. Tipo <em>contribuci&oacute;n empleador</em>: no afecta bruto ni neto.</small>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="unidad_medida" class="col-lg-4 col-form-label">Unidad medida</label>
+            <div class="col-lg-4">
+                <input type="text" name="unidad_medida" id="unidad_medida" class="form-control" maxlength="4"
+                       value="{{ old('unidad_medida', $data->unidad_medida ?? '') }}"
+                       placeholder="% D H …"/>
+                <small class="form-text text-muted">Presentaci&oacute;n en recibo (LSD). No altera el c&aacute;lculo.</small>
+            </div>
+        </div>
+        <div class="form-group row">
             <label for="orden" class="col-lg-4 col-form-label">Orden</label>
             <div class="col-lg-4">
                 <input type="number" name="orden" id="orden" class="form-control" min="0"
@@ -109,6 +133,7 @@
     <label for="formula" class="col-lg-2 col-form-label">F&oacute;rmula (importe)</label>
     <div class="col-lg-10">
         <textarea name="formula" id="formula" class="form-control" rows="2" maxlength="2000">{{ old('formula', $data->formula ?? '') }}</textarea>
+        <small class="form-text text-muted">En edici&oacute;n pod&eacute;s usar el <em>Debugger de f&oacute;rmulas</em> debajo del formulario.</small>
     </div>
 </div>
 <div class="form-group row">

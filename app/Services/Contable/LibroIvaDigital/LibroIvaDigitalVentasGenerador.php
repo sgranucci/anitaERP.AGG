@@ -154,6 +154,12 @@ class LibroIvaDigitalVentasGenerador
      */
     private function armarRegistroVenta(Venta $venta): ?array
     {
+        // RMV / IZV internos (Anita t_comp estado I): no van al libro IVA digital AFIP.
+        $abrev = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? '')));
+        if (in_array($abrev, ['RMV', 'IZV'], true)) {
+            return null;
+        }
+
         $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $venta->codigo);
         $codigoBase = (string) ($venta->tipotransacciones->codigo ?? '001');
         $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoBase, $letra);

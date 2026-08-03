@@ -58,9 +58,9 @@ return [
     'unidades_negocio' => [
         'labels' => [
             'gastronomia' => 'Gastronomía',
-            'vending' => 'Vending',
+            'vending' => 'Máquinas (vending)',
             'estacionamiento' => 'Estacionamiento',
-            'otros' => 'Administración / Otros',
+            'otros' => 'Administración',
         ],
         // PVs extra a forzar como vending (por id), además de los de la tabla maquinavending.
         'vending_puntoventa_ids' => [],

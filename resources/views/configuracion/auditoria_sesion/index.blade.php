@@ -272,11 +272,24 @@
                 @endif
             </div>
         </div>
+        @if (in_array($pestana, ['navegacion', 'datos'], true))
+            @include('includes.admin.modalconsultausuario')
+        @endif
     </div>
 </div>
 @endsection
 
 @section('scripts')
+@if (in_array(($filtros['pestana'] ?? ''), ['navegacion', 'datos'], true))
+<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/usuario/consulta.js')) }}"></script>
+<script>
+$(function () {
+    if (typeof activa_eventos_consultausuario === 'function') {
+        activa_eventos_consultausuario();
+    }
+});
+</script>
+@endif
 @if (($filtros['pestana'] ?? '') === 'datos')
 <script src="{{ asset('assets/pages/scripts/configuracion/auditoria_sesion/favoritos.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/auditoria_sesion/buscar_registro.js') }}"></script>

@@ -111,9 +111,12 @@ class SolicitudpagoArbolIntegracionService
                 ->procesaArbolaprobacion(self::TIPO_COMPROBANTE, $solicitudpagoId, 'insert');
 
             if ($nivel === -1) {
+                $spFresh = $this->solicitudpagoRepository->findOrFail($solicitudpagoId);
+
                 return [
                     'ok' => true,
-                    'mensaje' => 'No había niveles pendientes en el árbol del concepto; la solicitud quedó AUTORIZADA.',
+                    'mensaje' => 'No había niveles pendientes en el árbol del concepto; la solicitud quedó '
+                        .SolicitudpagoEstados::label($spFresh->estado).'.',
                     'nivel' => -1,
                 ];
             }
@@ -196,20 +199,27 @@ class SolicitudpagoArbolIntegracionService
             if ($uid <= 0) {
                 continue;
             }
-            if (trim((string) ($mov->hashaprobacion ?? '')) === ''
-                || trim((string) ($mov->hashrechazo ?? '')) === '') {
+            $esAvisoPago = $this->esNivelAvisoPago($spMail, $nivelActual);
+            if (trim((string) ($mov->hashrechazo ?? '')) === '') {
+                $errores[] = 'Movimiento #'.$mov->id.' sin hash de rechazo.';
+
+                continue;
+            }
+            if (! $esAvisoPago && trim((string) ($mov->hashaprobacion ?? '')) === '') {
                 $errores[] = 'Movimiento #'.$mov->id.' sin hashes de aprobación/rechazo.';
 
                 continue;
             }
 
-            $hashVis = (string) ($mov->hashvisualizar ?? $mov->hashaprobacion);
-            $linkAprobacion = ArbolAprobacionEnlaceSupport::enlaceAprobar(
-                $ip,
-                self::TIPO_COMPROBANTE,
-                $solicitudpagoId,
-                (string) $mov->hashaprobacion
-            );
+            $hashVis = (string) ($mov->hashvisualizar ?? $mov->hashaprobacion ?? $mov->hashrechazo);
+            $linkAprobacion = $esAvisoPago
+                ? ''
+                : ArbolAprobacionEnlaceSupport::enlaceAprobar(
+                    $ip,
+                    self::TIPO_COMPROBANTE,
+                    $solicitudpagoId,
+                    (string) $mov->hashaprobacion
+                );
             $linkRechazo = ArbolAprobacionEnlaceSupport::enlaceRechazo(
                 $ip,
                 self::TIPO_COMPROBANTE,
@@ -295,7 +305,6 @@ class SolicitudpagoArbolIntegracionService
         }
 
         if (in_array($sp->estado, [
-            SolicitudpagoEstados::AUTORIZADA,
             SolicitudpagoEstados::PAGADA,
             SolicitudpagoEstados::RECHAZADA,
             SolicitudpagoEstados::TERMINADA,
@@ -314,6 +323,16 @@ class SolicitudpagoArbolIntegracionService
         $empresaId = (int) ($sp->empresa_id ?? 0);
 
         while (true) {
+            $sp->refresh();
+            if (in_array($sp->estado, [
+                SolicitudpagoEstados::PAGADA,
+                SolicitudpagoEstados::RECHAZADA,
+                SolicitudpagoEstados::TERMINADA,
+                SolicitudpagoEstados::SUSPENDIDA,
+            ], true)) {
+                return $sp->estado === SolicitudpagoEstados::PAGADA ? -1 : 0;
+            }
+
             $estadoAprobacionActual = $leeAprobacionComprobante($tipoarbol, $comprobanteId);
             $proximoNivel = $this->buscaProximoNivelDesdeConcepto(
                 $sp,
@@ -332,16 +351,46 @@ class SolicitudpagoArbolIntegracionService
                 return 0;
             }
 
+            // Nivel EMITIDA o sin firmantes operativos: pasa automático (como árbol general sin usuario).
+            if (! empty($proximoNivel['auto'])) {
+                $nivelAuto = (int) $proximoNivel['proximonivel'];
+                $this->aplicaEstadoTrasAprobarNivel($comprobanteId, $nivelAuto, Auth::id() ?? $sp->usuario_umod_id);
+                $obsAuto = 'Nivel sin usuario (automático)';
+                $estAuto = (string) ($proximoNivel['documento_estado_al_aprobar'] ?? '');
+                if ($estAuto === SolicitudpagoEstados::EMITIDA) {
+                    $obsAuto = 'Nivel EMITIDA (automático)';
+                } elseif (SolicitudpagoEstados::esAvisoPagoArbol($estAuto)) {
+                    $obsAuto = 'Nivel aviso pago sin firmantes (automático → AUTORIZADA)';
+                }
+                $this->grabaMovimientoArbolAutomaticoSp(
+                    (int) $arbolShell->id,
+                    $comprobanteId,
+                    $nivelAuto,
+                    Auth::id() ?? (int) $sp->usuario_umod_id,
+                    $obsAuto
+                );
+                continue;
+            }
+
             $uids = $proximoNivel['proximousuarios'] ?? [];
             if (! is_array($uids) || $uids === []) {
                 return 0;
+            }
+
+            $esAvisoPago = ! empty($proximoNivel['es_aviso_pago'])
+                || SolicitudpagoEstados::esAvisoPagoArbol($proximoNivel['documento_estado_al_aprobar'] ?? null);
+
+            // Aviso a pagadores: la SP debe quedar AUTORIZADA; PAGADA solo la pone el IE/OP.
+            if ($esAvisoPago) {
+                $this->asegurarAutorizadaAntesDeAvisoPago($comprobanteId, $sp);
+                $sp->refresh();
             }
 
             $ip = (string) config('arbolaprobacion.ip_link');
             $ref = (string) ($sp->codigo ?? $sp->id);
             $hashVisualizar = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make('VIS'.$comprobanteId.$sp->fecha.$ref));
             $linkVisualizar = ArbolAprobacionEnlaceSupport::enlaceVisualizar($ip, 'solicitudpago/solicitudpago/visualizar', (int) $comprobanteId, $hashVisualizar);
-            $sp->loadMissing(['monedas', 'empresas', 'proveedores', 'conceptos', 'formapagosol', 'sectores']);
+            $sp->loadMissing(['monedas', 'empresas', 'proveedores', 'conceptos', 'formapagosol', 'sectores', 'archivos']);
             $mailExtras = $this->armaExtrasMail($sp, (int) $proximoNivel['proximonivel'], $hashVisualizar, $ip);
 
             $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
@@ -366,7 +415,10 @@ class SolicitudpagoArbolIntegracionService
                 $hashRechazo = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make(
                     self::TIPO_COMPROBANTE.'R'.$comprobanteId.$sp->fecha.$ref.'N'.$estadoAprobacionActual['nivelactual'].'U'.$uid
                 ));
-                $linkAprobacion = ArbolAprobacionEnlaceSupport::enlaceAprobar($ip, self::TIPO_COMPROBANTE, (int) $comprobanteId, $hashAprobacion);
+                // Nivel aviso pago: sin botón aprobar; CTA = IE. Rechazo sí.
+                $linkAprobacion = $esAvisoPago
+                    ? ''
+                    : ArbolAprobacionEnlaceSupport::enlaceAprobar($ip, self::TIPO_COMPROBANTE, (int) $comprobanteId, $hashAprobacion);
                 $linkRechazo = ArbolAprobacionEnlaceSupport::enlaceRechazo($ip, self::TIPO_COMPROBANTE, (int) $comprobanteId, $hashRechazo);
 
                 $enviaCorreo($uid, $tipoarbol, $sp, $linkAprobacion, $linkRechazo, $linkVisualizar, $mailExtras);
@@ -387,7 +439,7 @@ class SolicitudpagoArbolIntegracionService
                     'destinatariousuario_id' => $uid,
                     'fechaproceso' => null,
                     'estado' => $nombrePendiente,
-                    'observacion' => '',
+                    'observacion' => $esAvisoPago ? 'Aviso a pagadores (IE)' : '',
                 ]);
                 $creados++;
             }
@@ -402,17 +454,36 @@ class SolicitudpagoArbolIntegracionService
 
     public function finalizaTrasArbolCompleto(int $solicitudpagoId, $usuarioId): void
     {
-        $this->solicitudpagoRepository->cambiarEstado(
-            $solicitudpagoId,
-            SolicitudpagoEstados::AUTORIZADA,
-            'Autorizada por árbol del concepto'
-        );
+        unset($usuarioId);
+        $sp = Solicitudpago::query()->find($solicitudpagoId);
+        if (! $sp) {
+            return;
+        }
+
+        if (in_array($sp->estado, [
+            SolicitudpagoEstados::PAGADA,
+            SolicitudpagoEstados::RECHAZADA,
+            SolicitudpagoEstados::TERMINADA,
+            SolicitudpagoEstados::SUSPENDIDA,
+        ], true)) {
+            return;
+        }
+
+        $destino = $this->estadoFinalTrasArbolCompleto($sp);
+        if ($destino === null || $destino === $sp->estado) {
+            return;
+        }
+
+        $leyenda = $destino === SolicitudpagoEstados::AUTORIZADA
+            ? 'Autorizada por árbol del concepto'
+            : 'Árbol del concepto: '.$destino;
+
+        $this->solicitudpagoRepository->cambiarEstado($solicitudpagoId, $destino, $leyenda);
     }
 
     /**
-     * Tras aprobar un nivel del árbol del concepto:
-     * - si queda otro nivel → CONTROLADA
-     * - si era el último → AUTORIZADA (procesaArbol también lo asegura vía finalizaTrasArbolCompleto)
+     * Tras aprobar un nivel: aplica documento_estado_al_aprobar del concepto.
+     * PAGADA en el árbol = aviso a pagadores → cabecera AUTORIZADA (PAGADA solo vía IE/OP).
      */
     public function aplicaEstadoTrasAprobarNivel(int $solicitudpagoId, int $nivelAprobado, $usuarioId = null): void
     {
@@ -423,7 +494,6 @@ class SolicitudpagoArbolIntegracionService
         }
 
         if (in_array($sp->estado, [
-            SolicitudpagoEstados::AUTORIZADA,
             SolicitudpagoEstados::PAGADA,
             SolicitudpagoEstados::RECHAZADA,
             SolicitudpagoEstados::TERMINADA,
@@ -432,29 +502,116 @@ class SolicitudpagoArbolIntegracionService
             return;
         }
 
-        $destino = $this->estadoTrasAprobarNivel($sp, $nivelAprobado);
-        if ($destino === null || $destino === $sp->estado) {
+        if ($this->esNivelAvisoPago($sp, $nivelAprobado)) {
+            $this->asegurarAutorizadaAntesDeAvisoPago($solicitudpagoId, $sp);
+
             return;
         }
 
-        $leyenda = $destino === SolicitudpagoEstados::AUTORIZADA
-            ? 'Autorizada por árbol del concepto'
-            : 'Árbol de aprobación: control intermedio (nivel '.$nivelAprobado.')';
+        $destino = $this->estadoTrasAprobarNivel($sp, $nivelAprobado);
+        if ($destino === null || $destino === $sp->estado || $destino === SolicitudpagoEstados::EMITIDA) {
+            return;
+        }
+
+        $leyenda = match ($destino) {
+            SolicitudpagoEstados::AUTORIZADA => 'Autorizada por árbol del concepto (nivel '.$nivelAprobado.')',
+            SolicitudpagoEstados::CONTROLADA => 'Árbol de aprobación: controlada (nivel '.$nivelAprobado.')',
+            default => 'Árbol de aprobación: '.$destino.' (nivel '.$nivelAprobado.')',
+        };
 
         $this->solicitudpagoRepository->cambiarEstado($solicitudpagoId, $destino, $leyenda);
     }
 
     /**
-     * Estado de cabecera esperado al aprobar el nivel indicado (para mail / portal).
+     * Cierre de seguridad tras procesaArbol: sin pendientes → estado final del último nivel;
+     * con pendientes → estado del último nivel aprobado (si está configurado).
+     */
+    public function asegurarEstadoTrasProcesarArbol(int $solicitudpagoId): void
+    {
+        $sp = Solicitudpago::query()->find($solicitudpagoId);
+        if (! $sp) {
+            return;
+        }
+
+        if (in_array($sp->estado, [
+            SolicitudpagoEstados::PAGADA,
+            SolicitudpagoEstados::RECHAZADA,
+            SolicitudpagoEstados::TERMINADA,
+            SolicitudpagoEstados::SUSPENDIDA,
+        ], true)) {
+            return;
+        }
+
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+
+        $tienePendientes = Arbolaprobacion_Movimiento::query()
+            ->where('solicitudpago_id', $solicitudpagoId)
+            ->where('estado', $nombrePendiente)
+            ->exists();
+
+        if (! $tienePendientes) {
+            $this->finalizaTrasArbolCompleto($solicitudpagoId, Auth::id() ?? (int) $sp->usuario_umod_id);
+
+            return;
+        }
+
+        $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+        $nivelMaxAprobado = (int) Arbolaprobacion_Movimiento::query()
+            ->where('solicitudpago_id', $solicitudpagoId)
+            ->where('estado', $nombreAprobado)
+            ->max('nivel');
+
+        if ($nivelMaxAprobado <= 0) {
+            return;
+        }
+
+        $destino = $this->documentoEstadoNivelConcepto($sp, $nivelMaxAprobado);
+        if ($destino === null || $destino === SolicitudpagoEstados::EMITIDA) {
+            return;
+        }
+        // Aviso pago no fija PAGADA; pendientes de ese nivel no deben “finalizar” como pagadas.
+        if (SolicitudpagoEstados::esAvisoPagoArbol($destino)) {
+            $destino = SolicitudpagoEstados::AUTORIZADA;
+        }
+        if ($destino === $sp->estado) {
+            return;
+        }
+
+        $this->solicitudpagoRepository->cambiarEstado(
+            $solicitudpagoId,
+            $destino,
+            'Árbol de aprobación: '.$destino.' (nivel '.$nivelMaxAprobado.')'
+        );
+    }
+
+    /**
+     * Estado de cabecera al aprobar el nivel (null / sin cambio en aviso pago).
+     * PAGADA en config = aviso a pagadores → no se expone como destino de cabecera.
      */
     public function estadoTrasAprobarNivel(Solicitudpago $sp, int $nivelQueSeAprueba): ?string
     {
+        $cfg = $this->documentoEstadoNivelConcepto($sp, $nivelQueSeAprueba);
+        if (SolicitudpagoEstados::esAvisoPagoArbol($cfg)) {
+            return null;
+        }
+        if ($cfg !== null) {
+            return $cfg;
+        }
+
+        // Fallback legacy si el nivel no tiene estado cargado.
         $siguiente = $this->buscaProximoNivelDesdeConcepto(
             $sp,
             $nivelQueSeAprueba,
             (float) ($sp->monto ?? 0),
             (int) ($sp->empresa_id ?? 0)
         );
+        if (! empty($siguiente['es_aviso_pago'])) {
+            return SolicitudpagoEstados::AUTORIZADA;
+        }
         $prox = (int) ($siguiente['proximonivel'] ?? 0);
         if ($prox === -1) {
             return SolicitudpagoEstados::AUTORIZADA;
@@ -464,6 +621,11 @@ class SolicitudpagoArbolIntegracionService
         }
 
         return null;
+    }
+
+    public function esNivelAvisoPago(Solicitudpago $sp, int $nivel): bool
+    {
+        return SolicitudpagoEstados::esAvisoPagoArbol($this->documentoEstadoNivelConcepto($sp, $nivel));
     }
 
     public function rechazaPorRechazo(int $solicitudpagoId, $usuarioId, string $observacion): void
@@ -476,13 +638,14 @@ class SolicitudpagoArbolIntegracionService
     }
 
     /**
-     * Extras del mail de aprobación (alineado a RS/OC: estado destino, monto formateado, descarga).
+     * Extras del mail (aprobación o aviso a pagadores).
      *
      * @return array<string, mixed>
      */
     private function armaExtrasMail(Solicitudpago $sp, int $nivelQueSeEnvia, string $hashVisualizar, string $ip): array
     {
-        $estadoCodigo = $this->estadoTrasAprobarNivel($sp, $nivelQueSeEnvia);
+        $esAvisoPago = $this->esNivelAvisoPago($sp, $nivelQueSeEnvia);
+        $estadoCodigo = $esAvisoPago ? null : $this->estadoTrasAprobarNivel($sp, $nivelQueSeEnvia);
         $estadoTras = $estadoCodigo !== null ? SolicitudpagoEstados::label($estadoCodigo) : null;
 
         $monto = (float) ($sp->monto ?? 0);
@@ -490,7 +653,8 @@ class SolicitudpagoArbolIntegracionService
         // AR: miles con punto, decimales con coma (igual que requisiciones de sala).
         $montoFmt = number_format($monto, 2, ',', '.');
 
-        return [
+        $extras = [
+            'es_aviso_pago' => $esAvisoPago,
             'estado_tras_aprobar' => $estadoTras,
             'monto_items' => $monto,
             'monto_items_fmt' => $montoFmt,
@@ -504,10 +668,28 @@ class SolicitudpagoArbolIntegracionService
                 ? $sp->archivos->isNotEmpty()
                 : $sp->archivos()->exists(),
         ];
+
+        if ($esAvisoPago) {
+            $extras['link_pago'] = ArbolAprobacionEnlaceSupport::enlaceCrearIngresoEgresoDesdeSp($ip, (int) $sp->id, [
+                'empresa_id' => (int) ($sp->empresa_id ?? 0) ?: null,
+                'proveedor_id' => (int) ($sp->proveedor_id ?? 0) ?: null,
+                'detalle' => 'Pago SP '.($sp->codigo ?? $sp->id)
+                    .($sp->detalle ? ' — '.$sp->detalle : ''),
+            ]);
+        }
+
+        return $extras;
     }
 
     /**
-     * @return array{proximonivel: int, proximousuario: ?int, proximousuarios: list<int>}
+     * @return array{
+     *     proximonivel: int,
+     *     proximousuario: ?int,
+     *     proximousuarios: list<int>,
+     *     documento_estado_al_aprobar: ?string,
+     *     auto: bool,
+     *     es_aviso_pago: bool
+     * }
      */
     private function buscaProximoNivelDesdeConcepto(
         Solicitudpago $sp,
@@ -515,83 +697,250 @@ class SolicitudpagoArbolIntegracionService
         float $monto,
         int $empresaId
     ): array {
+        $vacio = [
+            'proximonivel' => 0,
+            'proximousuario' => null,
+            'proximousuarios' => [],
+            'documento_estado_al_aprobar' => null,
+            'auto' => false,
+            'es_aviso_pago' => false,
+        ];
+        $completo = [
+            'proximonivel' => -1,
+            'proximousuario' => null,
+            'proximousuarios' => [],
+            'documento_estado_al_aprobar' => null,
+            'auto' => false,
+            'es_aviso_pago' => false,
+        ];
+
         $conceptoId = (int) ($sp->concepto_solicitudpago_id ?? 0);
         if ($conceptoId <= 0) {
-            return ['proximonivel' => 0, 'proximousuario' => null, 'proximousuarios' => []];
+            return $vacio;
         }
 
         $filas = Concepto_Solicitudpago_Usuario::query()
             ->where('concepto_solicitudpago_id', $conceptoId)
             ->where('nivel', '>', 0)
-            ->where('usuario_id', '>', 0)
             ->where(function ($q) use ($monto) {
                 $q->whereNull('desde_monto')
                     ->orWhere('desde_monto', '<=', $monto);
             })
             ->orderBy('nivel')
             ->orderBy('id')
-            ->get(['nivel', 'usuario_id']);
+            ->get(['nivel', 'usuario_id', 'documento_estado_al_aprobar']);
 
         if ($filas->isEmpty()) {
-            // Sin firmantes aplicables: no hay circuito → autoriza (como árbol vacío completo).
-            return ['proximonivel' => -1, 'proximousuario' => null, 'proximousuarios' => []];
+            // Sin filas aplicables: no hay circuito → finaliza.
+            return $completo;
         }
 
+        /** @var array<int, array{uids: list<int>, estado: ?string}> $porNivel */
         $porNivel = [];
         foreach ($filas as $fila) {
             $n = (int) $fila->nivel;
             if ($n <= $nivelActual) {
                 continue;
             }
-            $porNivel[$n][] = (int) $fila->usuario_id;
+            if (! isset($porNivel[$n])) {
+                $porNivel[$n] = ['uids' => [], 'estado' => null];
+            }
+            $uid = (int) ($fila->usuario_id ?? 0);
+            if ($uid > 0) {
+                $porNivel[$n]['uids'][] = $uid;
+            }
+            if ($porNivel[$n]['estado'] === null) {
+                $est = strtoupper(trim((string) ($fila->documento_estado_al_aprobar ?? '')));
+                if ($est !== '' && in_array($est, SolicitudpagoEstados::valoresArbolAprobacion(), true)) {
+                    $porNivel[$n]['estado'] = $est;
+                }
+            }
         }
 
         if ($porNivel === []) {
-            return ['proximonivel' => -1, 'proximousuario' => null, 'proximousuarios' => []];
+            return $completo;
         }
 
         ksort($porNivel, SORT_NUMERIC);
-        $nivel = (int) array_key_first($porNivel);
-        $uids = array_values(array_unique(array_filter($porNivel[$nivel])));
 
-        if ($empresaId > 0) {
-            $uids = $this->usuarioRepository->filtrarIdsOperativosPorEmpresa($uids, $empresaId);
-        } else {
-            $uids = $this->usuarioRepository->filtrarIdsOperativos($uids);
-        }
-        $uids = array_values(array_filter(array_map('intval', $uids)));
-
-        if ($uids === []) {
-            // Nivel sin firmantes operativos: salta buscando siguientes.
-            $resto = $porNivel;
-            unset($resto[$nivel]);
-            while ($resto !== []) {
-                $nivel = (int) array_key_first($resto);
-                $uids = array_values(array_unique(array_filter($resto[$nivel])));
-                unset($resto[$nivel]);
+        foreach ($porNivel as $nivel => $cfg) {
+            $estado = $cfg['estado'] ?? SolicitudpagoEstados::estadoArbolPorNivel((int) $nivel);
+            $uids = array_values(array_unique(array_filter($cfg['uids'])));
+            if ($uids !== []) {
                 if ($empresaId > 0) {
                     $uids = $this->usuarioRepository->filtrarIdsOperativosPorEmpresa($uids, $empresaId);
                 } else {
                     $uids = $this->usuarioRepository->filtrarIdsOperativos($uids);
                 }
                 $uids = array_values(array_filter(array_map('intval', $uids)));
-                if ($uids !== []) {
-                    return [
-                        'proximonivel' => $nivel,
-                        'proximousuario' => $uids[0],
-                        'proximousuarios' => $uids,
-                    ];
-                }
             }
 
-            return ['proximonivel' => -1, 'proximousuario' => null, 'proximousuarios' => []];
+            $autoEmitida = $estado === SolicitudpagoEstados::EMITIDA;
+            $autoSinUsuario = $uids === [];
+            $esAvisoPago = SolicitudpagoEstados::esAvisoPagoArbol($estado);
+
+            if ($autoEmitida || $autoSinUsuario) {
+                return [
+                    'proximonivel' => (int) $nivel,
+                    'proximousuario' => null,
+                    'proximousuarios' => [],
+                    'documento_estado_al_aprobar' => $estado,
+                    'auto' => true,
+                    'es_aviso_pago' => false,
+                ];
+            }
+
+            return [
+                'proximonivel' => (int) $nivel,
+                'proximousuario' => $uids[0],
+                'proximousuarios' => $uids,
+                'documento_estado_al_aprobar' => $estado,
+                'auto' => false,
+                'es_aviso_pago' => $esAvisoPago,
+            ];
         }
 
-        return [
-            'proximonivel' => $nivel,
-            'proximousuario' => $uids[0],
-            'proximousuarios' => $uids,
-        ];
+        return $completo;
+    }
+
+    private function documentoEstadoNivelConcepto(Solicitudpago $sp, int $nivel): ?string
+    {
+        $conceptoId = (int) ($sp->concepto_solicitudpago_id ?? 0);
+        if ($conceptoId <= 0 || $nivel <= 0) {
+            return null;
+        }
+
+        $filas = Concepto_Solicitudpago_Usuario::query()
+            ->where('concepto_solicitudpago_id', $conceptoId)
+            ->where('nivel', $nivel)
+            ->orderBy('id')
+            ->get(['documento_estado_al_aprobar']);
+
+        foreach ($filas as $fila) {
+            $est = strtoupper(trim((string) ($fila->documento_estado_al_aprobar ?? '')));
+            if ($est !== '' && in_array($est, SolicitudpagoEstados::valoresArbolAprobacion(), true)) {
+                return $est;
+            }
+        }
+
+        return SolicitudpagoEstados::estadoArbolPorNivel($nivel);
+    }
+
+    private function estadoFinalTrasArbolCompleto(Solicitudpago $sp): string
+    {
+        $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+
+        $nivelMax = (int) Arbolaprobacion_Movimiento::query()
+            ->where('solicitudpago_id', $sp->id)
+            ->where('estado', $nombreAprobado)
+            ->max('nivel');
+
+        if ($nivelMax > 0) {
+            $cfg = $this->normalizarEstadoCabeceraDesdeArbol(
+                $this->documentoEstadoNivelConcepto($sp, $nivelMax)
+            );
+            if ($cfg !== null) {
+                return $cfg;
+            }
+        }
+
+        // Sin movimientos: último nivel de aprobación del concepto (ignora aviso pago).
+        $conceptoId = (int) ($sp->concepto_solicitudpago_id ?? 0);
+        if ($conceptoId > 0) {
+            $niveles = Concepto_Solicitudpago_Usuario::query()
+                ->where('concepto_solicitudpago_id', $conceptoId)
+                ->orderByDesc('nivel')
+                ->get(['nivel', 'documento_estado_al_aprobar']);
+            foreach ($niveles as $fila) {
+                $est = strtoupper(trim((string) ($fila->documento_estado_al_aprobar ?? '')));
+                if ($est === '') {
+                    $est = (string) (SolicitudpagoEstados::estadoArbolPorNivel((int) $fila->nivel) ?? '');
+                }
+                if (SolicitudpagoEstados::esAvisoPagoArbol($est) || $est === SolicitudpagoEstados::EMITIDA) {
+                    continue;
+                }
+                $cfg = $this->normalizarEstadoCabeceraDesdeArbol($est);
+                if ($cfg !== null) {
+                    return $cfg;
+                }
+            }
+        }
+
+        return SolicitudpagoEstados::AUTORIZADA;
+    }
+
+    /** PAGADA en árbol no es estado de cabecera; EMITIDA no cierra el circuito. */
+    private function normalizarEstadoCabeceraDesdeArbol(?string $estado): ?string
+    {
+        $estado = strtoupper(trim((string) $estado));
+        if ($estado === '' || $estado === SolicitudpagoEstados::EMITIDA) {
+            return null;
+        }
+        if (SolicitudpagoEstados::esAvisoPagoArbol($estado)) {
+            return SolicitudpagoEstados::AUTORIZADA;
+        }
+        if (in_array($estado, SolicitudpagoEstados::valoresArbolAprobacion(), true)) {
+            return $estado;
+        }
+
+        return null;
+    }
+
+    private function asegurarAutorizadaAntesDeAvisoPago(int $solicitudpagoId, Solicitudpago $sp): void
+    {
+        if (in_array($sp->estado, [
+            SolicitudpagoEstados::AUTORIZADA,
+            SolicitudpagoEstados::PAGADA,
+            SolicitudpagoEstados::RECHAZADA,
+            SolicitudpagoEstados::TERMINADA,
+            SolicitudpagoEstados::SUSPENDIDA,
+        ], true)) {
+            return;
+        }
+
+        $this->solicitudpagoRepository->cambiarEstado(
+            $solicitudpagoId,
+            SolicitudpagoEstados::AUTORIZADA,
+            'Autorizada por árbol del concepto (aviso a pagadores)'
+        );
+    }
+
+    private function grabaMovimientoArbolAutomaticoSp(
+        int $arbolaprobacionId,
+        int $solicitudpagoId,
+        int $nivel,
+        int $envioUid,
+        string $observacion
+    ): void {
+        $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+
+        $token = self::TIPO_COMPROBANTE.'AUTO'.$solicitudpagoId.'N'.$nivel.str_replace([' ', ':'], '', microtime(false));
+        $hashAprobacion = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make($token.'A'));
+        $hashRechazo = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make($token.'R'));
+        $hashVisualizar = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make($token.'V'));
+
+        $this->arbolaprobacionMovimientoRepository->create([
+            'arbolaprobacion_id' => $arbolaprobacionId,
+            'fechaenvio' => Carbon::now(),
+            'enviousuario_id' => $envioUid > 0 ? $envioUid : null,
+            'requisicion_id' => null,
+            'ordencompra_id' => null,
+            'solicitudpago_id' => $solicitudpagoId,
+            'ordenventa_id' => null,
+            'pedido_id' => null,
+            'hashaprobacion' => $hashAprobacion,
+            'hashrechazo' => $hashRechazo,
+            'hashvisualizar' => $hashVisualizar,
+            'nivel' => $nivel,
+            'destinatariousuario_id' => null,
+            'fechaproceso' => Carbon::now(),
+            'estado' => $nombreAprobado,
+            'observacion' => $observacion,
+        ]);
     }
 
     /**

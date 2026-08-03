@@ -4,6 +4,12 @@
     $usuarioId = $fila->usuario_id ?? '';
     $codigoUsuario = $usuario->usuario ?? '';
     $nombreUsuario = $usuario->nombre ?? '';
+    $nivelFila = (int) ($fila->nivel ?? $index);
+    $estadosArbol = \App\Support\Solicitudpago\SolicitudpagoEstados::opcionesArbolAprobacion();
+    $selEstado = old('documento_estado_al_aprobar.'.($index - 1), $fila->documento_estado_al_aprobar ?? '');
+    if ($selEstado === '') {
+        $selEstado = \App\Support\Solicitudpago\SolicitudpagoEstados::estadoArbolPorNivel($nivelFila) ?? '';
+    }
 @endphp
 <tr class="item-concepto-usuario">
     <td>
@@ -11,7 +17,7 @@
     </td>
     <td>
         <input type="number" min="1" class="form-control form-control-sm nivel" name="niveles[]"
-               value="{{ $fila->nivel ?? $index }}"/>
+               value="{{ $nivelFila }}"/>
     </td>
     <td>
         <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
@@ -32,6 +38,17 @@
     <td>
         <input type="number" step="0.01" min="0" class="form-control form-control-sm desdemonto"
                name="desdemontos[]" value="{{ $fila->desde_monto ?? '0' }}">
+    </td>
+    <td>
+        <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm documento_estado_al_aprobar"
+                title="Estado al aprobar; «Aviso pago (IE)» solo notifica a pagadores (PAGADA la pone el IE)">
+            <option value="">—</option>
+            @foreach ($estadosArbol as $est)
+                <option value="{{ $est['valor'] }}" {{ $selEstado === $est['valor'] ? 'selected' : '' }}>
+                    {{ $est['nombre'] }}
+                </option>
+            @endforeach
+        </select>
     </td>
     <td class="text-center">
         <button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar_concepto_usuario tooltipsC">

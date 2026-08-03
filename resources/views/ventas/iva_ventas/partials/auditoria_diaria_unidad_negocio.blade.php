@@ -23,14 +23,19 @@
                     $diasConDif = (int) ($stats['dias_con_diferencia'] ?? 0);
                     $cuentasDet = $unidad['cuentas_detalle'] ?? [];
                 @endphp
-                <div class="card card-outline card-secondary mb-1">
+                @php
+                    $abrirUnidad = ! empty($unidad['abrir']) || $diasConDif > 0;
+                @endphp
+                <div class="card card-outline {{ $abrirUnidad ? 'card-warning' : 'card-secondary' }} mb-1">
                     <div class="card-header p-2" id="heading-aud-un-{{ $idx }}">
-                        <button class="btn btn-link btn-sm text-left w-100 collapsed d-flex justify-content-between align-items-center"
+                        <button class="btn btn-link btn-sm text-left w-100 d-flex justify-content-between align-items-center {{ $abrirUnidad ? '' : 'collapsed' }}"
                             type="button" data-toggle="collapse" data-target="#collapse-aud-un-{{ $idx }}"
-                            aria-expanded="false" aria-controls="collapse-aud-un-{{ $idx }}">
+                            aria-expanded="{{ $abrirUnidad ? 'true' : 'false' }}" aria-controls="collapse-aud-un-{{ $idx }}">
                             <span>
                                 <strong>{{ $unidad['label'] ?? '' }}</strong>
-                                @if ($diasConDif === 0)
+                                @if ((int) ($stats['dias_con_movimiento'] ?? 0) === 0)
+                                    <span class="badge badge-light border ml-1">Sin movimiento</span>
+                                @elseif ($diasConDif === 0)
                                     <span class="badge badge-success ml-1">Cuadra</span>
                                 @else
                                     <span class="badge badge-warning ml-1">{{ $diasConDif }} día(s) con dif.</span>
@@ -41,7 +46,7 @@
                             </span>
                         </button>
                     </div>
-                    <div id="collapse-aud-un-{{ $idx }}" class="collapse" data-parent="#accordion-auditoria-unidad-dia">
+                    <div id="collapse-aud-un-{{ $idx }}" class="collapse {{ $abrirUnidad ? 'show' : '' }}">
                         <div class="card-body p-2">
                             @if (count($cuentasDet) > 0)
                                 <p class="small text-muted mb-2">

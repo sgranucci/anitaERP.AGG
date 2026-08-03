@@ -15,11 +15,17 @@
         puedeEjecutar: @json(can('ejecutar-cierre-rendicion-estacionamiento-contable', false)),
         puedeAnular: @json(can('anular-cierre-rendicion-estacionamiento-contable', false)),
     };
+    window.CIERRE_REND_PENDIENTES = {
+        urlPendientes: @json(route('api_cierre_rendicion_estacionamiento_pendientes')),
+        empresaIdFiltro: @json((int) ($filtros['empresa_id'] ?? 0)),
+        modalRangoId: 'modal-cierre-rango-rend-est',
+    };
 </script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cierre_rendicion_estacionamiento/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cierre_rendicion_estacionamiento/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cierre_rendicion_estacionamiento/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cierre_rendicion_estacionamiento/index.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/includes/pendientes_cierre_modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/includes/pendientes_cierre_modal.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @php
@@ -38,6 +44,10 @@
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route(
+        'cierre_rendicion_estacionamiento_contable',
+        CierreRendicionEstacionamientoListadoFiltros::paraQueryStringEmpresa($filtros ?? [])
+    );
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -47,6 +57,11 @@
                 <h3 class="card-title">Cierre rendiciones estacionamiento</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @if (can('listar-cierre-rendicion-estacionamiento-contable', false))
+                        <button type="button" class="btn btn-sm btn-warning mr-2 mb-1" id="btn-abrir-pendientes-cierre"
+                                title="Ver turnos pendientes de cierre contable">
+                            <i class="fa fa-hourglass-half"></i> Pendientes de cerrar
+                            <span class="badge badge-dark ml-1 d-none" id="badge-pendientes-cierre">0</span>
+                        </button>
                         <a href="{{ route('cierre_rendicion_estacionamiento_conciliacion_flash', $retornoListadoQuery) }}"
                            class="btn btn-sm btn-outline-info mr-2 mb-1" title="Conciliar rendiciones vs flash">
                             <i class="fa fa-balance-scale"></i> Conciliaci&oacute;n flash
@@ -67,7 +82,7 @@
                         'formId' => 'form-filtros-cierre-rend-est',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => CierreRendicionEstacionamientoListadoFiltros::tieneCriteriosUsuario($filtros ?? []),
-                        'limpiarUrl' => route('cierre_rendicion_estacionamiento_contable'),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (ticket, ID, empresa…)',
                         'toggleTarget' => '#panel-filtros-cierre-rend-est',
                         'toggleId' => 'btn-toggle-filtros-cierre-rend-est',
@@ -78,6 +93,7 @@
             <form method="get" action="{{ route('cierre_rendicion_estacionamiento_contable') }}" id="form-filtros-cierre-rend-est" class="mb-0">
                 @include('contable.cierre_rendicion_estacionamiento.partials.filtros_listado')
             </form>
+            @include('contable.cierre_rendicion_estacionamiento.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_cierre_rendicion_estacionamiento_contable',
@@ -203,7 +219,9 @@
                                 @if ($estado === CierreRendicionEstacionamientoGrupoSupport::ESTADO_CERRADA)
                                     <span class="badge badge-success">Cerrado</span>
                                 @elseif ($estado === CierreRendicionEstacionamientoGrupoSupport::ESTADO_LEGACY)
-                                    <span class="badge badge-secondary">Hist&oacute;rico</span>
+                                    <span class="badge badge-secondary" title="Cerrada sin asiento porque no hubo montos a imputar">
+                                        {{ CierreRendicionEstacionamientoGrupoSupport::ETIQUETA_ESTADO_LEGACY }}
+                                    </span>
                                 @elseif ($estado === CierreRendicionEstacionamientoGrupoSupport::ESTADO_PARCIAL)
                                     <span class="badge badge-warning">Parcial</span>
                                 @else
@@ -270,6 +288,19 @@
 </div>
 
 @include('contable.cierre_rendicion_estacionamiento.modal_preview_asiento')
+@if (can('listar-cierre-rendicion-estacionamiento-contable', false))
+    @include('contable.partials.modal_pendientes_cierre', [
+        'rutaListado' => route('cierre_rendicion_estacionamiento_contable'),
+        'estadoPendiente' => \App\Support\Contable\CierreRendicionEstacionamientoListadoFiltros::ESTADO_PENDIENTE,
+        'permisoEjecutar' => 'ejecutar-cierre-rendicion-estacionamiento-contable',
+        'textoIntro' => 'Turnos de estacionamiento presentados en caja sin asiento contable. Un cierre genera <strong>un asiento por fecha jornada + punto de venta</strong>. Los datos se consultan en vivo al abrir y al actualizar.',
+        'mostrarPuntoventa' => true,
+        'mostrarFacturado' => true,
+        'labelTurnos' => 'Turnos',
+        'labelCobrado' => 'Total cobrado',
+        'exigeCorrelatividad' => false,
+    ])
+@endif
 @if (can('ejecutar-cierre-rendicion-estacionamiento-contable', false))
     @include('contable.cierre_rendicion_estacionamiento.modal_cierre_rango')
 @endif

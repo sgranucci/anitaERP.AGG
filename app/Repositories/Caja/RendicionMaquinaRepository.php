@@ -31,7 +31,8 @@ class RendicionMaquinaRepository implements RendicionMaquinaRepositoryInterface
                 'valor' => $texto,
                 'valor_hasta' => '',
                 'busqueda' => $texto,
-                'empresa_id' => 0,
+                'empresa_id' => null,
+                'empresa_scope' => 'todas',
                 'empresas_asignadas' => $this->empresaRepository->traeEmpresasAsignadas(),
             ];
         } elseif (! is_array($filtros)) {
@@ -50,13 +51,12 @@ class RendicionMaquinaRepository implements RendicionMaquinaRepositoryInterface
 
         RendicionMaquinaListadoFiltros::aplicarScopeEmpresasAsignadas($query, $filtros);
 
-        if (RendicionMaquinaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+        if (RendicionMaquinaListadoFiltros::tieneCriteriosTexto($filtros)) {
             RendicionMaquinaListadoFiltros::aplicar($query, $filtros);
         }
 
-        $query->orderByDesc('rendicion_maquina.fecha')
-            ->orderBy('rendicion_maquina.turno')
-            ->orderByDesc('rendicion_maquina.id');
+        // Mayor a menor (último grabado primero), como el resto de CRUDs.
+        $query->orderByDesc('rendicion_maquina.id');
 
         return $paginar
             ? $query->paginate(10)->appends(RendicionMaquinaListadoFiltros::paraQueryString($filtros))

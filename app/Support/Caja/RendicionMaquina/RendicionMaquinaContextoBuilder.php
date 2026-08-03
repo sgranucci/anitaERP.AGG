@@ -57,9 +57,11 @@ final class RendicionMaquinaContextoBuilder
             if (! isset($orquestador['vale_rep_fondo'])) {
                 $contexto['calc.vale_rep_fondo'] = round((float) ($previas['vale_rep_fondo'] ?? $contexto['calc.vale_rep_fondo']), 2);
             }
-            if (! array_key_exists('fondo_inicial', $inputs) && ! array_key_exists('inputs.fondo_inicial', $inputs)) {
-                $contexto['inputs.fondo_inicial'] = round((float) ($previas['fondo_inicial'] ?? 0), 2);
+            $fondoActual = (float) ($contexto['inputs.fondo_inicial'] ?? 0);
+            if (abs($fondoActual) < 0.00001 && abs((float) ($previas['fondo_inicial'] ?? 0)) > 0.00001) {
+                $contexto['inputs.fondo_inicial'] = round((float) $previas['fondo_inicial'], 2);
             }
+            // No rellenar impuesto_drop desde previas acá: 0 manual en T/N (o M) debe respetarse.
         }
 
         return $contexto;
@@ -75,7 +77,6 @@ final class RendicionMaquinaContextoBuilder
         $efectivo = 0.0;
         $qr = 0.0;
         $divisa = 0.0;
-        $noDivisa = 0.0;
 
         foreach ($lineasValor as $linea) {
             $monto = round((float) ($linea['monto'] ?? 0), 2);
@@ -83,18 +84,20 @@ final class RendicionMaquinaContextoBuilder
                 continue;
             }
 
-            $total += $monto;
             $tipo = trim((string) ($linea['tipo_valormae'] ?? $linea['valm_tipo'] ?? ''));
-
-            // valormae: 0 pesos, 1 u$s, 2 €, 5 QR, 7 dep.QR/transf, 8 cripto, 9 TotalCoin
+            $cotizacion = (float) ($linea['cotizacion'] ?? 0);
+            // Paridad calcula_arqueo_maquina: VALM_EFE_DOLAR / EURO / CRIPTO → total * cotización
             if (in_array($tipo, ['1', '2', '8'], true)) {
-                $divisa += $monto;
-            } elseif (in_array($tipo, ['5', '9'], true)) {
-                $qr += $monto;
-            } elseif ($tipo === '0' || $tipo === '7' || $tipo === '') {
-                $efectivo += $monto;
+                $montoPesos = round($monto * $cotizacion, 2);
+                $divisa += $montoPesos;
+                $total += $montoPesos;
             } else {
-                $efectivo += $monto;
+                $total += $monto;
+                if (in_array($tipo, ['5', '9'], true)) {
+                    $qr += $monto;
+                } else {
+                    $efectivo += $monto;
+                }
             }
         }
 

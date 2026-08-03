@@ -9,20 +9,39 @@
     $fecha = fn ($v) => $v ? \Illuminate\Support\Carbon::parse($v)->format('Y-m-d') : '';
 @endphp
 
+@if ($esEdicion)
 <div class="form-group row">
-    <label class="col-lg-3 col-form-label text-right">Empresa <span class="text-danger">*</span></label>
+    <label class="col-lg-3 control-label text-right pr-2 requerido">Empresa</label>
     <div class="col-lg-6">
-        @if ($esEdicion)
-            <input type="text" class="form-control" value="{{ optional($d->empresa)->nombre }}" readonly>
-            <small class="text-muted">La empresa no se modifica una vez creada la corrida.</small>
-        @else
-            <select name="empresa_id" class="form-control" required>
-                <option value="">— Seleccione —</option>
-                @foreach(($empresas ?? []) as $emp)
-                    <option value="{{ $emp->id }}" {{ (int) old('empresa_id') === (int) $emp->id ? 'selected' : '' }}>{{ $emp->nombre }}</option>
-                @endforeach
-            </select>
-        @endif
+        <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $d->empresa_id }}">
+        <input type="text" class="form-control" value="{{ optional($d->empresa)->nombre }}" readonly>
+        <small class="text-muted">La empresa no se modifica una vez creada la corrida.</small>
+    </div>
+</div>
+@else
+@include('includes.form-empresa-asignada', [
+    'empresa_query' => $empresas ?? $empresa_query ?? collect(),
+    'empresa_id' => old('empresa_id'),
+    'col_label' => 'col-lg-3 control-label text-right pr-2',
+    'col_input' => 'col-lg-6',
+    'required' => true,
+])
+@endif
+
+{{-- Espejo help_4 l-recibolargo: Todos / Empresa actual / Multiempresa --}}
+<div class="form-group row">
+    <label for="alcance" class="col-lg-3 col-form-label text-right">Alcance empresas</label>
+    <div class="col-lg-6">
+        <select name="alcance" id="alcance" class="form-control" @if($esEdicion && !($d->esEditable() ?? true)) disabled @endif>
+            @foreach (Liquidacion_Sueldos::ALCANCES as $val => $label)
+                <option value="{{ $val }}" {{ old('alcance', $d->alcance ?? 'todos') === $val ? 'selected' : '' }}>{{ $label }}</option>
+            @endforeach
+        </select>
+        <small class="form-text text-muted">
+            Como Anita: <em>Todos</em> liquida/emite la empresa elegida;
+            <em>Empresa actual</em> solo legajos mono-empresa;
+            <em>Multiempresa</em> solo legajos en varias empresas y al emitir el recibo incluye las otras empresas del mismo per&iacute;odo/tipo.
+        </small>
     </div>
 </div>
 

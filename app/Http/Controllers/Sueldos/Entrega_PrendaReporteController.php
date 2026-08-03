@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Sueldos;
 
 use App\Exports\Sueldos\EntregaPrendaReporteExport;
 use App\Http\Controllers\Controller;
-use App\Models\Configuracion\Empresa;
 use App\Models\Sueldos\Agrupamiento_Sueldos;
 use App\Models\Sueldos\Entrega_Prenda_Sueldos;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Sueldos\EntregaPrendaListadoFiltros;
 use App\Support\Sueldos\EntregaPrendaReporteConsulta;
@@ -15,6 +15,10 @@ use Illuminate\Pagination\LengthAwarePaginator;
 
 class Entrega_PrendaReporteController extends Controller
 {
+    public function __construct(private EmpresaRepositoryInterface $empresaRepository)
+    {
+    }
+
     public function index(Request $request)
     {
         can('listar-entrega-prenda');
@@ -37,7 +41,8 @@ class Entrega_PrendaReporteController extends Controller
             'camposFiltro' => EntregaPrendaListadoFiltros::CAMPOS,
             'totalCantidad' => $totalCantidad,
             'agrupamientos' => Agrupamiento_Sueldos::query()->orderBy('descripcion')->get(['id', 'descripcion']),
-            'empresas' => Empresa::query()->orderBy('nombre')->get(['id', 'nombre']),
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'empresas' => $this->empresaRepository->allFiltrado(),
         ]);
     }
 

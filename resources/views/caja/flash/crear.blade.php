@@ -5,7 +5,11 @@
 
 @section("scripts")
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
-<script>window.flashCalcularUrl = @json(route('flash_caja_api_calcular')); window.flashDesgloseExcelUrl = @json(route('flash_caja_desglose_wigos_excel'));</script>
+<script>
+window.flashCalcularUrl = @json(route('flash_caja_api_calcular'));
+window.flashDesgloseExcelUrl = @json(route('flash_caja_desglose_wigos_excel'));
+window.flashOrigenTotalUrl = @json(route('flash_caja_api_origen_total'));
+</script>
 <script src="{{ asset('assets/pages/scripts/caja/flash/form.js') }}" type="text/javascript"></script>
 @endsection
 

@@ -8,11 +8,19 @@
     foreach (CuentacajaListadoFiltros::CAMPOS as $key => $meta) {
         $operadoresJson[$key] = CuentacajaListadoFiltros::operadoresParaCampo($key);
     }
-    $tieneCriteriosPanel = CuentacajaListadoFiltros::tieneCriteriosAplicados($f);
-    $limpiarUrlPanel = $limpiarUrl ?? route('cuentacaja');
+    $tieneCriteriosPanel = CuentacajaListadoFiltros::tieneCriteriosTexto($f);
+    $limpiarUrlPanel = $limpiarUrl ?? route('cuentacaja', CuentacajaListadoFiltros::paraQueryStringEmpresa($f));
+    $fScope = $f['empresa_scope'] ?? 'una';
+    $fEmp = (int) ($f['empresa_id'] ?? 0);
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-cuentacaja" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    {{-- Persistencia del filtro externo de empresa al buscar por texto o aplicar el panel --}}
+    @if ($fScope === 'todas')
+        <input type="hidden" name="empresa_todas" value="1">
+    @elseif ($fEmp > 0)
+        <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">

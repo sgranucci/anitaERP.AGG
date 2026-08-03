@@ -5,24 +5,66 @@ namespace App\Http\Controllers\Sueldos;
 use App\Exports\Sueldos\LiquidacionSueldosListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionLiquidacion_Sueldos;
-use App\Models\Configuracion\Empresa;
 use App\Models\Sueldos\Empleado_Sueldos;
+use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Models\Sueldos\Motivoegreso_Sueldos;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Sueldos\Liquidacion_SueldosRepositoryInterface;
+use App\Services\Sueldos\AnitaLiquidacionNovedadSyncService;
 use App\Services\Sueldos\LiquidacionCalculadorService;
 use App\Services\Sueldos\PlanCuotaLiquidacionService;
+use App\Services\Sueldos\ReciboAnexoIIIArmadorService;
+use App\Services\Sueldos\ReciboMultiempresaService;
 use App\Support\Sueldos\Formula\FormulaException;
 use App\Support\Sueldos\LiquidacionSueldosListadoFiltros;
 use Illuminate\Http\Request;
 
 class Liquidacion_SueldosController extends Controller
 {
-    private Liquidacion_SueldosRepositoryInterface $repository;
+    public function __construct(
+        private Liquidacion_SueldosRepositoryInterface $repository,
+        private EmpresaRepositoryInterface $empresaRepository,
+    ) {
+    }
 
-    public function __construct(Liquidacion_SueldosRepositoryInterface $repository)
+    /**
+     * Trae maeliq (master) + novedades Anita. Default: empresa 1, fecha_liq >= 20260700.
+     */
+    public function sincronizarAnita(Request $request, AnitaLiquidacionNovedadSyncService $sync)
     {
-        $this->repository = $repository;
+        can('crear-liquidacion-sueldos');
+
+        $empresaId = (int) $request->input('empresa_id', 1);
+        $fechaDesde = (int) $request->input('fecha_liq_desde', 20260700);
+        if ($empresaId <= 0) {
+            $empresaId = 1;
+        }
+        if ($fechaDesde < 19000100) {
+            $fechaDesde = 20260700;
+        }
+
+        $r = $sync->sincronizarEmpresaDesdeFechaLiq($empresaId, $fechaDesde);
+        $liq = $r['liquidaciones'];
+        $nov = $r['novedades'];
+
+        $msg = 'Sync Anita empresa '.$empresaId.' (mael_fecha_liq >= '.$fechaDesde.'): '
+            .'liquidaciones Anita '.$liq['en_anita']
+            .' · importadas '.$liq['importadas']
+            .' · actualizadas '.$liq['actualizadas']
+            .' · números '.implode(', ', $liq['numeros'] ?: ['—'])
+            .' · novedades en alcance '.$nov['en_anita']
+            .' · importadas '.$nov['importados']
+            .' · omitidas '.$nov['omitidos'];
+
+        $errores = array_merge($liq['errores'] ?? [], $nov['errores'] ?? []);
+        if ($errores !== []) {
+            return redirect()->route('consultar_liquidacion_sueldos')
+                ->with('mensaje', $msg)
+                ->with('error', implode(' | ', array_slice($errores, 0, 5)));
+        }
+
+        return redirect()->route('consultar_liquidacion_sueldos')->with('mensaje', $msg);
     }
 
     public function index(Request $request)
@@ -248,6 +290,97 @@ class Liquidacion_SueldosController extends Controller
     }
 
     /**
+     * Vista previa HTML del recibo Anexo III (Dto. 407).
+     * Query multiempresa=1|0 overridea el alcance de la corrida.
+     */
+    public function reciboPreview(
+        Request $request,
+        ReciboAnexoIIIArmadorService $armador,
+        ReciboMultiempresaService $multi,
+        $id,
+        $reciboId
+    ) {
+        can('listar-liquidacion-sueldos');
+
+        $recibo = $this->reciboDeCorrida($id, $reciboId);
+        $liq = $recibo->liquidacion ?? $this->repository->findOrFail($id);
+        $emitirMulti = $multi->emitirMultiempresa(
+            $liq,
+            $request->has('multiempresa') ? $request->boolean('multiempresa') : null
+        );
+        $cadena = $multi->cadenaEmision($recibo, $emitirMulti);
+        $bloques = [];
+        foreach ($cadena as $idx => $rec) {
+            $datos = $armador->armar($rec);
+            $datos['modo_preview'] = true;
+            $datos['multiempresa_activo'] = $emitirMulti;
+            $datos['multiempresa_indice'] = $idx + 1;
+            $datos['multiempresa_total'] = $cadena->count();
+            $bloques[] = $datos;
+        }
+
+        return response()->view('sueldos.liquidacion.recibo_anexo_iii_cadena', [
+            'bloques' => $bloques,
+            'es_pdf' => false,
+            'liq' => $liq,
+            'recibo' => $recibo,
+            'multiempresa' => $emitirMulti,
+        ]);
+    }
+
+    /**
+     * PDF DomPDF del recibo Anexo III (cadena multiempresa si aplica).
+     */
+    public function reciboPdf(
+        Request $request,
+        ReciboAnexoIIIArmadorService $armador,
+        ReciboMultiempresaService $multi,
+        $id,
+        $reciboId
+    ) {
+        can('listar-liquidacion-sueldos');
+
+        $recibo = $this->reciboDeCorrida($id, $reciboId);
+        $liq = $recibo->liquidacion ?? $this->repository->findOrFail($id);
+        $emitirMulti = $multi->emitirMultiempresa(
+            $liq,
+            $request->has('multiempresa') ? $request->boolean('multiempresa') : null
+        );
+        $cadena = $multi->cadenaEmision($recibo, $emitirMulti);
+        $bloques = [];
+        foreach ($cadena as $idx => $rec) {
+            $datos = $armador->armar($rec);
+            $datos['modo_preview'] = false;
+            $datos['multiempresa_activo'] = $emitirMulti;
+            $datos['multiempresa_indice'] = $idx + 1;
+            $datos['multiempresa_total'] = $cadena->count();
+            $bloques[] = $datos;
+        }
+
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->loadView('sueldos.liquidacion.recibo_anexo_iii_cadena', [
+            'bloques' => $bloques,
+            'es_pdf' => true,
+            'liq' => $liq,
+            'recibo' => $recibo,
+            'multiempresa' => $emitirMulti,
+        ])->setPaper('a4', 'portrait');
+
+        $nombre = 'recibo_'.$recibo->legajo.'_'.$recibo->numero_recibo
+            .($emitirMulti && $cadena->count() > 1 ? '_multi' : '').'.pdf';
+
+        return $pdf->stream($nombre);
+    }
+
+    private function reciboDeCorrida($liquidacionId, $reciboId): Liquidacion_Recibo_Sueldos
+    {
+        return Liquidacion_Recibo_Sueldos::query()
+            ->where('liquidacion_id', (int) $liquidacionId)
+            ->where('id', (int) $reciboId)
+            ->firstOrFail();
+    }
+
+    /**
      * Depurador: rastro paso a paso del calculo de un empleado en la corrida.
      */
     public function trazar(Request $request, LiquidacionCalculadorService $calculador, $id, $empleadoId)
@@ -268,7 +401,7 @@ class Liquidacion_SueldosController extends Controller
 
     private function empresas()
     {
-        return Empresa::query()->orderBy('nombre')->get(['id', 'nombre']);
+        return $this->empresaRepository->allFiltrado();
     }
 
     private function motivosegreso()

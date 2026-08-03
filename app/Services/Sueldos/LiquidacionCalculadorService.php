@@ -9,7 +9,10 @@ use App\Models\Sueldos\Liquidacion_Acumulador_Sueldos;
 use App\Models\Sueldos\Liquidacion_Detalle_Sueldos;
 use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
+use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
+use App\Support\Sueldos\ConceptoTipo;
 use App\Support\Sueldos\EmpleadoEstados;
+use App\Support\Sueldos\ReciboBaseCalculoSupport;
 use App\Support\Sueldos\Formula\ContextoLiquidacion;
 use App\Support\Sueldos\Formula\EvaluadorFormula;
 use App\Support\Sueldos\Formula\FormulaException;
@@ -32,6 +35,10 @@ class LiquidacionCalculadorService
 
     private PlanCuotaLiquidacionService $planCuotas;
 
+    private ConceptoSetEfectivoService $setEfectivo;
+
+    private ReciboMultiempresaService $multiempresa;
+
     /** Mapa tipo de concepto -> columna del recibo. */
     private const COLUMNA = [
         'remunerativo' => 'haber',
@@ -42,16 +49,21 @@ class LiquidacionCalculadorService
         'retencion' => 'descuento',
         'neto' => 'neto',
         'informativo' => 'informativo',
-        'contribucion' => 'informativo',
+        // Contribución empleador: sección CE Anexo III; no suma a bruto/neto.
+        'contribucion' => 'contribucion',
     ];
 
     public function __construct(
         GananciasPuenteLiquidacionService $puenteGanancias,
-        PlanCuotaLiquidacionService $planCuotas
+        PlanCuotaLiquidacionService $planCuotas,
+        ConceptoSetEfectivoService $setEfectivo,
+        ReciboMultiempresaService $multiempresa
     ) {
         $this->motor = new EvaluadorFormula;
         $this->puenteGanancias = $puenteGanancias;
         $this->planCuotas = $planCuotas;
+        $this->setEfectivo = $setEfectivo;
+        $this->multiempresa = $multiempresa;
     }
 
     /**
@@ -90,7 +102,12 @@ class LiquidacionCalculadorService
             foreach ($empleados as $emp) {
                 $numeroRecibo++;
                 $ctx = new ContextoLiquidacion($emp, $liquidacion, $acumDefs, $parametros);
-                $lineas = $this->calcularEmpleado($ctx, $emp, $conceptos, $overrides, $liquidacion, $planPendientes);
+                $setInfo = null;
+                $conceptosEmp = $this->conceptosParaEmpleado($conceptos, $emp, $liquidacion, $setInfo);
+                $lineas = $this->calcularEmpleado(
+                    $ctx, $emp, $conceptosEmp, $overrides, $liquidacion, $planPendientes,
+                    $setInfo['meta'] ?? []
+                );
 
                 $rec = $this->totalesRecibo($lineas);
                 $recibo = Liquidacion_Recibo_Sueldos::create([
@@ -139,7 +156,7 @@ class LiquidacionCalculadorService
                         'columna' => $l['columna'],
                         'cantidad' => $l['cantidad'],
                         'valor' => $l['valor'],
-                        'base_calculo' => 0,
+                        'base_calculo' => $l['base_calculo'] ?? null,
                         'importe' => $l['importe'],
                         'remunerativo' => $l['tipo'] === 'remunerativo',
                         'va_recibo' => $l['va_recibo'],
@@ -205,13 +222,17 @@ class LiquidacionCalculadorService
      * @param  array<int, array<string, array{signo: int, excluir: bool}>>  $overrides
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * @param  array<int, array{origen?: string, detalle?: string, origen_label?: string}>  $origenMeta
+     */
     private function calcularEmpleado(
         ContextoLiquidacion $ctx,
         Empleado_Sueldos $emp,
         $conceptos,
         array $overrides = [],
         ?Liquidacion_Sueldos $liquidacion = null,
-        ?array &$planPendientes = null
+        ?array &$planPendientes = null,
+        array $origenMeta = []
     ): array {
         $lineas = [];
         $gananciasListo = false;
@@ -221,8 +242,10 @@ class LiquidacionCalculadorService
                 $gananciasListo = true;
             }
 
-            $cantidad = $c->formula_cantidad ? $this->evalNum($ctx, $c->formula_cantidad, $c) : 1.0;
-            $valor = $c->formula_valor ? $this->evalNum($ctx, $c->formula_valor, $c) : 0.0;
+            $tieneCantidadExplicita = filled($c->formula_cantidad);
+            $tieneValorExplicito = filled($c->formula_valor);
+            $cantidad = $tieneCantidadExplicita ? $this->evalNum($ctx, $c->formula_cantidad, $c) : 1.0;
+            $valor = $tieneValorExplicito ? $this->evalNum($ctx, $c->formula_valor, $c) : 0.0;
             $ctx->setEscalares($cantidad, $valor, (float) $c->factor);
 
             $importe = $c->formula
@@ -231,15 +254,44 @@ class LiquidacionCalculadorService
             $importe = round($importe, 2);
 
             $ctx->registrarConcepto((int) $c->codigo, $importe);
-            $ctx->aplicarAcumuladores((string) $c->tipo, $importe, $overrides[$c->id] ?? []);
+            // Contribución empleador / informativo: no alimentan acumuladores de bruto/neto.
+            if (! in_array((string) $c->tipo, ConceptoTipo::TIPOS_SIN_IMPACTO_TOTALES, true)) {
+                $ctx->aplicarAcumuladores((string) $c->tipo, $importe, $overrides[$c->id] ?? []);
+            }
 
             if ($importe == 0.0 && ! $c->va_recibo) {
                 continue;
             }
-            if ($importe == 0.0 && $c->tipo !== 'informativo') {
+            if ($importe == 0.0 && $c->tipo !== 'informativo' && $c->tipo !== 'contribucion') {
                 continue;
             }
 
+            $unidad = ReciboBaseCalculoSupport::normalizarUnidad($c->unidad_medida)
+                ?: (ReciboBaseCalculoSupport::inferirUnidad($c->descripcion, $c->factor !== null ? (float) $c->factor : null, (string) $c->tipo) ?? '');
+            $tieneValorExplicito = $tieneValorExplicito || abs($valor) > 0.0000001;
+            // % sin CA: alícuota desde factor (0.11 → 11) solo para presentar BASE.
+            $cantidadBase = (float) $cantidad;
+            $cantExplicitaBase = $tieneCantidadExplicita;
+            if ($unidad === '%' && ! $tieneCantidadExplicita && $c->factor !== null) {
+                $f = abs((float) $c->factor);
+                if ($f > 0 && $f < 1) {
+                    $cantidadBase = $f * 100.0;
+                    $cantExplicitaBase = true;
+                } elseif ($f >= 1 && $f <= 100) {
+                    $cantidadBase = $f;
+                    $cantExplicitaBase = true;
+                }
+            }
+            $base = ReciboBaseCalculoSupport::derivar(
+                $importe,
+                $cantidadBase,
+                (float) $valor,
+                $unidad,
+                $cantExplicitaBase,
+                $tieneValorExplicito,
+            );
+
+            $origen = (string) ($origenMeta[$c->id]['origen'] ?? ConceptoElegibilidadCatalogo::ORIGEN_SISTEMA);
             $lineas[] = [
                 'concepto_id' => $c->id,
                 'codigo' => $c->codigo,
@@ -248,10 +300,16 @@ class LiquidacionCalculadorService
                 'columna' => self::COLUMNA[$c->tipo] ?? 'informativo',
                 'cantidad' => round($cantidad, 4),
                 'valor' => round($valor, 4),
+                'base_calculo' => $base,
+                'unidad_medida' => $unidad !== '' ? $unidad : null,
                 'importe' => $importe,
                 'va_recibo' => (bool) $c->va_recibo,
                 'concepto_afip' => $c->concepto_afip,
                 'leyenda' => $c->leyenda_recibo,
+                'origen' => $origen,
+                'origen_label' => ConceptoElegibilidadCatalogo::origenLabel($origen),
+                'origen_badge' => ConceptoElegibilidadCatalogo::origenBadge($origen),
+                'origen_detalle' => (string) ($origenMeta[$c->id]['detalle'] ?? ''),
             ];
         }
 
@@ -270,10 +328,23 @@ class LiquidacionCalculadorService
                     'columna' => self::COLUMNA[$pl['tipo']] ?? 'informativo',
                     'cantidad' => 1.0,
                     'valor' => $importe,
+                    'base_calculo' => ReciboBaseCalculoSupport::derivar(
+                        $importe,
+                        1.0,
+                        $importe,
+                        null,
+                        false,
+                        true,
+                    ),
+                    'unidad_medida' => null,
                     'importe' => $importe,
                     'va_recibo' => $pl['va_recibo'],
                     'concepto_afip' => $pl['concepto_afip'],
                     'leyenda' => $pl['leyenda'],
+                    'origen' => ConceptoElegibilidadCatalogo::ORIGEN_PLAN_CUOTA,
+                    'origen_label' => ConceptoElegibilidadCatalogo::origenLabel(ConceptoElegibilidadCatalogo::ORIGEN_PLAN_CUOTA),
+                    'origen_badge' => ConceptoElegibilidadCatalogo::origenBadge(ConceptoElegibilidadCatalogo::ORIGEN_PLAN_CUOTA),
+                    'origen_detalle' => (string) ($pl['leyenda'] ?? 'Plan de cuotas del legajo'),
                 ];
 
                 if ($planPendientes !== null) {
@@ -292,84 +363,461 @@ class LiquidacionCalculadorService
     }
 
     /**
-     * Modo depurador: calcula un empleado devolviendo el rastro por concepto.
-     * No persiste.
+     * Preview de recibo para un empleado (no persiste).
+     * Usa corrida real del mismo período/tipo si existe; si no, liquidación virtual.
+     *
+     * @return array{
+     *   lineas: list<array<string, mixed>>,
+     *   totales: array{haber: float, descuento: float, contribucion: float, neto: float, cantidad: int},
+     *   periodo: int,
+     *   tipo: string,
+     *   liquidacion_id: int|null,
+     *   liquidacion_label: string,
+     *   errores: list<string>
+     * }
+     */
+    public function simularEmpleado(Empleado_Sueldos $emp, string $periodoInput, string $tipo = 'mensual'): array
+    {
+        [$periodoYm, $anio, $mes] = $this->parsePeriodoInput($periodoInput);
+        if (! isset(Liquidacion_Sueldos::TIPOS[$tipo])) {
+            $tipo = 'mensual';
+        }
+
+        $liqReal = Liquidacion_Sueldos::query()
+            ->where('empresa_id', $emp->empresa_id)
+            ->where('periodo', $periodoYm)
+            ->where('tipo', $tipo)
+            ->whereIn('estado', array_merge(Liquidacion_Sueldos::ESTADOS_EDITABLES, ['cerrada', 'contabilizada', 'pagada']))
+            ->orderByRaw("FIELD(estado,'borrador','calculada','revisada','cerrada','contabilizada','pagada')")
+            ->orderByDesc('numero')
+            ->first();
+
+        $liq = $liqReal ?? $this->liquidacionVirtual($emp, $periodoYm, $anio, $mes, $tipo);
+
+        $setInfo = null;
+        $conceptos = $this->conceptosParaEmpleado($this->conceptos(), $emp, $liq, $setInfo);
+        $acumDefs = $this->acumuladoresDef($liq->empresa_id);
+        $overrides = $this->overridesConceptoAcumulador();
+        $parametros = $this->parametros($liq);
+        $ctx = new ContextoLiquidacion($emp, $liq, $acumDefs, $parametros);
+
+        $errores = [];
+        $lineas = [];
+        try {
+            $lineas = $this->calcularEmpleado(
+                $ctx, $emp, $conceptos, $overrides, $liq, null,
+                $setInfo['meta'] ?? []
+            );
+        } catch (FormulaException $e) {
+            $errores[] = $e->getMessage();
+        }
+
+        $totales = ['haber' => 0.0, 'descuento' => 0.0, 'contribucion' => 0.0, 'neto' => 0.0, 'cantidad' => count($lineas)];
+        foreach ($lineas as $l) {
+            $col = $l['columna'] ?? 'informativo';
+            $imp = (float) ($l['importe'] ?? 0);
+            if ($col === 'haber') {
+                $totales['haber'] += $imp;
+            } elseif ($col === 'descuento') {
+                $totales['descuento'] += $imp;
+            } elseif ($col === 'contribucion' || ($l['tipo'] ?? '') === 'contribucion') {
+                $totales['contribucion'] += $imp;
+            } elseif ($col === 'neto') {
+                $totales['neto'] += $imp;
+            }
+        }
+        if ($totales['neto'] == 0.0) {
+            $totales['neto'] = $totales['haber'] - $totales['descuento'];
+        }
+
+        $label = $liqReal
+            ? 'Corrida N° '.$liqReal->numero.' · '.$liqReal->descripcion.' ('.$liqReal->estado.')'
+            : 'Simulación (sin corrida abierta para este período)';
+
+        return [
+            'lineas' => $lineas,
+            'totales' => $totales,
+            'periodo' => $periodoYm,
+            'tipo' => $tipo,
+            'liquidacion_id' => $liqReal ? (int) $liqReal->id : null,
+            'liquidacion_label' => $label,
+            'errores' => $errores,
+            'set_efectivo' => [
+                'modo' => $setInfo['modo'] ?? null,
+                'modo_label' => $setInfo['modo_label'] ?? null,
+                'grupos' => $setInfo['grupos'] ?? [],
+                'cantidad_conceptos' => isset($setInfo['conceptos']) ? $setInfo['conceptos']->count() : 0,
+                'cantidad_excluidos' => count($setInfo['excluidos'] ?? []),
+                'excluidos' => $setInfo['excluidos'] ?? [],
+                'meta' => $setInfo['meta'] ?? [],
+            ],
+        ];
+    }
+
+    /**
+     * @return array{0: int, 1: int, 2: int} periodoYm, anio, mes
+     */
+    private function parsePeriodoInput(string $periodoInput): array
+    {
+        $periodoInput = trim($periodoInput);
+        if (preg_match('/^(\d{4})-(\d{2})$/', $periodoInput, $m)) {
+            $anio = (int) $m[1];
+            $mes = (int) $m[2];
+        } elseif (preg_match('/^(\d{6})$/', $periodoInput, $m)) {
+            $anio = (int) substr($m[1], 0, 4);
+            $mes = (int) substr($m[1], 4, 2);
+        } else {
+            $now = Carbon::now();
+            $anio = (int) $now->year;
+            $mes = (int) $now->month;
+        }
+        if ($mes < 1 || $mes > 12) {
+            $mes = 1;
+        }
+
+        return [$anio * 100 + $mes, $anio, $mes];
+    }
+
+    private function liquidacionVirtual(
+        Empleado_Sueldos $emp,
+        int $periodoYm,
+        int $anio,
+        int $mes,
+        string $tipo
+    ): Liquidacion_Sueldos {
+        $ini = Carbon::create($anio, $mes, 1)->startOfDay();
+        $fin = $ini->copy()->endOfMonth();
+        $liq = new Liquidacion_Sueldos([
+            'empresa_id' => $emp->empresa_id,
+            'numero' => 0,
+            'descripcion' => 'Simulación preview',
+            'tipo' => $tipo,
+            'periodo' => (string) $periodoYm,
+            'periodo_anio' => $anio,
+            'periodo_mes' => $mes,
+            'periodo_desde' => $ini->toDateString(),
+            'periodo_hasta' => $fin->toDateString(),
+            'fecha_liquidacion' => $fin->toDateString(),
+            'estado' => 'borrador',
+            'simulacion' => true,
+            'acumula_novedades' => true,
+        ]);
+        $liq->id = 0;
+
+        return $liq;
+    }
+
+    /**
+     * Modo depurador legacy (vista trazar de corrida): solo pasos.
      *
      * @return array<int, array<string, mixed>>
      */
     public function trazarEmpleado(Liquidacion_Sueldos $liquidacion, Empleado_Sueldos $emp): array
     {
-        $conceptos = $this->conceptos();
+        return $this->depurarSobreLiquidacion($emp, $liquidacion)['pasos'];
+    }
+
+    /**
+     * Debugger de fórmulas: preview por período/tipo (con o sin corrida abierta).
+     *
+     * @param  array{formula?: ?string, formula_cantidad?: ?string, formula_valor?: ?string}|null  $overridesFormula
+     * @return array<string, mixed>
+     */
+    public function depurarEmpleado(
+        Empleado_Sueldos $emp,
+        string $periodoInput,
+        string $tipo = 'mensual',
+        ?int $soloCodigo = null,
+        ?array $overridesFormula = null,
+        bool $incluirContexto = true
+    ): array {
+        [$periodoYm, $anio, $mes] = $this->parsePeriodoInput($periodoInput);
+        if (! isset(Liquidacion_Sueldos::TIPOS[$tipo])) {
+            $tipo = 'mensual';
+        }
+
+        $liqReal = Liquidacion_Sueldos::query()
+            ->where('empresa_id', $emp->empresa_id)
+            ->where('periodo', $periodoYm)
+            ->where('tipo', $tipo)
+            ->whereIn('estado', array_merge(Liquidacion_Sueldos::ESTADOS_EDITABLES, ['cerrada', 'contabilizada', 'pagada']))
+            ->orderByRaw("FIELD(estado,'borrador','calculada','revisada','cerrada','contabilizada','pagada')")
+            ->orderByDesc('numero')
+            ->first();
+
+        $liq = $liqReal ?? $this->liquidacionVirtual($emp, $periodoYm, $anio, $mes, $tipo);
+
+        return $this->depurarSobreLiquidacion(
+            $emp,
+            $liq,
+            $soloCodigo,
+            $overridesFormula,
+            $incluirContexto,
+            $liqReal ? 'Corrida N° '.$liqReal->numero.' · '.$liqReal->descripcion : 'Simulación (sin corrida)'
+        );
+    }
+
+    /**
+     * Valida sintaxis de una fórmula (sin evaluar).
+     */
+    public function validarFormula(string $formula): array
+    {
+        $formula = trim($formula);
+        if ($formula === '') {
+            return ['ok' => true, 'mensaje' => 'Fórmula vacía (se usará cantidad × valor).'];
+        }
+        $err = $this->motor->validar($formula);
+
+        return $err === null
+            ? ['ok' => true, 'mensaje' => 'Sintaxis OK']
+            : ['ok' => false, 'mensaje' => $err];
+    }
+
+    /**
+     * @param  array{formula?: ?string, formula_cantidad?: ?string, formula_valor?: ?string}|null  $overridesFormula
+     * @return array<string, mixed>
+     */
+    private function depurarSobreLiquidacion(
+        Empleado_Sueldos $emp,
+        Liquidacion_Sueldos $liquidacion,
+        ?int $soloCodigo = null,
+        ?array $overridesFormula = null,
+        bool $incluirContexto = true,
+        string $liquidacionLabel = ''
+    ): array {
+        $setInfo = null;
+        $conceptos = $this->conceptosParaEmpleado($this->conceptos(), $emp, $liquidacion, $setInfo);
+        $origenMeta = $setInfo['meta'] ?? [];
         $acumDefs = $this->acumuladoresDef($liquidacion->empresa_id);
         $overrides = $this->overridesConceptoAcumulador();
         $parametros = $this->parametros($liquidacion);
         $ctx = new ContextoLiquidacion($emp, $liquidacion, $acumDefs, $parametros);
+        $contextoInicial = $incluirContexto ? $ctx->snapshotDebug() : null;
 
         $pasos = [];
         $gananciasListo = false;
+        $focusEncontrado = false;
+
         foreach ($conceptos as $c) {
+            $codigo = (int) $c->codigo;
+            $esFocus = $soloCodigo === null || $codigo === $soloCodigo;
+
             if (! $gananciasListo && $this->formulaUsaGanancias($c)) {
                 $this->puenteGanancias->sincronizarDesdeContexto($ctx, $emp, $liquidacion);
                 $gananciasListo = true;
             }
 
-            $cantidad = $c->formula_cantidad ? $this->evalNum($ctx, $c->formula_cantidad, $c) : 1.0;
-            $valor = $c->formula_valor ? $this->evalNum($ctx, $c->formula_valor, $c) : 0.0;
-            $ctx->setEscalares($cantidad, $valor, (float) $c->factor);
-
-            $rastro = null;
-            if ($c->formula) {
-                try {
-                    [$importe, $rastro] = $this->motor->evaluarConRastro($c->formula, $ctx);
-                    $importe = round((float) $importe, 2);
-                } catch (FormulaException $e) {
-                    $pasos[] = $this->pasoError($c, $e);
-
-                    continue;
+            $fCant = (string) ($c->formula_cantidad ?? '');
+            $fValor = (string) ($c->formula_valor ?? '');
+            $fImp = (string) ($c->formula ?? '');
+            if ($esFocus && is_array($overridesFormula)) {
+                if (array_key_exists('formula_cantidad', $overridesFormula) && $overridesFormula['formula_cantidad'] !== null) {
+                    $fCant = (string) $overridesFormula['formula_cantidad'];
                 }
-            } else {
-                $importe = round($cantidad * $valor, 2);
+                if (array_key_exists('formula_valor', $overridesFormula) && $overridesFormula['formula_valor'] !== null) {
+                    $fValor = (string) $overridesFormula['formula_valor'];
+                }
+                if (array_key_exists('formula', $overridesFormula) && $overridesFormula['formula'] !== null) {
+                    $fImp = (string) $overridesFormula['formula'];
+                }
             }
 
-            $ctx->registrarConcepto((int) $c->codigo, $importe);
-            $ctx->aplicarAcumuladores((string) $c->tipo, $importe, $overrides[$c->id] ?? []);
+            $rastroCant = null;
+            $rastroValor = null;
+            $rastro = null;
+            $error = null;
 
-            $pasos[] = [
-                'codigo' => $c->codigo,
-                'descripcion' => $c->descripcion,
-                'tipo' => $c->tipo,
-                'formula' => $c->formula,
-                'cantidad' => round($cantidad, 4),
-                'valor' => round($valor, 4),
-                'importe' => $importe,
-                'error' => null,
-                'rastro' => $rastro ? $rastro->arbol() : [],
-                'rastro_texto' => $rastro ? $rastro->texto() : '',
-                'acumuladores' => $ctx->acumuladores(),
-            ];
+            try {
+                if ($fCant !== '') {
+                    if ($esFocus) {
+                        [$cantidad, $rastroCant] = $this->motor->evaluarConRastro($fCant, $ctx);
+                        $cantidad = (float) $cantidad;
+                    } else {
+                        $cantidad = (float) $this->motor->evaluar($fCant, $ctx);
+                    }
+                } else {
+                    $cantidad = 1.0;
+                }
+
+                if ($fValor !== '') {
+                    if ($esFocus) {
+                        [$valor, $rastroValor] = $this->motor->evaluarConRastro($fValor, $ctx);
+                        $valor = (float) $valor;
+                    } else {
+                        $valor = (float) $this->motor->evaluar($fValor, $ctx);
+                    }
+                } else {
+                    $valor = 0.0;
+                }
+
+                $ctx->setEscalares($cantidad, $valor, (float) $c->factor);
+
+                if ($fImp !== '') {
+                    if ($esFocus) {
+                        [$importe, $rastro] = $this->motor->evaluarConRastro($fImp, $ctx);
+                        $importe = round((float) $importe, 2);
+                    } else {
+                        $importe = round((float) $this->motor->evaluar($fImp, $ctx), 2);
+                    }
+                } else {
+                    $importe = round($cantidad * $valor, 2);
+                }
+            } catch (FormulaException $e) {
+                $error = $e->getMessage();
+                $cantidad = $cantidad ?? 0.0;
+                $valor = $valor ?? 0.0;
+                $importe = 0.0;
+            }
+
+            if ($error === null) {
+                $ctx->registrarConcepto($codigo, $importe);
+                if (! in_array((string) $c->tipo, ConceptoTipo::TIPOS_SIN_IMPACTO_TOTALES, true)) {
+                    $ctx->aplicarAcumuladores((string) $c->tipo, $importe, $overrides[$c->id] ?? []);
+                }
+            }
+
+            if ($esFocus) {
+                $focusEncontrado = true;
+                $origen = (string) ($origenMeta[$c->id]['origen'] ?? ConceptoElegibilidadCatalogo::ORIGEN_SISTEMA);
+                $pasos[] = [
+                    'concepto_id' => (int) $c->id,
+                    'codigo' => $codigo,
+                    'descripcion' => $c->descripcion,
+                    'tipo' => $c->tipo,
+                    'formula' => $fImp !== '' ? $fImp : null,
+                    'formula_cantidad' => $fCant !== '' ? $fCant : null,
+                    'formula_valor' => $fValor !== '' ? $fValor : null,
+                    'formula_override' => $esFocus && is_array($overridesFormula),
+                    'cantidad' => round((float) $cantidad, 4),
+                    'valor' => round((float) $valor, 4),
+                    'importe' => $importe,
+                    'error' => $error,
+                    'rastro' => $rastro instanceof RastreadorFormula ? $rastro->arbol() : [],
+                    'rastro_texto' => $rastro instanceof RastreadorFormula ? $rastro->texto() : '',
+                    'rastro_cantidad' => $rastroCant instanceof RastreadorFormula ? $rastroCant->arbol() : [],
+                    'rastro_valor' => $rastroValor instanceof RastreadorFormula ? $rastroValor->arbol() : [],
+                    'acumuladores' => $ctx->acumuladores(),
+                    'contexto_tras' => $incluirContexto ? $ctx->snapshotDebug() : null,
+                    'origen' => $origen,
+                    'origen_label' => ConceptoElegibilidadCatalogo::origenLabel($origen),
+                    'en_set' => true,
+                ];
+
+                // Si filtramos un solo código, seguir calculando silenciosamente no hace falta
+                // para el resto del set… salvo que el usuario quiera ver acumuladores previos.
+                // Calculamos todos para que Iconcepto/acum previos existan; solo devolvemos focus.
+                if ($soloCodigo !== null && $error !== null) {
+                    // con error igual seguimos registrando 0? ya no registramos — ok
+                }
+            } elseif ($error !== null) {
+                // Concepto previo falló: corta la cadena (igual que liquidar).
+                break;
+            }
         }
 
-        // Cuotas de planes (préstamos) — se muestran pero no se persisten al trazar.
-        foreach ($this->planCuotas->lineasPlan($emp, $liquidacion, $ctx) as $pl) {
-            $importe = round((float) $pl['importe'], 2);
-            $ctx->registrarConcepto((int) $pl['codigo'], $importe);
-            $ctx->aplicarAcumuladores((string) $pl['tipo'], $importe, []);
-            $pasos[] = [
-                'codigo' => $pl['codigo'],
-                'descripcion' => $pl['descripcion'],
-                'tipo' => $pl['tipo'],
-                'formula' => '(plan de cuotas) '.$pl['leyenda'],
-                'cantidad' => 1,
-                'valor' => $importe,
-                'importe' => $importe,
-                'error' => null,
-                'rastro' => [],
-                'rastro_texto' => $pl['leyenda'],
-                'acumuladores' => $ctx->acumuladores(),
-            ];
+        if ($soloCodigo === null) {
+            foreach ($this->planCuotas->lineasPlan($emp, $liquidacion, $ctx) as $pl) {
+                $importe = round((float) $pl['importe'], 2);
+                $ctx->registrarConcepto((int) $pl['codigo'], $importe);
+                $ctx->aplicarAcumuladores((string) $pl['tipo'], $importe, []);
+                $pasos[] = [
+                    'concepto_id' => (int) ($pl['concepto_id'] ?? 0),
+                    'codigo' => $pl['codigo'],
+                    'descripcion' => $pl['descripcion'],
+                    'tipo' => $pl['tipo'],
+                    'formula' => '(plan de cuotas) '.$pl['leyenda'],
+                    'formula_cantidad' => null,
+                    'formula_valor' => null,
+                    'formula_override' => false,
+                    'cantidad' => 1.0,
+                    'valor' => $importe,
+                    'importe' => $importe,
+                    'error' => null,
+                    'rastro' => [],
+                    'rastro_texto' => $pl['leyenda'],
+                    'rastro_cantidad' => [],
+                    'rastro_valor' => [],
+                    'acumuladores' => $ctx->acumuladores(),
+                    'contexto_tras' => null,
+                    'origen' => ConceptoElegibilidadCatalogo::ORIGEN_PLAN_CUOTA,
+                    'origen_label' => ConceptoElegibilidadCatalogo::origenLabel(ConceptoElegibilidadCatalogo::ORIGEN_PLAN_CUOTA),
+                    'en_set' => true,
+                ];
+            }
+        } elseif (! $focusEncontrado && $soloCodigo !== null) {
+            // Concepto fuera del set: evaluar igual en sandbox (útil al programar en ABM).
+            $c = Concepto_Sueldos::query()->where('codigo', $soloCodigo)->where('activo', true)->first();
+            if ($c) {
+                $fCant = (string) ($overridesFormula['formula_cantidad'] ?? $c->formula_cantidad ?? '');
+                $fValor = (string) ($overridesFormula['formula_valor'] ?? $c->formula_valor ?? '');
+                $fImp = (string) ($overridesFormula['formula'] ?? $c->formula ?? '');
+                try {
+                    $cantidad = $fCant !== '' ? (float) $this->motor->evaluar($fCant, $ctx) : 1.0;
+                    $valor = $fValor !== '' ? (float) $this->motor->evaluar($fValor, $ctx) : 0.0;
+                    $ctx->setEscalares($cantidad, $valor, (float) $c->factor);
+                    $rastro = null;
+                    if ($fImp !== '') {
+                        [$importe, $rastro] = $this->motor->evaluarConRastro($fImp, $ctx);
+                        $importe = round((float) $importe, 2);
+                    } else {
+                        $importe = round($cantidad * $valor, 2);
+                    }
+                    $pasos[] = [
+                        'concepto_id' => (int) $c->id,
+                        'codigo' => (int) $c->codigo,
+                        'descripcion' => $c->descripcion,
+                        'tipo' => $c->tipo,
+                        'formula' => $fImp !== '' ? $fImp : null,
+                        'formula_cantidad' => $fCant !== '' ? $fCant : null,
+                        'formula_valor' => $fValor !== '' ? $fValor : null,
+                        'formula_override' => is_array($overridesFormula),
+                        'cantidad' => round($cantidad, 4),
+                        'valor' => round($valor, 4),
+                        'importe' => $importe,
+                        'error' => null,
+                        'rastro' => $rastro instanceof RastreadorFormula ? $rastro->arbol() : [],
+                        'rastro_texto' => $rastro instanceof RastreadorFormula ? $rastro->texto() : '',
+                        'rastro_cantidad' => [],
+                        'rastro_valor' => [],
+                        'acumuladores' => $ctx->acumuladores(),
+                        'contexto_tras' => $incluirContexto ? $ctx->snapshotDebug() : null,
+                        'origen' => 'fuera_set',
+                        'origen_label' => 'Fuera del set',
+                        'en_set' => false,
+                        'aviso' => 'Este concepto no está en el set efectivo del legajo; se evaluó igual para depurar.',
+                    ];
+                } catch (FormulaException $e) {
+                    $pasos[] = array_merge($this->pasoError($c, $e), [
+                        'en_set' => false,
+                        'origen' => 'fuera_set',
+                        'origen_label' => 'Fuera del set',
+                        'aviso' => 'Concepto fuera del set; falló al evaluar en sandbox.',
+                    ]);
+                }
+            }
         }
 
-        return $pasos;
+        return [
+            'pasos' => $pasos,
+            'periodo' => (int) ($liquidacion->periodo ?: 0),
+            'tipo' => (string) $liquidacion->tipo,
+            'liquidacion_id' => (int) ($liquidacion->id ?? 0) ?: null,
+            'liquidacion_label' => $liquidacionLabel,
+            'empleado' => [
+                'id' => (int) $emp->id,
+                'legajo' => (int) $emp->legajo,
+                'nombre' => (string) $emp->nombre,
+                'empresa_id' => (int) $emp->empresa_id,
+            ],
+            'set_efectivo' => [
+                'modo' => $setInfo['modo'] ?? null,
+                'modo_label' => $setInfo['modo_label'] ?? null,
+                'cantidad_conceptos' => isset($setInfo['conceptos']) ? $setInfo['conceptos']->count() : 0,
+                'cantidad_excluidos' => count($setInfo['excluidos'] ?? []),
+            ],
+            'contexto_inicial' => $contextoInicial,
+            'contexto_final' => $incluirContexto ? $ctx->snapshotDebug() : null,
+        ];
     }
 
     /**
@@ -447,6 +895,26 @@ class LiquidacionCalculadorService
             ->orderBy('orden')
             ->orderBy('codigo')
             ->get();
+    }
+
+    /**
+     * Filtra el catálogo global al set efectivo del legajo
+     * (grupos + elegibilidad + novedades en modo grupos + explícitos).
+     *
+     * @param  \Illuminate\Support\Collection<int, Concepto_Sueldos>  $todos
+     * @param  array<string, mixed>|null  $setInfo  salida del resolver (meta, modo, …)
+     * @return \Illuminate\Support\Collection<int, Concepto_Sueldos>
+     */
+    private function conceptosParaEmpleado($todos, Empleado_Sueldos $emp, Liquidacion_Sueldos $liq, ?array &$setInfo = null)
+    {
+        $setInfo = $this->setEfectivo->resolver($emp, $liq);
+        $ids = $setInfo['conceptos']->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if ($ids === []) {
+            return $todos->take(0);
+        }
+        $flip = array_flip($ids);
+
+        return $todos->filter(fn ($c) => isset($flip[(int) $c->id]))->values();
     }
 
     /**
@@ -546,6 +1014,8 @@ class LiquidacionCalculadorService
         if (! empty($filtros['centrocosto_id'])) {
             $query->where('centrocosto_id', (int) $filtros['centrocosto_id']);
         }
+
+        $this->multiempresa->aplicarAlcanceAlQueryEmpleados($query, $liq);
 
         return $query->get();
     }

@@ -25,15 +25,14 @@
             </div>
         @endif
         <div class="form-row align-items-end">
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="filtro_empresa_id">Empresa</label>
-                <select name="filtro_empresa_id" id="filtro_empresa_id" class="form-control form-control-sm">
-                    <option value="">Todas</option>
-                    @foreach(($empresas ?? []) as $emp)
-                        <option value="{{ $emp->id }}" {{ (int)($f['empresa_id'] ?? 0) === (int)$emp->id ? 'selected' : '' }}>{{ $emp->nombre }}</option>
-                    @endforeach
-                </select>
-            </div>
+            @include('includes.listado.filtro_empresa_asignada', [
+                'empresa_query' => $empresas ?? $empresa_query ?? collect(),
+                'empresa_id' => $f['empresa_id'] ?? null,
+                'name' => 'filtro_empresa_id',
+                'id' => 'filtro_empresa_id',
+                'col_class' => 'col-md-2 col-sm-6 mb-2',
+                'opcion_todas' => 'Todas',
+            ])
             <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="filtro_tipo">Tipo</label>
                 <select name="filtro_tipo" id="filtro_tipo" class="form-control form-control-sm">

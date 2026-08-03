@@ -31,7 +31,7 @@ class UifConciliacionWigosController extends Controller
 
         $filtros = UifWigosConciliacionFiltros::resolverDesdeRequest($request);
         $filtrosQuery = UifWigosConciliacionFiltros::paraQueryString($filtros);
-        $empresaQuery = $this->empresaRepository->allFiltrado()
+        $empresaQuery = \App\Support\Uif\ClienteUifOrigenPcSupport::empresasUifAsignadas()
             ->filter(fn ($e) => in_array((int) $e->id, UifWigosConciliacionEmpresaSupport::empresaIdsOrdenados(), true))
             ->values();
 

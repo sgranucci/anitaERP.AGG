@@ -1034,6 +1034,7 @@ Route::get('contable/listar-cierre-rendiciones-estacionamiento-conciliacion-flas
 Route::get('contable/listar-cierre-rendiciones-estacionamiento-diario-puntoventa/{formato?}', 'Contable\CierreRendicionEstacionamientoController@listarDiarioPuntoventa')->name('listar_cierre_rendicion_estacionamiento_diario_puntoventa');
 Route::get('contable/listar-cierre-rendiciones-estacionamiento/{formato?}/{busqueda?}', 'Contable\CierreRendicionEstacionamientoController@listar')->name('listar_cierre_rendicion_estacionamiento_contable');
 Route::post('contable/cierre-rendiciones-estacionamiento/api/preview-asiento', 'Contable\CierreRendicionEstacionamientoController@apiPreviewAsiento')->name('api_cierre_rendicion_estacionamiento_preview');
+Route::get('contable/cierre-rendiciones-estacionamiento/api/pendientes-cierre', 'Contable\CierreRendicionEstacionamientoController@apiPendientesCierre')->name('api_cierre_rendicion_estacionamiento_pendientes');
 Route::post('contable/cierre-rendiciones-estacionamiento/api/preview-cierre-rango', 'Contable\CierreRendicionEstacionamientoController@apiPreviewCierreRango')->name('api_cierre_rendicion_estacionamiento_preview_rango');
 Route::post('contable/cierre-rendiciones-estacionamiento/api/ejecutar-cierre', 'Contable\CierreRendicionEstacionamientoController@apiEjecutarCierre')->name('api_cierre_rendicion_estacionamiento_ejecutar');
 Route::post('contable/cierre-rendiciones-estacionamiento/api/ejecutar-cierre-rango', 'Contable\CierreRendicionEstacionamientoController@apiEjecutarCierreRango')->name('api_cierre_rendicion_estacionamiento_ejecutar_rango');
@@ -1051,9 +1052,23 @@ Route::get('contable/cierres-turno-gastronomia/parcial/{id}/comprobante', 'Conta
 
 Route::get('contable/cierre-rendiciones-bingo', 'Contable\CierreRendicionBingoController@index')->name('cierre_rendicion_bingo_contable');
 Route::get('contable/listar-cierre-rendiciones-bingo/{formato?}/{busqueda?}', 'Contable\CierreRendicionBingoController@listar')->name('listar_cierre_rendicion_bingo_contable');
+Route::get('contable/cierre-rendiciones-bingo/api/pendientes-cierre', 'Contable\CierreRendicionBingoController@apiPendientesCierre')->name('api_cierre_rendicion_bingo_pendientes');
 Route::post('contable/cierre-rendiciones-bingo/api/preview-asiento', 'Contable\CierreRendicionBingoController@apiPreviewAsiento')->name('api_cierre_rendicion_bingo_preview');
+Route::post('contable/cierre-rendiciones-bingo/api/preview-cierre-rango', 'Contable\CierreRendicionBingoController@apiPreviewCierreRango')->name('api_cierre_rendicion_bingo_preview_rango');
 Route::post('contable/cierre-rendiciones-bingo/api/ejecutar-cierre', 'Contable\CierreRendicionBingoController@apiEjecutarCierre')->name('api_cierre_rendicion_bingo_ejecutar');
+Route::post('contable/cierre-rendiciones-bingo/api/ejecutar-cierre-rango', 'Contable\CierreRendicionBingoController@apiEjecutarCierreRango')->name('api_cierre_rendicion_bingo_ejecutar_rango');
 Route::post('contable/cierre-rendiciones-bingo/api/anular-cierre', 'Contable\CierreRendicionBingoController@apiAnularCierre')->name('api_cierre_rendicion_bingo_anular');
+
+Route::get('contable/cierre-rendiciones-maquina', 'Contable\CierreRendicionMaquinaController@index')->name('cierre_rendicion_maquina_contable');
+Route::get('contable/cierre-rendiciones-maquina/conciliacion-flash', 'Contable\CierreRendicionMaquinaController@conciliacionFlash')->name('cierre_rendicion_maquina_conciliacion_flash');
+Route::get('contable/listar-cierre-rendiciones-maquina-conciliacion-flash/{formato?}', 'Contable\CierreRendicionMaquinaController@listarConciliacionFlash')->name('listar_cierre_rendicion_maquina_conciliacion_flash');
+Route::get('contable/listar-cierre-rendiciones-maquina/{formato?}/{busqueda?}', 'Contable\CierreRendicionMaquinaController@listar')->name('listar_cierre_rendicion_maquina_contable');
+Route::get('contable/cierre-rendiciones-maquina/api/pendientes-cierre', 'Contable\CierreRendicionMaquinaController@apiPendientesCierre')->name('api_cierre_rendicion_maquina_pendientes');
+Route::post('contable/cierre-rendiciones-maquina/api/preview-asiento', 'Contable\CierreRendicionMaquinaController@apiPreviewAsiento')->name('api_cierre_rendicion_maquina_preview');
+Route::post('contable/cierre-rendiciones-maquina/api/preview-cierre-rango', 'Contable\CierreRendicionMaquinaController@apiPreviewCierreRango')->name('api_cierre_rendicion_maquina_preview_rango');
+Route::post('contable/cierre-rendiciones-maquina/api/ejecutar-cierre', 'Contable\CierreRendicionMaquinaController@apiEjecutarCierre')->name('api_cierre_rendicion_maquina_ejecutar');
+Route::post('contable/cierre-rendiciones-maquina/api/ejecutar-cierre-rango', 'Contable\CierreRendicionMaquinaController@apiEjecutarCierreRango')->name('api_cierre_rendicion_maquina_ejecutar_rango');
+Route::post('contable/cierre-rendiciones-maquina/api/anular-cierre', 'Contable\CierreRendicionMaquinaController@apiAnularCierre')->name('api_cierre_rendicion_maquina_anular');
 
 Route::get('contable/cierre-rendiciones-maquinavending', 'Contable\CierreRendicionMaquinavendingController@index')->name('cierre_rendicion_maquinavending_contable');
 Route::get('contable/cierre-rendiciones-maquinavending/conciliacion-flash', 'Contable\CierreRendicionMaquinavendingController@conciliacionFlash')->name('cierre_rendicion_maquinavending_conciliacion_flash');
@@ -1062,6 +1077,7 @@ Route::get('contable/listar-cierre-rendiciones-maquinavending-conciliacion-flash
 Route::get('contable/listar-cierre-rendiciones-maquinavending-diario-puntoventa/{formato?}', 'Contable\CierreRendicionMaquinavendingController@listarDiarioPuntoventa')->name('listar_cierre_rendicion_maquinavending_diario_puntoventa');
 Route::get('contable/listar-cierre-rendiciones-maquinavending/{formato?}/{busqueda?}', 'Contable\CierreRendicionMaquinavendingController@listar')->name('listar_cierre_rendicion_maquinavending_contable');
 Route::post('contable/cierre-rendiciones-maquinavending/api/preview-asiento', 'Contable\CierreRendicionMaquinavendingController@apiPreviewAsiento')->name('api_cierre_rendicion_maquinavending_preview');
+Route::get('contable/cierre-rendiciones-maquinavending/api/pendientes-cierre', 'Contable\CierreRendicionMaquinavendingController@apiPendientesCierre')->name('api_cierre_rendicion_maquinavending_pendientes');
 Route::post('contable/cierre-rendiciones-maquinavending/api/preview-cierre-rango', 'Contable\CierreRendicionMaquinavendingController@apiPreviewCierreRango')->name('api_cierre_rendicion_maquinavending_preview_rango');
 Route::post('contable/cierre-rendiciones-maquinavending/api/ejecutar-cierre', 'Contable\CierreRendicionMaquinavendingController@apiEjecutarCierre')->name('api_cierre_rendicion_maquinavending_ejecutar');
 Route::post('contable/cierre-rendiciones-maquinavending/api/ejecutar-cierre-rango', 'Contable\CierreRendicionMaquinavendingController@apiEjecutarCierreRango')->name('api_cierre_rendicion_maquinavending_ejecutar_rango');
@@ -2426,6 +2442,7 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/flash/crear', 'Caja\Flash\FlashCajaController@crear')->name('crear_flash_caja');
     Route::post('caja/flash', 'Caja\Flash\FlashCajaController@guardar')->name('guardar_flash_caja');
     Route::post('caja/flash/api/calcular', 'Caja\Flash\FlashCajaController@apiCalcular')->name('flash_caja_api_calcular');
+    Route::post('caja/flash/api/origen-total', 'Caja\Flash\FlashCajaController@apiOrigenTotal')->name('flash_caja_api_origen_total');
     Route::get('caja/flash/api/desglose-wigos-excel', 'Caja\Flash\FlashCajaController@exportarDesgloseWigos')->name('flash_caja_desglose_wigos_excel');
     Route::get('caja/flash/{id}/editar', 'Caja\Flash\FlashCajaController@editar')->name('editar_flash_caja');
     Route::put('caja/flash/{id}', 'Caja\Flash\FlashCajaController@actualizar')->name('actualizar_flash_caja');
@@ -2453,6 +2470,19 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::post('caja/rendicion-maquina/api/lineas-empresa', 'Caja\RendicionMaquinaController@apiLineasEmpresa')->name('rendicion_maquina_api_lineas_empresa');
     Route::match(['get', 'post'], 'caja/rendicion-maquina/api/ajustes', 'Caja\RendicionMaquinaController@apiAjustes')->name('rendicion_maquina_api_ajustes');
     Route::delete('caja/rendicion-maquina/{id}', 'Caja\RendicionMaquinaController@eliminar')->name('eliminar_rendicion_maquina');
+
+    Route::get('caja/remesa', 'Caja\RemesaController@index')->name('remesa');
+    Route::get('caja/lista-remesa/{formato?}/{busqueda?}', 'Caja\RemesaController@listar')->name('lista_remesa');
+    Route::get('caja/remesa/crear', 'Caja\RemesaController@crear')->name('crear_remesa');
+    Route::post('caja/remesa', 'Caja\RemesaController@guardar')->name('guardar_remesa');
+    Route::get('caja/remesa/configurar', 'Caja\RemesaController@configurar')->name('configurar_remesa');
+    Route::post('caja/remesa/configurar/agregar', 'Caja\RemesaController@configurarAgregar')->name('configurar_remesa_agregar');
+    Route::post('caja/remesa/configurar/quitar', 'Caja\RemesaController@configurarQuitar')->name('configurar_remesa_quitar');
+    Route::get('caja/remesa/{id}/editar', 'Caja\RemesaController@editar')->name('editar_remesa');
+    Route::put('caja/remesa/{id}', 'Caja\RemesaController@actualizar')->name('actualizar_remesa');
+    Route::post('caja/remesa/{id}/revertir', 'Caja\RemesaController@revertir')->name('revertir_remesa');
+    Route::delete('caja/remesa/{id}', 'Caja\RemesaController@anular')->name('anular_remesa');
+    Route::post('caja/remesa/api/lineas-empresa', 'Caja\RemesaController@apiLineasEmpresa')->name('remesa_api_lineas_empresa');
 
     Route::get('caja/bingo/concepto-rendicion', 'Caja\Bingo\BingoConceptoRendicionController@index')->name('bingo_concepto_rendicion');
     Route::get('caja/lista-bingo-concepto-rendicion/{formato?}/{busqueda?}', 'Caja\Bingo\BingoConceptoRendicionController@listar')->name('lista_bingo_concepto_rendicion');
@@ -3568,51 +3598,56 @@ Route::put('uif/estadocivil_uif/{id}', 'Uif\Estadocivil_UifController@actualizar
 Route::delete('uif/estadocivil_uif/{id}', 'Uif\Estadocivil_UifController@eliminar')->name('elimina_estadocivil_uif');
 
 /*
- * Clientes UIF
+ * Clientes UIF — requiere PC con configuración PV estacionamiento (empresa → BSA/KSA/RSA)
  */
 
-Route::get('uif/cliente_uif', 'Uif\Cliente_UifController@index')->name('consulta_cliente_uif');
-Route::get('uif/cliente_uif/crear', 'Uif\Cliente_UifController@crear')->name('crea_cliente_uif');
-Route::post('uif/cliente_uif', 'Uif\Cliente_UifController@guardar')->name('guarda_cliente_uif');
-Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif')->middleware('modo.consulta');
-Route::get('uif/cliente_uif/{id}/listar-premios/{formato?}', 'Uif\Cliente_UifController@listarPremiosCliente')->name('lista_premios_cliente_uif');
-Route::get('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@mostrarFotodocumento')->name('cliente_uif_fotodocumento');
-Route::delete('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@eliminarFotodocumento')->name('elimina_fotodocumento_cliente_uif');
-Route::put('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@actualizar')->name('actualiza_cliente_uif')->middleware('modo.consulta');
-Route::delete('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@eliminar')->name('elimina_cliente_uif');
+Route::middleware('uif.pc_configurada')->group(function () {
+    Route::get('uif/cliente_uif', 'Uif\Cliente_UifController@index')->name('consulta_cliente_uif');
+    Route::get('uif/cliente_uif/crear', 'Uif\Cliente_UifController@crear')->name('crea_cliente_uif');
+    Route::post('uif/cliente_uif', 'Uif\Cliente_UifController@guardar')->name('guarda_cliente_uif');
+    Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif')->middleware('modo.consulta');
+    Route::get('uif/cliente_uif/{id}/listar-premios/{formato?}', 'Uif\Cliente_UifController@listarPremiosCliente')->name('lista_premios_cliente_uif');
+    Route::get('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@mostrarFotodocumento')->name('cliente_uif_fotodocumento');
+    Route::get('uif/cliente_uif/{id}/archivo/{archivo}', 'Uif\Cliente_UifController@mostrarArchivo')->name('cliente_uif_archivo')->where('archivo', '.*');
+    Route::delete('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@eliminarFotodocumento')->name('elimina_fotodocumento_cliente_uif');
+    Route::put('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@actualizar')->name('actualiza_cliente_uif')->middleware('modo.consulta');
+    Route::delete('uif/cliente_uif/{id}', 'Uif\Cliente_UifController@eliminar')->name('elimina_cliente_uif');
 
-Route::get('uif/listacliente_uif/{formato?}/{busqueda?}', 'Uif\Cliente_UifController@listar')->name('lista_cliente_uif');
-Route::post('uif/consultacliente_uif', 'Uif\Cliente_UifController@consultaCliente_Uif')->name('consultar_cliente_uif');
-Route::get('uif/leercliente_uif/{cliente_uif_id}', 'Uif\Cliente_UifController@leeCliente_Uif')->name('leer_cliente_uif');
-Route::get('uif/calculariesgo_uif/{cliente_uif_id}/{periodo}/{inusualidad_uif_id}', 'Uif\Cliente_UifController@calculaRiesgo')->name('calcula_riesgo_cliente_uif');
+    Route::get('uif/listacliente_uif/{formato?}/{busqueda?}', 'Uif\Cliente_UifController@listar')->name('lista_cliente_uif');
+    Route::post('uif/consultacliente_uif', 'Uif\Cliente_UifController@consultaCliente_Uif')->name('consultar_cliente_uif');
+    Route::get('uif/leercliente_uif/{cliente_uif_id}', 'Uif\Cliente_UifController@leeCliente_Uif')->name('leer_cliente_uif');
+    Route::get('uif/calculariesgo_uif/{cliente_uif_id}/{periodo}/{inusualidad_uif_id}', 'Uif\Cliente_UifController@calculaRiesgo')->name('calcula_riesgo_cliente_uif');
 
-Route::get('uif/crearexportaoperacion', 'Uif\Cliente_UifController@crearExportaOperacion')->name('crear_exporta_operacion');
-Route::post('uif/generaexportaoperacion', 'Uif\Cliente_UifController@generaExportaOperacion')->name('generar_exporta_operacion');
-Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}', 'Uif\Cliente_UifController@listadoExportaOperacion')->name('listado_exporta_operacion_uif');
-Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/xml', 'Uif\Cliente_UifController@exportaOperacion')->name('exporta_cliente_uif');
-Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/excel', 'Uif\Cliente_UifController@exportaOperacionExcel')->name('exporta_cliente_uif_excel');
-Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/xml-zip', 'Uif\Cliente_UifController@descargarXmlZip')->name('descargar_cliente_uif_xml_zip');
+    Route::get('uif/crearexportaoperacion', 'Uif\Cliente_UifController@crearExportaOperacion')->name('crear_exporta_operacion');
+    Route::post('uif/generaexportaoperacion', 'Uif\Cliente_UifController@generaExportaOperacion')->name('generar_exporta_operacion');
+    Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}', 'Uif\Cliente_UifController@listadoExportaOperacion')->name('listado_exporta_operacion_uif');
+    Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/xml', 'Uif\Cliente_UifController@exportaOperacion')->name('exporta_cliente_uif');
+    Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/excel', 'Uif\Cliente_UifController@exportaOperacionExcel')->name('exporta_cliente_uif_excel');
+    Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/xml-zip', 'Uif\Cliente_UifController@descargarXmlZip')->name('descargar_cliente_uif_xml_zip');
 
-Route::get('uif/conciliacion-wigos', 'Uif\UifConciliacionWigosController@index')->name('conciliacion_wigos_uif');
-Route::post('uif/conciliacion-wigos/cargar', 'Uif\UifConciliacionWigosController@cargar')->name('cargar_conciliacion_wigos_uif');
-Route::post('uif/conciliacion-wigos/conciliar', 'Uif\UifConciliacionWigosController@conciliar')->name('conciliar_conciliacion_wigos_uif');
-Route::get('uif/listar-conciliacion-wigos/{formato}', 'Uif\UifConciliacionWigosController@exportar')->name('listar_conciliacion_wigos_uif');
+    Route::get('uif/conciliacion-wigos', 'Uif\UifConciliacionWigosController@index')->name('conciliacion_wigos_uif');
+    Route::post('uif/conciliacion-wigos/cargar', 'Uif\UifConciliacionWigosController@cargar')->name('cargar_conciliacion_wigos_uif');
+    Route::post('uif/conciliacion-wigos/conciliar', 'Uif\UifConciliacionWigosController@conciliar')->name('conciliar_conciliacion_wigos_uif');
+    Route::get('uif/listar-conciliacion-wigos/{formato}', 'Uif\UifConciliacionWigosController@exportar')->name('listar_conciliacion_wigos_uif');
 
-/*
- * Premios UIF
- */
+    /*
+     * Premios UIF
+     */
 
-Route::get('uif/premio_uif', 'Uif\Cliente_Premio_UifController@index')->name('consulta_cliente_premio_uif');
-Route::get('uif/premio_uif/crear/{id}', 'Uif\Cliente_Premio_UifController@crear')->name('crea_cliente_premio_uif')->middleware('modo.consulta');
-Route::post('uif/premio_uif', 'Uif\Cliente_Premio_UifController@guardar')->name('guarda_cliente_premio_uif')->middleware('modo.consulta');
-Route::get('uif/premio_uif/{id}/editar', 'Uif\Cliente_Premio_UifController@editar')->name('edita_cliente_premio_uif')->middleware('modo.consulta');
-Route::put('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@actualizar')->name('actualiza_cliente_premio_uif')->middleware('modo.consulta');
-Route::delete('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@eliminar')->name('elimina_cliente_premio_uif')->middleware('modo.consulta');
-Route::post('uif/elimina_premio_uif', 'Uif\Cliente_Premio_UifController@eliminarExterno')->name('elimina_externo_cliente_premio_uif')->middleware('modo.consulta');
+    Route::get('uif/premio_uif', 'Uif\Cliente_Premio_UifController@index')->name('consulta_cliente_premio_uif');
+    Route::get('uif/premio_uif/crear/{id}', 'Uif\Cliente_Premio_UifController@crear')->name('crea_cliente_premio_uif')->middleware('modo.consulta');
+    Route::post('uif/premio_uif', 'Uif\Cliente_Premio_UifController@guardar')->name('guarda_cliente_premio_uif')->middleware('modo.consulta');
+    Route::get('uif/premio_uif/{id}/editar', 'Uif\Cliente_Premio_UifController@editar')->name('edita_cliente_premio_uif')->middleware('modo.consulta');
+    Route::put('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@actualizar')->name('actualiza_cliente_premio_uif')->middleware('modo.consulta');
+    Route::delete('uif/premio_uif/{id}', 'Uif\Cliente_Premio_UifController@eliminar')->name('elimina_cliente_premio_uif')->middleware('modo.consulta');
+    Route::post('uif/elimina_premio_uif', 'Uif\Cliente_Premio_UifController@eliminarExterno')->name('elimina_externo_cliente_premio_uif')->middleware('modo.consulta');
 
-Route::get('uif/premio_uif/lista_un_premio_uif/{id}', 'Uif\Cliente_Premio_UifController@listarUnPremio')->name('lista_un_cliente_premio_uif')->middleware('modo.consulta');
-Route::get('uif/premio_uif/mostrar_foto/{id}', 'Uif\Cliente_Premio_UifController@mostrarFoto')->name('muestra_foto_cliente_premio_uif')->middleware('modo.consulta');
-Route::get('uif/premio_uif/{formato?}/{busqueda?}', 'Uif\Cliente_Premio_UifController@listar')->name('lista_cliente_premio_uif');
+    Route::get('uif/premio_uif/lista_un_premio_uif/{id}', 'Uif\Cliente_Premio_UifController@listarUnPremio')->name('lista_un_cliente_premio_uif')->middleware('modo.consulta');
+    Route::get('uif/premio_uif/mostrar_foto/{id}', 'Uif\Cliente_Premio_UifController@mostrarFoto')->name('muestra_foto_cliente_premio_uif')->middleware('modo.consulta');
+    Route::get('uif/premio_uif/foto/{archivo}', 'Uif\Cliente_Premio_UifController@mostrarFotoArchivo')->name('cliente_premio_uif_foto_archivo')->where('archivo', '.*');
+    Route::get('uif/premio_uif/{id}/archivo/{archivo}', 'Uif\Cliente_Premio_UifController@mostrarArchivo')->name('cliente_premio_uif_archivo')->where('archivo', '.*');
+    Route::get('uif/premio_uif/{formato?}/{busqueda?}', 'Uif\Cliente_Premio_UifController@listar')->name('lista_cliente_premio_uif');
+});
 
 /*
  * Actividades
@@ -3856,6 +3891,7 @@ Route::delete('sueldos/vacacion/{id}', 'Sueldos\Vacacion_SueldosController@elimi
  */
 Route::get('sueldos/liquidacion', 'Sueldos\Liquidacion_SueldosController@index')->name('consultar_liquidacion_sueldos');
 Route::get('sueldos/listaliquidacion/{formato?}/{busqueda?}', 'Sueldos\Liquidacion_SueldosController@listar')->name('lista_liquidacion_sueldos');
+Route::post('sueldos/liquidacion/sincronizar-anita', 'Sueldos\Liquidacion_SueldosController@sincronizarAnita')->name('sincronizar_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/crear', 'Sueldos\Liquidacion_SueldosController@crear')->name('crear_liquidacion_sueldos');
 Route::post('sueldos/liquidacion', 'Sueldos\Liquidacion_SueldosController@guardar')->name('guardar_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/editar', 'Sueldos\Liquidacion_SueldosController@editar')->name('editar_liquidacion_sueldos');
@@ -3863,8 +3899,27 @@ Route::put('sueldos/liquidacion/{id}', 'Sueldos\Liquidacion_SueldosController@ac
 Route::post('sueldos/liquidacion/{id}/estado', 'Sueldos\Liquidacion_SueldosController@estado')->name('estado_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/{id}/calcular', 'Sueldos\Liquidacion_SueldosController@calcular')->name('calcular_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/resultado', 'Sueldos\Liquidacion_SueldosController@resultado')->name('resultado_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/{id}/recibo/{reciboId}', 'Sueldos\Liquidacion_SueldosController@reciboPreview')->name('preview_recibo_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/{id}/recibo/{reciboId}/pdf', 'Sueldos\Liquidacion_SueldosController@reciboPdf')->name('pdf_recibo_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/trazar/{empleadoId}', 'Sueldos\Liquidacion_SueldosController@trazar')->name('trazar_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/{id}/novedades', 'Sueldos\Novedad_SueldosController@liquidacion')->name('novedades_liquidacion_sueldos');
 Route::delete('sueldos/liquidacion/{id}', 'Sueldos\Liquidacion_SueldosController@eliminar')->name('eliminar_liquidacion_sueldos');
+
+/*
+ * Novedades de liquidación (entradas del período para el motor: V/P/VC/IC).
+ */
+Route::get('sueldos/novedad', 'Sueldos\Novedad_SueldosController@index')->name('consultar_novedad_sueldos');
+Route::get('sueldos/listanovedad/{formato?}/{busqueda?}', 'Sueldos\Novedad_SueldosController@listar')->name('lista_novedad_sueldos');
+Route::post('sueldos/novedad/sincronizar-anita', 'Sueldos\Novedad_SueldosController@sincronizarAnita')->name('sincronizar_novedad_sueldos');
+Route::get('sueldos/novedad/importar', 'Sueldos\Novedad_SueldosController@importarForm')->name('importar_novedad_sueldos');
+Route::post('sueldos/novedad/importar', 'Sueldos\Novedad_SueldosController@importar')->name('procesar_importar_novedad_sueldos');
+Route::get('sueldos/novedad/empleados-empresa', 'Sueldos\Novedad_SueldosController@empleadosPorEmpresa')->name('empleados_empresa_novedad_sueldos');
+Route::get('sueldos/novedad/liquidaciones-empresa', 'Sueldos\Novedad_SueldosController@liquidacionesPorEmpresa')->name('liquidaciones_empresa_novedad_sueldos');
+Route::get('sueldos/novedad/crear', 'Sueldos\Novedad_SueldosController@crear')->name('crear_novedad_sueldos');
+Route::post('sueldos/novedad', 'Sueldos\Novedad_SueldosController@guardar')->name('guardar_novedad_sueldos');
+Route::get('sueldos/novedad/{id}/editar', 'Sueldos\Novedad_SueldosController@editar')->name('editar_novedad_sueldos');
+Route::put('sueldos/novedad/{id}', 'Sueldos\Novedad_SueldosController@actualizar')->name('actualizar_novedad_sueldos');
+Route::delete('sueldos/novedad/{id}', 'Sueldos\Novedad_SueldosController@eliminar')->name('eliminar_novedad_sueldos');
 
 Route::get('sueldos/ganancias', 'Sueldos\Ganancias_SueldosController@index')->name('consultar_ganancias_sueldos');
 Route::post('sueldos/ganancias/simular', 'Sueldos\Ganancias_SueldosController@simular')->name('simular_ganancias_sueldos');
@@ -3887,12 +3942,29 @@ Route::get('sueldos/ganancia-deduccion', 'Sueldos\Ganancia_Deduccion_SueldosCont
 Route::get('sueldos/ganancia-deduccion/{codigo}/editar', 'Sueldos\Ganancia_Deduccion_SueldosController@editar')->name('editar_ganancia_deduccion_sueldos');
 Route::put('sueldos/ganancia-deduccion/{codigo}', 'Sueldos\Ganancia_Deduccion_SueldosController@actualizar')->name('actualizar_ganancia_deduccion_sueldos');
 
+Route::get('sueldos/grupo-concepto', 'Sueldos\Grupo_Concepto_SueldosController@index')->name('consultar_grupo_concepto_sueldos');
+Route::get('sueldos/listagrupo-concepto/{formato?}/{busqueda?}', 'Sueldos\Grupo_Concepto_SueldosController@listar')->name('lista_grupo_concepto_sueldos');
+Route::post('sueldos/grupo-concepto/sincronizar-anita', 'Sueldos\Grupo_Concepto_SueldosController@sincronizarAnita')->name('sincronizar_grupo_concepto_sueldos');
+Route::get('sueldos/grupo-concepto/crear', 'Sueldos\Grupo_Concepto_SueldosController@crear')->name('crear_grupo_concepto_sueldos');
+Route::post('sueldos/grupo-concepto', 'Sueldos\Grupo_Concepto_SueldosController@guardar')->name('guardar_grupo_concepto_sueldos');
+Route::get('sueldos/grupo-concepto/{id}/editar', 'Sueldos\Grupo_Concepto_SueldosController@editar')->name('editar_grupo_concepto_sueldos');
+Route::put('sueldos/grupo-concepto/{id}', 'Sueldos\Grupo_Concepto_SueldosController@actualizar')->name('actualizar_grupo_concepto_sueldos');
+Route::delete('sueldos/grupo-concepto/{id}', 'Sueldos\Grupo_Concepto_SueldosController@eliminar')->name('eliminar_grupo_concepto_sueldos');
+
 Route::get('sueldos/concepto', 'Sueldos\Concepto_SueldosController@index')->name('consultar_concepto_sueldos');
 Route::get('sueldos/listaconcepto/{formato?}/{busqueda?}', 'Sueldos\Concepto_SueldosController@listar')->name('lista_concepto_sueldos');
+Route::post('sueldos/concepto/sincronizar-anita', 'Sueldos\Concepto_SueldosController@sincronizarAnita')->name('sincronizar_concepto_sueldos');
+Route::post('sueldos/concepto/retraducir-formulas', 'Sueldos\Concepto_SueldosController@retraducirFormulas')->name('retraducir_formulas_concepto_sueldos');
+Route::post('sueldos/concepto/reclasificar-papo', 'Sueldos\Concepto_SueldosController@reclasificarPapo')->name('reclasificar_papo_concepto_sueldos');
+Route::post('sueldos/concepto/validar-formula', 'Sueldos\Concepto_SueldosController@validarFormula')->name('validar_formula_concepto_sueldos');
 Route::get('sueldos/concepto/crear', 'Sueldos\Concepto_SueldosController@crear')->name('crear_concepto_sueldos');
 Route::post('sueldos/concepto', 'Sueldos\Concepto_SueldosController@guardar')->name('guardar_concepto_sueldos');
-Route::get('sueldos/concepto/{id}/editar', 'Sueldos\Concepto_SueldosController@editar')->name('editar_concepto_sueldos');
-Route::put('sueldos/concepto/{id}', 'Sueldos\Concepto_SueldosController@actualizar')->name('actualizar_concepto_sueldos');
+Route::post('sueldos/concepto/consultaconcepto', 'Sueldos\Concepto_SueldosController@consultaConcepto')->name('consulta_concepto_sueldos');
+Route::get('sueldos/concepto/leerporcodigo/{codigo}', 'Sueldos\Concepto_SueldosController@leeUnConceptoPorCodigo')->name('leer_concepto_sueldos_por_codigo');
+Route::get('sueldos/concepto/leer/{id}', 'Sueldos\Concepto_SueldosController@leeConcepto')->name('leer_concepto_sueldos');
+Route::get('sueldos/concepto/{id}/editar', 'Sueldos\Concepto_SueldosController@editar')->name('editar_concepto_sueldos')->middleware('modo.consulta');
+Route::put('sueldos/concepto/{id}', 'Sueldos\Concepto_SueldosController@actualizar')->name('actualizar_concepto_sueldos')->middleware('modo.consulta');
+Route::post('sueldos/concepto/{id}/depurar-formula', 'Sueldos\Concepto_SueldosController@depurarFormula')->name('depurar_formula_concepto_sueldos');
 Route::delete('sueldos/concepto/{id}', 'Sueldos\Concepto_SueldosController@eliminar')->name('eliminar_concepto_sueldos');
 
 Route::get('sueldos/parametro', 'Sueldos\Parametro_SueldosController@index')->name('consultar_parametro_sueldos');
@@ -3997,6 +4069,16 @@ Route::post('sueldos/empleado/{id}/reincorporar', 'Sueldos\Empleado_SueldosContr
 Route::post('sueldos/empleado/{id}/bases', 'Sueldos\Empleado_SueldosController@guardarBase')->name('guardar_base_empleado_sueldos');
 Route::post('sueldos/empleado/{id}/bases/vigencias', 'Sueldos\Empleado_SueldosController@guardarVigenciasLote')->name('guardar_vigencias_empleado_sueldos');
 Route::get('sueldos/empleado/{id}/bases', 'Sueldos\Empleado_SueldosController@bases')->name('bases_empleado_sueldos');
+Route::get('sueldos/empleado/{id}/simular-liquidacion', 'Sueldos\Empleado_SueldosController@simularLiquidacion')->name('simular_liquidacion_empleado_sueldos');
+Route::get('sueldos/empleado/{id}/depurar-formulas', 'Sueldos\Empleado_SueldosController@depurarFormulas')->name('depurar_formulas_empleado_sueldos');
+Route::get('sueldos/empleado/{empleado}/set-conceptos', 'Sueldos\Empleado_GrupoConceptoController@panel')->name('set_conceptos_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/grupos-concepto', 'Sueldos\Empleado_GrupoConceptoController@agregarGrupo')->name('agregar_grupo_empleado_sueldos');
+Route::delete('sueldos/empleado-grupo-concepto/{id}', 'Sueldos\Empleado_GrupoConceptoController@quitarGrupo')->name('quitar_grupo_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/concepto-explicito', 'Sueldos\Empleado_GrupoConceptoController@guardarExplicito')->name('guardar_explicito_empleado_sueldos');
+Route::delete('sueldos/empleado-concepto/{id}', 'Sueldos\Empleado_GrupoConceptoController@eliminarExplicito')->name('eliminar_explicito_empleado_sueldos');
+Route::get('sueldos/concepto/{concepto}/elegibilidad', 'Sueldos\Concepto_Elegibilidad_SueldosController@panel')->name('elegibilidad_concepto_sueldos');
+Route::post('sueldos/concepto/{concepto}/elegibilidad', 'Sueldos\Concepto_Elegibilidad_SueldosController@guardar')->name('guardar_elegibilidad_concepto_sueldos');
+Route::delete('sueldos/concepto-elegibilidad/{id}', 'Sueldos\Concepto_Elegibilidad_SueldosController@eliminar')->name('eliminar_elegibilidad_concepto_sueldos');
 Route::get('sueldos/empleado/{id}/bases/historial', 'Sueldos\Empleado_SueldosController@historialBases')->name('historial_bases_empleado_sueldos');
 Route::put('sueldos/empleado/{id}/bases/{baseId}', 'Sueldos\Empleado_SueldosController@actualizarVigencia')->name('actualizar_vigencia_empleado_sueldos');
 Route::delete('sueldos/empleado/{id}/bases/{baseId}', 'Sueldos\Empleado_SueldosController@eliminarBase')->name('eliminar_base_empleado_sueldos');
@@ -4029,6 +4111,11 @@ Route::get('sueldos/empleado/{empleado}/planes-cuota', 'Sueldos\Empleado_PlanCuo
 Route::post('sueldos/empleado/{empleado}/planes-cuota', 'Sueldos\Empleado_PlanCuotaSueldosController@guardar')->name('guardar_plan_cuota_empleado_sueldos');
 Route::put('sueldos/plan-cuota/{id}', 'Sueldos\Empleado_PlanCuotaSueldosController@actualizar')->name('actualizar_plan_cuota_empleado_sueldos');
 Route::delete('sueldos/plan-cuota/{id}', 'Sueldos\Empleado_PlanCuotaSueldosController@eliminar')->name('eliminar_plan_cuota_empleado_sueldos');
+
+Route::get('sueldos/empleado/{empleado}/novedades', 'Sueldos\Empleado_NovedadSueldosController@panel')->name('novedades_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/novedades', 'Sueldos\Empleado_NovedadSueldosController@guardar')->name('guardar_novedad_empleado_sueldos');
+Route::put('sueldos/novedad-empleado/{id}', 'Sueldos\Empleado_NovedadSueldosController@actualizar')->name('actualizar_novedad_empleado_sueldos');
+Route::delete('sueldos/novedad-empleado/{id}', 'Sueldos\Empleado_NovedadSueldosController@eliminar')->name('eliminar_novedad_empleado_sueldos');
 
 /*
  * Indumentaria del empleado (solapa): dotación/saldos, entrega con descuento de stock + asiento,

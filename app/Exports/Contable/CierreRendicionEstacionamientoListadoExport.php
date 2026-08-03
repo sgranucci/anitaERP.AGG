@@ -233,7 +233,7 @@ class CierreRendicionEstacionamientoListadoExport implements FromView, WithColum
         foreach ($this->grupos ?? [] as $grupo) {
             $estado = match ($grupo['estado_grupo'] ?? '') {
                 \App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport::ESTADO_CERRADA => 'Cerrado',
-                \App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport::ESTADO_LEGACY => 'Histórico',
+                \App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport::ESTADO_LEGACY => \App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport::ETIQUETA_ESTADO_LEGACY,
                 \App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport::ESTADO_PARCIAL => 'Parcial',
                 default => 'Pendiente',
             };

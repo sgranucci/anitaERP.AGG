@@ -1,0 +1,42 @@
+---
+description: Labels de formularios horizontal siempre alineadas a la derecha
+globs: resources/views/**/*.blade.php
+alwaysApply: false
+---
+
+# Forms: labels alineadas a la derecha
+
+En formularios horizontales del ERP (`form-horizontal`, `form-group row`), las **labels** van siempre a la **derecha**.
+
+## Clase canónica
+
+```blade
+<label for="campo" class="col-lg-4 control-label text-right pr-2">Etiqueta</label>
+{{-- o col-lg-3 según el ABM --}}
+<label for="campo" class="col-lg-3 control-label text-right pr-2 requerido">Etiqueta</label>
+```
+
+- Preferir `control-label text-right pr-2` (patrón empleado / ABM modernos).
+- Si el módulo ya usa `col-form-label`, sumar `text-right`: `col-lg-3 col-form-label text-right`.
+- Partials compartidos (`form-empresa-asignada`, etc.): pasar `col_label` con `text-right pr-2`.
+
+## Prohibido en forms nuevos o al tocar un form
+
+```blade
+{{-- ❌ Label a la izquierda / sin text-right --}}
+<label class="col-lg-3 col-form-label">Descripción</label>
+<label class="col-lg-4 control-label">Código</label>
+```
+
+## Excepciones
+
+- Labels de checkbox/radio inline (`custom-control-label`) junto al control.
+- Toolbars / `form-inline` de filtros (no son form horizontal de ABM).
+- Tablas y thead (no aplica).
+
+## Comprobación rápida
+
+```bash
+# Forms nuevos: labels de fila sin text-right
+rg 'col-form-label(?![^\n"]*text-right)|control-label(?![^\n"]*text-right)' resources/views/{modulo}/{recurso}/form*.blade.php
+```

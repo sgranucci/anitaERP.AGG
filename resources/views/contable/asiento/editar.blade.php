@@ -87,9 +87,19 @@
                     <button type="button" id="botonform3" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> Copia asiento
                     </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-history"></span> Revierte asiento
-                    </button>
+                    @php
+                        $asientoConOrigenProceso = \App\Support\Contable\AsientoOrigenProcesoSupport::tieneOrigenProceso($data ?? []);
+                    @endphp
+                    @if ($asientoConOrigenProceso)
+                        <button type="button" class="btn btn-secondary btn-sm" disabled
+                                title="{{ \App\Support\Contable\AsientoOrigenProcesoSupport::mensajeBloqueo($data ?? [], 'revertir') }}">
+                            <span class="fa fa-history"></span> Revierte asiento
+                        </button>
+                    @else
+                        <button type="button" id="botonform4" class="btn btn-info btn-sm">
+                            <span class="fa fa-history"></span> Revierte asiento
+                        </button>
+                    @endif
                 </div>
             </div>
             <form action="{{route('actualizar_asiento', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">

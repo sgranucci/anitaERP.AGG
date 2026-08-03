@@ -9,7 +9,6 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\CierreRendicionMaquinavendingService;
 use App\Support\Contable\CierreRendicionMaquinavendingListadoFiltros;
-use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -400,14 +399,48 @@ class CierreRendicionMaquinavendingController extends Controller
         try {
             $resultado = $this->service->ejecutarCierreGrupo($empresaId, $fechaDia, $puntoventaCaeId);
 
+            $msgRmv = ! empty($resultado['venta_codigo'])
+                ? ' RMV '.$resultado['venta_codigo'].'.'
+                : '';
+
             return response()->json([
                 'ok' => true,
                 'mensaje' => 'Cierre contable registrado. Asiento '.$resultado['numeroasiento']
-                    .' ('.count($resultado['rendicion_ids']).' rendición/es).',
+                    .' ('.count($resultado['rendicion_ids']).' rendición/es).'.$msgRmv,
                 'asiento_id' => $resultado['asiento_id'],
                 'numeroasiento' => $resultado['numeroasiento'],
+                'venta_id' => $resultado['venta_id'] ?? null,
+                'venta_codigo' => $resultado['venta_codigo'] ?? null,
                 'rendicion_ids' => $resultado['rendicion_ids'],
             ]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiPendientesCierre(Request $request): JsonResponse
+    {
+        can('listar-cierre-rendicion-maquinavending-contable');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique empresa.'], 422);
+        }
+
+        $permitidas = $this->empresaRepository->allFiltrado()
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+        if (! in_array($empresaId, $permitidas, true)) {
+            return response()->json(['ok' => false, 'mensaje' => 'Empresa no autorizada.'], 403);
+        }
+
+        try {
+            $resumen = $this->service->resumenPendientesCierre($empresaId);
+
+            return response()->json(['ok' => true, 'resumen' => $resumen]);
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
@@ -552,29 +585,37 @@ class CierreRendicionMaquinavendingController extends Controller
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $filtros = CierreRendicionMaquinavendingListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaDefault = $this->resolverEmpresaDefaultId($empresaQuery);
         $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
+
+        $filtros = CierreRendicionMaquinavendingListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault,
+        );
         $filtros['empresas_asignadas'] = $asignadas;
 
-        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return $filtros;
-        }
-
-        $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-
-        if ($empresaId <= 0 && count($asignadas) === 1 && ! $request->has('empresa_id')) {
-            $primera = $empresaQuery->first();
-            if ($primera !== null) {
-                $filtros['empresa_id'] = (int) $primera->id;
-            }
-        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
-            $primera = $empresaQuery->first();
-            if ($primera !== null) {
-                $filtros['empresa_id'] = (int) $primera->id;
+        if (
+            ($filtros['empresa_scope'] ?? 'una') === 'una'
+            && $empresaId > 0
+            && count($asignadas) >= 1
+            && ! in_array($empresaId, $asignadas, true)
+        ) {
+            $filtros['empresa_id'] = $empresaDefault > 0 ? $empresaDefault : '';
+            if ((int) $filtros['empresa_id'] <= 0) {
+                $filtros['empresa_scope'] = 'todas';
             }
         }
 
         return $filtros;
+    }
+
+    private function resolverEmpresaDefaultId($empresaQuery): int
+    {
+        $first = $empresaQuery->first();
+
+        return $first !== null ? (int) $first->id : 0;
     }
 }

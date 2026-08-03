@@ -108,6 +108,7 @@ class TransferenciaMercaderiaAsientoService
         }
 
         $payloadAsiento = $preview['payload_asiento'];
+        $payloadAsiento['transferencia_mercaderia_id'] = (int) $transferencia->id;
         $movEntradaId = (int) ($transferencia->movimientostock_entrada_id ?? 0);
         if ($movEntradaId > 0) {
             $payloadAsiento['movimientostock_id'] = $movEntradaId;

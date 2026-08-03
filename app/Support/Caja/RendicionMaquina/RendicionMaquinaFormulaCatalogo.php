@@ -20,7 +20,7 @@ namespace App\Support\Caja\RendicionMaquina;
  */
 final class RendicionMaquinaFormulaCatalogo
 {
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     /**
      * @return list<FormulaDef>
@@ -31,11 +31,12 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'B10',
                 'destino' => 'calc.drop_bill_rodillo',
-                'expresion' => 'inputs.drop_billete - inputs.impuesto_drop',
+                // inputs.drop_billete ya viene neto (bruto WIGOS − impuesto); bruto en drop_billete_bruto
+                'expresion' => 'inputs.drop_billete',
                 'seccion' => 'prep',
                 'orden' => 10,
                 'activo' => true,
-                'detalle' => 'Drop billetes rodillo neto de impuesto drop',
+                'detalle' => 'Drop billetes rodillo neto (paridad Anita dr_bill_rod)',
             ],
             [
                 'codigo' => 'B20',
@@ -110,9 +111,20 @@ final class RendicionMaquinaFormulaCatalogo
                 'detalle' => 'Tito ruletas',
             ],
             [
+                // calcula_arqueo_maquina() en a-rendmaquina.c (sin sobrantes):
+                // tot_valores(+cotiz divisa) + vales + reintegros + gastos + vta_ant_gastro
+                'codigo' => 'D25',
+                'destino' => 'calc.deposito',
+                'expresion' => 'valores.total + gastos.total + inputs.vales + inputs.reintegros + inputs.vta_ant_gastro',
+                'seccion' => 'salidas',
+                'orden' => 125,
+                'activo' => true,
+                'detalle' => 'Depósito calculado (calcula_arqueo_maquina / a-rendmaquina.c)',
+            ],
+            [
                 'codigo' => 'D30',
                 'destino' => 'calc.deposito_efectivo',
-                'expresion' => 'calc.drop_bill_rodillo + calc.drop_bill_ruleta - calc.vale_rep_fondo + inputs.deposito - inputs.sobrantes',
+                'expresion' => 'calc.drop_bill_rodillo + calc.drop_bill_ruleta - calc.vale_rep_fondo + calc.deposito - inputs.sobrantes',
                 'seccion' => 'salidas',
                 'orden' => 130,
                 'activo' => true,
@@ -204,7 +216,7 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'F06',
                 'destino' => 'calc.dif_caja',
-                'expresion' => '(inputs.vale_anterior + inputs.deposito - calc.transferencia) - (calc.resultado_rodillo + calc.resultado_ruleta) - prev.impuesto_drop_dia_ant + inputs.impuesto_drop',
+                'expresion' => '(inputs.vale_anterior + calc.deposito - calc.transferencia) - (calc.resultado_rodillo + calc.resultado_ruleta) - prev.impuesto_drop_dia_ant + inputs.impuesto_drop',
                 'seccion' => 'completo',
                 'orden' => 320,
                 'activo' => true,

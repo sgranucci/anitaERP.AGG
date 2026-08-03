@@ -1,0 +1,84 @@
+---
+description: Solapa de archivos adjuntos unificada (galería + agregar renglones) alineada a OC/recepción/Capex
+alwaysApply: true
+---
+
+# Archivos adjuntos: solapa unificada
+
+Toda **solapa o sección de archivos adjuntos** nueva o migrada debe seguir el mismo layout que **orden de compra**, **recepción proveedor**, **Capex** y el patrón moderno de **empleado sueldos**. No inventar UI distinta (`form-control-file` suelto, lista plana sin tarjetas, DataTables solo para adjuntos).
+
+Complementa `crud-ui-moderna.mdc` y `crud-card-colores.mdc`.
+
+## Referencias canónicas
+
+| Módulo | Solapa / wrapper | Galería | Template renglón |
+|---|---|---|---|
+| Orden compra | `compras/ordencompra/partials/solapa_archivos_ordencompra` | `archivos_adjuntos_ordencompra` | `template_oc_archivos` |
+| Recepción proveedor | `stock/recepcion_proveedor/partials/solapa_archivos` | `archivos_adjuntos_recepcion` | `template_recepcion_archivos` |
+| Capex | `presupuesto/capex/form3` | `partials/archivos_adjuntos` | `template3` |
+| Empleado (moderno) | `sueldos/empleado/partials/form_archivos` | `partials/archivos_adjuntos` | `partials/template_archivos` |
+
+Preferir el layout de **empleado** / **OC** al crear o migrar: card info (actuales) + card primary (agregar).
+
+## Estructura obligatoria (2 bloques)
+
+### 1. Archivos actuales (galería)
+
+- Contenedor: `card card-outline card-info` (o al menos título «Archivos asociados» / «Archivos actuales»).
+- Partial dedicado `{modulo}/{recurso}/partials/archivos_adjuntos*.blade.php`.
+- Grilla `row` + `col-md-6 col-lg-4` con tarjeta `card card-outline card-secondary h-100`.
+- Por archivo: nombre truncado, vista previa (imagen / iframe PDF / icono), botones **Descargar** + **Abrir** (`target="_blank" rel="noopener noreferrer"`).
+- Si editable: hidden de conservación (`nombresanteriores[]` o `archivo_ids_existentes[]` según el módulo) + botón **Quitar** que remueve la tarjeta en el DOM (persistencia al guardar).
+- Flag `$ocultarInputsConservar` (o equivalente) en solo lectura / visualizar.
+- Vacío: mensaje «No hay archivos adjuntos.» (idealmente empty-state centrado).
+
+### 2. Agregar archivos nuevos
+
+- Contenedor: `card card-outline card-primary`.
+- Texto de ayuda: un archivo por renglón + **+ Agrega renglón**; mencionar Quitar en tarjetas si ya hay actuales.
+- Tabla `table table-sm table-bordered` con thead `#85C1E9` / `#17202A`.
+- Columnas: **Archivo nuevo** (`input type="file" name="nombrearchivos[]" class="form-control"`) + **Acciones** (`fa-times-circle text-danger` vía `btn-accion-tabla`).
+- `<template id="…-template-renglon-archivo">` + botón outline primary/danger **+ Agrega renglón**.
+- JS del módulo: clonar template al agregar; al quitar renglón, si queda uno solo, limpiar el `input` en lugar de dejar tbody vacío (salvo patrón OC/RP documentado con tbody vacío al editar).
+- Prefijos de id/clase propios del módulo (`oc-`, `rp-`, `empleado-`, etc.) para no chocar con otras solapas en la misma página.
+
+## Archivos al crear/migrar
+
+| Capa | Archivo |
+|---|---|
+| Solapa | `partials/solapa_archivos*.blade.php` o `form_archivos.blade.php` |
+| Galería | `partials/archivos_adjuntos*.blade.php` |
+| Template | `partials/template_*archivos*.blade.php` |
+| JS | handler agregar/quitar renglón + quitar tarjeta existente |
+
+## Backend (sin inventar contrato)
+
+- Conservar nombres ya usados por el módulo (`nombrearchivos[]`, `nombresanteriores[]`, etc.).
+- Quitar de la galería = no enviar el hidden de conservación; el repository sincroniza al guardar.
+- Nuevos = `UploadedFile` en `nombrearchivos[]`.
+- No anidar `<form>` (ver `blade-formularios-no-anidados.mdc`).
+
+## Prohibido en solapas nuevas o migradas
+
+- Solo `<input type="file" class="form-control-file" multiple>` sin galería ni renglones.
+- Lista de links sin tarjetas de vista previa cuando el resto del ERP ya usa galería.
+- Omitir **Abrir** / **Descargar** en tarjetas existentes.
+- Mezclar ids globales (`#archivo-table`, `#agrega_renglon_archivo`) si la pantalla puede coexistir con otra solapa de archivos.
+- Copiar UI legacy de un ABM viejo «porque está en el mismo menú» si ya existe versión moderna (empleado / OC / recepción / Capex).
+
+## Excepciones válidas
+
+- Adjuntos con **tipo** extra (comprobante proveedor: columna Tipo / factura OCR): mantener tabla de asociados + mismo bloque «Agregar» y misma galería de preview.
+- Solo lectura / portal / visualizar: galería sin Quitar ni card «Agregar».
+- Alta sin ID aún: mensaje «Guarde el borrador/registro para adjuntar…» y ocultar o deshabilitar upload hasta tener PK (patrón recepción).
+
+## Comprobación rápida
+
+```bash
+rg 'form-control-file' resources/views/{modulo}/{recurso}/
+rg 'Agregar archivos nuevos|archivos_adjuntos|nombrearchivos\[]' resources/views/{modulo}/{recurso}/
+rg '85C1E9' resources/views/{modulo}/{recurso}/partials/*archivo*
+php artisan view:cache
+```
+
+Al migrar una solapa vieja: alinear a este stack completo; no dejar híbridos (galería moderna + `form-control-file` suelto).

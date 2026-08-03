@@ -106,12 +106,13 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
         $ctamovGrabados = [];
 
         try {
-            $grabados = DB::transaction(function () use ($payloads, $tipoAsientoId, $snapshot, $porcentaje, $fecha, &$ctamovGrabados) {
+            $grabados = DB::transaction(function () use ($payloads, $tipoAsientoId, $snapshot, $porcentaje, $fecha, $jornadaId, &$ctamovGrabados) {
                 $registros = [];
 
                 foreach ($payloads as $item) {
                     $data = $item['payload'];
                     $data['tipoasiento_id'] = $tipoAsientoId;
+                    $data['jornada_gastronomia_id'] = $jornadaId;
                     $data['moneda_ids'] = $data['moneda_ids'] ?? [];
                     $data['centrocosto_ids'] = $data['centrocosto_ids'] ?? [];
                     $data['debes'] = $data['debes'] ?? [];

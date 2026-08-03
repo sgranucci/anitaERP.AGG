@@ -42,6 +42,7 @@
         </div>
     </div>
 
+    @include('contable.asiento.partials.origen_remesa')
     @include('contable.asiento.partials.referencias')
 
     <input type="hidden" id="numeroasiento" name="numeroasiento" value="{{ $data->numeroasiento ?? '' }}" />

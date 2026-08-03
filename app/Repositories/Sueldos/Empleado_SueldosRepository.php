@@ -213,13 +213,32 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
     /** @return list<string> */
     private function extraerLeyendas(array &$data): array
     {
-        $raw = $data['leyendas'] ?? [];
+        $raw = $data['leyendas'] ?? '';
         unset($data['leyendas']);
-        if (! is_array($raw)) {
-            return [];
+
+        if (is_array($raw)) {
+            $lineas = $raw;
+        } else {
+            $lineas = preg_split("/\r\n|\n|\r/", (string) $raw) ?: [];
         }
 
-        return array_values($raw);
+        $out = [];
+        foreach ($lineas as $texto) {
+            $texto = (string) $texto;
+            if ($texto === '') {
+                continue;
+            }
+            // Anita empley: 80 chars por línea; partir renglones largos sin perder texto
+            while (mb_strlen($texto) > 80) {
+                $out[] = mb_substr($texto, 0, 80);
+                $texto = mb_substr($texto, 80);
+            }
+            if ($texto !== '') {
+                $out[] = $texto;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -388,7 +407,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         .'emp_telefono, emp_contratado, emp_mo_dir_ind, emp_cod_postal, emp_codigo_afjp, emp_codigo_art, '
         .'emp_situacion, emp_condicion, emp_modalidad, emp_provincia, emp_siniestrado, emp_marca_red, '
         .'emp_tipo_empresa, emp_regimen, emp_lugartrabajo, emp_cbu, emp_motivoegr, emp_entre_calles, '
-        .'emp_cod_banco, emp_pais_nac';
+        .'emp_cod_banco, emp_pais_nac, emp_grp1, emp_grp2, emp_grp3';
 
     /**
      * Llenado inicial desde Anita (sueldos.empleado + emping + empley).
@@ -504,6 +523,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'obrasocial_id' => $this->fk($maps['obrasocial_id'], $f->emp_codigo_o_soc ?? null),
                 'sindicato_id' => $this->fk($maps['sindicato_id'], $f->emp_gremio ?? null),
                 'art_id' => $this->fk($maps['art_id'], $f->emp_codigo_art ?? null),
+                'grupo_concepto_1_codigo' => $this->intNull($f->emp_grp1 ?? null),
+                'grupo_concepto_2_codigo' => $this->intNull($f->emp_grp2 ?? null),
+                'grupo_concepto_3_codigo' => $this->intNull($f->emp_grp3 ?? null),
                 'sueldo_basico' => $this->num($f->emp_sueldo ?? null),
                 'jornal_dia' => $this->num($f->emp_jornal_dia ?? null),
                 'jornal_hora' => $this->num($f->emp_jornal_hora ?? null),

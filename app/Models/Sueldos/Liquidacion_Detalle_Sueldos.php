@@ -54,6 +54,7 @@ class Liquidacion_Detalle_Sueldos extends Model implements Auditable
         'descuento' => 'Descuento',
         'neto' => 'Neto',
         'informativo' => 'Informativo',
+        'contribucion' => 'Contrib. empleador',
     ];
 
     public function recibo()

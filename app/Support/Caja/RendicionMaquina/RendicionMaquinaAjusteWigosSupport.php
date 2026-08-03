@@ -7,7 +7,9 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Support\Collection;
 
 /**
- * Registro y consulta del log de ajustes WIGOS (override con permiso).
+ * Log de ajustes WIGOS (tabla rendicion_maquina_ajuste_wigos).
+ *
+ * No hay campo aparte «ajuste_wigosd»: se edita el dato y el delta queda en este log.
  */
 final class RendicionMaquinaAjusteWigosSupport
 {
@@ -16,29 +18,44 @@ final class RendicionMaquinaAjusteWigosSupport
     public const PERMISO_LISTAR = 'listar-ajustes-wigos-rendicion-maquina';
 
     /**
-     * Campos WIGOS que admiten override (ruta de variables del motor).
+     * Datos WIGOS editables (pantalla, bloque principal).
      *
      * @var array<string, string> campo => etiqueta UI
      */
-    public const CAMPOS_AJUSTABLES = [
-        'inputs.drop_billete' => 'Drop billetes rodillo',
+    public const CAMPOS_WIGOS = [
+        'inputs.drop_billete_bruto' => 'Drop billetes rodillo bruto WIGOS',
+        'inputs.drop_billete' => 'Drop billetes rodillo (neto Anita)',
         'inputs.drop_ruleta' => 'Drop billetes ruleta',
         'inputs.drop_bill_ant' => 'Drop billetes rodillo anterior',
         'inputs.drop_rul_ant' => 'Drop billetes ruleta anterior',
         'inputs.dropqr_rodillo' => 'Drop QR rodillo',
         'inputs.dropqr_ruleta' => 'Drop QR ruleta',
         'inputs.venta_ficha' => 'Venta de fichas',
-        'inputs.venta_ruleta' => 'Venta / entrada ruleta',
         'inputs.tito' => 'Tito rodillos',
         'inputs.tito_ruleta' => 'Tito ruletas',
-        'inputs.hopper' => 'Hopper / llenados',
         'inputs.salida_ruleta' => 'Salidas ruleta',
         'inputs.pago_manual' => 'Pagos manuales',
-        'inputs.impuesto_drop' => 'Impuesto drop',
-        'inputs.impuesto_qr' => 'Impuesto QR',
-        'inputs.impuesto_venta' => 'Impuesto venta',
-        'inputs.ajuste_wigosd' => 'Ajuste WIGOS drop',
     ];
+
+    /**
+     * Impuestos (pantalla, bloque aparte).
+     *
+     * @var array<string, string>
+     */
+    public const CAMPOS_IMPUESTOS = [
+        'inputs.impuesto_drop' => 'Impuesto drop',
+        'inputs.impuesto_venta' => 'Impuesto venta',
+        'inputs.impuesto_qr' => 'Impuesto QR',
+        'inputs.impuesto_pago' => 'Impuesto / canje gastronomía',
+    ];
+
+    /**
+     * @return array<string, string>
+     */
+    public static function camposAjustables(): array
+    {
+        return self::CAMPOS_WIGOS + self::CAMPOS_IMPUESTOS;
+    }
 
     /**
      * @param  array{
@@ -57,7 +74,8 @@ final class RendicionMaquinaAjusteWigosSupport
     public static function registrar(array $data): ?RendicionMaquinaAjusteWigos
     {
         $campo = (string) $data['campo'];
-        if (! isset(self::CAMPOS_AJUSTABLES[$campo])) {
+        $ajustables = self::camposAjustables();
+        if (! isset($ajustables[$campo])) {
             throw new \InvalidArgumentException("Campo WIGOS no ajustable: {$campo}");
         }
 
@@ -76,7 +94,7 @@ final class RendicionMaquinaAjusteWigosSupport
             'turno' => $turno,
             'nro_oper' => $data['nro_oper'] ?? null,
             'campo' => $campo,
-            'etiqueta' => self::CAMPOS_AJUSTABLES[$campo],
+            'etiqueta' => $ajustables[$campo],
             'valor_wigos' => $wigos,
             'valor_ajustado' => $ajustado,
             'delta' => round($ajustado - $wigos, 2),

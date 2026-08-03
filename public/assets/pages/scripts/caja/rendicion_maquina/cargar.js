@@ -8,9 +8,15 @@
 
     var carpetaBase = (typeof window.carpetaBase !== 'undefined' && window.carpetaBase) ? window.carpetaBase : '';
     var debounceTimer = null;
+    var wigosDebounceTimer = null;
     var wigosOriginales = {};
     var ajustesPendientes = [];
     var recargandoLineas = false;
+    var wigosLeidoOk = false;
+    var wigosEnCurso = false;
+    /** Descarta respuestas viejas si el usuario cambia empresa/fecha/turno a mitad de lectura. */
+    var wigosRequestSeq = 0;
+    var esAlta = app.dataset.modoEdicion !== '1';
 
     function fmtMoney(n) {
         return Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -92,6 +98,30 @@
         return el ? el.value : (app.dataset.turno || 'M');
     }
 
+    function claseBadgeTurno(turno) {
+        if (turno === 'C') {
+            return 'badge-warning';
+        }
+        if (turno === 'N') {
+            return 'badge-dark';
+        }
+        if (turno === 'T') {
+            return 'badge-info';
+        }
+        return 'badge-primary';
+    }
+
+    function actualizarBadgeTurno() {
+        var badge = document.getElementById('rendmaq-badge-turno');
+        if (!badge) {
+            return;
+        }
+        var turno = getTurno();
+        badge.textContent = 'Turno ' + turno;
+        badge.classList.remove('badge-primary', 'badge-info', 'badge-dark', 'badge-warning');
+        badge.classList.add(claseBadgeTurno(turno));
+    }
+
     function recolectarInputs() {
         var inputs = {};
         app.querySelectorAll('.js-input-wigos, .js-input-manual').forEach(function (inp) {
@@ -145,6 +175,14 @@
                 el.textContent = '$' + fmtMoney(totales[key]);
             }
         });
+        var depCalc = document.getElementById('calc_deposito');
+        if (depCalc && totales.deposito !== undefined) {
+            depCalc.value = fmtMoney(totales.deposito);
+        }
+        var ffCalc = document.getElementById('calc_fondo_fijo');
+        if (ffCalc && totales.fondo_fijo !== undefined) {
+            ffCalc.value = fmtMoney(totales.fondo_fijo);
+        }
         var wrapDif = document.getElementById('wrap-dif-caja');
         if (wrapDif) {
             if (getTurno() === 'C') {
@@ -153,6 +191,59 @@
                 wrapDif.classList.add('d-none');
             }
         }
+    }
+
+    /** Pie sticky a cero (alta / cambio cabecera / Ctrl+R con bfcache). */
+    function blanquearTotales() {
+        pintarTotales({
+            fondo_inicial: 0,
+            comprobante: 0,
+            fondo_fijo: 0,
+            drop_billete_bruto: 0,
+            impuesto_drop: 0,
+            drop_bill_rodillo: 0,
+            total_ingreso: 0,
+            total_salida: 0,
+            resultado_turno: 0,
+            fondo_cierre: 0,
+            transferencia: 0,
+            dif_caja: 0,
+            deposito: 0
+        });
+    }
+
+    function blanquearFondoInput() {
+        var inpFondo = document.getElementById('input_fondo_inicial');
+        if (inpFondo) {
+            inpFondo.value = fmtMoney(0);
+        }
+        var inpVale = document.getElementById('calc_vale_rep_fondo');
+        if (inpVale) {
+            inpVale.value = fmtMoney(0);
+        }
+        var inpComp = document.getElementById('calc_comprobante');
+        if (inpComp) {
+            inpComp.value = fmtMoney(0);
+        }
+    }
+
+    function ordenarPorCodigoNumerico(lineas) {
+        return (lineas || []).slice().sort(function (a, b) {
+            var ca = String(a.codigo || '').trim();
+            var cb = String(b.codigo || '').trim();
+            var na = /^\d+$/.test(ca) ? parseInt(ca, 10) : null;
+            var nb = /^\d+$/.test(cb) ? parseInt(cb, 10) : null;
+            if (na !== null && nb !== null && na !== nb) {
+                return na - nb;
+            }
+            if (na !== null && nb === null) {
+                return -1;
+            }
+            if (na === null && nb !== null) {
+                return 1;
+            }
+            return ca.localeCompare(cb, 'es', { numeric: true, sensitivity: 'base' });
+        });
     }
 
     function renderValores(lineas) {
@@ -164,7 +255,7 @@
             tbody.innerHTML = '<tr class="js-fila-vacia"><td colspan="3" class="text-muted text-center py-3">Sin cuentas con uso «Rendición de máquinas»</td></tr>';
             return;
         }
-        tbody.innerHTML = lineas.map(function (linea) {
+        tbody.innerHTML = ordenarPorCodigoNumerico(lineas).map(function (linea) {
             var id = parseInt(linea.cuentacaja_id, 10) || 0;
             var codigo = escapeHtml(linea.codigo || '');
             var nombre = escapeHtml(linea.nombre || '');
@@ -186,7 +277,7 @@
             tbody.innerHTML = '<tr class="js-fila-vacia"><td colspan="3" class="text-muted text-center py-3">Sin aperturas de gasto activas para la empresa</td></tr>';
             return;
         }
-        tbody.innerHTML = lineas.map(function (linea) {
+        tbody.innerHTML = ordenarPorCodigoNumerico(lineas).map(function (linea) {
             var id = parseInt(linea.apertura_gasto_id, 10) || 0;
             var codigo = escapeHtml(linea.codigo || '');
             var nombre = escapeHtml(linea.nombre || '');
@@ -284,18 +375,76 @@
         debounceTimer = setTimeout(calcular, 400);
     }
 
+    function puedeDispararWigos() {
+        return getEmpresaId() > 0 && !!getFecha() && !!getTurno();
+    }
+
+    function actualizarAvisoWigos() {
+        var aviso = document.getElementById('aviso-wigos-pendiente');
+        var progreso = document.getElementById('aviso-wigos-progreso');
+        if (progreso) {
+            progreso.style.display = wigosEnCurso ? 'block' : 'none';
+        }
+        if (!aviso) {
+            return;
+        }
+        // Pendiente solo en alta, si aún no hay lectura OK y no hay lectura en curso
+        aviso.style.display = (esAlta && !wigosLeidoOk && !wigosEnCurso) ? 'block' : 'none';
+    }
+
+    function marcarWigosLeido(ok) {
+        wigosLeidoOk = !!ok;
+        actualizarAvisoWigos();
+    }
+
+    function setWigosEnCurso(enCurso) {
+        wigosEnCurso = !!enCurso;
+        var btn = document.getElementById('btn-traer-wigos');
+        if (btn) {
+            // No bloquear el resto del formulario: solo feedback en el botón
+            btn.disabled = wigosEnCurso;
+            btn.innerHTML = wigosEnCurso
+                ? '<i class="fa fa-spinner fa-spin"></i> Leyendo WIGOS…'
+                : '<i class="fa fa-cloud-download"></i> Traer WIGOS';
+        }
+        actualizarAvisoWigos();
+    }
+
+    function traerWigosDebounced(motivo) {
+        clearTimeout(wigosDebounceTimer);
+        // Mientras llega WIGOS, no dejar totales/fondo del turno/fecha anterior
+        if (esAlta) {
+            blanquearTotales();
+            blanquearFondoInput();
+        }
+        wigosDebounceTimer = setTimeout(function () {
+            traerWigos({ silencioso: true, motivo: motivo || 'cambio' });
+        }, 450);
+    }
+
     function recargarLineasPorEmpresa() {
         var empresaId = getEmpresaId();
         app.dataset.empresaId = String(empresaId);
+        marcarWigosLeido(false);
+        if (esAlta) {
+            blanquearTotales();
+            blanquearFondoInput();
+        }
 
         if (app.dataset.modoEdicion === '1') {
-            calcularDebounced();
+            if (puedeDispararWigos()) {
+                traerWigosDebounced('empresa');
+            } else {
+                calcularDebounced();
+            }
             return;
         }
 
         if (empresaId <= 0) {
             renderValores([]);
             renderGastos([]);
+            blanquearTotales();
+            actualizarAvisoWigos();
             return;
         }
 
@@ -312,7 +461,11 @@
             })
             .finally(function () {
                 recargandoLineas = false;
-                calcularDebounced();
+                if (puedeDispararWigos()) {
+                    traerWigosDebounced('empresa');
+                } else {
+                    calcularDebounced();
+                }
             });
     }
 
@@ -357,30 +510,110 @@
             }
             inp.classList.remove('input-wigos-ajustable');
         });
+        // Fondo / vale / comprobante: previas de la fecha pedida (no conservar día anterior)
+        if (inputs.fondo_inicial !== undefined) {
+            var inpFondo = document.getElementById('input_fondo_inicial');
+            if (inpFondo) {
+                inpFondo.value = fmtMoney(inputs.fondo_inicial);
+            }
+        }
+        var orq = data.calc_orquestador || {};
+        if (orq.comprobante !== undefined) {
+            var inpComp = document.getElementById('calc_comprobante');
+            if (inpComp) {
+                inpComp.value = fmtMoney(orq.comprobante);
+            }
+        }
+        if (orq.vale_rep_fondo !== undefined) {
+            var inpVale = document.getElementById('calc_vale_rep_fondo');
+            if (inpVale) {
+                inpVale.value = fmtMoney(orq.vale_rep_fondo);
+            }
+        }
         ajustesPendientes = [];
         calcularDebounced();
     }
 
-    function traerWigos() {
-        var empresaId = getEmpresaId();
-        if (empresaId <= 0) {
-            alert('Seleccione empresa.');
+    /**
+     * Lectura WIGOS en segundo plano: no bloquea valores/gastos/manuales/usuarios.
+     * Si el usuario cambia empresa/fecha/turno, una nueva lectura invalida la anterior.
+     *
+     * @param {{ silencioso?: boolean, motivo?: string }|undefined} opts
+     */
+    function traerWigos(opts) {
+        opts = opts || {};
+        if (!puedeDispararWigos()) {
+            if (!opts.silencioso) {
+                alert('Para leer WIGOS complete empresa, fecha y turno.');
+            }
             return;
         }
+
+        var seq = ++wigosRequestSeq;
+        var empresaIdReq = getEmpresaId();
+        var fechaReq = getFecha();
+        var turnoReq = getTurno();
+
+        setWigosEnCurso(true);
         postJson(app.dataset.apiTraerWigos, {
-            empresa_id: empresaId,
-            fecha: getFecha(),
-            turno: getTurno()
+            empresa_id: empresaIdReq,
+            fecha: fechaReq,
+            turno: turnoReq,
+            inputs: recolectarInputs()
         }).then(function (data) {
-            if (data.ok) {
+            // Respuesta obsoleta (cambió cabecera o hay otra lectura más nueva)
+            if (seq !== wigosRequestSeq) {
+                return;
+            }
+            if (
+                empresaIdReq !== getEmpresaId()
+                || fechaReq !== getFecha()
+                || turnoReq !== getTurno()
+            ) {
+                return;
+            }
+            if (data.ok || (data.inputs && Object.keys(data.inputs).length)) {
                 aplicarWigos(data);
-                if (data.meta && data.meta.stub) {
-                    alert(data.meta.mensaje || data.mensaje || 'WIGOS aún no está conectado: se cargaron ceros.');
-                }
+            }
+            var stub = !!(data.meta && data.meta.stub);
+            marcarWigosLeido(!stub);
+            if (stub && !opts.silencioso) {
+                alert(data.meta.mensaje || data.mensaje || 'No se pudo leer WIGOS.');
             }
         }).catch(function (err) {
-            alert(err.message);
+            if (seq !== wigosRequestSeq) {
+                return;
+            }
+            marcarWigosLeido(false);
+            if (!opts.silencioso) {
+                alert(err.message);
+            }
+        }).finally(function () {
+            // Solo apagar el spinner si esta era la lectura vigente
+            if (seq === wigosRequestSeq) {
+                setWigosEnCurso(false);
+            }
         });
+    }
+
+    function mostrarOverlayGuardando() {
+        var overlay = document.getElementById('rendmaq-guardando-overlay');
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function ocultarOverlayGuardando() {
+        var overlay = document.getElementById('rendmaq-guardando-overlay');
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
     }
 
     function guardar() {
@@ -389,6 +622,23 @@
             alert('Seleccione empresa.');
             return;
         }
+
+        if (esAlta && !wigosLeidoOk) {
+            var seguir = window.confirm(
+                'Todavía no se importaron (o falló) los datos WIGOS.\n\n'
+                + 'Si guarda así, los drops/tito/ventas pueden quedar en cero.\n\n'
+                + '¿Desea guardar de todos modos?'
+            );
+            if (!seguir) {
+                return;
+            }
+        }
+
+        var btnGuardar = document.getElementById('btn-guardar-rendicion');
+        if (btnGuardar) {
+            btnGuardar.disabled = true;
+        }
+        mostrarOverlayGuardando();
 
         var payload = {
             id: parseInt(app.dataset.rendicionId || '0', 10) || null,
@@ -409,17 +659,18 @@
 
         postJson(app.dataset.apiGuardar, payload).then(function (data) {
             if (data.ok) {
-                alert(data.mensaje || 'Guardado.');
                 if (data.url_comprobante_pdf) {
                     window.open(data.url_comprobante_pdf, '_blank');
                 }
-                if (data.url_editar) {
-                    window.location.href = data.url_editar;
-                } else {
-                    window.location.href = app.dataset.urlIndex;
-                }
+                window.location.href = data.url_index || app.dataset.urlIndex;
+                return;
             }
+            throw new Error((data && (data.error || data.message)) || 'No se pudo guardar.');
         }).catch(function (err) {
+            ocultarOverlayGuardando();
+            if (btnGuardar) {
+                btnGuardar.disabled = false;
+            }
             alert(err.message);
         });
     }
@@ -503,20 +754,230 @@
     });
 
     document.getElementById('empresa_id')?.addEventListener('change', recargarLineasPorEmpresa);
-    document.getElementById('fecha_rendicion')?.addEventListener('change', calcularDebounced);
+    document.getElementById('fecha_rendicion')?.addEventListener('change', function () {
+        app.dataset.fecha = getFecha();
+        marcarWigosLeido(false);
+        if (esAlta) {
+            blanquearTotales();
+            blanquearFondoInput();
+        }
+        if (puedeDispararWigos()) {
+            traerWigosDebounced('fecha');
+        } else {
+            calcularDebounced();
+        }
+    });
     document.getElementById('turno_rendicion')?.addEventListener('change', function () {
         app.dataset.turno = getTurno();
-        calcularDebounced();
+        actualizarBadgeTurno();
+        marcarWigosLeido(false);
+        if (esAlta) {
+            blanquearTotales();
+            blanquearFondoInput();
+        }
+        if (getTurno() === 'C') {
+            document.getElementById('wrap-dif-caja')?.classList.remove('d-none');
+        } else {
+            document.getElementById('wrap-dif-caja')?.classList.add('d-none');
+        }
+        if (puedeDispararWigos()) {
+            traerWigosDebounced('turno');
+        } else {
+            calcularDebounced();
+        }
     });
 
-    document.getElementById('btn-traer-wigos')?.addEventListener('click', traerWigos);
+    document.getElementById('btn-traer-wigos')?.addEventListener('click', function () {
+        traerWigos({ silencioso: false, motivo: 'boton' });
+    });
     document.getElementById('btn-guardar-rendicion')?.addEventListener('click', guardar);
     document.getElementById('btn-ver-log-ajustes')?.addEventListener('click', verLogAjustes);
+
+    function esTeclaF1(e) {
+        return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+    }
+
+    function esTeclaEnter(e) {
+        return e && (e.key === 'Enter' || e.keyCode === 13 || e.which === 13);
+    }
+
+    function modalAbierto(selector) {
+        var m = document.querySelector(selector);
+        return !!(m && m.classList.contains('show'));
+    }
+
+    function hayModalAbierto() {
+        return modalAbierto('#consultausuarioModal')
+            || modalAbierto('#modal-log-ajustes-wigos')
+            || !!document.querySelector('.modal.show');
+    }
+
+    function esCampoNav(el) {
+        if (!el || el.disabled || el.readOnly) {
+            return false;
+        }
+        if (el.tagName === 'TEXTAREA') {
+            return false;
+        }
+        if (el.tagName === 'SELECT') {
+            return el.id === 'empresa_id' || el.id === 'turno_rendicion';
+        }
+        if (el.tagName !== 'INPUT') {
+            return false;
+        }
+        if (el.type === 'hidden' || el.type === 'button' || el.type === 'submit') {
+            return false;
+        }
+        if (el.classList.contains('usuario_codigo_arbol')) {
+            return true;
+        }
+        if (el.classList.contains('nombreusuario')) {
+            return false;
+        }
+        return el.id === 'fecha_rendicion'
+            || el.classList.contains('js-input-wigos')
+            || el.classList.contains('js-input-manual')
+            || el.classList.contains('js-valor-monto')
+            || el.classList.contains('js-gasto-monto')
+            || el.classList.contains('js-calc-orq');
+    }
+
+    function listarCamposNav() {
+        var nodos = app.querySelectorAll(
+            '#empresa_id, #fecha_rendicion, #turno_rendicion, '
+            + '.usuario_codigo_arbol, '
+            + '.js-input-wigos, .js-input-manual, '
+            + '.js-valor-monto, .js-gasto-monto, .js-calc-orq'
+        );
+        var out = [];
+        nodos.forEach(function (el) {
+            if (esCampoNav(el) && el.offsetParent !== null) {
+                out.push(el);
+            }
+        });
+        return out;
+    }
+
+    function enfocarCampo(el) {
+        if (!el) {
+            return;
+        }
+        setTimeout(function () {
+            el.focus();
+            if (typeof el.select === 'function' && el.tagName === 'INPUT' && el.type !== 'date') {
+                el.select();
+            }
+        }, 0);
+    }
+
+    function siguienteCampoNav(actual) {
+        var campos = listarCamposNav();
+        var idx = campos.indexOf(actual);
+        if (idx >= 0 && idx < campos.length - 1) {
+            return campos[idx + 1];
+        }
+        return null;
+    }
+
+    function validarUsuarioYAvanzar(input) {
+        var $inp = window.jQuery ? window.jQuery(input) : null;
+        if ($inp && $inp.length) {
+            // Dispara el blur de consulta.js (resolver por código/ID)
+            $inp.trigger('blur');
+        } else {
+            input.blur();
+        }
+        setTimeout(function () {
+            var next = siguienteCampoNav(input);
+            if (next) {
+                enfocarCampo(next);
+            }
+        }, 180);
+    }
+
+    function abrirConsultaUsuarioDesdeInput(input) {
+        var ctx = input.closest('.tm-usuario-campo') || input.closest('.form-group');
+        if (!ctx) {
+            return;
+        }
+        var btn = ctx.querySelector('.consultausuario');
+        if (btn) {
+            btn.click();
+        }
+    }
+
+    // Capture: gana al bloqueo global de Enter en consulta.js
+    app.addEventListener('keydown', function (e) {
+        var target = e.target;
+        if (!target || !app.contains(target)) {
+            return;
+        }
+
+        if (esTeclaF1(e)) {
+            if (
+                target.classList
+                && target.classList.contains('usuario_codigo_arbol')
+                && !modalAbierto('#consultausuarioModal')
+            ) {
+                e.preventDefault();
+                e.stopPropagation();
+                abrirConsultaUsuarioDesdeInput(target);
+            }
+            return;
+        }
+
+        if (!esTeclaEnter(e)) {
+            return;
+        }
+        if (hayModalAbierto()) {
+            return;
+        }
+        if (target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON') {
+            return;
+        }
+        if (!esCampoNav(target) && !(target.classList && target.classList.contains('usuario_codigo_arbol'))) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (target.classList && target.classList.contains('usuario_codigo_arbol')) {
+            validarUsuarioYAvanzar(target);
+            return;
+        }
+
+        // Al pasar el foco, focusout formatea montos; change de fecha/select ya corrió al editar
+        var next = siguienteCampoNav(target);
+        if (next) {
+            enfocarCampo(next);
+        }
+    }, true);
+
+    if (typeof window.jQuery !== 'undefined' && typeof window.activa_eventos_consultausuario === 'function') {
+        window.activa_eventos_consultausuario();
+    }
 
     if (getTurno() === 'C') {
         document.getElementById('wrap-dif-caja')?.classList.remove('d-none');
     }
 
     initFormatoMontos(app);
-    calcularDebounced();
+    actualizarAvisoWigos();
+
+    // Alta: pie en cero hasta Traer WIGOS / editar montos (Ctrl+R no debe dejar totales viejos).
+    // Edición: recalcular con lo grabado.
+    if (esAlta) {
+        blanquearTotales();
+    } else {
+        calcularDebounced();
+    }
+
+    // bfcache (atrás / a veces Ctrl+R): forzar pie en cero en alta
+    window.addEventListener('pageshow', function (ev) {
+        if (ev.persisted && esAlta) {
+            blanquearTotales();
+            marcarWigosLeido(false);
+        }
+    });
 })();

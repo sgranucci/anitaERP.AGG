@@ -1,13 +1,13 @@
 <div class="modal fade" id="modal-cierre-rango-rend-est" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content" style="max-height:calc(100vh - 3.5rem);">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title">Cierre contable por rango de fechas</h5>
                 <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body" style="overflow-y:auto;">
                 <p class="text-muted small">
                     Cierra rendiciones de turno <strong>pendientes</strong> cuya jornada cae en el rango.
                     Se genera <strong>un asiento por fecha jornada + punto de venta</strong>.
@@ -39,7 +39,7 @@
                         Un asiento contable por fila (fecha jornada + punto de venta). Use
                         <i class="fa fa-chevron-down"></i> para ver cada rendici&oacute;n.
                     </p>
-                    <div class="table-responsive" style="max-height:320px;overflow-y:auto;">
+                    <div class="table-responsive" style="max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch;">
                         <table class="table table-sm table-bordered mb-0" id="tabla-rango-preview-grupos">
                             <thead style="background:#85C1E9;color:#17202A;">
                                 <tr>
@@ -55,7 +55,7 @@
                     </div>
                     <div id="rango-preview-por-dia-box" class="mt-3 d-none">
                         <p class="small font-weight-bold mb-1">Totales por jornada</p>
-                        <div class="table-responsive">
+                        <div class="table-responsive" style="max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;">
                             <table class="table table-sm table-bordered mb-0">
                                 <thead class="thead-light">
                                     <tr>
@@ -72,7 +72,7 @@
                 </div>
                 <div id="rango-error-box" class="alert alert-danger d-none"></div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer bg-white border-top">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-outline-primary" id="btn-rango-preview">
                     <i class="fa fa-eye"></i> Ver pendientes

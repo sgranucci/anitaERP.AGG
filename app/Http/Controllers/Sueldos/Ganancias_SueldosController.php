@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Sueldos;
 
 use App\Http\Controllers\Controller;
 use App\Models\Sueldos\Empleado_Sueldos;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Sueldos\GananciasCalculadorService;
 use Illuminate\Http\Request;
 
@@ -12,6 +13,10 @@ use Illuminate\Http\Request;
  */
 class Ganancias_SueldosController extends Controller
 {
+    public function __construct(private EmpresaRepositoryInterface $empresaRepository)
+    {
+    }
+
     public function index(Request $request, GananciasCalculadorService $calculador)
     {
         can('listar-ganancias-sueldos');
@@ -20,6 +25,9 @@ class Ganancias_SueldosController extends Controller
         $hastaMes = (int) $request->input('hasta_mes', now()->month);
         $legajo = trim((string) $request->input('legajo', ''));
         $empresaId = $request->input('empresa_id') ? (int) $request->input('empresa_id') : null;
+        if ($empresaId && ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
 
         $empleado = null;
         $resultado = null;
@@ -28,6 +36,8 @@ class Ganancias_SueldosController extends Controller
             $q = Empleado_Sueldos::query()->where('legajo', (int) $legajo);
             if ($empresaId) {
                 $q->where('empresa_id', $empresaId);
+            } else {
+                $this->empresaRepository->aplicarFiltroEmpresasAsignadas($q, 'empresa_id');
             }
             $empleado = $q->first();
 
@@ -49,7 +59,7 @@ class Ganancias_SueldosController extends Controller
             'empresaId' => $empresaId,
             'empleado' => $empleado,
             'resultado' => $resultado,
-            'empresas' => \App\Models\Configuracion\Empresa::query()->orderBy('nombre')->get(['id', 'nombre']),
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
         ]);
     }
 

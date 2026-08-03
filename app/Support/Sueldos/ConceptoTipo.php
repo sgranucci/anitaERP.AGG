@@ -13,12 +13,18 @@ class ConceptoTipo
         'remunerativo' => 'Remunerativo',
         'no_remunerativo' => 'No remunerativo',
         'descuento' => 'Descuento',
-        'aporte' => 'Aporte',
-        'contribucion' => 'Contribución',
+        'aporte' => 'Aporte (trabajador)',
+        'contribucion' => 'Contribución empleador (solo recibo CE)',
         'retencion' => 'Retención',
         'asignacion' => 'Asignación familiar',
         'neto' => 'Neto',
-        'informativo' => 'Informativo',
+        'informativo' => 'Informativo / solo reportes',
+    ];
+
+    /** Tipos que no suman a bruto, descuentos ni neto. */
+    public const TIPOS_SIN_IMPACTO_TOTALES = [
+        'contribucion',
+        'informativo',
     ];
 
     /** @var array<string, string> Momento de liquidacion (Anita hab_momento) */

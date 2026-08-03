@@ -10,6 +10,80 @@ use App\ApiAnita;
  */
 final class AnitaUifArchivosSync
 {
+    /** @var array<int, list<string>>|null */
+    private static ?array $indiceBasenamesCliente = null;
+
+    /** @var array<string, list<string>>|null clave "{cliente}-{premio}" */
+    private static ?array $indiceBasenamesPremio = null;
+
+    /**
+     * Escanea una vez carpetas planas de adjuntos para sync bulk (evita glob por cliente).
+     */
+    public static function warmIndicesDesdeDirectorios(string $dirClientes, string $dirPremios): array
+    {
+        self::$indiceBasenamesCliente = [];
+        self::$indiceBasenamesPremio = [];
+
+        $dirCli = rtrim($dirClientes, '/');
+        if (is_dir($dirCli)) {
+            foreach (scandir($dirCli, SCANDIR_SORT_NONE) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                $path = $dirCli.'/'.$entry;
+                if (! is_file($path)) {
+                    continue;
+                }
+                if (! preg_match('/^0*(\d+)-/', $entry, $m)) {
+                    continue;
+                }
+                $cid = (int) $m[1];
+                self::$indiceBasenamesCliente[$cid][] = $entry;
+            }
+        }
+
+        $dirPre = rtrim($dirPremios, '/');
+        if (is_dir($dirPre)) {
+            foreach (scandir($dirPre, SCANDIR_SORT_NONE) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                $path = $dirPre.'/'.$entry;
+                if (! is_file($path)) {
+                    continue;
+                }
+                if (! preg_match('/^0*(\d+)-(\d+)-/', $entry, $m)) {
+                    continue;
+                }
+                $key = ((int) $m[1]).'-'.((int) $m[2]);
+                self::$indiceBasenamesPremio[$key][] = $entry;
+            }
+        }
+
+        return [
+            'clientes_archivos' => array_sum(array_map('count', self::$indiceBasenamesCliente)),
+            'premios_archivos' => array_sum(array_map('count', self::$indiceBasenamesPremio)),
+            'clientes_con_archivo' => count(self::$indiceBasenamesCliente),
+            'premios_con_archivo' => count(self::$indiceBasenamesPremio),
+            'dir_clientes' => $dirCli,
+            'dir_premios' => $dirPre,
+        ];
+    }
+
+    /** @deprecated Preferir {@see warmIndicesDesdeDirectorios} */
+    public static function warmIndicesDesdeMount(string $mount): array
+    {
+        $mount = rtrim($mount, '/');
+
+        return self::warmIndicesDesdeDirectorios($mount.'/clientes', $mount.'/premios');
+    }
+
+    public static function clearIndices(): void
+    {
+        self::$indiceBasenamesCliente = null;
+        self::$indiceBasenamesPremio = null;
+    }
+
     /**
      * @param  array<int, object>  $filasApi
      * @return array<int, string> Nombres de archivo (sin path) a importar
@@ -117,6 +191,9 @@ final class AnitaUifArchivosSync
         if ($mount === '' || $inroclienteid <= 0) {
             return [];
         }
+        if (self::$indiceBasenamesCliente !== null) {
+            return array_values(array_unique(self::$indiceBasenamesCliente[$inroclienteid] ?? []));
+        }
         $dir = $mount.'/clientes';
         if (! is_dir($dir)) {
             return [];
@@ -168,6 +245,11 @@ final class AnitaUifArchivosSync
         $mount = rtrim($mount, '/');
         if ($mount === '' || $inroclienteid <= 0 || $inropremioid <= 0) {
             return [];
+        }
+        if (self::$indiceBasenamesPremio !== null) {
+            $key = $inroclienteid.'-'.$inropremioid;
+
+            return array_values(array_unique(self::$indiceBasenamesPremio[$key] ?? []));
         }
         $dir = $mount.'/premios';
         if (! is_dir($dir)) {

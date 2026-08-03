@@ -1,3 +1,6 @@
+@php
+    $estadosArbol = \App\Support\Solicitudpago\SolicitudpagoEstados::opcionesArbolAprobacion();
+@endphp
 <template id="template-renglon-concepto-usuario">
     <tr class="item-concepto-usuario">
         <td>
@@ -23,6 +26,17 @@
         <td>
             <input type="number" step="0.01" min="0" class="form-control form-control-sm desdemonto"
                    name="desdemontos[]" value="0">
+        </td>
+        <td>
+            <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm documento_estado_al_aprobar"
+                    title="Estado de la SP al aprobar este nivel">
+                <option value="">—</option>
+                @foreach ($estadosArbol as $est)
+                    <option value="{{ $est['valor'] }}" {{ $est['valor'] === 'EMITIDA' ? 'selected' : '' }}>
+                        {{ $est['nombre'] }}
+                    </option>
+                @endforeach
+            </select>
         </td>
         <td class="text-center">
             <button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar_concepto_usuario tooltipsC">

@@ -55,8 +55,11 @@ class AnitaFormulaTraductor
         $importeAst = null;
         $importeContador = 0;
 
+        $ultimaAsignacionAst = null;
+        $ultimaAsignacionNombre = null;
+
         foreach ($lineas as $original) {
-            $linea = trim((string) $original);
+            $linea = $this->sanitizarLineaAnita((string) $original);
             if ($linea === '') {
                 continue;
             }
@@ -73,7 +76,7 @@ class AnitaFormulaTraductor
             try {
                 $ast = $this->parsearExpresion($rhs);
             } catch (FormulaException $e) {
-                $this->resultado->traducible = false;
+                // Una línea rota no tumba el concepto si hay otra línea de importe válida.
                 $this->resultado->agregarAdvertencia("No se pudo parsear «{$original}»: ".$e->getMessage());
 
                 continue;
@@ -103,14 +106,29 @@ class AnitaFormulaTraductor
                 );
             }
 
-            // Temporal inlineable (_V1, _R, etc.)
+            // Temporal inlineable (_V1, _R, V:=…, etc.)
             $this->temporales[$lhs] = $ast;
+            $ultimaAsignacionAst = $ast;
+            $ultimaAsignacionNombre = $lhs;
         }
 
         if ($importeContador > 1) {
             $this->resultado->agregarAdvertencia(
                 "El concepto tenía {$importeContador} líneas de importe (sin :=); se usó la última (comportamiento Anita)."
             );
+        }
+
+        if ($importeAst === null && $ultimaAsignacionAst !== null) {
+            // Conceptos que solo tienen V:=… / _Vn:=… sin línea final de importe.
+            if (isset($this->temporales['V'])) {
+                $importeAst = $this->temporales['V'];
+                $this->resultado->agregarAdvertencia('Se usó la asignación V:= como fórmula de importe (no había línea sin :=).');
+            } else {
+                $importeAst = $ultimaAsignacionAst;
+                $this->resultado->agregarAdvertencia(
+                    "Se usó la última asignación «{$ultimaAsignacionNombre}:=» como fórmula de importe (no había línea sin :=)."
+                );
+            }
         }
 
         if ($importeAst !== null) {
@@ -131,6 +149,56 @@ class AnitaFormulaTraductor
     public function traducirExpresion(string $expr): ResultadoTraduccion
     {
         return $this->traducirConcepto([$expr]);
+    }
+
+    /**
+     * Limpia basura típica de Informix (padding con `_`) y corrige typos frecuentes
+     * en fórmulas Anita cargadas a mano.
+     */
+    private function sanitizarLineaAnita(string $linea): string
+    {
+        $linea = trim($linea);
+        if ($linea === '') {
+            return '';
+        }
+        // Padding al final del campo char(75): subrayados sueltos.
+        $linea = rtrim($linea, "_ \t");
+        // Basura al inicio (ej. `>(_V5+_V6+_V7`).
+        $linea = ltrim($linea, "> \t");
+        // Typo asignación con paréntesis de más: `(_R:=ACIM(0)+_T` → `_R:=ACIM(0)+_T`
+        if (preg_match('/^\(+([A-Z_][A-Z0-9_]*\s*:=.+)$/i', $linea, $m)) {
+            $linea = $m[1];
+        }
+        // Dígito pegado a temporal `_Vx` sin coma (error frecuente en fórmulas Anita).
+        $linea = preg_replace('/(\d)(_[A-Za-z][A-Za-z0-9_]*)/', '$1,$2', $linea) ?? $linea;
+        // Typo `CA:P=(680)` → `CA:=P(680)` (falta `=` del operador :=).
+        $linea = preg_replace('/\b([A-Z]+):([A-Z])=\(/i', '$1:=$2(', $linea) ?? $linea;
+        // Leyenda / comentario sin expresión matemática → 0.
+        $upper = strtoupper($linea);
+        if (preg_match('/^[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ0-9 .]+$/u', $upper)
+            && ! preg_match('/[+\-*\/^()<>=]/', $upper)
+            && ! preg_match('/\b(IF|IM|V|F|IC|VC|BR|CA|VA|ACIM|CANTAS)\b/', $upper)) {
+            return '0';
+        }
+        // Balanceo básico de paréntesis (sobra o falta al final).
+        $abre = substr_count($linea, '(');
+        $cierra = substr_count($linea, ')');
+        if ($abre > $cierra) {
+            $linea .= str_repeat(')', $abre - $cierra);
+        } elseif ($cierra > $abre) {
+            $extra = $cierra - $abre;
+            while ($extra > 0 && str_ends_with($linea, ')')) {
+                $linea = substr($linea, 0, -1);
+                $extra--;
+            }
+        }
+        $linea = trim($linea);
+        // Solo basura de paréntesis → 0.
+        if ($linea === '' || $linea === '(' || $linea === ')' || $linea === '()') {
+            return '0';
+        }
+
+        return $linea;
     }
 
     /**
@@ -381,6 +449,13 @@ class AnitaFormulaTraductor
         }
 
         $erp = $map['erp'];
+
+        // Anita IF(cond, a) → si(cond, a, 0)
+        if ($nombre === 'IF' && count($args) === 2) {
+            $args[] = ['t' => 'num', 'v' => 0.0];
+            $this->resultado->agregarAdvertencia('«IF(cond, a)» → «si(cond, a, 0)» (falso implícito).');
+        }
+
         if (! $map['exacto']) {
             $nota = $map['nota'] ?? '';
             $this->resultado->agregarAdvertencia("«{$nombre}()» → «{$erp}()» (aprox): {$nota}");
@@ -440,9 +515,16 @@ class AnitaFormulaTraductor
      */
     private function traducirVariable(string $nombre): array
     {
-        // 1) Temporal inlineable (_V1, _R, ...)
+        // 1) Temporal inlineable (_V1, _R, V1, ...)
         if (isset($this->temporales[$nombre])) {
             return $this->temporales[$nombre]; // PHP copia el array por valor
+        }
+        // Anita mezcla V5 y _V5 en el mismo concepto.
+        if (! str_starts_with($nombre, '_') && isset($this->temporales['_'.$nombre])) {
+            return $this->temporales['_'.$nombre];
+        }
+        if (str_starts_with($nombre, '_') && isset($this->temporales[substr($nombre, 1)])) {
+            return $this->temporales[substr($nombre, 1)];
         }
 
         // 2) Variable Anita conocida

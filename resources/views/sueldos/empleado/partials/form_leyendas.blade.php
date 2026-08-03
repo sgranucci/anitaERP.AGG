@@ -1,28 +1,26 @@
 @php
-    $leyendas = old('leyendas');
-    if (! is_array($leyendas)) {
-        $leyendas = isset($data) ? $data->leyendas->pluck('leyenda')->all() : [''];
-    }
-    if ($leyendas === []) {
-        $leyendas = [''];
+    $leyendasTexto = old('leyendas');
+    if (! is_string($leyendasTexto)) {
+        if (is_array($leyendasTexto)) {
+            $leyendasTexto = implode("\n", $leyendasTexto);
+        } elseif (isset($data)) {
+            $leyendasTexto = $data->leyendas->pluck('leyenda')->implode("\n");
+        } else {
+            $leyendasTexto = '';
+        }
     }
 @endphp
-<p class="text-muted small">Leyendas del legajo (Anita empley). También se usan «A cargo de» y «Puesto jefe» en la solapa laborales.</p>
-<div id="leyendas-empleado">
-    @foreach ($leyendas as $i => $texto)
-        <div class="form-group row leyenda-fila">
-            <label class="col-lg-2 control-label">Línea {{ $i + 1 }}</label>
-            <div class="col-lg-8">
-                <input type="text" name="leyendas[]" class="form-control" maxlength="80" value="{{ $texto }}">
-            </div>
-            <div class="col-lg-2">
-                <button type="button" class="btn btn-outline-danger btn-sm btn-quitar-leyenda" title="Quitar">
-                    <i class="fa fa-times"></i>
-                </button>
-            </div>
-        </div>
-    @endforeach
+
+<div class="card card-outline card-info mb-0">
+    <div class="card-header py-2">
+        <h3 class="card-title mb-0"><i class="fa fa-comment"></i> Leyendas del legajo</h3>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-2">
+            Texto libre (Anita empley). Cada renglón se guarda como una línea (máx. 80 caracteres; si supera, se parte automáticamente).
+            También se usan «A cargo de» y «Puesto jefe» en la solapa Laborales.
+        </p>
+        <textarea name="leyendas" id="leyendas" class="form-control" rows="14"
+                  placeholder="Escribí las leyendas…">{{ $leyendasTexto }}</textarea>
+    </div>
 </div>
-<button type="button" class="btn btn-outline-primary btn-sm" id="btn-agregar-leyenda">
-    <i class="fa fa-plus"></i> Agregar línea
-</button>

@@ -247,7 +247,8 @@ final class RendicionGastronomiaRepararJornadaAnitaService
     }
 
     /**
-     * Anula Z/NC/fc_caea en cabeceras con host legacy (pc-caja*, bingo…) no registradas en configuración.
+     * Anula Z/NC/fc_caea en cabeceras huérfanas (hosts no configurados en gastronomía).
+     * No toca vending ERP (VENDING NRO.*), estacionamiento, Waitry ni agregados CAEA.
      *
      * @param  list<object>  $cabecerasDia
      * @return array<string, mixed>

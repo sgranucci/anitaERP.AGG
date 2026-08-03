@@ -11,7 +11,6 @@ use App\Services\Caja\RendicionMaquina\RendicionMaquinaService;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaAjusteWigosSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
 use App\Support\Caja\RendicionMaquinaListadoFiltros;
-use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -211,6 +210,7 @@ class RendicionMaquinaController extends Controller
             'codigo' => $rendicion->codigo,
             'nro_oper_anita' => (int) ($rendicion->nro_oper_anita ?? 0),
             'mensaje' => $id > 0 ? 'Rendición actualizada.' : 'Rendición guardada.',
+            'url_index' => route('rendicion_maquina'),
             'url_editar' => route('editar_rendicion_maquina', ['id' => $rendicion->id]),
         ];
 
@@ -248,12 +248,18 @@ class RendicionMaquinaController extends Controller
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
         }
 
-        $datos = $this->service->stubTraerWigos($empresaId, $fecha, $turno);
+        $inputsActuales = is_array($request->input('inputs'))
+            ? $request->input('inputs')
+            : null;
+
+        $datos = $this->service->traerWigos($empresaId, $fecha, $turno, $inputsActuales);
 
         return response()->json([
             'ok' => true,
             'inputs' => $datos['inputs'],
             'wigos_json' => $datos['wigos_json'],
+            'previas' => $datos['previas'] ?? [],
+            'calc_orquestador' => $datos['calc_orquestador'] ?? [],
             'meta' => $datos['meta'],
             'mensaje' => $datos['meta']['mensaje'] ?? null,
         ]);
@@ -414,21 +420,21 @@ class RendicionMaquinaController extends Controller
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $filtros = RendicionMaquinaListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaDefault = optional($empresaQuery->first())->id;
+        $filtros = RendicionMaquinaListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+
         $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
         $filtros['empresas_asignadas'] = $asignadas;
 
-        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return $filtros;
-        }
-
-        $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-
-        if ($empresaId <= 0 && count($asignadas) === 1 && ! $request->has('empresa_id')) {
+        if ($empresaId > 0 && $asignadas !== [] && ! in_array($empresaId, $asignadas, true)) {
             $filtros['empresa_id'] = $this->resolverEmpresaDefaultId($empresaQuery);
-        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
-            $filtros['empresa_id'] = $this->resolverEmpresaDefaultId($empresaQuery);
+            $filtros['empresa_scope'] = ((int) $filtros['empresa_id']) > 0 ? 'una' : 'todas';
         }
 
         return $filtros;
