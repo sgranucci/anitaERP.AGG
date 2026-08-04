@@ -2,7 +2,9 @@
 
 namespace App\Repositories\Contable;
 
+use App\Models\Caja\Conceptogasto;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Configuracion\Empresa;
 use App\Repositories\Contable\Cuentacontable_CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -133,27 +135,179 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
         return $cuentacontable;
     }
 
-    public function sincronizarConAnita(){
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 'sistema' => 'contab',
-                        'campos' => 'ctam_empresa, '.$this->keyFieldAnita, 
-						'tabla' => $this->tableAnita[0], 
-						'orderBy' => 'ctam_empresa, '.$this->keyFieldAnita  );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+    public function sincronizarConAnita(?array $empresasCodigo = null): array
+    {
+        ini_set('max_execution_time', '600');
 
-        $datosLocal = Cuentacontable::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
+        $ret = [
+            'en_anita' => 0,
+            'importados' => 0,
+            'omitidos' => 0,
+            'errores' => [],
+        ];
+
+        $apiAnita = new ApiAnita();
+        $payload = [
+            'acc' => 'list',
+            'sistema' => 'contab',
+            'campos' => 'ctam_empresa, '.$this->keyFieldAnita,
+            'tabla' => $this->tableAnita[0],
+            'orderBy' => 'ctam_empresa, '.$this->keyFieldAnita,
+        ];
+        if ($empresasCodigo !== null && $empresasCodigo !== []) {
+            $lista = implode(',', array_map(
+                static fn ($c) => "'".str_replace("'", '', (string) $c)."'",
+                $empresasCodigo
+            ));
+            $payload['whereArmado'] = " WHERE ctam_empresa IN ({$lista}) ";
         }
-		if ($dataAnita)
-		{
-        	foreach ($dataAnita as $value) {
-            	if (!in_array($value->{$this->keyFieldAnita}, $datosLocalArray)) {
-                	$this->traerRegistroDeAnita($value->ctam_empresa, $value->{$this->keyFieldAnita});
-            	}
-        	}
-		}
+
+        $dataAnita = json_decode($apiAnita->apiCall($payload));
+        if (! is_array($dataAnita)) {
+            $ret['errores'][] = 'Anita no devolvió un listado válido de ctamae.';
+
+            return $ret;
+        }
+
+        $ret['en_anita'] = count($dataAnita);
+
+        $empresaPorCodigo = Empresa::query()->pluck('id', 'codigo');
+        $locales = [];
+        foreach ($this->model->newQuery()->get(['empresa_id', 'codigo']) as $cta) {
+            $locales[(int) $cta->empresa_id.'|'.$cta->codigo] = true;
+        }
+
+        foreach ($dataAnita as $value) {
+            $empresaCodigo = (string) ($value->ctam_empresa ?? '');
+            $cuentaCodigo = (string) ($value->{$this->keyFieldAnita} ?? '');
+            $empresaId = $empresaPorCodigo[$empresaCodigo] ?? null;
+            if (! $empresaId) {
+                $ret['errores'][] = "emp {$empresaCodigo} cta {$cuentaCodigo}: empresa no existe en ERP";
+                continue;
+            }
+
+            $clave = (int) $empresaId.'|'.$cuentaCodigo;
+            if (isset($locales[$clave])) {
+                $ret['omitidos']++;
+                continue;
+            }
+
+            try {
+                $this->traerRegistroDeAnita($empresaCodigo, $cuentaCodigo);
+                $locales[$clave] = true;
+                $ret['importados']++;
+            } catch (Exception $e) {
+                $ret['errores'][] = "emp {$empresaCodigo} cta {$cuentaCodigo}: ".$e->getMessage();
+            }
+        }
+
+        return $ret;
+    }
+
+    /**
+     * Resincroniza conceptogasto_id de cuentas existentes desde Anita ctaconc.
+     * ctaco_concepto 0 → null; id de conceptogasto = código Anita.
+     *
+     * @param  list<string>|null  $empresasCodigo
+     * @return array{en_anita:int,actualizados:int,iguales:int,sin_cuenta:int,sin_concepto:int,errores:list<string>}
+     */
+    public function sincronizarConceptosDesdeAnita(bool $dryRun = false, ?array $empresasCodigo = null): array
+    {
+        ini_set('max_execution_time', '600');
+
+        $ret = [
+            'en_anita' => 0,
+            'actualizados' => 0,
+            'iguales' => 0,
+            'sin_cuenta' => 0,
+            'sin_concepto' => 0,
+            'errores' => [],
+        ];
+
+        $apiAnita = new ApiAnita();
+        $payload = [
+            'acc' => 'list',
+            'sistema' => 'contab',
+            'tabla' => $this->tableAnita[1],
+            'campos' => 'ctaco_empresa,ctaco_cuenta,ctaco_concepto',
+        ];
+        if ($empresasCodigo !== null && $empresasCodigo !== []) {
+            $lista = implode(',', array_map(
+                static fn ($c) => "'".str_replace("'", '', (string) $c)."'",
+                $empresasCodigo
+            ));
+            $payload['whereArmado'] = " WHERE ctaco_empresa IN ({$lista}) ";
+        }
+
+        $dataAnita = json_decode($apiAnita->apiCall($payload));
+
+        if (! is_array($dataAnita)) {
+            $ret['errores'][] = 'Anita no devolvió un listado válido de ctaconc.';
+
+            return $ret;
+        }
+
+        $ret['en_anita'] = count($dataAnita);
+
+        $empresaPorCodigo = Empresa::query()->pluck('id', 'codigo');
+        $conceptoIds = Conceptogasto::query()->pluck('id', 'id')->all();
+
+        $cuentaPorEmpresaCodigo = [];
+        foreach ($this->model->newQuery()->get(['id', 'empresa_id', 'codigo', 'conceptogasto_id']) as $cta) {
+            $cuentaPorEmpresaCodigo[(int) $cta->empresa_id.'|'.$cta->codigo] = $cta;
+        }
+
+        foreach ($dataAnita as $row) {
+            $empresaCodigo = (string) ($row->ctaco_empresa ?? '');
+            $cuentaCodigo = (string) ($row->ctaco_cuenta ?? '');
+            $conceptoAnita = (int) ($row->ctaco_concepto ?? 0);
+
+            $empresaId = $empresaPorCodigo[$empresaCodigo] ?? null;
+            if (! $empresaId) {
+                $ret['sin_cuenta']++;
+                continue;
+            }
+
+            $clave = (int) $empresaId.'|'.$cuentaCodigo;
+            $cuenta = $cuentaPorEmpresaCodigo[$clave] ?? null;
+            if (! $cuenta) {
+                $ret['sin_cuenta']++;
+                continue;
+            }
+
+            $nuevoConceptoId = null;
+            if ($conceptoAnita > 0) {
+                if (! isset($conceptoIds[$conceptoAnita])) {
+                    $ret['sin_concepto']++;
+                    $ret['errores'][] = "emp {$empresaCodigo} cta {$cuentaCodigo}: concepto {$conceptoAnita} no existe en conceptogasto";
+                    continue;
+                }
+                $nuevoConceptoId = (int) $conceptoIds[$conceptoAnita];
+            }
+
+            $actual = $cuenta->conceptogasto_id !== null ? (int) $cuenta->conceptogasto_id : null;
+            if ($actual === $nuevoConceptoId) {
+                $ret['iguales']++;
+                continue;
+            }
+
+            if ($dryRun) {
+                $ret['actualizados']++;
+                continue;
+            }
+
+            try {
+                $this->model->newQuery()
+                    ->whereKey($cuenta->id)
+                    ->update(['conceptogasto_id' => $nuevoConceptoId]);
+                $cuenta->conceptogasto_id = $nuevoConceptoId;
+                $ret['actualizados']++;
+            } catch (Exception $e) {
+                $ret['errores'][] = "emp {$empresaCodigo} cta {$cuentaCodigo}: ".$e->getMessage();
+            }
+        }
+
+        return $ret;
     }
 
     public function traerRegistroDeAnita($empresa, $key){
@@ -183,10 +337,12 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        $usuario_id = Auth::user()->id;
+        $usuario_id = Auth::id() ?? 1;
 
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
+            $ctamEmpresa = $data->ctam_empresa;
+            $ctamCuenta = $data->ctam_cuenta;
 
 			switch($data->ctam_tipo)
 			{
@@ -222,22 +378,23 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 
                 // Busca concepto por codigo
                 try {
-                    $conceptogasto = $this->conceptogastoRepository->find($dataConc->ctaco_concepto);
-
-                    if ($conceptogasto)
-                        $conceptogasto_id = $conceptogasto->id;
-                    else    
-                        $conceptogasto_id = null;
+                    $conceptoAnita = (int) ($dataConc->ctaco_concepto ?? 0);
+                    if ($conceptoAnita > 0) {
+                        $conceptogasto = $this->conceptogastoRepository->findPorId($conceptoAnita);
+                        if ($conceptogasto) {
+                            $conceptogasto_id = $conceptogasto->id;
+                        }
+                    }
                 } catch (Exception $e) {
                     $conceptogasto_id = null;
                 }
             }
 
             $empresa_id = null;
-            $empresa = $this->empresaRepository->findPorCodigo($data->ctam_empresa);
+            $empresaModel = $this->empresaRepository->findPorCodigo($ctamEmpresa);
 
-            if ($empresa)
-                $empresa_id = $empresa->id;
+            if ($empresaModel)
+                $empresa_id = $empresaModel->id;
 
             try {
                 $cuentacontable = $this->model->create([
@@ -255,9 +412,9 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                     "cuentacontable_difcambio_id" => $data->ctam_cta_dif_cbio
                 ]);
             } catch (Exception $e) {
-                dd($e);
+                throw $e;
             }
-			$data = array( 
+			$dataCcos = array( 
 				'acc' => 'list', 'tabla' => $this->tableAnita[2], 
 				'sistema' => 'contab',
 				'campos' => '
@@ -265,12 +422,12 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 					ccosv_cuenta,
                     ccosv_ccosto
 				',
-				'whereArmado' => " WHERE ccosv_empresa = '".$data->ctam_empresa.
-                                "' and ccosv_cuenta = '".$data->ctam_cuenta."' "
+				'whereArmado' => " WHERE ccosv_empresa = '".$ctamEmpresa.
+                                "' and ccosv_cuenta = '".$ctamCuenta."' "
 			);
-			$dataAnita = json_decode($apiAnita->apiCall($data));
+			$dataAnitaCcos = json_decode($apiAnita->apiCall($dataCcos));
 
-			foreach ($dataAnita as $cuentacontable_centrocosto)
+			foreach ((array) $dataAnitaCcos as $cuentacontable_centrocosto)
 			{
 				// Busca centro de costo
                 try {

@@ -4,17 +4,14 @@ namespace App\Queries\Contable;
 
 use App\Models\Contable\Asiento;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Contable\AsientoListadoFiltros;
 
 class AsientoQuery implements AsientoQueryInterface
 {
     protected $model;
+
     protected $empresaRepository;
 
-    /**
-     * PostRepository constructor.
-     *
-     * @param Post $post
-     */
     public function __construct(Asiento $asiento, EmpresaRepositoryInterface $empresaRepository)
     {
         $this->model = $asiento;
@@ -36,85 +33,84 @@ class AsientoQuery implements AsientoQueryInterface
         return $this->model->select($campos)->get();
     }
 
-    public function leeAsiento($busqueda, $flPaginando = null, $empresaId = null)
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     */
+    public function leeAsiento($filtros = null, $flPaginando = null, $empresaId = null)
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $busqueda = is_string($busqueda) ? trim($busqueda) : $busqueda;
-        $empresaId = (int) $empresaId;
+        $filtros = $this->normalizarFiltros($filtros, $empresaId);
 
-        $asientos = $this->model->select('asiento.id as id',
-                                        'asiento.empresa_id as empresa',
-                                        'empresa.nombre as nombreempresa',
-                                        'asiento.numeroasiento as numeroasiento',
-                                        'asiento.tipoasiento_id as tipoasiento_id',
-                                        'tipoasiento.nombre as nombretipoasiento',
-                                        'asiento.fecha as fecha',
-                                        'asiento.observacion as observacion',
-                                        'asiento.estado_aprobacion as estado_aprobacion')
-                                ->join('tipoasiento', 'tipoasiento.id', '=', 'asiento.tipoasiento_id')
-                                ->join('empresa', 'empresa.id', '=', 'asiento.empresa_id')
-                                ->with('asiento_movimientos');
+        $asientos = $this->model->select(
+            'asiento.id as id',
+            'asiento.empresa_id as empresa',
+            'empresa.nombre as nombreempresa',
+            'asiento.numeroasiento as numeroasiento',
+            'asiento.tipoasiento_id as tipoasiento_id',
+            'tipoasiento.nombre as nombretipoasiento',
+            'asiento.fecha as fecha',
+            'asiento.observacion as observacion',
+            'asiento.estado_aprobacion as estado_aprobacion'
+        )
+            ->join('tipoasiento', 'tipoasiento.id', '=', 'asiento.tipoasiento_id')
+            ->join('empresa', 'empresa.id', '=', 'asiento.empresa_id')
+            ->with('asiento_movimientos');
 
-        if ($busqueda !== null && $busqueda !== '')
-        {
-            // Solo compara contra la columna DATE si el texto es una fecha válida
-            // (soporta d/m/Y, d-m-Y y Y-m-d); si no, evita el error 1525 de MySQL.
-            $fechaBuscada = $this->normalizarFecha($busqueda);
+        AsientoListadoFiltros::aplicar($asientos, $filtros);
 
-            $asientos->where(function ($query) use ($busqueda, $fechaBuscada)
-            {
-                $query->where('asiento.numeroasiento', $busqueda)
-                      ->orWhere('empresa.nombre', 'like', '%'.$busqueda.'%')
-                      ->orWhere('tipoasiento.nombre', 'like', '%'.$busqueda.'%');
-
-                if ($fechaBuscada !== null)
-                    $query->orWhere('asiento.fecha', $fechaBuscada);
-            });
-        }
-
-        if ($empresaId > 0)
-            $asientos->where('asiento.empresa_id', $empresaId);
-
-        // Restringe a las empresas asignadas al operador (acceso total si no tiene asignaciones).
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($asientos, 'asiento.empresa_id');
 
-        $asientos->orderby('asiento.id', 'DESC');
+        $asientos->orderBy('asiento.id', 'DESC');
 
-        if (isset($flPaginando))
-        {
-            if ($flPaginando)
-                $asientos = $asientos->paginate(10);
-            else
-                $asientos = $asientos->get();
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
+                return $asientos->paginate(10);
+            }
+
+            return $asientos->get();
         }
-        else
-            $asientos = $asientos->get();
 
-        return $asientos;
+        return $asientos->get();
     }
 
     /**
-     * Devuelve la fecha en formato Y-m-d si el texto es una fecha válida; null si no lo es.
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return array<string, mixed>
      */
-    private function normalizarFecha($texto): ?string
+    private function normalizarFiltros($filtros, $empresaId = null): array
     {
-        $texto = trim((string) $texto);
+        $empresaId = (int) $empresaId;
 
-        if ($texto === '')
-            return null;
+        if (is_string($filtros)) {
+            $valor = trim($filtros);
 
-        foreach (['d/m/Y', 'd-m-Y', 'Y-m-d'] as $formato)
-        {
-            $fecha = \DateTime::createFromFormat($formato, $texto);
-
-            if ($fecha !== false && $fecha->format($formato) === $texto)
-                return $fecha->format('Y-m-d');
+            return [
+                'modo' => AsientoListadoFiltros::MODO_TODOS,
+                'campo' => 'numeroasiento',
+                'operador' => 'contiene',
+                'valor' => $valor,
+                'valor_hasta' => '',
+                'busqueda' => $valor,
+                'empresa_id' => $empresaId > 0 ? $empresaId : null,
+                'empresa_scope' => $empresaId > 0 ? 'una' : 'todas',
+            ];
         }
 
-        return null;
+        if (! is_array($filtros)) {
+            $filtros = AsientoListadoFiltros::filtrosVacios();
+        }
+
+        if ($empresaId > 0 && empty($filtros['empresa_id'])) {
+            $filtros['empresa_id'] = $empresaId;
+            $filtros['empresa_scope'] = 'una';
+        }
+
+        if (! isset($filtros['valor']) && isset($filtros['busqueda'])) {
+            $filtros['valor'] = trim((string) $filtros['busqueda']);
+        }
+
+        return $filtros;
     }
-
 }
-

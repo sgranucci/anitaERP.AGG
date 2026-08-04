@@ -328,12 +328,22 @@ function activa_eventos_consulta_cuentacontable()
             }
 
             var $ctx = contextoDesdeInputCodigoCuentaContable($input);
+            var esCampoTm = $ctx && $ctx.length && $ctx.hasClass('tm-cuentacontable-campo');
+            var codigoActual = $.trim($input.val() || '');
+            var codigoPrevio = ($ctx && $ctx.length)
+                ? $.trim($ctx.find('.codigo_previo').first().val() || '')
+                : '';
 
+            // tm-cuentacontable-campo: solo blur (change se ignora para no duplicar).
+            // Grilla asiento (tr): blur y change resuelven si el código cambió — si no,
+            // el hidden cuentacontable_ids[] queda con el id viejo al grabar.
             if (event.type === 'blur') {
-                if (!$ctx || !$ctx.length || !$ctx.hasClass('tm-cuentacontable-campo')) {
-                    return;
+                if (!esCampoTm) {
+                    if (!$ctx || !$ctx.length || codigoActual === codigoPrevio) {
+                        return;
+                    }
                 }
-            } else if ($ctx && $ctx.hasClass('tm-cuentacontable-campo')) {
+            } else if (esCampoTm) {
                 return;
             }
 

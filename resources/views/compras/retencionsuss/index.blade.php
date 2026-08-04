@@ -30,7 +30,7 @@
                 <h3 class="card-title">Retenciones SUSS</h3>
                 <div class="card-tools">
                     <a href="{{route('crear_retencionsuss')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-retenciones-de-suss', false))
+                       	@if (can('crear-retencion-de-suss', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
@@ -75,12 +75,12 @@
 								<td>{{ number_format($retencionsuss->minimoretencion ?? 0,2) }}</td>
 								<td>{{ $retencionsuss->regimen }}</td>
         						<td>
-                       			@if (can('editar-retenciones-de-suss', false))
+                       			@if (can('editar-retencion-de-suss', false))
                                 	<a href="{{route('editar_retencionsuss', ['id' => $retencionsuss->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                    	<i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-retenciones-de-suss', false))
+                       			@if (can('borrar-retencion-de-suss', false))
                                 	<form action="{{route('eliminar_retencionsuss', ['id' => $retencionsuss->id])}}" class="d-inline form-eliminar" method="POST">
                                    		@csrf @method("delete")
                                    		<button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">

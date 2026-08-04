@@ -25,7 +25,6 @@ $( "#botonform0" ).click(function() {
         }
     });
 
-    // Valida montos
     let totDebe = 0;
     let totHaber = 0;
     let parseMonto = window.AsientoMontosFormato
@@ -44,23 +43,17 @@ $( "#botonform0" ).click(function() {
 
     $("#tbody-cuenta-table .debe").each(function() {
         let valor = parseMonto($(this).val());
-
-        if (valor >= 0)
-            totDebe += valor;
+        if (valor >= 0) totDebe += valor;
     });
 
     $("#tbody-cuenta-table .haber").each(function() {
         let valor = parseMonto($(this).val());
-
-        if (valor >= 0)
-            totHaber += valor;
+        if (valor >= 0) totHaber += valor;
     });
 
     if (totDebe - totHaber > 0.009 || totHaber - totDebe > 0.009)
     {
-        diferencia = totDebe - totHaber;
-        
-        alert("No coincide el debe con el haber, diferencia "+diferencia);
+        alert("No coincide el debe con el haber, diferencia " + (totDebe - totHaber));
         flError = true;
     }
 
@@ -71,11 +64,14 @@ $( "#botonform0" ).click(function() {
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('asiento', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Crear Asiento</h3>
                 <div class="card-tools">
@@ -84,29 +80,42 @@ $( "#botonform0" ).click(function() {
                             <i class="fa fa-fw fa-file-excel"></i> Importar Excel
                         </a>
                     @endif
-                    <a href="{{route('asiento')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
             <form action="{{route('guardar_asiento')}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf
-                <div align="center" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-user"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform2" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Archivos asociados
-                    </button>
-                </div>
                 <div class="card-body">
-                    @include('contable.asiento.form')
-                    @include('contable.asiento.form2')
+                    @include('includes.tabs-activas-estilos')
+                    <div class="tabs-activas">
+                        <ul class="nav nav-tabs" id="tabs-asiento" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active" id="tab-asiento-datos-link" data-toggle="tab" href="#tab-asiento-datos" role="tab">
+                                    <i class="fa fa-book"></i> Datos principales
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="tab-asiento-archivos-link" data-toggle="tab" href="#tab-asiento-archivos" role="tab">
+                                    <i class="fa fa-paperclip"></i> Archivos asociados
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="tab-content pt-3">
+                        <div class="tab-pane fade show active" id="tab-asiento-datos" role="tabpanel">
+                            @include('contable.asiento.form')
+                        </div>
+                        <div class="tab-pane fade" id="tab-asiento-archivos" role="tabpanel">
+                            @include('contable.asiento.form2')
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-3"></div>
-                        <div class="col-lg-4">
+                        <div class="col-lg-6">
 							<button type="button" id="botonform0" class="btn btn-success">
 						     	<i class="fa fa-save"></i> Guardar
 							</button>

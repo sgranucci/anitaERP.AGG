@@ -37,6 +37,11 @@
     }
 
     function cantidadAValidarFila($tr) {
+        // Solo la cantidad cargada: si est\u00e1 en 0, la l\u00ednea no bloquea.
+        return cantidadEntregaFila($tr);
+    }
+
+    function cantidadReferenciaAviso($tr) {
         var entrega = cantidadEntregaFila($tr);
         if (entrega > 0) {
             return entrega;
@@ -55,6 +60,25 @@
             && saldo !== undefined
             && !Number.isNaN(Number(saldo))
             && Number(saldo) + 1e-9 < qty;
+    }
+
+    function limpiarEstadoEntregaFila($tr) {
+        $tr.find('.input-estadoparcial').val('');
+        $tr.find('.motivo-parcial-label').text('');
+        $tr.find('.input-estado-linea').val('');
+        $tr.find('.input-fecha-entrega').val('');
+        $tr.find('.input-numeroremito').val('');
+        $tr.find('.input-nombreresponsable').val('');
+    }
+
+    function forzarCantidadCero($tr) {
+        var $input = $tr.find('.input-cantidad-entrega');
+        if (!$input.length) {
+            return;
+        }
+        $input.val('0');
+        limpiarEstadoEntregaFila($tr);
+        $tr.removeClass('fila-saldo-insuficiente');
     }
 
     function mostrarSaldoFila($tr, saldo, controlaStock, esError) {
@@ -92,25 +116,33 @@
     }
 
     function mensajeSaldoInsuficiente($tr, saldo, cantidad) {
-        var qty = cantidad !== undefined ? cantidad : cantidadAValidarFila($tr);
+        var qty = cantidad !== undefined ? cantidad : cantidadReferenciaAviso($tr);
         return 'Saldo insuficiente para '
             + (skuFila($tr) || 'el art\u00edculo')
             + '. Saldo: ' + fmtSaldo(saldo)
             + ', requerido: ' + fmtSaldo(qty)
-            + '. Cambie el dep\u00f3sito origen o la cantidad antes de grabar.';
+            + '. Se dej\u00f3 la cantidad en 0: cambie el dep\u00f3sito origen o la cantidad.';
     }
 
     function avisarSaldoInsuficiente($tr, saldo, forzar) {
-        if (!saldoInsuficiente($tr, saldo)) {
+        var qtyRef = cantidadReferenciaAviso($tr);
+        if (!saldoInsuficiente($tr, saldo, qtyRef)) {
             avisosSaldoPendientes[$tr.data('linea-id')] = false;
             return;
         }
+
+        forzarCantidadCero($tr);
+        mostrarSaldoFila($tr, saldo, true);
+
         var key = String($tr.data('linea-id') || $tr.index());
         if (!forzar && avisosSaldoPendientes[key]) {
             return;
         }
         avisosSaldoPendientes[key] = true;
-        alert(mensajeSaldoInsuficiente($tr, saldo));
+        // Diferir el alert para no bloquear el cierre de modales Bootstrap (backdrop pegado).
+        window.setTimeout(function () {
+            alert(mensajeSaldoInsuficiente($tr, saldo, qtyRef));
+        }, 0);
     }
 
     function cargarSaldoFila($tr, opciones) {
@@ -211,8 +243,12 @@
                     (item.sku || 'Art\u00edculo')
                     + ': saldo ' + fmtSaldo(saldo)
                     + ', solicitado ' + fmtSaldo(item.cantidad)
+                    + ' (cantidad en 0 para corregir)'
                 );
-                item.$tr.addClass('fila-saldo-insuficiente');
+                forzarCantidadCero(item.$tr);
+                if (!Number.isNaN(saldo)) {
+                    mostrarSaldoFila(item.$tr, saldo, true);
+                }
             }
         });
 
@@ -221,7 +257,8 @@
         }
 
         alert(
-            'No se puede grabar: hay l\u00edneas con saldo insuficiente en el dep\u00f3sito origen.\n\n'
+            'No se puede grabar: hay l\u00edneas con saldo insuficiente en el dep\u00f3sito origen.\n'
+            + 'Se dej\u00f3 cantidad 0 en esas l\u00edneas; cambie dep\u00f3sito o cantidad y vuelva a grabar.\n\n'
             + problemas.join('\n')
         );
         return false;
@@ -257,7 +294,7 @@
             return;
         }
         var saldo = Number(saldoAttr);
-        var insuficiente = saldoInsuficiente($tr, saldo, cantidadEntregaFila($tr) || pendienteFila($tr));
+        var insuficiente = saldoInsuficiente($tr, saldo, cantidadEntregaFila($tr));
         $tr.toggleClass('fila-saldo-insuficiente', insuficiente);
         var $span = $tr.find('.ms-saldo-origen');
         $span.removeClass('text-muted text-danger text-success font-weight-bold');

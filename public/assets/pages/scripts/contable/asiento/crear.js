@@ -24,16 +24,30 @@
 		});
 
 		$("#botonform1").click(function(){
+            // Compat: solapas migradas a Bootstrap tabs (#tab-asiento-datos).
+            if ($('#tab-asiento-datos-link').length) {
+                $('#tab-asiento-datos-link').tab('show');
+                return;
+            }
             $(".form1").show();
             $(".form2").hide();
         });
 		$("#botonform2").click(function(){
+            if ($('#tab-asiento-archivos-link').length) {
+                $('#tab-asiento-archivos-link').tab('show');
+                return;
+            }
             $(".form1").hide();
             $(".form2").show();
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Cuentas");
         });
+
+		$(document).on('click', '.eliminar-archivo-asiento', function (e) {
+			e.preventDefault();
+			$(this).closest('.asiento-archivo-item').remove();
+		});
 
 		// copia asiento
 		$("#botonform3").click(function(){
@@ -182,6 +196,11 @@
 
     function borraRenglonArchivo() {
     	event.preventDefault();
+    	var $tbody = $("#tbody-tabla-archivo");
+    	if ($tbody.find('tr.item-archivo').length <= 1) {
+    		$(this).closest('tr').find('input[type=file]').val('');
+    		return;
+    	}
     	$(this).parents('tr').remove();
     }
 
@@ -422,7 +441,79 @@
 		enviarFormularioAsiento(false);
 	});
 
+	/**
+	 * Antes de armar FormData: si el operador cambió el código y aún no resolvió
+	 * (Enter/blur async), sincroniza cuentacontable_ids[] para que la grabación
+	 * no persista el id anterior.
+	 */
+	function asegurarCuentasContablesResueltasAntesDeEnviar() {
+		var empresaId = parseInt($('#empresa_id').val(), 10) || 0;
+		if (!empresaId) {
+			return { ok: false, mensaje: 'Debe ingresar empresa' };
+		}
+
+		var error = null;
+		$('#tbody-cuenta-table tr.item-cuenta').each(function () {
+			if (error) {
+				return false;
+			}
+			var $tr = $(this);
+			var codigo = $.trim($tr.find('.codigocuentacontable').first().val() || '');
+			var codigoPrev = $.trim($tr.find('.codigo_previo').first().val() || '');
+			var cuentaId = parseInt($tr.find('.cuentacontable_id').first().val(), 10) || 0;
+
+			if (!codigo) {
+				if (cuentaId > 0) {
+					$tr.find('.cuentacontable_id').first().val('');
+					$tr.find('.cuentacontable_id_previa').val('');
+				}
+				return;
+			}
+
+			if (cuentaId > 0 && codigo === codigoPrev) {
+				return;
+			}
+
+			var urlCta = carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/'
+				+ empresaId + '/' + encodeURIComponent(codigo);
+			$.ajax({
+				url: urlCta,
+				type: 'GET',
+				async: false,
+				success: function (data) {
+					if (data && data.id > 0) {
+						if (typeof aplicarCuentaContableEnContexto === 'function') {
+							aplicarCuentaContableEnContexto($tr, data);
+						} else {
+							$tr.find('.cuentacontable_id').first().val(data.id);
+							$tr.find('.cuentacontable_id_previa').val(data.id);
+							$tr.find('.codigo_previo').val(data.codigo);
+							$tr.find('.nombrecuentacontable').first().val(data.nombre);
+							$tr.find('.codigocuentacontable').first().val(data.codigo);
+						}
+					} else {
+						error = 'No existe la cuenta ' + codigo;
+					}
+				},
+				error: function () {
+					error = 'No se pudo validar la cuenta ' + codigo;
+				}
+			});
+		});
+
+		if (error) {
+			return { ok: false, mensaje: error };
+		}
+		return { ok: true };
+	}
+
 	function enviarFormularioAsiento(confirmarPendiente) {
+		var resolucionCuentas = asegurarCuentasContablesResueltasAntesDeEnviar();
+		if (!resolucionCuentas.ok) {
+			alert(resolucionCuentas.mensaje);
+			return;
+		}
+
 		if (window.AsientoMontosFormato) {
 			AsientoMontosFormato.normalizarAntesDeEnviar('#form-general');
 		}

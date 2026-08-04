@@ -8,6 +8,9 @@ use App\Support\Contable\MayorConcepto\MayorConceptoMemoriaMotor;
 
 /**
  * Resuelve nro_oc en movimientos del mayor plano vía auxpag + aplicped (patrón mayor por concepto).
+ *
+ * Importante: en aplicped, aplp_orden / aplp_orden_com son números de renglón (PEP/COM),
+ * no el número de orden de compra. El nro de OC es el del comprobante tipo COM (ref_nro / nro).
  */
 class MayorPlanoCuentaOrdencompraResolver
 {
@@ -92,14 +95,16 @@ class MayorPlanoCuentaOrdencompraResolver
         $this->movimientosResueltos = 0;
 
         foreach ($movimientos as $idx => $mov) {
-            if ((int) ($mov['nro_oc'] ?? 0) > 0) {
+            $nroOc = $this->resolverNroOc($mov);
+            if ($nroOc <= 0) {
                 continue;
             }
-
-            $nroOc = $this->resolverNroOc($mov);
-            if ($nroOc > 0) {
+            $previo = (int) ($mov['nro_oc'] ?? 0);
+            if ($previo !== $nroOc) {
                 $movimientos[$idx]['nro_oc'] = $nroOc;
-                $this->movimientosResueltos++;
+                if ($previo <= 0) {
+                    $this->movimientosResueltos++;
+                }
             }
         }
 
@@ -116,24 +121,21 @@ class MayorPlanoCuentaOrdencompraResolver
      */
     public function resolverNroOc(array $mov): int
     {
-        $existente = (int) ($mov['nro_oc'] ?? 0);
-        if ($existente > 0) {
-            return $existente;
-        }
-
         $tipo = strtoupper(trim((string) ($mov['tipo_comp'] ?? '')));
         $letra = trim((string) ($mov['letra'] ?? ' '));
         $sucursal = (int) ($mov['sucursal'] ?? 0);
         $nro = (int) ($mov['nro'] ?? 0);
         $fecha = (int) ($mov['fecha'] ?? 0);
         $emisor = trim((string) ($mov['emisor'] ?? ''));
+        $existente = (int) ($mov['nro_oc'] ?? 0);
 
+        // En Anita el comprobante COM es la OC: el número del documento es el nro de OC.
+        // No pasar por aplicped: aplp_orden / aplp_orden_com son nros de renglón (1, 2, 3…), no de OC.
         if ($tipo === 'COM' && $nro > 0) {
-            $orden = $this->ordenDesdeDocumentoCompras($emisor, $tipo, $letra, $sucursal, $nro);
-            if ($orden > 0) {
-                return $orden;
-            }
+            return $nro;
         }
+
+        $desdeAplicped = 0;
 
         if (in_array($tipo, MayorConceptoMemoriaMotor::TIPOS_REF_IMPUTABLE, true) && $nro > 0) {
             $claveOp = $this->claveOperacionPago($tipo, $nro, $fecha);
@@ -143,18 +145,20 @@ class MayorPlanoCuentaOrdencompraResolver
                 }
                 $orden = $this->ordenComDesdeAplicacion($axp);
                 if ($orden > 0) {
-                    return $orden;
+                    $desdeAplicped = $orden;
+                    break;
                 }
             }
         }
 
-        if ($emisor !== '' && $nro > 0 && $tipo !== '') {
+        if ($desdeAplicped <= 0 && $emisor !== '' && $nro > 0 && $tipo !== '') {
             $claveDoc = $this->claveDocumentoCompras($emisor, $tipo, $letra, $sucursal, $nro);
             if ($claveDoc !== '') {
                 foreach ($this->auxpagPorDocumento[$claveDoc] ?? [] as $axp) {
                     $orden = $this->ordenComDesdeAplicacion($axp);
                     if ($orden > 0) {
-                        return $orden;
+                        $desdeAplicped = $orden;
+                        break;
                     }
                 }
             }
@@ -162,18 +166,21 @@ class MayorPlanoCuentaOrdencompraResolver
             // Documento de compras en subdiario/ctamov: cadena aplicped (DNS→PEP→COM, FGA→PEP→COM, etc.).
             // No limitar a TIPOS_FACTURA_APLICADA: débitos como DNS tienen OC en aplicped
             // aunque no figuren como factura aplicada en auxpag.
-            if (! MayorPlanoCuentaSupport::esTipoOrdenPago($tipo)
+            if ($desdeAplicped <= 0
+                && ! MayorPlanoCuentaSupport::esTipoOrdenPago($tipo)
                 && ! $this->mediopagoSupport->esMedioPagoAuxpag($tipo)
                 && ! $this->mediopagoSupport->esAuxpagIgnorado($tipo)
             ) {
-                $orden = $this->ordenDesdeDocumentoCompras($emisor, $tipo, $letra, $sucursal, $nro);
-                if ($orden > 0) {
-                    return $orden;
-                }
+                $desdeAplicped = $this->ordenDesdeDocumentoCompras($emisor, $tipo, $letra, $sucursal, $nro);
             }
         }
 
-        return 0;
+        // Preferir COM resuelto por aplicped: ctav_o_compra a veces trae renglón (1/2/3).
+        if ($desdeAplicped > 0) {
+            return $desdeAplicped;
+        }
+
+        return $existente > 0 ? $existente : 0;
     }
 
     /**
@@ -289,11 +296,16 @@ class MayorPlanoCuentaOrdencompraResolver
     private function ordenComDesdeAplicacion(object $aplicacion): int
     {
         $prov = trim((string) ($aplicacion->axp_pro ?? ''));
-        $tipoAp = trim((string) ($aplicacion->axp_tipo_ap ?? ''));
+        $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
         $letraAp = trim((string) ($aplicacion->axp_letra_comp ?? ' '));
         $sucAp = (int) ($aplicacion->axp_sucursal ?? 0);
         $nroAp = (int) ($aplicacion->axp_nro ?? 0);
         $claveFac = $prov.'|'.$tipoAp.'|'.$letraAp.'|'.$sucAp.'|'.$nroAp;
+
+        // El propio documento aplicado ya es la OC.
+        if ($tipoAp === 'COM' && $nroAp > 0) {
+            return $nroAp;
+        }
 
         $this->resolverClavesComDesdeFactura($aplicacion);
 
@@ -311,14 +323,10 @@ class MayorPlanoCuentaOrdencompraResolver
         }
 
         foreach ($this->aplicpedCache[$claveFac] as $apl) {
-            $orden = (int) ($apl->aplp_orden ?? 0);
-            if ($orden > 0) {
-                return $orden;
-            }
-
-            $refTipo = trim((string) ($apl->aplp_ref_tipo ?? ''));
+            $refTipo = strtoupper(trim((string) ($apl->aplp_ref_tipo ?? '')));
             $refNro = (int) ($apl->aplp_ref_nro ?? 0);
-            if (in_array($refTipo, ['PEP', 'COM'], true) && $refNro > 0) {
+            // Solo COM: aplp_orden / aplp_orden_com son renglones; PEP.ref_nro es pedido, no OC.
+            if ($refTipo === 'COM' && $refNro > 0) {
                 return $refNro;
             }
         }
@@ -329,7 +337,7 @@ class MayorPlanoCuentaOrdencompraResolver
     private function resolverClavesComDesdeFactura(object $aplicacion): void
     {
         $prov = trim((string) ($aplicacion->axp_pro ?? ''));
-        $tipoAp = trim((string) ($aplicacion->axp_tipo_ap ?? ''));
+        $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
         $letraAp = trim((string) ($aplicacion->axp_letra_comp ?? ' '));
         $sucAp = (int) ($aplicacion->axp_sucursal ?? 0);
         $nroAp = (int) ($aplicacion->axp_nro ?? 0);
@@ -351,11 +359,16 @@ class MayorPlanoCuentaOrdencompraResolver
 
         while ($pendientes !== []) {
             [$tipo, $letra, $suc, $nro] = array_shift($pendientes);
+            $tipo = strtoupper(trim((string) $tipo));
             $claveDoc = $prov.'|'.$tipo.'|'.$letra.'|'.$suc.'|'.$nro;
             if (isset($visitados[$claveDoc])) {
                 continue;
             }
             $visitados[$claveDoc] = true;
+
+            if ($tipo === 'COM' && $nro > 0) {
+                $this->ordenesComPorFactura[$claveFac]['COM|'.$letra.'|'.$suc.'|'.$nro] = $nro;
+            }
 
             if (! isset($this->aplicpedCache[$claveDoc])) {
                 $this->consultasBridgeIndividuales++;
@@ -365,24 +378,21 @@ class MayorPlanoCuentaOrdencompraResolver
             }
 
             foreach ($this->aplicpedCache[$claveDoc] as $apl) {
-                $refTipo = trim((string) ($apl->aplp_ref_tipo ?? ''));
+                $refTipo = strtoupper(trim((string) ($apl->aplp_ref_tipo ?? '')));
                 $refLetra = trim((string) ($apl->aplp_ref_letra ?? ' '));
                 $refSuc = (int) ($apl->aplp_ref_sucursal ?? 0);
                 $refNro = (int) ($apl->aplp_ref_nro ?? 0);
-                $orden = (int) ($apl->aplp_orden ?? 0);
 
-                if ($refTipo === 'COM') {
+                if ($refTipo === 'COM' && $refNro > 0) {
                     $claveCom = $refTipo.'|'.$refLetra.'|'.$refSuc.'|'.$refNro;
-                    $this->ordenesComPorFactura[$claveFac][$claveCom] = $orden > 0 ? $orden : $refNro;
+                    // Número de OC = nro del comprobante COM (nunca aplp_orden = renglón).
+                    $this->ordenesComPorFactura[$claveFac][$claveCom] = $refNro;
 
                     continue;
                 }
 
                 if ($refTipo !== '' && $refNro > 0) {
                     $pendientes[] = [$refTipo, $refLetra, $refSuc, $refNro];
-                    if ($orden <= 0 && in_array($refTipo, ['PEP', 'COM'], true)) {
-                        $this->ordenesComPorFactura[$claveFac]['orden|'.$refTipo.'|'.$refNro] = $refNro;
-                    }
                 }
             }
         }

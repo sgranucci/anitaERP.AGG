@@ -22,7 +22,6 @@
             }
     	});
 
-        // Valida montos
         let totDebe = 0;
         let totHaber = 0;
         let parseMonto = window.AsientoMontosFormato
@@ -41,23 +40,17 @@
 
         $("#tbody-cuenta-table .debe").each(function() {
             let valor = parseMonto($(this).val());
-
-            if (valor >= 0)
-                totDebe += valor;
+            if (valor >= 0) totDebe += valor;
         });
 
         $("#tbody-cuenta-table .haber").each(function() {
             let valor = parseMonto($(this).val());
-
-            if (valor >= 0)
-                totHaber += valor;
+            if (valor >= 0) totHaber += valor;
         });
 
         if (totDebe - totHaber > 0.009 || totHaber - totDebe > 0.009)
         {
-            diferencia = totDebe - totHaber;
-            
-            alert("No coincide el debe con el haber, diferencia "+diferencia);
+            alert("No coincide el debe con el haber, diferencia " + (totDebe - totHaber));
             flError = true;
         }
 
@@ -68,13 +61,17 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('asiento', $filtrosQuery ?? []);
+    $asientoConOrigenProceso = \App\Support\Contable\AsientoOrigenProcesoSupport::tieneOrigenProceso($data ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Editar Asiento - {{$data->tipoasientos->nombre}}- Numero {{$data->numeroasiento}}</h3>
+                <h3 class="card-title">Editar Asiento — {{ $data->tipoasientos->nombre ?? '' }} N° {{ $data->numeroasiento }}</h3>
                 <div class="card-tools">
                     @if (can('crear-asiento', false))
                         <a href="{{ route('crear_importacion_asiento') }}" class="btn btn-outline-success btn-sm" title="Importar asientos desde Excel">
@@ -82,26 +79,23 @@
                         </a>
                     @endif
                     @if (can('listar-asiento', false) || can('editar-asiento', false))
-                    <a href="{{ route('imprimir_pdf_asiento', ['id' => $data->id]) }}" class="btn btn-primary btn-sm" title="Emitir asiento en PDF" target="_blank" rel="noopener noreferrer">
+                    <a href="{{ route('imprimir_pdf_asiento', ['id' => $data->id]) }}" class="btn btn-outline-danger btn-sm" title="Emitir asiento en PDF" target="_blank" rel="noopener noreferrer">
                         <i class="fas fa-file-pdf"></i> Emitir PDF
                     </a>
                     @endif
-                    <a href="{{route('asiento')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
+                    <button type="button" id="botonform3" class="btn btn-outline-secondary btn-sm">
                         <span class="fa fa-copy"></span> Copia asiento
                     </button>
-                    @php
-                        $asientoConOrigenProceso = \App\Support\Contable\AsientoOrigenProcesoSupport::tieneOrigenProceso($data ?? []);
-                    @endphp
                     @if ($asientoConOrigenProceso)
                         <button type="button" class="btn btn-secondary btn-sm" disabled
                                 title="{{ \App\Support\Contable\AsientoOrigenProcesoSupport::mensajeBloqueo($data ?? [], 'revertir') }}">
                             <span class="fa fa-history"></span> Revierte asiento
                         </button>
                     @else
-                        <button type="button" id="botonform4" class="btn btn-info btn-sm">
+                        <button type="button" id="botonform4" class="btn btn-outline-secondary btn-sm">
                             <span class="fa fa-history"></span> Revierte asiento
                         </button>
                     @endif
@@ -109,23 +103,41 @@
             </div>
             <form action="{{route('actualizar_asiento', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method("put")
-                <div align="center" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-user"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform2" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Archivos asociados
-                    </button>
-                </div>
                 <div class="card-body">
-                    @include('contable.asiento.form')
-                    @include('contable.asiento.form2')
+                    @include('includes.tabs-activas-estilos')
+                    <div class="tabs-activas">
+                        <ul class="nav nav-tabs" id="tabs-asiento" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active" id="tab-asiento-datos-link" data-toggle="tab" href="#tab-asiento-datos" role="tab">
+                                    <i class="fa fa-book"></i> Datos principales
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="tab-asiento-archivos-link" data-toggle="tab" href="#tab-asiento-archivos" role="tab">
+                                    <i class="fa fa-paperclip"></i> Archivos asociados
+                                    @if (($data->asiento_archivos->count() ?? 0) > 0)
+                                        <span class="badge badge-info">{{ $data->asiento_archivos->count() }}</span>
+                                    @endif
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="tab-content pt-3">
+                        <div class="tab-pane fade show active" id="tab-asiento-datos" role="tabpanel">
+                            @include('contable.asiento.form')
+                        </div>
+                        <div class="tab-pane fade" id="tab-asiento-archivos" role="tabpanel">
+                            @include('contable.asiento.form2')
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-3"></div>
-                        <div class="col-lg-4">
-                        	<button type="button" id="botonform0" class="btn btn-success">Actualizar</button>
+                        <div class="col-lg-6">
+                        	<button type="button" id="botonform0" class="btn btn-success">
+                                <i class="fa fa-save"></i> Actualizar
+                            </button>
                     	</div>
                     </div>
                 </div>

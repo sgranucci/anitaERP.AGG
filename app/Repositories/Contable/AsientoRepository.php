@@ -152,9 +152,12 @@ class AsientoRepository implements AsientoRepositoryInterface
 
 		$asiento = $this->model->findOrFail($id)->update($data);
 
-		// Actualiza anita
-		$anita = self::actualizarAnita($data);
-
+		// omitir_anita: el caller sincroniza ctamov después de grabar movimientos
+		// (evita reescribir Anita con el request antes de persistir líneas en ERP).
+		$omitirAnita = filter_var($data['omitir_anita'] ?? false, FILTER_VALIDATE_BOOLEAN);
+		if (! $omitirAnita) {
+			self::actualizarAnita($data);
+		}
 
 		return $asiento;
     }

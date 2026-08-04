@@ -65,11 +65,29 @@ final class SicoreSueldosDatosService
             $nombre = substr(trim((string) ($emp['emp_nombre'] ?? ('Legajo '.$legajo))), 0, 30);
 
             if (abs($totales['ret']) >= 0.001) {
-                $filas[] = $this->filaSueldo($config, $regimen, $cuit, $nombre, $fechaIso, $totales['ret'], 7, $legajo);
+                $filas[] = $this->filaSueldo(
+                    $config,
+                    $regimen,
+                    $cuit,
+                    $nombre,
+                    $fechaIso,
+                    $totales['ret'],
+                    SicoreFormatoV8Support::COD_COMP_LIQUIDACION,
+                    $legajo,
+                );
             }
             // Incluye concepto_devolucion y créditos del concepto retención (deducción negativa).
             if (abs($totales['dev']) >= 0.001) {
-                $filas[] = $this->filaSueldo($config, $regimen, $cuit, $nombre, $fechaIso, abs($totales['dev']), 8, $legajo);
+                $filas[] = $this->filaSueldo(
+                    $config,
+                    $regimen,
+                    $cuit,
+                    $nombre,
+                    $fechaIso,
+                    abs($totales['dev']),
+                    SicoreFormatoV8Support::COD_COMP_DEVOLUCION,
+                    $legajo,
+                );
             }
         }
 
@@ -173,7 +191,8 @@ final class SicoreSueldosDatosService
             if ($codigo === $conceptoRet) {
                 // Créditos/devoluciones suelen liquidarse en el mismo concepto de
                 // retención (ej. 1650) con deducción negativa, no en concepto_devolucion.
-                // SICORE: retención → cod_comp 7; crédito → cod_comp 8.
+                // SICORE 787 (4ta cat.): retención → cod_comp 7; crédito → cod_comp 8
+                // (no confundir con NC proveedores = 3).
                 if ($monto < -0.001) {
                     $acumulado[$legajo]['dev'] += abs($monto);
                 } elseif ($monto > 0.001) {
@@ -201,7 +220,9 @@ final class SicoreSueldosDatosService
         int $legajo,
     ): array {
         $importe = round($importe, 2);
-        $base = $codComp === 8 ? -abs($importe) : abs($importe);
+        $base = $codComp === SicoreFormatoV8Support::COD_COMP_DEVOLUCION
+            ? -abs($importe)
+            : abs($importe);
 
         return [
             'origen' => 'sueldos',

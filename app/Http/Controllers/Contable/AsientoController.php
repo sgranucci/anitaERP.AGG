@@ -81,7 +81,12 @@ class AsientoController extends Controller
         // Memoria de filtros: si el request trae filtros los usa y persiste; si vuelve
         // desde editar (URL sin parámetros) restaura el último filtro de la sesión.
         if (
-            $request->has('busqueda')
+            $request->has('filtro_valor')
+            || $request->has('busqueda')
+            || $request->filled('filtro_modo')
+            || $request->filled('filtro_campo')
+            || $request->filled('filtro_operador')
+            || $request->boolean('filtro_busqueda_rapida')
             || $request->filled('empresa_id')
             || $request->has('empresa_todas')
             || $request->input('empresa_scope') === 'todas'
@@ -98,15 +103,13 @@ class AsientoController extends Controller
             }
         }
 
-        $busqueda = $filtros['busqueda'] !== '' ? $filtros['busqueda'] : null;
-        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-
-		$asientos = $this->asientoQuery->leeAsiento($busqueda, true, $empresaId);
+		$asientos = $this->asientoQuery->leeAsiento($filtros, true);
 
         $datas = [
             'asientos' => $asientos,
-            'busqueda' => $busqueda,
+            'busqueda' => $filtros['valor'] ?? '',
             'filtros' => $filtros,
+            'camposFiltro' => AsientoListadoFiltros::CAMPOS,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'filtrosQuery' => AsientoListadoFiltros::paraQueryString($filtros),
         ];
@@ -122,13 +125,11 @@ class AsientoController extends Controller
         ini_set('max_execution_time', '0');
 
         $filtros = $this->resolverFiltrosListado($request, $busqueda);
-        $busqueda = $filtros['busqueda'] !== '' ? $filtros['busqueda'] : null;
-        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
 
         switch($formato)
         {
         case 'PDF':
-            $asientos = $this->asientoQuery->leeAsiento($busqueda, false, $empresaId);
+            $asientos = $this->asientoQuery->leeAsiento($filtros, false);
 
             $view =  \View::make('contable.asiento.listado', compact('asientos'))
                         ->render();
@@ -144,13 +145,13 @@ class AsientoController extends Controller
 
         case 'EXCEL':
             return (new AsientoExport($this->asientoQuery))
-                        ->parametros($busqueda, $empresaId)
+                        ->parametros($filtros)
                         ->download('asiento.xlsx');
             break;
 
         case 'CSV':
             return (new AsientoExport($this->asientoQuery))
-                        ->parametros($busqueda, $empresaId)
+                        ->parametros($filtros)
                         ->download('asiento.csv', \Maatwebsite\Excel\Excel::CSV);
             break;            
         }   
@@ -182,7 +183,7 @@ class AsientoController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-asiento');
 
@@ -192,10 +193,12 @@ class AsientoController extends Controller
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
         $usuarioTieneRestriccionCuentas = AsientoCuentaUsuarioSupport::usuarioTieneRestriccionCuentas((int) auth()->id());
+        $filtrosQuery = AsientoListadoFiltros::paraQueryString($this->resolverFiltrosListado($request));
         
         return view('contable.asiento.crear', compact('tipoasiento_query', 'moneda_query', 
                                                 'empresa_query', 'cuentacontable_query',
-                                                'centrocosto_query', 'usuarioTieneRestriccionCuentas'));
+                                                'centrocosto_query', 'usuarioTieneRestriccionCuentas',
+                                                'filtrosQuery'));
     }
 
     /**
@@ -286,7 +289,7 @@ class AsientoController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         if (! can('listar-asiento', false) && ! can('editar-asiento', false)) {
             return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para consultar el asiento');
@@ -300,12 +303,13 @@ class AsientoController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
         $cuentacontable_query = $this->cuentacontableRepository->all();
         $centrocosto_query = $this->centrocostoRepository->all();
+        $filtrosQuery = AsientoListadoFiltros::paraQueryString($this->resolverFiltrosListado($request));
 
         return view('contable.asiento.editar', compact('data',
                                                     'asiento_referencias',
                                                     'tipoasiento_query', 'moneda_query',
                                                     'empresa_query', 'cuentacontable_query',
-                                                    'centrocosto_query'));
+                                                    'centrocosto_query', 'filtrosQuery'));
     }
 
     /**
@@ -328,17 +332,27 @@ class AsientoController extends Controller
             $existente = $this->asientoRepository->find($id);
             $data = AsientoReferenciaAnitaSupport::conservarFksOrigenProceso($request->all(), $existente);
             $data = AsientoReferenciaAnitaSupport::aplicarAPayload($data);
-            // Graba asiento
+            // Cabecera ERP primero; Anita se sincroniza al final desde movimientos ya grabados.
+            $data['omitir_anita'] = true;
             $asiento = $this->asientoRepository->update($data, $id);
 
             if ($asiento === 'Error')
                 throw new Exception('Error en grabacion anita.');
 
-                // Graba movimientos del asiento
+            // Graba movimientos del asiento
             $this->asiento_movimientoRepository->update($request->all(), $id);
 
             // Graba archivos del asiento
             $this->asiento_archivoRepository->update($request, $id);
+
+            $fresh = $this->asientoRepository->find($id);
+            $payloadAnita = $this->asientoRepository->armarPayloadAnitaDesdeModelo($fresh);
+            foreach (['tipo', 'letra', 'sucursal', 'nro', 'sistema_ctav', 'ctav_o_compra', 'path_sistema'] as $claveAnita) {
+                if (array_key_exists($claveAnita, $data)) {
+                    $payloadAnita[$claveAnita] = $data[$claveAnita];
+                }
+            }
+            $this->asientoRepository->sincronizarCtamovAnita($payloadAnita);
 
             DB::commit();
         } catch (\Exception $e) {

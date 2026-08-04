@@ -1,19 +1,24 @@
-<div class="card form1">
-    <div class="asiento-datos-card mb-3">
-        <h5 class="asiento-datos-card-title mb-3">
-            <i class="fa fa-book mr-1"></i> Datos del asiento
-        </h5>
+<div class="asiento-datos-form">
+    <div class="card card-outline card-info mb-3">
+        <div class="card-header py-2">
+            <h3 class="card-title mb-0">
+                <i class="fa fa-book mr-1"></i> Datos del asiento
+            </h3>
+        </div>
+        <div class="card-body">
         <div class="row">
             <div class="col-sm-6">
                 @include('includes.form-empresa-asignada', [
                     'empresa_query' => $empresa_query,
                     'empresa_id' => $data->empresa_id ?? session('empresa_id'),
                     'mostrar_id' => true,
+                    'col_label' => 'col-lg-4 text-right pr-2',
                     'col_input' => 'col-lg-7',
                 ])
                 <div class="form-group row">
-                    <label for="tipoasiento" class="col-lg-3 col-form-label">Tipo de asiento</label>
-                    <select name="tipoasiento_id" id="tipoasiento_id" data-placeholder="Tipo de asiento" class="col-lg-7 form-control required" data-fouc>
+                    <label for="tipoasiento_id" class="col-lg-4 control-label text-right pr-2">Tipo de asiento</label>
+                    <div class="col-lg-7">
+                    <select name="tipoasiento_id" id="tipoasiento_id" data-placeholder="Tipo de asiento" class="form-control required" data-fouc>
                         <option value="">-- Seleccionar --</option>
                         @foreach($tipoasiento_query as $key => $value)
                             @if( (int) $value->id == (int) old('tipoasiento_id', $data->tipoasiento_id ?? session('tipoasiento_id')))
@@ -23,11 +28,12 @@
                             @endif
                         @endforeach
                     </select>
+                    </div>
                 </div>
             </div>
             <div class="col-sm-6">
                 <div class="form-group row">
-                    <label for="fecha" class="col-lg-3 col-form-label">Fecha</label>
+                    <label for="fecha" class="col-lg-4 control-label text-right pr-2">Fecha</label>
                     <div class="col-lg-5">
                         <input type="date" name="fecha" id="fecha" class="form-control" value="{{old('fecha', $data->fecha ?? date('Y-m-d'))}}">
                     </div>
@@ -35,10 +41,11 @@
             </div>
         </div>
         <div class="form-group row mb-0">
-            <label for="observacion" class="col-lg-3 col-form-label">Observaciones</label>
-            <div class="col-lg-8">
+            <label for="observacion" class="col-lg-2 control-label text-right pr-2">Observaciones</label>
+            <div class="col-lg-9">
                 <input type="text" name="observacion" id="observacion" class="form-control" value="{{old('observacion', $data->observacion ?? '')}}">
             </div>
+        </div>
         </div>
     </div>
 
@@ -54,7 +61,6 @@
         'titulo' => 'Guardando asiento…',
         'subtitulo' => 'Por favor espere. No cierre la página.',
     ])
-    <h3 class="asiento-seccion-cuentas">Cuentas</h3>
     @php
         $totalDebeAsientoForm = 0.0;
         $totalHaberAsientoForm = 0.0;
@@ -88,9 +94,13 @@
             font-weight: 700;
         }
     </style>
-    <div class="card-body">
-        <table class="table" id="cuenta-table">
-            <thead>
+    <div class="card card-outline card-info mb-0">
+        <div class="card-header py-2 d-flex align-items-center justify-content-between">
+            <h3 class="card-title mb-0"><i class="fa fa-list"></i> Cuentas</h3>
+        </div>
+        <div class="card-body">
+        <table class="table table-sm table-bordered" id="cuenta-table">
+            <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
                     <th style="width: 12%;">Código</th>
                     <th style="width: 18%;">Descripción</th>
@@ -206,8 +216,11 @@
         @include('contable.asiento.template')
         <div class="row mt-2">
             <div class="col-sm-12">
-                <button id="agrega_renglon_cuenta" type="button" class="btn btn-danger">+ Agrega rengl&oacute;n</button>
+                <button id="agrega_renglon_cuenta" type="button" class="btn btn-outline-primary btn-sm">
+                    <i class="fa fa-plus"></i> Agrega rengl&oacute;n
+                </button>
             </div>
+        </div>
         </div>
     </div>
 </div>

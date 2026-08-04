@@ -229,7 +229,8 @@ class MayorPlanoCuentaReporteService
     }
 
     /**
-     * Si hay ordencompra_id (p. ej. desde asiento) pero falta nro_oc, completa el número para el link.
+     * Si hay ordencompra_id (p. ej. desde asiento), alinea nro_oc al número real de esa OC.
+     * Con FK de asiento sobrescribe nros espurios (renglón aplicped confundido con OC).
      *
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
@@ -242,7 +243,7 @@ class MayorPlanoCuentaReporteService
                 continue;
             }
             $ocId = (int) ($fila['ordencompra_id'] ?? 0);
-            if ($ocId > 0 && (int) ($fila['nro_oc'] ?? 0) <= 0) {
+            if ($ocId > 0) {
                 $ids[$ocId] = true;
             }
         }
@@ -261,11 +262,17 @@ class MayorPlanoCuentaReporteService
                 continue;
             }
             $ocId = (int) ($fila['ordencompra_id'] ?? 0);
-            if ($ocId <= 0 || (int) ($fila['nro_oc'] ?? 0) > 0) {
+            if ($ocId <= 0) {
                 continue;
             }
             $nro = (int) ($mapa[$ocId] ?? 0);
-            if ($nro > 0) {
+            if ($nro <= 0) {
+                continue;
+            }
+            $ocAsiento = (int) ($fila['ordencompra_id_asiento'] ?? 0);
+            $nroActual = (int) ($fila['nro_oc'] ?? 0);
+            // FK del asiento manda; si no hay nro, completar desde el id resuelto.
+            if ($ocAsiento === $ocId || $nroActual <= 0) {
                 $filas[$idx]['nro_oc'] = $nro;
             }
         }

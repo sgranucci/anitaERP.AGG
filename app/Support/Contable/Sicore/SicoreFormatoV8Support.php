@@ -6,11 +6,24 @@ namespace App\Support\Contable\Sicore;
 
 final class SicoreFormatoV8Support
 {
-    /** Orden de pago / retención practicada. */
+    /** Factura (retenciones IVA sobre FC). */
+    public const COD_COMP_FACTURA = 1;
+
+    /** Nota de crédito — proveedores (impuestos 217 / 767). */
+    public const COD_COMP_NOTA_CREDITO = 3;
+
+    /** Nota de débito. */
+    public const COD_COMP_NOTA_DEBITO = 4;
+
+    /** Orden de pago / retención practicada (proveedores). */
     public const COD_COMP_ORDEN_PAGO = 6;
 
+    /** Liquidación / retención de sueldos (impuesto 787). */
+    public const COD_COMP_LIQUIDACION = 7;
+
     /**
-     * Devolución / anulación de retención (SICORE ganancias).
+     * Devolución / crédito de retención de 4ta categoría (impuesto 787).
+     * No usar en proveedores: ahí va {@see COD_COMP_NOTA_CREDITO}.
      * Va al inicio del registro (posiciones 1–2); los importes se emiten en positivo.
      */
     public const COD_COMP_DEVOLUCION = 8;
@@ -132,16 +145,22 @@ final class SicoreFormatoV8Support
         $tipo = str_pad(trim($tipoComp), 2, '0', STR_PAD_LEFT);
 
         return match ($tipo) {
-            '01' => 1,
-            '02' => 4,
-            '03' => 3,
+            '01' => self::COD_COMP_FACTURA,
+            '02' => self::COD_COMP_NOTA_DEBITO,
+            '03' => self::COD_COMP_NOTA_CREDITO,
             default => self::COD_COMP_ORDEN_PAGO,
         };
     }
 
+    /**
+     * Crédito / anulación de retención en el .dat (importes en positivo).
+     * Proveedores: nota de crédito (3). Sueldos 4ta cat.: devolución (8).
+     */
     public static function esDevolucion(array $reg): bool
     {
-        return (int) ($reg['cod_comp'] ?? 0) === self::COD_COMP_DEVOLUCION;
+        $cod = (int) ($reg['cod_comp'] ?? 0);
+
+        return $cod === self::COD_COMP_NOTA_CREDITO || $cod === self::COD_COMP_DEVOLUCION;
     }
 
     public static function tolerancia(): float

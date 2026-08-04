@@ -102,8 +102,9 @@ class MayorPlanoCuentaComprobanteEnricher
             $filas[$idx]['movimientostock_id'] = (int) ($row->movimientostock_id ?? 0);
             $ocAsiento = (int) ($row->ordencompra_id ?? 0);
             $filas[$idx]['ordencompra_id_asiento'] = $ocAsiento;
-            // Si el enricher por nro_oc no resolvió ID, usar la FK del asiento.
-            if ($ocAsiento > 0 && (int) ($filas[$idx]['ordencompra_id'] ?? 0) <= 0) {
+            // Preferir siempre la FK del asiento ERP: aplp_orden/ctav mal resueltos
+            // pueden haber cargado un nro_oc de renglón (1, 2, 3…) con id de OC antigua.
+            if ($ocAsiento > 0) {
                 $filas[$idx]['ordencompra_id'] = $ocAsiento;
             }
 

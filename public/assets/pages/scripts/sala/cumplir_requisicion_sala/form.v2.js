@@ -427,14 +427,16 @@
         if (controlaStock && saldoAttr !== '' && saldoAttr !== undefined) {
             var saldo = Number(saldoAttr);
             if (!Number.isNaN(saldo) && saldo + 1e-9 < entrega) {
+                $fila.find('.input-cantidad-entrega').val('0');
+                limpiarEstadoLinea($fila);
+                $fila.removeClass('fila-saldo-insuficiente');
                 alert(
                     'La cantidad supera el saldo disponible en el dep\u00f3sito origen. Saldo: '
                     + saldo
                     + ', solicitado: '
                     + entrega
-                    + '.'
+                    + '. Se dej\u00f3 la cantidad en 0: puede cambiar el dep\u00f3sito o la cantidad.'
                 );
-                $fila.addClass('fila-saldo-insuficiente');
                 if (typeof alListo === 'function') {
                     alListo(false);
                 }

@@ -6579,24 +6579,21 @@ class MayorConceptoPeriodoProcesador
             }
 
             foreach ($this->aplicpedCache[$claveDoc] as $apl) {
-                $refTipo = trim((string) ($apl->aplp_ref_tipo ?? ''));
+                $refTipo = strtoupper(trim((string) ($apl->aplp_ref_tipo ?? '')));
                 $refLetra = trim((string) ($apl->aplp_ref_letra ?? ' '));
                 $refSuc = (int) ($apl->aplp_ref_sucursal ?? 0);
                 $refNro = (int) ($apl->aplp_ref_nro ?? 0);
-                $orden = (int) ($apl->aplp_orden ?? 0);
 
-                if ($refTipo === 'COM') {
+                if ($refTipo === 'COM' && $refNro > 0) {
                     $claveCom = $refTipo.'|'.$refLetra.'|'.$refSuc.'|'.$refNro;
                     $clavesCom[$claveCom] = $claveCom;
-                    $this->ordenesComPorFactura[$claveFac][$claveCom] = $orden > 0 ? $orden : $refNro;
+                    // Número de OC = nro del comprobante COM (nunca aplp_orden = renglón).
+                    $this->ordenesComPorFactura[$claveFac][$claveCom] = $refNro;
                     continue;
                 }
 
                 if ($refTipo !== '' && $refNro > 0) {
                     $pendientes[] = [$refTipo, $refLetra, $refSuc, $refNro];
-                    if ($orden <= 0 && in_array($refTipo, ['PEP', 'COM'], true)) {
-                        $this->ordenesComPorFactura[$claveFac]['orden|'.$refTipo.'|'.$refNro] = $refNro;
-                    }
                 }
             }
         }
@@ -6618,11 +6615,16 @@ class MayorConceptoPeriodoProcesador
     private function ordenComDesdeAplicacion(object $aplicacion): int
     {
         $prov = trim((string) ($aplicacion->axp_pro ?? ''));
-        $tipoAp = trim((string) ($aplicacion->axp_tipo_ap ?? ''));
+        $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
         $letraAp = trim((string) ($aplicacion->axp_letra_comp ?? ' '));
         $sucAp = (int) ($aplicacion->axp_sucursal ?? 0);
         $nroAp = (int) ($aplicacion->axp_nro ?? 0);
         $claveFac = $prov.'|'.$tipoAp.'|'.$letraAp.'|'.$sucAp.'|'.$nroAp;
+
+        // El propio documento aplicado ya es la OC.
+        if ($tipoAp === 'COM' && $nroAp > 0) {
+            return $nroAp;
+        }
 
         $this->resolverClavesComDesdeFactura($aplicacion);
 
@@ -6640,14 +6642,10 @@ class MayorConceptoPeriodoProcesador
         }
 
         foreach ($this->aplicpedCache[$claveFac] as $apl) {
-            $orden = (int) ($apl->aplp_orden ?? 0);
-            if ($orden > 0) {
-                return $orden;
-            }
-
-            $refTipo = trim((string) ($apl->aplp_ref_tipo ?? ''));
+            $refTipo = strtoupper(trim((string) ($apl->aplp_ref_tipo ?? '')));
             $refNro = (int) ($apl->aplp_ref_nro ?? 0);
-            if (in_array($refTipo, ['PEP', 'COM'], true) && $refNro > 0) {
+            // Solo COM: aplp_orden es renglón; PEP.ref_nro es pedido, no OC.
+            if ($refTipo === 'COM' && $refNro > 0) {
                 return $refNro;
             }
         }

@@ -3,11 +3,22 @@
 		\App\Support\Export\ExcelFormatoNumero::preferenciaGlobal()
 	);
 @endphp
-<h2> Asientos </h2>
-<table> 
+<table>
+	@if (!empty($reservarFilaLogoExcel))
+		<tbody>
+			<tr>
+				<td colspan="15" style="height: 52px;">&#160;</td>
+			</tr>
+		</tbody>
+	@endif
+	<tbody>
+		<tr>
+			<td colspan="15"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de asientos contables</h2></td>
+		</tr>
+	</tbody>
 	<thead>
 	<tr>
-		<th class="width20">ID</th>
+		<th>ID</th>
 		<th>Empresa</th>
 		<th>Número</th>
 		<th>Fecha</th>
@@ -45,10 +56,10 @@
 						</td>
 						@php $flPrimerMovimiento = false; @endphp
 					@else
-						<td colspan='7'></td>
+						<td></td><td></td><td></td><td></td><td></td><td></td><td></td>
 					@endif
-					<td>{{ $movimiento->cuentacontables->codigo }}</td>
-					<td>{{ $movimiento->cuentacontables->nombre }}</td>
+					<td>{{ $movimiento->cuentacontables->codigo ?? '' }}</td>
+					<td>{{ $movimiento->cuentacontables->nombre ?? '' }}</td>
 					<td>{{ $movimiento->centrocostos->nombre ?? '' }}</td>
 					<td>
 						@if ($movimiento->monto > 0)
@@ -60,7 +71,7 @@
 							{{ $fmtMonto(abs($movimiento->monto)) }}
 						@endif
 					</td>
-					<td>{{ $movimiento->monedas->nombre }}</td>
+					<td>{{ $movimiento->monedas->nombre ?? '' }}</td>
 					<td>{{ $movimiento->cotizacion }}</td>
 					<td>{{ $movimiento->observacion }}</td>
 				</tr>

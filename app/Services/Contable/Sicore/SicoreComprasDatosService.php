@@ -124,9 +124,9 @@ final class SicoreComprasDatosService
                     'cod_regimen' => $regimen,
                     'cod_impuesto' => (int) $config->codigo_impuesto,
                     'cod_operacion' => (int) ($config->codigo_operacion ?? 1),
-                    // Devolución AOP: cod_comp=8 al inicio del registro; importes del .dat en positivo.
+                    // Devolución AOP (proveedores 217): nota de crédito (3), no devolución 4ta cat. (8).
                     'cod_comp' => $esDevolucion
-                        ? SicoreFormatoV8Support::COD_COMP_DEVOLUCION
+                        ? SicoreFormatoV8Support::COD_COMP_NOTA_CREDITO
                         : SicoreFormatoV8Support::COD_COMP_ORDEN_PAGO,
                     'fecha_comp' => $fechaContable,
                     'nro_comp' => (int) ($row['retv_nro'] ?? 0),
@@ -212,6 +212,10 @@ final class SicoreComprasDatosService
 
             $cuit = SicoreFormatoV8Support::normalizarCuit((string) ($prov->nroinscripcion ?? ''));
             $codigoProv = (string) ($prov->codigo ?? '');
+            // Crédito / anulación de retención proveedores → NC (3); retención → OP (6).
+            $codComp = $importe < 0
+                ? SicoreFormatoV8Support::COD_COMP_NOTA_CREDITO
+                : SicoreFormatoV8Support::COD_COMP_ORDEN_PAGO;
 
             $out[] = [
                 'origen' => $tipoRetencion === 'I' ? 'compras_iva_erp' : 'compras_ganancias_erp',
@@ -219,7 +223,7 @@ final class SicoreComprasDatosService
                 'cod_regimen' => $regimen,
                 'cod_impuesto' => (int) $config->codigo_impuesto,
                 'cod_operacion' => (int) ($config->codigo_operacion ?? 1),
-                'cod_comp' => 6,
+                'cod_comp' => $codComp,
                 'fecha_comp' => $pago->fecha?->format('Y-m-d') ?? '',
                 'nro_comp' => (int) $pago->numerotransaccion,
                 'importe_comp' => abs((float) $pago->monto),
@@ -315,7 +319,7 @@ final class SicoreComprasDatosService
     /**
      * Devoluciones de retención de ganancias pagadas con cheque propio (CHP) que imputan
      * la cuenta configurada (ej. 214010013). No generan AOP en retmov; el mayor las ve
-     * como Debe sobre el pasivo. En SICORE: cod_comp=8 e importes positivos en el .dat.
+     * como Debe sobre el pasivo. En SICORE proveedores: cod_comp=3 (NC) e importes positivos.
      *
      * @return list<array<string, mixed>>
      */
@@ -391,7 +395,7 @@ final class SicoreComprasDatosService
                 'cod_regimen' => $regimen,
                 'cod_impuesto' => (int) $config->codigo_impuesto,
                 'cod_operacion' => (int) ($config->codigo_operacion ?? 1),
-                'cod_comp' => SicoreFormatoV8Support::COD_COMP_DEVOLUCION,
+                'cod_comp' => SicoreFormatoV8Support::COD_COMP_NOTA_CREDITO,
                 'fecha_comp' => $fechaIso,
                 'nro_comp' => (int) ($ch['nro'] ?? 0),
                 'importe_comp' => $pagoActual > 0.001 ? $pagoActual : $importeAbs,
