@@ -668,9 +668,18 @@ class ProveedorController extends Controller
             report($e);
 
             return response()->json([
-                'ok' => false,
-                'message' => $e->getMessage(),
-            ], 500);
+                'ok' => true,
+                'message' => \App\Services\Arca\WsapocConsultaService::mensajeAvisoNoDisponible(),
+                'validacion' => [
+                    'aplica' => true,
+                    'ok' => true,
+                    'error_servicio' => true,
+                    'mensaje' => \App\Services\Arca\WsapocConsultaService::mensajeAvisoNoDisponible(),
+                    'es_apocrifo' => false,
+                    'detalles' => [],
+                ],
+                'facturas_apocrifas' => false,
+            ]);
         }
     }
 

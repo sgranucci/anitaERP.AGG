@@ -52,21 +52,21 @@ final class PrecargaProveedorApocConsultaSupport
             $eval = $this->apocSupport->evaluarProveedor($proveedor, suspenderSiApocrifo: true);
         } catch (Throwable $e) {
             Log::channel(config('comprobante_proveedor_pdf_ia.log_channel', 'stack'))
-                ->warning('WSAPOC precarga: fallo de consulta', [
+                ->warning('WSAPOC precarga: servicio no disponible', [
                     'proveedor_id' => $proveedorId,
                     'error' => $e->getMessage(),
                 ]);
 
             $resuelto['consulta_apoc'] = [
                 'ejecutada' => true,
-                'ok' => false,
+                'ok' => true,
+                'error_servicio' => true,
                 'error' => $e->getMessage(),
             ];
             $resuelto['advertencias'] = $this->agregarAdvertencia(
                 $resuelto['advertencias'] ?? [],
-                'No se pudo consultar facturas apócrifas en ARCA: '.$e->getMessage()
+                \App\Services\Arca\WsapocConsultaService::mensajeAvisoNoDisponible()
             );
-            $resuelto['pararevisar'] = true;
 
             return $resuelto;
         }
@@ -81,8 +81,7 @@ final class PrecargaProveedorApocConsultaSupport
             return false;
         }
 
-        return ($apoc['es_apocrifo'] ?? false) === true
-            || ($apoc['ok'] ?? true) === false;
+        return ($apoc['es_apocrifo'] ?? false) === true;
     }
 
     /**
@@ -115,9 +114,11 @@ final class PrecargaProveedorApocConsultaSupport
                 );
             }
             $resuelto['pararevisar'] = true;
-        } elseif (! ($eval['ok'] ?? true) && ($eval['mensaje'] ?? '') !== '') {
-            $advertencias = $this->agregarAdvertencia($advertencias, '[ARCA APOC] '.$eval['mensaje']);
-            $resuelto['pararevisar'] = true;
+        } elseif ($eval['error_servicio'] ?? false) {
+            $advertencias = $this->agregarAdvertencia(
+                $advertencias,
+                $eval['mensaje'] ?? \App\Services\Arca\WsapocConsultaService::mensajeAvisoNoDisponible()
+            );
         }
 
         $resuelto['advertencias'] = $advertencias;

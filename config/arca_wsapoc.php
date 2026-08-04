@@ -40,8 +40,8 @@ return [
 
     // Reintentos ante fallas transitorias de ARCA (transporte o respuesta 200 sin
     // el elemento *Result esperado). Total de intentos = reintentos (>= 1).
-    'reintentos' => max(1, (int) env('ARCA_WSAPOC_REINTENTOS', 3)),
-    'reintento_pausa_ms' => max(0, (int) env('ARCA_WSAPOC_REINTENTO_PAUSA_MS', 500)),
+    'reintentos' => max(1, (int) env('ARCA_WSAPOC_REINTENTOS', 5)),
+    'reintento_pausa_ms' => max(0, (int) env('ARCA_WSAPOC_REINTENTO_PAUSA_MS', 1500)),
 
     /*
     |--------------------------------------------------------------------------

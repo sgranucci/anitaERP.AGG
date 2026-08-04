@@ -27,7 +27,17 @@
     }
 
     function mostrarModalApoc(validacion, mensajeFallback, esCliente) {
-        if (!validacion || validacion.ok) {
+        if (!validacion) {
+            return;
+        }
+
+        // Solo el hallazgo real de apócrifo abre el modal rojo. Fallas del WS son aviso suave.
+        if (validacion.error_servicio && !validacion.es_apocrifo) {
+            mostrarAvisoServicio(validacion.mensaje || mensajeFallback);
+            return;
+        }
+
+        if (validacion.ok || !validacion.es_apocrifo) {
             return;
         }
 
@@ -43,7 +53,11 @@
 
         var $modal = $('#arca-apoc-validacion-modal');
         if (!$modal.length) {
-            alert(mensaje);
+            if (typeof toastr !== 'undefined') {
+                toastr.warning(mensaje);
+            } else {
+                alert(mensaje);
+            }
             return;
         }
 
@@ -60,6 +74,32 @@
             $det.hide();
         }
         $modal.modal('show');
+    }
+
+    function mostrarAvisoServicio(mensaje) {
+        var texto = mensaje
+            || 'Consulta de facturas apócrifas no disponible por el momento (ARCA). Puede continuar con normalidad.';
+        var clave = 'aviso-servicio::' + texto;
+        if (clave === ultimaClaveMostrada) {
+            return;
+        }
+        ultimaClaveMostrada = clave;
+
+        if (typeof toastr !== 'undefined') {
+            toastr.options = toastr.options || {};
+            toastr.info(texto, 'APOC', { timeOut: 4500, extendedTimeOut: 2000, closeButton: true });
+            return;
+        }
+
+        // Fallback mínimo si no hay toastr
+        var selector = '#cliente-apoc-estado-badge, #proveedor-apoc-estado-badge';
+        var $badge = $(selector).first();
+        if ($badge.length) {
+            $badge.removeClass('badge-success badge-danger').addClass('badge-secondary')
+                .text('APOC no consultado')
+                .attr('title', texto)
+                .show();
+        }
     }
 
     function actualizarBadgeApoc(facturasApocrifas, consultaAt, esCliente) {

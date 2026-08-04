@@ -11,6 +11,9 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>{{ $tituloReporte }}</title>
     <style>
+        @page {
+            margin: 8mm 6mm;
+        }
         body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
         table.data {
             font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
@@ -22,7 +25,7 @@
         table.data td, table.data th {
             border: 1px solid #cccccc;
             text-align: left;
-            padding: 4px 5px;
+            padding: 3px 4px;
             vertical-align: top;
             word-wrap: break-word;
         }
@@ -45,6 +48,7 @@
         .listado-header td { vertical-align: middle; border: none; }
         .meta { font-size: 7.5px; color: #444; margin-top: 3px; }
         .nota-celda { white-space: pre-wrap; font-size: 7.5px; }
+        .leyenda-tipo { font-size: 7px; color: #555; margin: 0 0 6px 0; }
     </style>
 </head>
 <body>
@@ -70,25 +74,27 @@
         </tr>
     </table>
 
+    <p class="leyenda-tipo">Tipo: Cta = Cuenta · CP = Cliente potencial · Cont = Contacto</p>
+
     @forelse ($agrupadas as $fechaYmd => $filasDia)
         <div class="fecha-grupo">
             {{ ! empty($filasDia[0]['fecha_display']) ? $filasDia[0]['fecha_display'] : $fechaYmd }}
         </div>
         <table class="data">
             <colgroup>
-                <col style="width: 12%;">
-                <col style="width: 22%;">
+                <col style="width: 9%;">
                 <col style="width: 14%;">
-                <col style="width: 8%;">
-                <col style="width: 18%;">
-                <col style="width: 26%;">
+                <col style="width: 4%;">
+                <col style="width: 5%;">
+                <col style="width: 13%;">
+                <col style="width: 55%;">
             </colgroup>
             <thead>
                 <tr>
+                    <th>Vendedor</th>
+                    <th>Empresa</th>
                     <th>Tipo</th>
-                    <th>Relacionado</th>
-                    <th>Empresa potencial</th>
-                    <th>Cód. ERP</th>
+                    <th>Cód.</th>
                     <th>Asunto</th>
                     <th>Nota</th>
                 </tr>
@@ -96,9 +102,9 @@
             <tbody>
                 @foreach ($filasDia as $fila)
                     <tr>
-                        <td>{{ $fila['tipo'] ?? '' }}</td>
+                        <td>{{ $fila['vendedor'] ?? '' }}</td>
                         <td>{{ $fila['relacionado'] ?? '' }}</td>
-                        <td>{{ $fila['empresa_potencial'] ?? '' }}</td>
+                        <td>{{ $fila['tipo'] ?? '' }}</td>
                         <td>{{ $fila['codigo_anita'] ?? '' }}</td>
                         <td>{{ $fila['asunto'] ?? '' }}</td>
                         <td class="nota-celda">{{ $fila['nota'] ?? '' }}</td>

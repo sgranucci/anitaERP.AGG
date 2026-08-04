@@ -6,24 +6,25 @@ use App\Support\Configuracion\EmpresaLogoArchivo;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Events\BeforeSheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class SuitecrmNotaAuditoriaExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class SuitecrmNotaAuditoriaExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'I';
+    private const COL_ULTIMA = 'F';
 
     private bool $hayFilaLogos = false;
 
@@ -76,9 +77,10 @@ class SuitecrmNotaAuditoriaExport implements FromView, ShouldAutoSize, WithColum
     {
         return [
             'A' => NumberFormat::FORMAT_TEXT,
+            'C' => NumberFormat::FORMAT_TEXT,
+            'D' => NumberFormat::FORMAT_TEXT,
             'E' => NumberFormat::FORMAT_TEXT,
-            'H' => NumberFormat::FORMAT_TEXT,
-            'I' => NumberFormat::FORMAT_TEXT,
+            'F' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -102,22 +104,36 @@ class SuitecrmNotaAuditoriaExport implements FromView, ShouldAutoSize, WithColum
 
     public function columnWidths(): array
     {
+        // Total ~132; Nota (F) ~56% para impresión horizontal.
         return [
-            'A' => 12,
-            'B' => 14,
-            'C' => 28,
-            'D' => 22,
-            'E' => 12,
-            'F' => 28,
-            'G' => 18,
-            'H' => 32,
-            'I' => 55,
+            'A' => 11,
+            'B' => 18,
+            'C' => 5,
+            'D' => 6,
+            'E' => 17,
+            'F' => 75,
         ];
     }
 
     public function registerEvents(): array
     {
         return [
+            BeforeSheet::class => function (BeforeSheet $event) {
+                $setup = $event->sheet->getDelegate()->getPageSetup();
+                $setup->setOrientation(PageSetup::ORIENTATION_LANDSCAPE);
+                $setup->setPaperSize(PageSetup::PAPERSIZE_LETTER);
+                $setup->setFitToPage(true);
+                $setup->setFitToWidth(1);
+                $setup->setFitToHeight(0);
+
+                $margins = $event->sheet->getDelegate()->getPageMargins();
+                $margins->setLeft(0.3);
+                $margins->setRight(0.3);
+                $margins->setTop(0.4);
+                $margins->setBottom(0.35);
+                $margins->setHeader(0.2);
+                $margins->setFooter(0.2);
+            },
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
 
@@ -202,11 +218,11 @@ class SuitecrmNotaAuditoriaExport implements FromView, ShouldAutoSize, WithColum
 
                 $highest = $sheet->getHighestRow();
                 if ($highest >= $this->filaPrimeraDatosExcel) {
-                    $sheet->getStyle('H'.$this->filaPrimeraDatosExcel.':I'.$highest)
+                    $sheet->getStyle('B'.$this->filaPrimeraDatosExcel.':B'.$highest)
                         ->getAlignment()
                         ->setWrapText(true)
                         ->setVertical(Alignment::VERTICAL_TOP);
-                    $sheet->getStyle('C'.$this->filaPrimeraDatosExcel.':C'.$highest)
+                    $sheet->getStyle('E'.$this->filaPrimeraDatosExcel.':F'.$highest)
                         ->getAlignment()
                         ->setWrapText(true)
                         ->setVertical(Alignment::VERTICAL_TOP);

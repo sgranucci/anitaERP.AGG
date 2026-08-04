@@ -3,11 +3,13 @@
 namespace App\Support\Ventas;
 
 use App\Models\Ventas\Cliente;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
  * Bloqueo WSAPOC en operaciones de venta administrativas (pedido / factura clásica).
  * No aplica bypass por cliente regularizado: APOC es bloqueo absoluto.
+ * Si el servicio ARCA no responde, no bloquea (aviso suave en ABM; la operación sigue).
  */
 final class ArcaApocClienteOperacionValidacionSupport
 {
@@ -38,9 +40,8 @@ final class ArcaApocClienteOperacionValidacionSupport
 
         $cuit = preg_replace('/\D+/', '', (string) ($cliente->numerodocumento ?? ''));
         if (strlen($cuit) !== 11) {
-            return [
-                'error' => 'El cliente no tiene CUIT válida (11 dígitos) para consultar facturas apócrifas en ARCA.',
-            ];
+            // Sin CUIT no se puede consultar APOC; no bloquea la operación (el WS no es determinante).
+            return null;
         }
 
         if (! $consultarWs) {
@@ -50,7 +51,7 @@ final class ArcaApocClienteOperacionValidacionSupport
         try {
             $validacion = $support->evaluarCliente($cliente instanceof Cliente ? $cliente : Cliente::query()->find($cliente->id), suspenderSiApocrifo: true);
 
-            if (($validacion['es_apocrifo'] ?? false) || (($validacion['aplica'] ?? false) && ! ($validacion['ok'] ?? false))) {
+            if ($validacion['es_apocrifo'] ?? false) {
                 return [
                     'error' => (string) ($validacion['mensaje'] ?? 'El cliente figura en la base de facturas apócrifas de ARCA (WSAPOC).'),
                     'validacion' => $validacion,
@@ -59,9 +60,12 @@ final class ArcaApocClienteOperacionValidacionSupport
 
             return null;
         } catch (Throwable $e) {
-            return [
-                'error' => 'No se pudo consultar facturas apócrifas en ARCA: '.$e->getMessage(),
-            ];
+            Log::warning('WSAPOC operación venta: servicio no disponible (no bloquea)', [
+                'cliente_id' => $cliente->id ?? null,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
         }
     }
 

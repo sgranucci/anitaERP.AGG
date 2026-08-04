@@ -267,7 +267,7 @@ class SuitecrmNotaAuditoriaService
                 $nombre = trim((string) ($nota->cuenta_relacionada_c ?? ''));
             }
 
-            return ['Cuenta', $nombre, ''];
+            return ['Cta', $nombre, ''];
         }
 
         if ($parentType === 'Leads') {
@@ -277,7 +277,7 @@ class SuitecrmNotaAuditoriaService
             }
             $empresa = trim((string) ($nota->lead_account_name ?? ''));
 
-            return ['Cliente potencial', $persona, $empresa];
+            return ['CP', $persona, $empresa];
         }
 
         if ($parentType === 'Contacts') {
@@ -289,7 +289,7 @@ class SuitecrmNotaAuditoriaService
                 $nombre = trim((string) ($nota->cuenta_relacionada_c ?? ''));
             }
 
-            return ['Contacto', $nombre, ''];
+            return ['Cont', $nombre, ''];
         }
 
         $fallback = trim((string) ($nota->cuenta_relacionada_c ?? ''));

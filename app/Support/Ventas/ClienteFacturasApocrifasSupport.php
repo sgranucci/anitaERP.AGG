@@ -6,6 +6,7 @@ use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Tiposuspensioncliente;
 use App\Services\Arca\WsapocConsultaService;
 use App\Traits\Ventas\ClienteTrait;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -70,10 +71,16 @@ final class ClienteFacturasApocrifasSupport
         try {
             $ws = $this->wsapocService->getPublicacionApoc($cuit);
         } catch (Throwable $e) {
+            Log::warning('WSAPOC cliente: servicio no disponible', [
+                'cliente_id' => $cliente->id,
+                'error' => $e->getMessage(),
+            ]);
+
             return [
                 'aplica' => true,
-                'ok' => false,
-                'mensaje' => 'Error al consultar facturas apócrifas en ARCA: '.$e->getMessage(),
+                'ok' => true,
+                'error_servicio' => true,
+                'mensaje' => WsapocConsultaService::mensajeAvisoNoDisponible(),
                 'detalles' => [],
                 'es_apocrifo' => false,
                 'debe_suspender' => false,
@@ -188,13 +195,11 @@ final class ClienteFacturasApocrifasSupport
     public function evaluarRespuestaWs(Cliente $cliente, array $ws, bool $suspenderSiApocrifo = false): array
     {
         if ($ws['error_servicio'] ?? false) {
-            $codigo = (string) ($ws['codigo'] ?? '?');
-            $desc = trim((string) ($ws['descripcion'] ?? 'Error del servicio WSAPOC.'));
-
             return [
                 'aplica' => true,
-                'ok' => false,
-                'mensaje' => "ARCA WSAPOC respondió error {$codigo}: {$desc}",
+                'ok' => true,
+                'error_servicio' => true,
+                'mensaje' => WsapocConsultaService::mensajeAvisoNoDisponible(),
                 'detalles' => [],
                 'es_apocrifo' => false,
                 'debe_suspender' => false,

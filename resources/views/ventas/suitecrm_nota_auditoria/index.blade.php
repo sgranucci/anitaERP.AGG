@@ -21,6 +21,8 @@
                         Lista las notas de SuiteCRM (cuentas, clientes potenciales y contactos), agrupables por fecha
                         como en los reportes AOR. Cruza con clientes del ERP cuando hay código/CUIT;
                         las notas sin vínculo ERP también se incluyen si tienen contenido (relacionado, asunto o texto).
+                        En PDF/Excel: columnas optimizadas para impresión horizontal
+                        (Tipo: <strong>Cta</strong> = Cuenta, <strong>CP</strong> = Cliente potencial, <strong>Cont</strong> = Contacto).
                     </p>
 
                     <form method="get" action="{{ route('auditoria_notas_suitecrm') }}" class="mb-4" id="form-auditoria-notas-crm">

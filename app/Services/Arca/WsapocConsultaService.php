@@ -20,6 +20,14 @@ class WsapocConsultaService
     public function __construct(private WsaaService $wsaaService) {}
 
     /**
+     * Aviso de UI cuando ARCA/WSAPOC no responde: no bloquea operaciones.
+     */
+    public static function mensajeAvisoNoDisponible(): string
+    {
+        return 'Consulta de facturas apócrifas no disponible por el momento (ARCA). Puede continuar con normalidad.';
+    }
+
+    /**
      * @return array{request: string, response: string}|null
      */
     public function getLastSoapTrace(): ?array
@@ -162,8 +170,13 @@ class WsapocConsultaService
                     return $result;
                 }
 
-                // HTTP 200 pero sin el elemento esperado: intermitencia de ARCA.
-                $ultimoError = new Exception("WSAPOC: respuesta inválida (sin {$resultProp}).");
+                // HTTP 200 pero sin el elemento esperado: intermitencia de ARCA
+                // (a veces body HTML vacío/con ticket en lugar de SOAP).
+                $respBody = (string) ($this->lastSoapTrace['response'] ?? '');
+                $detalle = $this->esRespuestaHtmlOVacia($respBody)
+                    ? 'WSAPOC: ARCA devolvió HTML/vacío en lugar de SOAP (sin '.$resultProp.').'
+                    : "WSAPOC: respuesta inválida (sin {$resultProp}).";
+                $ultimoError = new Exception($detalle);
                 $this->logIntentoFallido($metodo, $intento, $maxIntentos, $ultimoError->getMessage(), true);
             } catch (SoapFault $e) {
                 $this->lastSoapTrace = $this->captureSoapTrace($client);
@@ -206,6 +219,12 @@ class WsapocConsultaService
             'gateway time',
             'http error',
             'error de transporte',
+            // ARCA a veces responde HTML vacío/con ticket en vez de SOAP (WAF/caída).
+            'looks like we got no xml',
+            'no xml document',
+            'unexpected end of file',
+            'start tag expected',
+            '<html',
             '502',
             '503',
             '504',
@@ -422,5 +441,19 @@ class WsapocConsultaService
     private function soloDigitos(string $v): string
     {
         return preg_replace('/\D+/', '', $v) ?? '';
+    }
+
+    private function esRespuestaHtmlOVacia(string $response): bool
+    {
+        $trim = trim($response);
+        if ($trim === '') {
+            return true;
+        }
+
+        $lower = mb_strtolower($trim);
+
+        return str_starts_with($lower, '<html')
+            || str_contains($lower, '<html')
+            || (! str_contains($lower, 'soap') && ! str_contains($lower, '<?xml'));
     }
 }
