@@ -29,7 +29,7 @@
 })();
 </script>
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<script src="{{ asset('assets/pages/scripts/reportes/empresas_dual.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/mayor_plano_cuenta/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
@@ -54,7 +54,7 @@
                         Los links a orden de compra sincronizan desde Anita bridge si aún no están en AnitaERP.
                     </p>
 
-                    @include('includes.reportes.asignacion_empresas_dual', [
+                    @include('includes.reportes.asignacion_empresas_checkboxes', [
                         'empresa_query' => $empresa_query,
                         'empresa_ids_seleccionados' => $filtros['empresa_ids'] ?? [],
                         'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,

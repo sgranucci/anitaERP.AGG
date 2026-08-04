@@ -215,6 +215,7 @@ class MayorPlanoCuentaReporteService
         $filas = $this->enriquecerEnlaces($filas, $empresaIds);
         $filas = $this->ordencompraEnricher->enriquecer($filas);
         $filas = $this->comprobanteEnricher->enriquecer($filas);
+        $filas = $this->completarNroOcDesdeIds($filas);
         $filas = $this->proveedorEnricher->enriquecer($filas);
 
         if ($filtros !== []) {
@@ -222,6 +223,51 @@ class MayorPlanoCuentaReporteService
                 $filas,
                 (string) ($filtros['filtro_texto'] ?? ''),
             );
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Si hay ordencompra_id (p. ej. desde asiento) pero falta nro_oc, completa el número para el link.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function completarNroOcDesdeIds(array $filas): array
+    {
+        $ids = [];
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $ocId = (int) ($fila['ordencompra_id'] ?? 0);
+            if ($ocId > 0 && (int) ($fila['nro_oc'] ?? 0) <= 0) {
+                $ids[$ocId] = true;
+            }
+        }
+
+        if ($ids === []) {
+            return $filas;
+        }
+
+        $mapa = DB::table('ordencompra')
+            ->whereIn('id', array_keys($ids))
+            ->pluck('numeroordencompra', 'id')
+            ->all();
+
+        foreach ($filas as $idx => $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $ocId = (int) ($fila['ordencompra_id'] ?? 0);
+            if ($ocId <= 0 || (int) ($fila['nro_oc'] ?? 0) > 0) {
+                continue;
+            }
+            $nro = (int) ($mapa[$ocId] ?? 0);
+            if ($nro > 0) {
+                $filas[$idx]['nro_oc'] = $nro;
+            }
         }
 
         return $filas;

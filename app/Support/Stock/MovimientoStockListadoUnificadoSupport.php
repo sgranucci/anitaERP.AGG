@@ -384,8 +384,10 @@ final class MovimientoStockListadoUnificadoSupport
                 ->get()
                 ->keyBy('id');
 
-        return $filasRaw->map(function ($raw) use ($movimientos, $transferencias) {
+        $filas = $filasRaw->map(function ($raw) use ($movimientos, $transferencias) {
             return MovimientoStockListadoFila::desdeRaw($raw, $movimientos, $transferencias);
         });
+
+        return MovimientoStockListadoCostoSupport::enriquecer($filas);
     }
 }

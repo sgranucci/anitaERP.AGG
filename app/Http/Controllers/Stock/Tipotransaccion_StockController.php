@@ -220,6 +220,8 @@ class Tipotransaccion_StockController extends Controller
             || can('crear-movimientos-de-stock', false)
             || can('editar-movimientos-de-stock', false)
             || can('listar-movimientos-de-stock', false)
+            || can('ver-configuracion-indumentaria', false)
+            || can('editar-configuracion-indumentaria', false)
             || can('crear-transferencia-mercaderia', false)
             || can('listar-transferencias-pendientes', false);
     }

@@ -88,12 +88,12 @@ class MayorPlanoCuentaSupport
     }
 
     /**
-     * Moneda de referencia = inversa de la del asiento.
-     * Pesos (id 1) → dólares (2); extranjera (id >= 2) → pesos (1).
+     * Moneda complementaria a la del reporte (para Mon.Referencia).
+     * Reporte en pesos → dólares (2); reporte extranjera → pesos (1).
      */
-    public static function monedaReferenciaId(int $monedaAsientoId): int
+    public static function monedaReferenciaId(int $monedaReporteId): int
     {
-        return max(1, $monedaAsientoId) <= 1 ? 2 : 1;
+        return max(1, $monedaReporteId) <= 1 ? 2 : 1;
     }
 
     /**
@@ -107,33 +107,61 @@ class MayorPlanoCuentaSupport
     }
 
     /**
-     * Importe en moneda de referencia (inversa del asiento) con cotización del asiento.
-     * - Pesos (id/cod 1) → dólares = importe / cotización
-     * - Extranjera (id >= 2) → pesos = importe * cotización
-     * Sin cotización válida → 0 (el procesador puede usar cotización diaria como fallback).
+     * Importe Mon.Referencia: moneda complementaria a Debe/Haber (moneda del reporte).
+     *
+     * - Mayor en pesos: asiento en pesos → USD (nativo/cotiz); asiento extranjera → nativo original.
+     * - Mayor en extranjera: asiento en pesos → nativo (pesos); asiento extranjera → pesos (nativo*cotiz).
+     *
+     * Sin cotización válida cuando hace falta convertir → 0 (el procesador puede usar cotización diaria).
      */
     public static function importeMonedaReferencia(
         float $importeNativo,
         string $dh,
-        string $codMon = '1',
-        float $cotizacion = 0.0,
+        int $monedaAsientoId,
+        float $cotizacion,
+        int $monedaReporteId,
     ): float {
         $monto = abs($importeNativo);
         if ($monto < 0.00001) {
             return 0.0;
         }
 
+        $asientoPesos = max(1, $monedaAsientoId) <= 1;
+        $reportePesos = max(1, $monedaReporteId) <= 1;
         $cotiz = $cotizacion;
-        if ($cotiz < 0.01) {
-            return 0.0;
+
+        if ($reportePesos) {
+            if ($asientoPesos) {
+                if ($cotiz < 0.01) {
+                    return 0.0;
+                }
+                $convertido = $monto / $cotiz;
+            } else {
+                // Moneda original del asiento (no reconvertir a pesos).
+                $convertido = $monto;
+            }
+        } elseif ($asientoPesos) {
+            $convertido = $monto;
+        } else {
+            if ($cotiz < 0.01) {
+                return 0.0;
+            }
+            $convertido = $monto * $cotiz;
         }
 
-        $monedaAsientoId = max(1, (int) (trim($codMon) !== '' ? trim($codMon) : '1'));
-        $convertido = $monedaAsientoId <= 1
-            ? $monto / $cotiz
-            : $monto * $cotiz;
-
         return self::firmarImporteDh($convertido, $dh);
+    }
+
+    /**
+     * True si Mon.Referencia necesita cotización (conversión pesos↔extranjera).
+     */
+    public static function monReferenciaNecesitaCotizacion(int $monedaAsientoId, int $monedaReporteId): bool
+    {
+        $asientoPesos = max(1, $monedaAsientoId) <= 1;
+        $reportePesos = max(1, $monedaReporteId) <= 1;
+
+        // Solo cuando hay que cruzar pesos ↔ extranjera.
+        return $asientoPesos === $reportePesos;
     }
 
     /** Inicio de ejercicio contable (01/01 del año del período). Equivalente a EMPM_extrae_ejercicio(). */

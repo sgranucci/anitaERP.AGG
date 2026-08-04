@@ -44,15 +44,22 @@ $(document).on('keyup', '#consultatipotransaccionstock', function () {
 var capturaEnterAbreviaturaTipotransaccionStockActiva = false;
 
 function manejarEnterAbreviaturaTipotransaccionStock(e) {
-    if (e.which !== 13 && e.key !== 'Enter') {
-        return;
-    }
-
     var target = e.target;
     if (!target || !target.classList || !target.classList.contains('abreviaturatipotransaccionstock')) {
         return;
     }
     if (target.readOnly || target.disabled) {
+        return;
+    }
+
+    if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        $(target).closest('.tm-tipotransaccion-stock-campo, tr').find('.consultatipotransaccionstock').first().trigger('click');
+        return;
+    }
+
+    if (e.which !== 13 && e.key !== 'Enter') {
         return;
     }
 

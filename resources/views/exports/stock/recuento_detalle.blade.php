@@ -2,7 +2,7 @@
     use App\Models\Stock\Recuento;
     use App\Support\Stock\RecuentoDetalleExportSupport;
 
-    $colspan = 9;
+    $colspan = 11;
     $detalleExport = $detalleExport
         ?? RecuentoDetalleExportSupport::agruparPorTipoArticulo($recuento->items ?? []);
 @endphp
@@ -44,6 +44,8 @@
         <tr>
             <th>SKU</th>
             <th>Descripci&oacute;n</th>
+            <th>Color</th>
+            <th>Talle</th>
             <th>UM</th>
             <th>Saldo sistema</th>
             <th>Contado</th>
@@ -71,6 +73,8 @@
                 <tr>
                     <td>{{ optional($item->articulos)->sku }}</td>
                     <td>{{ $item->detalle ?: optional($item->articulos)->descripcion }}</td>
+                    <td>{{ optional($item->color)->nombre ?? '—' }}</td>
+                    <td>{{ optional($item->talle)->nombre ?? '—' }}</td>
                     <td>{{ optional($item->unidadmedida)->abreviatura ?? optional($item->articulos?->unidadesdemedidas)->abreviatura }}</td>
                     <td>{{ (float) $item->saldo_sistema }}</td>
                     <td>{{ (float) $item->cantidad_contada }}</td>
@@ -93,7 +97,7 @@
                 </tr>
             @endforeach
             <tr>
-                <td colspan="7"><strong>Subtotal {{ $grupo['tipo_nombre'] }}</strong></td>
+                <td colspan="9"><strong>Subtotal {{ $grupo['tipo_nombre'] }}</strong></td>
                 <td><strong>{{ $grupo['subtotal_valor_contado'] }}</strong></td>
                 <td><strong>{{ $grupo['subtotal_valor_dif'] }}</strong></td>
             </tr>
@@ -104,7 +108,7 @@
         @endforelse
         @if (($detalleExport['cantidad_lineas'] ?? 0) > 0)
             <tr>
-                <td colspan="7"><strong>Total general (costo u/c)</strong></td>
+                <td colspan="9"><strong>Total general (costo u/c)</strong></td>
                 <td><strong>{{ $detalleExport['total_valor_contado'] }}</strong></td>
                 <td><strong>{{ $detalleExport['total_valor_dif'] }}</strong></td>
             </tr>

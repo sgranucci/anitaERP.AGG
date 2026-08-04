@@ -74,9 +74,10 @@ class PeriodoCierreContableController extends Controller
             'mes' => $mes,
             'anio' => $anio,
             'anio_mes' => $anioMes,
-            'agenda_filas' => $agendaFilas,
+            'agenda_grupos' => $agendaFilas,
             'fecha_hasta_default' => $fechaHastaDefault,
             'alcances' => PeriodoContableCierreSupport::alcancesDisponibles(),
+            'jerarquia_alcances' => PeriodoContableCierreSupport::jerarquiaAgenda(),
             'cierres' => $cierres,
             'resumen_vigente' => $resumenVigente,
             'ultimo_cierre' => $ultimoCierreGeneral,
@@ -184,7 +185,7 @@ class PeriodoCierreContableController extends Controller
             $request->input('hora_ejecucion')
         );
 
-        $mensaje = 'Se programaron '.$resultado['guardados'].' módulo(s).';
+        $mensaje = 'Se programaron '.$resultado['guardados'].' alcance(s).';
         if ($resultado['errores'] !== []) {
             return $this->redirectIndex($request)
                 ->with('mensaje', $mensaje)

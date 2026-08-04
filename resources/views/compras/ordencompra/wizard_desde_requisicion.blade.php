@@ -328,9 +328,15 @@ jQuery(function ($) {
                                     </div>
                                 </div>
                                 <div class="form-group row mb-2">
-                                    <label class="col-lg-3 col-form-label requerido">Detalle</label>
+                                    <label class="col-lg-3 col-form-label requerido text-right pr-2" for="wz_detalle">Detalle</label>
                                     <div class="col-lg-9">
-                                        <textarea id="wz_detalle" rows="3" class="form-control form-control-sm" maxlength="2000">{{ $wizardPlantilla['detalle'] ?? '' }}</textarea>
+                                        <textarea id="wz_detalle" rows="3" class="form-control form-control-sm{{ !empty($wizardPlantilla['detalle_autogenerado']) ? ' border-warning' : '' }}" maxlength="2000" aria-describedby="wz_detalle_aviso">{{ $wizardPlantilla['detalle'] ?? '' }}</textarea>
+                                        @if (!empty($wizardPlantilla['detalle_autogenerado']))
+                                            <div class="alert alert-warning py-1 px-2 mt-1 mb-0 small" id="wz_detalle_aviso" role="status">
+                                                <i class="fa fa-info-circle mr-1"></i>
+                                                La requisición no tenía detalle: se prefijó uno por defecto. Reviselo y edítelo si hace falta.
+                                            </div>
+                                        @endif
                                     </div>
                                 </div>
                                 <div class="form-group row mb-2">

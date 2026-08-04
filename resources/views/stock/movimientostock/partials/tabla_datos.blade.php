@@ -34,6 +34,11 @@
         <td><small>{{ $fila->etiquetaDestino() }}</small></td>
         <td><small>{{ $fila->nombreEmpresa }}</small></td>
         <td class="text-right">{{ number_format($fila->totalCantidad, 2, ',', '.') }}</td>
+        <td class="text-right">
+            @if ($fila->costoProducto !== null)
+                {{ number_format($fila->costoProducto, 4, ',', '.') }}
+            @endif
+        </td>
         <td class="text-center">{{ $fila->itemsCount > 0 ? $fila->itemsCount : '' }}</td>
         <td>
             @if ($fila->esTransferencia())

@@ -5,7 +5,7 @@
 
 @section('scripts')
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<script src="{{ asset('assets/pages/scripts/reportes/empresas_dual.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/sala/requisicion_sala_reporte/filtro.js') }}"></script>
 @endsection
 
@@ -41,11 +41,12 @@
                         #form-requisicion-sala-reporte .rs-campo-requisicion { max-width: 10rem; }
                     </style>
 
-                    @include('includes.reportes.asignacion_empresas_dual', [
+                    @include('includes.reportes.asignacion_empresas_checkboxes', [
                         'empresa_query' => $empresa_query,
                         'empresa_ids_seleccionados' => $filtros['empresa_ids'] ?? [],
+                        'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,
                         'reporte_clave' => 'requisicion_sala_reporte',
-                        'mostrar_consolidar' => false,
+                        'mostrar_consolidar' => true,
                         'col_label' => 'col-lg-2 col-form-label text-right pr-2',
                     ])
 

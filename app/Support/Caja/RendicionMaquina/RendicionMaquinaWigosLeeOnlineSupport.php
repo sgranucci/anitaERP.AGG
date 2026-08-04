@@ -27,11 +27,14 @@ final class RendicionMaquinaWigosLeeOnlineSupport
      * @return array{
      *   inputs: array<string, float>,
      *   wigos_json: array<string, float>,
+     *   valores?: list<array<string, mixed>>,
+     *   gastos?: list<array<string, mixed>>,
+     *   calc_orquestador?: array<string, float>,
      *   crudo: array<string, mixed>,
      *   meta: array<string, mixed>
      * }
      */
-    public static function traer(int $empresaId, string $fechaYmd, string $turno): array
+    public static function traer(int $empresaId, string $fechaYmd, string $turno, ?int $exceptoId = null): array
     {
         if ($empresaId <= 0) {
             throw new RuntimeException('Empresa inválida para lectura WIGOS.');
@@ -65,25 +68,35 @@ final class RendicionMaquinaWigosLeeOnlineSupport
             'dia' => $datosDia,
             'dia_anterior' => null,
         ];
+        $valores = null;
+        $gastos = null;
+        $orquestadorCompleto = null;
 
         if ($esCierre) {
-            // RENDM_trae_bill_actual = TRUE: drop del día + QR del día
+            // RENDM_trae_bill_actual = TRUE: drop bruto + QR neto del día (desfase jornada vs M/T/N).
             $inputs['drop_billete'] = round($billSlots, 2);
             $inputs['drop_ruleta'] = round($billRul, 2);
-            // Bruto WIGOS D-1; luego lee_rendiciones_del_dia lo pisa con neto del M
             $inputs['drop_bill_ant'] = round($billSlotsAnt, 2);
             $inputs['drop_rul_ant'] = round($billRulAnt, 2);
             $inputs['dropqr_rodillo'] = round($montoNetoQr, 2);
-            $inputs['impuesto_qr'] = round($impuestoQr, 2);
-
-            $previas = RendicionMaquinaPreviasSupport::resolver($empresaId, $fechaYmd, $turnoNorm);
-            if (abs((float) $previas['drop_bill_ant_completo']) > 0.00001
-                || abs((float) $previas['drop_rul_ant_completo']) > 0.00001) {
-                $inputs['drop_bill_ant'] = round((float) $previas['drop_bill_ant_completo'], 2);
-                $inputs['drop_rul_ant'] = round((float) $previas['drop_rul_ant_completo'], 2);
-                $crudo['drop_ant_origen'] = $previas['origen_drop_ant_completo'];
+            // impuesto_qr / venta / tito / pago / valores / gastos: lee_rendiciones_del_dia
+            $completo = RendicionMaquinaCompletoDelDiaSupport::consolidar(
+                $empresaId,
+                $fechaYmd,
+                $exceptoId
+            );
+            foreach ($completo['inputs'] as $clave => $valor) {
+                // No pisar drop/QR brutos del día que vienen de WIGOS con trae_bill_actual.
+                if (in_array($clave, ['drop_billete', 'drop_ruleta', 'dropqr_rodillo', 'dropqr_ruleta'], true)) {
+                    continue;
+                }
+                $inputs[$clave] = round((float) $valor, 2);
             }
-            // Impuesto drop del C es del día (no se hereda del C anterior)
+            $valores = $completo['valores'];
+            $gastos = $completo['gastos'];
+            $orquestadorCompleto = $completo['orquestador'];
+            $crudo['completo_del_dia'] = $completo['meta'];
+            $crudo['drop_ant_origen'] = $completo['meta']['origen_drop_ant'] ?? 'ninguno';
         } else {
             // Paridad RENDM_lee_on_line (!trae_bill_actual):
             // 1) drop de trabajo = BillSlotsAnterior; ant. arranca igual (bruto WIGOS).
@@ -127,7 +140,7 @@ final class RendicionMaquinaWigosLeeOnlineSupport
             $crudo['previas_origen_impuesto'] = $previas['origen_impuesto_drop'];
         }
 
-        return [
+        $out = [
             'inputs' => $inputs,
             'wigos_json' => $inputs,
             'crudo' => $crudo,
@@ -137,9 +150,22 @@ final class RendicionMaquinaWigosLeeOnlineSupport
                 'stub' => false,
                 'es_cierre' => $esCierre,
                 'fecha_wigos' => $fechaWigos,
-                'mensaje' => 'Datos WIGOS importados (calc_datos_wigos / on_line).',
+                'mensaje' => $esCierre
+                    ? 'Completo: drop/QR del día (WIGOS) + consolidado M/T/N (lee_rendiciones_del_dia).'
+                    : 'Datos WIGOS importados (calc_datos_wigos / on_line).',
             ],
         ];
+        if ($valores !== null) {
+            $out['valores'] = $valores;
+        }
+        if ($gastos !== null) {
+            $out['gastos'] = $gastos;
+        }
+        if ($orquestadorCompleto !== null) {
+            $out['calc_orquestador'] = $orquestadorCompleto;
+        }
+
+        return $out;
     }
 
     /**

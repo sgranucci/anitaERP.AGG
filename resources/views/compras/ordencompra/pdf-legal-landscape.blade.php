@@ -261,7 +261,7 @@
                 <th class="num" style="width:8%;">P.unit.</th>
                 <th class="cen" style="width:8%;">Mon./cot.</th>
                 <th class="cen" style="width:6%;">F.ent.</th>
-                <th class="cen" style="width:5%;">CC</th>
+                <th class="cen" style="width:5%;">CC dest.</th>
                 <th style="width:6%;">P./Cp.</th>
                 <th class="num" style="width:14%;">Subt.</th>
             </tr>
@@ -291,7 +291,12 @@
                     }
                     $monAb = optional($linea->monedas)->abreviatura ?? optional($linea->monedas)->nombre ?? '—';
                     $fEnt = $linea->fechaentrega ? date('d/m/y', strtotime($linea->fechaentrega)) : '—';
-                    $ccCod = optional($ccDest)->codigo ?? '—';
+                    $ccCod = optional($ccDest)->codigo ?? '';
+                    $ccNom = optional($ccDest)->nombre ?? '';
+                    $ccEtiqueta = trim($ccCod.' '.$ccNom);
+                    if ($ccEtiqueta === '') {
+                        $ccEtiqueta = '—';
+                    }
                     $detLin = trim((string) ($linea->detalle ?? ''));
                     $origTxt = trim((string) ($linea->precio_origen_etiqueta ?? ''));
                 @endphp
@@ -311,7 +316,7 @@
                     <td class="num" style="width:8%;">@if ($monAb !== '' && $monAb !== '—'){{ $monAb }} @endif{{ number_format((float) $linea->precio, 3, ',', '.') }}</td>
                     <td class="mcot cen" style="width:8%;">{{ $monAb }}<br>{{ number_format($cot, 3, ',', '.') }}</td>
                     <td class="cen" style="width:6%;">{{ $fEnt }}</td>
-                    <td class="cen" style="width:5%;">{{ $ccCod }}</td>
+                    <td class="cen" style="width:5%;">{{ $ccCod !== '' ? $ccCod : '—' }}</td>
                     <td style="width:6%;">{{ $refPartCpx }}</td>
                     <td class="num items-subt" style="width:14%;">@if ($monOcItems !== ''){{ $monOcItems }} @endif{{ number_format($sub, 2, ',', '.') }}</td>
                 </tr>
@@ -323,7 +328,7 @@
                         <span class="muted">Leyenda del ítem:</span>
                         columnas F.ent. = fecha entrega línea; CC = centro costo destino; P./Cp. = partida o CAPEX.
                         Subtotal (sin IVA)@if ($monOcItems !== ''), en moneda OC ({{ $monOcItems }})@endif = cant. × P.unit. × cotización.
-                        Entrega {{ $fEnt }}, CC {{ $ccCod }}, Part./CAPEX {{ $refPartCpx }}.
+                        Entrega {{ $fEnt }}, CC dest. {{ $ccEtiqueta }}, Part./CAPEX {{ $refPartCpx }}.
                         @if ($origTxt !== '')
                             Origen precio: {{ $origTxt }}@if (! empty($linea->precio_origen_tipo)) ({{ $linea->precio_origen_tipo }}@if (! empty($linea->precio_origen_ref_id)), ref. {{ $linea->precio_origen_ref_id }}@endif)@endif.
                         @endif

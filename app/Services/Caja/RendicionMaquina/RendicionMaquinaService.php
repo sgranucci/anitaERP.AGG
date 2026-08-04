@@ -9,6 +9,7 @@ use App\Models\Caja\RendicionMaquinaAjusteWigos;
 use App\Models\Caja\Usocuentacaja;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaAjusteWigosSupport;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaCompletoDelDiaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaContextoBuilder;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaPreviasSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaResultadoCalculo;
@@ -294,13 +295,33 @@ final class RendicionMaquinaService
 
         // Si vienen en 0 (cambio de fecha blanqueó inputs), completar desde previas.
         // Tras Traer WIGOS el JS ya carga vale/comprobante de la fecha.
-        if (abs((float) ($orq['comprobante'] ?? 0)) < 0.00001
-            && abs((float) ($previas['comprobante'] ?? 0)) > 0.00001) {
-            $orq['comprobante'] = round((float) $previas['comprobante'], 2);
-        }
-        if (abs((float) ($orq['vale_rep_fondo'] ?? 0)) < 0.00001
-            && abs((float) ($previas['vale_rep_fondo'] ?? 0)) > 0.00001) {
-            $orq['vale_rep_fondo'] = round((float) $previas['vale_rep_fondo'], 2);
+        if (RendicionMaquinaTurno::esCompleto($turnoPayload)) {
+            // Completo: comprobante/vale = 0; fondo_cierre/resultado/transfer desde M/T/N.
+            $orq['comprobante'] = 0.0;
+            $orq['vale_rep_fondo'] = 0.0;
+            $inputs['fondo_inicial'] = 0.0;
+            $faltaCierre = abs((float) ($orq['fondo_cierre'] ?? 0)) < 0.00001
+                || abs((float) ($orq['resultado_turno'] ?? 0)) < 0.00001
+                || ! array_key_exists('transferencia', $orq);
+            if ($faltaCierre) {
+                $completo = RendicionMaquinaCompletoDelDiaSupport::consolidar(
+                    $empresaId,
+                    $fecha,
+                    $exceptoId
+                );
+                $orq['fondo_cierre'] = round((float) ($completo['orquestador']['fondo_cierre'] ?? 0), 2);
+                $orq['resultado_turno'] = round((float) ($completo['orquestador']['resultado_turno'] ?? 0), 2);
+                $orq['transferencia'] = round((float) ($completo['orquestador']['transferencia'] ?? 0), 2);
+            }
+        } else {
+            if (abs((float) ($orq['comprobante'] ?? 0)) < 0.00001
+                && abs((float) ($previas['comprobante'] ?? 0)) > 0.00001) {
+                $orq['comprobante'] = round((float) $previas['comprobante'], 2);
+            }
+            if (abs((float) ($orq['vale_rep_fondo'] ?? 0)) < 0.00001
+                && abs((float) ($previas['vale_rep_fondo'] ?? 0)) > 0.00001) {
+                $orq['vale_rep_fondo'] = round((float) $previas['vale_rep_fondo'], 2);
+            }
         }
 
         $payload['inputs'] = $inputs;
@@ -311,17 +332,28 @@ final class RendicionMaquinaService
 
     /**
      * Trae drop/tito/venta/QR desde WIGOS (RENDM_lee_on_line / calc_datos_wigos).
-     * Conserva fondo_inicial y campos manuales del payload actual si se pasan.
+     * En turno Completo consolida M/T/N (lee_rendiciones_del_dia) y valores/gastos.
      *
      * @param  array<string, float|int|string>|null  $inputsActuales
-     * @return array{inputs: array<string, float>, wigos_json: array<string, float>, meta: array<string, mixed>}
+     * @return array<string, mixed>
      */
-    public function traerWigos(int $empresaId, string $fechaYmd, string $turno, ?array $inputsActuales = null): array
-    {
+    public function traerWigos(
+        int $empresaId,
+        string $fechaYmd,
+        string $turno,
+        ?array $inputsActuales = null,
+        ?int $exceptoId = null
+    ): array {
         $turnoNorm = RendicionMaquinaTurno::normalizar($turno);
+        $esCompleto = RendicionMaquinaTurno::esCompleto($turnoNorm);
 
         try {
-            $resultado = RendicionMaquinaWigosLeeOnlineSupport::traer($empresaId, $fechaYmd, $turnoNorm);
+            $resultado = RendicionMaquinaWigosLeeOnlineSupport::traer(
+                $empresaId,
+                $fechaYmd,
+                $turnoNorm,
+                $exceptoId
+            );
         } catch (\Throwable $e) {
             Log::warning('RendicionMaquina Traer WIGOS falló', [
                 'empresa_id' => $empresaId,
@@ -334,7 +366,7 @@ final class RendicionMaquinaService
             foreach (RendicionMaquinaVariables::INPUTS as $ruta) {
                 $inputs[$this->claveInputCorta($ruta)] = 0.0;
             }
-            $previasStub = RendicionMaquinaPreviasSupport::resolver($empresaId, $fechaYmd, $turnoNorm);
+            $previasStub = RendicionMaquinaPreviasSupport::resolver($empresaId, $fechaYmd, $turnoNorm, $exceptoId);
             $inputs['fondo_inicial'] = round((float) ($previasStub['fondo_inicial'] ?? 0), 2);
             // Solo M trae impuesto drop del C anterior; T/N = 0 (Anita).
             $inputs['impuesto_drop'] = RendicionMaquinaTurno::esManiana($turnoNorm)
@@ -342,13 +374,17 @@ final class RendicionMaquinaService
                 : 0.0;
             $inputs['drop_billete_bruto'] = 0.0;
 
-            return [
+            $stub = [
                 'inputs' => $inputs,
                 'wigos_json' => $inputs,
                 'previas' => $previasStub,
                 'calc_orquestador' => [
-                    'comprobante' => round((float) ($previasStub['comprobante'] ?? 0), 2),
-                    'vale_rep_fondo' => round((float) ($previasStub['vale_rep_fondo'] ?? 0), 2),
+                    'comprobante' => $esCompleto
+                        ? 0.0
+                        : round((float) ($previasStub['comprobante'] ?? 0), 2),
+                    'vale_rep_fondo' => $esCompleto
+                        ? 0.0
+                        : round((float) ($previasStub['vale_rep_fondo'] ?? 0), 2),
                 ],
                 'meta' => [
                     'modo_wigos' => RendicionMaquinaTurno::modoWigos($turnoNorm),
@@ -361,48 +397,71 @@ final class RendicionMaquinaService
                         .'. Se dejaron ceros; complete manualmente o reintente.',
                 ],
             ];
+
+            if ($esCompleto) {
+                $completo = RendicionMaquinaCompletoDelDiaSupport::consolidar(
+                    $empresaId,
+                    $fechaYmd,
+                    $exceptoId
+                );
+                foreach ($completo['inputs'] as $clave => $valor) {
+                    $stub['inputs'][$clave] = round((float) $valor, 2);
+                }
+                $stub['inputs']['fondo_inicial'] = 0.0;
+                $stub['wigos_json'] = $stub['inputs'];
+                $stub['valores'] = $completo['valores'];
+                $stub['gastos'] = $completo['gastos'];
+                $stub['calc_orquestador'] = $completo['orquestador'];
+                $stub['meta']['completo_del_dia'] = $completo['meta'];
+            }
+
+            return $stub;
         }
 
         $inputs = $resultado['inputs'];
 
-        // Manuales que no vienen de WIGOS. fondo_inicial NUNCA se conserva del cliente:
-        // al cambiar fecha/turno quedaba el fondo del día anterior (ej. 796.5M del 02/08
-        // al pasar al 30/07). Siempre se resuelve por previas de la fecha pedida.
-        $conservar = [
-            'sobrantes',
-            'variacion_ff',
-            'pago_diferido',
-            'vale_anterior',
-            'vales',
-            'reintegros',
-            'vta_ant_gastro',
-        ];
-        if (is_array($inputsActuales)) {
-            foreach ($conservar as $clave) {
-                if (array_key_exists($clave, $inputsActuales)) {
-                    $inputs[$clave] = is_numeric($inputsActuales[$clave])
-                        ? (float) $inputsActuales[$clave]
-                        : 0.0;
-                } elseif (array_key_exists('inputs.'.$clave, $inputsActuales)) {
-                    $inputs[$clave] = (float) $inputsActuales['inputs.'.$clave];
+        // Manuales: en Completo vienen del consolidado M/T/N; no conservar payload cliente.
+        if (! $esCompleto) {
+            $conservar = [
+                'sobrantes',
+                'variacion_ff',
+                'pago_diferido',
+                'vale_anterior',
+                'vales',
+                'reintegros',
+                'vta_ant_gastro',
+            ];
+            if (is_array($inputsActuales)) {
+                foreach ($conservar as $clave) {
+                    if (array_key_exists($clave, $inputsActuales)) {
+                        $inputs[$clave] = is_numeric($inputsActuales[$clave])
+                            ? (float) $inputsActuales[$clave]
+                            : 0.0;
+                    } elseif (array_key_exists('inputs.'.$clave, $inputsActuales)) {
+                        $inputs[$clave] = (float) $inputsActuales['inputs.'.$clave];
+                    }
                 }
             }
         }
 
-        $previas = RendicionMaquinaPreviasSupport::resolver($empresaId, $fechaYmd, $turnoNorm);
-        $inputs['fondo_inicial'] = round((float) ($previas['fondo_inicial'] ?? 0), 2);
+        $previas = RendicionMaquinaPreviasSupport::resolver($empresaId, $fechaYmd, $turnoNorm, $exceptoId);
 
-        // Impuesto drop del C anterior solo en M → neto Anita dr_bill_rod.
-        // T/N en Anita van con imp_drop = 0.
-        if (RendicionMaquinaTurno::esManiana($turnoNorm)) {
-            $inputs['impuesto_drop'] = round((float) ($previas['impuesto_drop'] ?? 0), 2);
-        } elseif (! RendicionMaquinaTurno::esCompleto($turnoNorm)) {
-            $inputs['impuesto_drop'] = 0.0;
+        if ($esCompleto) {
+            // calcula_rendicion_turno_completo: fondo/comprobante/vale = 0
+            $inputs['fondo_inicial'] = 0.0;
+            // impuesto_drop ya viene del M del día siguiente (consolidado)
+        } else {
+            $inputs['fondo_inicial'] = round((float) ($previas['fondo_inicial'] ?? 0), 2);
+            // Impuesto drop del C anterior solo en M → neto Anita dr_bill_rod.
+            if (RendicionMaquinaTurno::esManiana($turnoNorm)) {
+                $inputs['impuesto_drop'] = round((float) ($previas['impuesto_drop'] ?? 0), 2);
+            } else {
+                $inputs['impuesto_drop'] = 0.0;
+            }
         }
 
         // Pantalla: drop_billete = neto (como Anita dr_bill_rod); bruto aparte.
-        // drop_bill_ant / drop_rul_ant NUNCA se netean: en M/T/N son bruto WIGOS;
-        // en C se pisan con el neto del M (lee_rendiciones_del_dia / previas).
+        // En C el impuesto es el del M de D+1 (desfase jornada).
         $bruto = round((float) ($inputs['drop_billete'] ?? 0), 2);
         $imp = round((float) ($inputs['impuesto_drop'] ?? 0), 2);
         $inputs['drop_billete_bruto'] = $bruto;
@@ -411,15 +470,40 @@ final class RendicionMaquinaService
         $resultado['inputs'] = $inputs;
         $resultado['wigos_json'] = $inputs;
         $resultado['previas'] = $previas;
-        $resultado['calc_orquestador'] = [
-            'comprobante' => round((float) ($previas['comprobante'] ?? 0), 2),
-            'vale_rep_fondo' => round((float) ($previas['vale_rep_fondo'] ?? 0), 2),
-        ];
-        $resultado['meta']['origen_fondo'] = $previas['origen_fondo'];
-        $resultado['meta']['origen_comprobante'] = $previas['origen_comprobante'] ?? 'ninguno';
-        $resultado['meta']['origen_impuesto_drop'] = $previas['origen_impuesto_drop'];
-        $resultado['meta']['origen_vale_rep_fondo'] = $previas['origen_vale_rep_fondo'];
-        $resultado['meta']['origen_drop_ant_completo'] = $previas['origen_drop_ant_completo'] ?? 'ninguno';
+        if ($esCompleto) {
+            // lee_rendiciones_del_dia: comprobante/vale=0; fondo_cierre/resultado de Noche; transfer suma M+T+N
+            $orqCompleto = is_array($resultado['calc_orquestador'] ?? null)
+                ? $resultado['calc_orquestador']
+                : [];
+            $resultado['calc_orquestador'] = [
+                'comprobante' => 0.0,
+                'vale_rep_fondo' => 0.0,
+                'fondo_cierre' => round((float) ($orqCompleto['fondo_cierre'] ?? 0), 2),
+                'resultado_turno' => round((float) ($orqCompleto['resultado_turno'] ?? 0), 2),
+                'transferencia' => round((float) ($orqCompleto['transferencia'] ?? 0), 2),
+            ];
+        } else {
+            $resultado['calc_orquestador'] = [
+                'comprobante' => round((float) ($previas['comprobante'] ?? 0), 2),
+                'vale_rep_fondo' => round((float) ($previas['vale_rep_fondo'] ?? 0), 2),
+            ];
+        }
+        $resultado['meta']['origen_fondo'] = $esCompleto ? 'completo_cero' : $previas['origen_fondo'];
+        $resultado['meta']['origen_comprobante'] = $esCompleto
+            ? 'completo_cero'
+            : ($previas['origen_comprobante'] ?? 'ninguno');
+        $resultado['meta']['origen_impuesto_drop'] = $esCompleto
+            ? (string) ($resultado['crudo']['completo_del_dia']['origen_impuesto_drop'] ?? 'ninguno')
+            : $previas['origen_impuesto_drop'];
+        $resultado['meta']['origen_vale_rep_fondo'] = $esCompleto
+            ? 'completo_cero'
+            : $previas['origen_vale_rep_fondo'];
+        $resultado['meta']['origen_drop_ant_completo'] = $esCompleto
+            ? (string) ($resultado['crudo']['drop_ant_origen'] ?? $previas['origen_drop_ant_completo'] ?? 'ninguno')
+            : ($previas['origen_drop_ant_completo'] ?? 'ninguno');
+        $resultado['meta']['origen_noche'] = $esCompleto
+            ? (string) ($resultado['crudo']['completo_del_dia']['origen_noche'] ?? 'ninguno')
+            : 'n/a';
 
         return $resultado;
     }

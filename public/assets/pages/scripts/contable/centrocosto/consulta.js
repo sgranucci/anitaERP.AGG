@@ -147,13 +147,37 @@ function activa_eventos_consultacentrocosto() {
     $('#consultacentrocostoModal')
         .off('shown.bs.modal.ccConsulta')
         .on('shown.bs.modal.ccConsulta', function () {
-            $(this).find('#consultacentrocosto').focus();
+            apilarModalConsultaCentrocostoSiAnidado();
+            $(this).find('#consultacentrocosto').focus().select();
+        });
+
+    $('#consultacentrocostoModal')
+        .off('hidden.bs.modal.ccConsultaStack')
+        .on('hidden.bs.modal.ccConsultaStack', function () {
+            desapilarModalConsultaCentrocostoSiAnidado();
         });
 
     $(document)
         .off('keyup.ccConsultaBuscar', '#consultacentrocosto')
-        .on('keyup.ccConsultaBuscar', '#consultacentrocosto', function () {
+        .on('keyup.ccConsultaBuscar', '#consultacentrocosto', function (e) {
+            if (e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13) {
+                return;
+            }
             buscar_datos_centrocosto($(this).val());
+        });
+
+    $(document)
+        .off('keydown.ccConsultaEnterModal', '#consultacentrocosto')
+        .on('keydown.ccConsultaEnterModal', '#consultacentrocosto', function (e) {
+            if (!(e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13)) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            var $btn = $('#datoscentrocosto .eligeconsultacentrocosto').first();
+            if ($btn.length) {
+                $btn.trigger('click');
+            }
         });
 
     $(document)
@@ -189,13 +213,53 @@ function activa_eventos_consultacentrocosto() {
         });
 
     $(document)
-        .off('keydown.ccConsultaF1', '.tm-centrocosto-campo .codigocentrocosto')
-        .on('keydown.ccConsultaF1', '.tm-centrocosto-campo .codigocentrocosto', function (e) {
+        .off('keydown.ccConsultaCodigo', '.tm-centrocosto-campo .codigocentrocosto')
+        .on('keydown.ccConsultaCodigo', '.tm-centrocosto-campo .codigocentrocosto', function (e) {
             if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
                 e.preventDefault();
                 $(this).closest('.tm-centrocosto-campo').find('.consultacentrocosto').trigger('click');
+                return;
+            }
+            if (e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13) {
+                e.preventDefault();
+                e.stopPropagation();
+                leerCentrocostoPorCodigo($(this).val(), this, function (data) {
+                    if (!data || !data.id) {
+                        return;
+                    }
+                    var $modalArbol = $('#modalRequisicionCentrocostoRetomeArbol');
+                    if ($modalArbol.hasClass('show') || $modalArbol.hasClass('in')) {
+                        $('#requisicionCentrocostoRetomeArbolConfirmar').focus();
+                    }
+                });
             }
         });
+}
+
+function apilarModalConsultaCentrocostoSiAnidado() {
+    var visibles = document.querySelectorAll('.modal.show, .modal.in').length;
+    if (visibles < 2) {
+        return;
+    }
+    var $m = $('#consultacentrocostoModal');
+    var zHijo = 1060 + (10 * visibles);
+    $m.data('ccModalApilado', true);
+    $m.css('z-index', zHijo);
+    setTimeout(function () {
+        $('.modal-backdrop').last().css('z-index', zHijo - 1);
+    }, 0);
+}
+
+function desapilarModalConsultaCentrocostoSiAnidado() {
+    var $m = $('#consultacentrocostoModal');
+    if (!$m.data('ccModalApilado')) {
+        return;
+    }
+    $m.removeData('ccModalApilado');
+    $m.css('z-index', '');
+    if (document.querySelectorAll('.modal.show, .modal.in').length > 0) {
+        $('body').addClass('modal-open');
+    }
 }
 
 window.activa_eventos_consultacentrocosto = activa_eventos_consultacentrocosto;

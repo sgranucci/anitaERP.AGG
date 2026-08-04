@@ -1,47 +1,71 @@
 @php
-    $tabla = is_array($tabla ?? null) ? $tabla : null;
-    $columnas = is_array($tabla['columnas'] ?? null) ? $tabla['columnas'] : [];
-    $filas = is_array($tabla['filas'] ?? null) ? $tabla['filas'] : [];
-    $tieneTabla = $columnas !== [] && $filas !== [];
-    $colspan = $tieneTabla ? max(count($columnas), 2) : 2;
+    $columnas = is_array($columnas ?? null) ? $columnas : [];
+    $filas = is_array($filas ?? null) ? $filas : [];
+    $parrafos = is_array($parrafos ?? null) ? $parrafos : [];
+    $resumen = is_array($resumen ?? null) ? $resumen : [];
+    $tieneTabla = (bool) ($tieneTabla ?? false);
+    $colspan = (int) ($colspan ?? 2);
+    $interpretacion = (string) ($interpretacion ?? '');
+    $pregunta = (string) ($pregunta ?? '');
+    $fuente = (string) ($fuente ?? '');
+    $intent = (string) ($intent ?? '');
 @endphp
 <table>
     <tr>
-        <td colspan="{{ $colspan }}"><strong>{{ $titulo }}</strong></td>
+        <td colspan="{{ $colspan }}"><strong>{{ $titulo ?? 'Consulta operativa IA' }}</strong></td>
     </tr>
     <tr>
         <td colspan="{{ $colspan }}">
-            Generado {{ $generado }}
-            @if ($interpretacion !== '') — {{ $interpretacion }} @endif
-            @if ($intent !== '') — intent: {{ $intent }} @endif
-            @if ($fuente !== '') — fuente: {{ $fuente }} @endif
+            Generado {{ $generado ?? date('d/m/Y H:i') }}
+            @if ($intent !== '')
+                — {{ $intent }}
+            @endif
+            @if ($fuente !== '')
+                — {{ $fuente }}
+            @endif
         </td>
     </tr>
-    @if ($pregunta !== '')
+    @if ($interpretacion !== '')
         <tr>
-            <td colspan="{{ $colspan }}">Pregunta: {{ $pregunta }}</td>
+            <td colspan="{{ $colspan }}">{{ $interpretacion }}</td>
         </tr>
     @endif
-
+    @if ($pregunta !== '')
+        <tr>
+            <td colspan="{{ $colspan }}">Consulta: {{ $pregunta }}</td>
+        </tr>
+    @endif
     @if ($tieneTabla)
         @foreach ($parrafos as $linea)
             <tr>
                 <td colspan="{{ $colspan }}">{{ $linea }}</td>
             </tr>
         @endforeach
+    @endif
+    @foreach ($resumen as $lineaResumen)
+        <tr>
+            <td colspan="{{ $colspan }}">{{ $lineaResumen }}</td>
+        </tr>
+    @endforeach
+
+    @if ($tieneTabla)
         <tr>
             @foreach ($columnas as $col)
                 <th>{{ $col['label'] ?? $col['key'] ?? '' }}</th>
             @endforeach
         </tr>
-        @foreach ($filas as $fila)
+        @forelse ($filas as $fila)
             <tr>
                 @foreach ($columnas as $col)
                     @php $key = (string) ($col['key'] ?? ''); @endphp
                     <td>{{ is_array($fila) ? ($fila[$key] ?? '') : '' }}</td>
                 @endforeach
             </tr>
-        @endforeach
+        @empty
+            <tr>
+                <td colspan="{{ $colspan }}">Sin movimientos en el período.</td>
+            </tr>
+        @endforelse
     @else
         <tr>
             <th>#</th>
@@ -55,25 +79,8 @@
         @empty
             <tr>
                 <td></td>
-                <td>Sin filas</td>
+                <td>Sin detalle para exportar.</td>
             </tr>
         @endforelse
-    @endif
-
-    @if (! empty($datos) && is_array($datos))
-        <tr>
-            <td colspan="{{ $colspan }}"></td>
-        </tr>
-        <tr>
-            <th colspan="{{ $colspan }}">Resumen</th>
-        </tr>
-        @foreach ($datos as $clave => $valor)
-            @if (! is_array($valor))
-                <tr>
-                    <td>{{ $clave }}</td>
-                    <td colspan="{{ max(1, $colspan - 1) }}">{{ $valor }}</td>
-                </tr>
-            @endif
-        @endforeach
     @endif
 </table>

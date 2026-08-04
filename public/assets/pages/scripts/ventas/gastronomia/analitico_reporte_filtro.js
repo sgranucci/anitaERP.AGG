@@ -107,9 +107,10 @@
                 $('#filtro_busqueda_rapida').val('');
             }
 
-            var $dual = $(this).find('.reporte-empresas-dual');
-            if ($dual.length && String($dual.data('empresa-unica')) !== '1') {
-                var hayEmpresas = $dual.find('input[name="empresa_ids[]"]').length > 0;
+            var $empresas = $(this).find('.reporte-empresas-checkboxes');
+            if ($empresas.length && String($empresas.data('empresa-unica')) !== '1') {
+                var hayEmpresas = $empresas.find('input[name="empresa_ids[]"]:checked').length > 0
+                    || $empresas.find('input[type="hidden"][name="empresa_ids[]"]').length > 0;
                 if (!hayEmpresas) {
                     e.preventDefault();
                     window.alert('Seleccione al menos una empresa.');

@@ -24,7 +24,8 @@ final class AsientoReversoSupport
         Asiento $asientoOriginal,
         ?string $fecha = null,
         ?int $movimientostockId = null,
-        ?string $prefijoObservacion = null
+        ?string $prefijoObservacion = null,
+        bool $omitirAnita = false,
     ): array {
         $asientoOriginal->loadMissing('asiento_movimientos');
 
@@ -72,6 +73,8 @@ final class AsientoReversoSupport
             'debes' => $debes,
             'haberes' => $haberes,
             'alcance_cierre_contable' => PeriodoContableCierreSupport::ALCANCE_CONTABLE,
+            // Caller que re-sincroniza ctamov después (ej. TM) evita huérfanos por doble escritura.
+            'omitir_anita' => $omitirAnita,
         ];
 
         if ($movimientostockId > 0) {

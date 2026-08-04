@@ -4,9 +4,14 @@ Recuento {{ $recuento->codigo }}
 @endsection
 
 @section("scripts")
+<script>
+    window.msColoresOpciones = @json(($color_query ?? collect())->map(fn ($c) => ['id' => (int) $c->id, 'nombre' => $c->nombre])->values());
+    window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id' => (int) $t->id, 'nombre' => $t->nombre])->values());
+</script>
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/stock/recuento/form.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/recuento/form-color-talle.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recuento/form-color-talle.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/recuento/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recuento/form.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recuento/archivos.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>

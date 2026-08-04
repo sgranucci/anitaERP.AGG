@@ -3,6 +3,7 @@
 namespace App\Repositories\Contable;
 
 use App\Models\Contable\Asiento;
+use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Ventas\Venta;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
@@ -967,6 +968,19 @@ class AsientoRepository implements AsientoRepositoryInterface
 		}
 
 		if (! empty($data['movimientostock_id'])) {
+			$abrev = strtoupper((string) (
+				MovimientoStock::query()
+					->whereKey((int) $data['movimientostock_id'])
+					->with('tipotransaccion_stock:id,abreviatura')
+					->first()
+					?->tipotransaccion_stock
+					?->abreviatura
+				?? ''
+			));
+			if ($abrev === 'EIND') {
+				return PeriodoContableCierreSupport::ALCANCE_INDUMENTARIA;
+			}
+
 			return PeriodoContableCierreSupport::ALCANCE_STOCK;
 		}
 

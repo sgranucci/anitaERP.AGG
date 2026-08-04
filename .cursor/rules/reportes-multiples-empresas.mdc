@@ -1,5 +1,5 @@
 ---
-description: Reportes con selección múltiple de empresas (dual list) y preferencias de usuario
+description: Reportes con selección múltiple de empresas (checkboxes) y preferencias de usuario
 globs: resources/views/**/index.blade.php,app/Http/Controllers/**/*Reporte*Controller.php,app/Http/Controllers/Contable/Mayor*Controller.php,app/Support/Reportes/**,resources/views/includes/reportes/**,public/assets/pages/scripts/reportes/**
 alwaysApply: false
 ---
@@ -10,23 +10,41 @@ Patrón para reportes de **consulta** que admiten **más de una empresa** en el 
 
 Referencias canónicas:
 
-| Reporte | Clave preferencias | Partial |
+| Reporte | Clave preferencias | Partial UI |
 |---|---|---|
-| Mayor plano cuenta | `mayor_plano_cuenta` | `includes.reportes.asignacion_empresas_dual` |
-| Mayor concepto | `mayor_concepto` | `includes.reportes.asignacion_empresas_dual` (orquestación en Service; motor/conciliador mono-empresa) |
+| Mayor plano cuenta | `mayor_plano_cuenta` | `includes.reportes.asignacion_empresas_checkboxes` |
+| Mayor concepto | `mayor_concepto` | `includes.reportes.asignacion_empresas_checkboxes` |
+| Sumas y saldos | `sumas_saldos` | `includes.reportes.asignacion_empresas_checkboxes` |
+| Flash histórico | `flash_caja_historico` | `includes.reportes.asignacion_empresas_checkboxes` |
+| Analítico gastronomía | `gastronomia_analitico_reporte` | `includes.reportes.asignacion_empresas_checkboxes` |
+| Requisición compras | `requisicion_compras_reporte` | `includes.reportes.asignacion_empresas_checkboxes` |
+| Requisición sala | `requisicion_sala_reporte` | `includes.reportes.asignacion_empresas_checkboxes` |
 | CAPEX reporte | `capex_reporte` | `form-empresa-asignada` + preferencias |
 
-## UI obligatoria (multiempresa)
+## UI multiempresa (tildes)
 
 | Elemento | Patrón |
 |---|---|
-| Partial | `@include('includes.reportes.asignacion_empresas_dual', …)` |
+| Partial | `@include('includes.reportes.asignacion_empresas_checkboxes', …)` |
 | Fuente datos | `EmpresaRepository::allFiltrado()` → `$empresa_query` |
-| Una empresa asignada | Hidden + readonly (sin dual list) |
-| Listas | Compactas (`list_size` 5, CSS `.reporte-empresas-dual`) |
-| Scripts | `public/assets/pages/scripts/reportes/empresas_dual.js` |
-| POST/GET | `empresa_ids[]` vía hidden sincronizados desde lista derecha |
-| Consolidar | Botón con tilde `btn-toggle-consolidar-empresas` + hidden `consolidar_empresas` (1=consolidado, 0=por empresa) |
+| Una empresa asignada | Hidden + readonly (sin checklist) |
+| Varias | Checklist con tilde + **Todas** / **Ninguna** + contador |
+| Scripts | `public/assets/pages/scripts/reportes/empresas_checkboxes.js` |
+| Estilos | `.reporte-empresas-checkboxes*` en `public/assets/css/custom.css` |
+| POST/GET | `empresa_ids[]` vía checkboxes marcados |
+| Contenedor IDs | `# {id_prefix}_empresas_asignadas_hidden` (leer `:checked` si hay checkboxes) |
+| Consolidar | Botón bajo la lista `btn-toggle-consolidar-empresas` + hidden `consolidar_empresas` (omitir con `mostrar_consolidar => false`) |
+
+Legacy dual list (`asignacion_empresas_dual` / `empresas_dual.js`) solo para pantallas aún no migradas; **no** usar en reportes nuevos.
+
+## F1 en consulta (reportes Contable)
+
+| Pantalla | Campo | Comportamiento |
+|---|---|---|
+| Mayor plano | `.mpc-cuenta-campo` | F1 / lupa → modal cuentas |
+| Sumas y saldos | `.sys-cuenta-campo` | F1 / lupa → modal cuentas |
+| Conciliación bancaria | `#codigo_cuentacaja` | F1 / lupa → modal cuenta caja |
+| Ingresos brutos | `#codigoprovincia` | F1 / lupa → modal provincia |
 
 ## Consolidación vs reporte por empresa
 
@@ -61,14 +79,15 @@ Usar `App\Support\Reportes\ReportePreferenciasUsuario` (cache por usuario vía `
 - `form-empresa-asignada-multiple` con Select2 en reportes multiempresa nuevos.
 - Select2 múltiple como única UI de empresas en reportes de consulta.
 - Omitir persistencia de empresas en mayores, capex y reportes de consulta equivalentes.
-- Aplicar dual list en reportes que solo admiten `empresa_id` único.
+- Dual list en reportes nuevos (usar checkboxes).
+- Aplicar dual list / checkboxes en reportes que solo admiten `empresa_id` único.
 
 ## Comprobación rápida
 
 ```bash
-rg 'asignacion_empresas_dual' resources/views/{modulo}/
-rg 'empresas_dual.js' resources/views/{modulo}/
+rg 'asignacion_empresas_dual' resources/views/ --glob '*.blade.php'
+# Solo debería quedar includes/reportes/asignacion_empresas_dual.blade.php (partial legacy)
+rg 'empresas_checkboxes.js' resources/views/
 rg 'ReportePreferenciasUsuario' app/Http/Controllers/
-rg 'consolidar_empresas' app/Support app/Services
 php artisan view:cache
 ```

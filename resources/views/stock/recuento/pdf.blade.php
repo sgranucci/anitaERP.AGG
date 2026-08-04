@@ -71,6 +71,8 @@
             <tr>
                 <th>SKU</th>
                 <th>Descripción</th>
+                <th>Color</th>
+                <th>Talle</th>
                 <th>UM</th>
                 <th class="num">Saldo sistema</th>
                 <th class="num">Contado</th>
@@ -83,7 +85,7 @@
         <tbody>
             @forelse ($detalleExport['grupos'] as $grupo)
                 <tr class="grupo">
-                    <td colspan="9">
+                    <td colspan="11">
                         Tipo: {{ $grupo['tipo_nombre'] }}
                         ({{ $grupo['cantidad_lineas'] }} l&iacute;nea{{ $grupo['cantidad_lineas'] === 1 ? '' : 's' }})
                     </td>
@@ -100,6 +102,8 @@
                     <tr>
                         <td>{{ optional($item->articulos)->sku }}</td>
                         <td>{{ $item->detalle ?: optional($item->articulos)->descripcion }}</td>
+                        <td>{{ optional($item->color)->nombre ?? '—' }}</td>
+                        <td>{{ optional($item->talle)->nombre ?? '—' }}</td>
                         <td>{{ optional($item->unidadmedida)->abreviatura ?? optional($item->articulos?->unidadesdemedidas)->abreviatura }}</td>
                         <td class="num">{{ rtrim(rtrim(number_format((float) $item->saldo_sistema, 6, '.', ''), '0'), '.') }}</td>
                         <td class="num">{{ rtrim(rtrim(number_format((float) $item->cantidad_contada, 6, '.', ''), '0'), '.') }}</td>
@@ -130,20 +134,20 @@
                     </tr>
                 @endforeach
                 <tr class="subtotal">
-                    <td colspan="7" class="num">Subtotal {{ $grupo['tipo_nombre'] }}</td>
+                    <td colspan="9" class="num">Subtotal {{ $grupo['tipo_nombre'] }}</td>
                     <td class="num">{{ number_format($grupo['subtotal_valor_contado'], 2, '.', '') }}</td>
                     <td class="num">{{ number_format($grupo['subtotal_valor_dif'], 2, '.', '') }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9">Sin l&iacute;neas de conteo.</td>
+                    <td colspan="11">Sin l&iacute;neas de conteo.</td>
                 </tr>
             @endforelse
         </tbody>
         @if (($detalleExport['cantidad_lineas'] ?? 0) > 0)
             <tfoot>
                 <tr class="total-general">
-                    <th colspan="7" class="num">Total general (costo u/c)</th>
+                    <th colspan="9" class="num">Total general (costo u/c)</th>
                     <th class="num">{{ number_format($detalleExport['total_valor_contado'], 2, '.', '') }}</th>
                     <th class="num">{{ number_format($detalleExport['total_valor_dif'], 2, '.', '') }}</th>
                 </tr>

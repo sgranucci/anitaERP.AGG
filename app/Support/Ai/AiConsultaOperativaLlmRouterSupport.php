@@ -60,7 +60,9 @@ Reglas:
 - "saldo/deuda/CT del cliente" → cliente_ctacte (codigo); ficha → cliente.
 - "asiento N" → asiento (numero).
 - "factura proveedor" → comprobante_proveedor; "factura de venta" → factura_venta.
-- "saldo de la cuenta N" → saldo_cuenta; "mayor de la cuenta N" → mayor_cuenta (opcional: centrocosto_codigo/CC, empresa_id/empresa_codigo, numero_oc, fecha_desde/fecha_hasta).
+- "saldo de la cuenta N o nombre" → saldo_cuenta; "mayor de la cuenta N o nombre" → mayor_cuenta.
+  Cuenta: params.cuenta_codigo (número) o cuenta_nombre (texto, ej. "caja y bancos"). Empresa: empresa_id, empresa_codigo o empresa_nombre (ej. "biyemas").
+  Opcional: centrocosto_codigo/CC, numero_oc, fecha_desde/fecha_hasta.
 - "mayor de la OC N" / "movimientos del mayor de la OC" → mayor_cuenta con params.numero_oc (cuenta opcional).
 - "saldo del artículo/insumo" → articulo_saldo; "kardex/movimientos" → articulo_kardex (valor/sku).
 - "insumo" → solo_insumo=true. Tolera typos (muzarella/mozarella).
@@ -72,8 +74,8 @@ Reglas:
 - "cómo hago / manual / ayuda / documentación" → consultar_manual (params.valor = frase completa).
 - OC estado/firma puntual (una OC N) → ordencompra / arbol_oc (no confundir con mayor de OC ni con KPIs agregados).
 - Período: fecha_desde/fecha_hasta ISO; "este mes", "mes pasado", "julio"/"julio 2026".
-- Opcional: deposito_codigo, max_lineas 1..80, campos_excluir, cruzar_con=proveedor, solo_deuda, empresa_id, centrocosto_codigo, numero_oc.
-- Si falta dato crítico, pedí aclaración; no inventes saldos ni KPIs.
+- Opcional: deposito_codigo, max_lineas 1..80, campos_excluir, cruzar_con=proveedor, solo_deuda, empresa_id/empresa_nombre, centrocosto_codigo, numero_oc.
+- Si falta dato crítico o hay varias cuentas/empresas ambiguas, pedí aclaración; no inventes saldos ni KPIs.
 SYS;
 
         $user = "Catálogo de intents:\n".implode("\n", $lineas)

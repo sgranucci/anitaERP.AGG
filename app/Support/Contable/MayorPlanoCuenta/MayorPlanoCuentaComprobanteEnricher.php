@@ -100,7 +100,12 @@ class MayorPlanoCuentaComprobanteEnricher
             $filas[$idx]['pagoproveedor_id'] = (int) ($row->pagoproveedor_id ?? 0);
             $filas[$idx]['recepcionproveedor_id'] = (int) ($row->recepcionproveedor_id ?? 0);
             $filas[$idx]['movimientostock_id'] = (int) ($row->movimientostock_id ?? 0);
-            $filas[$idx]['ordencompra_id_asiento'] = (int) ($row->ordencompra_id ?? 0);
+            $ocAsiento = (int) ($row->ordencompra_id ?? 0);
+            $filas[$idx]['ordencompra_id_asiento'] = $ocAsiento;
+            // Si el enricher por nro_oc no resolvió ID, usar la FK del asiento.
+            if ($ocAsiento > 0 && (int) ($filas[$idx]['ordencompra_id'] ?? 0) <= 0) {
+                $filas[$idx]['ordencompra_id'] = $ocAsiento;
+            }
 
             if (trim((string) ($filas[$idx]['comprobante'] ?? '')) === '') {
                 $filas[$idx]['comprobante'] = $this->etiquetaComprobante($filas[$idx]);
@@ -152,6 +157,10 @@ class MayorPlanoCuentaComprobanteEnricher
         }
         if ((int) ($fila['caja_movimiento_id'] ?? 0) > 0) {
             return 'Mov.caja #'.(int) $fila['caja_movimiento_id'];
+        }
+        $ocId = (int) ($fila['ordencompra_id'] ?? $fila['ordencompra_id_asiento'] ?? 0);
+        if ($ocId > 0) {
+            return 'OC #'.$ocId;
         }
 
         return '';

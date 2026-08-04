@@ -352,13 +352,19 @@
 
 	function cambioTecnico(ticket_tarea_id, tecnico_ticket_id)
 	{
+		if (!ticket_tarea_id || !tecnico_ticket_id || !$.isNumeric(tecnico_ticket_id)) {
+			return;
+		}
+
 		let url = carpetaBase+'/ticket/cambiar_tecnico/'+ticket_tarea_id+'/'+tecnico_ticket_id;
 
 		$.get(url, function(data, textStatus){
-			if (textStatus == 'success')
-				alert('Técnico reasignado')
+			if (textStatus == 'success' && data == 'ok')
+				alert('Técnico reasignado');
 			else
-				alert('Ha ocurrido un error reasignando el técnico')
+				alert('No se puede asignar: el técnico no existe o su usuario está suspendido');
+		}).fail(function() {
+			alert('No se puede asignar: el técnico no existe o su usuario está suspendido');
 		});
 	}
 

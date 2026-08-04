@@ -5,7 +5,6 @@ namespace App\Repositories\Contable;
 use App\Models\Contable\Centrocosto;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
-use Auth;
 
 class CentrocostoRepository implements CentrocostoRepositoryInterface
 {
@@ -154,8 +153,6 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
                 'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
             );           
         $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        $usuario_id = Auth::user()->id;
 
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];

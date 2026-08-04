@@ -4,6 +4,7 @@ namespace App\Repositories\Stock;
 
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Recuento_Item;
+use App\Support\Stock\ArticuloStockColorTalleSupport;
 
 class Recuento_ItemRepository implements Recuento_ItemRepositoryInterface
 {
@@ -35,10 +36,22 @@ class Recuento_ItemRepository implements Recuento_ItemRepositoryInterface
                 continue;
             }
 
+            $colorRaw = isset($data['colores_id'][$i]) ? (int) $data['colores_id'][$i] : 0;
+            $talleRaw = isset($data['talles_id'][$i]) ? (int) $data['talles_id'][$i] : 0;
+            [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo(
+                $colorRaw > 0 ? $colorRaw : null,
+                $talleRaw > 0 ? $talleRaw : null
+            );
+
             $cantidadContada = (float) ($data['cantidades_contadas'][$i] ?? 0);
             $saldoSistema = isset($data['saldos_sistema'][$i]) && $data['saldos_sistema'][$i] !== ''
                 ? (float) $data['saldos_sistema'][$i]
-                : $this->saldoRepository->saldo($articuloId, $depositoId);
+                : $this->saldoRepository->saldoVariante(
+                    $articuloId,
+                    $depositoId,
+                    $colorKey > 0 ? $colorKey : null,
+                    $talleKey > 0 ? $talleKey : null
+                );
 
             $articulo = Articulo::query()->select('id', 'unidadmedida_id')->find($articuloId);
             $unidadmedidaId = $data['unidadmedida_ids'][$i] ?? ($articulo->unidadmedida_id ?? null);
@@ -46,6 +59,8 @@ class Recuento_ItemRepository implements Recuento_ItemRepositoryInterface
             $payload = [
                 'recuento_id' => $recuentoId,
                 'articulo_id' => $articuloId,
+                'color_id' => $colorKey,
+                'talle_id' => $talleKey,
                 'detalle' => $data['detalle_articulos'][$i] ?? '',
                 'unidadmedida_id' => $unidadmedidaId ?: null,
                 'saldo_sistema' => $saldoSistema,

@@ -810,6 +810,23 @@
 		if (pl.detalle !== undefined) {
 			$('#wz_detalle').val(pl.detalle);
 		}
+		var $aviso = $('#wz_detalle_aviso');
+		if (pl.detalle_autogenerado) {
+			$('#wz_detalle').addClass('border-warning');
+			if (!$aviso.length) {
+				$('#wz_detalle').after(
+					'<div class="alert alert-warning py-1 px-2 mt-1 mb-0 small" id="wz_detalle_aviso" role="status">' +
+						'<i class="fa fa-info-circle mr-1"></i>' +
+						'La requisición no tenía detalle: se prefijó uno por defecto. Reviselo y edítelo si hace falta.' +
+					'</div>'
+				);
+			} else {
+				$aviso.removeClass('d-none');
+			}
+		} else {
+			$('#wz_detalle').removeClass('border-warning');
+			$aviso.addClass('d-none');
+		}
 		if (pl.tratamiento) {
 			$('#wz_tratamiento').val(pl.tratamiento);
 		}
@@ -1802,7 +1819,15 @@
 		if (!$('#wz_empresa_id').val()) { alert('Indique la empresa.'); return; }
 		if (!$('#wz_fecha').val() || !$('#wz_fechaentrega').val()) { alert('Indique las fechas de documento y entrega.'); return; }
 		if (!$('#wz_centrocosto_id').val()) { alert('Indique el centro de costo.'); return; }
-		if (!$('#wz_detalle').val()) { alert('Indique el detalle compartido.'); return; }
+		if (!$.trim($('#wz_detalle').val() || '')) {
+			var $det = $('#wz_detalle');
+			alert('Indique el detalle compartido (Datos compartidos por todas las OC).');
+			if ($det.length) {
+				$('html, body').animate({ scrollTop: Math.max(0, $det.offset().top - 120) }, 200);
+				$det.addClass('border-danger').trigger('focus');
+			}
+			return;
+		}
 
 		if (!todosGruposTienenProveedor()) {
 			renderModalProveedorFaltante();

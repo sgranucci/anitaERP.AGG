@@ -3,6 +3,8 @@
 namespace App\Repositories\Ticket;
 
 use App\Models\Ticket\Tecnico_Ticket;
+use App\Support\Seguridad\UsuarioOperativoSupport;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Auth;
 
@@ -19,6 +21,15 @@ class Tecnico_TicketRepository implements Tecnico_TicketRepositoryInterface
                                 )
     {
         $this->model = $tecnico_ticket;
+    }
+
+    /**
+     * Técnicos cuyo usuario vinculado no está suspendido (elección en administración de ticket).
+     */
+    protected function queryConUsuarioOperativo(): Builder
+    {
+        return $this->model->newQuery()
+            ->whereHas('usuarios', static fn ($q) => $q->soloActivos());
     }
 
     public function all()
@@ -89,6 +100,26 @@ class Tecnico_TicketRepository implements Tecnico_TicketRepositoryInterface
         return $tecnico_ticket;
     }
 
+    /**
+     * Resuelve técnico para asignación operativa; null si no existe o el usuario está suspendido.
+     */
+    public function findOperativo($id): ?Tecnico_Ticket
+    {
+        $tecnico = $this->queryConUsuarioOperativo()
+            ->with(['areadestinos', 'usuarios'])
+            ->find($id);
+
+        if ($tecnico === null) {
+            return null;
+        }
+
+        if (! UsuarioOperativoSupport::esOperativo($tecnico->usuarios)) {
+            return null;
+        }
+
+        return $tecnico;
+    }
+
     public function leePorUsuarioId($usuario_id)
     {
         return $this->model->where('usuario_id', $usuario_id)->get();
@@ -99,10 +130,11 @@ class Tecnico_TicketRepository implements Tecnico_TicketRepositoryInterface
 		$columns = ['tecnico_ticket.id', 'tecnico_ticket.nombre', 'areadestino.nombre', 'areadestino.id'];
         $columnsOut = ['id', 'nombre', 'nombreareadestino', 'idareadestino'];
 
-		$consulta = strtoupper($consulta);
+		$consulta = strtoupper($consulta ?? '');
 
 		$count = count($columns);
-		$data = $this->model->select('tecnico_ticket.id as id',
+		$data = $this->queryConUsuarioOperativo()
+                            ->select('tecnico_ticket.id as id',
 									'tecnico_ticket.nombre as nombre',
                                     'tecnico_ticket.areadestino_id as idareadestino',
 									'areadestino.nombre as nombreareadestino')

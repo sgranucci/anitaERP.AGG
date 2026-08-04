@@ -1433,7 +1433,8 @@ class TransferenciaMercaderiaService
                         $transferencia->asientos,
                         $fechaOperacion,
                         (int) $entrada['id'],
-                        'Revierte transferencia '.$transferencia->codigo
+                        'Revierte transferencia '.$transferencia->codigo,
+                        true, // omitir_anita: sync ctamov una sola vez abajo
                     );
                     $revert->asiento_id = (int) $asientoRev['asiento_id'];
                     $revert->save();

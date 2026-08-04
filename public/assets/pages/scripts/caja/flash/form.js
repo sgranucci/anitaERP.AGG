@@ -398,6 +398,27 @@
         $('#modal-flash-desglose-wigos').modal('show');
     }
 
+    function renderAccionesOrigen(acciones) {
+        if (!acciones || !acciones.length) {
+            return '<span class="text-muted">—</span>';
+        }
+        var html = '';
+        acciones.forEach(function (acc) {
+            if (!acc || !acc.url) {
+                return;
+            }
+            var icon = String(acc.icon || 'fa-external-link').replace(/^fa\s+/, '');
+            var extra = acc.icon_extra ? (' ' + String(acc.icon_extra)) : '';
+            html += '<a href="' + escaparHtml(acc.url) + '"'
+                + ' class="btn-accion-tabla tooltipsC"'
+                + ' title="' + escaparHtml(acc.title || '') + '"'
+                + ' target="_blank" rel="noopener">'
+                + '<i class="fa ' + escaparHtml(icon) + escaparHtml(extra) + '"></i>'
+                + '</a> ';
+        });
+        return html || '<span class="text-muted">—</span>';
+    }
+
     function renderOrigenTotal(origen) {
         if (!origen) {
             return '<p class="text-muted mb-0">Sin datos de origen.</p>';
@@ -405,6 +426,10 @@
         var html = '';
         html += '<p class="mb-2"><strong>' + escaparHtml(origen.titulo || origen.campo) + '</strong>';
         html += ' <span class="badge badge-secondary">' + escaparHtml(origen.origen || '') + '</span>';
+        if (origen.bloque_calculado) {
+            html += ' <span class="badge badge-light" title="Solo se recalculó este bloque">'
+                + escaparHtml(origen.bloque_calculado) + '</span>';
+        }
         html += ' · Empresa ' + escaparHtml(origen.empresa_id) + ' · ' + escaparHtml(origen.fecha) + '</p>';
         html += '<div class="alert alert-info py-2 mb-3">' + escaparHtml(origen.explicacion || '') + '</div>';
 
@@ -492,7 +517,11 @@
                 html += '<tr>';
                 (sec.columnas || []).forEach(function (col) {
                     var val = fila[col.key];
-                    if (col.num) {
+                    if (col.acciones) {
+                        html += '<td class="text-nowrap">' + renderAccionesOrigen(val) + '</td>';
+                    } else if (col.html) {
+                        html += '<td class="text-nowrap">' + (val == null ? '' : val) + '</td>';
+                    } else if (col.num) {
                         html += '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(val)) + '</td>';
                     } else {
                         html += '<td>' + escaparHtml(val == null ? '' : val) + '</td>';
@@ -534,6 +563,34 @@
         return parseDecimal($el.val(), 2);
     }
 
+    function mensajeOverlayOrigen(campo) {
+        var erp = {
+            estac: 'Consultando jornadas y rendiciones de estacionamiento…',
+            cant_vehic: 'Consultando comprobantes de estacionamiento…',
+            ayb: 'Consultando ventas gastronomía ERP…',
+            vending: 'Consultando rendiciones vending…',
+            bingo_cant_carton: 'Consultando rendiciones bingo…',
+            bingo_total_venta: 'Consultando rendiciones bingo…',
+            bingo_resultado: 'Consultando rendiciones bingo…'
+        };
+        if (erp[campo]) {
+            return {
+                titulo: 'Consultando origen…',
+                subtitulo: erp[campo] + ' (solo este bloque; no recalcula Wigos ni el flash completo).'
+            };
+        }
+        if (campo === 'slot_d' || campo === 'slot_r') {
+            return {
+                titulo: 'Consultando origen…',
+                subtitulo: 'Recalculando gaming Wigos + impuestos turno C y listando movimientos. No cierra el flash ERP (AyB/estac/bingo).'
+            };
+        }
+        return {
+            titulo: 'Consultando origen…',
+            subtitulo: 'Recalculando gaming Wigos del campo y listando movimientos. No recalcula AyB/estac/vending/bingo.'
+        };
+    }
+
     function consultarOrigenTotal(campo) {
         var empresaId = $('#empresa_id').val();
         var fecha = $('#fecha').val();
@@ -549,7 +606,8 @@
         }
 
         var $btns = $('.flash-btn-origen').prop('disabled', true);
-        mostrarAvisoCalculo(true, 'Consultando origen…', 'Recalculando el total y listando movimientos Wigos/ERP. No cierre la página.');
+        var overlay = mensajeOverlayOrigen(campo);
+        mostrarAvisoCalculo(true, overlay.titulo, overlay.subtitulo);
 
         var data = {
             _token: $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val(),

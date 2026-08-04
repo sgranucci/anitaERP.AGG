@@ -2,10 +2,13 @@
 
 namespace App\Repositories\Contable;
 
+use App\ApiAnita;
+use App\Models\Contable\Centrocosto;
+use App\Models\Contable\Cuentacontable;
 use App\Models\Contable\Cuentacontable_Centrocosto;
+use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Carbon\Carbon;
-use Auth;
+use Throwable;
 
 class Cuentacontable_CentrocostoRepository implements Cuentacontable_CentrocostoRepositoryInterface
 {
@@ -19,6 +22,96 @@ class Cuentacontable_CentrocostoRepository implements Cuentacontable_Centrocosto
     public function __construct(Cuentacontable_Centrocosto $cuentacontable_centrocosto)
     {
         $this->model = $cuentacontable_centrocosto;
+    }
+
+    public function sincronizarDesdeAnita(): array
+    {
+        ini_set('max_execution_time', '600');
+
+        $ret = [
+            'en_anita' => 0,
+            'importados' => 0,
+            'omitidos' => 0,
+            'sin_cuenta' => 0,
+            'sin_centrocosto' => 0,
+            'errores' => [],
+        ];
+
+        $apiAnita = new ApiAnita();
+        $dataAnita = json_decode($apiAnita->apiCall([
+            'acc' => 'list',
+            'sistema' => 'contab',
+            'tabla' => 'ccosvalid',
+            'campos' => 'ccosv_empresa,ccosv_cuenta,ccosv_ccosto',
+        ]));
+
+        if (! is_array($dataAnita)) {
+            $ret['errores'][] = 'Anita no devolvió un listado válido de ccosvalid.';
+
+            return $ret;
+        }
+
+        $ret['en_anita'] = count($dataAnita);
+
+        $empresaPorCodigo = Empresa::query()->pluck('id', 'codigo');
+
+        $centrocostoPorCodigo = [];
+        foreach (Centrocosto::query()->get(['id', 'codigo']) as $cc) {
+            $centrocostoPorCodigo[(string) (int) $cc->codigo] = (int) $cc->id;
+        }
+
+        $cuentaPorEmpresaCodigo = [];
+        foreach (Cuentacontable::query()->get(['id', 'empresa_id', 'codigo']) as $cta) {
+            $cuentaPorEmpresaCodigo[(int) $cta->empresa_id.'|'.$cta->codigo] = (int) $cta->id;
+        }
+
+        $existentes = [];
+        foreach ($this->model->newQuery()->get(['cuentacontable_id', 'centrocosto_id']) as $row) {
+            $existentes[(int) $row->cuentacontable_id.'|'.(int) $row->centrocosto_id] = true;
+        }
+
+        foreach ($dataAnita as $row) {
+            $empresaCodigo = (string) ($row->ccosv_empresa ?? '');
+            $cuentaCodigo = (string) ($row->ccosv_cuenta ?? '');
+            $ccostoCodigo = (string) (int) ($row->ccosv_ccosto ?? 0);
+
+            $empresaId = $empresaPorCodigo[$empresaCodigo] ?? null;
+            if (! $empresaId) {
+                $ret['sin_cuenta']++;
+                continue;
+            }
+
+            $cuentaId = $cuentaPorEmpresaCodigo[(int) $empresaId.'|'.$cuentaCodigo] ?? null;
+            if (! $cuentaId) {
+                $ret['sin_cuenta']++;
+                continue;
+            }
+
+            $centrocostoId = $centrocostoPorCodigo[$ccostoCodigo] ?? null;
+            if (! $centrocostoId) {
+                $ret['sin_centrocosto']++;
+                continue;
+            }
+
+            $clave = $cuentaId.'|'.$centrocostoId;
+            if (isset($existentes[$clave])) {
+                $ret['omitidos']++;
+                continue;
+            }
+
+            try {
+                $this->model->create([
+                    'cuentacontable_id' => $cuentaId,
+                    'centrocosto_id' => $centrocostoId,
+                ]);
+                $existentes[$clave] = true;
+                $ret['importados']++;
+            } catch (Throwable $e) {
+                $ret['errores'][] = "emp {$empresaCodigo} cta {$cuentaCodigo} cc {$ccostoCodigo}: ".$e->getMessage();
+            }
+        }
+
+        return $ret;
     }
 
     public function create(array $data, $id)

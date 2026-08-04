@@ -963,6 +963,9 @@ Route::delete('contable/tipoasiento/{id}', 'Contable\TipoasientoController@elimi
 
 Route::get('contable/asiento', 'Contable\AsientoController@index')->name('asiento');
 Route::get('contable/asiento/crear', 'Contable\AsientoController@crear')->name('crear_asiento');
+Route::get('contable/asiento/crearimportacion', 'Contable\AsientoImportController@crear')->name('crear_importacion_asiento');
+Route::post('contable/asiento/importar/preview', 'Contable\AsientoImportController@preview')->name('asiento_import_preview');
+Route::post('contable/asiento/importar', 'Contable\AsientoImportController@importar')->name('importar_asiento');
 Route::post('contable/asiento', 'Contable\AsientoController@guardar')->name('guardar_asiento');
 Route::get('contable/asiento/{id}/editar', 'Contable\AsientoController@editar')->name('editar_asiento');
 Route::put('contable/actualizarasiento/{id}', 'Contable\AsientoController@actualizar')->name('actualizar_asiento');
@@ -3056,6 +3059,8 @@ Route::post('compras/listaprecio_proveedor/{id}/importar_excel', 'Compras\Listap
  * Ordenes de Compra
  */
 
+Route::get('compras/ordencompra-reporte', 'Compras\OrdencompraReporteController@index')->name('reporte_ordencompra');
+Route::get('compras/listar-ordencompra-reporte/{formato?}', 'Compras\OrdencompraReporteController@exportar')->name('listar_reporte_ordencompra');
 Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
 Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');
 Route::post('compras/ordencompra', 'Compras\OrdencompraController@guardar')->name('guardar_ordencompra');
@@ -3388,6 +3393,7 @@ Route::get('sala/cumplir-requisicion-sala/crear', 'Sala\CumplirRequisicionSalaCo
 Route::get('sala/cumplir-requisicion-sala/consulta', 'Sala\CumplirRequisicionSalaController@consultaRequisicion')->name('consulta_requisicion_sala_cumple');
 Route::get('sala/cumplir-requisicion-sala/datos/{id}', 'Sala\CumplirRequisicionSalaController@datosRequisicion')->name('datos_requisicion_sala_cumple');
 Route::get('sala/cumplir-requisicion-sala/consulta-npu', 'Sala\CumplirRequisicionSalaController@consultaNpu')->name('consulta_npu_cumple_requisicion_sala');
+Route::get('sala/cumplir-requisicion-sala/saldo-articulo', 'Sala\CumplirRequisicionSalaController@saldoArticuloDeposito')->name('cumplir_requisicion_sala_saldo_articulo');
 Route::get('sala/cumplir-requisicion-sala/pdf/{token?}', 'Sala\CumplirRequisicionSalaController@imprimirPdf')->name('pdf_cumplir_requisicion_sala');
 Route::post('sala/cumplir-requisicion-sala', 'Sala\CumplirRequisicionSalaController@grabar')->name('grabar_cumplir_requisicion_sala');
 Route::get('sala/cumplir-requisicion-sala/{id}/imprimir-pdf', 'Sala\CumplirRequisicionSalaController@imprimirCumplimientoPdf')->name('imprimir_pdf_cumplir_requisicion_sala');

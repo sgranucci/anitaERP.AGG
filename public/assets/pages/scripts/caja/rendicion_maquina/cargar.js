@@ -10,6 +10,8 @@
     var debounceTimer = null;
     var wigosDebounceTimer = null;
     var wigosOriginales = {};
+    /** Semillas Completo (fondo_cierre/resultado/transfer) que no tienen input en pantalla. */
+    var orquestadorCompletoExtra = {};
     var ajustesPendientes = [];
     var recargandoLineas = false;
     var wigosLeidoOk = false;
@@ -159,10 +161,22 @@
     }
 
     function recolectarCalcOrquestador() {
-        return {
+        var orq = {
             comprobante: parseNum(document.getElementById('calc_comprobante')?.value),
             vale_rep_fondo: parseNum(document.getElementById('calc_vale_rep_fondo')?.value)
         };
+        if (getTurno() === 'C' && orquestadorCompletoExtra) {
+            if (orquestadorCompletoExtra.fondo_cierre !== undefined) {
+                orq.fondo_cierre = orquestadorCompletoExtra.fondo_cierre;
+            }
+            if (orquestadorCompletoExtra.resultado_turno !== undefined) {
+                orq.resultado_turno = orquestadorCompletoExtra.resultado_turno;
+            }
+            if (orquestadorCompletoExtra.transferencia !== undefined) {
+                orq.transferencia = orquestadorCompletoExtra.transferencia;
+            }
+        }
+        return orq;
     }
 
     function pintarTotales(totales) {
@@ -202,6 +216,8 @@
             drop_billete_bruto: 0,
             impuesto_drop: 0,
             drop_bill_rodillo: 0,
+            drop_bill_ruleta: 0,
+            dropqr_rodillo: 0,
             total_ingreso: 0,
             total_salida: 0,
             resultado_turno: 0,
@@ -530,6 +546,30 @@
                 inpVale.value = fmtMoney(orq.vale_rep_fondo);
             }
         }
+        // Completo: semillas Noche / suma transferencias (sin input en pantalla)
+        if (getTurno() === 'C') {
+            orquestadorCompletoExtra = {
+                fondo_cierre: parseNum(orq.fondo_cierre),
+                resultado_turno: parseNum(orq.resultado_turno),
+                transferencia: parseNum(orq.transferencia)
+            };
+        } else {
+            orquestadorCompletoExtra = {};
+        }
+        // Completo: valores/gastos consolidados de M/T/N (lee_rendiciones_del_dia)
+        if (Array.isArray(data.valores)) {
+            renderValores(data.valores);
+        }
+        if (Array.isArray(data.gastos)) {
+            renderGastos(data.gastos);
+        }
+        // Manuales / previas que el consolidado Completo también trae
+        app.querySelectorAll('.js-input-manual[data-clave]').forEach(function (inp) {
+            var clave = inp.dataset.clave;
+            if (clave && inputs[clave] !== undefined) {
+                inp.value = fmtMoney(inputs[clave]);
+            }
+        });
         ajustesPendientes = [];
         calcularDebounced();
     }
@@ -559,6 +599,7 @@
             empresa_id: empresaIdReq,
             fecha: fechaReq,
             turno: turnoReq,
+            rendicion_id: parseInt(app.dataset.rendicionId || '0', 10) || null,
             inputs: recolectarInputs()
         }).then(function (data) {
             // Respuesta obsoleta (cambió cabecera o hay otra lectura más nueva)

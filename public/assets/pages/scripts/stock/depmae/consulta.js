@@ -230,6 +230,12 @@ $('input').keydown(function (e) {
 $(document)
     .off('keydown.leerDepositoEnter', '.codigodeposito')
     .on('keydown.leerDepositoEnter', '.codigodeposito', function (e) {
+        if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).closest('.tm-deposito-campo, .depmae-campo-consulta, tr').find('.consultadeposito').first().trigger('click');
+            return;
+        }
         if (e.which !== 13 && e.key !== 'Enter') {
             return;
         }
@@ -245,6 +251,31 @@ $(document)
         e.stopPropagation();
         leerDepositoPorCodigo($(this).val(), this);
     });
+
+function esTeclaF1Deposito(e) {
+    return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function manejarF1CodigoDepositoCapture(e) {
+    if (!esTeclaF1Deposito(e)) {
+        return;
+    }
+    var target = e.target;
+    if (!target || !target.classList || !target.classList.contains('codigodeposito')) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    $(target).closest('.tm-deposito-campo, .depmae-campo-consulta, tr').find('.consultadeposito').first().trigger('click');
+}
+
+if (!window.__depositoF1CaptureActivo) {
+    document.addEventListener('keydown', manejarF1CodigoDepositoCapture, true);
+    window.__depositoF1CaptureActivo = true;
+}
 
 $(document).on('keyup', '#consultadeposito', function () {
     buscar_datos_deposito($(this).val());

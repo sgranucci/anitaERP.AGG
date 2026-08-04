@@ -114,7 +114,13 @@
 @endif
     @forelse ($filas as $fila)
         @php $tipo = $fila['tipo_fila'] ?? 'detalle'; @endphp
-        @if ($tipo === 'cabecera_requisicion')
+        @if ($tipo === 'header_empresa')
+            <tr class="{{ $paraPdf ? 'grupo' : 'font-weight-bold' }}" style="background-color:#d6eaf8;">
+                <td colspan="{{ $colSpan }}" @if ($paraPdf) style="background-color:#d6eaf8;font-weight:bold;" @endif>
+                    Empresa: {{ $fila['nombreempresa'] ?? '' }}
+                </td>
+            </tr>
+        @elseif ($tipo === 'cabecera_requisicion')
             <tr class="req-reporte-grupo-cabecera {{ $paraPdf ? 'grupo' : 'font-weight-bold bg-light' }}"
                 @if (! $paraPdf) data-grupo-id="{{ $fila['grupo_id'] ?? '' }}" style="cursor:pointer;" @endif>
                 <td colspan="{{ $colSpan }}" @if ($paraPdf) style="background-color:#e9ecef;font-weight:bold;" @endif>

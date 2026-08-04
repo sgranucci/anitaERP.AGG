@@ -94,6 +94,7 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnForma
      * @return array{
      *   bloques_pv: list<array<string, mixed>>,
      *   filas: list<array<string, mixed>>,
+     *   totales: list<float>,
      *   cantidad_columnas: int,
      *   labels_fila2: list<string>
      * }
@@ -305,9 +306,35 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnForma
         return [
             'bloques_pv' => array_values($bloquesPv),
             'filas' => $filas,
+            'totales' => self::sumarColumnas($filas, max(0, $cantidadColumnas - 1)),
             'cantidad_columnas' => $cantidadColumnas,
             'labels_fila2' => $labelsFila2,
         ];
+    }
+
+    /**
+     * Suma vertical de cada columna numérica (null = 0).
+     *
+     * @param  list<array{fecha: string, valores: list<float|null>}>  $filas
+     * @return list<float>
+     */
+    private static function sumarColumnas(array $filas, int $cantidadValores): array
+    {
+        if ($filas === [] || $cantidadValores <= 0) {
+            return [];
+        }
+
+        $totales = array_fill(0, $cantidadValores, 0.0);
+        foreach ($filas as $fila) {
+            foreach ($fila['valores'] ?? [] as $idx => $valor) {
+                if ($valor === null || ! array_key_exists($idx, $totales)) {
+                    continue;
+                }
+                $totales[$idx] = round($totales[$idx] + (float) $valor, 2);
+            }
+        }
+
+        return array_values($totales);
     }
 
     /**
@@ -497,6 +524,29 @@ class EstacionamientoDiarioPuntoventaExport implements FromView, WithColumnForma
                             ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                         $sheet->getStyle('B'.$filaDatos.':'.$colUltima.$ultimaFila)
                             ->getFont()->setName('Arial')->setSize(9);
+                    }
+                }
+
+                // Fila TOTAL (suma vertical de jornadas).
+                if ($ultimaFila >= $filaDatos
+                    && strtoupper(trim((string) $sheet->getCell('A'.$ultimaFila)->getValue())) === 'TOTAL'
+                ) {
+                    $colFinAntesTotal = ($colInicioTotal !== null)
+                        ? max(1, $colInicioTotal - 1)
+                        : max(1, $this->cantidadColumnas);
+                    $sheet->getStyle('A'.$ultimaFila.':'.$colUltima.$ultimaFila)
+                        ->getFont()->setBold(true)->setName('Arial')->setSize(9)
+                        ->getColor()->setRGB('17202A');
+                    $sheet->getStyle('A'.$ultimaFila.':'.Coordinate::stringFromColumnIndex($colFinAntesTotal).$ultimaFila)
+                        ->getFill()
+                        ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F5B041');
+                    $sheet->getStyle('A'.$ultimaFila.':'.$colUltima.$ultimaFila)->getBorders()->getTop()
+                        ->setBorderStyle(Border::BORDER_MEDIUM)->getColor()->setRGB('D68910');
+                    if ($colInicioTotal !== null && $colFinTotal !== null) {
+                        $rangoTotalPie = Coordinate::stringFromColumnIndex($colInicioTotal).$ultimaFila
+                            .':'.Coordinate::stringFromColumnIndex($colFinTotal).$ultimaFila;
+                        $sheet->getStyle($rangoTotalPie)->getFill()
+                            ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('5DADE2');
                     }
                 }
             },

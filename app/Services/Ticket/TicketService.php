@@ -230,7 +230,10 @@ class TicketService
 
 	public function cambiarTecnico($ticket_tarea_id, $tecnico_ticket_id)
 	{
-		$tecnico_ticket = $this->tecnico_ticketRepository->findOrFail($tecnico_ticket_id);
+		$tecnico_ticket = $this->tecnico_ticketRepository->findOperativo($tecnico_ticket_id);
+		if ($tecnico_ticket === null) {
+			return response('ng', 422);
+		}
 
 		$novedad = [
 					"ticket_tarea_id" => $ticket_tarea_id,

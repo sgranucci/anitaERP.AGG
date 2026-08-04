@@ -4,7 +4,7 @@
 @endsection
 
 @section('scripts')
-<script src="{{ asset('assets/pages/scripts/reportes/empresas_dual.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
 <script>
 (function () {
     var form = document.getElementById('form-flash-historico');
@@ -12,26 +12,10 @@
         return;
     }
     form.addEventListener('submit', function () {
-        if (window.jQuery) {
-            window.jQuery(form).find('.reporte-empresas-dual').each(function () {
-                var $c = window.jQuery(this);
-                var prefix = String($c.data('id-prefix') || 'reporte');
-                var $hidden = $c.find('#' + prefix + '_empresas_asignadas_hidden');
-                var $asignado = $c.find('#' + prefix + '_empresas_asignadas_list');
-                if (! $hidden.length || ! $asignado.length) {
-                    return;
-                }
-                $hidden.empty();
-                $asignado.find('option').each(function () {
-                    $hidden.append(
-                        window.jQuery('<input>', {
-                            type: 'hidden',
-                            name: 'empresa_ids[]',
-                            value: window.jQuery(this).val(),
-                        })
-                    );
-                });
-            });
+        var btnConsol = form.querySelector('.btn-toggle-consolidar-empresas');
+        var inputConsol = form.querySelector('input[name="consolidar_empresas"]');
+        if (btnConsol && inputConsol) {
+            inputConsol.value = btnConsol.classList.contains('btn-success') ? '1' : '0';
         }
         var btn = document.getElementById('btn-consultar-flash-historico');
         if (btn) {
@@ -66,7 +50,7 @@
                         Informe mensual estilo l-flash (Consolidated Income). Permite consolidar varias empresas.
                     </p>
 
-                    @include('includes.reportes.asignacion_empresas_dual', [
+                    @include('includes.reportes.asignacion_empresas_checkboxes', [
                         'empresa_query' => $empresa_query,
                         'empresa_ids_seleccionados' => $filtros['empresa_ids'] ?? [],
                         'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,

@@ -1,4 +1,4 @@
-<div class="card form1">
+<div class="card card-outline card-info form1 mb-0 border-0 shadow-none">
     <div id="form-errors"></div>
     <input type="hidden" name="solicitudpago_id" id="solicitudpago_id"
            value="{{ old('solicitudpago_id', $data->solicitudpago_id ?? request('solicitudpago_id')) }}">
@@ -8,68 +8,92 @@
                 'empresa_query' => $empresa_query,
                 'empresa_id' => $data->empresa_id ?? session('empresa_id'),
                 'mostrar_id' => true,
-                'col_label' => 'col-lg-3',
+                'col_label' => 'col-lg-3 control-label text-right pr-2',
                 'col_input' => 'col-lg-7',
             ])
             <div class="form-group row">
-                <label for="tipotransaccion_caja" class="col-lg-3 col-form-label">Tipo de transacción</label>
-                <select name="tipotransaccion_caja_id" id="tipotransaccion_caja_id" data-placeholder="Tipo de transacción" class="col-lg-7 form-control required" data-fouc required>
-                    <option value="">-- Seleccionar --</option>
-                    @foreach($tipotransaccion_caja_query as $key => $value)
-                        @if( (int) $value->id == (int) old('tipotransaccion_caja_id', $data->tipotransaccion_caja_id ?? session('tipotransaccion_caja_id')))
-                            <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-                        @else
-                            <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-                        @endif
-                    @endforeach
-                </select>
+                <label for="tipotransaccion_caja_id" class="col-lg-3 control-label text-right pr-2">Tipo de transacción</label>
+                <div class="col-lg-7">
+                    <select name="tipotransaccion_caja_id" id="tipotransaccion_caja_id" data-placeholder="Tipo de transacción" class="form-control required" data-fouc required>
+                        <option value="">-- Seleccionar --</option>
+                        @foreach($tipotransaccion_caja_query as $key => $value)
+                            @if( (int) $value->id == (int) old('tipotransaccion_caja_id', $data->tipotransaccion_caja_id ?? session('tipotransaccion_caja_id')))
+                                <option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}" data-operacion="{{ $value->operacion }}" data-signo="{{ $value->signo }}" selected="select">{{ $value->nombre }}</option>
+                            @else
+                                <option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}" data-operacion="{{ $value->operacion }}" data-signo="{{ $value->signo }}">{{ $value->nombre }}</option>
+                            @endif
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+            <div id="aviso-transferencia-ie" class="alert alert-info py-2" style="display:none;">
+                <strong>Transferencia:</strong> cargue al menos dos cuentas de caja —
+                monto <strong>positivo</strong> en la cuenta que recibe y <strong>negativo</strong> en la que entrega.
+                Debe y Haber de caja, y el asiento contable, deben quedar balanceados.
             </div>
             <div class="form-group row" id="div-proveedor" style="display: none">
-                <label for="proveedor" class="col-lg-2 col-form-label">Proveedor</label>
-                <input type="text" class="col-lg-2 proveedor_id" id="proveedor_id" name="proveedor_id" value="{{$data->proveedor_id ?? ''}}" >
-                <input type="text" class="col-lg-6 proveedor" id="proveedor" name="proveedor" value="{{ optional($data->proveedores)->nombre ?? '' }}" readonly>
-                <button type="button" title="Consulta proveedores" style="padding:1;" class="btn-accion-tabla consultaproveedor tooltipsC">
-                    <i class="fa fa-search text-primary"></i>
-                </button>
-                <input type="hidden" class="proveedor_id" id="proveedor_id" name="proveedor_id" value="{{$data->proveedor_id ?? ''}}" >
-                <input type="hidden" name="nombreproveedor" id="nombreproveedor" class="form-control" value="{{old('nombreproveedor', optional($data->proveedores)->nombre ?? '')}}">
+                <label for="proveedor" class="col-lg-3 control-label text-right pr-2">Proveedor</label>
+                <div class="col-lg-7">
+                    <div class="input-group">
+                        <input type="text" class="form-control proveedor_id" id="proveedor_id" name="proveedor_id" value="{{ $data->proveedor_id ?? '' }}">
+                        <input type="text" class="form-control proveedor" id="proveedor" name="proveedor" value="{{ optional($data->proveedores)->nombre ?? '' }}" readonly>
+                        <div class="input-group-append">
+                            <button type="button" title="Consulta proveedores" class="btn btn-outline-secondary consultaproveedor tooltipsC">
+                                <i class="fa fa-search text-primary"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <input type="hidden" name="nombreproveedor" id="nombreproveedor" class="form-control" value="{{ old('nombreproveedor', optional($data->proveedores)->nombre ?? '') }}">
+                </div>
             </div>
         </div>
         <div class="col-sm-6">
             <div class="form-group row">
-                <label for="fecha" class="col-lg-3 col-form-label">Fecha</label>
-                <div class="col-lg-3">
-                    <input type="date" name="fecha" id="fecha" class="form-control" value="{{old('fecha', $data->fecha ?? date('Y-m-d'))}}">
+                <label for="fecha" class="col-lg-3 control-label text-right pr-2">Fecha</label>
+                <div class="col-lg-5">
+                    <input type="date" name="fecha" id="fecha" class="form-control" value="{{ old('fecha', $data->fecha ?? date('Y-m-d')) }}">
                 </div>
             </div>
             <div class="form-group row" id="div-ordenservicio" style="display: none">
-                <label for="ordenservicio" class="col-lg-3 col-form-label">Orden de Servicio</label>
-                <input type="text" class="ordenservicio_id" id="ordenservicio_id" name="ordenservicio_id" value="{{$data->ordenservicio_id ?? ''}}" >
+                <label for="ordenservicio_id" class="col-lg-3 control-label text-right pr-2">Orden de servicio</label>
+                <div class="col-lg-5">
+                    <input type="text" class="form-control ordenservicio_id" id="ordenservicio_id" name="ordenservicio_id" value="{{ $data->ordenservicio_id ?? '' }}">
+                </div>
             </div>
             <div class="form-group row" id="div-conceptogasto" style="display: none">
-                <label for="conceptogasto" class="col-lg-3 col-form-label">Concepto de gasto</label>
-                <input type="text" class="col-lg-2 conceptogasto_id" id="conceptogasto_id" name="conceptogasto_id" value="{{$data->conceptogasto_id??''}}" >
-                <button type="button" title="Consulta conceptos" style="padding:1;" class="btn-accion-tabla consultaconceptogasto tooltipsC">
-                        <i class="fa fa-search text-primary"></i>
-                </button>
-                <input type="text" class="col-lg-6 nombreconceptogasto form-control" id="nombreconceptogasto" name="nombreconceptogasto" value="{{$data->conceptogastos->nombre??''}}" >
+                <label for="conceptogasto_id" class="col-lg-3 control-label text-right pr-2">Concepto de gasto</label>
+                <div class="col-lg-7">
+                    <div class="input-group">
+                        <input type="text" class="form-control conceptogasto_id" id="conceptogasto_id" name="conceptogasto_id" value="{{ $data->conceptogasto_id ?? '' }}">
+                        <input type="text" class="form-control nombreconceptogasto" id="nombreconceptogasto" name="nombreconceptogasto" value="{{ $data->conceptogastos->nombre ?? '' }}">
+                        <div class="input-group-append">
+                            <button type="button" title="Consulta conceptos" class="btn btn-outline-secondary consultaconceptogasto tooltipsC">
+                                <i class="fa fa-search text-primary"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     <div class="form-group row">
-        <label for="detalle" class="col-lg-3 col-form-label">Detalle</label>
+        <label for="detalle" class="col-lg-3 control-label text-right pr-2">Detalle</label>
         <div class="col-lg-8">
-            <input type="text" name="detalle" id="detalle" class="form-control" value="{{old('detalle', $data->detalle ?? '')}}">
+            <input type="text" name="detalle" id="detalle" class="form-control" value="{{ old('detalle', $data->detalle ?? '') }}">
         </div>
     </div>
     <input type="hidden" id="numerotransaccion" name="numerotransaccion" value="{{ $data->numerotransaccion ?? '' }}" />
     <input type="hidden" id="id" name="id" value="{{ $data->id ?? '' }}" />
     <input type="hidden" id="rendicionreceptivo_id" name="rendicionreceptivo_id" value="{{ $data->rendicionreceptivo_id ?? '' }}" />
-    <h2 id="loading"style="display:none">Guardando movimiento de caja ...</h2>
-    <h3>Cuentas</h3>
-    <div class="card-body">
-        <table class="table" id="cuenta-table">
-            <thead>
+    <h2 id="loading" style="display:none">Guardando movimiento de caja ...</h2>
+
+    <div class="card card-outline card-info mt-3 mb-0">
+        <div class="card-header py-2">
+            <h3 class="card-title mb-0"><i class="fa fa-wallet"></i> Cuentas de caja</h3>
+        </div>
+        <div class="card-body">
+        <table class="table table-sm table-bordered" id="cuenta-table">
+            <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
                     <th style="width: 12%;">Código</th>
                     <th style="width: 18%;">Descripción</th>
@@ -77,25 +101,36 @@
                     <th style="width: 15%;">Monto</th>
                     <th style="width: 12%;">Cotización</th>
                     <th>Observación</th>
-                    <th></th>
+                    <th class="width40"></th>
                 </tr>
             </thead>
             <tbody id="tbody-cuenta-table">
-            @if ($data->caja_movimiento_cuentacajas ?? '') 
-                @foreach (old('cuenta', $data->caja_movimiento_cuentacajas->count() ? $data->caja_movimiento_cuentacajas : ['']) as $cuenta)
+            @php
+                $abrevTipoIe = optional($data->tipotransaccioncajas ?? null)->abreviatura;
+                if (! $abrevTipoIe && isset($tipotransaccion_caja_query)) {
+                    $tipoSelId = (int) old('tipotransaccion_caja_id', $data->tipotransaccion_caja_id ?? 0);
+                    $abrevTipoIe = optional($tipotransaccion_caja_query->firstWhere('id', $tipoSelId))->abreviatura;
+                }
+                $preservarSignoMonto = strtoupper((string) $abrevTipoIe) === \App\Support\Caja\IngresoEgresoTransferenciaSupport::ABREV_TRA;
+                $lineasCuentas = collect();
+                if (isset($data) && $data->caja_movimiento_cuentacajas && $data->caja_movimiento_cuentacajas->count() > 0) {
+                    $lineasCuentas = $data->caja_movimiento_cuentacajas;
+                }
+            @endphp
+            @foreach ($lineasCuentas as $cuenta)
                     <tr class="item-cuenta">
                         <td>
-                            <div class="form-group row" id="cuenta">
+                            <div class="form-group row mb-0" id="cuenta">
                                 <input type="hidden" name="cuentacaja[]" class="form-control iicuenta" readonly value="{{ $loop->index+1 }}" />
                                 <input type="hidden" class="cuentacaja_id" name="cuentacaja_ids[]" value="{{$cuenta->cuentacaja_id ?? ''}}" >
                                 <input type="hidden" class="cuentacaja_id_previa" name="cuentacaja_id_previa[]" value="{{$cuenta->cuentacaja_id ?? ''}}" >
-                                <button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuentacaja tooltipsC">
+                                <button type="button" title="Consulta cuentas" class="btn-accion-tabla consultacuentacaja tooltipsC">
                                         <i class="fa fa-search text-primary"></i>
                                 </button>
                                 <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="{{$cuenta->cuentacajas->codigo ?? ''}}" >
                                 <input type="hidden" class="codigo_previo" name="codigo_previos[]" value="{{$cuenta->cuentacajas->codigo ?? ''}}" >
                             </div>
-                        </td>							
+                        </td>
                         <td>
                             <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombre form-control" name="nombres[]" value="{{$cuenta->cuentacajas->nombre ?? ''}}" readonly>
                         </td>
@@ -103,16 +138,22 @@
                             <select name="moneda_ids[]" data-placeholder="Moneda" class="moneda form-control required" required readonly data-fouc>
                                 <option value="">-- Seleccionar --</option>
                                 @foreach($moneda_query as $key => $value)
-                                    @if( (int) $value->id == (int) old('moneda_ids[]', $cuenta->moneda_id ?? ''))
-                                        <option value="{{ $value->id }}" selected="select">{{ $value->abreviatura }}</option>    
+                                    @if( (int) $value->id == (int) old('moneda_ids.'.$loop->parent->index, $cuenta->moneda_id ?? ''))
+                                        <option value="{{ $value->id }}" selected="select">{{ $value->abreviatura }}</option>
                                     @else
-                                        <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>    
+                                        <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>
                                     @endif
                                 @endforeach
                             </select>
                         </td>
                         <td>
-                            <input type="number" name="montos[]" class="form-control monto" value="{{old('montos[]', abs($cuenta->monto) ?? '')}}">
+                            @php
+                                $montoLinea = '';
+                                if (is_object($cuenta) && isset($cuenta->monto)) {
+                                    $montoLinea = $preservarSignoMonto ? $cuenta->monto : abs($cuenta->monto);
+                                }
+                            @endphp
+                            <input type="number" name="montos[]" class="form-control monto" step="0.01" value="{{ old('montos.'.$loop->index, $montoLinea) }}">
                         </td>
                         <td>
                             <input type="number" name="cotizaciones[]" class="form-control cotizacion" value="{{old('cotizaciones[]', $cuenta->cotizacion ?? '0')}}">
@@ -126,25 +167,27 @@
                             </button>
                         </td>
                     </tr>
-                @endforeach
-            @endif
+            @endforeach
             </tbody>
         </table>
         @include('caja.ingresoegreso.template')
-        <div class="row">
-            <div class="col-sm-6">
-                <div class="form-group row">
-                    <button id="agrega_renglon_cuenta" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
-                </div>
+        <div class="row align-items-center">
+            <div class="col-sm-4 mb-2">
+                <button type="button" id="agrega_renglon_cuenta" class="btn btn-outline-primary btn-sm">
+                    <i class="fa fa-plus"></i> Agrega renglón
+                </button>
             </div>
-            <div class="form-group row">
-                <label for="totaldebe" id="labeltotaldebe" class="col-lg-3 col-form-label">Total debe</label>
-                <input type="text" id="totaldebe" name="totaldebe" class="form-control col-lg-3" readonly value="" />
-                <label for="totaldebe" id="labeltotalhaber" class="col-lg-3 col-form-label">Total haber</label>
-                <input type="text" id="totalhaber" name="totalhaber" class="form-control col-lg-3" readonly value="" />
+            <div class="col-sm-8">
+                <div class="form-group row mb-0 justify-content-end">
+                    <label for="totaldebe" id="labeltotaldebe" class="col-auto col-form-label pr-2">Total debe</label>
+                    <input type="text" id="totaldebe" name="totaldebe" class="form-control form-control-sm col-lg-2" readonly value="" />
+                    <label for="totalhaber" id="labeltotalhaber" class="col-auto col-form-label pr-2">Total haber</label>
+                    <input type="text" id="totalhaber" name="totalhaber" class="form-control form-control-sm col-lg-2" readonly value="" />
+                </div>
             </div>
         </div>
         <div class="form-group row totales-por-moneda">
+        </div>
         </div>
     </div>
 </div>
@@ -155,5 +198,3 @@
 @include('caja.ingresoegreso.copiaringresoegresomodal')
 @include('caja.ingresoegreso.revertiringresoegresomodal')
 @include('includes.caja.modalconsultagasto')
-
-

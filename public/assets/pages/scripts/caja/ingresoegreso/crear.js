@@ -10,12 +10,18 @@ var idMoneda=[];
 var descripcionMoneda=[];
 var flCrear;
 var flModificaAsiento;
+var ingresoEgresoAbrevTipo = '';
+var ABREV_TRANSFERENCIA_IE = 'TRA';
    
     $(function () {
         $('#agrega_renglon_cuenta').on('click', agregaRenglonCuenta);
         $(document).on('click', '.eliminar_cuenta', borraRenglonCuenta);
-		$('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
-        $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+		$('#ie-agrega-renglon-archivo').on('click', agregaRenglonArchivo);
+        $(document).on('click', '.ie-eliminararchivo', borraRenglonArchivo);
+		$(document).on('click', '.eliminar-archivo-ie', function (e) {
+			e.preventDefault();
+			$(this).closest('.ie-archivo-item').remove();
+		});
 
 		flCrear = document.getElementById("crear");
 		flModificaAsiento = false;
@@ -26,72 +32,59 @@ var flModificaAsiento;
 			activaEventosChequesIngresoEgreso();
 		}
 
-		$("#botonform1").click(function(){
-            $(".form1").show();
-            $(".form2").hide();
-			$(".form3").hide();
-			$(".form4").hide();
-			$(".formasientoexterno").hide();
-			$(".form6").hide();
-        });
-		$("#botonform2").click(function(){
-			$(".form1").hide();
-            $(".form2").show();
-			$(".form3").hide();
-			$(".form4").hide();
-			$(".formasientoexterno").hide();
-			$(".form6").hide();
+		function marcarSolapaIeActiva($boton) {
+			$('#tabs-ingresoegreso .nav-link').removeClass('active');
+			$boton.addClass('active');
+		}
 
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-        });
-		$("#botonform3").click(function(){
+		function ocultarSolapasIe() {
 			$(".form1").hide();
-            $(".form2").hide();
+			$(".form2").hide();
+			$(".form3").hide();
+			$(".form4").hide();
+			$(".formasientoexterno").hide();
+			$(".form6").hide();
+		}
+
+		$("#botonform1").click(function(e){
+			e.preventDefault();
+			ocultarSolapasIe();
+			$(".form1").show();
+			marcarSolapaIeActiva($(this));
+        });
+		$("#botonform2").click(function(e){
+			e.preventDefault();
+			ocultarSolapasIe();
+			$(".form2").show();
+			marcarSolapaIeActiva($(this));
+        });
+		$("#botonform3").click(function(e){
+			e.preventDefault();
+			ocultarSolapasIe();
 			$(".form3").show();
-			$(".form4").hide();
-			$(".formasientoexterno").hide();
-			$(".form6").hide();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
+			marcarSolapaIeActiva($(this));
         });
-		$("#botonform4").click(function(){
-			$(".form1").hide();
-            $(".form2").hide();
-			$(".form3").hide();
+		$("#botonform4").click(function(e){
+			e.preventDefault();
+			ocultarSolapasIe();
 			$(".form4").show();
-			$(".formasientoexterno").hide();
-			$(".form6").hide();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
+			marcarSolapaIeActiva($(this));
         });
-		$("#botonform5").click(function(){
+		$("#botonform5").click(function(e){
+			e.preventDefault();
 			// Solo genera el asiento cuando se crea la operacion
 			if (flCrear || flModificaAsiento)
 				generaAsientoContable();
 
-			$(".form1").hide();
-            $(".form2").hide();
-			$(".form3").hide();
-			$(".form4").hide();
+			ocultarSolapasIe();
 			$(".formasientoexterno").show();
-			$(".form6").hide();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
+			marcarSolapaIeActiva($(this));
         });
-		$("#botonform6").click(function(){
-			$(".form1").hide();
-            $(".form2").hide();
-			$(".form3").hide();
-			$(".form4").hide();
-			$(".formasientoexterno").hide();
+		$("#botonform6").click(function(e){
+			e.preventDefault();
+			ocultarSolapasIe();
 			$(".form6").show();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
+			marcarSolapaIeActiva($(this));
         });
 
 		$("#boton-copia-ie").click(function(){
@@ -140,9 +133,11 @@ var flModificaAsiento;
 			$('#revertiringresoegresoModal').modal('hide');
 		});
 
-		// Agrega el primer renglon si esta creando una transaccion
-		if (flCrear)
+		// Alta: 1 renglón vacío. Transferencia (TRA) pasa a 2 vía asegurarRenglonesCuentaPorTipo.
+		if (flCrear && $("#tbody-cuenta-table .item-cuenta").length === 0) {
 			agregaUnRenglon();
+		}
+		asegurarRenglonesCuentaPorTipo();
 
 		// Lee monedas
 		$.get(carpetaBase+'/configuracion/leermoneda', function(data){
@@ -170,14 +165,43 @@ var flModificaAsiento;
 					flError = true;
 				}
 			});
+
+			sumaMonto();
+
+			if (esTransferenciaIngresoEgreso()) {
+				if (!validarBalanceCajaTransferencia()) {
+					flError = true;
+				}
+			}
 	
+			if (flError) {
+				return;
+			}
+
+			// Transferencia: regenera asiento on-the-fly y luego valida/graba
+			if (esTransferenciaIngresoEgreso()) {
+				flModificaAsiento = true;
+				generaAsientoContable(function (ok) {
+					if (!ok) {
+						return;
+					}
+					sumaMontoAsiento();
+					if (!validarBalanceAsientoTransferencia()) {
+						muestraVentanaAsiento();
+						return;
+					}
+					continuarGrabacionTrasValidaciones();
+				});
+				return;
+			}
+
 			// Valida montos asiento
 			sumaMontoAsiento();
 
-			totalDebeAsiento = $("#totaldebeasiento").val();
-			totalHaberAsiento = $("#totalhaberasiento").val();
+			totalDebeAsiento = parseTotalAsientoCampo($("#totaldebeasiento").val());
+			totalHaberAsiento = parseTotalAsientoCampo($("#totalhaberasiento").val());
 
-			if (totalDebeAsiento != totalHaberAsiento || totalDebeAsiento == 0)
+			if (Math.abs(totalDebeAsiento - totalHaberAsiento) > 0.02 || totalDebeAsiento < 0.02)
 			{
 				alert('Problemas en el asiento, no coincide el debe con el haber');
 				flError = true;
@@ -186,32 +210,36 @@ var flModificaAsiento;
 	
 			if (!flError)
 			{
-				if (typeof window.obtenerComprobantesIvaIngresoEgreso === 'function') {
-					$('#comprobantes_ivacompra_json').val(JSON.stringify(window.obtenerComprobantesIvaIngresoEgreso()));
-				}
-
-				var comprobantesIva = typeof window.obtenerComprobantesIvaIngresoEgreso === 'function'
-					? window.obtenerComprobantesIvaIngresoEgreso()
-					: [];
-				if (comprobantesIva.length > 0 && typeof window.validarComprobantesIvaContraCaja === 'function') {
-					window.validarComprobantesIvaContraCaja(function (valido) {
-						if (!valido) {
-							return;
-						}
-						continuarGrabacionIngresoEgreso(totalDebe, totalHaber, totalDebeAsiento);
-					});
-					return;
-				}
-			}
-
-			if (!flError) {
-				continuarGrabacionIngresoEgreso(totalDebe, totalHaber, totalDebeAsiento);
+				continuarGrabacionTrasValidaciones();
 			}
 		});
+
+		function continuarGrabacionTrasValidaciones()
+		{
+			if (typeof window.obtenerComprobantesIvaIngresoEgreso === 'function') {
+				$('#comprobantes_ivacompra_json').val(JSON.stringify(window.obtenerComprobantesIvaIngresoEgreso()));
+			}
+
+			var comprobantesIva = typeof window.obtenerComprobantesIvaIngresoEgreso === 'function'
+				? window.obtenerComprobantesIvaIngresoEgreso()
+				: [];
+			if (comprobantesIva.length > 0 && typeof window.validarComprobantesIvaContraCaja === 'function') {
+				window.validarComprobantesIvaContraCaja(function (valido) {
+					if (!valido) {
+						return;
+					}
+					continuarGrabacionIngresoEgreso(totalDebe, totalHaber, parseTotalAsientoCampo($("#totaldebeasiento").val()));
+				});
+				return;
+			}
+
+			continuarGrabacionIngresoEgreso(totalDebe, totalHaber, parseTotalAsientoCampo($("#totaldebeasiento").val()));
+		}
 
 		function continuarGrabacionIngresoEgreso(totalDebe, totalHaber, totalDebeAsiento)
 		{
 			var flError = false;
+			totalDebeAsiento = parseTotalAsientoCampo(totalDebeAsiento);
 
 			// Controla total de la operacion contra el total del asiento
 			if (totalDebe != 0 || totalHaber != 0)
@@ -223,7 +251,7 @@ var flModificaAsiento;
 				else
 					totalOperacion = totalHaber;
 
-				if (totalOperacion != totalDebeAsiento)
+				if (Math.abs(totalOperacion - totalDebeAsiento) > 0.02)
 				{
 					alert('Problemas en el asiento, no coincide el monto total de la operación con el asiento contable');
 					flError = true;
@@ -278,6 +306,8 @@ var flModificaAsiento;
 			event.preventDefault();
 
 			buscaTipoTransaccionCaja();
+			flModificaAsiento = true;
+			sumaMonto();
 		});
 		
 		$('.codigo').on('change', function (event) {
@@ -413,6 +443,8 @@ var flModificaAsiento;
 		$(".form4").hide();
 		$(".formasientoexterno").show();
 		$(".form6").hide();
+		$('#tabs-ingresoegreso .nav-link').removeClass('active');
+		$('#botonform5').addClass('active');
 	}
 
     function agregaRenglonCuenta(event){
@@ -461,14 +493,22 @@ var flModificaAsiento;
 
 	function agregaRenglonArchivo(){
     	event.preventDefault();
-    	var renglon = $('#template-renglon-archivo').html();
-
-    	$("#tbody-tabla-archivo").append(renglon);
+    	var renglon = $('#ie-template-renglon-archivo').html();
+    	if (!renglon) {
+    		return;
+    	}
+    	$("#ie-tbody-tabla-archivo").append(renglon);
     }
 
     function borraRenglonArchivo() {
     	event.preventDefault();
-    	$(this).parents('tr').remove();
+    	var $tbody = $('#ie-tbody-tabla-archivo');
+    	var $fila = $(this).closest('tr.item-archivo-ie');
+    	if ($tbody.find('tr.item-archivo-ie').length <= 1) {
+    		$fila.find('input[type=file]').val('');
+    		return;
+    	}
+    	$fila.remove();
     }
 
     function actualizaArchivo(elem) {
@@ -563,7 +603,7 @@ var flModificaAsiento;
 		
 	}
 
-	function generaAsientoContable()
+	function generaAsientoContable(onDone)
 	{
 		let token = $("meta[name='csrf-token']").attr("content");
 		let datosCuentasCaja=[];
@@ -572,16 +612,23 @@ var flModificaAsiento;
 		let tipotransaccion_caja_id = $("#tipotransaccion_caja_id").val();
 		let conceptogasto_id = $("#conceptogasto_id").val();
 		let empresa_id = $('#empresa_id').val();
+		var callback = typeof onDone === 'function' ? onDone : null;
 
 		if (!empresa_id)
 		{
 			alert("Debe asignar empresa");
+			if (callback) {
+				callback(false);
+			}
 			return;
 		}
 
 		if (!tipotransaccion_caja_id)
 		{
 			alert("Debe asignar tipo de transaccion de caja");
+			if (callback) {
+				callback(false);
+			}
 			return;
 		}
 
@@ -691,7 +738,7 @@ var flModificaAsiento;
 						$(wrapper).append('<tr class="item-cuenta-asiento">'+
 							'<td>'+
 								'<div class="form-group row" id="cuentacontable">'+
-								'<input type="hidden" name="cuenta[]" class="form-control iicuentacontable" readonly value="{{ $loop->index+1 }}" />'+
+								'<input type="hidden" name="cuenta[]" class="form-control iicuentacontable" readonly value="1" />'+
 								'<input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="'+cuentaContableId+'" >'+
 								'<input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="'+cuentaContableId+'" >'+
 								'<button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">'+
@@ -703,7 +750,7 @@ var flModificaAsiento;
 								'</div>'+
 							'</td>'+				
                         	'<td>'+
-                            	'<input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombrecuentacontable form-control" name="nombrecuentacontables[]" value="'+nombreCuentaContable+'" readonly>'+
+                            	'<input type="text" style="WIDTH: 250px;HEIGHT: 38px" class="nombrecuentacontable form-control" name="nombrecuentacontables[]" value="'+nombreCuentaContable+'" readonly>'+
                         	'</td>'+
                         	'<td>'+
                             	'<select name="centrocostoasiento_ids[]" data-placeholder="Centro de costo" class="centrocostoasiento form-control" data-fouc>'+
@@ -748,14 +795,36 @@ var flModificaAsiento;
 					// Suma totales del asiento
 					sumaMontoAsiento();
 
-					totalDebeAsiento = $("#totaldebeasiento").val();
-					totalHaberAsiento = $("#totalhaberasiento").val();
+					totalDebeAsiento = parseTotalAsientoCampo($("#totaldebeasiento").val());
+					totalHaberAsiento = parseTotalAsientoCampo($("#totalhaberasiento").val());
+					flModificaAsiento = false;
+					if (callback) {
+						callback(true);
+					}
 				}
-				else
+				else {
 					alert("Error en generación del asiento contable");
+					if (callback) {
+						callback(false);
+					}
+				}
 			},
 			error: function (r) {
-				alert("Error grave en generación del asiento contable");
+				var msg = "Error grave en generación del asiento contable";
+				if (r && r.responseJSON && r.responseJSON.message) {
+					msg = r.responseJSON.message;
+				} else if (r && r.responseText) {
+					try {
+						var j = JSON.parse(r.responseText);
+						if (j.message) {
+							msg = j.message;
+						}
+					} catch (e) {}
+				}
+				alert(msg);
+				if (callback) {
+					callback(false);
+				}
 			}
 		});
 	}
@@ -864,13 +933,23 @@ var flModificaAsiento;
 
 	function buscaTipoTransaccionCaja()
 	{
+		let $opt = $('#tipotransaccion_caja_id option:selected');
+		ingresoEgresoAbrevTipo = String($opt.data('abreviatura') || '').toUpperCase();
+		actualizarAvisoTransferenciaIe();
+
 		let tipotransaccion_caja_id = $('#tipotransaccion_caja_id').val();
+		if (!tipotransaccion_caja_id) {
+			return;
+		}
 		let url = carpetaBase+'/caja/leertipotransaccion_caja/'+tipotransaccion_caja_id;
 
 		$.get(url, function(data){
 			if (data.id > 0)
 			{
-				if (data.signo == 'E')
+				ingresoEgresoAbrevTipo = String(data.abreviatura || '').toUpperCase();
+				actualizarAvisoTransferenciaIe();
+
+				if (data.signo == 'E' && !esTransferenciaIngresoEgreso())
 				{
 					$("#div-ordenservicio").show();
 					$("#div-conceptogasto").show();
@@ -881,9 +960,11 @@ var flModificaAsiento;
 					$("#div-ordenservicio").hide();
 					$("#div-conceptogasto").hide();
 					$("#div-proveedor").hide();
-					$('#ordenservicio_id').val('');
-					$('#conceptogasto_id').val('');
-					$('#proveedor_id').val('');
+					if (esTransferenciaIngresoEgreso()) {
+						$('#ordenservicio_id').val('');
+						$('#conceptogasto_id').val('');
+						$('#proveedor_id').val('');
+					}
 				}
 			}
 			else
@@ -892,6 +973,116 @@ var flModificaAsiento;
 				return;
 			}
 		});
+	}
+
+	function esTransferenciaIngresoEgreso()
+	{
+		if (ingresoEgresoAbrevTipo === ABREV_TRANSFERENCIA_IE) {
+			return true;
+		}
+		var op = $('#tipotransaccion_caja_id option:selected').data('operacion');
+		return String(op || '').toUpperCase() === 'T';
+	}
+
+	function actualizarAvisoTransferenciaIe()
+	{
+		if (esTransferenciaIngresoEgreso()) {
+			$('#aviso-transferencia-ie').show();
+		} else {
+			$('#aviso-transferencia-ie').hide();
+		}
+		asegurarRenglonesCuentaPorTipo();
+	}
+
+	function cantidadRenglonesCuenta()
+	{
+		return $("#tbody-cuenta-table .item-cuenta").length;
+	}
+
+	function renglonCuentaVacio($tr)
+	{
+		var cta = parseInt($tr.find('.cuentacaja_id').val() || '0', 10);
+		var codigo = String($tr.find('.codigo').val() || '').trim();
+		var monto = parseFloat($tr.find('.monto').val() || '0');
+		return cta <= 0 && codigo === '' && (isNaN(monto) || Math.abs(monto) < 0.000001);
+	}
+
+	/**
+	 * TRA: al menos 2 renglones. Resto: 1 por defecto (quita solo vacíos sobrantes).
+	 */
+	function asegurarRenglonesCuentaPorTipo()
+	{
+		if (esTransferenciaIngresoEgreso()) {
+			while (cantidadRenglonesCuenta() < 2) {
+				agregaUnRenglon();
+			}
+			return;
+		}
+
+		while (cantidadRenglonesCuenta() > 1) {
+			var $last = $("#tbody-cuenta-table .item-cuenta").last();
+			if (!$last.length || !renglonCuentaVacio($last)) {
+				break;
+			}
+			$last.remove();
+		}
+		if (cantidadRenglonesCuenta() === 0 && flCrear) {
+			agregaUnRenglon();
+		} else {
+			actualizaRenglonesCuenta();
+		}
+	}
+
+	function parseTotalAsientoCampo(val)
+	{
+		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.parseDecimal === 'function') {
+			return AsientoMontosFormato.parseDecimal(val);
+		}
+		if (typeof parseMontoAsiento === 'function') {
+			return parseMontoAsiento(val);
+		}
+		var n = parseFloat(String(val || '').replace(/\./g, '').replace(',', '.'));
+		return isNaN(n) ? 0 : n;
+	}
+
+	function validarBalanceCajaTransferencia()
+	{
+		sumaMonto();
+		var hayEntrada = totalDebe > 0.02;
+		var haySalida = totalHaber > 0.02;
+		var lineas = 0;
+		$("#tbody-cuenta-table .item-cuenta").each(function () {
+			var cta = parseInt($(this).find('.cuentacaja_id').val() || '0', 10);
+			var monto = parseFloat($(this).find('.monto').val() || '0');
+			if (cta > 0 && Math.abs(monto) > 0.000001) {
+				lineas++;
+			}
+		});
+		if (lineas < 2 || !hayEntrada || !haySalida) {
+			alert('Transferencia: cargue al menos una cuenta con monto positivo (entrada) y otra con monto negativo (salida).');
+			return false;
+		}
+		if (Math.abs(totalDebe - totalHaber) > 0.02) {
+			alert('Transferencia: las cuentas de caja deben quedar balanceadas (entradas = salidas).');
+			return false;
+		}
+		return true;
+	}
+
+	function validarBalanceAsientoTransferencia()
+	{
+		sumaMontoAsiento();
+		var debe = parseTotalAsientoCampo($("#totaldebeasiento").val());
+		var haber = parseTotalAsientoCampo($("#totalhaberasiento").val());
+		if (Math.abs(debe - haber) > 0.02 || debe < 0.02) {
+			alert('Transferencia: el asiento contable debe estar balanceado (Debe = Haber).');
+			return false;
+		}
+		if (Math.abs(debe - totalDebe) > 0.02) {
+			alert('Transferencia: el total del asiento debe coincidir con el total de la operación de caja.');
+			return false;
+		}
+		return true;
 	}
 
 		

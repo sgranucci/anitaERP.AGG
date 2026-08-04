@@ -211,7 +211,7 @@
 })();
 </script>
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<script src="{{ asset('assets/pages/scripts/reportes/empresas_dual.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/sumas_saldos/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/sumas_saldos/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
@@ -243,7 +243,7 @@
                         <span id="aviso-fuente"></span>
                     </p>
 
-                    @include('includes.reportes.asignacion_empresas_dual', [
+                    @include('includes.reportes.asignacion_empresas_checkboxes', [
                         'empresa_query' => $empresa_query,
                         'empresa_ids_seleccionados' => $filtros['empresa_ids'] ?? [],
                         'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,

@@ -211,10 +211,7 @@ class PeriodoCierreContableService
             ->orderByDesc('id');
 
         if ($alcance !== null && $alcance !== '' && $alcance !== PeriodoContableCierreSupport::ALCANCE_GENERAL) {
-            $query->where(function ($q) use ($alcance) {
-                $q->where('alcance', PeriodoContableCierreSupport::ALCANCE_GENERAL)
-                    ->orWhere('alcance', $alcance);
-            });
+            $query->whereIn('alcance', PeriodoContableCierreSupport::alcancesQueRestringen($alcance));
         } elseif ($alcance === PeriodoContableCierreSupport::ALCANCE_GENERAL) {
             $query->where('alcance', PeriodoContableCierreSupport::ALCANCE_GENERAL);
         }

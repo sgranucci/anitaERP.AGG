@@ -8,6 +8,7 @@ Requisiciones
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/enviar-arbol.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/volver-compras.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>

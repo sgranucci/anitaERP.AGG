@@ -691,6 +691,9 @@ class MayorConceptoPeriodoProcesador
             return $lineas;
         }
 
+        // Solo meta de visualización: nro de CHP de la OP (no axp_banco de la factura).
+        $nroChequeOp = $this->numeroChequeDesdeAuxpag($auxpag);
+
         $imputoGastoDesdeFacturas = false;
 
         if ($this->debeImputarChequeProveedor($totalCheques, $totalFacturas, $totalBancoHaber, $auxpag)) {
@@ -1072,6 +1075,7 @@ class MayorConceptoPeriodoProcesador
                         $gasto['aplicacion'],
                         $gasto['linea_gasto'] ?? null,
                         $cuentaBanco,
+                        $nroChequeOp,
                     );
                     if (! empty($gasto['anticipo_prefijo_origen'])) {
                         $metaLinea['anticipo_prefijo_origen'] = (string) $gasto['anticipo_prefijo_origen'];
@@ -6219,7 +6223,7 @@ class MayorConceptoPeriodoProcesador
             'nro_asiento' => (int) ($origen->subd_nro_operacion ?? 0),
             'tipo_comp' => $refTipo,
             'comprobante' => $this->formatearComprobante($refTipo, $refLetra, $refSuc, $refNro),
-            'cheque' => trim((string) ($meta['cheque'] ?? '')),
+            'cheque' => $this->resolverChequeLineaReporte($meta, $origen),
             'nro_oc' => (int) ($meta['nro_oc'] ?? 0),
             'emisor' => trim((string) ($meta['emisor'] ?? '')),
             'cuit' => trim((string) ($meta['cuit'] ?? '')),
@@ -6659,6 +6663,7 @@ class MayorConceptoPeriodoProcesador
         object $aplicacion,
         ?object $lineaCom,
         int $cuentaDisponibilidad,
+        string $nroChequeOp = '',
     ): array {
         $prov = trim((string) ($aplicacion->axp_pro ?? ''));
         $prom = null;
@@ -6681,26 +6686,86 @@ class MayorConceptoPeriodoProcesador
             $nroOc = (int) ($this->ordenesComPorFactura[$claveFac][$claveCom] ?? 0);
         }
 
+        $cheque = $this->numeroChequeDesdeAplicacion($aplicacion);
+        if ($cheque === '' && $nroChequeOp !== '') {
+            $cheque = $nroChequeOp;
+        }
+
         return [
             'cuenta_disponibilidad' => $cuentaDisponibilidad,
-            'cheque' => $this->numeroChequeDesdeAplicacion($aplicacion),
+            'cheque' => $cheque,
             'nro_oc' => $nroOc,
             'emisor' => $prom ? $this->truncarTexto(trim((string) ($prom->prom_nombre ?? '')), 15) : '',
             'cuit' => $prom ? trim((string) ($prom->prom_cuit ?? '')) : '',
         ];
     }
 
-    private function numeroChequeDesdeAplicacion(object $aplicacion): string
+    /**
+     * @param  array<string, mixed>  $meta
+     */
+    private function resolverChequeLineaReporte(array $meta, ?object $origen): string
     {
-        $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
-        if ($tipoAp === 'CHP') {
-            $nro = trim((string) ($aplicacion->axp_nro ?? ''));
-            if ($nro !== '' && $nro !== '0') {
-                return $nro;
+        $cheque = trim((string) ($meta['cheque'] ?? ''));
+        if ($cheque !== '') {
+            return $cheque;
+        }
+
+        if ($origen === null) {
+            return '';
+        }
+
+        return $this->numeroChequeDesdeDescripcion(trim((string) ($origen->subd_desc_mov ?? '')));
+    }
+
+    /**
+     * Número de cheque propio (CHP) en auxpag. No usar axp_banco: en facturas es
+     * un código fijo (ej. 000001) y en CHP es la cuenta bancaria, no el nro.
+     *
+     * @param  list<object>  $auxpag
+     */
+    private function numeroChequeDesdeAuxpag(array $auxpag): string
+    {
+        $numeros = [];
+        foreach ($auxpag as $fila) {
+            $nro = $this->numeroChequeDesdeAplicacion($fila);
+            if ($nro !== '') {
+                $numeros[$nro] = $nro;
             }
         }
 
-        return trim((string) ($aplicacion->axp_banco ?? ''));
+        if ($numeros === []) {
+            return '';
+        }
+
+        return (string) reset($numeros);
+    }
+
+    private function numeroChequeDesdeAplicacion(object $aplicacion): string
+    {
+        $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
+        if ($tipoAp !== 'CHP') {
+            return '';
+        }
+
+        $nro = trim((string) ($aplicacion->axp_nro ?? ''));
+        if ($nro === '' || $nro === '0') {
+            return '';
+        }
+
+        return $nro;
+    }
+
+    private function numeroChequeDesdeDescripcion(string $descripcion): string
+    {
+        if ($descripcion === '') {
+            return '';
+        }
+
+        if (preg_match('/\bCh:\s*(\d{5,12})\b/i', $descripcion, $m)) {
+            return $m[1];
+        }
+
+        return '';
     }
 
     private function claveComprobanteDesdeSubdiario(object $linea): string

@@ -1681,6 +1681,7 @@ class ArbolaprobacionService
 
     /**
      * Resuelve el centro de costo del circuito de aprobación. Null si hay varios y falta selección.
+     * La selección del usuario puede ser un CC de los renglones o uno adicional (fuera de la grilla).
      *
      * @param  list<int>  $idsDistintos
      *
@@ -1689,16 +1690,16 @@ class ArbolaprobacionService
     public function resolverCentroCostoArbolRequisicion(Requisicion $requisicion, ?int $seleccionUsuario, array $idsDistintos): ?int
     {
         if ($seleccionUsuario !== null && $seleccionUsuario > 0) {
-            if (! in_array($seleccionUsuario, $idsDistintos, true)) {
-                throw new \RuntimeException('El centro de costo de destino seleccionado no corresponde a los renglones de la requisición.');
-            }
+            $this->assertCentrocostoExisteParaArbol($seleccionUsuario);
 
             return $seleccionUsuario;
         }
 
         $persistido = (int) ($requisicion->centrocostodestino_arbol_id ?? 0);
-        if ($persistido > 0 && in_array($persistido, $idsDistintos, true)) {
-            return $persistido;
+        if ($persistido > 0) {
+            if (Centrocosto::query()->whereKey($persistido)->exists()) {
+                return $persistido;
+            }
         }
 
         if (count($idsDistintos) === 0) {
@@ -1709,6 +1710,16 @@ class ArbolaprobacionService
         }
 
         return null;
+    }
+
+    /**
+     * @throws \RuntimeException
+     */
+    private function assertCentrocostoExisteParaArbol(int $centrocostoId): void
+    {
+        if ($centrocostoId <= 0 || ! Centrocosto::query()->whereKey($centrocostoId)->exists()) {
+            throw new \RuntimeException('El centro de costo de destino seleccionado no existe.');
+        }
     }
 
     /**
@@ -2046,21 +2057,22 @@ class ArbolaprobacionService
 
     /**
      * Resuelve el CC del circuito desde el request. Null si hay varios y falta selección.
+     * Acepta un CC adicional fuera de los renglones (mismo criterio que el modal de envío al árbol).
      *
      * @param  list<int>  $idsDistintos
+     *
+     * @throws \RuntimeException
      */
     public function resolverCentroCostoArbolDesdeRequest(array $data, ?int $seleccionUsuario, array $idsDistintos): ?int
     {
         if ($seleccionUsuario !== null && $seleccionUsuario > 0) {
-            if ($idsDistintos !== [] && ! in_array($seleccionUsuario, $idsDistintos, true)) {
-                throw new \RuntimeException('El centro de costo de destino seleccionado no corresponde a los renglones de la requisición.');
-            }
+            $this->assertCentrocostoExisteParaArbol($seleccionUsuario);
 
             return $seleccionUsuario;
         }
 
         $persistido = (int) ($data['centrocostodestino_arbol_id'] ?? 0);
-        if ($persistido > 0 && ($idsDistintos === [] || in_array($persistido, $idsDistintos, true))) {
+        if ($persistido > 0 && Centrocosto::query()->whereKey($persistido)->exists()) {
             return $persistido;
         }
 

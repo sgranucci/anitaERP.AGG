@@ -84,11 +84,12 @@
                                 value="{{ (int) ($filtros['provincia_id'] ?? 0) }}" required>
                             <div class="input-group">
                                 <input type="text" class="form-control codigoprovincia" id="codigoprovincia" name="codigoprovincia"
-                                    value="{{ $provincia->codigo ?? '' }}" placeholder="Cód." autocomplete="off">
+                                    value="{{ $provincia->codigo ?? '' }}" placeholder="Cód." autocomplete="off"
+                                    title="C&oacute;digo provincia. F1 = consulta">
                                 <input type="text" class="form-control nombreprovincia" id="nombreprovincia" name="nombreprovincia"
                                     value="{{ $provincia->nombre ?? '' }}" readonly placeholder="Nombre provincia">
                                 <div class="input-group-append">
-                                    <button type="button" title="Consultar provincias" class="btn btn-outline-secondary consultaprovincia tooltipsC">
+                                    <button type="button" title="Consultar provincias (F1)" class="btn btn-outline-secondary consultaprovincia tooltipsC">
                                         <i class="fa fa-search text-primary"></i>
                                     </button>
                                 </div>

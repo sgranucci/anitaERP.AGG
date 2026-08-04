@@ -24,6 +24,44 @@
         return div.innerHTML;
     }
 
+    /**
+     * Indicador cuando la jornada aún tiene pendientes pero algún PV ya se cerró.
+     * Campos opcionales (estacionamiento); otros módulos los ignoran.
+     */
+    function htmlNotaCierreParcialDia(item, opts) {
+        opts = opts || {};
+        var parcial = !!(item && (item.dia_tiene_cierre_parcial || item.tiene_cierre_parcial));
+        if (!parcial) {
+            return '';
+        }
+        var n = parseInt(
+            item.cantidad_grupos_cerrados_dia != null
+                ? item.cantidad_grupos_cerrados_dia
+                : item.cantidad_grupos_cerrados,
+            10
+        ) || 0;
+        if (n <= 0) {
+            return '';
+        }
+        var detalle = item.detalle_pv_cerrados_dia || item.detalle_pv_cerrados || '';
+        var texto = n === 1
+            ? 'Cierre parcial: 1 PV ya cerrado'
+            : ('Cierre parcial: ' + n + ' PV ya cerrados');
+        if (detalle) {
+            texto += ' (' + detalle + ')';
+        }
+        var title = detalle
+            ? ('Esta jornada no está completa: ya se cerró el/los PV '
+                + detalle
+                + '. El resto de puntos de venta sigue pendiente.')
+            : 'Esta jornada no está completa: algún punto de venta ya tiene asiento; otros siguen pendientes.';
+        var clase = opts.inline ? 'text-info small ml-1' : 'd-block text-info small mt-1';
+        return '<span class="' + clase + '" title="' + escapeHtml(title) + '">'
+            + '<i class="fa fa-info-circle" aria-hidden="true"></i> '
+            + escapeHtml(texto)
+            + '</span>';
+    }
+
     function metaPendientes() {
         return document.getElementById('pendientes-url-listado-base');
     }
@@ -357,9 +395,19 @@
 
         if (tbody) {
             tbody.innerHTML = '';
+            var ultimaFechaNota = '';
             (filtrado.grupos || []).forEach(function (g) {
                 var tr = document.createElement('tr');
-                var html = '<td>' + escapeHtml(g.fecha_dia_fmt || formatoFechaIso(g.fecha_dia)) + '</td>';
+                var fechaKey = g.fecha_dia || '';
+                var notaParcial = '';
+                if (fechaKey && fechaKey !== ultimaFechaNota) {
+                    notaParcial = htmlNotaCierreParcialDia(g);
+                    ultimaFechaNota = fechaKey;
+                }
+                var html = '<td>'
+                    + escapeHtml(g.fecha_dia_fmt || formatoFechaIso(g.fecha_dia))
+                    + notaParcial
+                    + '</td>';
                 if (mostrarPv) {
                     html += '<td><small>' + escapeHtml(g.puntoventa_label || '—') + '</small></td>';
                 }
@@ -375,11 +423,17 @@
 
         if (porDiaTbody && porDiaBox) {
             var porDia = filtrado.por_dia || [];
-            if (porDia.length > 1) {
+            var hayParcial = porDia.some(function (d) {
+                return !!(d.tiene_cierre_parcial);
+            });
+            if (porDia.length > 1 || (porDia.length === 1 && hayParcial)) {
                 porDiaTbody.innerHTML = '';
                 porDia.forEach(function (d) {
                     var trDia = document.createElement('tr');
-                    trDia.innerHTML = '<td>' + escapeHtml(d.fecha_jornada_fmt || formatoFechaIso(d.fecha_jornada)) + '</td>'
+                    trDia.innerHTML = '<td>'
+                        + escapeHtml(d.fecha_jornada_fmt || formatoFechaIso(d.fecha_jornada))
+                        + htmlNotaCierreParcialDia(d)
+                        + '</td>'
                         + '<td class="text-center">' + (d.cantidad || 0) + '</td>'
                         + '<td class="text-center">' + (d.cantidad_grupos || 0) + '</td>'
                         + '<td class="text-right">' + formatoNumero(d.total_cobrado || 0) + '</td>';

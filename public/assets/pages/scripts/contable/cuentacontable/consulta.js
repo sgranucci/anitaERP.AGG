@@ -2,6 +2,9 @@ var cuentacontablexcodigo;
 var nombrexcodigo;
 var codigoxcodigo;
 var ptrCuentacontableContext;
+var consultaCuentaContableTimer = null;
+var consultaCuentaContableAjax = null;
+var CONSULTA_CUENTACONTABLE_DEBOUNCE_MS = 280;
 
 function esTeclaF1CuentaContable(e) {
     return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
@@ -128,9 +131,14 @@ function refrescarCentroCostoTrasCuenta($ctx, data) {
 }
 
 function buscar_datos(consulta) {
-    var empresa_id = empresaIdParaConsultaCuentaContable(ptrCuentacontableContext);
+    if (consultaCuentaContableAjax && consultaCuentaContableAjax.readyState !== 4) {
+        consultaCuentaContableAjax.abort();
+    }
 
-    $.ajax({
+    var empresa_id = empresaIdParaConsultaCuentaContable(ptrCuentacontableContext);
+    var texto = (consulta === undefined || consulta === null) ? '' : String(consulta);
+
+    consultaCuentaContableAjax = $.ajax({
         url: carpetaBase+'/contable/cuentacontable/consultacuentacontable',
         type: 'POST',
         dataType: 'json',
@@ -138,7 +146,7 @@ function buscar_datos(consulta) {
         	'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
     	},
         data: {
-            consulta: consulta,
+            consulta: texto,
             empresa_id: empresa_id
         },
     })
@@ -156,9 +164,18 @@ function buscar_datos(consulta) {
         }
         $('#datoscuentas').html(html);
     })
-    .fail (function() {
-        console.log("error");
+    .fail (function(xhr, status) {
+        if (status !== 'abort') {
+            console.log("error");
+        }
     });
+}
+
+function programarBusquedaCuentaContable(consulta) {
+    clearTimeout(consultaCuentaContableTimer);
+    consultaCuentaContableTimer = setTimeout(function () {
+        buscar_datos(consulta);
+    }, CONSULTA_CUENTACONTABLE_DEBOUNCE_MS);
 }
 
 function resolverPorCodigoCuentaContable(codigo, $ctx) {
@@ -210,6 +227,7 @@ function abrirModalConsultaCuentaContableDesdeContexto($ctx) {
     if (empresaId > 0) {
         $('#consultaempresa_id').val(empresaId);
         $('#consultacuentaModal').modal('show');
+        clearTimeout(consultaCuentaContableTimer);
         buscar_datos('');
     } else {
         alert('Debe ingresar empresa');
@@ -293,14 +311,10 @@ document.addEventListener('keydown', function (e) {
     abrirModalConsultaCuentaContableDesdeContexto(contextoDesdeInputCodigoCuentaContable($(target)));
 }, true);
 
-$(document).on('keyup', '#consultacuentacontable', function () {
-    var valor = $(this).val();
-    if (valor != "") {
-        buscar_datos(valor);
-    } else {
-        buscar_datos();
-    }
-});
+$(document).off('keyup.consultactaBuscar input.consultactaBuscar', '#consultacuentacontable')
+    .on('keyup.consultactaBuscar input.consultactaBuscar', '#consultacuentacontable', function () {
+        programarBusquedaCuentaContable($(this).val());
+    });
 
 function activa_eventos_consulta_cuentacontable()
 {

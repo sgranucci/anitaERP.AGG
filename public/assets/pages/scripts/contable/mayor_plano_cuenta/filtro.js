@@ -18,9 +18,13 @@ function mayorPlanoFormatearCodigoCuenta(codigo) {
 }
 
 function mayorPlanoEmpresaIdParaConsultaCuenta() {
-    var $hiddenEmpresas = $('#mpc_empresas_asignadas_hidden input[name="empresa_ids[]"]');
-    if ($hiddenEmpresas.length) {
-        return parseInt($hiddenEmpresas.first().val(), 10) || 0;
+    var $checks = $('#mpc_empresas_asignadas_hidden input[name="empresa_ids[]"]');
+    if ($checks.length) {
+        var $marcados = $checks.filter(':checked');
+        var $fuente = $marcados.length ? $marcados : $checks.filter('[type="hidden"]');
+        if ($fuente.length) {
+            return parseInt($fuente.first().val(), 10) || 0;
+        }
     }
 
     var $empresa = $('#mpc_empresa_id, #empresa_id');
@@ -297,6 +301,28 @@ function mayorPlanoBuscarCuentasModal(consulta) {
         });
 }
 
+function mayorPlanoEsTeclaF1(e) {
+    return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function mayorPlanoModalConsultaAbierto() {
+    var $modal = $('#consultacuentaModal');
+    return $modal.hasClass('show') || $modal.is(':visible');
+}
+
+function mayorPlanoAbrirModalConsultaCuenta($campo) {
+    var empresaId = mayorPlanoEmpresaIdParaConsultaCuenta();
+    if (!empresaId) {
+        alert('Debe seleccionar al menos una empresa');
+        return false;
+    }
+
+    mayorPlanoCuentaCampoActivo = $campo && $campo.length ? $campo : null;
+    $('#consultaempresa_id').val(empresaId);
+    $('#consultacuentaModal').modal('show');
+    return true;
+}
+
 function activaEventosMayorPlanoCuentaFiltro() {
     mayorPlanoCargarCuentasDesdeDom();
 
@@ -321,6 +347,9 @@ function activaEventosMayorPlanoCuentaFiltro() {
             }
         });
 
+    document.removeEventListener('keydown', mayorPlanoOnKeydownF1Capture, true);
+    document.addEventListener('keydown', mayorPlanoOnKeydownF1Capture, true);
+
     $(document)
         .off('click.mpc', '#mpc-btn-agregar-cuenta')
         .on('click.mpc', '#mpc-btn-agregar-cuenta', function (event) {
@@ -340,16 +369,7 @@ function activaEventosMayorPlanoCuentaFiltro() {
         .off('click.mpc', '.mpc-cuenta-campo .consultacuentacontable')
         .on('click.mpc', '.mpc-cuenta-campo .consultacuentacontable', function (event) {
             event.preventDefault();
-
-            var empresaId = mayorPlanoEmpresaIdParaConsultaCuenta();
-            if (!empresaId) {
-                alert('Debe seleccionar al menos una empresa');
-                return;
-            }
-
-            mayorPlanoCuentaCampoActivo = $(this).closest('.mpc-cuenta-campo');
-            $('#consultaempresa_id').val(empresaId);
-            $('#consultacuentaModal').modal('show');
+            mayorPlanoAbrirModalConsultaCuenta($(this).closest('.mpc-cuenta-campo'));
         });
 
     $('#consultacuentaModal')
@@ -410,7 +430,7 @@ function activaEventosMayorPlanoCuentaFiltro() {
             mayorPlanoSincronizarHiddenCuentas();
         });
 
-    $('#mpc-empresas-dual, #empresa_id')
+    $('#mpc-empresas-checkboxes, #mpc-empresas-dual, #empresa_id')
         .off('change.mpc reporte-empresas-cambiadas.mpc')
         .on('change.mpc reporte-empresas-cambiadas.mpc', function () {
             $('.mpc-cuenta-campo').each(function () {
@@ -422,6 +442,41 @@ function activaEventosMayorPlanoCuentaFiltro() {
                 }
             });
         });
+}
+
+function mayorPlanoOnKeydownF1Capture(e) {
+    if (!mayorPlanoEsTeclaF1(e)) {
+        return;
+    }
+
+    var target = e.target;
+    if (!target || target.disabled) {
+        return;
+    }
+
+    var $target = $(target);
+    var $campo = $target.closest('.mpc-cuenta-campo');
+    if (!$campo.length) {
+        return;
+    }
+
+    // Código editable, o nombre/lupa del mismo bloque de cuenta.
+    var enCampoCuenta = $target.hasClass('codigocuentacontable')
+        || $target.hasClass('nombrecuentacontable')
+        || $target.closest('.consultacuentacontable').length > 0
+        || $target.hasClass('consultacuentacontable');
+
+    if (!enCampoCuenta) {
+        return;
+    }
+
+    if (mayorPlanoModalConsultaAbierto()) {
+        return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    mayorPlanoAbrirModalConsultaCuenta($campo);
 }
 
 $(function () {

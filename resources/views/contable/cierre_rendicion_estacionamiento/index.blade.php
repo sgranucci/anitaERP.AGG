@@ -293,7 +293,7 @@
         'rutaListado' => route('cierre_rendicion_estacionamiento_contable'),
         'estadoPendiente' => \App\Support\Contable\CierreRendicionEstacionamientoListadoFiltros::ESTADO_PENDIENTE,
         'permisoEjecutar' => 'ejecutar-cierre-rendicion-estacionamiento-contable',
-        'textoIntro' => 'Turnos de estacionamiento presentados en caja sin asiento contable. Un cierre genera <strong>un asiento por fecha jornada + punto de venta</strong>. Los datos se consultan en vivo al abrir y al actualizar.',
+        'textoIntro' => 'Turnos de estacionamiento presentados en caja sin asiento contable. Un cierre genera <strong>un asiento por fecha jornada + punto de venta</strong>. Si un día figura pendiente pero ya cerraron algún PV, verá la leyenda <em>Cierre parcial</em> con el/los códigos. Los datos se consultan en vivo al abrir y al actualizar.',
         'mostrarPuntoventa' => true,
         'mostrarFacturado' => true,
         'labelTurnos' => 'Turnos',

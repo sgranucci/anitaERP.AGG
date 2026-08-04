@@ -195,7 +195,7 @@ class ImportarArticulosIndumentariaRrhhCommand extends Command
                         'estado' => 'ACTIVO',
                         'nofactura' => 0,
                         'oficinacompra_id' => 1,
-                        'maneja_stock_color_talle' => 0,
+                        'maneja_stock_color_talle' => 1,
                         'fl_precio_promedio_transferencia' => 0,
                     ]);
 

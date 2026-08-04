@@ -27,28 +27,20 @@
             <div class="card-header">
                 <h3 class="card-title">Asientos Contables</h3>
                 <div class="card-tools">
-                    <a href="{{route('crear_asiento')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-asiento', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
+                    @if (can('crear-asiento', false))
+                        <a href="{{ route('crear_importacion_asiento') }}" class="btn btn-outline-success btn-sm" title="Importar asientos desde Excel">
+                            <i class="fa fa-fw fa-file-excel"></i> Importar Excel
+                        </a>
+                        <a href="{{ route('crear_asiento') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
+                        </a>
+                    @endif
                 </div>
-                @php $empresasFiltro = collect($empresa_query ?? []); @endphp
                 <form action="{{ route('asiento') }}" method="GET" class="form-inline justify-content-md-end mt-2">
-                    @if ($empresasFiltro->count() > 1)
-                        <div class="input-group input-group-sm mr-2 mb-1" style="width: auto;">
-                            <div class="input-group-prepend">
-                                <span class="input-group-text bg-white text-muted"><i class="fa fa-building"></i></span>
-                            </div>
-                            <select name="empresa_id" id="empresa_id" class="form-control form-control-sm" onchange="this.form.submit()">
-                                <option value="">Todas las empresas</option>
-                                @foreach ($empresasFiltro as $emp)
-                                    <option value="{{ $emp->id }}" @selected((int) ($empresa_id ?? 0) === (int) $emp->id)>{{ $emp->nombre }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                    @elseif ($empresasFiltro->count() === 1)
-                        <input type="hidden" name="empresa_id" value="{{ (int) $empresasFiltro->first()->id }}">
+                    @if (($filtros['empresa_scope'] ?? 'una') === 'todas')
+                        <input type="hidden" name="empresa_todas" value="1">
+                    @elseif (! empty($filtros['empresa_id']))
+                        <input type="hidden" name="empresa_id" value="{{ (int) $filtros['empresa_id'] }}">
                     @endif
                     <div class="input-group input-group-sm mb-1" style="width: auto;">
                         <input type="text" name="busqueda" value="{{ $busqueda ?? '' }}" class="form-control form-control-sm" placeholder="Buscar número, tipo o fecha…" style="min-width: 210px;">
@@ -60,6 +52,7 @@
                     </div>
                 </form>
             </div>
+            @include('contable.asiento.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', ['ruta' => 'lista_asiento', 'queryparams' => $filtrosQuery ?? []])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">

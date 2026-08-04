@@ -141,27 +141,40 @@
         var reqNro = req ? req.numerorequisicion : '';
         var reqId = req ? req.id : '';
         var destino = linea.destino || '';
-        var html = '<tr class="fila-cumple-linea" data-linea-id="' + linea.id + '" data-requisicion-id="' + reqId + '" data-destino="' + escapeHtml(destino) + '">';
+        var html = '<tr class="fila-cumple-linea" data-linea-id="' + linea.id + '" data-articulo-id="' + (linea.articulo_id || '') + '" data-requisicion-id="' + reqId + '" data-destino="' + escapeHtml(destino) + '">';
         html += '<td>#' + escapeHtml(String(reqNro)) + '</td>';
         html += '<td>' + escapeHtml(linea.sku) + '</td>';
         html += '<td>' + escapeHtml(linea.descripcion) + '</td>';
         html += '<td class="text-right pendiente-cell">' + Number(linea.pendiente).toFixed(2) + '</td>';
+        html += '<td class="align-middle text-right col-saldo-orig"><span class="ms-saldo-origen text-monospace small" title="Saldo en dep\u00f3sito origen">\u2014</span></td>';
         html += htmlDepositoInline(idx, linea.deposito_origen_id, linea.deposito_origen_codigo, linea.deposito_origen_nombre);
         html += htmlTecnicoCell(idx, tecnicos, destino);
         html += '<td>' + escapeHtml(linea.uid) + '</td>';
         html += '<td><input type="text" name="lineas[' + idx + '][numeroparte]" class="form-control form-control-sm input-npu-linea" maxlength="50" value="' + escapeHtml(linea.numeroparte || '') + '" placeholder="NPU"></td>';
         html += '<td>';
         html += '<input type="hidden" name="lineas[' + idx + '][requisicion_sala_articulo_id]" value="' + linea.id + '">';
-        html += '<input type="hidden" name="lineas[' + idx + '][estadoparcial]" class="input-estadoparcial" value="">';
-        html += '<input type="hidden" name="lineas[' + idx + '][estado_linea]" class="input-estado-linea" value="">';
-        html += '<input type="hidden" name="lineas[' + idx + '][fecha_entrega]" class="input-fecha-entrega" value="">';
-        html += '<input type="hidden" name="lineas[' + idx + '][numeroremito]" class="input-numeroremito" value="">';
-        html += '<input type="hidden" name="lineas[' + idx + '][nombreresponsable]" class="input-nombreresponsable" value="">';
-        html += '<input type="number" step="0.01" min="0" name="lineas[' + idx + '][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="' + linea.pendiente + '">';
+        html += '<input type="hidden" name="lineas[' + idx + '][estadoparcial]" class="input-estadoparcial" value="' + escapeHtml(linea.estadoparcial || '') + '">';
+        html += '<input type="hidden" name="lineas[' + idx + '][estado_linea]" class="input-estado-linea" value="' + escapeHtml(linea.estado_linea || '') + '">';
+        html += '<input type="hidden" name="lineas[' + idx + '][fecha_entrega]" class="input-fecha-entrega" value="' + escapeHtml(linea.fecha_entrega || '') + '">';
+        html += '<input type="hidden" name="lineas[' + idx + '][numeroremito]" class="input-numeroremito" value="' + escapeHtml(linea.numeroremito || '') + '">';
+        html += '<input type="hidden" name="lineas[' + idx + '][nombreresponsable]" class="input-nombreresponsable" value="' + escapeHtml(linea.nombreresponsable || '') + '">';
+        html += '<input type="number" step="0.01" min="0" name="lineas[' + idx + '][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="' + linea.pendiente + '" value="' + escapeHtml(linea.cantidad_entrega != null && linea.cantidad_entrega !== '' ? String(linea.cantidad_entrega) : '') + '">';
         html += '</td>';
-        html += '<td class="motivo-parcial-label small text-muted"></td>';
+        html += '<td class="motivo-parcial-label small text-muted">' + escapeHtml(linea.estadoparcial ? nombreMotivoParcial(linea.estadoparcial) : '') + '</td>';
         html += '</tr>';
         return html;
+    }
+
+    function refrescarSaldosGrilla(avisar) {
+        if (typeof window.crsRefrescarSaldosOrigen === 'function') {
+            window.crsRefrescarSaldosOrigen({ avisar: !!avisar });
+        }
+    }
+
+    function cargarSaldoFilaNueva($fila, avisar) {
+        if (typeof window.crsCargarSaldoFila === 'function') {
+            window.crsCargarSaldoFila($fila, !!avisar);
+        }
     }
 
     function renderLineas(lineas, tecnicos, req) {
@@ -175,6 +188,7 @@
             activa_eventos_consultadeposito();
         }
         actualizarResumenNpu();
+        refrescarSaldosGrilla(true);
     }
 
     function agregarLinea(linea, req, tecnicos) {
@@ -189,6 +203,8 @@
             activa_eventos_consultadeposito();
         }
         actualizarResumenNpu();
+        var $fila = $('#tbody-lineas-cumple tr.fila-cumple-linea').last();
+        cargarSaldoFilaNueva($fila, true);
         return true;
     }
 
@@ -406,6 +422,26 @@
             return;
         }
 
+        var saldoAttr = $fila.attr('data-saldo-origen');
+        var controlaStock = $fila.attr('data-controla-stock') !== '0';
+        if (controlaStock && saldoAttr !== '' && saldoAttr !== undefined) {
+            var saldo = Number(saldoAttr);
+            if (!Number.isNaN(saldo) && saldo + 1e-9 < entrega) {
+                alert(
+                    'La cantidad supera el saldo disponible en el dep\u00f3sito origen. Saldo: '
+                    + saldo
+                    + ', solicitado: '
+                    + entrega
+                    + '.'
+                );
+                $fila.addClass('fila-saldo-insuficiente');
+                if (typeof alListo === 'function') {
+                    alListo(false);
+                }
+                return;
+            }
+        }
+
         if (entrega < pendiente) {
             if (datos.motivo === '6') {
                 $fila.find('.input-estado-linea').val('C');
@@ -478,14 +514,139 @@
         return true;
     }
 
+    function aplicarValoresPostEnFila($fila, linea) {
+        if (!$fila || !$fila.length || !linea) {
+            return;
+        }
+        if (linea.tecnico_laboratorio_id) {
+            $fila.find('.select-tecnico').val(String(linea.tecnico_laboratorio_id));
+        }
+        if (linea.deposito_origen_id) {
+            $fila.find('.deposito_id').val(linea.deposito_origen_id);
+            $fila.find('.codigodeposito').val(linea.deposito_origen_codigo || '');
+            $fila.find('.descripciondeposito').val(linea.deposito_origen_nombre || '');
+        }
+        if (linea.cantidad_entrega !== undefined && linea.cantidad_entrega !== null && linea.cantidad_entrega !== '') {
+            $fila.find('.input-cantidad-entrega').val(linea.cantidad_entrega);
+        }
+        if (linea.numeroparte !== undefined) {
+            $fila.find('.input-npu-linea').val(linea.numeroparte || '');
+        }
+        $fila.find('.input-estadoparcial').val(linea.estadoparcial || '');
+        $fila.find('.input-estado-linea').val(linea.estado_linea || '');
+        $fila.find('.input-fecha-entrega').val(linea.fecha_entrega || '');
+        $fila.find('.input-numeroremito').val(linea.numeroremito || '');
+        $fila.find('.input-nombreresponsable').val(linea.nombreresponsable || '');
+        $fila.find('.motivo-parcial-label').text(linea.estadoparcial ? nombreMotivoParcial(linea.estadoparcial) : '');
+    }
+
+    function restaurarLineasDesdeOld() {
+        var olds = cfg.oldLineas || [];
+        if (!olds.length) {
+            return;
+        }
+
+        var porEmpresa = cfg.tecnicosPorEmpresa || {};
+        Object.keys(porEmpresa).forEach(function (empresaId) {
+            cacheTecnicos(empresaId, porEmpresa[empresaId]);
+        });
+
+        if (cfg.modoNpu && $('#tbody-lineas-cumple tr.fila-cumple-linea').length === 0) {
+            olds.forEach(function (oldLinea) {
+                var req = oldLinea.requisicion || null;
+                var empresaId = req ? req.empresa_id : null;
+                var tecnicos = tecnicosParaEmpresa(empresaId, porEmpresa[empresaId] || []);
+                $('#tbody-lineas-cumple').append(construirFilaLinea(oldLinea, req, tecnicos, indiceLinea));
+                var $fila = $('#tbody-lineas-cumple tr.fila-cumple-linea').last();
+                aplicarValoresPostEnFila($fila, oldLinea);
+                indiceLinea++;
+            });
+            if (typeof activa_eventos_consultadeposito === 'function') {
+                activa_eventos_consultadeposito();
+            }
+            var numReqs = {};
+            $('#tbody-lineas-cumple tr.fila-cumple-linea').each(function () {
+                numReqs[$(this).data('requisicion-id')] = true;
+            });
+            var multi = Object.keys(numReqs).length > 1;
+            var primera = olds[0] && olds[0].requisicion ? olds[0].requisicion : null;
+            renderCabecera(primera, multi);
+            if (!multi && primera) {
+                $('#empresa_id').val(primera.empresa_id || '');
+            } else {
+                $('#empresa_id').val('');
+            }
+            actualizarResumenNpu();
+            refrescarSaldosGrilla(true);
+            return;
+        }
+
+        var byId = {};
+        olds.forEach(function (oldLinea) {
+            byId[String(oldLinea.id)] = oldLinea;
+        });
+        $('#tbody-lineas-cumple tr.fila-cumple-linea').each(function () {
+            var $fila = $(this);
+            aplicarValoresPostEnFila($fila, byId[String($fila.data('linea-id'))]);
+        });
+        refrescarSaldosGrilla(true);
+    }
+
+    function mostrarErrorCumple(mensaje) {
+        var $box = $('#cumple-alerta-error');
+        if (!$box.length) {
+            alert(mensaje || 'Error al grabar cumplimiento.');
+            return;
+        }
+        $box.find('.cumple-alerta-error-texto').text(mensaje || 'Error al grabar cumplimiento.');
+        $box.removeClass('d-none');
+        var top = $box.offset() ? $box.offset().top - 80 : 0;
+        $('html, body').animate({ scrollTop: Math.max(top, 0) }, 200);
+    }
+
+    function ocultarErrorCumple() {
+        $('#cumple-alerta-error').addClass('d-none');
+    }
+
+    function restaurarBotonGrabar() {
+        enviandoFormulario = false;
+        grabarPendiente = false;
+        $('#btn-grabar-cumple').prop('disabled', false).html('<i class="fa fa-save"></i> Grabar cumplimiento');
+    }
+
     function enviarFormularioCumple() {
         enviandoFormulario = true;
         grabarPendiente = false;
         grabarIndiceLinea = 0;
+        ocultarErrorCumple();
         $('#btn-grabar-cumple').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Grabando&hellip;');
-        window.setTimeout(function () {
-            document.getElementById('form-cumple-requisicion-sala').submit();
-        }, 50);
+
+        var $form = $('#form-cumple-requisicion-sala');
+        $.ajax({
+            url: cfg.urlGrabar || $form.attr('action'),
+            method: 'POST',
+            data: $form.serialize(),
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                Accept: 'application/json',
+            },
+        }).done(function (resp) {
+            if (resp && resp.ok && resp.redirect) {
+                window.location.href = resp.redirect;
+                return;
+            }
+            restaurarBotonGrabar();
+            mostrarErrorCumple((resp && resp.mensaje) || 'Error al grabar cumplimiento.');
+        }).fail(function (xhr) {
+            restaurarBotonGrabar();
+            var mensaje = 'Error al grabar cumplimiento.';
+            if (xhr.responseJSON && xhr.responseJSON.mensaje) {
+                mensaje = xhr.responseJSON.mensaje;
+            } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                mensaje = xhr.responseJSON.message;
+            }
+            mostrarErrorCumple(mensaje);
+        });
     }
 
     function continuarGrabarDesdeIndice(indice) {
@@ -565,6 +726,11 @@
             return;
         }
 
+        if (typeof window.crsValidarSaldosAntesDeGrabar === 'function'
+            && !window.crsValidarSaldosAntesDeGrabar()) {
+            return;
+        }
+
         esperarValidacionesYGrabar();
     }
 
@@ -585,7 +751,17 @@
         });
 
         if (cfg.modoNpu) {
-            renderCabecera(null, $('#tbody-lineas-cumple tr').length === 0);
+            if (!(cfg.oldLineas || []).length) {
+                renderCabecera(null, $('#tbody-lineas-cumple tr').length === 0);
+                setTimeout(function () {
+                    $('#input-npu-cumple').focus();
+                }, 300);
+            }
+        }
+
+        restaurarLineasDesdeOld();
+
+        if (cfg.modoNpu && (cfg.oldLineas || []).length) {
             setTimeout(function () {
                 $('#input-npu-cumple').focus();
             }, 300);

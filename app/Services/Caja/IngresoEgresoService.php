@@ -27,6 +27,8 @@ use Carbon\Carbon;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
+use App\Support\Caja\IngresoEgresoTransferenciaSupport;
+use InvalidArgumentException;
 use App;
 use Auth;
 use DB;
@@ -96,6 +98,12 @@ class IngresoEgresoService
 		$this->validarComprobantesIvaContraCaja($request);
 
 		$data = $request->all();
+
+		try {
+			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
+		} catch (InvalidArgumentException $e) {
+			return ['errores' => $e->getMessage()];
+		}
 
    		// Crea estado
 	   	$data['fechas'][] = Carbon::now();
@@ -197,6 +205,12 @@ class IngresoEgresoService
 		$this->validarComprobantesIvaContraCaja($request);
 
 		$data = $request->all();
+
+		try {
+			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
+		} catch (InvalidArgumentException $e) {
+			return ['errores' => $e->getMessage()];
+		}
 
 		// Crea estado
 		$data['fechas'][] = Carbon::now();
@@ -409,9 +423,13 @@ class IngresoEgresoService
 				$signo = -1;
 		}
 
+		// Transferencia (TRA): los montos ya vienen firmados (+ entrada / − salida).
+		if (IngresoEgresoTransferenciaSupport::esTransferencia($tipotransaccion_caja)) {
+			$signo = 1;
+		}
+
 		// Arma cuentas contables de cada imputacion de caja
 		$asiento = [];
-		$empresa_id = 0;
 		if (count($datosContables) > 0)
 		{
 			foreach($datosContables as $imputacionContable)
@@ -442,15 +460,16 @@ class IngresoEgresoService
 				// Busca si la imputacion ya existe
 				if ($cuentacaja)
 				{
-					if ($movimiento->montos * $signo > 0)
+					$importeFirmado = (float) $movimiento->montos * $signo;
+					if ($importeFirmado > 0)
 					{
-						$debe = $movimiento->montos;
+						$debe = round(abs($importeFirmado), 2);
 						$haber = '';
 					}
 					else
 					{
 						$debe = '';
-						$haber = abs($movimiento->montos);
+						$haber = round(abs($importeFirmado), 2);
 					}
 
 					for ($i = 0, $flExiste = false; $i < count($asiento) && !$flExiste; $i++)
@@ -479,8 +498,8 @@ class IngresoEgresoService
 					}
 					else
 					{
-						$asiento[$i]['debe'] += $debe;
-						$asiento[$i]['haber'] += $haber;
+						$asiento[$i - 1]['debe'] = (float) ($asiento[$i - 1]['debe'] ?: 0) + (float) ($debe ?: 0);
+						$asiento[$i - 1]['haber'] = (float) ($asiento[$i - 1]['haber'] ?: 0) + (float) ($haber ?: 0);
 					}
 				}
 			}

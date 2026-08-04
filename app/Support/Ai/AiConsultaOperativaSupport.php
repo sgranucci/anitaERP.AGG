@@ -1064,24 +1064,24 @@ final class AiConsultaOperativaSupport
             return self::fallo(self::INTENT_SALDO_CUENTA, 'Sin permiso para consultar saldos contables.');
         }
 
-        $codigo = self::normalizarCodigoCuenta((string) ($params['cuenta_codigo'] ?? $params['codigo'] ?? $params['valor'] ?? ''));
-        if ($codigo === '') {
-            return self::fallo(self::INTENT_SALDO_CUENTA, 'Indique el código de cuenta contable.');
+        $empresaRes = AiResolucionMaestrosSupport::resolverEmpresa($params);
+        if (! ($empresaRes['ok'] ?? false)) {
+            return self::fallo(self::INTENT_SALDO_CUENTA, (string) ($empresaRes['error'] ?? 'Empresa no resuelta.'));
         }
+        $empresaId = $empresaRes['empresa_id'] ?? null;
 
-        $cuenta = Cuentacontable::query()->where('codigo', $codigo)->first()
-            ?? Cuentacontable::query()->where('codigo', (int) $codigo)->first();
-        if (! $cuenta) {
-            return self::fallo(self::INTENT_SALDO_CUENTA, 'No se encontró la cuenta «'.$codigo.'».');
+        $cuentaRes = AiResolucionMaestrosSupport::resolverCuenta($params, true, $empresaId);
+        if (! ($cuentaRes['ok'] ?? false) || ! ($cuentaRes['cuenta'] ?? null)) {
+            return self::fallo(self::INTENT_SALDO_CUENTA, (string) ($cuentaRes['error'] ?? 'Indique código o nombre de cuenta contable.'));
         }
-
-        $empresaId = isset($params['empresa_id']) && (int) $params['empresa_id'] > 0
-            ? (int) $params['empresa_id']
-            : null;
+        /** @var Cuentacontable $cuenta */
+        $cuenta = $cuentaRes['cuenta'];
+        $cuentasConsulta = AiResolucionMaestrosSupport::cuentasParaConsulta($cuenta);
+        $cuentaIds = AiResolucionMaestrosSupport::idsCuentas($cuentasConsulta);
         [$desdeMes, $hastaMes] = self::resolverRangoAnioMes($params);
 
         $q = DB::table('cuentacontable_saldo_mes')
-            ->where('cuentacontable_id', $cuenta->id)
+            ->whereIn('cuentacontable_id', $cuentaIds !== [] ? $cuentaIds : [(int) $cuenta->id])
             ->where('moneda_id', CuentacontableSaldoMesSupport::monedaLocalId());
         if ($empresaId) {
             $q->where('empresa_id', $empresaId);
@@ -1104,11 +1104,14 @@ final class AiConsultaOperativaSupport
 
         $parrafos = [
             'Cuenta '.$cuenta->codigo.' — '.($cuenta->nombre ?? ''),
-            'Período: '.$periodoTxt,
-            'Debe: '.number_format($debe, 2, ',', '.'),
-            'Haber: '.number_format($haber, 2, ',', '.'),
-            'Saldo neto (debe − haber): '.number_format($neto, 2, ',', '.'),
         ];
+        if (count($cuentasConsulta) > 1) {
+            $parrafos[] = 'Cuenta de título/total: saldo consolidado de '.count($cuentasConsulta).' cuentas imputables.';
+        }
+        $parrafos[] = 'Período: '.$periodoTxt;
+        $parrafos[] = 'Debe: '.number_format($debe, 2, ',', '.');
+        $parrafos[] = 'Haber: '.number_format($haber, 2, ',', '.');
+        $parrafos[] = 'Saldo neto (debe − haber): '.number_format($neto, 2, ',', '.');
 
         return [
             'ok' => true,
@@ -1119,6 +1122,7 @@ final class AiConsultaOperativaSupport
             'datos' => [
                 'cuentacontable_id' => (int) $cuenta->id,
                 'cuenta_codigo' => (string) $cuenta->codigo,
+                'cuentas_incluidas' => count($cuentasConsulta),
                 'debe' => $debe,
                 'haber' => $haber,
                 'neto' => $neto,
@@ -1138,21 +1142,38 @@ final class AiConsultaOperativaSupport
             return self::fallo(self::INTENT_MAYOR_CUENTA, 'Sin permiso para consultar el mayor.');
         }
 
-        $codigoCuentaRaw = trim((string) ($params['cuenta_codigo'] ?? ''));
+        $pidioEmpresa = ($params['empresa_id'] ?? null)
+            || trim((string) ($params['empresa_codigo'] ?? '')) !== ''
+            || trim((string) ($params['empresa_nombre'] ?? '')) !== '';
+        $empresaRes = AiResolucionMaestrosSupport::resolverEmpresa($params);
+        if ($pidioEmpresa && ! ($empresaRes['ok'] ?? false)) {
+            return self::fallo(self::INTENT_MAYOR_CUENTA, (string) ($empresaRes['error'] ?? 'Empresa no resuelta.'));
+        }
+        $empresaId = ($empresaRes['ok'] ?? false) ? ($empresaRes['empresa_id'] ?? null) : null;
+
+        $codigoCuentaRaw = trim((string) ($params['cuenta_codigo'] ?? $params['cuenta_nombre'] ?? ''));
         if ($codigoCuentaRaw === '' && empty($params['numero_oc']) && empty($params['ordencompra_id'])
             && empty($params['centrocosto_id']) && empty($params['centrocosto_codigo'])) {
             // Compat: "valor"/"codigo" solo si no hay filtros OC/CC (evita tomar nro OC como cuenta)
             $codigoCuentaRaw = trim((string) ($params['codigo'] ?? $params['valor'] ?? ''));
+            if ($codigoCuentaRaw !== '') {
+                $params['cuenta_codigo'] = $codigoCuentaRaw;
+            }
         }
-        $codigo = self::normalizarCodigoCuenta($codigoCuentaRaw);
 
         $cuenta = null;
-        if ($codigo !== '') {
-            $cuenta = Cuentacontable::query()->where('codigo', $codigo)->first()
-                ?? Cuentacontable::query()->where('codigo', (int) $codigo)->first();
-            if (! $cuenta) {
-                return self::fallo(self::INTENT_MAYOR_CUENTA, 'No se encontró la cuenta «'.$codigo.'».');
+        $cuentasConsulta = [];
+        $pidioCuenta = trim((string) ($params['cuenta_codigo'] ?? '')) !== ''
+            || trim((string) ($params['cuenta_nombre'] ?? '')) !== ''
+            || $codigoCuentaRaw !== '';
+        if ($pidioCuenta) {
+            $cuentaRes = AiResolucionMaestrosSupport::resolverCuenta($params, true, $empresaId);
+            if (! ($cuentaRes['ok'] ?? false) || ! ($cuentaRes['cuenta'] ?? null)) {
+                return self::fallo(self::INTENT_MAYOR_CUENTA, (string) ($cuentaRes['error'] ?? 'Cuenta no resuelta.'));
             }
+            /** @var Cuentacontable $cuenta */
+            $cuenta = $cuentaRes['cuenta'];
+            $cuentasConsulta = AiResolucionMaestrosSupport::cuentasParaConsulta($cuenta);
         }
 
         $cc = self::resolverCentrocostoMayor($params);
@@ -1161,15 +1182,6 @@ final class AiConsultaOperativaSupport
                 $ref = (string) ($params['centrocosto_codigo'] ?? $params['centrocosto_id'] ?? '');
 
                 return self::fallo(self::INTENT_MAYOR_CUENTA, 'No se encontró el centro de costo «'.$ref.'».');
-            }
-        }
-
-        $empresaId = self::resolverEmpresaIdMayor($params);
-        if (($params['empresa_id'] ?? null) || ($params['empresa_codigo'] ?? null)) {
-            if (! $empresaId) {
-                $ref = (string) ($params['empresa_codigo'] ?? $params['empresa_id'] ?? '');
-
-                return self::fallo(self::INTENT_MAYOR_CUENTA, 'No se encontró la empresa «'.$ref.'».');
             }
         }
 
@@ -1201,6 +1213,10 @@ final class AiConsultaOperativaSupport
         $excluir = is_array($params['campos_excluir'] ?? null) ? $params['campos_excluir'] : [];
         $cruzar = (string) ($params['cruzar_con'] ?? '');
         $ordencompraId = $oc ? (int) $oc->id : 0;
+        $cuentaIds = $cuentasConsulta !== []
+            ? AiResolucionMaestrosSupport::idsCuentas($cuentasConsulta)
+            : [];
+        $multiCuenta = count($cuentaIds) > 1;
 
         $base = Asiento_Movimiento::query()
             ->whereHas('asientos', function ($aq) use ($fechaDesde, $fechaHasta, $empresaId) {
@@ -1209,8 +1225,8 @@ final class AiConsultaOperativaSupport
                     $aq->where('empresa_id', $empresaId);
                 }
             });
-        if ($cuenta) {
-            $base->where('cuentacontable_id', $cuenta->id);
+        if ($cuentaIds !== []) {
+            $base->whereIn('cuentacontable_id', $cuentaIds);
         }
         if ($cc) {
             $base->where('centrocosto_id', (int) $cc->id);
@@ -1250,7 +1266,7 @@ final class AiConsultaOperativaSupport
             'comprobante_proveedores:id,proveedor_id,letra,sucursal,numerocomprobante,ordencompra_id',
             'comprobante_proveedores.proveedores:id,codigo,nombre',
         ];
-        if (! $cuenta) {
+        if (! $cuenta || $multiCuenta) {
             $with[] = 'cuentacontables:id,codigo,nombre';
         }
 
@@ -1263,7 +1279,7 @@ final class AiConsultaOperativaSupport
             ->limit($max)
             ->get();
 
-        $mostrarCuenta = ! $cuenta || ! in_array('cuenta', $excluir, true);
+        $mostrarCuenta = (! $cuenta || $multiCuenta) && ! in_array('cuenta', $excluir, true);
         $mostrarCc = $cc !== null || ! in_array('centrocosto', $excluir, true);
         $columnas = [];
         if (! in_array('fecha', $excluir, true)) {
@@ -1272,7 +1288,7 @@ final class AiConsultaOperativaSupport
         if (! in_array('asiento', $excluir, true)) {
             $columnas[] = ['key' => 'asiento', 'label' => 'Asiento'];
         }
-        if (! $cuenta && $mostrarCuenta) {
+        if ($mostrarCuenta) {
             $columnas[] = ['key' => 'cuenta', 'label' => 'Cuenta'];
         }
         if ($mostrarCc && ($cc || $movs->contains(fn ($m) => (int) ($m->centrocosto_id ?? 0) > 0))) {
@@ -1309,8 +1325,12 @@ final class AiConsultaOperativaSupport
                     'asiento' => (string) ($mov->asientos->numeroasiento ?? $mov->asiento_id ?? '—'),
                     'cuenta' => trim(($mov->cuentacontables->codigo ?? '').' '.($mov->cuentacontables->nombre ?? '')) ?: '—',
                     'centrocosto' => trim(($mov->centrocostos->codigo ?? '').' '.($mov->centrocostos->nombre ?? '')) ?: '—',
-                    'debe' => $debe > 0 ? number_format($debe, 2, ',', '.') : '',
-                    'haber' => $haber > 0 ? number_format($haber, 2, ',', '.') : '',
+                    'debe' => $modoExport
+                        ? ($debe > 0 ? round($debe, 2) : '')
+                        : ($debe > 0 ? number_format($debe, 2, ',', '.') : ''),
+                    'haber' => $modoExport
+                        ? ($haber > 0 ? round($haber, 2) : '')
+                        : ($haber > 0 ? number_format($haber, 2, ',', '.') : ''),
                     'detalle' => (string) ($mov->observacion ?? ''),
                     'proveedor' => self::etiquetaProveedorMovimiento($mov),
                     default => '',
@@ -1322,6 +1342,9 @@ final class AiConsultaOperativaSupport
         $parrafos = [];
         if ($cuenta) {
             $parrafos[] = 'Mayor cuenta '.$cuenta->codigo.' — '.($cuenta->nombre ?? '');
+            if ($multiCuenta) {
+                $parrafos[] = 'Cuenta de título/total: incluye '.count($cuentaIds).' cuentas imputables del rubro.';
+            }
         } else {
             $parrafos[] = 'Mayor (todas las cuentas del filtro)';
         }
@@ -1366,6 +1389,7 @@ final class AiConsultaOperativaSupport
             'datos' => [
                 'cuentacontable_id' => $cuenta ? (int) $cuenta->id : null,
                 'cuenta_codigo' => $cuenta ? (string) $cuenta->codigo : null,
+                'cuentas_incluidas' => $multiCuenta ? count($cuentaIds) : ($cuenta ? 1 : 0),
                 'centrocosto_id' => $cc ? (int) $cc->id : null,
                 'centrocosto_codigo' => $cc ? (string) $cc->codigo : null,
                 'empresa_id' => $empresaId,
@@ -1406,19 +1430,9 @@ final class AiConsultaOperativaSupport
      */
     private static function resolverEmpresaIdMayor(array $params): ?int
     {
-        $id = (int) ($params['empresa_id'] ?? 0);
-        if ($id > 0) {
-            return Empresa::query()->where('id', $id)->exists() ? $id : null;
-        }
-        $codigo = trim((string) ($params['empresa_codigo'] ?? ''));
-        if ($codigo === '') {
-            return null;
-        }
-        $emp = Empresa::query()->where('codigo', $codigo)->first()
-            ?? (ctype_digit($codigo) ? Empresa::query()->where('codigo', (int) $codigo)->first() : null)
-            ?? (ctype_digit($codigo) ? Empresa::query()->find((int) $codigo) : null);
+        $res = AiResolucionMaestrosSupport::resolverEmpresa($params);
 
-        return $emp ? (int) $emp->id : null;
+        return ($res['ok'] ?? false) ? ($res['empresa_id'] ?? null) : null;
     }
 
     /**
@@ -1603,9 +1617,7 @@ final class AiConsultaOperativaSupport
             return self::fallo(self::INTENT_ASIENTO, 'Indique el número de asiento.');
         }
 
-        $empresaId = isset($params['empresa_id']) && (int) $params['empresa_id'] > 0
-            ? (int) $params['empresa_id']
-            : null;
+        $empresaId = self::resolverEmpresaIdMayor($params);
 
         $q = Asiento::query()
             ->with(['empresas:id,nombre', 'tipoasientos:id,nombre', 'asiento_movimientos.cuentacontables:id,codigo,nombre'])
@@ -1678,9 +1690,7 @@ final class AiConsultaOperativaSupport
             return self::fallo(self::INTENT_COMPROBANTE_PROVEEDOR, 'Indique número o letra-sucursal-número del comprobante.');
         }
 
-        $empresaId = isset($params['empresa_id']) && (int) $params['empresa_id'] > 0
-            ? (int) $params['empresa_id']
-            : null;
+        $empresaId = self::resolverEmpresaIdMayor($params);
         $cp = self::buscarComprobanteProveedor($valor, $empresaId);
         if (! $cp) {
             return self::fallo(self::INTENT_COMPROBANTE_PROVEEDOR, 'No se encontró comprobante de proveedor «'.$valor.'».');
@@ -1736,9 +1746,7 @@ final class AiConsultaOperativaSupport
             return self::fallo(self::INTENT_FACTURA_VENTA, 'Indique número o punto de venta-número de la factura.');
         }
 
-        $empresaId = isset($params['empresa_id']) && (int) $params['empresa_id'] > 0
-            ? (int) $params['empresa_id']
-            : null;
+        $empresaId = self::resolverEmpresaIdMayor($params);
         $venta = self::buscarFacturaVenta($valor, $empresaId);
         if (! $venta) {
             return self::fallo(self::INTENT_FACTURA_VENTA, 'No se encontró factura de venta «'.$valor.'».');
@@ -1957,10 +1965,7 @@ final class AiConsultaOperativaSupport
 
     private static function normalizarCodigoCuenta(string $codigo): string
     {
-        $codigo = trim($codigo);
-        $codigo = str_replace(['-', '.', ' '], '', $codigo);
-
-        return $codigo;
+        return AiResolucionMaestrosSupport::normalizarCodigoCuenta($codigo);
     }
 
     /**

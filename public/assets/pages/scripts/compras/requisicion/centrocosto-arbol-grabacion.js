@@ -1,6 +1,8 @@
 /**
  * Intercepta alta/actualización de requisición cuando hay varios CC de destino
  * y pide el mismo modal que el retome desde EN COMPRAS.
+ * Con permiso cargar-centrocosto-arbol-requisicion: no pide modal; usa el CC del formulario
+ * (default origen) independientemente de los destinos de renglón.
  */
 (function ($) {
 	'use strict';
@@ -11,6 +13,10 @@
 		}
 		// Alta normal (no provisorio): sí. Provisorio: no.
 		return !window.requisicionModoProvisorio;
+	}
+
+	function usaCcOrigenArbol() {
+		return !!window.requisicionUsaCcOrigenArbol;
 	}
 
 	function centrosCostoDistintosDesdeFormulario($form) {
@@ -46,12 +52,29 @@
 	}
 
 	function asegurarHiddenCcArbol($form, centrocostoId) {
+		var $campo = $form.find('#centrocostodestino_arbol_id');
+		if ($campo.length) {
+			$campo.val(centrocostoId > 0 ? centrocostoId : '').trigger('change');
+			return;
+		}
 		var $hidden = $form.find('input[name="centrocostodestino_arbol_id"]');
 		if (!$hidden.length) {
 			$hidden = $('<input type="hidden" name="centrocostodestino_arbol_id">');
 			$form.append($hidden);
 		}
 		$hidden.val(centrocostoId > 0 ? centrocostoId : '');
+	}
+
+	function ccArbolDesdeFormularioOOrigen($form) {
+		var arbolId = parseInt($form.find('#centrocostodestino_arbol_id').val(), 10)
+			|| parseInt($form.find('input[name="centrocostodestino_arbol_id"]').val(), 10)
+			|| 0;
+		if (arbolId > 0) {
+			return arbolId;
+		}
+		return parseInt($form.find('#centrocosto_id').val(), 10)
+			|| parseInt($form.find('input[name="centrocosto_id"]').val(), 10)
+			|| 0;
 	}
 
 	function interceptarSubmitFormulario() {
@@ -62,6 +85,12 @@
 			}
 			if ($form.data('req-cc-arbol-ok')) {
 				$form.removeData('req-cc-arbol-ok');
+				return;
+			}
+
+			// Capital Humano: CC del árbol en cabecera (default origen); sin modal multi-destino.
+			if (usaCcOrigenArbol()) {
+				asegurarHiddenCcArbol($form, ccArbolDesdeFormularioOOrigen($form));
 				return;
 			}
 

@@ -252,11 +252,12 @@
             <tr>
                 <th class="cen items-col-idx" style="width:3%;">#</th>
                 <th style="width:7%;">SKU</th>
-                <th style="width:44%;">Descripción</th>
+                <th style="width:34%;">Descripción</th>
                 <th class="num items-col-cant" style="width:6%;">Cant.</th>
-                <th class="num" style="width:9%;">P.unit.</th>
-                <th class="cen" style="width:9%;">Mon./cot.</th>
-                <th class="num" style="width:22%;">Subt.</th>
+                <th class="num" style="width:8%;">P.unit.</th>
+                <th class="cen" style="width:8%;">Mon./cot.</th>
+                <th class="cen" style="width:14%;">CC dest.</th>
+                <th class="num" style="width:20%;">Subt.</th>
             </tr>
         </thead>
         <tbody>
@@ -284,14 +285,19 @@
                     }
                     $monAb = optional($linea->monedas)->abreviatura ?? optional($linea->monedas)->nombre ?? '—';
                     $fEnt = $linea->fechaentrega ? date('d/m/y', strtotime($linea->fechaentrega)) : '—';
-                    $ccCod = optional($ccDest)->codigo ?? '—';
+                    $ccCod = optional($ccDest)->codigo ?? '';
+                    $ccNom = optional($ccDest)->nombre ?? '';
+                    $ccEtiqueta = trim($ccCod.' '.$ccNom);
+                    if ($ccEtiqueta === '') {
+                        $ccEtiqueta = '—';
+                    }
                     $detLin = trim((string) ($linea->detalle ?? ''));
                     $origTxt = trim((string) ($linea->precio_origen_etiqueta ?? ''));
                 @endphp
                 <tr>
                     <td class="cen items-col-idx" style="width:3%;">{{ $i + 1 }}</td>
                     <td style="width:7%;">{{ $art->sku ?? '—' }}</td>
-                    <td style="width:44%;">
+                    <td style="width:34%;">
                         {{ $art->descripcion ?? '—' }}
                         @if (optional($linea->color)->nombre)
                             <br><span class="muted">Color: {{ $linea->color->nombre }}</span>
@@ -301,19 +307,21 @@
                         @endif
                     </td>
                     <td class="num items-col-cant" style="width:6%;">{{ number_format((float) $linea->cantidad, 3, ',', '.') }}</td>
-                    <td class="num" style="width:9%;">@if ($monAb !== '' && $monAb !== '—'){{ $monAb }} @endif{{ number_format((float) $linea->precio, 3, ',', '.') }}</td>
-                    <td class="mcot cen" style="width:9%;">{{ $monAb }}<br>{{ number_format($cot, 3, ',', '.') }}</td>
-                    <td class="num items-subt" style="width:22%;">@if ($monOcItems !== ''){{ $monOcItems }} @endif{{ number_format($sub, 2, ',', '.') }}</td>
+                    <td class="num" style="width:8%;">@if ($monAb !== '' && $monAb !== '—'){{ $monAb }} @endif{{ number_format((float) $linea->precio, 3, ',', '.') }}</td>
+                    <td class="mcot cen" style="width:8%;">{{ $monAb }}<br>{{ number_format($cot, 3, ',', '.') }}</td>
+                    <td class="cen" style="width:14%;">{{ $ccEtiqueta }}</td>
+                    <td class="num items-subt" style="width:20%;">@if ($monOcItems !== ''){{ $monOcItems }} @endif{{ number_format($sub, 2, ',', '.') }}</td>
                 </tr>
                 <tr class="item-leyenda">
-                    <td colspan="7">
+                    <td colspan="8">
                         @if ($detLin !== '')
                             <div class="item-leyenda-detalle">{{ $linea->detalle }}</div>
                         @endif
                         <span class="muted">Leyenda del ítem:</span>
+                        CC dest. = centro de costo destino.
                         Subtotal línea (sin IVA)@if ($monOcItems !== ''), expresado en moneda OC ({{ $monOcItems }})@endif = cantidad × precio unitario × cotización.
                         Entrega: {{ $fEnt }}.
-                        Centro de costo destino: {{ $ccCod }}.
+                        Centro de costo destino: {{ $ccEtiqueta }}.
                         Partida / CAPEX: {{ $refPartCpx }}.
                         @if ($origTxt !== '')
                             Origen del precio: {{ $origTxt }}@if (! empty($linea->precio_origen_tipo)) ({{ $linea->precio_origen_tipo }}@if (! empty($linea->precio_origen_ref_id)), ref. {{ $linea->precio_origen_ref_id }}@endif)@endif.

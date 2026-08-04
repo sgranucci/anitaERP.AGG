@@ -544,8 +544,35 @@ class MovimientoStockService
 		PeriodoContableCierreSupport::assertOperacionPermitida(
 			$empresaId,
 			(string) $data['fecha'],
-			PeriodoContableCierreSupport::ALCANCE_STOCK
+			$this->resolverAlcanceCierreStock($data)
 		);
+	}
+
+	/**
+	 * Indumentaria (EIND) valida bajo sueldos; el resto bajo movimientos de stock.
+	 */
+	private function resolverAlcanceCierreStock(array $data): string
+	{
+		$alcance = (string) ($data['alcance_cierre_contable'] ?? '');
+		if ($alcance !== '' && PeriodoContableCierreSupport::alcanceEsValido($alcance)) {
+			return $alcance;
+		}
+
+		$tipoId = 0;
+		if (! empty($data['tipotransaccion_stock_id'])) {
+			$tipoId = (int) $data['tipotransaccion_stock_id'];
+		} elseif (! empty($data['tipotransaccion_id'])) {
+			$tipoId = (int) $data['tipotransaccion_id'];
+		}
+
+		if ($tipoId > 0) {
+			$abrev = strtoupper((string) (Tipotransaccion_Stock::query()->whereKey($tipoId)->value('abreviatura') ?? ''));
+			if ($abrev === 'EIND') {
+				return PeriodoContableCierreSupport::ALCANCE_INDUMENTARIA;
+			}
+		}
+
+		return PeriodoContableCierreSupport::ALCANCE_STOCK;
 	}
 
 	/**

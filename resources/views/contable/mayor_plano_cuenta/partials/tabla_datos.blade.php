@@ -161,6 +161,14 @@
                             $hrefComprobante = route('editar_movimientostock', ['id' => $movStockIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
                         } elseif ($puedeVerCajaMov && $cajaMovIdFila > 0) {
                             $hrefComprobante = route('editar_ingresoegreso', ['id' => $cajaMovIdFila, 'origen' => 'modal_consulta']);
+                        } elseif ($puedeVerOc) {
+                            $ocIdComp = (int) ($fila['ordencompra_id'] ?? 0);
+                            if ($ocIdComp <= 0) {
+                                $ocIdComp = (int) ($fila['ordencompra_id_asiento'] ?? 0);
+                            }
+                            if ($ocIdComp > 0) {
+                                $hrefComprobante = route('editar_ordencompra', ['id' => $ocIdComp, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                            }
                         }
                         if ($textoComprobante === '' && $hrefComprobante) {
                             $textoComprobante = 'Ver origen';
@@ -189,14 +197,21 @@
                 <td>{{ $fila['cuit'] ?? '' }}</td>
                 <td>{{ $fila['descripcion'] ?? '' }}</td>
                 <td>
-                    @if ((int) ($fila['nro_oc'] ?? 0) > 0)
-                        @if ($puedeVerOc && (int) ($fila['ordencompra_id'] ?? 0) > 0)
-                            <a href="{{ route('editar_ordencompra', ['id' => $fila['ordencompra_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                    @php
+                        $nroOcFila = (int) ($fila['nro_oc'] ?? 0);
+                        $ocIdFila = (int) ($fila['ordencompra_id'] ?? 0);
+                        if ($ocIdFila <= 0) {
+                            $ocIdFila = (int) ($fila['ordencompra_id_asiento'] ?? 0);
+                        }
+                    @endphp
+                    @if ($nroOcFila > 0 || $ocIdFila > 0)
+                        @if ($puedeVerOc && $ocIdFila > 0)
+                            <a href="{{ route('editar_ordencompra', ['id' => $ocIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
                                target="_blank" rel="noopener" class="text-primary">
-                                {{ $fila['nro_oc'] }}
+                                {{ $nroOcFila > 0 ? $nroOcFila : ('#'.$ocIdFila) }}
                             </a>
-                        @else
-                            {{ $fila['nro_oc'] }}
+                        @elseif ($nroOcFila > 0)
+                            {{ $nroOcFila }}
                         @endif
                     @endif
                 </td>

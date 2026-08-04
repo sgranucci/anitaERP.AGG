@@ -56,7 +56,7 @@ final class GastronomiaSkuCatalogoSupport
         $digitos = $digitosSufijo ?? self::digitosSufijo();
 
         if ($digitos > 0) {
-            return (bool) preg_match(self::patronRegexCatalogo($prefijo, $digitos), $sku);
+            return (bool) preg_match('/'.self::patronRegexCatalogo($prefijo, $digitos).'/', $sku);
         }
 
         return str_starts_with($sku, $prefijo);

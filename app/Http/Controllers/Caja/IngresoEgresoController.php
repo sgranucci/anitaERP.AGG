@@ -26,6 +26,8 @@ use App\Services\Caja\IngresoEgresoComprobanteIvaService;
 use App\Services\Caja\IngresoEgresoService;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
+use App\Support\Caja\IngresoEgresoListadoFiltros;
+use App\Support\Caja\IngresoEgresoVisibilidadSupport;
 use App\Queries\Caja\Caja_MovimientoQueryInterface;
 use App\Exports\Caja\Caja_MovimientoExport;
 use Illuminate\Http\Request;
@@ -112,55 +114,56 @@ class IngresoEgresoController extends Controller
 		if (!$hayMovimientosCaja)
 			$this->caja_movimientoRepository->sincronizarConAnita();
 
-        $busqueda = $request->busqueda;
+        $filtros = $this->resolverFiltrosListado($request);
+        $caja_movimiento = $this->caja_movimientoQuery->leeCaja_Movimiento($filtros, 0, true);
 
-        $caja_movimiento = $this->caja_movimientoQuery->leeCaja_Movimiento($busqueda, 0, true);
-
-        $datas = ['caja_movimiento' => $caja_movimiento, 'busqueda' => $busqueda];
+        $datas = [
+            'caja_movimiento' => $caja_movimiento,
+            'filtros' => $filtros,
+            'camposFiltro' => IngresoEgresoListadoFiltros::camposParaVista(),
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'filtrosQuery' => IngresoEgresoListadoFiltros::paraQueryString($filtros),
+            'alcance_centro_costo' => IngresoEgresoVisibilidadSupport::etiquetaAlcanceActivo(),
+        ];
 
         return view('caja.ingresoegreso.index', $datas);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-ingresos-egresos-caja'); 
+        can('listar-ingresos-egresos-caja');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        switch($formato)
-        {
-        case 'PDF':
-            $caja_movimiento = $this->caja_movimientoQuery->leeCaja_Movimiento($busqueda, 0, false);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
 
-            $view =  \View::make('caja.ingresoegreso.listado', compact('caja_movimiento'))
-                        ->render();
+        switch ($formato) {
+        case 'PDF':
+            $caja_movimiento = $this->caja_movimientoQuery->leeCaja_Movimiento($filtros, 0, false);
+
+            $view = \View::make('caja.ingresoegreso.listado', compact('caja_movimiento'))->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_caja_movimiento';
 
             $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
+            $pdf->setPaper('legal', 'landscape');
             $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
 
         case 'EXCEL':
             return (new Caja_MovimientoExport($this->caja_movimientoQuery))
-                        ->parametros($busqueda)
+                        ->parametros($filtros, false)
                         ->download('caja_movimiento.xlsx');
-            break;
 
         case 'CSV':
             return (new Caja_MovimientoExport($this->caja_movimientoQuery))
-                        ->parametros($busqueda, true)
+                        ->parametros($filtros, true)
                         ->download('caja_movimiento.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
-        }   
+        }
 
-        $datas = ['caja_movimiento' => $caja_movimiento, 'busqueda' => $busqueda];
-
-		return view('caja.ingresoegreso.indexp', $datas);       
+        return redirect()->route('ingresoegreso', IngresoEgresoListadoFiltros::paraQueryString($filtros));
     }
 
     /**
@@ -267,6 +270,7 @@ class IngresoEgresoController extends Controller
     public function editar($id, $origen = null)
     {
         can('editar-ingresos-egresos-caja');
+        IngresoEgresoVisibilidadSupport::abortSiNoAccesible((int) $id);
 
         if (!isset($origen))
             $origen = 'ingresoegreso';
@@ -314,6 +318,7 @@ class IngresoEgresoController extends Controller
     public function actualizar(ValidacionIngresoEgreso $request, $id)
     {
         can('actualizar-ingresos-egresos-caja');
+        IngresoEgresoVisibilidadSupport::abortSiNoAccesible((int) $id);
 
         session(['empresa_id' => $request->empresa_id]);
         
@@ -336,6 +341,7 @@ class IngresoEgresoController extends Controller
     public function eliminar(Request $request, $id, $origen = null)
     {
         can('borrar-ingresos-egresos-caja');
+        IngresoEgresoVisibilidadSupport::abortSiNoAccesible((int) $id);
 
         if ($request->ajax()) 
 		{
@@ -554,6 +560,17 @@ class IngresoEgresoController extends Controller
             'tipos_tesoreria',
             'conceptos_cuenta_meta',
             'comprobantes_ivacompra_inicial',
+        );
+    }
+
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+
+        return IngresoEgresoListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
         );
     }
 }

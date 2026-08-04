@@ -2,7 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
+use InvalidArgumentException;
 
 class ValidacionIngresoEgreso extends FormRequest
 {
@@ -25,7 +28,22 @@ class ValidacionIngresoEgreso extends FormRequest
     {
         return [
             'empresa_id' => 'required',
-            'tipotransaccion_caja_id' => 'required'
+            'tipotransaccion_caja_id' => 'required',
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            try {
+                IngresoEgresoTransferenciaSupport::assertBalanceado($this->all());
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add('tipotransaccion_caja_id', $e->getMessage());
+            }
+        });
     }
 }

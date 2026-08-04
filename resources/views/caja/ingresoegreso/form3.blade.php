@@ -1,7 +1,7 @@
-<div class="card form3" style="display: none;">
+<div class="card card-outline card-info form3 mb-0 border-0 shadow-none" style="display: none;">
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4 class="mb-0">Comprobantes IVA compras</h4>
+            <h4 class="mb-0"><i class="fa fa-file-invoice"></i> Comprobantes IVA compras</h4>
             <div>
                 <button type="button" class="btn btn-info btn-sm" id="ie-btn-pdf-ia-comprobante">
                     <i class="fa fa-magic"></i> Cargar PDF (OCR/IA)

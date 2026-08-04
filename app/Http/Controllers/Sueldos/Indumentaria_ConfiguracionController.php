@@ -8,6 +8,7 @@ use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Models\Sueldos\Configuracion_Indumentaria_Sueldos;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class Indumentaria_ConfiguracionController extends Controller
 {
@@ -17,13 +18,21 @@ class Indumentaria_ConfiguracionController extends Controller
 
         $config = Configuracion_Indumentaria_Sueldos::actual();
 
+        $depositoId = (int) old('deposito_id', $config->deposito_id);
+        $tipoId = (int) old('tipotransaccion_stock_id', $config->tipotransaccion_stock_id);
+        $centrocostoId = (int) old('centrocosto_id', $config->centrocosto_id);
+
         return view('sueldos.indumentaria.configuracion', [
             'config' => $config,
-            'depositos' => Depmae::query()->orderBy('nombre')->get(['id', 'nombre', 'codigo', 'empresa_id']),
-            'tipos' => Tipotransaccion_Stock::query()
-                ->where('operacion', 'S')->where('estado', 'A')
-                ->orderBy('nombre')->get(['id', 'nombre', 'abreviatura', 'maneja_contabilidad']),
-            'centrocostos' => Centrocosto::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']),
+            'deposito' => $depositoId > 0
+                ? Depmae::query()->find($depositoId)
+                : null,
+            'tipo' => $tipoId > 0
+                ? Tipotransaccion_Stock::query()->find($tipoId)
+                : null,
+            'centrocosto' => $centrocostoId > 0
+                ? Centrocosto::query()->find($centrocostoId)
+                : null,
         ]);
     }
 
@@ -40,6 +49,13 @@ class Indumentaria_ConfiguracionController extends Controller
             'tipotransaccion_stock_id' => 'tipo de transacción de stock',
             'centrocosto_id' => 'centro de costo',
         ]);
+
+        $tipo = Tipotransaccion_Stock::query()->find((int) $data['tipotransaccion_stock_id']);
+        if ($tipo === null || $tipo->operacion !== 'S' || $tipo->estado !== 'A') {
+            throw ValidationException::withMessages([
+                'tipotransaccion_stock_id' => 'Debe elegir un tipo de transacción de salida (S) activo.',
+            ]);
+        }
 
         $config = Configuracion_Indumentaria_Sueldos::actual();
         $config->fill([

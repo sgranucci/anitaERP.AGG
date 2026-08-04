@@ -679,23 +679,30 @@ class MayorPlanoCuentaProcesador
             } else {
                 $importeNativo = 0.0;
             }
-            // Mon.Referencia = inversa del asiento por cotización del asiento (no la del reporte):
-            // pesos → USD (/cotiz); extranjera → pesos (*cotiz). Fallback cotización diaria si falta.
+            // Mon.Referencia = moneda complementaria al reporte (Debe/Haber):
+            // mayor en pesos → moneda original del asiento (USD si el asiento es pesos);
+            // mayor en extranjera → pesos.
+            $dhMov = (string) ($mov['dh'] ?? '');
             $cotizRef = $cotizMov;
-            if ($cotizRef < 0.01) {
+            if (MayorPlanoCuentaSupport::monReferenciaNecesitaCotizacion($monedaAsientoId, $monedaReporteId)
+                && $cotizRef < 0.01) {
                 $importeRefAbs = $monedaConverter->convertirImporte(
                     abs($importeNativo),
                     $codMonMov,
                     0.0,
                     $fecha,
-                    MayorPlanoCuentaSupport::monedaReferenciaId($monedaAsientoId),
+                    MayorPlanoCuentaSupport::monedaReferenciaId($monedaReporteId),
                 );
-            } elseif ($monedaAsientoId <= 1) {
-                $importeRefAbs = abs($importeNativo) / $cotizRef;
+                $monRef = MayorPlanoCuentaSupport::firmarImporteDh($importeRefAbs, $dhMov);
             } else {
-                $importeRefAbs = abs($importeNativo) * $cotizRef;
+                $monRef = MayorPlanoCuentaSupport::importeMonedaReferencia(
+                    $importeNativo,
+                    $dhMov,
+                    $monedaAsientoId,
+                    $cotizRef,
+                    $monedaReporteId,
+                );
             }
-            $monRef = MayorPlanoCuentaSupport::firmarImporteDh($importeRefAbs, (string) ($mov['dh'] ?? ''));
 
             $nroAsiento = (int) ($mov['nro_asiento'] ?? 0);
             $lineasDetalle[] = [

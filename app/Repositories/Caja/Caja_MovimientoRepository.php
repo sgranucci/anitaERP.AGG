@@ -58,8 +58,9 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 
     public function update(array $data, $id)
     {
-		$data['usuario_id'] = Auth::user()->id;
-		
+		// Conserva el creador: el alcance por centro de costo usa usuario_id original.
+		unset($data['usuario_id']);
+
 		$caja_movimiento = $this->model->findOrFail($id)->update($data);
 
 		// Actualiza anita
@@ -101,6 +102,7 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 									->with("asientos")
 									->with("empresas")
 									->with("conceptogastos")
+									->with("tipotransaccioncajas")
 									->find($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
@@ -117,6 +119,7 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 											->with("asientos")
 											->with("empresas")
 											->with("conceptogastos")
+											->with("tipotransaccioncajas")
 											->findOrFail($id))
 			{
             throw new ModelNotFoundException("Registro no encontrado");

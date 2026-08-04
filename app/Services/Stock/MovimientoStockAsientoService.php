@@ -11,6 +11,7 @@ use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\MovimientoStockAsientoSupport;
 use App\Support\Stock\MovimientoStockCuadreContableSupport;
 use Illuminate\Http\Request;
@@ -79,6 +80,7 @@ class MovimientoStockAsientoService
 
         $payload = $preview['payload_asiento'];
         $payload['movimientostock_id'] = (int) $movimiento->id;
+        $payload['alcance_cierre_contable'] = $this->resolverAlcanceCierre($movimiento);
 
         $asiento = $this->asientoRepository->create($payload);
         if ($asiento === 'Error' || ! $asiento) {
@@ -116,6 +118,7 @@ class MovimientoStockAsientoService
 
         $payload = $preview['payload_asiento'];
         $payload['movimientostock_id'] = (int) $movimiento->id;
+        $payload['alcance_cierre_contable'] = $this->resolverAlcanceCierre($movimiento);
 
         $this->asientoMovimientoRepository->update($payload, $asientoId);
         MovimientoStockCuadreContableSupport::assertPersistido(
@@ -183,6 +186,17 @@ class MovimientoStockAsientoService
         }
 
         $this->asientoRepository->delete($asientoId);
+    }
+
+    private function resolverAlcanceCierre(MovimientoStock $movimiento): string
+    {
+        $movimiento->loadMissing('tipotransaccion_stock:id,abreviatura');
+        $abrev = strtoupper((string) ($movimiento->tipotransaccion_stock->abreviatura ?? ''));
+        if ($abrev === 'EIND') {
+            return PeriodoContableCierreSupport::ALCANCE_INDUMENTARIA;
+        }
+
+        return PeriodoContableCierreSupport::ALCANCE_STOCK;
     }
 
     /**

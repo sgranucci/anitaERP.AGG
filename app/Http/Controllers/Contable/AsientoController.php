@@ -17,6 +17,7 @@ use App\Exports\Contable\AsientoExport;
 use App\Models\Contable\Asiento;
 use App\Services\Contable\AsientoAprobacionService;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
+use App\Support\Contable\AsientoListadoFiltros;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
 use App\Support\Contable\AsientoReferenciaAnitaSupport;
 use Illuminate\Http\Request;
@@ -76,32 +77,38 @@ class AsientoController extends Controller
 		if (!$hayAsientos)
 			$this->asientoRepository->sincronizarConAnita();
 
+        $filtros = $this->resolverFiltrosListado($request);
         // Memoria de filtros: si el request trae filtros los usa y persiste; si vuelve
         // desde editar (URL sin parámetros) restaura el último filtro de la sesión.
-        if ($request->has('busqueda') || $request->has('empresa_id'))
-        {
-            $busqueda = $request->input('busqueda');
-            $empresaId = (int) $request->input('empresa_id', 0);
-            session(['asiento_listado_filtros' => ['busqueda' => $busqueda, 'empresa_id' => $empresaId]]);
+        if (
+            $request->has('busqueda')
+            || $request->filled('empresa_id')
+            || $request->has('empresa_todas')
+            || $request->input('empresa_scope') === 'todas'
+        ) {
+            session(['asiento_listado_filtros' => $filtros]);
+        } else {
+            $sesion = session('asiento_listado_filtros');
+            if (is_array($sesion) && $sesion !== []) {
+                $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+                $filtros = AsientoListadoFiltros::desdeSesion(
+                    $sesion,
+                    $empresaDefault ? (int) $empresaDefault : null
+                );
+            }
         }
-        else
-        {
-            $filtros = session('asiento_listado_filtros', []);
-            $busqueda = $filtros['busqueda'] ?? null;
-            $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-        }
+
+        $busqueda = $filtros['busqueda'] !== '' ? $filtros['busqueda'] : null;
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
 
 		$asientos = $this->asientoQuery->leeAsiento($busqueda, true, $empresaId);
 
         $datas = [
             'asientos' => $asientos,
             'busqueda' => $busqueda,
-            'empresa_id' => $empresaId,
+            'filtros' => $filtros,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
-            'filtrosQuery' => array_filter([
-                'busqueda' => $busqueda,
-                'empresa_id' => $empresaId > 0 ? $empresaId : null,
-            ], fn ($v) => $v !== null && $v !== ''),
+            'filtrosQuery' => AsientoListadoFiltros::paraQueryString($filtros),
         ];
 
         return view('contable.asiento.index', $datas);
@@ -114,10 +121,9 @@ class AsientoController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        // Los filtros llegan por query params (busqueda, empresa_id); se conserva el
-        // segmento de ruta {busqueda} por compatibilidad con enlaces antiguos.
-        $busqueda = $request->input('busqueda', $busqueda);
-        $empresaId = (int) $request->input('empresa_id', 0);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
+        $busqueda = $filtros['busqueda'] !== '' ? $filtros['busqueda'] : null;
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
 
         switch($formato)
         {
@@ -149,7 +155,7 @@ class AsientoController extends Controller
             break;            
         }   
 
-        return redirect()->route('asiento');
+        return redirect()->route('asiento', AsientoListadoFiltros::paraQueryString($filtros));
     }
 
     public function imprimirPdf($id)
@@ -501,5 +507,16 @@ class AsientoController extends Controller
 
             return redirect('contable/asiento')->with('mensaje', $mensaje);
         }
+    }
+
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+
+        return AsientoListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
     }
 }

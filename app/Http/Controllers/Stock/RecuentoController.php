@@ -7,8 +7,10 @@ use App\Exports\Stock\RecuentoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRecuento;
 use App\Imports\Stock\RecuentoImport;
+use App\Models\Stock\Color;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Recuento;
+use App\Models\Stock\Talle;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\RecuentoRepositoryInterface;
@@ -103,8 +105,12 @@ class RecuentoController extends Controller
         $depositos = $this->depmaeRepository->allFiltrado();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $tipo = $request->query('tipo', Recuento::TIPO_MANUAL);
+        $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
-        return view('stock.recuento.crear', compact('depositos', 'empresa_query', 'tipo'));
+        return view('stock.recuento.crear', compact(
+            'depositos', 'empresa_query', 'tipo', 'color_query', 'talle_query'
+        ));
     }
 
     public function guardar(ValidacionRecuento $request)
@@ -132,9 +138,12 @@ class RecuentoController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
         $empresa_id = (int) ($recuento->empresa_id ?? $empresa_query->first()->id);
         $soloLectura = ! $recuento->esEditable();
+        $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
         return view('stock.recuento.editar', compact(
-            'recuento', 'depositos', 'empresa_query', 'empresa_id', 'soloLectura'
+            'recuento', 'depositos', 'empresa_query', 'empresa_id', 'soloLectura',
+            'color_query', 'talle_query'
         ));
     }
 
@@ -293,9 +302,16 @@ class RecuentoController extends Controller
     {
         $articuloId = (int) $request->query('articulo_id', 0);
         $depositoId = (int) $request->query('deposito_id', 0);
+        $colorId = (int) $request->query('color_id', 0);
+        $talleId = (int) $request->query('talle_id', 0);
 
         try {
-            $saldo = $this->service->saldoArticulo($articuloId, $depositoId);
+            $saldo = $this->service->saldoArticulo(
+                $articuloId,
+                $depositoId,
+                $colorId > 0 ? $colorId : null,
+                $talleId > 0 ? $talleId : null
+            );
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
@@ -331,13 +347,17 @@ class RecuentoController extends Controller
             'col_sku' => 'required|string|max:100',
             'col_cantidad' => 'required|string|max:100',
             'col_detalle' => 'nullable|string|max:100',
+            'col_color' => 'nullable|string|max:100',
+            'col_talle' => 'nullable|string|max:100',
         ]);
 
         try {
             $import = new RecuentoImport(
                 $request->input('col_sku'),
                 $request->input('col_cantidad'),
-                $request->input('col_detalle')
+                $request->input('col_detalle'),
+                $request->input('col_color'),
+                $request->input('col_talle')
             );
             Excel::import($import, $request->file('archivo'));
             $lineas = $this->service->lineasDesdeImportacion((int) $request->input('deposito_id'), $import->filas());
@@ -374,6 +394,8 @@ class RecuentoController extends Controller
             'col_sku' => 'required|string|max:100',
             'col_cantidad' => 'required|string|max:100',
             'col_detalle' => 'nullable|string|max:100',
+            'col_color' => 'nullable|string|max:100',
+            'col_talle' => 'nullable|string|max:100',
         ]);
 
         $recuento = $this->service->buscar($id);
@@ -390,11 +412,13 @@ class RecuentoController extends Controller
             $import = new RecuentoImport(
                 $request->input('col_sku'),
                 $request->input('col_cantidad'),
-                $request->input('col_detalle')
+                $request->input('col_detalle'),
+                $request->input('col_color'),
+                $request->input('col_talle')
             );
             Excel::import($import, $request->file('archivo'));
             $recuento = $this->service->importarLineas($id, $import->filas());
-            $recuento->load(['items.articulos', 'items.unidadmedida']);
+            $recuento->load(['items.articulos', 'items.unidadmedida', 'items.color', 'items.talle']);
 
             $mensaje = $recuento->items->count().' líneas importadas.';
             session()->flash('mensaje', $mensaje);
@@ -434,6 +458,9 @@ class RecuentoController extends Controller
             'unidadmedida' => $ln['unidadmedida'] ?? '',
             'saldo_sistema' => $ln['saldo_sistema'] ?? '',
             'cantidad_contada' => $ln['cantidad_contada'] ?? '',
+            'color_id' => (int) ($ln['color_id'] ?? 0),
+            'talle_id' => (int) ($ln['talle_id'] ?? 0),
+            'maneja_stock_color_talle' => (bool) ($ln['maneja_stock_color_talle'] ?? false),
         ], $lineas);
     }
 
@@ -452,6 +479,10 @@ class RecuentoController extends Controller
             'unidadmedida' => optional($i->unidadmedida)->abreviatura ?? optional($i->articulos?->unidadesdemedidas)->abreviatura,
             'saldo_sistema' => $i->saldo_sistema,
             'cantidad_contada' => $i->cantidad_contada,
+            'color_id' => (int) ($i->color_id ?? 0),
+            'talle_id' => (int) ($i->talle_id ?? 0),
+            'maneja_stock_color_talle' => (bool) (optional($i->articulos)->maneja_stock_color_talle ?? false)
+                || ((int) ($i->color_id ?? 0) > 0) || ((int) ($i->talle_id ?? 0) > 0),
         ])->all();
     }
 

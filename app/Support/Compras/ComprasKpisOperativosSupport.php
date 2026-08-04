@@ -5,6 +5,7 @@ namespace App\Support\Compras;
 use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Ai\AiConsultaOperativaSchemaSupport;
+use App\Support\Ai\AiResolucionMaestrosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -431,9 +432,14 @@ final class ComprasKpisOperativosSupport
 
     private static function empresaId(array $params): ?int
     {
-        $id = (int) ($params['empresa_id'] ?? 0);
+        $res = AiResolucionMaestrosSupport::resolverEmpresa($params);
+        if (! ($res['ok'] ?? false)) {
+            return null;
+        }
 
-        return $id > 0 ? $id : null;
+        $id = $res['empresa_id'] ?? null;
+
+        return $id !== null && (int) $id > 0 ? (int) $id : null;
     }
 
     private static function maxLineas(array $params, int $default): int

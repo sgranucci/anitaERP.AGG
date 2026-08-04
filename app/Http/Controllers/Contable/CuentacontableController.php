@@ -13,6 +13,7 @@ use App\Repositories\Contable\Cuentacontable_CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\Usuario_CuentacontableRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Contable\CuentacontableConsultaSupport;
 use DB;
 
 class CuentacontableController extends Controller
@@ -184,72 +185,71 @@ class CuentacontableController extends Controller
 
     public function consultaCuentaContable(Request $request)
     {
-		$columns = ['cuentacontable.id', 'cuentacontable.codigo', 'cuentacontable.nombre', 'empresa.nombre'];
 		$columnsOut = ['cuentacontable_id', 'codigocuentacontable', 'nombrecuentacontable', 'nombreempresa'];
+        $count = count($columnsOut);
 
-        $empresaId = $request->empresa_id;
+        $empresaId = (int) $request->input('empresa_id');
         $consulta = trim((string) $request->input('consulta', ''));
-        // Código formateado (111010-001) no coincide con codigo numérico en BD.
-        $consultaCodigo = preg_replace('/\D+/', '', $consulta) ?? '';
-        $count = count($columns);
 
-        $query = CuentaContable::select('cuentacontable.id as cuentacontable_id', 'cuentacontable.codigo as codigocuentacontable', 
-                'cuentacontable.nombre as nombrecuentacontable', 'cuentacontable.empresa_id as empresa_id', 'empresa.nombre as nombreempresa',
-                'cuentacontable.tipocuenta')
-				->leftJoin('empresa','cuentacontable.empresa_id','=','empresa.id')
-                ->orWhere(function ($query) use ($count, $consulta, $consultaCodigo, $columns) {
-                        for ($i = 0; $i < $count; $i++) {
-                            // Vacío → LIKE %% (listado inicial del modal).
-                            $query->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
-                            // Código formateado (111010-001) no coincide con codigo numérico en BD.
-                            if ($consultaCodigo !== '' && $consultaCodigo !== $consulta && $columns[$i] === 'cuentacontable.codigo') {
-                                $query->orWhere($columns[$i], 'LIKE', '%'.$consultaCodigo.'%');
-                            }
-                        }
-                })
-                ->get();
+        $query = Cuentacontable::select(
+                'cuentacontable.id as cuentacontable_id',
+                'cuentacontable.codigo as codigocuentacontable',
+                'cuentacontable.nombre as nombrecuentacontable',
+                'cuentacontable.empresa_id as empresa_id',
+                'empresa.nombre as nombreempresa',
+                'cuentacontable.tipocuenta'
+            )
+            ->leftJoin('empresa', 'cuentacontable.empresa_id', '=', 'empresa.id')
+            ->where('cuentacontable.tipocuenta', '1');
+
+        if ($empresaId > 0) {
+            $query->where('cuentacontable.empresa_id', $empresaId);
+        }
+
+        CuentacontableConsultaSupport::aplicarFiltroTexto($query, $consulta);
+        CuentacontableConsultaSupport::ordenarPorRelevancia($query, $consulta);
+
+        $rows = $query->limit(250)->get();
 
         $output = [];
-		$output['data'] = '';	
+		$output['data'] = '';
         $flSinDatos = true;
         $puedeConsultar = can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false);
         $usuarioTieneRestriccion = \App\Support\Contable\AsientoCuentaUsuarioSupport::usuarioTieneRestriccionCuentas((int) auth()->id());
-		if (count($query) > 0)
-		{
-			foreach ($query as $row)
-			{
-                $usuario_cuentacontable = $this->usuario_cuentacontableRepository
-                                            ->leePorUsuarioCuenta(auth()->id(), $row['cuentacontable_id']);
 
-                $cuentaPermitida = ! $usuarioTieneRestriccion || count($usuario_cuentacontable) > 0;
+		foreach ($rows as $row) {
+            $usuario_cuentacontable = $this->usuario_cuentacontableRepository
+                ->leePorUsuarioCuenta(auth()->id(), $row['cuentacontable_id']);
 
-                if ($row['tipocuenta'] == '1' && $row['empresa_id'] == $empresaId && $cuentaPermitida)
-                {
-                    $flSinDatos = false;
-                    $output['data'] .= '<tr>';
-                    for ($i = 0; $i < $count; $i++)
-                        $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';	
-                    $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacuentacontable">Elegir</a>';
-                    if ($puedeConsultar) {
-                        $urlConsulta = route('editar_cuentacontable', [
-                            'id' => $row['cuentacontable_id'],
-                            'origen' => 'modal_consulta',
-                            'vista' => 'consulta',
-                        ]);
-                        $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlConsulta).'" target="_blank" rel="noopener">Consultar</a>';
-                    }
-                    $output['data'] .= '</td>';
-                    $output['data'] .= '</tr>';
-                }
-			}
+            $cuentaPermitida = ! $usuarioTieneRestriccion || count($usuario_cuentacontable) > 0;
+            if (! $cuentaPermitida) {
+                continue;
+            }
+
+            $flSinDatos = false;
+            $output['data'] .= '<tr>';
+            for ($i = 0; $i < $count; $i++) {
+                $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';
+            }
+            $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacuentacontable">Elegir</a>';
+            if ($puedeConsultar) {
+                $urlConsulta = route('editar_cuentacontable', [
+                    'id' => $row['cuentacontable_id'],
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]);
+                $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlConsulta).'" target="_blank" rel="noopener">Consultar</a>';
+            }
+            $output['data'] .= '</td>';
+            $output['data'] .= '</tr>';
 		}
 
-        if ($flSinDatos)
-		{
+        if ($flSinDatos) {
 			$output['data'] .= '<tr>';
 			$output['data'] .= '<td colspan="4">Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
+
 		return response()->json($output);
 	}
 

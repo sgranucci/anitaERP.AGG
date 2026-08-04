@@ -109,6 +109,9 @@ class TransferenciaMercaderiaAsientoService
 
         $payloadAsiento = $preview['payload_asiento'];
         $payloadAsiento['transferencia_mercaderia_id'] = (int) $transferencia->id;
+        // create() no escribe ctamov: un solo sync al final evita asientos huérfanos
+        // en Anita si el alta ERP/rollback falla a mitad (incidente SyS jul/2026).
+        $payloadAsiento['omitir_anita'] = true;
         $movEntradaId = (int) ($transferencia->movimientostock_entrada_id ?? 0);
         if ($movEntradaId > 0) {
             $payloadAsiento['movimientostock_id'] = $movEntradaId;

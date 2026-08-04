@@ -34,19 +34,23 @@ class PeriodoCierreProgramadoService
     }
 
     /**
-     * Filas de agenda para el mes: una por alcance de módulo (sin general).
+     * Filas planas de agenda (módulos + submódulos) indexadas para lookups.
      *
-     * @return Collection<int, array{
+     * @return Collection<string, array{
      *   alcance: string,
      *   etiqueta: string,
+     *   es_modulo: bool,
      *   programado: ?PeriodoCierreProgramado,
      *   fecha_ejecucion: ?string,
+     *   hora_ejecucion: string,
      *   fecha_hasta: string,
      *   estado: string,
+     *   observacion: ?string,
+     *   error_mensaje: ?string,
      *   puede_ejecutar_ahora: bool
      * }>
      */
-    public function filasAgenda(int $empresaId, int $anioMes): Collection
+    public function filasAgendaPorAlcance(int $empresaId, int $anioMes): Collection
     {
         $existentes = PeriodoCierreProgramado::query()
             ->where('empresa_id', $empresaId)
@@ -64,6 +68,7 @@ class PeriodoCierreProgramadoService
                 return [
                     'alcance' => $alcance,
                     'etiqueta' => $etiqueta,
+                    'es_modulo' => PeriodoContableCierreSupport::esModuloPadre($alcance),
                     'programado' => $prog,
                     'fecha_ejecucion' => $prog?->fecha_ejecucion?->format('Y-m-d'),
                     'hora_ejecucion' => $prog?->horaEjecucionNormalizada() ?? PeriodoCierreProgramado::HORA_FIN_DIA,
@@ -72,6 +77,42 @@ class PeriodoCierreProgramadoService
                     'observacion' => $prog?->observacion,
                     'error_mensaje' => $prog?->error_mensaje,
                     'puede_ejecutar_ahora' => $prog?->puedeEjecutarAhora() ?? false,
+                ];
+            });
+    }
+
+    /**
+     * Agenda jerárquica: módulo padre + submódulos hijos.
+     *
+     * @return Collection<int, array{
+     *   codigo: string,
+     *   etiqueta: string,
+     *   es_modulo: bool,
+     *   fila: array,
+     *   hijos: list<array>
+     * }>
+     */
+    public function filasAgenda(int $empresaId, int $anioMes): Collection
+    {
+        $porAlcance = $this->filasAgendaPorAlcance($empresaId, $anioMes);
+
+        return collect(PeriodoContableCierreSupport::jerarquiaAgenda())
+            ->map(function (array $modulo) use ($porAlcance) {
+                $filaModulo = $porAlcance->get($modulo['codigo']);
+                $hijos = [];
+                foreach ($modulo['hijos'] as $hijo) {
+                    $filaHijo = $porAlcance->get($hijo['codigo']);
+                    if ($filaHijo !== null) {
+                        $hijos[] = $filaHijo;
+                    }
+                }
+
+                return [
+                    'codigo' => $modulo['codigo'],
+                    'etiqueta' => $modulo['etiqueta'],
+                    'es_modulo' => true,
+                    'fila' => $filaModulo,
+                    'hijos' => $hijos,
                 ];
             })
             ->values();

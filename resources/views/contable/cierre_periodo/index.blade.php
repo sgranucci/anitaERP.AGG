@@ -5,7 +5,7 @@
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/contable/cierre_periodo/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/cierre_periodo/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cierre_periodo/index.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -33,7 +33,9 @@
                     Al cerrar un período, ningún proceso del sistema puede generar información contable
                     con fecha anterior o igual al cierre del módulo correspondiente, salvo usuarios con
                     apertura programada aprobada o permiso de operación en período cerrado.
-                    Programe el cierre por módulo: <strong>fecha de ejecución</strong>,
+                    Puede cerrar por <strong>módulo entero</strong> (Caja, Ventas, Compras, Stock, Sueldos, Contable)
+                    o por <strong>submódulo</strong> (cobranzas, facturación, indumentaria, etc.).
+                    Programe el cierre: <strong>fecha de ejecución</strong>,
                     <strong>hora</strong> (por defecto <strong>24:00</strong> = fin del día) y
                     <strong>fecha de cierre</strong> (tope contable inclusive, editable).
                     El sistema ejecuta automáticamente al llegar esa fecha/hora; también puede aplicar en el momento si la fecha ya llegó.
@@ -115,9 +117,14 @@
                             </h3>
                             @if ($puede_ejecutar_cierre)
                                 <div class="card-tools mt-1 mt-md-0">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        id="btn-expandir-todos-submodulos"
+                                        title="Mostrar todos los submódulos">
+                                        <i class="fa fa-expand"></i> Submódulos
+                                    </button>
                                     <button type="button" class="btn btn-outline-warning btn-sm"
                                         data-toggle="modal" data-target="#modal-programar-todos"
-                                        title="Programar todos los módulos con las mismas fechas">
+                                        title="Programar todos los módulos y submódulos con las mismas fechas">
                                         <i class="fa fa-calendar-plus-o"></i> Programar todos
                                     </button>
                                     <button type="button" class="btn btn-warning btn-sm"
@@ -134,7 +141,7 @@
                                         <input type="hidden" name="mes" value="{{ $mes }}">
                                         <input type="hidden" name="anio" value="{{ $anio }}">
                                         <button type="submit" class="btn btn-success btn-sm"
-                                            onclick="return confirm('¿Ejecutar ahora todos los módulos pendientes con fecha de ejecución ya vencida o de hoy?');"
+                                            onclick="return confirm('¿Ejecutar ahora todos los pendientes con fecha de ejecución ya vencida o de hoy?');"
                                             title="Aplicar ahora los pendientes del mes">
                                             <i class="fa fa-play"></i> Aplicar pendientes
                                         </button>
@@ -144,25 +151,38 @@
                         </div>
                         <div class="card-body p-0">
                             @if ($puede_ejecutar_cierre)
-                                @foreach ($agenda_filas as $fila)
-                                    @if (($fila['estado'] ?? '') !== 'ejecutado')
+                                @foreach ($agenda_grupos as $grupo)
+                                    @if (!empty($grupo['fila']) && ($grupo['fila']['estado'] ?? '') !== 'ejecutado')
                                         <form method="post" action="{{ route('programar_cierre_periodo_contable') }}"
-                                            id="form-prog-{{ $fila['alcance'] }}" class="d-none">
+                                            id="form-prog-{{ $grupo['fila']['alcance'] }}" class="d-none">
                                             @csrf
                                             <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
                                             <input type="hidden" name="anio_mes" value="{{ $anio_mes }}">
-                                            <input type="hidden" name="alcance" value="{{ $fila['alcance'] }}">
+                                            <input type="hidden" name="alcance" value="{{ $grupo['fila']['alcance'] }}">
                                             <input type="hidden" name="mes" value="{{ $mes }}">
                                             <input type="hidden" name="anio" value="{{ $anio }}">
                                         </form>
                                     @endif
+                                    @foreach ($grupo['hijos'] as $hijo)
+                                        @if (($hijo['estado'] ?? '') !== 'ejecutado')
+                                            <form method="post" action="{{ route('programar_cierre_periodo_contable') }}"
+                                                id="form-prog-{{ $hijo['alcance'] }}" class="d-none">
+                                                @csrf
+                                                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                                                <input type="hidden" name="anio_mes" value="{{ $anio_mes }}">
+                                                <input type="hidden" name="alcance" value="{{ $hijo['alcance'] }}">
+                                                <input type="hidden" name="mes" value="{{ $mes }}">
+                                                <input type="hidden" name="anio" value="{{ $anio }}">
+                                            </form>
+                                        @endif
+                                    @endforeach
                                 @endforeach
                             @endif
                             <div class="table-responsive">
                                 <table class="table table-striped table-bordered table-sm mb-0" id="tabla-agenda-cierre">
                                     <thead style="background-color:#85C1E9;color:#17202A;">
                                         <tr>
-                                            <th>Módulo</th>
+                                            <th>Módulo / submódulo</th>
                                             <th style="min-width:130px;">Fecha ejecución</th>
                                             <th style="min-width:90px;" title="24:00 = fin del día">Hora</th>
                                             <th style="min-width:130px;">Fecha cierre</th>
@@ -174,127 +194,29 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @foreach ($agenda_filas as $fila)
-                                            @php
-                                                $prog = $fila['programado'];
-                                                $estado = $fila['estado'];
-                                                $badge = match ($estado) {
-                                                    'pendiente' => 'badge-info',
-                                                    'ejecutado' => 'badge-success',
-                                                    'cancelado' => 'badge-secondary',
-                                                    'error' => 'badge-danger',
-                                                    default => 'badge-light',
-                                                };
-                                                $editable = $puede_ejecutar_cierre && $estado !== 'ejecutado';
-                                            @endphp
-                                            <tr>
-                                                <td class="align-middle">
-                                                    <strong>{{ $fila['etiqueta'] }}</strong>
-                                                    @if ($fila['alcance'] === 'facturacion')
-                                                        <br><small class="text-muted">Valida por fecha de jornada</small>
-                                                    @endif
-                                                </td>
-                                                @if ($editable)
-                                                    <td class="align-middle">
-                                                        <input type="date" name="fecha_ejecucion" form="form-prog-{{ $fila['alcance'] }}"
-                                                            class="form-control form-control-sm" required
-                                                            value="{{ old('fecha_ejecucion', $fila['fecha_ejecucion'] ?? date('Y-m-d')) }}">
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        <input type="text" name="hora_ejecucion" form="form-prog-{{ $fila['alcance'] }}"
-                                                            class="form-control form-control-sm"
-                                                            style="min-width:72px;"
-                                                            maxlength="5"
-                                                            placeholder="24:00"
-                                                            title="HH:MM o 24:00 (fin de día). Vacío = 24:00"
-                                                            pattern="^([01]?\d|2[0-3]):[0-5]\d$|^24:00$"
-                                                            value="{{ old('hora_ejecucion', $fila['hora_ejecucion'] ?? '24:00') }}">
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        <input type="date" name="fecha_hasta" form="form-prog-{{ $fila['alcance'] }}"
-                                                            class="form-control form-control-sm" required
-                                                            max="{{ date('Y-m-d') }}"
-                                                            value="{{ old('fecha_hasta', $fila['fecha_hasta']) }}">
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        @if ($estado !== '')
-                                                            <span class="badge {{ $badge }}">{{ $estado }}</span>
-                                                            @if (!empty($fila['error_mensaje']))
-                                                                <small class="text-danger d-block">{{ $fila['error_mensaje'] }}</small>
-                                                            @endif
-                                                        @else
-                                                            <span class="text-muted">sin programar</span>
-                                                        @endif
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        <input type="text" name="observacion" form="form-prog-{{ $fila['alcance'] }}"
-                                                            class="form-control form-control-sm" maxlength="2000"
-                                                            placeholder="Observación"
-                                                            value="{{ old('observacion', $fila['observacion'] ?? '') }}">
-                                                    </td>
-                                                    <td class="align-middle text-nowrap">
-                                                        <button type="submit" form="form-prog-{{ $fila['alcance'] }}"
-                                                            class="btn btn-primary btn-sm" title="Guardar programación">
-                                                            <i class="fa fa-save"></i>
-                                                        </button>
-                                                        @if ($prog && ($fila['puede_ejecutar_ahora'] || $estado === 'error'))
-                                                            <form method="post"
-                                                                action="{{ route('ejecutar_programado_cierre_periodo_contable', $prog->id) }}"
-                                                                class="d-inline form-proceso-cierre"
-                                                                data-overlay-titulo="Ejecutando cierre…">
-                                                                @csrf
-                                                                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
-                                                                <input type="hidden" name="mes" value="{{ $mes }}">
-                                                                <input type="hidden" name="anio" value="{{ $anio }}">
-                                                                <button type="submit" class="btn btn-success btn-sm"
-                                                                    onclick="return confirm('¿Aplicar ahora el cierre de {{ $fila['etiqueta'] }}?');"
-                                                                    title="Aplicar ahora">
-                                                                    <i class="fa fa-play"></i>
-                                                                </button>
-                                                            </form>
-                                                        @endif
-                                                        @if ($prog && in_array($estado, ['pendiente', 'error'], true))
-                                                            <form method="post"
-                                                                action="{{ route('cancelar_programado_cierre_periodo_contable', $prog->id) }}"
-                                                                class="d-inline">
-                                                                @csrf
-                                                                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
-                                                                <input type="hidden" name="mes" value="{{ $mes }}">
-                                                                <input type="hidden" name="anio" value="{{ $anio }}">
-                                                                <button type="submit" class="btn btn-outline-secondary btn-sm"
-                                                                    onclick="return confirm('¿Cancelar la programación?');"
-                                                                    title="Cancelar">
-                                                                    <i class="fa fa-ban"></i>
-                                                                </button>
-                                                            </form>
-                                                        @endif
-                                                    </td>
-                                                @else
-                                                    <td class="align-middle">
-                                                        {{ $fila['fecha_ejecucion'] ? \Carbon\Carbon::parse($fila['fecha_ejecucion'])->format('d/m/Y') : '—' }}
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        {{ $fila['hora_ejecucion'] ?? '24:00' }}
-                                                        @if (($fila['hora_ejecucion'] ?? '24:00') === '24:00')
-                                                            <small class="text-muted d-block">fin de día</small>
-                                                        @endif
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        {{ \Carbon\Carbon::parse($fila['fecha_hasta'])->format('d/m/Y') }}
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        @if ($estado !== '')
-                                                            <span class="badge {{ $badge }}">{{ $estado }}</span>
-                                                        @else
-                                                            <span class="text-muted">sin programar</span>
-                                                        @endif
-                                                    </td>
-                                                    <td class="align-middle">{{ $fila['observacion'] ?? '' }}</td>
-                                                    @if ($puede_ejecutar_cierre)
-                                                        <td></td>
-                                                    @endif
-                                                @endif
-                                            </tr>
+                                        @foreach ($agenda_grupos as $grupo)
+                                            @if (!empty($grupo['fila']))
+                                                @include('contable.cierre_periodo.partials.fila_agenda', [
+                                                    'fila' => $grupo['fila'],
+                                                    'etiqueta_modulo' => $grupo['etiqueta'],
+                                                    'grupo_codigo' => $grupo['codigo'],
+                                                    'cantidad_hijos' => count($grupo['hijos'] ?? []),
+                                                    'empresa_id' => $empresa_id,
+                                                    'mes' => $mes,
+                                                    'anio' => $anio,
+                                                    'puede_ejecutar_cierre' => $puede_ejecutar_cierre,
+                                                ])
+                                            @endif
+                                            @foreach ($grupo['hijos'] as $hijo)
+                                                @include('contable.cierre_periodo.partials.fila_agenda', [
+                                                    'fila' => $hijo,
+                                                    'grupo_codigo' => $grupo['codigo'],
+                                                    'empresa_id' => $empresa_id,
+                                                    'mes' => $mes,
+                                                    'anio' => $anio,
+                                                    'puede_ejecutar_cierre' => $puede_ejecutar_cierre,
+                                                ])
+                                            @endforeach
                                         @endforeach
                                     </tbody>
                                 </table>
@@ -303,6 +225,7 @@
                                 Fecha de cierre por defecto: {{ \Carbon\Carbon::parse($fecha_hasta_default)->format('d/m/Y') }}
                                 (último día del mes anterior). Puede cambiarla en cada fila.
                                 Hora de ejecución por defecto: <strong>24:00</strong> (fin del día).
+                                Los submódulos están colapsados: use el chevron de cada módulo (o <strong>Submódulos</strong>) para cerrar selectivo.
                             </div>
                         </div>
                     </div>
@@ -310,7 +233,7 @@
                     @if ($puede_ejecutar_cierre)
                         <div class="card card-outline card-warning mb-4">
                             <div class="card-header">
-                                <h3 class="card-title">Cierre inmediato (un módulo)</h3>
+                                <h3 class="card-title">Cierre inmediato (módulo o submódulo)</h3>
                             </div>
                             <form method="post" action="{{ route('ejecutar_cierre_periodo_contable') }}" class="form-proceso-cierre"
                                 data-overlay-titulo="Registrando cierre…">
@@ -320,15 +243,13 @@
                                 <input type="hidden" name="anio" value="{{ $anio }}">
                                 <div class="card-body">
                                     <div class="form-group row">
-                                        <label class="col-md-2 control-label requerido">Módulo</label>
-                                        <div class="col-md-4">
-                                            <select name="alcance" class="form-control" required>
-                                                @foreach ($alcances as $codigo => $etiqueta)
-                                                    <option value="{{ $codigo }}" @selected(old('alcance', 'general') === $codigo)>
-                                                        {{ $etiqueta }}
-                                                    </option>
-                                                @endforeach
-                                            </select>
+                                        <label class="col-md-2 control-label requerido">Alcance</label>
+                                        <div class="col-md-5">
+                                            @include('contable.partials.select_alcance_periodo', [
+                                                'jerarquia_alcances' => $jerarquia_alcances,
+                                                'selected' => old('alcance', 'general'),
+                                                'incluir_general' => true,
+                                            ])
                                         </div>
                                     </div>
                                     <div class="form-group row">
@@ -440,14 +361,14 @@
                 <input type="hidden" name="anio" value="{{ $anio }}">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title"><i class="fa fa-calendar-plus-o"></i> Programar todos los módulos</h5>
+                        <h5 class="modal-title"><i class="fa fa-calendar-plus-o"></i> Programar todos los módulos y submódulos</h5>
                         <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
                             <span aria-hidden="true">&times;</span>
                         </button>
                     </div>
                     <div class="modal-body">
                         <p class="small text-muted">
-                            Aplica las mismas fechas a todos los módulos del mes (los ya ejecutados no se modifican).
+                            Aplica las mismas fechas a todos los módulos y submódulos del mes (los ya ejecutados no se modifican).
                         </p>
                         <div class="form-group">
                             <label class="requerido">Fecha de ejecución</label>

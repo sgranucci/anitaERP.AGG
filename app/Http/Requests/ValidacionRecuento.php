@@ -2,9 +2,13 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
+use App\Support\Stock\ArticuloStockColorTalleSupport;
+use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
+use InvalidArgumentException;
 
 class ValidacionRecuento extends FormRequest
 {
@@ -23,6 +27,10 @@ class ValidacionRecuento extends FormRequest
             'articulo_ids.*' => 'nullable|integer|exists:articulo,id',
             'recuento_item_ids' => 'nullable|array',
             'recuento_item_ids.*' => 'nullable|integer',
+            'colores_id' => 'nullable|array',
+            'colores_id.*' => 'nullable|integer',
+            'talles_id' => 'nullable|array',
+            'talles_id.*' => 'nullable|integer',
             'detalle_articulos' => 'nullable|array',
             'detalle_articulos.*' => 'nullable|string|max:500',
             'cantidades_contadas' => 'nullable|array',
@@ -61,21 +69,43 @@ class ValidacionRecuento extends FormRequest
                 $validator->errors()->add('deposito_id', 'No tiene permiso para operar sobre este depósito.');
             }
 
-            $articuloIds = array_values(array_filter(array_map(
-                static fn ($id): int => (int) $id,
-                $this->input('articulo_ids', [])
-            )));
-            $conteos = array_count_values($articuloIds);
-            foreach ($conteos as $articuloId => $cantidad) {
-                if ($cantidad <= 1 || $articuloId <= 0) {
+            $articuloIds = $this->input('articulo_ids', []);
+            $coloresId = $this->input('colores_id', []);
+            $tallesId = $this->input('talles_id', []);
+
+            $clavesVistas = [];
+            foreach ($articuloIds as $i => $articuloIdRaw) {
+                $articuloId = (int) $articuloIdRaw;
+                if ($articuloId <= 0) {
                     continue;
                 }
-                $sku = \App\Models\Stock\Articulo::query()->where('id', $articuloId)->value('sku');
-                $ref = $sku ?: ('ID '.$articuloId);
-                $validator->errors()->add(
-                    'articulo_ids',
-                    "El artículo «{$ref}» está repetido en el recuento. Cada artículo debe figurar en una sola línea."
+                $colorRaw = isset($coloresId[$i]) ? (int) $coloresId[$i] : 0;
+                $talleRaw = isset($tallesId[$i]) ? (int) $tallesId[$i] : 0;
+                [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo(
+                    $colorRaw > 0 ? $colorRaw : null,
+                    $talleRaw > 0 ? $talleRaw : null
                 );
+                $clave = $articuloId.'|'.$colorKey.'|'.$talleKey;
+                if (isset($clavesVistas[$clave])) {
+                    $sku = Articulo::query()->where('id', $articuloId)->value('sku');
+                    $ref = $sku ?: ('ID '.$articuloId);
+                    $validator->errors()->add(
+                        'articulo_ids',
+                        "La variante del artículo «{$ref}» (color/talle) está repetida. Cada combinación debe figurar en una sola línea."
+                    );
+                    break;
+                }
+                $clavesVistas[$clave] = true;
+            }
+
+            try {
+                MovimientoStockColorTalleExclusividadSupport::validarLineas(
+                    is_array($articuloIds) ? $articuloIds : [],
+                    is_array($coloresId) ? $coloresId : [],
+                    is_array($tallesId) ? $tallesId : []
+                );
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add('articulo_ids', $e->getMessage());
             }
         });
     }

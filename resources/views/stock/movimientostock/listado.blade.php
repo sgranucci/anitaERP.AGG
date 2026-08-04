@@ -86,10 +86,11 @@
                 <th style="width: 6%;">Lote</th>
                 <th style="width: 10%;">Empresa</th>
                 <th style="width: 6%;" class="num">Cant.</th>
+                <th style="width: 6%;" class="num">Costo</th>
                 <th style="width: 4%;" class="num">&Iacute;t.</th>
-                <th style="width: 8%;">Estado</th>
-                <th style="width: 5%;" class="num">M.S</th>
-                <th style="width: 5%;" class="num">M.E</th>
+                <th style="width: 7%;">Estado</th>
+                <th style="width: 4%;" class="num">M.S</th>
+                <th style="width: 4%;" class="num">M.E</th>
             </tr>
         </thead>
         <tbody>
@@ -108,6 +109,11 @@
                     <td>{{ $fila->loteListado }}</td>
                     <td>{{ $fila->nombreEmpresa }}</td>
                     <td class="num">{{ number_format($fila->totalCantidad, 2, ',', '.') }}</td>
+                    <td class="num">
+                        @if ($fila->costoProducto !== null)
+                            {{ number_format($fila->costoProducto, 4, ',', '.') }}
+                        @endif
+                    </td>
                     <td class="num">{{ $fila->itemsCount > 0 ? $fila->itemsCount : '' }}</td>
                     <td>{{ $estadoLabel }}</td>
                     <td class="num">{{ $fila->movSalidaId ?? '' }}</td>

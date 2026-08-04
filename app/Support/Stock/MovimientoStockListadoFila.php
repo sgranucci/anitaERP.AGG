@@ -42,7 +42,48 @@ final class MovimientoStockListadoFila
         public readonly ?int $movSalidaId,
         public readonly ?int $movEntradaId,
         public readonly ?string $usuarioNombre,
+        public readonly ?float $costoProducto = null,
+        public readonly ?float $costoProductoTotal = null,
+        public readonly ?string $costoProductoOrigen = null,
     ) {}
+
+    public function conCostoProducto(?float $unitario, ?float $total, ?string $origen): self
+    {
+        return new self(
+            filaTipo: $this->filaTipo,
+            pkId: $this->pkId,
+            fecha: $this->fecha,
+            movimiento: $this->movimiento,
+            transferencia: $this->transferencia,
+            totalCantidad: $this->totalCantidad,
+            itemsCount: $this->itemsCount,
+            codigoListado: $this->codigoListado,
+            tipoNombre: $this->tipoNombre,
+            leyendaListado: $this->leyendaListado,
+            loteListado: $this->loteListado,
+            nombreEmpresa: $this->nombreEmpresa,
+            depositoCodigo: $this->depositoCodigo,
+            depositoNombre: $this->depositoNombre,
+            depositoId: $this->depositoId,
+            depositoOrigenCodigo: $this->depositoOrigenCodigo,
+            depositoOrigenNombre: $this->depositoOrigenNombre,
+            depositoOrigenId: $this->depositoOrigenId,
+            depositoDestinoCodigo: $this->depositoDestinoCodigo,
+            depositoDestinoNombre: $this->depositoDestinoNombre,
+            depositoDestinoId: $this->depositoDestinoId,
+            bienUsoOrigenEtiqueta: $this->bienUsoOrigenEtiqueta,
+            bienUsoDestinoEtiqueta: $this->bienUsoDestinoEtiqueta,
+            marcaNombre: $this->marcaNombre,
+            estadoMovimiento: $this->estadoMovimiento,
+            estadoTransferencia: $this->estadoTransferencia,
+            movSalidaId: $this->movSalidaId,
+            movEntradaId: $this->movEntradaId,
+            usuarioNombre: $this->usuarioNombre,
+            costoProducto: $unitario,
+            costoProductoTotal: $total,
+            costoProductoOrigen: $origen,
+        );
+    }
 
     public function esTransferencia(): bool
     {

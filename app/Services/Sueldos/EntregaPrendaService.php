@@ -10,6 +10,7 @@ use App\Models\Sueldos\Entrega_Prenda_Sueldos;
 use App\Models\Sueldos\Prenda_Agrupamiento_Sueldos;
 use App\Models\Sueldos\Prenda_Articulo_Sueldos;
 use App\Services\Stock\MovimientoStockService;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -225,6 +226,7 @@ class EntregaPrendaService
                 'lote' => ' ',
                 'loteimportacion_id' => null,
                 'leyenda' => 'Entrega indumentaria - Legajo '.$empleado->legajo.' '.$empleado->nombre,
+                'alcance_cierre_contable' => PeriodoContableCierreSupport::ALCANCE_INDUMENTARIA,
                 'articulos_id' => $articulosId,
                 'cantidades' => $cantidades,
             ];

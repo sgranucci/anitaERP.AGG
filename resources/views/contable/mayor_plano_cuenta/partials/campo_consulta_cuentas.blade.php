@@ -10,7 +10,7 @@
         <p class="text-muted small mb-2 font-weight-bold">Cuentas particulares</p>
         <div class="mpc-cuenta-campo mpc-cuenta-puntual mb-2" data-campo="puntual">
             <div class="d-flex flex-wrap align-items-center" style="gap: 6px;">
-                <button type="button" title="Consultar cuentas contables" class="btn btn-outline-secondary btn-sm consultacuentacontable">
+                <button type="button" title="Consultar cuentas (F1)" class="btn btn-outline-secondary btn-sm consultacuentacontable">
                     <i class="fa fa-search"></i>
                 </button>
                 <input type="text"
@@ -18,6 +18,7 @@
                     id="mpc_cuenta_puntual_codigo"
                     value=""
                     placeholder="111010-001"
+                    title="C&oacute;digo de cuenta. F1 = consulta"
                     autocomplete="off"
                     style="max-width: 130px;">
                 <input type="text"
@@ -71,11 +72,12 @@
                             <input type="text" name="cuenta_desde" id="cuenta_desde_codigo"
                                 class="form-control codigocuentacontable mpc-cuenta-codigo-input"
                                 placeholder="111010-001" autocomplete="off"
+                                title="C&oacute;digo desde. F1 = consulta"
                                 value="{{ $cuenta_desde_meta['codigo'] ?? '' }}">
                             <input type="text" class="form-control nombrecuentacontable mpc-cuenta-nombre-input" readonly
                                 placeholder="Nombre cuenta" value="{{ $cuenta_desde_meta['nombre'] ?? '' }}">
                             <div class="input-group-append">
-                                <button type="button" title="Consulta cuentas" class="btn btn-outline-secondary consultacuentacontable tooltipsC">
+                                <button type="button" title="Consulta cuentas (F1)" class="btn btn-outline-secondary consultacuentacontable tooltipsC">
                                     <i class="fa fa-search"></i>
                                 </button>
                             </div>
@@ -89,11 +91,12 @@
                             <input type="text" name="cuenta_hasta" id="cuenta_hasta_codigo"
                                 class="form-control codigocuentacontable mpc-cuenta-codigo-input"
                                 placeholder="111010-999 (vac&iacute;o = solo desde)" autocomplete="off"
+                                title="C&oacute;digo hasta. F1 = consulta"
                                 value="{{ $cuenta_hasta_meta['codigo'] ?? '' }}">
                             <input type="text" class="form-control nombrecuentacontable mpc-cuenta-nombre-input" readonly
                                 placeholder="Nombre cuenta" value="{{ $cuenta_hasta_meta['nombre'] ?? '' }}">
                             <div class="input-group-append">
-                                <button type="button" title="Consulta cuentas" class="btn btn-outline-secondary consultacuentacontable tooltipsC">
+                                <button type="button" title="Consulta cuentas (F1)" class="btn btn-outline-secondary consultacuentacontable tooltipsC">
                                     <i class="fa fa-search"></i>
                                 </button>
                             </div>

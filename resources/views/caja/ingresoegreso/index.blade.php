@@ -4,20 +4,23 @@
 @endsection
 
 @section("scripts")
-<script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
-
+<script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/filtro.js') }}" type="text/javascript"></script>
 <script>
     function eliminarIngresoEgreso(event) {
-        var opcion = confirm("Desea eliminar la transacción de caja?");
-        if(!opcion) {
+        if (!confirm('¿Desea eliminar la transacción de caja?')) {
             event.preventDefault();
         }
     }
 </script>
-
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+@php
+    use App\Support\Caja\IngresoEgresoListadoFiltros;
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route('ingresoegreso', IngresoEgresoListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
+@endphp
 
 @section('contenido')
 <div class="row">
@@ -26,28 +29,41 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Ingresos y Egresos de Caja</h3>
-                <div class="card-tools">
-                    <a href="{{route('crear_ingresoegreso')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-ingresos-egresos-caja', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
-                </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('ingresoegreso') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-ingresoegreso',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => IngresoEgresoListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => $limpiarUrl,
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-ingresoegreso',
+                        'toggleId' => 'btn-toggle-filtros-ingresoegreso',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_ingresoegreso', $retornoListadoQuery),
+                        'nuevoRegistroCan' => 'crear-ingresos-egresos-caja',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('ingresoegreso') }}" id="form-filtros-ingresoegreso" class="mb-0">
+                @include('caja.ingresoegreso.partials.filtros_listado', [
+                    'limpiarUrl' => $limpiarUrl,
+                ])
+            </form>
+            @include('caja.ingresoegreso.partials.filtros_externos')
+            @if (! empty($alcance_centro_costo))
+                <div class="px-3 py-2 border-bottom bg-white text-muted small">
+                    <i class="fa fa-filter"></i>
+                    Listado limitado (ingresos/egresos de usuarios de su centro de costo):
+                    <strong>{{ $alcance_centro_costo }}</strong>
+                </div>
+            @endif
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_ingresoegreso', 'busqueda' => $busqueda])
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
-                    <thead>
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_ingresoegreso',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
+                <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width20">ID</th>
                             <th>Empresa</th>
@@ -59,72 +75,74 @@
                             @if (config('app.empresa') == 'Iguassu Travel')
                                 <th>Orden de servicio</th>
                             @endif
-                            <th>Monto en $</th>
+                            <th class="text-right">Monto en $</th>
                             <th>Movimientos</th>
-                            <th class="width40" data-orderable="false"></th>
+                            <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($caja_movimiento as $data)
+                        @forelse ($caja_movimiento as $data)
                         <tr>
-                            <td>{{$data->id}}</td>
-                            <td>{{$data->nombreempresa}}</td>
-                            <td>{{$data->numerotransaccion}}</td>
-                            <td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
-                            <td>{{$data->nombretipotransaccion_caja}}</td>
-                            <td>{{$data->nombreconceptogasto ?? ''}}</td>
-                            <td>{{$data->detalle ?? ''}}</td>
+                            <td>{{ $data->id }}</td>
+                            <td>{{ $data->nombreempresa }}</td>
+                            <td>{{ $data->numerotransaccion }}</td>
+                            <td>{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '' }}</td>
+                            <td>{{ $data->nombretipotransaccion_caja }}</td>
+                            <td>{{ $data->nombreconceptogasto ?? '' }}</td>
+                            <td>{{ $data->detalle ?? '' }}</td>
                             @if (config('app.empresa') == 'Iguassu Travel')
-                                <td>{{$data->ordenservicio_id}}</td>
+                                <td>{{ $data->ordenservicio_id }}</td>
                             @endif
-                            <td>
-                                @php $totalIngreso = 0; $totalEgreso= 0; @endphp
-                                @foreach($data->caja_movimiento_cuentacajas as $movimiento)
-                                    @if ($movimiento->moneda_id > 1)
-                                        @php $coef = $movimiento->cotizacion; @endphp
-                                    @else
-                                        @php $coef = 1.; @endphp
-                                    @endif
-                                    @php 
+                            <td class="text-right">
+                                @php $totalIngreso = 0; $totalEgreso = 0; @endphp
+                                @foreach ($data->caja_movimiento_cuentacajas as $movimiento)
+                                    @php
+                                        $coef = ($movimiento->moneda_id > 1) ? $movimiento->cotizacion : 1.;
                                         $totalIngreso += ($movimiento->monto > 0 ? $movimiento->monto * $coef : 0);
                                         $totalEgreso += ($movimiento->monto < 0 ? abs($movimiento->monto * $coef) : 0);
                                     @endphp
                                 @endforeach
-                                @if ($totalIngreso != 0)
-                                    {{number_format($totalIngreso,2)}}
-                                @else
-                                    {{number_format($totalEgreso,2)}}
-                                @endif
+                                {{ number_format($totalIngreso != 0 ? $totalIngreso : $totalEgreso, 2, ',', '.') }}
                             </td>
                             <td>
-                                <ul>
-                                @foreach($data->caja_movimiento_cuentacajas as $movimiento)
-                                    <li>{{ $movimiento->cuentacajas->nombre }} {{ $movimiento->monto > 0 ? number_format($movimiento->monto,2) : '' }} {{ $movimiento->monto < 0 ? number_format($movimiento->monto,2) : ''}}</li>
+                                <ul class="mb-0 pl-3 small">
+                                @foreach ($data->caja_movimiento_cuentacajas as $movimiento)
+                                    <li>
+                                        {{ $movimiento->cuentacajas->nombre ?? '' }}
+                                        {{ number_format((float) $movimiento->monto, 2, ',', '.') }}
+                                    </li>
                                 @endforeach
                                 </ul>
                             </td>
-                            <td>
-                       			@if (can('editar-ingresos-egresos-caja', false))
-                                	<a href="{{route('editar_ingresoegreso', ['id' => $data->id, 'origen' => 'ingresoegreso'])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                    <i class="fa fa-edit"></i>
-                                	</a>
-								@endif
-                       			@if (can('borrar-ingresos-egresos-caja', false))
-                                <form action="{{route('eliminar_ingresoegreso', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
-                                    @csrf @method("delete")
-                                    <button type="submit" onclick="eliminarIngresoEgreso(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                        <i class="fa fa-times-circle text-danger"></i>
-                                    </button>
-                                </form>
-								@endif
+                            <td class="text-nowrap">
+                                @if (can('editar-ingresos-egresos-caja', false))
+                                    <a href="{{ route('editar_ingresoegreso', ['id' => $data->id, 'origen' => 'ingresoegreso'] + $retornoListadoQuery) }}"
+                                       class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                        <i class="fa fa-edit"></i>
+                                    </a>
+                                @endif
+                                @if (can('borrar-ingresos-egresos-caja', false))
+                                    <form action="{{ route('eliminar_ingresoegreso', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
+                                        @csrf @method('delete')
+                                        <button type="submit" onclick="eliminarIngresoEgreso(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
+                                            <i class="fa fa-times-circle text-danger"></i>
+                                        </button>
+                                    </form>
+                                @endif
                             </td>
                         </tr>
-                        @endforeach
+                        @empty
+                        <tr>
+                            <td colspan="{{ config('app.empresa') == 'Iguassu Travel' ? 11 : 10 }}" class="text-center text-muted py-4">
+                                No hay movimientos con los filtros aplicados.
+                            </td>
+                        </tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 </div>
-{{ $caja_movimiento->appends(['busqueda' => $busqueda])->links() }}
+{{ $caja_movimiento->appends($filtrosQuery ?? [])->links() }}
 @endsection

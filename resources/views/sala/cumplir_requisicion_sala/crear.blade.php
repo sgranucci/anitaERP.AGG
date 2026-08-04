@@ -7,6 +7,13 @@
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
+        <div id="cumple-alerta-error" class="alert alert-danger alert-dismissible d-none" role="alert">
+            <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+            <h4><i class="icon fa fa-times"></i> Error</h4>
+            <ul class="mb-0">
+                <li class="cumple-alerta-error-texto"></li>
+            </ul>
+        </div>
         @if (!empty($pdfToken))
             <div class="alert alert-success">
                 Cumplimiento grabado.
@@ -122,6 +129,7 @@
                                         <th>Art&iacute;culo</th>
                                         <th>Descripci&oacute;n</th>
                                         <th class="text-right">Pend.</th>
+                                        <th class="text-right" title="Saldo en dep&oacute;sito origen">Saldo</th>
                                         <th>Dep. origen</th>
                                         <th>T&eacute;cnico</th>
                                         <th>UID</th>
@@ -136,17 +144,44 @@
                                             @php
                                                 $pendiente = (float) $linea->cantidad - (float) ($linea->cantidadentregada ?? 0);
                                                 $esReparacion = (string) ($linea->destino ?? '') === 'R';
+                                                $oldLinea = $oldLineasPorArticuloId[$linea->id] ?? [];
+                                                $depOrigenId = $oldLinea['deposito_origen_id'] ?? $depositoLabId;
+                                                $depOrigenCodigo = $oldLinea['deposito_origen_codigo'] ?? ($depositoLab->codigo ?? '');
+                                                $depOrigenNombre = $oldLinea['deposito_origen_nombre'] ?? ($depositoLab->nombre ?? '');
+                                                $tecnicoOld = $oldLinea['tecnico_laboratorio_id'] ?? '';
+                                                $cantidadOld = $oldLinea['cantidad_entrega'] ?? '';
+                                                $npuOld = $oldLinea['numeroparte'] ?? $linea->numeroparte;
+                                                $motivoOld = $oldLinea['estadoparcial'] ?? '';
+                                                $estadoLineaOld = $oldLinea['estado_linea'] ?? '';
+                                                $fechaEntregaOld = $oldLinea['fecha_entrega'] ?? '';
+                                                $remitoOld = $oldLinea['numeroremito'] ?? '';
+                                                $responsableOld = $oldLinea['nombreresponsable'] ?? '';
+                                                $motivoLabel = '';
+                                                if ($motivoOld !== '') {
+                                                    foreach ($estado_parcial_enum as $motivoEnum) {
+                                                        if ((string) ($motivoEnum['valor'] ?? '') === (string) $motivoOld) {
+                                                            $motivoLabel = (string) ($motivoEnum['nombre'] ?? $motivoOld);
+                                                            break;
+                                                        }
+                                                    }
+                                                    if ($motivoLabel === '') {
+                                                        $motivoLabel = (string) $motivoOld;
+                                                    }
+                                                }
                                             @endphp
-                                            <tr class="fila-cumple-linea" data-linea-id="{{ $linea->id }}" data-requisicion-id="{{ $requisicion->id }}" data-destino="{{ $linea->destino ?? '' }}">
+                                            <tr class="fila-cumple-linea" data-linea-id="{{ $linea->id }}" data-articulo-id="{{ $linea->articulo_id }}" data-requisicion-id="{{ $requisicion->id }}" data-destino="{{ $linea->destino ?? '' }}">
                                                 <td>#{{ $requisicion->numerorequisicion }}</td>
                                                 <td>{{ $linea->articulos->sku ?? '' }}</td>
                                                 <td>{{ $linea->descripcionArticulo() }}</td>
                                                 <td class="text-right pendiente-cell">{{ number_format($pendiente, 2, '.', '') }}</td>
+                                                <td class="align-middle text-right col-saldo-orig">
+                                                    <span class="ms-saldo-origen text-monospace small" title="Saldo en dep&oacute;sito origen">&mdash;</span>
+                                                </td>
                                                 <td class="tm-deposito-campo">
-                                                    <input type="hidden" class="deposito_id" name="lineas[{{ $idx }}][deposito_origen_id]" value="{{ $depositoLabId }}">
+                                                    <input type="hidden" class="deposito_id" name="lineas[{{ $idx }}][deposito_origen_id]" value="{{ $depOrigenId }}">
                                                     <div class="input-group input-group-sm">
-                                                        <input type="text" class="form-control form-control-sm codigodeposito" placeholder="C&oacute;d." maxlength="20" value="{{ $depositoLab->codigo ?? '' }}">
-                                                        <input type="text" class="form-control form-control-sm descripciondeposito" readonly placeholder="Dep&oacute;sito" value="{{ $depositoLab->nombre ?? '' }}">
+                                                        <input type="text" class="form-control form-control-sm codigodeposito" placeholder="C&oacute;d." maxlength="20" value="{{ $depOrigenCodigo }}">
+                                                        <input type="text" class="form-control form-control-sm descripciondeposito" readonly placeholder="Dep&oacute;sito" value="{{ $depOrigenNombre }}">
                                                         <div class="input-group-append">
                                                             <button type="button" class="btn btn-outline-secondary btn-sm consultadeposito" title="Consultar dep&oacute;sito"><i class="fa fa-search"></i></button>
                                                         </div>
@@ -157,7 +192,7 @@
                                                         <select name="lineas[{{ $idx }}][tecnico_laboratorio_id]" class="form-control form-control-sm select-tecnico select-tecnico-reparacion">
                                                             <option value="">Seleccione&hellip;</option>
                                                             @foreach ($tecnicos as $tec)
-                                                                <option value="{{ $tec->id }}">{{ $tec->nombre }}</option>
+                                                                <option value="{{ $tec->id }}" {{ (string) $tecnicoOld === (string) $tec->id ? 'selected' : '' }}>{{ $tec->nombre }}</option>
                                                             @endforeach
                                                         </select>
                                                     @else
@@ -167,18 +202,18 @@
                                                 </td>
                                                 <td>{{ $linea->uid }}</td>
                                                 <td>
-                                                    <input type="text" name="lineas[{{ $idx }}][numeroparte]" class="form-control form-control-sm input-npu-linea" maxlength="50" value="{{ old('lineas.'.$idx.'.numeroparte', $linea->numeroparte) }}" placeholder="NPU">
+                                                    <input type="text" name="lineas[{{ $idx }}][numeroparte]" class="form-control form-control-sm input-npu-linea" maxlength="50" value="{{ $npuOld }}" placeholder="NPU">
                                                 </td>
                                                 <td>
                                                     <input type="hidden" name="lineas[{{ $idx }}][requisicion_sala_articulo_id]" value="{{ $linea->id }}">
-                                                    <input type="hidden" name="lineas[{{ $idx }}][estadoparcial]" class="input-estadoparcial" value="">
-                                                    <input type="hidden" name="lineas[{{ $idx }}][estado_linea]" class="input-estado-linea" value="">
-                                                    <input type="hidden" name="lineas[{{ $idx }}][fecha_entrega]" class="input-fecha-entrega" value="">
-                                                    <input type="hidden" name="lineas[{{ $idx }}][numeroremito]" class="input-numeroremito" value="">
-                                                    <input type="hidden" name="lineas[{{ $idx }}][nombreresponsable]" class="input-nombreresponsable" value="">
-                                                    <input type="number" step="0.01" min="0" name="lineas[{{ $idx }}][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="{{ number_format($pendiente, 4, '.', '') }}">
+                                                    <input type="hidden" name="lineas[{{ $idx }}][estadoparcial]" class="input-estadoparcial" value="{{ $motivoOld }}">
+                                                    <input type="hidden" name="lineas[{{ $idx }}][estado_linea]" class="input-estado-linea" value="{{ $estadoLineaOld }}">
+                                                    <input type="hidden" name="lineas[{{ $idx }}][fecha_entrega]" class="input-fecha-entrega" value="{{ $fechaEntregaOld }}">
+                                                    <input type="hidden" name="lineas[{{ $idx }}][numeroremito]" class="input-numeroremito" value="{{ $remitoOld }}">
+                                                    <input type="hidden" name="lineas[{{ $idx }}][nombreresponsable]" class="input-nombreresponsable" value="{{ $responsableOld }}">
+                                                    <input type="number" step="0.01" min="0" name="lineas[{{ $idx }}][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="{{ number_format($pendiente, 4, '.', '') }}" value="{{ $cantidadOld }}">
                                                 </td>
-                                                <td class="motivo-parcial-label small text-muted"></td>
+                                                <td class="motivo-parcial-label small text-muted">{{ $motivoLabel }}</td>
                                             </tr>
                                         @endforeach
                                     @endif
@@ -219,14 +254,19 @@
         urlConsultaNpu: @json(route('consulta_npu_cumple_requisicion_sala')),
         urlDatos: @json(url('sala/cumplir-requisicion-sala/datos')),
         urlCumplir: @json(route('crear_cumplir_requisicion_sala')),
+        urlGrabar: @json(route('grabar_cumplir_requisicion_sala')),
+        urlSaldoOrigen: @json(route('cumplir_requisicion_sala_saldo_articulo')),
         urlPdf: @json(url('sala/cumplir-requisicion-sala/pdf')),
         depositoLabId: {{ (int) $depositoLabId }},
         depositoLabCodigo: @json($depositoLab->codigo ?? ''),
         depositoLabNombre: @json($depositoLab->nombre ?? ''),
         modoNpu: {{ !empty($modoNpu) ? 'true' : 'false' }},
         estadoParcialEnum: @json($estado_parcial_enum),
+        oldLineas: @json($oldLineas ?? []),
+        tecnicosPorEmpresa: @json($tecnicosPorEmpresa ?? []),
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/sala/cumplir_requisicion_sala/form-saldo-origen.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sala/cumplir_requisicion_sala/form-saldo-origen.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sala/cumplir_requisicion_sala/form.v2.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sala/cumplir_requisicion_sala/form.v2.js')) ?: time() }}"></script>
 @endsection

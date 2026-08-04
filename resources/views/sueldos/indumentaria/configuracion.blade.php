@@ -3,8 +3,32 @@
     Configuración de indumentaria
 @endsection
 
+@section('scripts')
+<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/tipotransaccion_stock/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/tipotransaccion_stock/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script>
+window.payloadExtraConsultaTipotransaccionStock = function () {
+    return { operaciones: ['S'] };
+};
+$(function () {
+    var $codigo = $('#deposito_id_codigo');
+    if ($codigo.length && !$codigo.prop('readonly') && !$codigo.prop('disabled')) {
+        setTimeout(function () {
+            $codigo.trigger('focus').select();
+        }, 50);
+    }
+});
+</script>
+@endsection
+
 @section('contenido')
-@php $puedeEditar = can('editar-configuracion-indumentaria', false); @endphp
+@php
+    $puedeEditar = can('editar-configuracion-indumentaria', false);
+    $depositoId = (int) old('deposito_id', $deposito->id ?? $config->deposito_id ?? 0);
+    $tipoId = (int) old('tipotransaccion_stock_id', $tipo->id ?? $config->tipotransaccion_stock_id ?? 0);
+    $centrocostoId = (int) old('centrocosto_id', $centrocosto->id ?? $config->centrocosto_id ?? 0);
+@endphp
 <div class="row">
     <div class="col-lg-8">
         @include('includes.form-error')
@@ -18,58 +42,69 @@
                     </a>
                 </div>
             </div>
-            <form action="{{ route('actualizar_config_indumentaria') }}" method="POST" class="form-horizontal">
+            <form action="{{ route('actualizar_config_indumentaria') }}" method="POST" class="form-horizontal" autocomplete="off">
                 @csrf @method('put')
                 <div class="card-body">
                     <p class="text-muted">
                         La entrega de prendas descuenta stock y genera el asiento contable reutilizando el circuito de
                         <strong>Movimientos de stock</strong> (la cuenta contable se toma del artículo, igual que en mov. de stock).
+                        En cada campo: código + Enter para resolver, F1 o lupa para consultar.
                     </p>
 
-                    <div class="form-group row">
-                        <label class="col-lg-4 col-form-label text-right">Depósito de origen <span class="text-danger">*</span></label>
+                    @include('stock.partials.campo_consulta_deposito', [
+                        'prefix' => 'indumentaria',
+                        'layout' => 'form_row',
+                        'label' => 'Depósito de origen',
+                        'inputName' => 'deposito_id',
+                        'inputId' => 'deposito_id',
+                        'depositoId' => $depositoId > 0 ? $depositoId : '',
+                        'codigo' => old('deposito_codigo', $deposito->codigo ?? ''),
+                        'descripcion' => old('deposito_descripcion', $deposito->nombre ?? ''),
+                        'tipodeposito' => $deposito->tipodeposito ?? '',
+                        'solo_lectura' => ! $puedeEditar,
+                        'required' => true,
+                        'col_label' => 'col-lg-4 control-label text-right pr-2',
+                        'col_input' => 'col-lg-8',
+                        'ayuda_tooltip' => 'Depósito del que salen las prendas al entregarlas.',
+                    ])
+
+                    @include('stock.partials.campo_consulta_tipotransaccion_stock', [
+                        'prefix' => 'indumentaria',
+                        'label' => 'Tipo de transacción de stock',
+                        'inputName' => 'tipotransaccion_stock_id',
+                        'inputId' => 'tipotransaccion_stock_id',
+                        'tipoId' => $tipoId,
+                        'abreviatura' => old('tipotransaccion_abreviatura', $tipo->abreviatura ?? ''),
+                        'nombre' => old('tipotransaccion_nombre', $tipo->nombre ?? ''),
+                        'operacion' => $tipo->operacion ?? 'S',
+                        'maneja_contabilidad' => (bool) ($tipo->maneja_contabilidad ?? false),
+                        'solo_lectura' => ! $puedeEditar,
+                        'required' => true,
+                        'col_label' => 'col-lg-4 control-label text-right pr-2',
+                        'col_input' => 'col-lg-8',
+                    ])
+                    <div class="form-group row mb-2">
+                        <div class="col-lg-4"></div>
                         <div class="col-lg-8">
-                            <select name="deposito_id" class="form-control" {{ $puedeEditar ? '' : 'disabled' }} required>
-                                <option value="">— Seleccione —</option>
-                                @foreach ($depositos as $d)
-                                    <option value="{{ $d->id }}" {{ (int) old('deposito_id', $config->deposito_id) === (int) $d->id ? 'selected' : '' }}>
-                                        {{ $d->codigo ? $d->codigo.' - ' : '' }}{{ $d->nombre }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <small class="text-muted">Depósito del que salen las prendas al entregarlas.</small>
+                            <small class="text-muted">Salida de stock (operación S). Preconfigurado: ENTREGA DE INDUMENTARIA (EIND).</small>
                         </div>
                     </div>
 
-                    <div class="form-group row">
-                        <label class="col-lg-4 col-form-label text-right">Tipo de transacción de stock <span class="text-danger">*</span></label>
-                        <div class="col-lg-8">
-                            <select name="tipotransaccion_stock_id" class="form-control" {{ $puedeEditar ? '' : 'disabled' }} required>
-                                <option value="">— Seleccione —</option>
-                                @foreach ($tipos as $t)
-                                    <option value="{{ $t->id }}" {{ (int) old('tipotransaccion_stock_id', $config->tipotransaccion_stock_id) === (int) $t->id ? 'selected' : '' }}>
-                                        {{ $t->nombre }} ({{ $t->abreviatura }}){{ $t->maneja_contabilidad ? ' · con asiento' : '' }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <small class="text-muted">Salida de stock que maneja contabilidad. Preconfigurado: ENTREGA DE INDUMENTARIA.</small>
-                        </div>
-                    </div>
-
-                    <div class="form-group row">
-                        <label class="col-lg-4 col-form-label text-right">Centro de costo (opcional)</label>
-                        <div class="col-lg-8">
-                            <select name="centrocosto_id" class="form-control" {{ $puedeEditar ? '' : 'disabled' }}>
-                                <option value="">— Usa el del empleado —</option>
-                                @foreach ($centrocostos as $c)
-                                    <option value="{{ $c->id }}" {{ (int) old('centrocosto_id', $config->centrocosto_id) === (int) $c->id ? 'selected' : '' }}>
-                                        {{ $c->codigo }} - {{ $c->nombre }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <small class="text-muted">Si se deja vacío, el asiento usa el centro de costo del empleado.</small>
-                        </div>
-                    </div>
+                    @include('contable.partials.campo_consulta_centrocosto', [
+                        'prefix' => 'indumentaria',
+                        'layout' => 'form_row',
+                        'label' => 'Centro de costo (opcional)',
+                        'inputName' => 'centrocosto_id',
+                        'inputId' => 'centrocosto_id',
+                        'centrocostoId' => $centrocostoId > 0 ? $centrocostoId : '',
+                        'codigo' => old('centrocosto_codigo', $centrocosto->codigo ?? ''),
+                        'descripcion' => old('centrocosto_descripcion', $centrocosto->nombre ?? ''),
+                        'solo_lectura' => ! $puedeEditar,
+                        'required' => false,
+                        'col_label' => 'col-lg-4 control-label text-right pr-2',
+                        'col_input' => 'col-lg-8',
+                        'ayuda' => 'Si se deja vacío, el asiento usa el centro de costo del empleado.',
+                    ])
                 </div>
                 @if ($puedeEditar)
                     <div class="card-footer text-right">
@@ -80,4 +115,7 @@
         </div>
     </div>
 </div>
+@include('includes.stock.modalconsultadeposito')
+@include('includes.stock.modalconsultatipotransaccionstock')
+@include('includes.contable.modalconsultacentrocosto')
 @endsection

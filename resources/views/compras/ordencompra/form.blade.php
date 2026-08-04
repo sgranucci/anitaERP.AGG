@@ -183,16 +183,34 @@
                 </div>
             @endif
 
+            @php
+                $tratamientoValorActual = old('tratamiento', (isset($data) && $data) ? $data->tratamiento : 'NO ANTICIPADA');
+                $tratamientoBloqueado = !empty($tratamiento_bloqueado_por_movimientos) && !$soloLectura;
+                $tratamientoDisabled = $soloLectura || $tratamientoBloqueado;
+            @endphp
             <div class="form-group row">
                 <label for="tratamiento" class="col-lg-4 control-label requerido">Tratamiento</label>
                 <div class="col-lg-4">
-                    <select name="tratamiento" id="tratamiento" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
+                    @if ($tratamientoBloqueado)
+                        <input type="hidden" name="tratamiento" value="{{ $tratamientoValorActual }}">
+                    @endif
+                    <select id="tratamiento" class="form-control" required {{ $tratamientoDisabled ? 'disabled' : '' }}
+                        @if (!$tratamientoBloqueado)
+                            name="tratamiento"
+                        @endif
+                        @if ($tratamientoBloqueado)
+                            title="No se puede cambiar: la OC ya tiene recepción o factura asociada"
+                        @endif
+                    >
                         @foreach ($tratamiento_enum as $t)
-                            <option value="{{ $t['nombre'] }}" {{ old('tratamiento', (isset($data) && $data) ? $data->tratamiento : 'NO ANTICIPADA') == $t['nombre'] ? 'selected' : '' }}>
+                            <option value="{{ $t['nombre'] }}" {{ $tratamientoValorActual == $t['nombre'] ? 'selected' : '' }}>
                                 {{ $t['nombre'] }}
                             </option>
                         @endforeach
                     </select>
+                    @if ($tratamientoBloqueado)
+                        <small class="form-text text-muted">No se puede cambiar: la OC ya tiene recepción o factura asociada.</small>
+                    @endif
                 </div>
                 <label for="numeroordencompra_show" class="col-lg-2 control-label">Nº OC</label>
                 <div class="col-lg-2">

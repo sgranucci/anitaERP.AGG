@@ -21,11 +21,12 @@ function sumasSaldosFormatearCodigoCuenta(codigo) {
 }
 
 function sumasSaldosEmpresaIdParaConsultaCuenta() {
-    var $hiddenEmpresas = $('#sys_empresas_asignadas_hidden input[name="empresa_ids[]"]');
-    if ($hiddenEmpresas.length) {
-        var id = parseInt($hiddenEmpresas.first().val(), 10) || 0;
-        if (id > 0) {
-            return id;
+    var $checks = $('#sys_empresas_asignadas_hidden input[name="empresa_ids[]"]');
+    if ($checks.length) {
+        var $marcados = $checks.filter(':checked');
+        var $fuente = $marcados.length ? $marcados : $checks.filter('[type="hidden"]');
+        if ($fuente.length) {
+            return parseInt($fuente.first().val(), 10) || 0;
         }
     }
 
@@ -42,12 +43,6 @@ function sumasSaldosEmpresaIdParaConsultaCuenta() {
         } else {
             return parseInt($empresa.val(), 10) || 0;
         }
-    }
-
-    // Dual list: primer ítem de la lista derecha.
-    var $listaDer = $('#sys_empresas_asignadas option').first();
-    if ($listaDer.length) {
-        return parseInt($listaDer.val(), 10) || 0;
     }
 
     return 0;
@@ -160,6 +155,45 @@ function sumasSaldosEsTeclaF1(e) {
     return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
 }
 
+function sumasSaldosModalConsultaAbierto() {
+    var $modal = $('#consultacuentaModal');
+    return $modal.hasClass('show') || $modal.is(':visible');
+}
+
+function sumasSaldosOnKeydownF1Capture(e) {
+    if (!sumasSaldosEsTeclaF1(e)) {
+        return;
+    }
+
+    var target = e.target;
+    if (!target || target.disabled) {
+        return;
+    }
+
+    var $target = $(target);
+    var $campo = $target.closest('.sys-cuenta-campo');
+    if (!$campo.length) {
+        return;
+    }
+
+    var enCampoCuenta = $target.hasClass('codigocuentacontable')
+        || $target.hasClass('nombrecuentacontable')
+        || $target.closest('.consultacuentacontable').length > 0
+        || $target.hasClass('consultacuentacontable');
+
+    if (!enCampoCuenta) {
+        return;
+    }
+
+    if (sumasSaldosModalConsultaAbierto()) {
+        return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    sumasSaldosAbrirModalConsulta($campo);
+}
+
 function activaEventosSumasSaldosFiltro() {
     $(document)
         .off('change.syscta', '.sys-cuenta-campo .codigocuentacontable')
@@ -171,13 +205,6 @@ function activaEventosSumasSaldosFiltro() {
     $(document)
         .off('keydown.syscta', '.sys-cuenta-campo .codigocuentacontable')
         .on('keydown.syscta', '.sys-cuenta-campo .codigocuentacontable', function (event) {
-            if (sumasSaldosEsTeclaF1(event)) {
-                event.preventDefault();
-                event.stopPropagation();
-                sumasSaldosAbrirModalConsulta($(this).closest('.sys-cuenta-campo'));
-                return;
-            }
-
             if (event.key === 'Enter' || event.keyCode === 13) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -185,7 +212,10 @@ function activaEventosSumasSaldosFiltro() {
             }
         });
 
-    // Capture por si otro handler frena F1/Enter.
+    document.removeEventListener('keydown', sumasSaldosOnKeydownF1Capture, true);
+    document.addEventListener('keydown', sumasSaldosOnKeydownF1Capture, true);
+
+    // Capture por si otro handler frena Enter en código.
     document.addEventListener(
         'keydown',
         function (e) {
@@ -197,16 +227,6 @@ function activaEventosSumasSaldosFiltro() {
                 return;
             }
             if (target.readOnly || target.disabled) {
-                return;
-            }
-
-            if (sumasSaldosEsTeclaF1(e)) {
-                if ($('#consultacuentaModal').hasClass('show') || $('#consultacuentaModal').is(':visible')) {
-                    return;
-                }
-                e.preventDefault();
-                e.stopPropagation();
-                sumasSaldosAbrirModalConsulta($(target).closest('.sys-cuenta-campo'));
                 return;
             }
 

@@ -29,10 +29,32 @@ class RequisicionReporteService
      *         total_pendiente: float,
      *         total_importe: float,
      *         total_requisiciones: int
-     *     }
+     *     },
+     *     secciones?: list<array<string, mixed>>
      * }
      */
     public function generar(array $filtros): array
+    {
+        $empresaIds = array_values(array_filter(
+            array_map('intval', $filtros['empresa_ids'] ?? []),
+            fn (int $id) => $id > 0,
+        ));
+        $consolidar = array_key_exists('consolidar_empresas', $filtros)
+            ? (bool) $filtros['consolidar_empresas']
+            : true;
+
+        if ($consolidar || count($empresaIds) <= 1) {
+            return $this->generarConsolidado($filtros);
+        }
+
+        return $this->generarPorEmpresa($filtros, $empresaIds);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array{filas: list<array<string, mixed>>, totales: array<string, float|int>, secciones: list<array<string, mixed>>}
+     */
+    private function generarConsolidado(array $filtros): array
     {
         $lineas = $this->consultarLineas($filtros);
         $filas = $this->aplanarFilas($lineas, $filtros);
@@ -41,7 +63,87 @@ class RequisicionReporteService
         return [
             'filas' => $filas,
             'totales' => $totales,
+            'secciones' => [[
+                'empresa_id' => count($filtros['empresa_ids'] ?? []) === 1
+                    ? (int) ($filtros['empresa_ids'][0] ?? 0)
+                    : 0,
+                'empresa_nombre' => '',
+                'filas' => $filas,
+                'totales' => $totales,
+            ]],
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  list<int>  $empresaIds
+     * @return array{filas: list<array<string, mixed>>, totales: array<string, float|int>, secciones: list<array<string, mixed>>}
+     */
+    private function generarPorEmpresa(array $filtros, array $empresaIds): array
+    {
+        $filasFusion = [];
+        $secciones = [];
+        $totales = [
+            'total_cantidad' => 0.0,
+            'total_entregado' => 0.0,
+            'total_pendiente' => 0.0,
+            'total_importe' => 0.0,
+            'total_requisiciones' => 0,
+        ];
+
+        foreach ($empresaIds as $empresaId) {
+            $parcialFiltros = array_merge($filtros, [
+                'empresa_ids' => [$empresaId],
+                'consolidar_empresas' => true,
+            ]);
+            $parcial = $this->generarConsolidado($parcialFiltros);
+            $nombre = $this->nombreEmpresa($empresaId, $parcial['filas']);
+
+            $secciones[] = [
+                'empresa_id' => $empresaId,
+                'empresa_nombre' => $nombre,
+                'filas' => $parcial['filas'],
+                'totales' => $parcial['totales'],
+            ];
+
+            $filasFusion[] = [
+                'tipo_fila' => 'header_empresa',
+                'empresa_id' => $empresaId,
+                'nombreempresa' => $nombre,
+            ];
+            foreach ($parcial['filas'] as $fila) {
+                $filasFusion[] = $fila;
+            }
+
+            $totales['total_cantidad'] += (float) ($parcial['totales']['total_cantidad'] ?? 0);
+            $totales['total_entregado'] += (float) ($parcial['totales']['total_entregado'] ?? 0);
+            $totales['total_pendiente'] += (float) ($parcial['totales']['total_pendiente'] ?? 0);
+            $totales['total_importe'] += (float) ($parcial['totales']['total_importe'] ?? 0);
+            $totales['total_requisiciones'] += (int) ($parcial['totales']['total_requisiciones'] ?? 0);
+        }
+
+        return [
+            'filas' => $filasFusion,
+            'totales' => $totales,
+            'secciones' => $secciones,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function nombreEmpresa(int $empresaId, array $filas = []): string
+    {
+        foreach ($filas as $fila) {
+            $nombre = trim((string) ($fila['nombreempresa'] ?? ''));
+            if ($nombre !== '') {
+                return $nombre;
+            }
+        }
+
+        $nombre = (string) (DB::table('empresa')->where('id', $empresaId)->value('nombre') ?? '');
+
+        return $nombre !== '' ? $nombre : ('#'.$empresaId);
     }
 
     /**
@@ -530,7 +632,11 @@ class RequisicionReporteService
                 ->values()
                 ->all();
             if ($nombres !== []) {
-                $partes[] = 'Empresas: '.implode(', ', $nombres);
+                $txt = 'Empresas: '.implode(', ', $nombres);
+                if (count($ids) > 1 && ! empty($filtros['consolidar_empresas'])) {
+                    $txt .= ' (consolidado)';
+                }
+                $partes[] = $txt;
             }
         }
 

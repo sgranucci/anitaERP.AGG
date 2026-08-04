@@ -41,10 +41,29 @@
             }
         }
 
+        function colorTalleFila(tr) {
+            const colorSel = tr.querySelector('select.ms-color-id');
+            const talleSel = tr.querySelector('select.ms-talle-id');
+            return {
+                colorId: parseInt((colorSel && colorSel.value) || 0, 10) || 0,
+                talleId: parseInt((talleSel && talleSel.value) || 0, 10) || 0
+            };
+        }
+
+        function claveVarianteFila(tr) {
+            const aid = parseInt((tr.querySelector('.articulo_id') || {}).value, 10) || 0;
+            const ct = colorTalleFila(tr);
+            return aid + '|' + ct.colorId + '|' + ct.talleId;
+        }
+
         function cargarSaldo(tr, articuloId) {
             const depId = depositoId();
             if (!articuloId || !depId || !saldoUrl) return;
-            fetch(saldoUrl + '?articulo_id=' + articuloId + '&deposito_id=' + depId, {
+            const ct = colorTalleFila(tr);
+            let url = saldoUrl + '?articulo_id=' + articuloId + '&deposito_id=' + depId;
+            if (ct.colorId > 0) url += '&color_id=' + ct.colorId;
+            if (ct.talleId > 0) url += '&talle_id=' + ct.talleId;
+            fetch(url, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
                 .then(function (r) { return r.json(); })
@@ -59,6 +78,11 @@
                 })
                 .catch(function () {});
         }
+
+        window.recuentoRefrescarSaldoFila = function (tr) {
+            const aid = parseInt((tr.querySelector('.articulo_id') || {}).value, 10) || 0;
+            if (aid) cargarSaldo(tr, aid);
+        };
 
         function pintarDiferencia(tr) {
             const saldo = parseFloat((tr.querySelector('.saldo_sistema_input') || {}).value || 0);
@@ -88,27 +112,45 @@
                 td.textContent = '—';
                 td.classList.remove('text-danger');
             }
+            const colorSel = tr.querySelector('select.ms-color-id');
+            const talleSel = tr.querySelector('select.ms-talle-id');
+            if (colorSel) {
+                colorSel.value = '';
+                colorSel.setAttribute('data-selected', '');
+            }
+            if (talleSel) {
+                talleSel.value = '';
+                talleSel.setAttribute('data-selected', '');
+            }
+            tr.setAttribute('data-maneja-stock-color-talle', '0');
             actualizarLinkArticulo(tr, 0);
             if (typeof window.actualizarBotonMovimientosRecuentoFila === 'function') {
                 window.actualizarBotonMovimientosRecuentoFila(tr);
             }
+            if (typeof window.msRecalcularModoColorTalle === 'function') {
+                window.msRecalcularModoColorTalle();
+            }
         }
 
-        function filaConArticuloId(articuloId, excluirTr) {
+        function filaConVariante(articuloId, colorId, talleId, excluirTr) {
             const id = parseInt(articuloId, 10);
             if (!id) return null;
+            const c = parseInt(colorId, 10) || 0;
+            const t = parseInt(talleId, 10) || 0;
             const rows = tbody.querySelectorAll('tr.recuento-item-row');
             for (let i = 0; i < rows.length; i++) {
                 const tr = rows[i];
                 if (excluirTr && tr === excluirTr) continue;
                 const aid = parseInt((tr.querySelector('.articulo_id') || {}).value, 10) || 0;
-                if (aid === id) return tr;
+                if (aid !== id) continue;
+                const ct = colorTalleFila(tr);
+                if (ct.colorId === c && ct.talleId === t) return tr;
             }
             return null;
         }
 
-        function rechazarArticuloDuplicado(tr, articuloId, etiqueta) {
-            const existente = filaConArticuloId(articuloId, tr);
+        function rechazarVarianteDuplicada(tr, articuloId, colorId, talleId, etiqueta) {
+            const existente = filaConVariante(articuloId, colorId, talleId, tr);
             if (!existente) return false;
 
             limpiarFilaArticulo(tr);
@@ -119,8 +161,8 @@
         function avisarArticuloDuplicadoEnGrilla(filaExistente, etiqueta) {
             const skuExistente = (filaExistente.querySelector('.codigoarticulo') || {}).value || '';
             const ref = etiqueta || skuExistente || '';
-            const msg = 'El artículo «' + ref + '» ya está cargado en otra línea del recuento. '
-                + 'Cada artículo solo puede figurar una vez; modifique la cantidad contada en la línea existente.';
+            const msg = 'La variante del artículo «' + ref + '» ya está cargada en otra línea del recuento. '
+                + 'Cada combinación artículo/color/talle solo puede figurar una vez; modifique la cantidad contada en la línea existente.';
 
             if (typeof Biblioteca !== 'undefined' && typeof Biblioteca.notificaciones === 'function') {
                 Biblioteca.notificaciones(msg, 'Recuento', 'warning');
@@ -146,7 +188,9 @@
         function agregarFila(data) {
             if (!template) return null;
             if (data && data.articulo_id) {
-                const existente = filaConArticuloId(data.articulo_id, null);
+                const cId = parseInt(data.color_id, 10) || 0;
+                const tId = parseInt(data.talle_id, 10) || 0;
+                const existente = filaConVariante(data.articulo_id, cId, tId, null);
                 if (existente) {
                     avisarArticuloDuplicadoEnGrilla(existente, data.sku || data.descripcion || data.articulo_id);
                     return existente;
@@ -166,11 +210,32 @@
                 if (um) um.textContent = data.unidadmedida || '—';
                 const spanSaldo = tr.querySelector('.saldo-deposito');
                 if (spanSaldo) spanSaldo.textContent = fmt(data.saldo_sistema);
+                const maneja = !!(data.maneja_stock_color_talle === true
+                    || data.maneja_stock_color_talle === 1
+                    || data.maneja_stock_color_talle === '1'
+                    || (parseInt(data.color_id, 10) || 0) > 0
+                    || (parseInt(data.talle_id, 10) || 0) > 0);
+                tr.setAttribute('data-maneja-stock-color-talle', maneja ? '1' : '0');
+                const colorSel = tr.querySelector('select.ms-color-id');
+                const talleSel = tr.querySelector('select.ms-talle-id');
+                const cId = parseInt(data.color_id, 10) || 0;
+                const tId = parseInt(data.talle_id, 10) || 0;
+                if (colorSel) colorSel.setAttribute('data-selected', cId > 0 ? String(cId) : '');
+                if (talleSel) talleSel.setAttribute('data-selected', tId > 0 ? String(tId) : '');
+                if (typeof window.msPoblarSelectsColorTalleFila === 'function' && typeof $ !== 'undefined') {
+                    window.msPoblarSelectsColorTalleFila($(tr));
+                }
+                if (typeof window.msAplicarExclusividadColorTalle === 'function' && typeof $ !== 'undefined') {
+                    window.msAplicarExclusividadColorTalle({ maneja_stock_color_talle: maneja }, $(tr));
+                }
                 actualizarLinkArticulo(tr, parseInt(data.articulo_id, 10) || 0);
             }
             pintarDiferencia(tr);
             if (typeof window.actualizarBotonMovimientosRecuentoFila === 'function') {
                 window.actualizarBotonMovimientosRecuentoFila(tr);
+            }
+            if (typeof window.msRecalcularModoColorTalle === 'function') {
+                window.msRecalcularModoColorTalle();
             }
             return tr;
         }
@@ -328,7 +393,13 @@
             const tr = ctx.row.jquery ? ctx.row[0] : ctx.row;
             if (!tr || !tr.closest('#tabla-recuento-items')) return;
             const artId = parseInt(dataArticulo.id, 10) || 0;
-            if (artId && rechazarArticuloDuplicado(tr, artId, dataArticulo.sku || dataArticulo.descripcion)) {
+            if (typeof window.msAplicarExclusividadColorTalle === 'function' && typeof $ !== 'undefined') {
+                if (!window.msAplicarExclusividadColorTalle(dataArticulo, $(tr))) {
+                    return;
+                }
+            }
+            const ct = colorTalleFila(tr);
+            if (artId && rechazarVarianteDuplicada(tr, artId, ct.colorId, ct.talleId, dataArticulo.sku || dataArticulo.descripcion)) {
                 return;
             }
             aplicarArticuloEnFila(tr, {
@@ -362,18 +433,31 @@
                             alert(data.error);
                             return;
                         }
+                        resetearModoColorTalle();
                         tbody.innerHTML = '';
                         (data.lineas || []).forEach(function (ln) { agregarFila(ln); });
                         if (!data.lineas || !data.lineas.length) agregarFila(null);
+                        if (typeof window.msRecalcularModoColorTalle === 'function') {
+                            window.msRecalcularModoColorTalle();
+                        }
                     })
                     .catch(function () { alert('No se pudo generar el recuento aleatorio.'); });
             });
         }
 
+        function resetearModoColorTalle() {
+            var modo = document.getElementById('modo_stock_color_talle');
+            if (modo) modo.value = '';
+        }
+
         function repoblarLineas(lineas) {
+            resetearModoColorTalle();
             tbody.innerHTML = '';
             (lineas || []).forEach(function (ln) { agregarFila(ln); });
             if (!lineas || !lineas.length) agregarFila(null);
+            if (typeof window.msRecalcularModoColorTalle === 'function') {
+                window.msRecalcularModoColorTalle();
+            }
         }
 
         const formImportExcel = document.getElementById('form-importar-recuento-excel');
@@ -497,13 +581,21 @@
             }
 
             var filasConArticulo = 0;
-            var idsVistos = {};
+            var clavesVistas = {};
             var filaDuplicada = null;
+            var faltaColorTalle = null;
+            var modoCt = String((document.getElementById('modo_stock_color_talle') || {}).value || '').trim() === '1';
             tbody.querySelectorAll('tr.recuento-item-row').forEach(function (tr) {
                 var aid = parseInt((tr.querySelector('.articulo_id') || {}).value, 10) || 0;
                 if (aid <= 0) return;
                 filasConArticulo++;
-                if (idsVistos[aid]) {
+                var ct = colorTalleFila(tr);
+                if (modoCt && (ct.colorId <= 0 || ct.talleId <= 0)) {
+                    resultado.valido = false;
+                    faltaColorTalle = faltaColorTalle || tr;
+                }
+                var clave = claveVarianteFila(tr);
+                if (clavesVistas[clave]) {
                     resultado.valido = false;
                     filaDuplicada = filaDuplicada || tr;
                     var skuInp = tr.querySelector('.codigoarticulo');
@@ -512,7 +604,7 @@
                     }
                     return;
                 }
-                idsVistos[aid] = tr;
+                clavesVistas[clave] = tr;
             });
             if (filasConArticulo === 0) {
                 resultado.valido = false;
@@ -526,6 +618,14 @@
                 resultado.articuloDuplicado = true;
                 if (!resultado.primerInvalido) {
                     resultado.primerInvalido = filaDuplicada.querySelector('.codigoarticulo');
+                }
+            } else if (faltaColorTalle) {
+                resultado.valido = false;
+                resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+                resultado.faltaColorTalle = true;
+                if (!resultado.primerInvalido) {
+                    resultado.primerInvalido = faltaColorTalle.querySelector('select.ms-color-id')
+                        || faltaColorTalle.querySelector('.codigoarticulo');
                 }
             }
 
@@ -551,7 +651,9 @@
                 if (!depositoId()) {
                     mensajeExtra = ' Valide el dep\u00f3sito (c\u00f3digo + Enter o modal).';
                 } else if (resultado.articuloDuplicado) {
-                    mensajeExtra = ' Hay art\u00edculos repetidos en la grilla. Cada art\u00edculo debe figurar una sola vez.';
+                    mensajeExtra = ' Hay variantes repetidas en la grilla. Cada combinaci\u00f3n art\u00edculo/color/talle debe figurar una sola vez.';
+                } else if (resultado.faltaColorTalle) {
+                    mensajeExtra = ' Complete color y talle en todas las l\u00edneas de este recuento.';
                 } else if (resultado.cantidadInvalidos === 1 && resultado.primerInvalido
                     && resultado.primerInvalido.classList.contains('codigoarticulo')) {
                     mensajeExtra = ' Agregue al menos un art\u00edculo.';

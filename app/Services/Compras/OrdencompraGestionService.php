@@ -26,6 +26,7 @@ use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraTotalesResumen;
+use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
@@ -171,6 +172,14 @@ class OrdencompraGestionService
         }
 
         $prov = $req->proveedores;
+        $detalleReq = trim((string) ($req->detalle ?? ''));
+        $detalleAutogenerado = $detalleReq === '';
+        if ($detalleAutogenerado) {
+            $nro = trim((string) ($req->numerorequisicion ?? ''));
+            $detalleReq = $nro !== ''
+                ? 'Orden de compra desde requisición N° '.$nro
+                : 'Orden de compra desde requisición #'.$req->id;
+        }
 
         return [
             'requisicion_id' => $req->id,
@@ -179,7 +188,9 @@ class OrdencompraGestionService
             'fechaentrega' => $req->fechaentrega,
             'centrocosto_id' => $req->centrocosto_id,
             'comentario' => $req->comentario,
-            'detalle' => $req->detalle,
+            'detalle' => $detalleReq,
+            'detalle_autogenerado' => $detalleAutogenerado,
+            'numerorequisicion' => $req->numerorequisicion,
             'tratamiento' => Ordencompra::mapearTratamientoDesdeRequisicion((string) ($req->tratamiento ?? '')),
             'proveedor_id' => $req->proveedor_id,
             'proveedor_codigo' => $prov ? (string) ($prov->codigo ?? '') : '',
@@ -491,6 +502,16 @@ class OrdencompraGestionService
 
         $cab = $this->armaCabeceraDesdeRequest($payload, $existente->estadoordencompra, $existente->sector_legajocompra_id, $existente->creousuario_id);
         unset($cab['creousuario_id']);
+
+        try {
+            OrdencompraTratamientoMovimientosSupport::assertPuedeCambiarTratamiento(
+                $id,
+                $existente->tratamiento ?? null,
+                $cab['tratamiento'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
 
         $oldReqId = $existente->requisicion_id ? (int) $existente->requisicion_id : null;
         $newReqId = ! empty($cab['requisicion_id']) ? (int) $cab['requisicion_id'] : null;

@@ -43,7 +43,7 @@ class MayorPlanoCuentaOrdencompraEnricher
 
             try {
                 $resultado = $this->syncService->traerRegistroDeAnita($numeroOc);
-                if ($resultado === 'importado' || $resultado === 'omitido') {
+                if (in_array($resultado, ['importado', 'omitido', 'lineas_completadas'], true)) {
                     $id = (int) Ordencompra::query()->where('numeroordencompra', $numeroOc)->value('id');
                     if ($id > 0) {
                         $this->cachePorNumero[$numeroOc] = $id;
@@ -60,6 +60,11 @@ class MayorPlanoCuentaOrdencompraEnricher
             }
 
             $nroOc = (int) ($fila['nro_oc'] ?? 0);
+            $ocIdExistente = (int) ($fila['ordencompra_id'] ?? 0);
+            if ($ocIdExistente > 0) {
+                continue;
+            }
+
             $filas[$idx]['ordencompra_id'] = $nroOc > 0 ? (int) ($this->cachePorNumero[$nroOc] ?? 0) : 0;
         }
 

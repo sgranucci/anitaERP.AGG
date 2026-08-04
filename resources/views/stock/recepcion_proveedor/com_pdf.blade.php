@@ -1,6 +1,17 @@
 @php
     $clave = \App\Support\Stock\RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
     $intercompanyPdf = \App\Support\Stock\RecepcionProveedorIntercompanySupport::detalleIntercompanyPdf($recepcion);
+    $monedaPdf = trim((string) (optional($recepcion->monedas)->abreviatura
+        ?? optional($recepcion->monedas)->nombre
+        ?? ''));
+    if ($monedaPdf === '') {
+        $monedaPdf = '—';
+    }
+    $cotizacionPdf = (float) ($recepcion->cotizacion ?: 1);
+    $cotizacionFmt = rtrim(rtrim(number_format($cotizacionPdf, 6, ',', '.'), '0'), ',');
+    if ($cotizacionFmt === '' || $cotizacionFmt === '-') {
+        $cotizacionFmt = '1';
+    }
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -54,6 +65,11 @@
         <td><strong>Estado:</strong> {{ $recepcion->estado }}</td>
         <td><strong>Tipo:</strong> {{ $recepcion->tipo }}</td>
         <td><strong>Usuario:</strong> {{ optional($recepcion->creousuarios)->nombre ?? '—' }}</td>
+    </tr>
+    <tr>
+        <td><strong>Moneda:</strong> {{ $monedaPdf }}</td>
+        <td><strong>Cotización:</strong> {{ $cotizacionFmt }}</td>
+        <td></td>
     </tr>
 </table>
 
@@ -128,7 +144,13 @@
     </tbody>
 </table>
 
-<div class="totales">Total neto (sin IVA): {{ number_format($total, 2, ',', '.') }}</div>
+<div class="totales">
+    Total neto (sin IVA)
+    @if ($monedaPdf !== '—')
+        ({{ $monedaPdf }})
+    @endif
+    : {{ number_format($total, 2, ',', '.') }}
+</div>
 
 @if($recepcion->recepcion_proveedor_partes_unicas->isNotEmpty())
 <h3 style="font-size:10px; margin-top:12px;">Números de parte única (NPU)</h3>

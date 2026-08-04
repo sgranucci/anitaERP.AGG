@@ -5,7 +5,7 @@
 @endsection
 
 @section('scripts')
-<script src="{{ asset('assets/pages/scripts/reportes/empresas_dual.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/reportes/empresas_dual.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/reportes/empresas_checkboxes.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/listado-filtros.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/analitico_reporte_filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/analitico_reporte_filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>

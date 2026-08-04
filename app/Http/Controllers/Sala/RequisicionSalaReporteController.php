@@ -10,6 +10,7 @@ use App\Support\Reportes\ReportePreferenciasUsuario;
 use App\Support\Sala\RequisicionSalaReporteCriteriosSupport;
 use App\Support\Sala\RequisicionSalaReporteFiltros;
 use Illuminate\Http\Request;
+use Jurosh\PDFMerge\PDFMerger;
 use Maatwebsite\Excel\Excel;
 
 class RequisicionSalaReporteController extends Controller
@@ -43,6 +44,7 @@ class RequisicionSalaReporteController extends Controller
         if ($consultado) {
             ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
                 'empresa_ids' => $filtros['empresa_ids'],
+                'consolidar_empresas' => (bool) ($filtros['consolidar_empresas'] ?? true),
             ]);
             $resultado = $this->service->generar($filtros);
             $perPage = max(25, min(500, (int) $request->input('per_page', 100)));
@@ -110,6 +112,10 @@ class RequisicionSalaReporteController extends Controller
 
         switch (strtoupper((string) $formato)) {
             case 'PDF':
+                if (count($filtros['empresa_ids'] ?? []) > 1 && empty($filtros['consolidar_empresas'])) {
+                    return $this->descargarPdfPorEmpresa($filtros, $resultado, $empresaQuery);
+                }
+
                 $view = \View::make('sala.requisicion_sala_reporte.listado', compact(
                     'filas',
                     'totales',
@@ -141,6 +147,71 @@ class RequisicionSalaReporteController extends Controller
 
     /**
      * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>  $resultadoCompleto
+     * @param  \Illuminate\Support\Collection<int, mixed>  $empresaQuery
+     */
+    private function descargarPdfPorEmpresa(array $filtros, array $resultadoCompleto, $empresaQuery)
+    {
+        $dir = storage_path('pdf/listados');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        $temporales = [];
+        $titulo = 'Requisiciones de SALA';
+
+        try {
+            foreach ($resultadoCompleto['secciones'] ?? [] as $seccion) {
+                $empresaId = (int) ($seccion['empresa_id'] ?? 0);
+                $filtrosEmpresa = array_merge($filtros, [
+                    'empresa_ids' => [$empresaId],
+                    'consolidar_empresas' => true,
+                ]);
+                $filas = $seccion['filas'] ?? [];
+                $totales = $seccion['totales'] ?? [];
+                $subtitulo = ((string) ($seccion['empresa_nombre'] ?? ''))
+                    .' · '.$this->service->subtituloFiltros($filtrosEmpresa, $empresaQuery);
+
+                $view = \View::make('sala.requisicion_sala_reporte.listado', compact(
+                    'filas',
+                    'totales',
+                    'titulo',
+                    'subtitulo',
+                ))->render();
+
+                $temp = $dir.'/req_sala_tmp_'.uniqid('', true).'.pdf';
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view, 'UTF-8')->save($temp);
+                $temporales[] = $temp;
+            }
+
+            $nombreBase = 'requisiciones_sala_'.date('Ymd_His');
+            $destino = $dir.'/'.$nombreBase.'.pdf';
+
+            if (count($temporales) === 1) {
+                rename($temporales[0], $destino);
+                $temporales = [];
+            } else {
+                $merger = new PDFMerger;
+                foreach ($temporales as $ruta) {
+                    $merger->addPDF($ruta, 'all', 'horizontal');
+                }
+                $merger->merge('file', $destino);
+            }
+
+            return response()->download($destino, $nombreBase.'.pdf')->deleteFileAfterSend(true);
+        } finally {
+            foreach ($temporales as $ruta) {
+                if (is_file($ruta)) {
+                    @unlink($ruta);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
      * @param  \Illuminate\Support\Collection<int, mixed>  $empresaQuery
      * @return array<string, mixed>
      */
@@ -168,6 +239,14 @@ class RequisicionSalaReporteController extends Controller
             $filtros['empresa_ids'] = $empresaQuery->count() === 1
                 ? [(int) $empresaQuery->first()->id]
                 : $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+        }
+
+        if (! $request->has('consolidar_empresas')) {
+            $filtros['consolidar_empresas'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'consolidar_empresas',
+                true,
+            );
         }
 
         return $filtros;

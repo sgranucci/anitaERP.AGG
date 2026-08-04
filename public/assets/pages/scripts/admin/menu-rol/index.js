@@ -179,8 +179,28 @@
         });
     });
 
+    function filtroNombreRolActual() {
+        return String($('#filtro-nombre-rol').val() || '').toLowerCase().trim();
+    }
+
+    /**
+     * Mismos roles visibles que en la grilla (filtro "Buscar rol").
+     * El backend ya aplica centro de costo; el texto de rol es solo cliente.
+     */
+    function filtrarRolesVisibles(roles) {
+        var qRol = filtroNombreRolActual();
+        var filtrados = {};
+        Object.keys(roles || {}).forEach(function (rolId) {
+            var nombre = String(roles[rolId] || '').toLowerCase();
+            if (qRol === '' || nombre.indexOf(qRol) !== -1) {
+                filtrados[rolId] = roles[rolId];
+            }
+        });
+        return filtrados;
+    }
+
     function buildPermisosTable(data) {
-        var roles = data.roles;
+        var roles = filtrarRolesVisibles(data.roles);
         var permisos = data.permisos;
         var roleKeys = Object.keys(roles);
         if (roleKeys.length === 0) {
@@ -248,8 +268,8 @@
             data: ajaxData,
             success: function (data) {
                 $cargando.hide();
-                var roleKeys = Object.keys(data.roles || {});
-                if (roleKeys.length === 0) {
+                var rolesVisibles = filtrarRolesVisibles(data.roles || {});
+                if (Object.keys(rolesVisibles).length === 0) {
                     $sinRoles.show();
                     return;
                 }
@@ -257,7 +277,12 @@
                     $vacio.show();
                     return;
                 }
-                $contenedor.html(buildPermisosTable(data)).show();
+                var tabla = buildPermisosTable(data);
+                if (!tabla) {
+                    $sinRoles.show();
+                    return;
+                }
+                $contenedor.html(tabla).show();
             },
             error: function (xhr) {
                 $cargando.hide();

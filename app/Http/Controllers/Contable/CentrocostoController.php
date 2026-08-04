@@ -199,6 +199,8 @@ class CentrocostoController extends Controller
             'crear-movimientos-de-stock',
             'editar-movimientos-de-stock',
             'listar-movimientos-de-stock',
+            'ver-configuracion-indumentaria',
+            'editar-configuracion-indumentaria',
         ] as $permiso) {
             if (can($permiso, false)) {
                 return true;

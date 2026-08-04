@@ -40,6 +40,8 @@ final class RecuentoDetalleExportSupport
             ->sortBy([
                 static fn (Recuento_Item $item): string => mb_strtolower(self::nombreTipo($item)),
                 static fn (Recuento_Item $item): string => (string) (optional($item->articulos)->sku ?? ''),
+                static fn (Recuento_Item $item): string => (string) (optional($item->color)->nombre ?? ''),
+                static fn (Recuento_Item $item): string => (string) (optional($item->talle)->nombre ?? ''),
                 static fn (Recuento_Item $item): int => (int) $item->id,
             ])
             ->values();

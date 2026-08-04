@@ -43,13 +43,26 @@
                             <input type="text" name="col_cantidad" class="form-control" value="{{ old('col_cantidad', 'cantidad_contada') }}" required>
                         </div>
                     </div>
-                    <div class="form-group row mb-0">
+                    <div class="form-group row">
                         <label class="col-lg-2 control-label">Columna detalle</label>
                         <div class="col-lg-3">
                             <input type="text" name="col_detalle" class="form-control" value="{{ old('col_detalle', 'detalle') }}">
                         </div>
                         <div class="col-lg-7">
-                            <span class="form-text text-muted mb-0">Opcional. Ejemplo de encabezados: sku, cantidad_contada, detalle.</span>
+                            <span class="form-text text-muted mb-0">Opcional.</span>
+                        </div>
+                    </div>
+                    <div class="form-group row mb-0">
+                        <label class="col-lg-2 control-label">Columna color</label>
+                        <div class="col-lg-3">
+                            <input type="text" name="col_color" class="form-control" value="{{ old('col_color', 'color') }}">
+                        </div>
+                        <label class="col-lg-2 control-label">Columna talle</label>
+                        <div class="col-lg-3">
+                            <input type="text" name="col_talle" class="form-control" value="{{ old('col_talle', 'talle') }}">
+                        </div>
+                        <div class="col-lg-2">
+                            <span class="form-text text-muted mb-0">Obligatorias si los art&iacute;culos manejan color/talle (nombre o ID).</span>
                         </div>
                     </div>
                 </div>

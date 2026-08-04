@@ -94,7 +94,7 @@ final class AiConsultaOperativaSchemaSupport
     {
         $out = [];
 
-        foreach (['sku', 'codigo', 'documento', 'numero', 'valor', 'cuenta_codigo', 'deposito_codigo', 'empresa_codigo', 'numero_oc', 'evento', 'descripcion'] as $k) {
+        foreach (['sku', 'codigo', 'documento', 'numero', 'valor', 'cuenta_codigo', 'cuenta_nombre', 'deposito_codigo', 'empresa_codigo', 'empresa_nombre', 'numero_oc', 'evento', 'descripcion'] as $k) {
             if (isset($params[$k]) && is_scalar($params[$k])) {
                 $v = trim((string) $params[$k]);
                 if ($v !== '') {
@@ -205,7 +205,7 @@ final class AiConsultaOperativaSchemaSupport
             AiConsultaOperativaSupport::INTENT_ASIENTO,
             AiConsultaOperativaSupport::INTENT_COMPROBANTE_PROVEEDOR,
             AiConsultaOperativaSupport::INTENT_FACTURA_VENTA => self::aliasValor($out, 'numero'),
-            AiConsultaOperativaSupport::INTENT_SALDO_CUENTA => self::aliasValor($out, 'cuenta_codigo'),
+            AiConsultaOperativaSupport::INTENT_SALDO_CUENTA => self::aliasSaldoCuenta($out),
             AiConsultaOperativaSupport::INTENT_MAYOR_CUENTA => self::aliasMayorCuenta($out),
             AiConsultaOperativaSupport::INTENT_PLAN_AGENTE => $out,
             AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR => self::aliasValor($out, 'codigo'),
@@ -230,6 +230,22 @@ final class AiConsultaOperativaSchemaSupport
     }
 
     /**
+     * @param  array<string,mixed>  $out
+     * @return array<string,mixed>
+     */
+    private static function aliasSaldoCuenta(array $out): array
+    {
+        if (empty($out['cuenta_codigo']) && ! empty($out['cuenta_nombre'])) {
+            $out['cuenta_codigo'] = $out['cuenta_nombre'];
+        }
+        if (empty($out['empresa_codigo']) && ! empty($out['empresa_nombre'])) {
+            $out['empresa_codigo'] = $out['empresa_nombre'];
+        }
+
+        return self::aliasValor($out, 'cuenta_codigo');
+    }
+
+    /**
      * Mayor admite cuenta y/o OC/CC: no promover valor→cuenta si ya hay OC/CC.
      *
      * @param  array<string,mixed>  $out
@@ -241,11 +257,17 @@ final class AiConsultaOperativaSchemaSupport
             || ! empty($out['ordencompra_id'])
             || ! empty($out['centrocosto_id'])
             || ! empty($out['centrocosto_codigo']);
+        if (empty($out['cuenta_codigo']) && ! empty($out['cuenta_nombre'])) {
+            $out['cuenta_codigo'] = $out['cuenta_nombre'];
+        }
         if (empty($out['cuenta_codigo']) && ! empty($out['valor']) && ! $tieneFiltroSinCuenta) {
             $out['cuenta_codigo'] = $out['valor'];
         }
         if (! empty($out['cuenta_codigo']) && empty($out['valor'])) {
             $out['valor'] = $out['cuenta_codigo'];
+        }
+        if (empty($out['empresa_codigo']) && ! empty($out['empresa_nombre'])) {
+            $out['empresa_codigo'] = $out['empresa_nombre'];
         }
 
         return $out;

@@ -82,6 +82,25 @@
         $('#consultacuentacajaModal').modal('show');
     }
 
+    $(document).on('keydown', '#codigo_cuentacaja, #nombre_cuentacaja', function (e) {
+        if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof e.stopImmediatePropagation === 'function') {
+                e.stopImmediatePropagation();
+            }
+            if (!$('#consultacuentacajaModal').hasClass('show') && !$('#consultacuentacajaModal').is(':visible')) {
+                abrirModalConsulta();
+            }
+            return;
+        }
+
+        if ($(this).is('#codigo_cuentacaja') && e.keyCode === 13) {
+            e.preventDefault();
+            buscarCuentacajaPorCodigo();
+        }
+    });
+
     $(document).on('click', '.consultacuentacaja', function (e) {
         e.preventDefault();
         abrirModalConsulta();
@@ -169,13 +188,7 @@
         buscarCuentacajaPorCodigo();
     });
 
-    $(document).on('keydown', '#codigo_cuentacaja', function (e) {
-        if (e.keyCode === 13) {
-            e.preventDefault();
-            buscarCuentacajaPorCodigo();
-        }
-    });
-
+    // Enter en código se maneja arriba junto con F1.
     function cargarEngancheCuentacaja() {
         var cuentacaja_id = $('#cuentacaja_id').val();
         var empresa_id = empresaId();

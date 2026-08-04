@@ -124,11 +124,12 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'D30',
                 'destino' => 'calc.deposito_efectivo',
-                'expresion' => 'calc.drop_bill_rodillo + calc.drop_bill_ruleta - calc.vale_rep_fondo + calc.deposito - inputs.sobrantes',
+                // Completo (calcula_rendicion_turno_completo): fuerza deposito_efectivo = 0.
+                'expresion' => 'meta.es_completo > 0 ? 0 : (calc.drop_bill_rodillo + calc.drop_bill_ruleta - calc.vale_rep_fondo + calc.deposito - inputs.sobrantes)',
                 'seccion' => 'salidas',
                 'orden' => 130,
                 'activo' => true,
-                'detalle' => 'Depósito efectivo (fórmula final del C)',
+                'detalle' => 'Depósito efectivo (0 en turno C; fórmula Anita en M/T/N)',
             ],
             [
                 'codigo' => 'D40',
@@ -151,11 +152,12 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'E10',
                 'destino' => 'calc.resultado_turno',
-                'expresion' => 'inputs.fondo_inicial + calc.comprobante + (inputs.variacion_ff > 0 ? inputs.variacion_ff : 0) + calc.total_ingreso - calc.total_salida - inputs.sobrantes',
+                // Completo: conserva resultado de la Noche (lee_rendiciones_del_dia).
+                'expresion' => 'meta.es_completo > 0 ? calc.resultado_turno : (inputs.fondo_inicial + calc.comprobante + (inputs.variacion_ff > 0 ? inputs.variacion_ff : 0) + calc.total_ingreso - calc.total_salida - inputs.sobrantes)',
                 'seccion' => 'cierre',
                 'orden' => 200,
                 'activo' => true,
-                'detalle' => 'Resultado del turno',
+                'detalle' => 'Resultado del turno (en C = Noche)',
             ],
             [
                 'codigo' => 'E20',
@@ -169,20 +171,22 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'E30',
                 'destino' => 'calc.fondo_cierre',
-                'expresion' => 'calc.fondo_fijo + inputs.variacion_ff',
+                // Completo: conserva fondo_cierre de la Noche (lee_rendiciones_del_dia).
+                'expresion' => 'meta.es_completo > 0 ? calc.fondo_cierre : (calc.fondo_fijo + inputs.variacion_ff)',
                 'seccion' => 'cierre',
                 'orden' => 220,
                 'activo' => true,
-                'detalle' => 'Fondo de cierre',
+                'detalle' => 'Fondo de cierre (en C = Noche)',
             ],
             [
                 'codigo' => 'E40',
                 'destino' => 'calc.transferencia',
-                'expresion' => 'calc.fondo_cierre - calc.resultado_turno - inputs.pago_diferido - inputs.impuesto_venta - inputs.impuesto_qr - inputs.impuesto_pago - (inputs.variacion_ff < 0 ? inputs.variacion_ff : 0)',
+                // Completo: suma transferencias M+T+N (lee_rendiciones_del_dia).
+                'expresion' => 'meta.es_completo > 0 ? calc.transferencia : (calc.fondo_cierre - calc.resultado_turno - inputs.pago_diferido - inputs.impuesto_venta - inputs.impuesto_qr - inputs.impuesto_pago - (inputs.variacion_ff < 0 ? inputs.variacion_ff : 0))',
                 'seccion' => 'cierre',
                 'orden' => 230,
                 'activo' => true,
-                'detalle' => 'Transferencia (noche graba vale)',
+                'detalle' => 'Transferencia (en C = suma M+T+N)',
             ],
             [
                 'codigo' => 'E50',

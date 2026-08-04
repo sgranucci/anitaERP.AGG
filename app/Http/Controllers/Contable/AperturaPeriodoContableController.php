@@ -47,6 +47,7 @@ class AperturaPeriodoContableController extends Controller
             'estado_filtro' => $estado,
             'aperturas' => $aperturas,
             'alcances' => PeriodoContableCierreSupport::alcancesDisponibles(),
+            'jerarquia_alcances' => PeriodoContableCierreSupport::jerarquiaAgenda(),
             'usuarios' => $this->usuariosParaSelect(),
             'puede_solicitar' => can('solicitar-apertura-periodo-contable', false),
             'puede_aprobar' => can('aprobar-apertura-periodo-contable', false),

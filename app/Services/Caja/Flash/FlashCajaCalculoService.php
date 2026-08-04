@@ -7,8 +7,8 @@ use App\Support\Caja\Flash\FlashCajaBingoTotalesSupport;
 use App\Support\Caja\Flash\FlashCajaImpuestosRendicionSupport;
 use App\Models\Configuracion\Sala;
 use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
+use App\Models\Ventas\MaquinavendingRendicion;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionPorPcSupport;
-use App\Support\Ventas\Gastronomia\GastronomiaConciliacionVendingRendgSupport;
 use App\Support\Wigos\WigosSqlServerProcess;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -24,18 +24,153 @@ final class FlashCajaCalculoService
 {
     public function __construct(
         private readonly GastronomiaConciliacionPorPcSupport $porPcSupport,
-        private readonly GastronomiaConciliacionVendingRendgSupport $vendingRendgSupport,
     ) {
     }
+
+    /** Bloques de cálculo parcial según el campo de origen consultado. */
+    public const BLOQUE_COMPLETO = 'completo';
+
+    public const BLOQUE_WIGOS = 'wigos';
+
+    public const BLOQUE_WIGOS_IMPUESTOS = 'wigos_impuestos';
+
+    public const BLOQUE_ERP_AYB = 'erp_ayb';
+
+    public const BLOQUE_ERP_ESTAC = 'erp_estac';
+
+    public const BLOQUE_ERP_VENDING = 'erp_vending';
+
+    public const BLOQUE_ERP_BINGO = 'erp_bingo';
+
     /**
      * @return array<string, mixed>
      */
     public function calcular(int $empresaId, string $fecha): array
     {
+        return $this->calcularBloque($empresaId, $fecha, self::BLOQUE_COMPLETO);
+    }
+
+    /**
+     * Calcula solo lo necesario para el campo del modal «origen y movimientos».
+     * Evita disparar Wigos + ERP completo cuando se abre AyB/estac/vending/bingo.
+     *
+     * @return array<string, mixed>
+     */
+    public function calcularCampo(int $empresaId, string $fecha, string $campo): array
+    {
+        return $this->calcularBloque($empresaId, $fecha, self::bloqueDeCampo($campo));
+    }
+
+    public static function bloqueDeCampo(string $campo): string
+    {
+        $campo = trim($campo);
+
+        return match ($campo) {
+            'ayb' => self::BLOQUE_ERP_AYB,
+            'estac', 'cant_vehic' => self::BLOQUE_ERP_ESTAC,
+            'vending' => self::BLOQUE_ERP_VENDING,
+            'bingo_cant_carton', 'bingo_total_venta', 'bingo_resultado' => self::BLOQUE_ERP_BINGO,
+            'slot_d', 'slot_r' => self::BLOQUE_WIGOS_IMPUESTOS,
+            default => self::BLOQUE_WIGOS,
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function calcularBloque(int $empresaId, string $fecha, string $bloque): array
+    {
         $fechaCarbon = Carbon::parse($fecha);
         $fechaYmd = $fechaCarbon->format('Ymd');
         $fechaSql = $fechaCarbon->format('Y-m-d');
+        $acumulado = $this->estructuraVacia();
+        $acumulado['bloque_calculado'] = $bloque;
+        $acumulado['calculado_en'] = now()->toDateTimeString();
 
+        $incluyeWigos = in_array($bloque, [self::BLOQUE_COMPLETO, self::BLOQUE_WIGOS, self::BLOQUE_WIGOS_IMPUESTOS], true);
+        $incluyeImpuestos = in_array($bloque, [self::BLOQUE_COMPLETO, self::BLOQUE_WIGOS_IMPUESTOS], true);
+        $incluyeErpCompleto = $bloque === self::BLOQUE_COMPLETO;
+
+        $desgloseSalas = [];
+        if ($incluyeWigos) {
+            $gaming = $this->calcularGamingWigos($empresaId, $fechaYmd, $fechaSql);
+            $acumulado = $this->sumarFlash($acumulado, $gaming['flash']);
+            $desgloseSalas = $gaming['desglose_salas'];
+            if (($gaming['advertencias_wigos'] ?? []) !== []) {
+                $acumulado['advertencias_wigos'] = $gaming['advertencias_wigos'];
+            }
+        }
+
+        if ($incluyeErpCompleto) {
+            $erp = $this->totalesAyBEstacBingo($empresaId, $fechaSql);
+            $acumulado['ayb'] = $erp['ayb'];
+            $acumulado['estac'] = $erp['estac'];
+            $acumulado['vending'] = $erp['vending'];
+            $acumulado['cant_vehic'] = $erp['cant_vehic'];
+            $acumulado['bingo_cant_carton'] = $erp['bingo_cant_carton'];
+            $acumulado['bingo_total_venta'] = $erp['bingo_total_venta'];
+            $acumulado['bingo_resultado'] = $erp['bingo_resultado'];
+        } elseif ($bloque === self::BLOQUE_ERP_AYB) {
+            $ayb = $this->totalAyB($empresaId, $fechaSql);
+            $acumulado['ayb'] = $ayb['neto'];
+            $acumulado['detalle_erp'] = ['ayb' => $ayb];
+        } elseif ($bloque === self::BLOQUE_ERP_ESTAC) {
+            $estac = $this->totalesEstacionamiento($empresaId, $fechaSql);
+            $acumulado['estac'] = $estac['estac'];
+            $acumulado['cant_vehic'] = $estac['cant_vehic'];
+            $acumulado['detalle_erp'] = ['estacionamiento' => $estac];
+        } elseif ($bloque === self::BLOQUE_ERP_VENDING) {
+            $vending = $this->detalleVending($empresaId, $fechaSql);
+            $acumulado['vending'] = $vending['total'];
+            $acumulado['detalle_erp'] = ['vending' => $vending];
+        } elseif ($bloque === self::BLOQUE_ERP_BINGO) {
+            $bingo = FlashCajaBingoTotalesSupport::resolver($empresaId, $fechaSql);
+            $acumulado['bingo_cant_carton'] = $bingo['bingo_cant_carton'];
+            $acumulado['bingo_total_venta'] = $bingo['bingo_total_venta'];
+            $acumulado['bingo_resultado'] = $bingo['bingo_resultado'];
+            $acumulado['detalle_erp'] = ['bingo' => $bingo];
+        }
+
+        $impuestos = [
+            'impuesto_drop' => 0.0,
+            'impuesto_venta' => 0.0,
+            'total' => 0.0,
+            'origen' => 'ninguno',
+            'nro_oper' => null,
+            'rendicion_id' => null,
+        ];
+        if ($incluyeImpuestos) {
+            $impuestos = FlashCajaImpuestosRendicionSupport::resolverDia($empresaId, $fechaSql);
+            $descuentoImpuestos = (float) ($impuestos['total'] ?? 0);
+            if ($descuentoImpuestos != 0.0) {
+                $acumulado['slot_d'] = round((float) $acumulado['slot_d'] - $descuentoImpuestos, 2);
+                $acumulado['slot_r'] = round((float) $acumulado['slot_r'] - $descuentoImpuestos, 2);
+            }
+        }
+        $acumulado['impuestos_rendicion'] = $impuestos;
+
+        if ($incluyeWigos) {
+            $acumulado['desglose_wigos'] = $this->armarDesgloseWigos(
+                $desgloseSalas,
+                $acumulado,
+                $empresaId,
+                $fechaSql,
+                $impuestos,
+            );
+        }
+
+        return $acumulado;
+    }
+
+    /**
+     * @return array{
+     *   flash: array<string, float|int>,
+     *   desglose_salas: list<array<string, mixed>>,
+     *   advertencias_wigos: list<string>
+     * }
+     */
+    private function calcularGamingWigos(int $empresaId, string $fechaYmd, string $fechaSql): array
+    {
         $acumulado = $this->estructuraVacia();
         $salas = Sala::query()
             ->where('empresa_id', $empresaId)
@@ -67,36 +202,11 @@ final class FlashCajaCalculoService
             );
         }
 
-        $erp = $this->totalesAyBEstacBingo($empresaId, $fechaSql);
-        $acumulado['ayb'] = $erp['ayb'];
-        $acumulado['estac'] = $erp['estac'];
-        $acumulado['vending'] = $erp['vending'];
-        $acumulado['cant_vehic'] = $erp['cant_vehic'];
-        $acumulado['bingo_cant_carton'] = $erp['bingo_cant_carton'];
-        $acumulado['bingo_total_venta'] = $erp['bingo_total_venta'];
-        $acumulado['bingo_resultado'] = $erp['bingo_resultado'];
-        $acumulado['calculado_en'] = now()->toDateTimeString();
-        if ($erroresWigos !== []) {
-            $acumulado['advertencias_wigos'] = $erroresWigos;
-        }
-
-        $impuestos = FlashCajaImpuestosRendicionSupport::resolverDia($empresaId, $fechaSql);
-        $descuentoImpuestos = (float) ($impuestos['total'] ?? 0);
-        if ($descuentoImpuestos != 0.0) {
-            $acumulado['slot_d'] = round((float) $acumulado['slot_d'] - $descuentoImpuestos, 2);
-            $acumulado['slot_r'] = round((float) $acumulado['slot_r'] - $descuentoImpuestos, 2);
-        }
-        $acumulado['impuestos_rendicion'] = $impuestos;
-
-        $acumulado['desglose_wigos'] = $this->armarDesgloseWigos(
-            $desgloseSalas,
-            $acumulado,
-            $empresaId,
-            $fechaSql,
-            $impuestos,
-        );
-
-        return $acumulado;
+        return [
+            'flash' => $acumulado,
+            'desglose_salas' => $desgloseSalas,
+            'advertencias_wigos' => $erroresWigos,
+        ];
     }
 
     /**
@@ -598,45 +708,16 @@ final class FlashCajaCalculoService
      */
     private function totalesAyBEstacBingo(int $empresaId, string $fechaSql): array
     {
-        $ayb = 0.0;
-        try {
-            $ayb = round((float) ($this->porPcSupport->totalErpNetoGastronomiaDia($empresaId, $fechaSql)['neto'] ?? 0), 2);
-        } catch (Throwable $e) {
-            Log::warning('Flash AyB ERP '.$fechaSql.': '.$e->getMessage(), [
-                'empresa_id' => $empresaId,
-            ]);
-        }
-
-        $vending = $this->totalVending($empresaId, $fechaSql);
-
+        $ayb = $this->totalAyB($empresaId, $fechaSql);
+        $estac = $this->totalesEstacionamiento($empresaId, $fechaSql);
+        $vending = $this->detalleVending($empresaId, $fechaSql);
         $bingo = FlashCajaBingoTotalesSupport::resolver($empresaId, $fechaSql);
 
-        $estac = 0.0;
-        $cantVehic = 0;
-        $jornadas = JornadaEstacionamiento::query()
-            ->where('empresa_id', $empresaId)
-            ->whereDate('fecha_jornada', $fechaSql)
-            ->whereNotNull('apertura_en')
-            ->whereNotNull('cierre_en')
-            ->get();
-
-        foreach ($jornadas as $jornada) {
-            try {
-                $totales = EstacionamientoTurnoOperativoTotalesSupport::calcularPorJornada($jornada);
-                $cantVehic += (int) ($totales['cantidad_comprobantes'] ?? 0);
-                $facturas = round((float) ($totales['total_facturas'] ?? 0), 2);
-                $notasCredito = round(abs((float) ($totales['total_notas_credito'] ?? 0)), 2);
-                $estac = round($estac + $facturas - $notasCredito, 2);
-            } catch (Throwable $e) {
-                Log::warning('Flash estacionamiento jornada '.$jornada->id.': '.$e->getMessage());
-            }
-        }
-
         return [
-            'ayb' => $ayb,
-            'estac' => $estac,
-            'vending' => $vending,
-            'cant_vehic' => $cantVehic,
+            'ayb' => $ayb['neto'],
+            'estac' => $estac['estac'],
+            'vending' => $vending['total'],
+            'cant_vehic' => $estac['cant_vehic'],
             'bingo_cant_carton' => $bingo['bingo_cant_carton'],
             'bingo_total_venta' => $bingo['bingo_total_venta'],
             'bingo_resultado' => $bingo['bingo_resultado'],
@@ -644,20 +725,137 @@ final class FlashCajaCalculoService
     }
 
     /**
-     * Ventas vending del día (Σ MaquinavendingRendicion.total_ventas por jornada ERP).
+     * @return array{bruto: float, nc: float, neto: float, cantidad_facturas: int, cantidad_nc: int}
      */
-    private function totalVending(int $empresaId, string $fechaSql): float
+    public function totalAyB(int $empresaId, string $fechaSql): array
+    {
+        $vacio = [
+            'bruto' => 0.0,
+            'nc' => 0.0,
+            'neto' => 0.0,
+            'cantidad_facturas' => 0,
+            'cantidad_nc' => 0,
+        ];
+        try {
+            $tot = $this->porPcSupport->totalErpNetoGastronomiaDia($empresaId, $fechaSql);
+
+            return [
+                'bruto' => round((float) ($tot['bruto'] ?? 0), 2),
+                'nc' => round((float) ($tot['nc'] ?? 0), 2),
+                'neto' => round((float) ($tot['neto'] ?? 0), 2),
+                'cantidad_facturas' => (int) ($tot['cantidad_facturas'] ?? 0),
+                'cantidad_nc' => (int) ($tot['cantidad_nc'] ?? 0),
+            ];
+        } catch (Throwable $e) {
+            Log::warning('Flash AyB ERP '.$fechaSql.': '.$e->getMessage(), [
+                'empresa_id' => $empresaId,
+            ]);
+
+            return $vacio;
+        }
+    }
+
+    /**
+     * @return array{
+     *   estac: float,
+     *   cant_vehic: int,
+     *   jornadas: list<array<string, mixed>>
+     * }
+     */
+    public function totalesEstacionamiento(int $empresaId, string $fechaSql): array
+    {
+        $estac = 0.0;
+        $cantVehic = 0;
+        $detalle = [];
+        $jornadas = JornadaEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', $fechaSql)
+            ->whereNotNull('apertura_en')
+            ->whereNotNull('cierre_en')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($jornadas as $jornada) {
+            try {
+                $totales = EstacionamientoTurnoOperativoTotalesSupport::calcularPorJornada($jornada);
+                $cant = (int) ($totales['cantidad_comprobantes'] ?? 0);
+                $facturas = round((float) ($totales['total_facturas'] ?? 0), 2);
+                $notasCredito = round(abs((float) ($totales['total_notas_credito'] ?? 0)), 2);
+                $neto = round($facturas - $notasCredito, 2);
+                $cantVehic += $cant;
+                $estac = round($estac + $neto, 2);
+                $detalle[] = [
+                    'jornada_id' => (int) $jornada->id,
+                    'fecha_jornada' => $jornada->fecha_jornada?->format('Y-m-d') ?? $fechaSql,
+                    'apertura_en' => $jornada->apertura_en?->format('d/m/Y H:i'),
+                    'cierre_en' => $jornada->cierre_en?->format('d/m/Y H:i'),
+                    'facturas' => $facturas,
+                    'notas_credito' => $notasCredito,
+                    'neto' => $neto,
+                    'cantidad_comprobantes' => $cant,
+                ];
+            } catch (Throwable $e) {
+                Log::warning('Flash estacionamiento jornada '.$jornada->id.': '.$e->getMessage());
+                $detalle[] = [
+                    'jornada_id' => (int) $jornada->id,
+                    'fecha_jornada' => $jornada->fecha_jornada?->format('Y-m-d') ?? $fechaSql,
+                    'apertura_en' => $jornada->apertura_en?->format('d/m/Y H:i'),
+                    'cierre_en' => $jornada->cierre_en?->format('d/m/Y H:i'),
+                    'facturas' => 0.0,
+                    'notas_credito' => 0.0,
+                    'neto' => 0.0,
+                    'cantidad_comprobantes' => 0,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return [
+            'estac' => $estac,
+            'cant_vehic' => $cantVehic,
+            'jornadas' => $detalle,
+        ];
+    }
+
+    /**
+     * Ventas vending del día (Σ MaquinavendingRendicion.total_ventas por jornada ERP).
+     *
+     * @return array{total: float, filas: list<array<string, mixed>>}
+     */
+    public function detalleVending(int $empresaId, string $fechaSql): array
     {
         try {
-            $map = $this->vendingRendgSupport->totalesMaquinavendingErpPorJornada($empresaId, $fechaSql, $fechaSql);
+            $rows = MaquinavendingRendicion::query()
+                ->with(['maquinavending:id,codigo,nombre'])
+                ->where('empresa_id', $empresaId)
+                ->whereDate('fecha_jornada', $fechaSql)
+                ->orderBy('id')
+                ->get();
 
-            return round((float) ($map[$fechaSql] ?? 0), 2);
+            $filas = [];
+            $total = 0.0;
+            foreach ($rows as $row) {
+                $monto = round((float) ($row->total_ventas ?? 0), 2);
+                $total = round($total + $monto, 2);
+                $maq = $row->maquinavending;
+                $filas[] = [
+                    'id' => (int) $row->id,
+                    'codigo' => (string) ($row->codigo ?? ''),
+                    'maquina' => trim(($maq->codigo ?? '').' '.($maq->nombre ?? '')),
+                    'numero_cierre' => (int) ($row->numero_cierre ?? 0),
+                    'nro_oper_anita' => $row->nro_oper_anita,
+                    'total_ventas' => $monto,
+                    'total_cobrado' => round((float) ($row->total_cobrado ?? 0), 2),
+                ];
+            }
+
+            return ['total' => $total, 'filas' => $filas];
         } catch (Throwable $e) {
             Log::warning('Flash vending '.$fechaSql.': '.$e->getMessage(), [
                 'empresa_id' => $empresaId,
             ]);
 
-            return 0.0;
+            return ['total' => 0.0, 'filas' => []];
         }
     }
 

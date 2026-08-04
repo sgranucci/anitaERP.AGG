@@ -657,14 +657,20 @@ class CierreRendicionEstacionamientoService
      *     puntoventa_label: string,
      *     cantidad_rendiciones: int,
      *     total_cobrado: float,
-     *     total_factura: float
+     *     total_factura: float,
+     *     dia_tiene_cierre_parcial: bool,
+     *     cantidad_grupos_cerrados_dia: int,
+     *     detalle_pv_cerrados_dia: string
      *   }>,
      *   por_dia: list<array{
      *     fecha_jornada: string,
      *     fecha_jornada_fmt: string,
      *     cantidad: int,
      *     cantidad_grupos: int,
-     *     total_cobrado: float
+     *     total_cobrado: float,
+     *     cantidad_grupos_cerrados: int,
+     *     tiene_cierre_parcial: bool,
+     *     detalle_pv_cerrados: string
      *   }>
      * }
      */
@@ -697,6 +703,9 @@ class CierreRendicionEstacionamientoService
                     'cantidad' => 0,
                     'cantidad_grupos' => 0,
                     'total_cobrado' => 0.0,
+                    'cantidad_grupos_cerrados' => 0,
+                    'tiene_cierre_parcial' => false,
+                    'detalle_pv_cerrados' => '',
                 ];
             }
             $cobrado = round((float) ($r->totalcobrado ?? 0), 2);
@@ -707,12 +716,18 @@ class CierreRendicionEstacionamientoService
             $totalFactura = round($totalFactura + $factura, 2);
         }
 
-        $grupos = [];
         foreach ($gruposRaw as $grupo) {
             $fecha = (string) ($grupo['fecha_dia'] ?? '');
             if ($fecha !== '' && isset($porDia[$fecha])) {
                 $porDia[$fecha]['cantidad_grupos']++;
             }
+        }
+
+        $porDia = $this->enriquecerPorDiaConCierresParciales($empresaId, $porDia);
+
+        $grupos = [];
+        foreach ($gruposRaw as $grupo) {
+            $fecha = (string) ($grupo['fecha_dia'] ?? '');
 
             $cobradoGrupo = 0.0;
             $facturaGrupo = 0.0;
@@ -729,6 +744,8 @@ class CierreRendicionEstacionamientoService
                 $pvLabel = 'PV #'.(int) ($grupo['puntoventa_cae_id'] ?? 0);
             }
 
+            $parcialDia = $porDia[$fecha] ?? null;
+
             $grupos[] = [
                 'clave' => (string) ($grupo['clave'] ?? ''),
                 'empresa_id' => (int) ($grupo['empresa_id'] ?? $empresaId),
@@ -739,6 +756,9 @@ class CierreRendicionEstacionamientoService
                 'cantidad_rendiciones' => $rends->count(),
                 'total_cobrado' => $cobradoGrupo,
                 'total_factura' => $facturaGrupo,
+                'dia_tiene_cierre_parcial' => (bool) ($parcialDia['tiene_cierre_parcial'] ?? false),
+                'cantidad_grupos_cerrados_dia' => (int) ($parcialDia['cantidad_grupos_cerrados'] ?? 0),
+                'detalle_pv_cerrados_dia' => (string) ($parcialDia['detalle_pv_cerrados'] ?? ''),
             ];
         }
 
@@ -775,6 +795,72 @@ class CierreRendicionEstacionamientoService
             'grupos' => $grupos,
             'por_dia' => array_values($porDia),
         ];
+    }
+
+    /**
+     * Para jornadas que aún tienen pendientes, informa cuántos PV ya tienen cierre
+     * (asiento o legacy) — útil cuando alguien cerró un PV suelto y el día sigue abierto.
+     *
+     * @param  array<string, array<string, mixed>>  $porDia
+     * @return array<string, array<string, mixed>>
+     */
+    private function enriquecerPorDiaConCierresParciales(int $empresaId, array $porDia): array
+    {
+        if ($porDia === []) {
+            return $porDia;
+        }
+
+        $fechas = array_keys($porDia);
+        sort($fechas);
+        $desde = $fechas[0];
+        $hasta = $fechas[array_key_last($fechas)];
+
+        $q = RendicionEstacionamientoCaja::query()
+            ->with([
+                'turnoOperativo.jornada:id,fecha_jornada',
+                'puntoventaCae:id,codigo,nombre',
+            ])
+            ->where('empresa_id', $empresaId);
+
+        CierreRendicionEstacionamientoListadoFiltros::aplicarScopeTurno($q);
+        CierreRendicionEstacionamientoListadoFiltros::aplicarEstadoCierre($q, [
+            'estado_cierre' => CierreRendicionEstacionamientoListadoFiltros::ESTADO_CERRADA,
+        ]);
+        $this->aplicarFiltroFechaJornadaRango($q, $desde, $hasta);
+
+        /** @var array<string, array<int, string>> $pvCerradosPorDia */
+        $pvCerradosPorDia = [];
+
+        foreach ($q->get() as $rendicion) {
+            $fecha = CierreRendicionEstacionamientoGrupoSupport::fechaDiaDesdeRendicion($rendicion);
+            if ($fecha === '' || ! isset($porDia[$fecha])) {
+                continue;
+            }
+
+            $pvId = (int) ($rendicion->puntoventa_cae_id ?? 0);
+            if ($pvId <= 0) {
+                continue;
+            }
+
+            $pv = $rendicion->puntoventaCae;
+            $codigo = trim((string) ($pv->codigo ?? ''));
+            $label = $codigo !== '' ? $codigo : ('#'.$pvId);
+            $pvCerradosPorDia[$fecha][$pvId] = $label;
+        }
+
+        foreach ($porDia as $fecha => &$dia) {
+            $labels = array_values($pvCerradosPorDia[$fecha] ?? []);
+            sort($labels);
+            $cantidad = count($labels);
+            $dia['cantidad_grupos_cerrados'] = $cantidad;
+            $dia['tiene_cierre_parcial'] = $cantidad > 0;
+            $dia['detalle_pv_cerrados'] = $cantidad > 0
+                ? implode(', ', $labels)
+                : '';
+        }
+        unset($dia);
+
+        return $porDia;
     }
 
     /**

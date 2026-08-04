@@ -53,10 +53,11 @@
                         <input type="hidden" name="cuentacaja_id" id="cuentacaja_id" value="{{ old('cuentacaja_id', $cuentacaja_id) }}">
                         <div class="col-lg-2">
                             <input type="text" class="form-control" id="codigo_cuentacaja" autocomplete="off"
-                                value="{{ $cuentacaja->codigo ?? '' }}" placeholder="Código">
+                                value="{{ $cuentacaja->codigo ?? '' }}" placeholder="Código"
+                                title="C&oacute;digo. F1 = consulta">
                         </div>
                         <div class="col-lg-1">
-                            <button type="button" class="btn-accion-tabla consultacuentacaja tooltipsC" title="Consultar cuentas de caja">
+                            <button type="button" class="btn-accion-tabla consultacuentacaja tooltipsC" title="Consultar cuentas de caja (F1)">
                                 <i class="fa fa-search text-primary"></i>
                             </button>
                         </div>

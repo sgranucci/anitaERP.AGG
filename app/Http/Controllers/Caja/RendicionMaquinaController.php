@@ -251,13 +251,16 @@ class RendicionMaquinaController extends Controller
         $inputsActuales = is_array($request->input('inputs'))
             ? $request->input('inputs')
             : null;
+        $exceptoId = (int) ($request->input('rendicion_id') ?? $request->input('id') ?? 0) ?: null;
 
-        $datos = $this->service->traerWigos($empresaId, $fecha, $turno, $inputsActuales);
+        $datos = $this->service->traerWigos($empresaId, $fecha, $turno, $inputsActuales, $exceptoId);
 
         return response()->json([
             'ok' => true,
             'inputs' => $datos['inputs'],
             'wigos_json' => $datos['wigos_json'],
+            'valores' => $datos['valores'] ?? null,
+            'gastos' => $datos['gastos'] ?? null,
             'previas' => $datos['previas'] ?? [],
             'calc_orquestador' => $datos['calc_orquestador'] ?? [],
             'meta' => $datos['meta'],

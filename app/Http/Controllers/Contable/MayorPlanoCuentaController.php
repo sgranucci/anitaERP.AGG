@@ -276,8 +276,8 @@ class MayorPlanoCuentaController extends Controller
     {
         $userId = (int) (auth()->id() ?? 0);
 
-        // v2: Mon.Referencia con conversión explícita + export desde cache.
-        return 'mayor_plano_cuenta_v2_'.$userId.'_'.MayorPlanoCuentaListadoFiltros::firma($filtros);
+        // v3: Mon.Referencia complementaria a la moneda del reporte (no a la del asiento).
+        return 'mayor_plano_cuenta_v3_'.$userId.'_'.MayorPlanoCuentaListadoFiltros::firma($filtros);
     }
 
     /**

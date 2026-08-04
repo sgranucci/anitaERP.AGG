@@ -65,25 +65,30 @@ final class RecuentoModoCierreSupport
         ];
     }
 
+    /**
+     * Saldo de referencia por variante (color/talle; null/0 = sin variante).
+     */
     public static function saldoReferencia(
         Articulo_Saldo_DepositoRepositoryInterface $saldoRepository,
         int $articuloId,
         int $depositoId,
         string $modoCierre,
         ?Carbon $fechaRecuento,
+        ?int $colorId = null,
+        ?int $talleId = null,
     ): float {
-        if (self::resolverModo($modoCierre) === self::MODO_FECHA_RECUENTO && $fechaRecuento) {
-            return $saldoRepository->saldoAFecha(
-                $articuloId,
-                $depositoId,
-                $fechaRecuento->toDateString()
-            );
-        }
+        [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo($colorId, $talleId);
 
-        return $saldoRepository->saldoAFecha(
+        $fecha = (self::resolverModo($modoCierre) === self::MODO_FECHA_RECUENTO && $fechaRecuento)
+            ? $fechaRecuento->toDateString()
+            : now()->toDateString();
+
+        return $saldoRepository->saldoVarianteAFecha(
             $articuloId,
             $depositoId,
-            now()->toDateString()
+            $fecha,
+            $colorKey > 0 ? $colorKey : null,
+            $talleKey > 0 ? $talleKey : null
         );
     }
 

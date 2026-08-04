@@ -95,27 +95,12 @@
         form.addEventListener('submit', function (event) {
             event.preventDefault();
 
-            // Reforzar sync de empresa_ids[] desde la lista derecha (dual list).
-            if (window.jQuery) {
-                window.jQuery(form).find('.reporte-empresas-dual').each(function () {
-                    var $c = window.jQuery(this);
-                    var prefix = String($c.data('id-prefix') || 'reporte');
-                    var $hidden = $c.find('#' + prefix + '_empresas_asignadas_hidden');
-                    var $asignado = $c.find('#' + prefix + '_empresas_asignadas_list');
-                    if (! $hidden.length || ! $asignado.length) {
-                        return;
-                    }
-                    $hidden.empty();
-                    $asignado.find('option').each(function () {
-                        $hidden.append(
-                            window.jQuery('<input>', {
-                                type: 'hidden',
-                                name: 'empresa_ids[]',
-                                value: window.jQuery(this).val(),
-                            })
-                        );
-                    });
-                });
+            // empresa_ids[] ya van por checkboxes marcados (FormData).
+            // Solo sincronizar Consolidar desde el botón (evita desfase hidden vs UI).
+            var btnConsolPre = form.querySelector('.btn-toggle-consolidar-empresas');
+            var inputConsolPre = form.querySelector('input[name="consolidar_empresas"]');
+            if (btnConsolPre && inputConsolPre) {
+                inputConsolPre.value = btnConsolPre.classList.contains('btn-success') ? '1' : '0';
             }
 
             var btn = document.getElementById('btn-consultar');
@@ -531,7 +516,7 @@
     };
 })();
 </script>
-<script src="{{ asset('assets/pages/scripts/reportes/empresas_dual.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
 
@@ -556,12 +541,13 @@
                         según cotización de cada movimiento.
                     </p>
 
-                    @include('includes.reportes.asignacion_empresas_dual', [
+                    @include('includes.reportes.asignacion_empresas_checkboxes', [
                         'empresa_query' => $empresa_query,
                         'empresa_ids_seleccionados' => $filtros['empresa_ids'] ?? [],
                         'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,
                         'reporte_clave' => 'mayor_concepto',
                         'id_prefix' => 'mco',
+                        'col_label' => 'col-lg-2 text-right',
                     ])
 
                     <div class="form-group row">

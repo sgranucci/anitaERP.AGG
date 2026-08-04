@@ -63,12 +63,19 @@ Recuento {{ $recuento->codigo }}
                     </div>
                 @endif
 
+                @php
+                    $muestraColorTalle = $recuento->items->contains(fn ($i) => (int) ($i->color_id ?? 0) > 0 || (int) ($i->talle_id ?? 0) > 0);
+                @endphp
                 <h4>L&iacute;neas de conteo</h4>
                 <table class="table table-bordered table-striped">
                     <thead>
                         <tr>
                             <th>SKU</th>
                             <th>Descripci&oacute;n</th>
+                            @if ($muestraColorTalle)
+                            <th>Color</th>
+                            <th>Talle</th>
+                            @endif
                             <th>UM</th>
                             <th class="text-right">Saldo sistema</th>
                             <th class="text-right">Contado</th>
@@ -104,6 +111,10 @@ Recuento {{ $recuento->codigo }}
                                     @endif
                                 </td>
                                 <td>{{ $item->detalle ?: optional($item->articulos)->descripcion }}</td>
+                                @if ($muestraColorTalle)
+                                <td>{{ optional($item->color)->nombre ?? '—' }}</td>
+                                <td>{{ optional($item->talle)->nombre ?? '—' }}</td>
+                                @endif
                                 <td>{{ optional($item->unidadmedida)->abreviatura ?? optional($item->articulos?->unidadesdemedidas)->abreviatura }}</td>
                                 <td class="text-right">{{ rtrim(rtrim(number_format((float) $item->saldo_sistema, 6, '.', ''), '0'), '.') }}</td>
                                 <td class="text-right">{{ rtrim(rtrim(number_format((float) $item->cantidad_contada, 6, '.', ''), '0'), '.') }}</td>

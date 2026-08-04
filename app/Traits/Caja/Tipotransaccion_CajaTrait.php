@@ -8,7 +8,8 @@ trait Tipotransaccion_CajaTrait {
 		'I' => 'Ingreso',
 		'E' => 'Egreso',
 		'P' => 'Pago a proveedores',
-		'C' => 'Cobranza de clientes'
+		'C' => 'Cobranza de clientes',
+		'T' => 'Transferencia',
 		];
 	
 	public static $enumSigno = [

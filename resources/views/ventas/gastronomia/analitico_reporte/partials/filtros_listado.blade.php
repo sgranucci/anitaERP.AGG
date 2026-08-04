@@ -20,7 +20,7 @@
 <input type="hidden" name="consultar" value="1">
 
 <div class="card-body bg-light border-bottom py-2">
-    @include('includes.reportes.asignacion_empresas_dual', [
+    @include('includes.reportes.asignacion_empresas_checkboxes', [
         'empresa_query' => $empresa_query ?? collect(),
         'empresa_ids_seleccionados' => $f['empresa_ids'] ?? [],
         'consolidar_empresas' => $f['consolidar_empresas'] ?? true,

@@ -15,11 +15,17 @@ use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Repositories\Stock\Recuento_ArchivoRepositoryInterface;
 use App\Repositories\Stock\Recuento_ItemRepositoryInterface;
 use App\Repositories\Stock\RecuentoRepositoryInterface;
+use App\Models\Stock\Color;
+use App\Models\Stock\Talle;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
+use App\Support\Stock\ArticuloStockColorTalleSupport;
+use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\RecuentoModoCierreSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
+use InvalidArgumentException;
 use Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -160,12 +166,16 @@ class RecuentoService
         return DB::transaction(function () use ($recuento, $items, $obs, $modo) {
             $ajustes = [];
             foreach ($items as $item) {
+                $colorId = (int) ($item->color_id ?? 0);
+                $talleId = (int) ($item->talle_id ?? 0);
                 $saldoRef = RecuentoModoCierreSupport::saldoReferencia(
                     $this->saldoRepository,
                     (int) $item->articulo_id,
                     (int) $recuento->deposito_id,
                     $modo,
-                    $recuento->fecha
+                    $recuento->fecha,
+                    $colorId > 0 ? $colorId : null,
+                    $talleId > 0 ? $talleId : null
                 );
                 $contado = (float) $item->cantidad_contada;
                 $delta = $contado - $saldoRef;
@@ -174,6 +184,8 @@ class RecuentoService
                 }
                 $ajustes[] = [
                     'articulo_id' => (int) $item->articulo_id,
+                    'color_id' => $colorId,
+                    'talle_id' => $talleId,
                     'delta' => $delta,
                     'concepto' => "Recuento {$recuento->codigo} - cierre parcial",
                 ];
@@ -212,33 +224,58 @@ class RecuentoService
 
         return DB::transaction(function () use ($recuento, $obs, $modo) {
             $conteos = [];
+            $modoCt = null;
             foreach ($recuento->items as $item) {
-                $conteos[(int) $item->articulo_id] = (float) $item->cantidad_contada;
+                $articuloId = (int) $item->articulo_id;
+                $colorId = (int) ($item->color_id ?? 0);
+                $talleId = (int) ($item->talle_id ?? 0);
+                [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo(
+                    $colorId > 0 ? $colorId : null,
+                    $talleId > 0 ? $talleId : null
+                );
+                $clave = $this->claveVariante($articuloId, $colorKey, $talleKey);
+                $conteos[$clave] = (float) $item->cantidad_contada;
+                $maneja = ArticuloStockColorTalleSupport::articuloManejaColorTalle($articuloId);
+                if ($modoCt === null) {
+                    $modoCt = $maneja;
+                }
             }
 
-            $articuloIds = collect($this->articuloIdsConStockEnDeposito((int) $recuento->deposito_id))
-                ->merge(array_keys($conteos))
-                ->unique()
-                ->values()
-                ->all();
+            $variantes = $this->variantesConStockEnDeposito((int) $recuento->deposito_id, $modoCt);
+            foreach (array_keys($conteos) as $clave) {
+                if (! isset($variantes[$clave])) {
+                    [$articuloId, $colorKey, $talleKey] = array_map('intval', explode('|', $clave));
+                    $variantes[$clave] = [
+                        'articulo_id' => $articuloId,
+                        'color_id' => $colorKey,
+                        'talle_id' => $talleKey,
+                    ];
+                }
+            }
 
             $ajustes = [];
-            foreach ($articuloIds as $articuloId) {
-                $articuloId = (int) $articuloId;
+            foreach ($variantes as $clave => $variante) {
+                $articuloId = (int) $variante['articulo_id'];
+                $colorId = (int) $variante['color_id'];
+                $talleId = (int) $variante['talle_id'];
                 $saldoRef = RecuentoModoCierreSupport::saldoReferencia(
                     $this->saldoRepository,
                     $articuloId,
                     (int) $recuento->deposito_id,
                     $modo,
-                    $recuento->fecha
+                    $recuento->fecha,
+                    $colorId > 0 ? $colorId : null,
+                    $talleId > 0 ? $talleId : null
                 );
-                $contado = (float) ($conteos[$articuloId] ?? 0);
+                $contado = (float) ($conteos[$clave] ?? 0);
                 $delta = $contado - $saldoRef;
                 if (abs($delta) < 1e-9) {
                     continue;
                 }
                 $ajustes[] = [
                     'articulo_id' => $articuloId,
+                    'color_id' => $colorId,
+                    'talle_id' => $talleId,
                     'delta' => $delta,
                     'concepto' => "Recuento {$recuento->codigo} - cierre total",
                 ];
@@ -284,8 +321,12 @@ class RecuentoService
 
             $ajustesReverso = [];
             foreach ($movCierre->articulos_movimiento as $mov) {
+                $colorId = (int) ($mov->color_id ?? 0);
+                $talleId = (int) ($mov->talle_id ?? 0);
                 $ajustesReverso[] = [
                     'articulo_id' => (int) $mov->articulo_id,
+                    'color_id' => $colorId,
+                    'talle_id' => $talleId,
                     'delta' => -1 * (float) $mov->cantidad,
                     'concepto' => "Anulación cierre recuento {$recuento->codigo}",
                 ];
@@ -305,34 +346,53 @@ class RecuentoService
     }
 
     /**
-     * Sortea N artículos para el recuento.
-     * 1) Artículos con depósito de entrega = depósito del recuento.
-     * 2) Si no hay, artículos con saldo o movimientos en ese depósito.
+     * Sortea N líneas (artículo o variante color/talle) para el recuento.
+     * Prioriza variantes con saldo ≠ 0; si no hay, artículos con depósito de entrega.
+     * Exclusividad: un solo modo (CT o no) por sorteo.
      *
      * @return array<int, array<string, mixed>>
      */
     public function generarLineasAleatorias(int $depositoId, int $cantidad): array
     {
         $deposito = $this->resolverDeposito($depositoId);
-        $articuloIds = $this->articuloIdsParaRecuentoAleatorio((int) $deposito->id);
+        $candidatos = $this->candidatosAleatorio((int) $deposito->id);
 
-        if ($articuloIds->isEmpty()) {
+        if ($candidatos === []) {
             throw new \RuntimeException(
-                'No hay artículos asignados al depósito ni con saldo/movimientos para sortear.'
+                'No hay artículos/variantes con saldo ni asignados al depósito para sortear.'
             );
         }
 
-        $seleccionados = $articuloIds->shuffle()->take(min($cantidad, $articuloIds->count()));
+        $modoCt = null;
+        foreach ($candidatos as $c) {
+            if ($modoCt === null) {
+                $modoCt = (bool) $c['maneja_ct'];
+            }
+        }
+        $candidatos = array_values(array_filter(
+            $candidatos,
+            static fn (array $c): bool => (bool) $c['maneja_ct'] === $modoCt
+        ));
+
+        shuffle($candidatos);
+        $seleccionados = array_slice($candidatos, 0, min($cantidad, count($candidatos)));
         $lineas = [];
 
-        foreach ($seleccionados as $articuloId) {
+        foreach ($seleccionados as $cand) {
             $articulo = Articulo::query()
                 ->with('unidadesdemedidas:id,abreviatura,nombre')
-                ->find((int) $articuloId);
+                ->find((int) $cand['articulo_id']);
             if (! $articulo || ! ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
                 continue;
             }
-            $saldo = $this->saldoRepository->saldo((int) $articulo->id, (int) $deposito->id);
+            $colorId = (int) ($cand['color_id'] ?? 0);
+            $talleId = (int) ($cand['talle_id'] ?? 0);
+            $saldo = $this->saldoRepository->saldoVariante(
+                (int) $articulo->id,
+                (int) $deposito->id,
+                $colorId > 0 ? $colorId : null,
+                $talleId > 0 ? $talleId : null
+            );
             $lineas[] = [
                 'articulo_id' => $articulo->id,
                 'sku' => $articulo->sku,
@@ -340,6 +400,9 @@ class RecuentoService
                 'detalle' => $articulo->descripcion,
                 'unidadmedida_id' => $articulo->unidadmedida_id,
                 'unidadmedida' => optional($articulo->unidadesdemedidas)->abreviatura,
+                'color_id' => $colorId,
+                'talle_id' => $talleId,
+                'maneja_stock_color_talle' => (bool) ($articulo->maneja_stock_color_talle ?? false),
                 'saldo_sistema' => $saldo,
                 'cantidad_contada' => 0,
             ];
@@ -350,6 +413,43 @@ class RecuentoService
         }
 
         return $lineas;
+    }
+
+    /**
+     * @return list<array{articulo_id:int, color_id:int, talle_id:int, maneja_ct:bool}>
+     */
+    private function candidatosAleatorio(int $depositoId): array
+    {
+        $variantes = $this->variantesConStockEnDeposito($depositoId, null);
+        $candidatos = [];
+
+        if ($variantes !== []) {
+            $flags = Articulo::query()
+                ->whereIn('id', array_values(array_unique(array_column($variantes, 'articulo_id'))))
+                ->pluck('maneja_stock_color_talle', 'id');
+            foreach ($variantes as $v) {
+                $candidatos[] = [
+                    'articulo_id' => (int) $v['articulo_id'],
+                    'color_id' => (int) $v['color_id'],
+                    'talle_id' => (int) $v['talle_id'],
+                    'maneja_ct' => (bool) ($flags[$v['articulo_id']] ?? false),
+                ];
+            }
+
+            return $candidatos;
+        }
+
+        foreach ($this->articuloIdsParaRecuentoAleatorio($depositoId) as $articuloId) {
+            $maneja = ArticuloStockColorTalleSupport::articuloManejaColorTalle((int) $articuloId);
+            $candidatos[] = [
+                'articulo_id' => (int) $articuloId,
+                'color_id' => 0,
+                'talle_id' => 0,
+                'maneja_ct' => $maneja,
+            ];
+        }
+
+        return $candidatos;
     }
 
     /**
@@ -388,27 +488,22 @@ class RecuentoService
     }
 
     /**
-     * @param  array<int, array{sku:string, cantidad_contada:float, detalle?:string}>  $filas
+     * @param  array<int, array{sku:string, cantidad_contada:float, detalle?:string, color?:string|null, talle?:string|null}>  $filas
      */
     public function lineasDesdeImportacion(int $depositoId, array $filas): array
     {
         $this->resolverDeposito($depositoId);
         $lineas = [];
-        $skusVistos = [];
+        $clavesVistas = [];
+        $articulosId = [];
+        $coloresId = [];
+        $tallesId = [];
 
         foreach ($filas as $fila) {
             $sku = trim((string) ($fila['sku'] ?? ''));
             if ($sku === '') {
                 continue;
             }
-            $skuClave = mb_strtoupper($sku);
-            if (isset($skusVistos[$skuClave])) {
-                throw new \RuntimeException(
-                    "El SKU «{$sku}» está repetido en el archivo importado. "
-                    .'Cada artículo debe figurar una sola vez; sume las cantidades en una única fila.'
-                );
-            }
-            $skusVistos[$skuClave] = true;
             $articulo = ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
                 Articulo::query()
                     ->with('unidadesdemedidas:id,abreviatura,nombre')
@@ -417,6 +512,39 @@ class RecuentoService
             if (! $articulo) {
                 throw new \RuntimeException("Artículo no encontrado o inactivo con SKU: {$sku}");
             }
+
+            $colorId = $this->resolverColorImport($fila['color'] ?? null);
+            $talleId = $this->resolverTalleImport($fila['talle'] ?? null);
+            $maneja = (bool) ($articulo->maneja_stock_color_talle ?? false);
+
+            if ($maneja && ($colorId <= 0 || $talleId <= 0)) {
+                throw new \RuntimeException(
+                    "El artículo «{$sku}» maneja color/talle: indique ambas columnas en el archivo."
+                );
+            }
+            if (! $maneja && ($colorId > 0 || $talleId > 0)) {
+                throw new \RuntimeException(
+                    "El artículo «{$sku}» no maneja color/talle: no informe esas columnas."
+                );
+            }
+
+            [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo(
+                $colorId > 0 ? $colorId : null,
+                $talleId > 0 ? $talleId : null
+            );
+            $clave = $this->claveVariante((int) $articulo->id, $colorKey, $talleKey);
+            if (isset($clavesVistas[$clave])) {
+                throw new \RuntimeException(
+                    "La variante de «{$sku}» está repetida en el archivo importado. "
+                    .'Cada combinación artículo/color/talle debe figurar una sola vez.'
+                );
+            }
+            $clavesVistas[$clave] = true;
+
+            $articulosId[] = (int) $articulo->id;
+            $coloresId[] = $colorKey;
+            $tallesId[] = $talleKey;
+
             $lineas[] = [
                 'articulo_id' => $articulo->id,
                 'sku' => $articulo->sku,
@@ -424,7 +552,15 @@ class RecuentoService
                 'detalle' => $fila['detalle'] ?? $articulo->descripcion,
                 'unidadmedida_id' => $articulo->unidadmedida_id,
                 'unidadmedida' => optional($articulo->unidadesdemedidas)->abreviatura,
-                'saldo_sistema' => $this->saldoRepository->saldo((int) $articulo->id, $depositoId),
+                'color_id' => $colorKey,
+                'talle_id' => $talleKey,
+                'maneja_stock_color_talle' => $maneja,
+                'saldo_sistema' => $this->saldoRepository->saldoVariante(
+                    (int) $articulo->id,
+                    $depositoId,
+                    $colorKey > 0 ? $colorKey : null,
+                    $talleKey > 0 ? $talleKey : null
+                ),
                 'cantidad_contada' => (float) ($fila['cantidad_contada'] ?? 0),
             ];
         }
@@ -433,7 +569,55 @@ class RecuentoService
             throw new \RuntimeException('No se importó ninguna línea válida.');
         }
 
+        try {
+            MovimientoStockColorTalleExclusividadSupport::validarLineas($articulosId, $coloresId, $tallesId);
+        } catch (InvalidArgumentException $e) {
+            throw new \RuntimeException($e->getMessage(), 0, $e);
+        }
+
         return $lineas;
+    }
+
+    private function resolverColorImport(?string $valor): int
+    {
+        $valor = trim((string) $valor);
+        if ($valor === '') {
+            return 0;
+        }
+        if (ctype_digit($valor)) {
+            return (int) $valor;
+        }
+
+        $id = Color::query()
+            ->whereRaw(SqlDialectSupport::lower('nombre').' = ?', [mb_strtolower($valor)])
+            ->value('id');
+
+        if (! $id) {
+            throw new \RuntimeException("Color no encontrado: {$valor}");
+        }
+
+        return (int) $id;
+    }
+
+    private function resolverTalleImport(?string $valor): int
+    {
+        $valor = trim((string) $valor);
+        if ($valor === '') {
+            return 0;
+        }
+        if (ctype_digit($valor)) {
+            return (int) $valor;
+        }
+
+        $id = Talle::query()
+            ->whereRaw(SqlDialectSupport::lower('nombre').' = ?', [mb_strtolower($valor)])
+            ->value('id');
+
+        if (! $id) {
+            throw new \RuntimeException("Talle no encontrado: {$valor}");
+        }
+
+        return (int) $id;
     }
 
     public function importarLineas(int $id, array $filas): Recuento
@@ -445,6 +629,8 @@ class RecuentoService
         $payload = [
             'articulo_ids' => [],
             'recuento_item_ids' => [],
+            'colores_id' => [],
+            'talles_id' => [],
             'detalle_articulos' => [],
             'cantidades_contadas' => [],
             'saldos_sistema' => [],
@@ -453,6 +639,8 @@ class RecuentoService
         foreach ($lineas as $ln) {
             $payload['articulo_ids'][] = $ln['articulo_id'];
             $payload['recuento_item_ids'][] = '';
+            $payload['colores_id'][] = (int) ($ln['color_id'] ?? 0);
+            $payload['talles_id'][] = (int) ($ln['talle_id'] ?? 0);
             $payload['detalle_articulos'][] = $ln['detalle'] ?? '';
             $payload['cantidades_contadas'][] = $ln['cantidad_contada'];
             $payload['saldos_sistema'][] = $ln['saldo_sistema'];
@@ -468,11 +656,105 @@ class RecuentoService
         });
     }
 
-    public function saldoArticulo(int $articuloId, int $depositoId): float
-    {
+    public function saldoArticulo(
+        int $articuloId,
+        int $depositoId,
+        ?int $colorId = null,
+        ?int $talleId = null,
+    ): float {
         $this->resolverDeposito($depositoId);
 
+        $color = ($colorId !== null && $colorId > 0) ? $colorId : 0;
+        $talle = ($talleId !== null && $talleId > 0) ? $talleId : 0;
+
+        if ($color > 0 || $talle > 0) {
+            return $this->saldoRepository->saldoVariante(
+                $articuloId,
+                $depositoId,
+                $color > 0 ? $color : null,
+                $talle > 0 ? $talle : null
+            );
+        }
+
+        // Artículo con flag y sin variante elegida → saldo 0/0 (no el total sumado).
+        if (ArticuloStockColorTalleSupport::articuloManejaColorTalle($articuloId)) {
+            return $this->saldoRepository->saldoVariante($articuloId, $depositoId, null, null);
+        }
+
         return $this->saldoRepository->saldo($articuloId, $depositoId);
+    }
+
+    private function claveVariante(int $articuloId, int $colorKey, int $talleKey): string
+    {
+        return $articuloId.'|'.$colorKey.'|'.$talleKey;
+    }
+
+    /**
+     * Variantes con saldo ≠ 0 en el depósito, filtradas por modo CT del comprobante.
+     * $modoCt true = solo artículos con flag; false = solo sin flag (variante 0/0);
+     * null = sin filtro (recuento vacío: todas las variantes con stock).
+     *
+     * @return array<string, array{articulo_id:int, color_id:int, talle_id:int}>
+     */
+    private function variantesConStockEnDeposito(int $depositoId, ?bool $modoCt): array
+    {
+        $filas = DB::table('articulo_saldo_deposito')
+            ->where('deposito_id', $depositoId)
+            ->whereRaw('ABS(cantidad) > ?', [1e-9])
+            ->get(['articulo_id', 'color_id', 'talle_id']);
+
+        $desdeMov = DB::table('articulo_movimiento')
+            ->select('articulo_id', 'color_id', 'talle_id')
+            ->selectRaw('SUM(cantidad) as total')
+            ->where('deposito_id', $depositoId)
+            ->whereNull('deleted_at')
+            ->groupBy('articulo_id', 'color_id', 'talle_id')
+            ->havingRaw('ABS(SUM(cantidad)) > ?', [1e-9])
+            ->get();
+
+        $mapa = [];
+        foreach ($filas->merge($desdeMov) as $row) {
+            $articuloId = (int) $row->articulo_id;
+            if ($articuloId <= 0) {
+                continue;
+            }
+            [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo(
+                isset($row->color_id) ? (int) $row->color_id : null,
+                isset($row->talle_id) ? (int) $row->talle_id : null
+            );
+            $clave = $this->claveVariante($articuloId, $colorKey, $talleKey);
+            $mapa[$clave] = [
+                'articulo_id' => $articuloId,
+                'color_id' => $colorKey,
+                'talle_id' => $talleKey,
+            ];
+        }
+
+        if ($modoCt === null || $mapa === []) {
+            return $mapa;
+        }
+
+        $articuloIds = array_values(array_unique(array_column($mapa, 'articulo_id')));
+        $flags = Articulo::query()
+            ->whereIn('id', $articuloIds)
+            ->pluck('maneja_stock_color_talle', 'id');
+
+        $filtrado = [];
+        foreach ($mapa as $clave => $variante) {
+            $maneja = (bool) ($flags[$variante['articulo_id']] ?? false);
+            if ($modoCt && ! $maneja) {
+                continue;
+            }
+            if (! $modoCt && $maneja) {
+                continue;
+            }
+            if (! $modoCt && ($variante['color_id'] !== 0 || $variante['talle_id'] !== 0)) {
+                continue;
+            }
+            $filtrado[$clave] = $variante;
+        }
+
+        return $filtrado;
     }
 
     private function validarDatosBasicos(array $data, bool $esActualizacion = false): void
@@ -603,6 +885,10 @@ class RecuentoService
 
             $articuloId = (int) $ajuste['articulo_id'];
             $precioUnitario = (float) ($preciosUltimaCompra[$articuloId]['precio'] ?? 0);
+            [$colorMov, $talleMov] = ArticuloStockColorTalleSupport::valoresMovimiento(
+                isset($ajuste['color_id']) ? (int) $ajuste['color_id'] : null,
+                isset($ajuste['talle_id']) ? (int) $ajuste['talle_id'] : null
+            );
 
             Articulo_Movimiento::create([
                 'fecha' => $fecha,
@@ -611,6 +897,8 @@ class RecuentoService
                 'movimientostock_id' => $movimiento->id,
                 'lote' => 0,
                 'articulo_id' => $articuloId,
+                'color_id' => $colorMov,
+                'talle_id' => $talleMov,
                 'concepto' => $ajuste['concepto'] ?? $tipo->nombre,
                 'cantidad' => $cantidad,
                 'precio' => $precioUnitario,
@@ -637,32 +925,4 @@ class RecuentoService
         return $texto;
     }
 
-    /**
-     * Artículos con existencia en el depósito: tabla de saldos y suma de movimientos
-     * (por si articulo_saldo_deposito quedó desincronizado).
-     *
-     * @return list<int>
-     */
-    private function articuloIdsConStockEnDeposito(int $depositoId): array
-    {
-        $desdeTabla = DB::table('articulo_saldo_deposito')
-            ->where('deposito_id', $depositoId)
-            ->whereRaw('ABS(cantidad) > ?', [1e-9])
-            ->pluck('articulo_id');
-
-        $desdeMovimientos = DB::table('articulo_movimiento')
-            ->where('deposito_id', $depositoId)
-            ->whereNull('deleted_at')
-            ->groupBy('articulo_id')
-            ->havingRaw('ABS(SUM(cantidad)) > ?', [1e-9])
-            ->pluck('articulo_id');
-
-        return $desdeTabla
-            ->merge($desdeMovimientos)
-            ->map(fn ($id) => (int) $id)
-            ->filter(fn (int $id) => $id > 0)
-            ->unique()
-            ->values()
-            ->all();
-    }
 }

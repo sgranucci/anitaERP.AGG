@@ -140,7 +140,7 @@ Menú - Rol
                 <div id="modalPermisosMenuError" class="alert alert-danger" style="display: none;"></div>
                 <div id="modalPermisosMenuContenedor" class="menu-rol-modal-tabla-wrap"></div>
                 <div id="modalPermisosMenuSinRoles" class="alert alert-warning" style="display: none;">
-                    No hay roles que coincidan con el filtro de centro de costo. Ajuste el filtro y vuelva a intentar.
+                    No hay roles que coincidan con el filtro aplicado (centro de costo o buscar rol). Ajuste el filtro y vuelva a intentar.
                 </div>
                 <div id="modalPermisosMenuVacio" class="alert alert-info" style="display: none;">
                     No hay permisos asociados a este ítem de menú (<code>menu_id</code> en la tabla permiso).

@@ -41,6 +41,17 @@ final class RendicionMaquinaContextoBuilder
         $orquestador = is_array($payload['calc_orquestador'] ?? null) ? $payload['calc_orquestador'] : [];
         $contexto['calc.comprobante'] = round((float) ($orquestador['comprobante'] ?? 0), 2);
         $contexto['calc.vale_rep_fondo'] = round((float) ($orquestador['vale_rep_fondo'] ?? 0), 2);
+        // Completo (lee_rendiciones_del_dia): semillas desde Noche / suma M+T+N.
+        // Las fórmulas E10/E30/E40/D30 las conservan cuando meta.es_completo > 0.
+        if (array_key_exists('fondo_cierre', $orquestador)) {
+            $contexto['calc.fondo_cierre'] = round((float) $orquestador['fondo_cierre'], 2);
+        }
+        if (array_key_exists('resultado_turno', $orquestador)) {
+            $contexto['calc.resultado_turno'] = round((float) $orquestador['resultado_turno'], 2);
+        }
+        if (array_key_exists('transferencia', $orquestador)) {
+            $contexto['calc.transferencia'] = round((float) $orquestador['transferencia'], 2);
+        }
 
         $contexto['meta.empresa_id'] = $empresaId;
         $contexto['meta.fecha_ymd'] = str_replace('-', '', $fecha);

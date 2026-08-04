@@ -46,6 +46,8 @@ final class RendicionMaquinaResultadoCalculo
                 : round($this->get('inputs.drop_billete') + $this->get('inputs.impuesto_drop'), 2),
             'impuesto_drop' => $this->get('inputs.impuesto_drop'),
             'drop_bill_rodillo' => $this->get('calc.drop_bill_rodillo'),
+            'drop_bill_ruleta' => $this->get('calc.drop_bill_ruleta'),
+            'dropqr_rodillo' => $this->get('inputs.dropqr_rodillo'),
             'total_ingreso' => $this->get('calc.total_ingreso'),
             'total_salida' => $this->get('calc.total_salida'),
             'resultado_turno' => $this->get('calc.resultado_turno'),

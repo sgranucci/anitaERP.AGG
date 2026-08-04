@@ -20,6 +20,7 @@ use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\RequisicionAnitaColisionSupport;
 use App\Support\Compras\RequisicionAnitaSyncEstado;
+use App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport;
 use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
@@ -206,6 +207,12 @@ class RequisicionService
 
         try {
             $idsDistintos = $this->arbolaprobacionService->centrosCostoDestinoDistintosIdsDesdeModelo($existente);
+            if (($centrocostoArbolId === null || $centrocostoArbolId <= 0)
+                && RequisicionCentrocostoArbolOrigenSupport::usuarioPuedeCargar()
+            ) {
+                $persistido = (int) ($existente->centrocostodestino_arbol_id ?? 0);
+                $centrocostoArbolId = $persistido > 0 ? $persistido : (int) $existente->centrocosto_id;
+            }
             $ccResuelto = $this->arbolaprobacionService->resolverCentroCostoArbolRequisicion($existente, $centrocostoArbolId, $idsDistintos);
             if ($ccResuelto === null) {
                 return [
@@ -755,6 +762,9 @@ class RequisicionService
 
         $idsDistintos = $this->arbolaprobacionService->centrosCostoDestinoDistintosIdsDesdeModelo($req);
         $cc = $this->arbolaprobacionService->resolverCentroCostoArbolRequisicion($req, null, $idsDistintos);
+        if ($cc === null && RequisicionCentrocostoArbolOrigenSupport::usuarioPuedeCargar()) {
+            $cc = (int) $req->centrocosto_id;
+        }
         if ($cc === null) {
             return [
                 'mensaje' => 'ok',
@@ -773,6 +783,7 @@ class RequisicionService
 
     /**
      * Resuelve el CC de circuito para alta/actualización. Si hay varios y falta selección, pide modal.
+     * Con permiso Capital Humano (`cargar-centrocosto-arbol-requisicion`), default = CC de origen.
      *
      * @return array{mensaje: string, centrocosto_arbol_id?: int, centros_costo?: list<array<string, mixed>>}
      */
@@ -780,6 +791,9 @@ class RequisicionService
     {
         $idsDistintos = $this->arbolaprobacionService->centrosCostoDestinoDistintosIdsDesdeRequest($data);
         $seleccion = (int) ($data['centrocostodestino_arbol_id'] ?? 0);
+        if ($seleccion <= 0 && RequisicionCentrocostoArbolOrigenSupport::usuarioPuedeCargar()) {
+            $seleccion = (int) ($data['centrocosto_id'] ?? 0);
+        }
         $seleccion = $seleccion > 0 ? $seleccion : null;
         $cc = $this->arbolaprobacionService->resolverCentroCostoArbolDesdeRequest($data, $seleccion, $idsDistintos);
         if ($cc === null) {

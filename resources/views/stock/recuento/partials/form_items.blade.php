@@ -15,6 +15,10 @@
             'unidadmedida' => optional($i->unidadmedida)->abreviatura ?? optional($i->articulos?->unidadesdemedidas)->abreviatura,
             'saldo_sistema' => $i->saldo_sistema,
             'cantidad_contada' => $i->cantidad_contada,
+            'color_id' => (int) ($i->color_id ?? 0),
+            'talle_id' => (int) ($i->talle_id ?? 0),
+            'maneja_stock_color_talle' => (bool) (optional($i->articulos)->maneja_stock_color_talle ?? false)
+                || ((int) ($i->color_id ?? 0) > 0) || ((int) ($i->talle_id ?? 0) > 0),
         ])->all();
     }
     if (empty($lineas)) {
@@ -28,7 +32,24 @@
             'unidadmedida' => '',
             'saldo_sistema' => '',
             'cantidad_contada' => '',
+            'color_id' => 0,
+            'talle_id' => 0,
+            'maneja_stock_color_talle' => false,
         ]];
+    }
+
+    $modoStockColorTalleInicial = old('modo_stock_color_talle', '');
+    if ($modoStockColorTalleInicial === '') {
+        foreach ($lineas as $lnModo) {
+            if (! empty($lnModo['articulo_id']) && ! empty($lnModo['maneja_stock_color_talle'])) {
+                $modoStockColorTalleInicial = '1';
+                break;
+            }
+            if (! empty($lnModo['articulo_id'])) {
+                $modoStockColorTalleInicial = '0';
+                break;
+            }
+        }
     }
 @endphp
 
@@ -58,6 +79,11 @@
 </div>
 @endif
 
+<div id="ms-ayuda-color-talle" class="alert alert-info py-2 small mb-2" style="display:none;">
+    Este recuento usa stock por color y talle: todas las líneas deben tener color y talle.
+</div>
+<input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
+
 <div class="card">
     <div class="card-header py-2">
         <h4 class="card-title mb-0"><i class="fa fa-cubes"></i> Líneas de conteo</h4>
@@ -66,13 +92,15 @@
         <table class="table table-striped table-hover mb-0" id="tabla-recuento-items">
             <thead>
                 <tr>
-                    <th style="width:14%">Artículo</th>
-                    <th style="width:24%">Descripción</th>
-                    <th style="width:8%">UM</th>
-                    <th style="width:10%">Saldo dep.</th>
-                    <th style="width:10%">Contado</th>
-                    <th style="width:10%">Diferencia</th>
-                    <th style="width:14%" class="text-right">Acciones</th>
+                    <th style="width:12%">Artículo</th>
+                    <th style="width:18%">Descripción</th>
+                    <th class="ms-col-color-talle" style="width:10%; display:none;">Color</th>
+                    <th class="ms-col-color-talle" style="width:8%; display:none;">Talle</th>
+                    <th style="width:6%">UM</th>
+                    <th style="width:9%">Saldo dep.</th>
+                    <th style="width:9%">Contado</th>
+                    <th style="width:9%">Diferencia</th>
+                    <th style="width:12%" class="text-right">Acciones</th>
                 </tr>
             </thead>
             <tbody id="tbody-recuento-items">
@@ -82,8 +110,11 @@
                         $saldo = old('saldos_sistema.'.$idx, $linea['saldo_sistema'] ?? '');
                         $contado = old('cantidades_contadas.'.$idx, $linea['cantidad_contada'] ?? '');
                         $dif = is_numeric($contado) && is_numeric($saldo) ? (float) $contado - (float) $saldo : null;
+                        $colorIdLin = (int) old('colores_id.'.$idx, $linea['color_id'] ?? 0);
+                        $talleIdLin = (int) old('talles_id.'.$idx, $linea['talle_id'] ?? 0);
+                        $manejaCt = (bool) ($linea['maneja_stock_color_talle'] ?? ($colorIdLin > 0 || $talleIdLin > 0));
                     @endphp
-                    <tr class="recuento-item-row">
+                    <tr class="recuento-item-row" data-maneja-stock-color-talle="{{ $manejaCt ? '1' : '0' }}">
                         <td>
                             <input type="hidden" class="recuento_item_id" name="recuento_item_ids[]" value="{{ old('recuento_item_ids.'.$idx, $linea['recuento_item_id'] ?? '') }}">
                             <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ $articuloId }}">
@@ -101,6 +132,11 @@
                         <td>
                             <input type="text" class="descripcionarticulo form-control form-control-sm" name="detalle_articulos[]" value="{{ old('detalle_articulos.'.$idx, $linea['detalle'] ?? ($linea['descripcion'] ?? '')) }}" readonly>
                         </td>
+                        @include('stock.movimientostock.partials.fila_color_talle', [
+                            'colorId' => $colorIdLin,
+                            'talleId' => $talleIdLin,
+                            'manejaColorTalle' => $manejaCt,
+                        ])
                         <td><span class="unidad-medida-label text-monospace">{{ old('unidadmedida_labels.'.$idx, $linea['unidadmedida'] ?? '—') }}</span></td>
                         <td><span class="saldo-deposito text-monospace">{{ $saldo !== '' ? rtrim(rtrim(number_format((float) $saldo, 6, '.', ''), '0'), '.') : '—' }}</span></td>
                         <td>
@@ -145,7 +181,7 @@
 </div>
 
 <template id="template-recuento-item-row">
-    <tr class="recuento-item-row">
+    <tr class="recuento-item-row" data-maneja-stock-color-talle="0">
         <td>
             <input type="hidden" class="recuento_item_id" name="recuento_item_ids[]" value="">
             <input type="hidden" class="articulo_id" name="articulo_ids[]" value="">
@@ -159,6 +195,11 @@
             </div>
         </td>
         <td><input type="text" class="descripcionarticulo form-control form-control-sm" name="detalle_articulos[]" readonly></td>
+        @include('stock.movimientostock.partials.fila_color_talle', [
+            'colorId' => 0,
+            'talleId' => 0,
+            'manejaColorTalle' => false,
+        ])
         <td><span class="unidad-medida-label text-monospace">—</span></td>
         <td><span class="saldo-deposito text-monospace">—</span></td>
         <td><input type="number" step="0.000001" min="0" name="cantidades_contadas[]" class="form-control form-control-sm input-cantidad-contada" value="0"></td>

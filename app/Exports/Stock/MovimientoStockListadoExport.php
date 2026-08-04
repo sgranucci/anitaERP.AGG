@@ -23,7 +23,7 @@ class MovimientoStockListadoExport implements FromView, ShouldAutoSize, WithColu
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'N';
+    private const COL_ULTIMA = 'O';
 
     private MovimientoStockRepositoryInterface $movimientoStockRepository;
 
@@ -113,10 +113,11 @@ class MovimientoStockListadoExport implements FromView, ShouldAutoSize, WithColu
             'H' => 10,
             'I' => 18,
             'J' => 12,
-            'K' => 8,
-            'L' => 14,
-            'M' => 10,
+            'K' => 12,
+            'L' => 8,
+            'M' => 14,
             'N' => 10,
+            'O' => 10,
         ];
     }
 

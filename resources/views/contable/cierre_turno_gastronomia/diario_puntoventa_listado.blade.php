@@ -8,8 +8,16 @@
     $matriz = $matriz ?? GastronomiaDiarioPuntoventaExport::matrizAncha($resultado);
     $bloquesPv = $matriz['bloques_pv'] ?? [];
     $filas = $matriz['filas'] ?? [];
+    $totalesColumnas = $matriz['totales'] ?? [];
     $labelsFila2 = $matriz['labels_fila2'] ?? [];
     $colspan = max(1, (int) ($matriz['cantidad_columnas'] ?? 1));
+    $colInicioTotalDia = 0;
+    foreach ($bloquesPv as $bloque) {
+        if (! empty($bloque['es_total_dia'])) {
+            break;
+        }
+        $colInicioTotalDia += (int) ($bloque['cantidad_columnas'] ?? 0);
+    }
     $empresaNombre = (string) ($resultado['empresa_nombre'] ?? '');
     $paraLogos = collect([(object) ['nombreempresa' => $empresaNombre]]);
     $logosCabecera = $esExcel ? [] : EmpresaLogoArchivo::logosCabeceraDesdeColeccion($paraLogos);
@@ -57,6 +65,8 @@
         .th-venta, .th-iva, .th-nc { background-color: #5DADE2; }
         .th-total-dia { background-color: #5DADE2 !important; }
         .fecha { font-weight: bold; text-align: center; white-space: nowrap; }
+        .fila-total td { background-color: #F5B041; font-weight: bold; color: #17202A; border-top: 2px solid #D68910; }
+        .fila-total td.td-total-dia { background-color: #5DADE2; }
     </style>
 </head>
 <body>
@@ -154,6 +164,16 @@
                     <td colspan="{{ $colspan }}" class="centro">Sin actividad</td>
                 </tr>
             @endforelse
+            @if ($filas !== [] && $totalesColumnas !== [])
+                <tr class="fila-total">
+                    <td class="fecha">TOTAL</td>
+                    @foreach ($totalesColumnas as $idx => $valor)
+                        <td class="num {{ $idx >= $colInicioTotalDia ? 'td-total-dia' : '' }}">
+                            {{ $fmtNum($valor) }}
+                        </td>
+                    @endforeach
+                </tr>
+            @endif
         </tbody>
     </table>
 @endif

@@ -132,7 +132,7 @@ class Tecnico_TicketController extends Controller
 
     public function leeTecnico_Ticket($tarea_id)
     {
-        return ($this->repository->find($tarea_id));
+        return $this->repository->findOperativo($tarea_id);
 	}
     
 }

@@ -14,6 +14,20 @@ class PeriodoContableCierreSupport
 
     public const ALCANCE_GENERAL = 'general';
 
+    /** Módulos padre (cierre global por área). */
+    public const MODULO_CAJA = 'mod_caja';
+
+    public const MODULO_VENTAS = 'mod_ventas';
+
+    public const MODULO_COMPRAS = 'mod_compras';
+
+    public const MODULO_STOCK = 'mod_stock';
+
+    public const MODULO_SUELDOS = 'mod_sueldos';
+
+    public const MODULO_CONTABLE = 'mod_contable';
+
+    /** Submódulos (alcances operativos). */
     public const ALCANCE_COBRANZA = 'cobranza';
 
     public const ALCANCE_CAJA = 'caja';
@@ -30,24 +44,80 @@ class PeriodoContableCierreSupport
 
     public const ALCANCE_INTERBANKING = 'interbanking';
 
-    /** @return array<string, string> */
-    public static function alcancesDisponibles(): array
+    public const ALCANCE_INDUMENTARIA = 'indumentaria';
+
+    /**
+     * Módulos padre: código => etiqueta.
+     *
+     * @return array<string, string>
+     */
+    public static function modulosDisponibles(): array
     {
         return [
-            self::ALCANCE_GENERAL => 'General (todos los módulos)',
-            self::ALCANCE_COBRANZA => 'Cobranzas',
-            self::ALCANCE_CAJA => 'Ingresos / egresos de caja',
-            self::ALCANCE_TRANSFERENCIA => 'Transferencias de mercadería',
-            self::ALCANCE_STOCK => 'Movimientos de stock',
-            self::ALCANCE_RECEPCION_PROVEEDOR => 'Recepción de proveedores',
-            self::ALCANCE_CONTABLE => 'Asientos contables manuales',
-            self::ALCANCE_INTERBANKING => 'Interbanking / conciliación bancaria',
-            self::ALCANCE_FACTURACION => 'Facturación (PV manual o CAEA)',
+            self::MODULO_CAJA => 'Caja',
+            self::MODULO_VENTAS => 'Ventas',
+            self::MODULO_COMPRAS => 'Compras',
+            self::MODULO_STOCK => 'Stock',
+            self::MODULO_SUELDOS => 'Sueldos',
+            self::MODULO_CONTABLE => 'Contable',
         ];
     }
 
     /**
-     * Alcances de la agenda mensual (sin "general"; el cierre de todos usa el atajo masivo).
+     * Submódulos por módulo padre.
+     *
+     * @return array<string, array<string, string>>
+     */
+    public static function submodulosPorModulo(): array
+    {
+        return [
+            self::MODULO_CAJA => [
+                self::ALCANCE_COBRANZA => 'Cobranzas',
+                self::ALCANCE_CAJA => 'Ingresos / egresos de caja',
+                self::ALCANCE_INTERBANKING => 'Interbanking / conciliación bancaria',
+            ],
+            self::MODULO_VENTAS => [
+                self::ALCANCE_FACTURACION => 'Facturación (PV manual o CAEA)',
+            ],
+            self::MODULO_COMPRAS => [
+                self::ALCANCE_RECEPCION_PROVEEDOR => 'Recepción de proveedores',
+            ],
+            self::MODULO_STOCK => [
+                self::ALCANCE_STOCK => 'Movimientos de stock',
+                self::ALCANCE_TRANSFERENCIA => 'Transferencias de mercadería',
+            ],
+            self::MODULO_SUELDOS => [
+                self::ALCANCE_INDUMENTARIA => 'Indumentaria (entrega y asiento)',
+            ],
+            self::MODULO_CONTABLE => [
+                self::ALCANCE_CONTABLE => 'Asientos contables manuales',
+            ],
+        ];
+    }
+
+    /**
+     * Catálogo completo: general + módulos padre + submódulos.
+     *
+     * @return array<string, string>
+     */
+    public static function alcancesDisponibles(): array
+    {
+        $lista = [
+            self::ALCANCE_GENERAL => 'General (todos los módulos)',
+        ];
+
+        foreach (self::modulosDisponibles() as $codigo => $etiqueta) {
+            $lista[$codigo] = $etiqueta.' (módulo completo)';
+            foreach (self::submodulosPorModulo()[$codigo] ?? [] as $subCodigo => $subEtiqueta) {
+                $lista[$subCodigo] = $subEtiqueta;
+            }
+        }
+
+        return $lista;
+    }
+
+    /**
+     * Alcances de la agenda mensual (módulos + submódulos; sin "general").
      *
      * @return array<string, string>
      */
@@ -57,6 +127,55 @@ class PeriodoContableCierreSupport
         unset($todos[self::ALCANCE_GENERAL]);
 
         return $todos;
+    }
+
+    /**
+     * Solo submódulos operativos (sin general ni módulos padre).
+     *
+     * @return array<string, string>
+     */
+    public static function alcancesOperativos(): array
+    {
+        $lista = [];
+        foreach (self::submodulosPorModulo() as $hijos) {
+            foreach ($hijos as $codigo => $etiqueta) {
+                $lista[$codigo] = $etiqueta;
+            }
+        }
+
+        return $lista;
+    }
+
+    /**
+     * Estructura para UI (agenda / selects con optgroup).
+     *
+     * @return list<array{
+     *   codigo: string,
+     *   etiqueta: string,
+     *   es_modulo: bool,
+     *   hijos: list<array{codigo: string, etiqueta: string}>
+     * }>
+     */
+    public static function jerarquiaAgenda(): array
+    {
+        $arbol = [];
+        foreach (self::modulosDisponibles() as $codigo => $etiqueta) {
+            $hijos = [];
+            foreach (self::submodulosPorModulo()[$codigo] ?? [] as $subCodigo => $subEtiqueta) {
+                $hijos[] = [
+                    'codigo' => $subCodigo,
+                    'etiqueta' => $subEtiqueta,
+                ];
+            }
+            $arbol[] = [
+                'codigo' => $codigo,
+                'etiqueta' => $etiqueta,
+                'es_modulo' => true,
+                'hijos' => $hijos,
+            ];
+        }
+
+        return $arbol;
     }
 
     public static function etiquetaAlcance(string $alcance): string
@@ -69,9 +188,60 @@ class PeriodoContableCierreSupport
         return array_key_exists($alcance, self::alcancesDisponibles());
     }
 
+    public static function esModuloPadre(string $alcance): bool
+    {
+        return array_key_exists($alcance, self::modulosDisponibles());
+    }
+
+    public static function esSubmodulo(string $alcance): bool
+    {
+        return array_key_exists($alcance, self::alcancesOperativos());
+    }
+
+    /**
+     * Módulo padre del alcance. Si ya es módulo, se retorna a sí mismo.
+     */
+    public static function moduloPadreDe(string $alcance): ?string
+    {
+        if (self::esModuloPadre($alcance)) {
+            return $alcance;
+        }
+
+        foreach (self::submodulosPorModulo() as $modulo => $hijos) {
+            if (array_key_exists($alcance, $hijos)) {
+                return $modulo;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Alcances de cierre que restringen una operación (general + módulo padre + propio).
+     *
+     * @return list<string>
+     */
+    public static function alcancesQueRestringen(string $alcanceOperacion): array
+    {
+        if ($alcanceOperacion === '' || $alcanceOperacion === self::ALCANCE_GENERAL) {
+            return [self::ALCANCE_GENERAL];
+        }
+
+        $alcances = [self::ALCANCE_GENERAL];
+        $modulo = self::moduloPadreDe($alcanceOperacion);
+        if ($modulo !== null) {
+            $alcances[] = $modulo;
+        }
+        if ($alcanceOperacion !== self::ALCANCE_GENERAL) {
+            $alcances[] = $alcanceOperacion;
+        }
+
+        return array_values(array_unique($alcances));
+    }
+
     /**
      * Fecha de cierre vigente para la empresa.
-     * Si se indica alcance de operación, considera cierres "general" y del mismo alcance
+     * Si se indica alcance de operación, considera cierres general, del módulo padre y del submódulo
      * (el MAX fecha_hasta es el más restrictivo).
      */
     public static function fechaCierreVigente(int $empresaId, ?string $alcance = null): ?Carbon
@@ -84,10 +254,7 @@ class PeriodoContableCierreSupport
             ->where('empresa_id', $empresaId);
 
         if ($alcance !== null && $alcance !== '' && $alcance !== self::ALCANCE_GENERAL) {
-            $query->where(function ($q) use ($alcance) {
-                $q->where('alcance', self::ALCANCE_GENERAL)
-                    ->orWhere('alcance', $alcance);
-            });
+            $query->whereIn('alcance', self::alcancesQueRestringen($alcance));
         } elseif ($alcance === self::ALCANCE_GENERAL) {
             $query->where('alcance', self::ALCANCE_GENERAL);
         }
@@ -168,6 +335,8 @@ class PeriodoContableCierreSupport
         Carbon $fechaOperacion,
         string $alcance
     ): bool {
+        $cubiertos = self::alcancesQueCubrenApertura($alcance);
+
         return AperturaPeriodoContable::query()
             ->where('empresa_id', $empresaId)
             ->where('usuario_habilitado_id', $usuarioId)
@@ -178,11 +347,18 @@ class PeriodoContableCierreSupport
             ->where('vence_en', '>', now())
             ->whereDate('fecha_operacion_desde', '<=', $fechaOperacion)
             ->whereDate('fecha_operacion_hasta', '>=', $fechaOperacion)
-            ->where(function ($query) use ($alcance) {
-                $query->where('alcance', self::ALCANCE_GENERAL)
-                    ->orWhere('alcance', $alcance);
-            })
+            ->whereIn('alcance', $cubiertos)
             ->exists();
+    }
+
+    /**
+     * Alcances de apertura que habilitan una operación (general, módulo padre, el propio).
+     *
+     * @return list<string>
+     */
+    public static function alcancesQueCubrenApertura(string $alcanceOperacion): array
+    {
+        return self::alcancesQueRestringen($alcanceOperacion);
     }
 
     public static function alcanceCubre(string $alcanceApertura, string $alcanceOperacion): bool
@@ -191,7 +367,18 @@ class PeriodoContableCierreSupport
             return true;
         }
 
-        return $alcanceApertura === $alcanceOperacion;
+        if ($alcanceApertura === $alcanceOperacion) {
+            return true;
+        }
+
+        if (self::esModuloPadre($alcanceApertura)) {
+            $hijos = self::submodulosPorModulo()[$alcanceApertura] ?? [];
+
+            return array_key_exists($alcanceOperacion, $hijos)
+                || $alcanceOperacion === $alcanceApertura;
+        }
+
+        return false;
     }
 
     public static function mensajeBloqueo(Carbon $fechaOperacion, Carbon $fechaCierre, string $alcance): string

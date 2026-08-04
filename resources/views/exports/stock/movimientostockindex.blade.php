@@ -2,13 +2,13 @@
     @if (!empty($reservarFilaLogoExcel))
         <tbody>
             <tr>
-                <td colspan="14" style="height: 52px;">&#160;</td>
+                <td colspan="15" style="height: 52px;">&#160;</td>
             </tr>
         </tbody>
     @endif
     <tbody>
         <tr>
-            <td colspan="14"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Movimientos de stock</h2></td>
+            <td colspan="15"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Movimientos de stock</h2></td>
         </tr>
     </tbody>
     <thead>
@@ -23,6 +23,7 @@
             <th>Lote</th>
             <th>Empresa</th>
             <th>Cantidad</th>
+            <th>Costo</th>
             <th>&Iacute;tems</th>
             <th>Estado</th>
             <th>Mov. salida</th>
@@ -45,6 +46,7 @@
                 <td>{{ $fila->loteListado }}</td>
                 <td>{{ $fila->nombreEmpresa }}</td>
                 <td>{{ number_format($fila->totalCantidad, 2, ',', '.') }}</td>
+                <td>{{ $fila->costoProducto !== null ? number_format($fila->costoProducto, 4, ',', '.') : '' }}</td>
                 <td>{{ $fila->itemsCount > 0 ? $fila->itemsCount : '' }}</td>
                 <td>{{ $estadoLabel }}</td>
                 <td>{{ $fila->movSalidaId ?? '' }}</td>

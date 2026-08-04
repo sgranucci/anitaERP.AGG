@@ -188,7 +188,7 @@ final class FlashCajaOrigenTotalSupport
         $fechaYmd = Carbon::parse($fecha)->format('Ymd');
 
         $calculoService = app(FlashCajaCalculoService::class);
-        $calculado = $calculoService->calcular($empresaId, $fechaSql);
+        $calculado = $calculoService->calcularCampo($empresaId, $fechaSql, $campo);
         $desglose = is_array($calculado['desglose_wigos'] ?? null) ? $calculado['desglose_wigos'] : [];
         $comp = is_array($desglose['componentes_aplicados'] ?? null) ? $desglose['componentes_aplicados'] : [];
         $imp = is_array($calculado['impuestos_rendicion'] ?? null) ? $calculado['impuestos_rendicion'] : [];
@@ -217,17 +217,24 @@ final class FlashCajaOrigenTotalSupport
                     'params' => null,
                 ];
             }
+            // Impuestos turno C como sección extra para slot_d / slot_r.
+            foreach (FlashCajaOrigenErpDetalleSupport::secciones($campo, $empresaId, $fechaSql, $calculado) as $extra) {
+                $secciones[] = $extra;
+            }
         } else {
-            $secciones[] = [
-                'titulo' => 'Origen ERP',
-                'nota' => $meta['explicacion'],
-                'columnas' => [],
-                'filas' => [],
-                'subtotal' => $totalFormula,
-                'truncado' => false,
-                'sp' => null,
-                'params' => null,
-            ];
+            $secciones = FlashCajaOrigenErpDetalleSupport::secciones($campo, $empresaId, $fechaSql, $calculado);
+            if ($secciones === []) {
+                $secciones[] = [
+                    'titulo' => 'Origen ERP',
+                    'nota' => $meta['explicacion'],
+                    'columnas' => [],
+                    'filas' => [],
+                    'subtotal' => $totalFormula,
+                    'truncado' => false,
+                    'sp' => null,
+                    'params' => null,
+                ];
+            }
         }
 
         $sumaCuenta = 0.0;
@@ -246,8 +253,10 @@ final class FlashCajaOrigenTotalSupport
             $aviso = 'El valor en pantalla ('.$valorPantallaNorm.') no coincide con el cálculo actual ERP ('
                 .$totalFormula.'). Diferencia: '.$diffPantalla.'. '
                 .'Si el flash se importó desde Anita o se editó a mano, use «Calcular desde ERP/Wigos» '
-                .'para alinear el formulario con esta cuenta (Wigos + impuestos turno C).';
+                .'para alinear el formulario con esta cuenta.';
         }
+
+        $bloque = (string) ($calculado['bloque_calculado'] ?? FlashCajaCalculoService::bloqueDeCampo($campo));
 
         return [
             'campo' => $campo,
@@ -257,6 +266,7 @@ final class FlashCajaOrigenTotalSupport
             'explicacion' => $meta['explicacion'],
             'empresa_id' => $empresaId,
             'fecha' => $fechaSql,
+            'bloque_calculado' => $bloque,
             'cuenta' => $cuenta,
             'suma_cuenta' => $sumaCuenta,
             'total_formula' => $totalFormula,
@@ -345,10 +355,62 @@ final class FlashCajaOrigenTotalSupport
             'cant_rul' => [
                 self::linea('Cant. ruletas', (float) ($calculado['cant_rul'] ?? 0), '+'),
             ],
-            default => [
-                self::linea(self::CAMPOS[$campo]['titulo'] ?? $campo, (float) ($calculado[$campo] ?? 0), '+'),
-            ],
+            default => self::cuentaErp($campo, $calculado),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $calculado
+     * @return list<array{label: string, valor: float, signo: string}>
+     */
+    private static function cuentaErp(string $campo, array $calculado): array
+    {
+        if (in_array($campo, ['estac', 'cant_vehic'], true)) {
+            $jornadas = is_array($calculado['detalle_erp']['estacionamiento']['jornadas'] ?? null)
+                ? $calculado['detalle_erp']['estacionamiento']['jornadas']
+                : [];
+            if ($jornadas !== []) {
+                $lineas = [];
+                foreach ($jornadas as $j) {
+                    $label = 'Jornada #'.($j['jornada_id'] ?? '?');
+                    $valor = $campo === 'cant_vehic'
+                        ? (float) ($j['cantidad_comprobantes'] ?? 0)
+                        : (float) ($j['neto'] ?? 0);
+                    $lineas[] = self::linea($label, $valor, '+');
+                }
+
+                return $lineas;
+            }
+        }
+
+        if ($campo === 'ayb') {
+            $ayb = is_array($calculado['detalle_erp']['ayb'] ?? null) ? $calculado['detalle_erp']['ayb'] : [];
+            if ($ayb !== []) {
+                return [
+                    self::linea('Facturas gastronomía', (float) ($ayb['bruto'] ?? 0), '+'),
+                    self::linea('Notas de crédito', -abs((float) ($ayb['nc'] ?? 0)), '−'),
+                ];
+            }
+        }
+
+        if ($campo === 'vending') {
+            $filas = is_array($calculado['detalle_erp']['vending']['filas'] ?? null)
+                ? $calculado['detalle_erp']['vending']['filas']
+                : [];
+            if ($filas !== []) {
+                $lineas = [];
+                foreach ($filas as $f) {
+                    $label = trim((string) (($f['codigo'] ?? '').' '.($f['maquina'] ?? ''))) ?: 'Rendición vending';
+                    $lineas[] = self::linea($label, (float) ($f['total_ventas'] ?? 0), '+');
+                }
+
+                return $lineas;
+            }
+        }
+
+        return [
+            self::linea(self::CAMPOS[$campo]['titulo'] ?? $campo, (float) ($calculado[$campo] ?? 0), '+'),
+        ];
     }
 
     /**

@@ -12,5 +12,12 @@ interface Cuentacontable_CentrocostoRepositoryInterface
     public function findOrFail($id);
     public function delete($Cuentacontable_id, $codigo);
     public function leeCuentacontable_Centrocosto($Cuentacontable_id);
+
+    /**
+     * Trae vínculos cuenta↔centro desde Anita (ccosvalid) e inserta los faltantes en ERP.
+     *
+     * @return array{en_anita:int, importados:int, omitidos:int, sin_cuenta:int, sin_centrocosto:int, errores:list<string>}
+     */
+    public function sincronizarDesdeAnita(): array;
 }
 

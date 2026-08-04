@@ -91,6 +91,7 @@ final class RequisicionSalaReporteFiltros
 
         return [
             'empresa_ids' => $empresaIds,
+            'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
             'fecha_desde' => self::fechaOpcional($request->input('fecha_desde')),
             'fecha_hasta' => self::fechaOpcional($request->input('fecha_hasta')),
             'requisicion_desde' => $requisicionDesde,
@@ -136,6 +137,10 @@ final class RequisicionSalaReporteFiltros
             ));
         }
 
+        if (empty($filtros['consolidar_empresas'])) {
+            $query['consolidar_empresas'] = 0;
+        }
+
         return $query;
     }
 
@@ -152,6 +157,7 @@ final class RequisicionSalaReporteFiltros
 
         return [
             'empresa_ids' => [],
+            'consolidar_empresas' => true,
             'fecha_desde' => $hoy->copy()->startOfMonth()->format('Y-m-d'),
             'fecha_hasta' => $hoy->copy()->endOfMonth()->format('Y-m-d'),
             'requisicion_desde' => '',

@@ -24,7 +24,7 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'I';
+    private const COL_ULTIMA = 'K';
 
     /** Filas meta en la vista: título, datos generales, comentario/costos. */
     private const FILAS_META_ENCABEZADO = 3;
@@ -88,12 +88,14 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'C' => NumberFormat::FORMAT_TEXT,
-            'D' => '#,##0.######',
-            'E' => '#,##0.######',
+            'D' => NumberFormat::FORMAT_TEXT,
+            'E' => NumberFormat::FORMAT_TEXT,
             'F' => '#,##0.######',
-            'G' => '#,##0.0000',
-            'H' => '#,##0.00',
-            'I' => '#,##0.00',
+            'G' => '#,##0.######',
+            'H' => '#,##0.######',
+            'I' => '#,##0.0000',
+            'J' => '#,##0.00',
+            'K' => '#,##0.00',
         ];
     }
 
@@ -101,14 +103,16 @@ class RecuentoDetalleExport implements FromView, ShouldAutoSize, WithColumnForma
     {
         return [
             'A' => 14,
-            'B' => 36,
-            'C' => 8,
-            'D' => 12,
-            'E' => 12,
-            'F' => 14,
+            'B' => 32,
+            'C' => 12,
+            'D' => 10,
+            'E' => 8,
+            'F' => 12,
             'G' => 12,
             'H' => 14,
-            'I' => 14,
+            'I' => 12,
+            'J' => 14,
+            'K' => 14,
         ];
     }
 

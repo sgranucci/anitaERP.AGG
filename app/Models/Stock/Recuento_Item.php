@@ -3,6 +3,7 @@
 namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Recuento_Item extends Model
 {
@@ -11,6 +12,8 @@ class Recuento_Item extends Model
     protected $fillable = [
         'recuento_id',
         'articulo_id',
+        'color_id',
+        'talle_id',
         'detalle',
         'unidadmedida_id',
         'saldo_sistema',
@@ -18,21 +21,33 @@ class Recuento_Item extends Model
     ];
 
     protected $casts = [
+        'color_id' => 'integer',
+        'talle_id' => 'integer',
         'saldo_sistema' => 'float',
         'cantidad_contada' => 'float',
     ];
 
-    public function recuento()
+    public function recuento(): BelongsTo
     {
         return $this->belongsTo(Recuento::class, 'recuento_id');
     }
 
-    public function articulos()
+    public function articulos(): BelongsTo
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
     }
 
-    public function unidadmedida()
+    public function color(): BelongsTo
+    {
+        return $this->belongsTo(Color::class, 'color_id');
+    }
+
+    public function talle(): BelongsTo
+    {
+        return $this->belongsTo(Talle::class, 'talle_id');
+    }
+
+    public function unidadmedida(): BelongsTo
     {
         return $this->belongsTo(Unidadmedida::class, 'unidadmedida_id');
     }

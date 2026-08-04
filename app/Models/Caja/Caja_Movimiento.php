@@ -12,6 +12,7 @@ use App\Models\Ventas\Venta;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Contable\Asiento;
+use App\Models\Seguridad\Usuario;
 use Auth;
 
 class Caja_Movimiento extends Model implements Auditable

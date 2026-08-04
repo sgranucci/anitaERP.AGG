@@ -96,6 +96,44 @@
                     </select>
                 </div>
             </div>
+
+            @php
+                $puedeCargarCcArbol = \App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport::usuarioPuedeCargar();
+                $ccArbolIdForm = (int) old(
+                    'centrocostodestino_arbol_id',
+                    (isset($data) && $data) ? ($data->centrocostodestino_arbol_id ?? 0) : 0
+                );
+                if ($puedeCargarCcArbol && $ccArbolIdForm <= 0) {
+                    $ccArbolIdForm = (int) $centrocostoUsuario_id;
+                }
+                $ccArbolModelo = null;
+                if ($ccArbolIdForm > 0 && isset($centrocosto_query)) {
+                    $ccArbolModelo = $centrocosto_query->firstWhere('id', $ccArbolIdForm);
+                }
+                if ($ccArbolIdForm > 0 && ! $ccArbolModelo) {
+                    $ccArbolModelo = \App\Models\Contable\Centrocosto::query()
+                        ->whereKey($ccArbolIdForm)
+                        ->first(['id', 'codigo', 'nombre']);
+                }
+            @endphp
+            @if ($puedeCargarCcArbol)
+                @include('contable.partials.campo_consulta_centrocosto', [
+                    'prefix' => 'arbol_cabecera',
+                    'layout' => 'form_row',
+                    'label' => 'CC árbol aprobación',
+                    'inputName' => 'centrocostodestino_arbol_id',
+                    'inputId' => 'centrocostodestino_arbol_id',
+                    'centrocostoId' => $ccArbolIdForm > 0 ? $ccArbolIdForm : '',
+                    'codigo' => old('centrocostodestino_arbol_codigo', optional($ccArbolModelo)->codigo ?? ''),
+                    'descripcion' => old('centrocostodestino_arbol_nombre', optional($ccArbolModelo)->nombre ?? ''),
+                    'required' => false,
+                    'solo_lectura' => $cabeceraSoloLectura,
+                    'mostrar_editar' => ! $cabeceraSoloLectura,
+                    'col_label' => 'col-lg-3',
+                    'col_input' => 'col-lg-9',
+                    'ayuda' => 'Opcional. Por defecto el centro de costo de origen. Define el circuito del árbol (independiente de los destinos de renglón). F1 consulta · Enter selecciona.',
+                ])
+            @endif
             @php
                 $reqProveedor = (isset($data) && $data) ? $data->proveedores : null;
                 $condicionPagoProveedorNombre = optional(optional($reqProveedor)->condicionpagos)->nombre ?? '';

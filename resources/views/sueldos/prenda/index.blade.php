@@ -22,20 +22,6 @@
             <div class="card-header">
                 <h3 class="card-title">Prendas (indumentaria)</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
-                    @if (can('ver-configuracion-indumentaria', false) || can('editar-configuracion-indumentaria', false))
-                        <a href="{{ route('config_indumentaria') }}" class="btn btn-outline-secondary btn-sm mr-1" title="Depósito de origen y tipo de transacción de las entregas">
-                            <i class="fa fa-fw fa-cogs"></i> Configuración de entrega
-                        </a>
-                    @endif
-                    @if (can('crear-prenda-sueldos', false))
-                        <form action="{{route('sincronizar_prenda_sueldos')}}" method="POST" class="d-inline mr-1"
-                              onsubmit="return confirm('¿Sincronizar prendas y variantes desde Anita? Solo se agregarán las que falten.');">
-                            @csrf
-                            <button type="submit" class="btn btn-outline-primary btn-sm">
-                                <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
-                            </button>
-                        </form>
-                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-prenda-sueldos',
                         'filtroValor' => $filtros['valor'] ?? '',
@@ -48,6 +34,20 @@
                         'nuevoRegistroUrl' => route('crear_prenda_sueldos', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-prenda-sueldos',
                     ])
+                    @if (can('crear-prenda-sueldos', false))
+                        <form action="{{route('sincronizar_prenda_sueldos')}}" method="POST" class="d-inline ml-1"
+                              onsubmit="return confirm('¿Sincronizar prendas y variantes desde Anita? Solo se agregarán las que falten.');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-primary btn-sm">
+                                <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
+                            </button>
+                        </form>
+                    @endif
+                    @if (can('ver-configuracion-indumentaria', false) || can('editar-configuracion-indumentaria', false))
+                        <a href="{{ route('config_indumentaria') }}" class="btn btn-outline-secondary btn-sm ml-1" title="Depósito de origen y tipo de transacción de las entregas">
+                            <i class="fa fa-fw fa-cogs"></i> Configuración de entrega
+                        </a>
+                    @endif
                 </div>
             </div>
             <form method="get" action="{{ route('consultar_prenda_sueldos') }}" id="form-filtros-prenda-sueldos" class="mb-0">

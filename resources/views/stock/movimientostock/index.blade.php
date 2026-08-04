@@ -66,6 +66,7 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
                             <th title="Transferencia: dep&oacute;sito o bien destino. Movimiento: dep&oacute;sito (c&oacute;digo &mdash; nombre).">Dep. destino</th>
                             <th>Empresa</th>
                             <th class="text-right">Cantidad</th>
+                            <th class="text-right" title="Producto de venta (SKU V…): lista 5000+mes. Resto: precio de última compra.">Costo</th>
                             <th class="text-center">&Iacute;tems</th>
                             <th>Estado</th>
                             <th class="width120" data-orderable="false"></th>

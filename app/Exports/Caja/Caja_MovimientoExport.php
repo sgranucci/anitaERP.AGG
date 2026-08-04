@@ -27,7 +27,8 @@ class Caja_MovimientoExport implements FromView, WithColumnFormatting, WithColum
 
     private $caja_movimientoQuery;
 
-    private $busqueda;
+    /** @var array<string, mixed>|string|null */
+    private $filtros = [];
 
     private bool $esCsv = false;
 
@@ -53,7 +54,7 @@ class Caja_MovimientoExport implements FromView, WithColumnFormatting, WithColum
 
     public function view(): View
     {
-        $caja_movimientos = $this->caja_movimientoQuery->leeCaja_Movimiento($this->busqueda, false);
+        $caja_movimientos = $this->caja_movimientoQuery->leeCaja_Movimiento($this->filtros, 0, false);
         $this->esIguassu = config('app.empresa') === 'Iguassu Travel';
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($caja_movimientos);
@@ -168,10 +169,26 @@ class Caja_MovimientoExport implements FromView, WithColumnFormatting, WithColum
         ];
     }
 
-    public function parametros($busqueda, bool $esCsv = false)
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     */
+    public function parametros($filtros, bool $esCsv = false, $empresaId = 0)
     {
-        $this->busqueda = $busqueda;
+        $this->filtros = $filtros;
         $this->esCsv = $esCsv;
+        // Compatibilidad: tercera arg empresa cuando $filtros es string legacy.
+        if (! is_array($filtros) && (int) $empresaId > 0) {
+            $this->filtros = [
+                'valor' => is_string($filtros) ? $filtros : '',
+                'busqueda' => is_string($filtros) ? $filtros : '',
+                'modo' => 'todos',
+                'operador' => 'contiene',
+                'empresa_id' => (int) $empresaId,
+                'empresa_scope' => 'una',
+                'fecha_desde' => '',
+                'fecha_hasta' => '',
+            ];
+        }
 
         return $this;
     }

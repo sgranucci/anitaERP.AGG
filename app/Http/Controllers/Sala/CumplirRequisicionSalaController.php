@@ -4,16 +4,20 @@ namespace App\Http\Controllers\Sala;
 
 use App\Http\Controllers\Controller;
 use App\Models\Sala\RequisicionSala;
+use App\Models\Sala\RequisicionSalaArticulo;
 use App\Models\Stock\Depmae;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Sala\CumplimientoRequisicionSalaRepositoryInterface;
 use App\Repositories\Sala\TecnicoLaboratorioRepositoryInterface;
+use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Services\Sala\CumplimientoRequisicionSalaRevertirService;
 use App\Services\Sala\CumplirRequisicionSalaPdfService;
 use App\Services\Sala\CumplirRequisicionSalaService;
 use App\Support\Sala\CumplimientoRequisicionSalaListadoFiltros;
+use App\Support\Stock\DepmaeControlStockSupport;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoParcialTrait;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoTrait;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CumplirRequisicionSalaController extends Controller
@@ -27,6 +31,7 @@ class CumplirRequisicionSalaController extends Controller
         private CumplimientoRequisicionSalaRevertirService $revertirService,
         private TecnicoLaboratorioRepositoryInterface $tecnicoRepository,
         private EmpresaRepositoryInterface $empresaRepository,
+        private Articulo_Saldo_DepositoRepositoryInterface $saldoDepositoRepository,
     ) {
     }
 
@@ -78,6 +83,29 @@ class CumplirRequisicionSalaController extends Controller
             ? $this->tecnicoRepository->allActivos((int) $requisicion->empresa_id)
             : collect();
 
+        $oldLineasInput = old('lineas');
+        $oldLineas = [];
+        $oldLineasPorArticuloId = [];
+        $tecnicosPorEmpresa = [];
+        if (is_array($oldLineasInput) && $oldLineasInput !== []) {
+            $oldLineas = $this->prepararOldLineasParaRestaurar($oldLineasInput, $depositoLabId, $depositoLab);
+            foreach ($oldLineas as $oldLinea) {
+                $oldLineasPorArticuloId[(int) ($oldLinea['id'] ?? 0)] = $oldLinea;
+                $empresaIdOld = (int) ($oldLinea['requisicion']['empresa_id'] ?? 0);
+                if ($empresaIdOld > 0 && ! isset($tecnicosPorEmpresa[$empresaIdOld])) {
+                    $tecnicosPorEmpresa[$empresaIdOld] = $this->tecnicoRepository
+                        ->allActivos($empresaIdOld)
+                        ->map(fn ($t) => ['id' => $t->id, 'nombre' => $t->nombre, 'legajo' => $t->legajo])
+                        ->values()
+                        ->all();
+                }
+            }
+            if ($modoNpu && $tecnicos->isEmpty() && $tecnicosPorEmpresa !== []) {
+                $primeraEmpresa = (int) array_key_first($tecnicosPorEmpresa);
+                $tecnicos = $this->tecnicoRepository->allActivos($primeraEmpresa);
+            }
+        }
+
         return view('sala.cumplir_requisicion_sala.crear', [
             'requisicion' => $requisicion,
             'lineas' => $lineas,
@@ -87,6 +115,9 @@ class CumplirRequisicionSalaController extends Controller
             'depositoLab' => $depositoLab,
             'tecnicos' => $tecnicos,
             'pdfToken' => $pdfToken,
+            'oldLineas' => $oldLineas,
+            'oldLineasPorArticuloId' => $oldLineasPorArticuloId,
+            'tecnicosPorEmpresa' => $tecnicosPorEmpresa,
             'estado_linea_enum' => RequisicionSalaArticuloEstadoTrait::$enumEstado,
             'estado_parcial_enum' => self::$enumEstadoParcial,
             'estados_cumplir' => CumplirRequisicionSalaService::estadosPermitidosParaCumplir(),
@@ -269,24 +300,78 @@ class CumplirRequisicionSalaController extends Controller
         ]);
     }
 
+    public function saldoArticuloDeposito(Request $request): JsonResponse
+    {
+        can('cumplir-requisicion-sala');
+
+        $articuloId = (int) $request->query('articulo_id', 0);
+        $depositoId = (int) $request->query('deposito_id', 0);
+        if ($articuloId <= 0 || $depositoId <= 0) {
+            return response()->json([
+                'ok' => true,
+                'controla_stock' => false,
+                'saldo' => null,
+            ]);
+        }
+
+        $deposito = Depmae::query()->find($depositoId);
+        if ($deposito === null) {
+            return response()->json(['ok' => false, 'mensaje' => 'Depósito no encontrado.'], 404);
+        }
+
+        if (! DepmaeControlStockSupport::manejaControlStock($deposito)) {
+            return response()->json([
+                'ok' => true,
+                'controla_stock' => false,
+                'saldo' => null,
+            ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'controla_stock' => true,
+            'saldo' => $this->saldoDepositoRepository->saldo($articuloId, $depositoId),
+        ]);
+    }
+
     public function grabar(Request $request)
     {
         can('cumplir-requisicion-sala');
 
+        $esAjax = $request->ajax() || $request->wantsJson();
+        $requisicionIdInput = (int) $request->input('requisicion_sala_id', 0);
+        $paramsError = $requisicionIdInput > 0
+            ? ['requisicion_sala_id' => $requisicionIdInput]
+            : ['modo' => 'npu'];
+
         $lineas = $request->input('lineas', []);
         if (! is_array($lineas) || $lineas === []) {
-            return redirect()->route('crear_cumplir_requisicion_sala')
-                ->with('mensaje-error', 'Debe cargar al menos una l&iacute;nea para cumplir.');
+            $msgVacio = 'Debe cargar al menos una l&iacute;nea para cumplir.';
+            if ($esAjax) {
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => html_entity_decode($msgVacio, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                ], 422);
+            }
+
+            return redirect()->route('crear_cumplir_requisicion_sala', $paramsError)
+                ->withInput()
+                ->with('mensaje-error', $msgVacio);
         }
 
         $result = $this->service->grabar($request->all());
         if (($result['mensaje'] ?? '') !== 'ok') {
-            $requisicionId = (int) $request->input('requisicion_sala_id', 0);
-            $params = $requisicionId > 0 ? ['requisicion_sala_id' => $requisicionId] : ['modo' => 'npu'];
+            $errores = (string) ($result['errores'] ?? 'Error al grabar cumplimiento.');
+            if ($esAjax) {
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => html_entity_decode(strip_tags($errores), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                ], 422);
+            }
 
-            return redirect()->route('crear_cumplir_requisicion_sala', $params)
+            return redirect()->route('crear_cumplir_requisicion_sala', $paramsError)
                 ->withInput()
-                ->with('mensaje-error', $result['errores'] ?? 'Error al grabar cumplimiento.');
+                ->with('mensaje-error', $errores);
         }
 
         $pdfToken = null;
@@ -309,13 +394,23 @@ class CumplirRequisicionSalaController extends Controller
         }
 
         $redirectParams = [];
-        $requisicionId = (int) $request->input('requisicion_sala_id', 0);
+        $requisicionId = $requisicionIdInput;
         if ($requisicionId > 0) {
             $req = RequisicionSala::query()->find($requisicionId);
             if ($req && $this->service->puedeCumplir($req)) {
                 $redirectParams['requisicion_sala_id'] = $requisicionId;
                 $msg .= ' La requisici&oacute;n sigue con &iacute;tems pendientes; puede continuar el cumplimiento.';
             }
+        }
+
+        if ($esAjax) {
+            session()->flash('mensaje', $msg);
+            session()->flash('cumple_pdf_token', $pdfToken);
+
+            return response()->json([
+                'ok' => true,
+                'redirect' => route('crear_cumplir_requisicion_sala', $redirectParams),
+            ]);
         }
 
         return redirect()->route('crear_cumplir_requisicion_sala', $redirectParams)
@@ -397,5 +492,111 @@ class CumplirRequisicionSalaController extends Controller
             (string) ($deposito->nombre ?? ''),
             (int) $deposito->id
         );
+    }
+
+    /**
+     * Enriquece lineas del old input para rehidratar la grilla tras error de grabado (stock, etc.).
+     *
+     * @param  list<array<string, mixed>>  $lineasOld
+     * @return list<array<string, mixed>>
+     */
+    private function prepararOldLineasParaRestaurar(array $lineasOld, int $depositoLabId, ?Depmae $depositoLab): array
+    {
+        $articuloIds = [];
+        $depositoIds = [];
+        foreach ($lineasOld as $lineaOld) {
+            if (! is_array($lineaOld)) {
+                continue;
+            }
+            $articuloId = (int) ($lineaOld['requisicion_sala_articulo_id'] ?? 0);
+            if ($articuloId > 0) {
+                $articuloIds[] = $articuloId;
+            }
+            $depositoId = (int) ($lineaOld['deposito_origen_id'] ?? 0);
+            if ($depositoId > 0) {
+                $depositoIds[] = $depositoId;
+            }
+        }
+
+        $articuloIds = array_values(array_unique($articuloIds));
+        $depositoIds = array_values(array_unique($depositoIds));
+        if ($articuloIds === []) {
+            return [];
+        }
+
+        $articulos = RequisicionSalaArticulo::query()
+            ->with([
+                'articulos',
+                'requisicion_salas.depositos',
+                'requisicion_salas.centrocostos',
+                'requisicion_salas.empresas',
+            ])
+            ->whereIn('id', $articuloIds)
+            ->get()
+            ->keyBy('id');
+
+        $depositos = $depositoIds === []
+            ? collect()
+            : Depmae::query()->whereIn('id', $depositoIds)->get()->keyBy('id');
+
+        $resultado = [];
+        foreach ($lineasOld as $lineaOld) {
+            if (! is_array($lineaOld)) {
+                continue;
+            }
+            $articuloId = (int) ($lineaOld['requisicion_sala_articulo_id'] ?? 0);
+            /** @var RequisicionSalaArticulo|null $linea */
+            $linea = $articulos->get($articuloId);
+            if (! $linea) {
+                continue;
+            }
+
+            $req = $linea->requisicion_salas;
+            $depositoId = (int) ($lineaOld['deposito_origen_id'] ?? $depositoLabId);
+            $deposito = $depositos->get($depositoId);
+            if (! $deposito && $depositoId === $depositoLabId) {
+                $deposito = $depositoLab;
+            }
+
+            $pendiente = (float) $linea->cantidad - (float) ($linea->cantidadentregada ?? 0);
+
+            $resultado[] = [
+                'id' => $linea->id,
+                'articulo_id' => $linea->articulo_id,
+                'sku' => $linea->articulos?->sku,
+                'descripcion' => $linea->descripcionArticulo(),
+                'cantidad' => (float) $linea->cantidad,
+                'cantidadentregada' => (float) ($linea->cantidadentregada ?? 0),
+                'pendiente' => $pendiente,
+                'uid' => $linea->uid,
+                'numeroparte' => (string) ($lineaOld['numeroparte'] ?? $linea->numeroparte ?? ''),
+                'destino' => (string) ($linea->destino ?? 'S'),
+                'requiere_tecnico' => (string) ($linea->destino ?? '') === 'R',
+                'deposito_origen_id' => $depositoId,
+                'deposito_origen_codigo' => $deposito?->codigo,
+                'deposito_origen_nombre' => $deposito?->nombre,
+                'cantidad_entrega' => $lineaOld['cantidad_entrega'] ?? '',
+                'tecnico_laboratorio_id' => $lineaOld['tecnico_laboratorio_id'] ?? '',
+                'estadoparcial' => $lineaOld['estadoparcial'] ?? '',
+                'estado_linea' => $lineaOld['estado_linea'] ?? '',
+                'fecha_entrega' => $lineaOld['fecha_entrega'] ?? '',
+                'numeroremito' => $lineaOld['numeroremito'] ?? '',
+                'nombreresponsable' => $lineaOld['nombreresponsable'] ?? '',
+                'requisicion' => $req ? [
+                    'id' => $req->id,
+                    'numerorequisicion' => $req->numerorequisicion,
+                    'fecha' => optional($req->fecha)->format('d/m/Y'),
+                    'fecha_entrega' => optional($req->fecha_entrega)->format('d/m/Y'),
+                    'estado' => $req->estado,
+                    'empresa' => $req->empresas?->nombre,
+                    'empresa_id' => $req->empresa_id,
+                    'deposito_id' => $req->deposito_id,
+                    'deposito' => self::etiquetaDeposito($req->depositos),
+                    'centrocosto' => trim(($req->centrocostos?->codigo ?? '').' '.($req->centrocostos?->nombre ?? '')),
+                ] : null,
+            ];
+        }
+
+        return $resultado;
     }
 }

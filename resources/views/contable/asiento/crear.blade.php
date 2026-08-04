@@ -79,6 +79,11 @@ $( "#botonform0" ).click(function() {
             <div class="card-header">
                 <h3 class="card-title">Crear Asiento</h3>
                 <div class="card-tools">
+                    @if (can('crear-asiento', false))
+                        <a href="{{ route('crear_importacion_asiento') }}" class="btn btn-outline-success btn-sm" title="Importar asientos desde Excel">
+                            <i class="fa fa-fw fa-file-excel"></i> Importar Excel
+                        </a>
+                    @endif
                     <a href="{{route('asiento')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>

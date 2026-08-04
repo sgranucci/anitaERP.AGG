@@ -181,11 +181,14 @@
                 <div class="form-group row">
                     <label class="col-md-3 control-label requerido">Alcance / permiso</label>
                     <div class="col-md-8">
-                        <select name="alcance" class="form-control" required>
-                            @foreach ($alcances as $codigo => $etiqueta)
-                                <option value="{{ $codigo }}" @selected(old('alcance') === $codigo)>{{ $etiqueta }}</option>
-                            @endforeach
-                        </select>
+                        @include('contable.partials.select_alcance_periodo', [
+                            'jerarquia_alcances' => $jerarquia_alcances,
+                            'selected' => old('alcance', 'general'),
+                            'incluir_general' => true,
+                        ])
+                        <small class="text-muted">
+                            Puede abrir un módulo completo o solo un submódulo.
+                        </small>
                     </div>
                 </div>
                 <div class="form-group row">

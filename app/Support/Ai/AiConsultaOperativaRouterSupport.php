@@ -253,7 +253,7 @@ final class AiConsultaOperativaRouterSupport
             $params = self::extraerParamsPeriodoYExtras($texto, $norm);
             $params = array_merge($params, self::extraerFiltrosMayor($texto, $norm));
 
-            $tieneCuenta = ! empty($params['cuenta_codigo']);
+            $tieneCuenta = ! empty($params['cuenta_codigo']) || ! empty($params['cuenta_nombre']);
             $tieneOc = ! empty($params['numero_oc']);
             $tieneCc = ! empty($params['centrocosto_codigo']) || ! empty($params['centrocosto_id']);
 
@@ -261,11 +261,11 @@ final class AiConsultaOperativaRouterSupport
                 return [
                     'ok' => false,
                     'needs_clarification' => true,
-                    'clarification' => 'Indique cuenta, OC o centro de costo (ej.: «mayor cuenta 214010013 CC 85 julio empresa 1» o «mayor de la OC 221022»).',
+                    'clarification' => 'Indique cuenta, OC o centro de costo (ej.: «mayor cuenta caja y bancos empresa biyemas julio» o «mayor de la OC 221022»).',
                     'error' => 'Falta criterio de mayor (cuenta / OC / CC).',
                     'sugerencias' => [
-                        'mayor de la cuenta 214010013 este mes',
-                        'mayor cuenta 211010004 CC 85 de julio',
+                        'mayor de la cuenta caja y bancos este mes',
+                        'mayor cuenta 211010004 empresa biyemas de julio',
                         'mayor de la OC 221022',
                         'mayor cuenta 214010013 empresa 1 2026-01-01 2026-07-31',
                     ],
@@ -274,13 +274,16 @@ final class AiConsultaOperativaRouterSupport
 
             $partes = [];
             if ($tieneCuenta) {
-                $partes[] = 'cuenta '.$params['cuenta_codigo'];
+                $partes[] = 'cuenta '.($params['cuenta_nombre'] ?? $params['cuenta_codigo']);
             }
             if ($tieneCc) {
                 $partes[] = 'CC '.($params['centrocosto_codigo'] ?? $params['centrocosto_id']);
             }
             if ($tieneOc) {
                 $partes[] = 'OC '.$params['numero_oc'];
+            }
+            if (! empty($params['empresa_nombre']) || ! empty($params['empresa_codigo']) || ! empty($params['empresa_id'])) {
+                $partes[] = 'empresa '.($params['empresa_nombre'] ?? $params['empresa_codigo'] ?? $params['empresa_id']);
             }
 
             return [
@@ -402,23 +405,35 @@ final class AiConsultaOperativaRouterSupport
         if ((self::contieneAlguno($norm, ['saldo de la cuenta', 'saldo cuenta', 'saldo contable'])
                 || (str_contains($norm, 'saldo') && str_contains($norm, 'cuenta') && ! str_contains($norm, 'corriente') && ! str_contains($norm, 'proveedor') && ! str_contains($norm, 'cliente')))
             && ! self::contieneAlguno($norm, ['articulo', 'sku', 'stock'])) {
-            $cuenta = self::extraerCodigoCuenta($texto, $norm);
-            if ($cuenta === null) {
+            $params = self::extraerParamsPeriodoYExtras($texto, $norm);
+            $params = array_merge($params, self::extraerFiltrosEmpresa($texto));
+            $cuenta = self::extraerCodigoCuentaNumerico($texto, $norm);
+            $nombreCuenta = $cuenta === null ? self::extraerNombreCuenta($texto) : null;
+            if ($cuenta === null && $nombreCuenta === null) {
                 return [
                     'ok' => false,
-                    'error' => 'Indique el código de cuenta (ej.: «saldo de la cuenta 214010013»).',
-                    'sugerencias' => ['saldo de la cuenta 214010013', 'saldo contable 111010000'],
+                    'error' => 'Indique código o nombre de cuenta (ej.: «saldo de la cuenta caja y bancos» o «saldo cuenta 214010013»).',
+                    'sugerencias' => [
+                        'saldo de la cuenta caja y bancos',
+                        'saldo de la cuenta 214010013',
+                        'saldo contable 111010000 empresa biyemas',
+                    ],
                 ];
             }
-            $params = self::extraerParamsPeriodoYExtras($texto, $norm);
-            $params['cuenta_codigo'] = $cuenta;
-            $params['valor'] = $cuenta;
+            if ($cuenta !== null) {
+                $params['cuenta_codigo'] = $cuenta;
+                $params['valor'] = $cuenta;
+            } else {
+                $params['cuenta_nombre'] = $nombreCuenta;
+                $params['cuenta_codigo'] = $nombreCuenta;
+                $params['valor'] = $nombreCuenta;
+            }
 
             return [
                 'ok' => true,
                 'intent' => AiConsultaOperativaSupport::INTENT_SALDO_CUENTA,
                 'params' => $params,
-                'interpretacion' => 'Saldo contable de la cuenta '.$cuenta,
+                'interpretacion' => 'Saldo contable de la cuenta '.($cuenta ?? $nombreCuenta),
             ];
         }
 
@@ -604,9 +619,11 @@ final class AiConsultaOperativaRouterSupport
             'saldo del proveedor 475 de julio',
             'saldo del cliente 10025 este mes',
             'mayor de la cuenta 211010004 de julio',
+            'mayor cuenta caja y bancos empresa biyemas este mes',
             'mayor cuenta 214010013 CC 85 este mes',
             'mayor de la OC 221022',
             'mayor cuenta 211010004 empresa 1 julio',
+            'saldo de la cuenta caja y bancos empresa biyemas',
             'resumen operativo de compras',
             'OC pendientes de firma',
             'OC vencidas sin recepción',
@@ -691,6 +708,20 @@ final class AiConsultaOperativaRouterSupport
 
     private static function extraerCodigoCuenta(string $texto, string $norm): ?string
     {
+        $numerico = self::extraerCodigoCuentaNumerico($texto, $norm);
+        if ($numerico !== null) {
+            return $numerico;
+        }
+
+        return self::extraerTokenCodigo($texto, [
+            'cuenta', 'codigo', 'saldo', 'mayor', 'contable', 'analitico', 'este', 'mes',
+            'sin', 'detalle', 'de', 'del', 'la', 'el', 'un', 'una',
+        ]);
+    }
+
+    /** Solo códigos numéricos de cuenta (4–12 dígitos); no captura nombres. */
+    private static function extraerCodigoCuentaNumerico(string $texto, string $norm): ?string
+    {
         if (preg_match('/cuenta\s*[#:]?\s*([0-9]{4,12})/ui', $texto, $m) === 1) {
             return trim($m[1]);
         }
@@ -698,10 +729,7 @@ final class AiConsultaOperativaRouterSupport
             return trim($m[1]);
         }
 
-        return self::extraerTokenCodigo($texto, [
-            'cuenta', 'codigo', 'saldo', 'mayor', 'contable', 'analitico', 'este', 'mes',
-            'sin', 'detalle', 'de', 'del', 'la', 'el', 'un', 'una',
-        ]);
+        return null;
     }
 
     /**
@@ -761,10 +789,17 @@ final class AiConsultaOperativaRouterSupport
             $params['cuenta_codigo'] = trim($mCuenta[1]);
             $params['valor'] = $params['cuenta_codigo'];
         } elseif ($numeroOc === null) {
-            $cuenta = self::extraerCodigoCuenta($texto, $norm);
+            $cuenta = self::extraerCodigoCuentaNumerico($texto, $norm);
             if ($cuenta !== null) {
                 $params['cuenta_codigo'] = $cuenta;
                 $params['valor'] = $cuenta;
+            } else {
+                $nombre = self::extraerNombreCuenta($texto);
+                if ($nombre !== null) {
+                    $params['cuenta_nombre'] = $nombre;
+                    $params['cuenta_codigo'] = $nombre;
+                    $params['valor'] = $nombre;
+                }
             }
         }
 
@@ -774,14 +809,74 @@ final class AiConsultaOperativaRouterSupport
             $params['centrocosto_codigo'] = $mCc2[1];
         }
 
+        $params = array_merge($params, self::extraerFiltrosEmpresa($texto));
+
+        return $params;
+    }
+
+    /**
+     * Extrae empresa por id, código o nombre («empresa biyemas», «empresa BUDGET Biyemas»).
+     *
+     * @return array<string,mixed>
+     */
+    private static function extraerFiltrosEmpresa(string $texto): array
+    {
+        $params = [];
         if (preg_match('/\bempresa\s*[#:=]?\s*(\d{1,6})\b/ui', $texto, $mEmp) === 1) {
             $params['empresa_id'] = (int) $mEmp[1];
             $params['empresa_codigo'] = $mEmp[1];
-        } elseif (preg_match('/\bempresa\s*[#:=]?\s*([A-Za-z0-9][A-Za-z0-9\.\-]{0,20})\b/ui', $texto, $mEmp2) === 1) {
-            $params['empresa_codigo'] = trim($mEmp2[1]);
+
+            return $params;
+        }
+
+        $stop = self::patronStopFraseMaestro();
+        if (preg_match('/\bempresa\s*[#:=]?\s*(.+?)(?=\s+(?:'.$stop.')|$)/ui', $texto, $mEmp2) === 1) {
+            $ref = trim($mEmp2[1], " \t.,;:#");
+            $ref = preg_replace('/^(de\s+la|de\s+el|del|de|la|el)\s+/ui', '', $ref) ?? $ref;
+            $ref = trim((string) $ref);
+            if ($ref !== '' && mb_strlen($ref) >= 2) {
+                if (ctype_digit($ref) && strlen($ref) <= 6) {
+                    $params['empresa_id'] = (int) $ref;
+                    $params['empresa_codigo'] = $ref;
+                } else {
+                    $params['empresa_nombre'] = $ref;
+                    $params['empresa_codigo'] = $ref;
+                }
+            }
         }
 
         return $params;
+    }
+
+    /** Nombre de cuenta tras «cuenta …» hasta un delimitador (empresa, mes, CC, etc.). */
+    private static function extraerNombreCuenta(string $texto): ?string
+    {
+        $stop = self::patronStopFraseMaestro();
+        if (preg_match('/cuenta\s+(?:contable\s+)?(?![0-9]{4,12}\b)(.+?)(?=\s+(?:'.$stop.')|$)/ui', $texto, $m) !== 1) {
+            return null;
+        }
+        $nombre = trim($m[1], " \t.,;:#");
+        $nombre = preg_replace('/^(de\s+la|de\s+el|del|de|la|el)\s+/ui', '', $nombre) ?? $nombre;
+        $nombre = trim((string) $nombre);
+        if ($nombre === '' || mb_strlen($nombre) < 3) {
+            return null;
+        }
+        // Evitar capturar solo stopwords residuales
+        $norm = mb_strtolower($nombre, 'UTF-8');
+        if (in_array($norm, ['contable', 'analitico', 'analítico', 'mayor', 'saldo'], true)) {
+            return null;
+        }
+
+        return $nombre;
+    }
+
+    /** Delimitadores comunes al extraer frases de maestro en NL. */
+    private static function patronStopFraseMaestro(): string
+    {
+        return 'empresa|cc\b|centro\s+de\s+costo|oc\b|orden\s+de\s+compra|orden\s+compra'
+            .'|este\s+mes|mes\s+pasado|mes\s+anterior|ultimos?|últimos?'
+            .'|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre'
+            .'|cruzar|sin\s+detalle|excluir|\d{4}-\d{2}-\d{2}';
     }
 
     /**
@@ -795,9 +890,7 @@ final class AiConsultaOperativaRouterSupport
     private static function interpretarComprasKpi(string $texto, string $norm): ?array
     {
         $params = self::extraerParamsPeriodoYExtras($texto, $norm);
-        if (preg_match('/\bempresa\s*[#:=]?\s*(\d{1,6})\b/ui', $texto, $mEmp) === 1) {
-            $params['empresa_id'] = (int) $mEmp[1];
-        }
+        $params = array_merge($params, self::extraerFiltrosEmpresa($texto));
 
         if (self::contieneAlguno($norm, [
             'oc vencidas', 'ordenes vencidas', 'órdenes vencidas', 'vencidas sin recepcion',

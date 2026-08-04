@@ -4,9 +4,11 @@
     $chequesRecibidos = $chequesMovimiento->where('origen', 'R')->whereNull('cheque_reemplaza_id')->values();
     $chequesReemplazo = $chequesMovimiento->whereNotNull('cheque_reemplaza_id')->values();
 @endphp
-<div class="card form2" style="display: none">
+<div class="card card-outline card-info form2 mb-0 border-0 shadow-none" style="display: none">
     <div class="card-body">
-        <ul class="nav nav-tabs mb-3" id="tabs-cheques-ingresoegreso" role="tablist">
+        @include('includes.tabs-activas-estilos')
+        <div class="tabs-activas mb-3">
+        <ul class="nav nav-tabs" id="tabs-cheques-ingresoegreso" role="tablist">
             <li class="nav-item">
                 <a class="nav-link active" id="tab-cheques-emitidos" data-toggle="tab" href="#panel-cheques-emitidos" role="tab">
                     Cheques emitidos (propios)
@@ -19,17 +21,18 @@
             </li>
             <li class="nav-item">
                 <a class="nav-link" id="tab-cheques-reemplazo" data-toggle="tab" href="#panel-cheques-reemplazo" role="tab">
-                    Anulaci&oacute;n / reemplazo
+                    Anulación / reemplazo
                 </a>
             </li>
         </ul>
+        </div>
         <div class="tab-content">
             <div class="tab-pane fade show active" id="panel-cheques-emitidos" role="tabpanel">
                 <p class="text-muted small">
                     Emisi&oacute;n de cheques propios. Posdatados imputan a cheques diferidos si est&aacute; habilitado en config.
                 </p>
-                <table class="table table-sm" id="cheque-emitido-table">
-                    <thead>
+                <table class="table table-sm table-bordered" id="cheque-emitido-table">
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>Cuenta banco</th>
                             <th>Chequera</th>
@@ -99,8 +102,8 @@
             </div>
             <div class="tab-pane fade" id="panel-cheques-recibidos" role="tabpanel">
                 <h3>Cheques recibidos</h3>
-                <table class="table table-sm" id="cheque-recibido-table">
-                    <thead>
+                <table class="table table-sm table-bordered" id="cheque-recibido-table">
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>F. cheque</th>
                             <th>Banco</th>
@@ -155,8 +158,8 @@
                 <p class="text-muted small">
                     Anula un cheque existente y registra el reemplazo (emitido o recibido).
                 </p>
-                <table class="table table-sm" id="cheque-reemplazo-table">
-                    <thead>
+                <table class="table table-sm table-bordered" id="cheque-reemplazo-table">
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>Cheque a anular</th>
                             <th>Tipo reemplazo</th>
