@@ -24,6 +24,7 @@ use App\Services\Configuracion\ImpuestoService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraDescuentoSupport;
+use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
@@ -34,6 +35,7 @@ use Auth;
 use Carbon\Carbon;
 use DB;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -53,6 +55,7 @@ class OrdencompraGestionService
         private ProveedorRepositoryInterface $proveedorRepository,
         private CotizacionQueryInterface $cotizacionQuery,
         private ImpuestoService $impuestoService,
+        private OrdencompraLegajoFacturaPdfService $legajoFacturaPdfService,
     ) {}
 
     public function idSectorCompras(): ?int
@@ -641,15 +644,44 @@ class OrdencompraGestionService
         return $this->cambiarEstado($id, OrdencompraEstados::PENDIENTE, 'Reactivación desde suspendida a pendiente');
     }
 
-    public function cambiarSector(int $id, int $sectorLegajocompraId, ?string $observacion, ?string $leyenda): array
-    {
+    public function cambiarSector(
+        int $id,
+        int $sectorLegajocompraId,
+        ?string $observacion,
+        ?string $leyenda,
+        ?UploadedFile $facturaPdf = null,
+    ): array {
         $sec = Sector_Legajocompra::find($sectorLegajocompraId);
         if (! $sec) {
             return ['mensaje' => 'error', 'errores' => 'Sector inválido.'];
         }
 
         $ocPrev = $this->ordencompraRepository->find($id);
-        $sectorAnteriorId = $ocPrev ? (int) ($ocPrev->sector_legajocompra_id ?? 0) : null;
+        if (! $ocPrev) {
+            return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
+        }
+        $sectorAnteriorId = (int) ($ocPrev->sector_legajocompra_id ?? 0);
+
+        if (OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorLegajocompraId)) {
+            try {
+                if ($facturaPdf) {
+                    $this->legajoFacturaPdfService->adjuntarPdfAlLegajo($ocPrev, $facturaPdf);
+                    $ocPrev = $this->ordencompraRepository->find($id) ?: $ocPrev;
+                }
+
+                $gate = OrdencompraEnvioCuentasAPagarGateSupport::evaluar($ocPrev);
+                if (! $gate['ok']) {
+                    return [
+                        'mensaje' => 'error',
+                        'errores' => implode(' ', $gate['errores']),
+                        'requiere_pdf' => $gate['requiere_pdf'],
+                        'gate' => $gate,
+                    ];
+                }
+            } catch (\Throwable $e) {
+                return ['mensaje' => 'error', 'errores' => $e->getMessage(), 'requiere_pdf' => true];
+            }
+        }
 
         DB::beginTransaction();
         try {

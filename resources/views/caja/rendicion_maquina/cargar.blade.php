@@ -41,24 +41,44 @@
     }
     .rendmaq-acciones-fijas .totales-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-        gap: 0.45rem 0.65rem;
+        grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+        gap: 0.3rem 0.4rem;
         flex: 1 1 auto;
         min-width: 0;
     }
     .rendmaq-acciones-fijas .tot-item {
         background: #f8fbfc;
         border: 1px solid #d6eaf8;
-        border-radius: 4px;
-        padding: 0.35rem 0.5rem;
+        border-radius: 3px;
+        padding: 0.2rem 0.35rem;
         text-align: center;
+        min-width: 0;
+        overflow: hidden;
     }
     .rendmaq-acciones-fijas .tot-item.is-destacado {
         border-color: #5dade2;
         background: #ebf5fb;
     }
-    .rendmaq-acciones-fijas .lbl { font-size: 0.7rem; color: #566573; display: block; line-height: 1.2; }
-    .rendmaq-acciones-fijas .val { font-weight: 700; font-size: 0.98rem; color: #17202A; white-space: nowrap; }
+    .rendmaq-acciones-fijas .lbl {
+        font-size: 0.62rem;
+        color: #566573;
+        display: block;
+        line-height: 1.15;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .rendmaq-acciones-fijas .val {
+        font-weight: 600;
+        font-size: 0.72rem;
+        color: #17202A;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
     .rendmaq-acciones-fijas .rendmaq-footer-acciones {
         display: flex;
         flex-wrap: wrap;
@@ -303,7 +323,10 @@
                                         @endforeach
                                     </select>
                                     @if ($turnoActual === 'C')
-                                        <small class="text-muted">Cierre de jornada: drop del d&iacute;a de la fecha.</small>
+                                        <small class="text-muted">
+                                            Cierre de jornada: drop del d&iacute;a + suma M/T/N.
+                                            Fondo inicial y comprobante = apertura del turno ma&ntilde;ana.
+                                        </small>
                                     @endif
                                 </div>
                             </div>
@@ -378,10 +401,11 @@
                             </div>
                             <div class="card-body p-2">
                                 <p class="rendmaq-hint mb-2 px-1">
-                                    <strong>Traer WIGOS</strong> importa drop, venta, tito, pagos y QR.
+                                    <strong>Traer WIGOS</strong> importa drop, venta (slots + ruletas), tito, pagos y QR.
                                     Drop rodillo en pantalla = <strong>neto</strong> (bruto − impuesto drop);
                                     el bruto queda aparte. Drop anterior en M/T/N = bruto WIGOS (como Anita);
-                                    en C = neto del M del d&iacute;a. Fondo fijo tesoro = fondo inicial + comprobante.
+                                    en C = neto del M del d&iacute;a. En Completo, fondo/comprobante = apertura de la ma&ntilde;ana;
+                                    WIN = drop efectivo neto + drop QR + ventas − manuales − tito.
                                 </p>
                                 <div class="form-row">
                                     @foreach ($camposWigos as $campoRuta => $etiqueta)
@@ -496,7 +520,9 @@
                                     </thead>
                                     <tbody>
                                         @forelse ($cuentasValor as $linea)
-                                            <tr data-cuentacaja-id="{{ (int) $linea['cuentacaja_id'] }}">
+                                            <tr data-cuentacaja-id="{{ (int) $linea['cuentacaja_id'] }}"
+                                                data-cotizacion="{{ number_format((float) ($linea['cotizacion'] ?? 1), 6, '.', '') }}"
+                                                data-moneda-id="{{ (int) ($linea['moneda_id'] ?? 1) }}">
                                                 <td class="text-muted col-codigo">{{ $linea['codigo'] ?? '' }}</td>
                                                 <td class="col-desc" title="{{ $linea['nombre'] ?? '' }}">{{ $linea['nombre'] ?? '' }}</td>
                                                 <td class="col-monto">
@@ -592,6 +618,13 @@
                     <div class="tot-item"><span class="lbl">Fondo inicial</span><span class="val" data-total="fondo_inicial">${{ number_format((float) ($totales['fondo_inicial'] ?? 0), 2, ',', '.') }}</span></div>
                     <div class="tot-item"><span class="lbl">Comprobante</span><span class="val" data-total="comprobante">${{ number_format((float) ($totales['comprobante'] ?? 0), 2, ',', '.') }}</span></div>
                     <div class="tot-item is-destacado"><span class="lbl">Fondo fijo tesoro</span><span class="val" data-total="fondo_fijo">${{ number_format((float) ($totales['fondo_fijo'] ?? 0), 2, ',', '.') }}</span></div>
+                    <div class="tot-item"><span class="lbl">Venta slots</span><span class="val" data-total="venta_ficha">${{ number_format((float) ($totales['venta_ficha'] ?? $inputs['venta_ficha'] ?? 0), 2, ',', '.') }}</span></div>
+                    <div class="tot-item"><span class="lbl">Venta ruletas</span><span class="val" data-total="venta_ruleta">${{ number_format((float) ($totales['venta_ruleta'] ?? $inputs['venta_ruleta'] ?? 0), 2, ',', '.') }}</span></div>
+                    <div class="tot-item is-destacado"><span class="lbl">Total ventas</span><span class="val" data-total="total_ventas">${{ number_format((float) ($totales['total_ventas'] ?? ((float) ($inputs['venta_ficha'] ?? 0) + (float) ($inputs['venta_ruleta'] ?? 0))), 2, ',', '.') }}</span></div>
+                    <div class="tot-item is-destacado" title="Drop efectivo neto + drop QR + ventas − manuales − tito (ventas ya netas de impuesto)">
+                        <span class="lbl">WIN</span>
+                        <span class="val" data-total="win">${{ number_format((float) ($totales['win'] ?? 0), 2, ',', '.') }}</span>
+                    </div>
                     <div class="tot-item"><span class="lbl">Drop rodillo bruto</span><span class="val" data-total="drop_billete_bruto">${{ number_format((float) ($totales['drop_billete_bruto'] ?? 0), 2, ',', '.') }}</span></div>
                     <div class="tot-item"><span class="lbl">Impuesto drop</span><span class="val" data-total="impuesto_drop">${{ number_format((float) ($totales['impuesto_drop'] ?? 0), 2, ',', '.') }}</span></div>
                     <div class="tot-item is-destacado"><span class="lbl">Drop rodillo neto</span><span class="val" data-total="drop_bill_rodillo">${{ number_format((float) ($totales['drop_bill_rodillo'] ?? 0), 2, ',', '.') }}</span></div>

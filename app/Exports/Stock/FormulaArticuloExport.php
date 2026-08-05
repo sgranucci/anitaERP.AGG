@@ -4,7 +4,7 @@ namespace App\Exports\Stock;
 
 use App\Queries\Stock\FormulaArticuloQueryInterface;
 use App\Services\Stock\FormulaArticuloCostoTotalService;
-use App\Services\Stock\StkmaeUltimaCompraAnitaService;
+use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Stock\FormulaArticuloNumero;
 use Illuminate\Contracts\View\View;
@@ -68,7 +68,7 @@ class FormulaArticuloExport implements FromView, ShouldAutoSize, WithColumnForma
                 $busqueda = trim($busqueda);
             }
             $formulas = $this->formulaQuery->leeFormulaArticulo($busqueda, false, true, $this->conOpcionales);
-            app(StkmaeUltimaCompraAnitaService::class)->enriquecerFormulasPaginadasConCosto($formulas);
+            ArticuloPrecioUltimaCompraSupport::enriquecerFormulasPaginadasConCosto($formulas);
             app(FormulaArticuloCostoTotalService::class)->enriquecerFormulasConCostoTotal($formulas);
 
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($formulas);

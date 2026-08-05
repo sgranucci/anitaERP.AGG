@@ -3,19 +3,19 @@
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
-    				<label for="sku" class="col-lg-4 col-form-label requerido">Sku</label>
+    				<label for="sku" class="col-lg-4 col-form-label text-right pr-2 requerido">Sku</label>
     				<div class="col-lg-5">
     					<input type="text" name="sku" id="sku" class="form-control sku" value="{{old('sku', $producto->sku ?? '')}}" required readonly/>
                 	</div>
                 </div>
                 <div class="form-group row">
-    				<label for="sku" class="col-lg-4 col-form-label requerido">Descripci&oacute;n</label>
+    				<label for="sku" class="col-lg-4 col-form-label text-right pr-2 requerido">Descripci&oacute;n</label>
     				<div class="col-lg-8">
     					<input type="text" name="descripcion" id="descripcion" class="form-control descripcion" value="{{old('descripcion', $producto->descripcion ?? '')}}" required disabled/>
                 	</div>
                 </div>
 				<div class="form-group row">
-    				<label for="nofactura" class="col-lg-4 col-form-label requerido">Facturable</label>
+    				<label for="nofactura" class="col-lg-4 col-form-label text-right pr-2 requerido">Facturable</label>
 					<div class="col-lg-8">
 					<select id="nofactura" name="nofactura" class="form-control">
                         <option value="">-- Seleccionar --</option>
@@ -30,7 +30,7 @@
                     </div>
               	</div>
                 <div class="form-group row">
-                    <div class="col-lg-4 col-form-label"></div>
+                    <div class="col-lg-4 col-form-label text-right pr-2"></div>
                     <div class="col-lg-8">
                         <div class="form-check">
                             <input type="checkbox" class="form-check-input" name="fl_precio_promedio_transferencia"
@@ -40,13 +40,13 @@
                                 Art&iacute;culo TITO (precio promedio 3 &uacute;lt. compras en TRCONT)
                             </label>
                         </div>
-                        <small class="text-muted">Art&iacute;culos TITO usan promedio de recepciones en el asiento contable de transferencia TRCONT. Los dem&aacute;s contabilizables usan &uacute;ltima compra (stkmae).</small>
+                        <small class="text-muted">Art&iacute;culos TITO: promedio de exactamente 3 recepciones COM en el ERP; si no hay 3, promedio Anita stkm_pre_compra1/2/3. Los dem&aacute;s contabilizables usan &uacute;ltima compra (ERP &rarr; Anita compra3).</small>
                     </div>
                 </div>
             </div>
             <div class="col-sm-6">
 				<div class="form-group row">
-    				<label for="impuesto_id" class="col-lg-4 col-form-label requerido">Impuesto aplicado</label>
+    				<label for="impuesto_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Impuesto aplicado</label>
 					<div class="col-lg-8">
 					<select id="impuesto_id" name="impuesto_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
@@ -62,14 +62,14 @@
               	</div>
                 @if (strtoupper(config('app.empresa')) == 'CALZADOS FERLI S.A.')
                     <div class="form-group row">
-                        <label for="nomenclador" class="col-lg-4 col-form-label requerido">Nomenclador</label>
+                        <label for="nomenclador" class="col-lg-4 col-form-label text-right pr-2 requerido">Nomenclador</label>
                         <div class="col-lg-8">
                             <input type="text" name="nomenclador" id="nomenclador" class="form-control" value="{{old('nomenclador', $producto->nomenclador ?? '')}}" required/>
                         </div>
                     </div>
                 @else
                     <div class="form-group row">
-                        <label for="nomenclador" class="col-lg-4 col-form-label">Nomenclador</label>
+                        <label for="nomenclador" class="col-lg-4 col-form-label text-right pr-2">Nomenclador</label>
                         <div class="col-lg-8">
                             <input type="text" name="nomenclador" id="nomenclador" class="form-control" value="{{old('nomenclador', $producto->nomenclador ?? '')}}"/>
                         </div>
@@ -80,7 +80,7 @@
     </div>
     <div class="card-body">
     	<table class="table" id="cuentacontable-table">
-    		<thead>
+    		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
 					<th>Empresa</th>
                     <th>Tipo Imputación</th>

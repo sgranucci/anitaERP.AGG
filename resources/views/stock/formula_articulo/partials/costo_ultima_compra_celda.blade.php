@@ -9,4 +9,4 @@
        class="form-control form-control-sm js-costo-ultima-compra text-right text-monospace"
        value="{{ $costoUltTxt }}"
        placeholder="—"
-       title="Última compra (Anita stkmae.stkm_pre_compra3)" />
+       title="Última compra (ERP → Anita stkm_pre_compra3)" />

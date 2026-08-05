@@ -133,13 +133,15 @@ class UsuarioRepository implements UsuarioRepositoryInterface
         array $columnas = ['id', 'nombre', 'email', 'usuario'],
         bool $soloConEmail = false,
         array $with = [],
+        ?int $sectorLegajocompraId = null,
     ): Collection {
         return UsuarioOperativoSupport::listadoParaSelector(
             $empresaId,
             $centrocostoId,
             $columnas,
             $soloConEmail,
-            $with
+            $with,
+            $sectorLegajocompraId,
         );
     }
 

@@ -36,7 +36,7 @@
         <div class="table-responsive">
             <table class="table table-sm" id="tabla-articulo-proveedor"
                 data-puede-consultar-lista="{{ ListaprecioProveedorConsultaDesdeModal::puedeConsultar() ? '1' : '0' }}">
-                <thead>
+                <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
                         <th class="col-proveedor">Proveedor</th>
                         <th class="col-nombre-art">Nombre art. proveedor</th>

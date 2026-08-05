@@ -90,7 +90,14 @@ class RendicionMaquinavendingController extends Controller
 
         try {
             $cabecera = $this->service->cabeceraDesdeRequest($request->validated());
-            $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
+            $fechaCotiz = isset($cabecera['fecharendicion'])
+                ? substr((string) $cabecera['fecharendicion'], 0, 10)
+                : null;
+            $movimientos = $this->service->normalizarMovimientosRequest(
+                $request->input('movimientos', []),
+                $fechaCotiz,
+                (int) ($cabecera['empresa_id'] ?? 1)
+            );
             $resultado = $this->service->guardar($cabecera, $movimientos);
             $presentacion = $resultado['presentacion'];
         } catch (InvalidArgumentException|\RuntimeException $e) {
@@ -144,7 +151,14 @@ class RendicionMaquinavendingController extends Controller
 
         try {
             $cabecera = $this->service->cabeceraDesdeRequest($request->validated(), $id);
-            $movimientos = $this->service->normalizarMovimientosRequest($request->input('movimientos', []));
+            $fechaCotiz = isset($cabecera['fecharendicion'])
+                ? substr((string) $cabecera['fecharendicion'], 0, 10)
+                : null;
+            $movimientos = $this->service->normalizarMovimientosRequest(
+                $request->input('movimientos', []),
+                $fechaCotiz,
+                (int) ($cabecera['empresa_id'] ?? 1)
+            );
             $resultado = $this->service->actualizar($id, $cabecera, $movimientos);
         } catch (InvalidArgumentException|\RuntimeException $e) {
             return redirect()->back()->withInput()->with('errores', [$e->getMessage()]);

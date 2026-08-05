@@ -44,7 +44,7 @@
                 <th>Componente / subf&oacute;rmula</th>
                 <th class="text-right">Cantidad</th>
                 <th class="text-right">Factor costo</th>
-                <th class="text-right" title="Anita stkmae.stkm_pre_compra3">Costo &uacute;lt. compra</th>
+                <th class="text-right" title="ERP → Anita stkm_pre_compra3">Costo &uacute;lt. compra</th>
                 @if ($formulaGastronomiaOpcional)
                 <th>Opcional</th>
                 <th>Orden opc.</th>

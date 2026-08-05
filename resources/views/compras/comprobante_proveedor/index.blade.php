@@ -15,6 +15,11 @@
             <div class="card-header">
                 <h3 class="card-title">Comprobantes de proveedor</h3>
                 <div class="card-tools">
+                    @if (can('editar-configuracion-comprobante-proveedor', false))
+                    <a href="{{ route('configuracion_comprobante_proveedor') }}" class="btn btn-outline-secondary btn-sm mr-1">
+                        <i class="fa fa-cog"></i> Configuración
+                    </a>
+                    @endif
                     @if (can('crear-comprobante-proveedor', false) || can('listar-precarga-proveedores', false))
                     <a href="{{ route('comprobante_proveedor_opciones_carga') }}" class="btn btn-outline-success btn-sm">
                         <i class="fa fa-fw fa-plus-circle"></i> Cargar factura

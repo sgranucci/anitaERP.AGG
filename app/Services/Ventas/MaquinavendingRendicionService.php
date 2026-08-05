@@ -10,6 +10,7 @@ use App\Models\Ventas\MaquinavendingRendicionArticulo;
 use App\Models\Ventas\MaquinavendingRendicionMedioPago;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\MaquinavendingRendicionRepositoryInterface;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Ventas\MaquinavendingRendicionAnitaAdvertenciaSupport;
 use App\Support\Ventas\MaquinavendingRendicionPermiso;
@@ -310,7 +311,10 @@ class MaquinavendingRendicionService
     private function parsearPayload(array $payload, int $empresaId): array
     {
         $lineas = $this->normalizarLineas($payload['articulos'] ?? []);
-        $medios = $this->normalizarMedios($payload['medios_pago'] ?? [], $empresaId);
+        $fechaCotiz = isset($payload['fecha_jornada'])
+            ? (string) $payload['fecha_jornada']
+            : (isset($payload['fecha']) ? (string) $payload['fecha'] : date('Y-m-d'));
+        $medios = $this->normalizarMedios($payload['medios_pago'] ?? [], $empresaId, $fechaCotiz);
 
         $totalVentas = round(array_sum(array_column($lineas, 'importe_total')), 2);
         $totalCobrado = round(array_sum(array_map(
@@ -454,12 +458,13 @@ class MaquinavendingRendicionService
      * @param  mixed  $raw
      * @return list<array{cuentacaja_id:int, monto:float, cotizacion:float}>
      */
-    private function normalizarMedios(mixed $raw, int $empresaId): array
+    private function normalizarMedios(mixed $raw, int $empresaId, ?string $fecha = null): array
     {
         if (! is_array($raw)) {
             return [];
         }
 
+        $fechaYmd = $fecha ?: date('Y-m-d');
         $medios = [];
         foreach ($raw as $row) {
             if (! is_array($row)) {
@@ -473,9 +478,10 @@ class MaquinavendingRendicionService
             if (! Cuentacaja::existeParaEmpresa($cuentacajaId, $empresaId)) {
                 throw new InvalidArgumentException('Cuenta de caja id '.$cuentacajaId.' no válida para la empresa.');
             }
-            $cotizacion = round((float) ($row['cotizacion'] ?? 1), 4);
-            if ($cotizacion <= 0) {
-                $cotizacion = 1.0;
+            $cotizacion = isset($row['cotizacion']) ? round((float) $row['cotizacion'], 4) : null;
+            if ($cotizacion === null || $cotizacion <= 0) {
+                $monedaId = (int) (Cuentacaja::query()->whereKey($cuentacajaId)->value('moneda_id') ?? 1);
+                $cotizacion = CotizacionTesoreriaConsultaSupport::calculaVenta($fechaYmd, $monedaId, $empresaId);
             }
             $medios[] = [
                 'cuentacaja_id' => $cuentacajaId,

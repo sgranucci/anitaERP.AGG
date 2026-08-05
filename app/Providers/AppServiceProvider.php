@@ -455,6 +455,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Caja\CotizacionTesoreriaRepositoryInterface',
+            'App\Repositories\Caja\CotizacionTesoreriaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepositoryInterface',
             'App\Repositories\Caja\Bingo\BingoConceptoRendicionRepository',
         );

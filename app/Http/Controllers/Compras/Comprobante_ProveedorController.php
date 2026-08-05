@@ -175,9 +175,15 @@ class Comprobante_ProveedorController extends Controller
                 ->with('errores', ['No se pudo guardar el comprobante: '.$e->getMessage()]);
         }
 
+        $mensaje = 'Comprobante de proveedor guardado en borrador.';
+        $avisos = $this->persistenciaService->ultimosAvisosControles();
+        if ($avisos !== []) {
+            $mensaje .= ' '.implode(' ', $avisos);
+        }
+
         return redirect()
             ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
-            ->with('mensaje', 'Comprobante de proveedor guardado en borrador.');
+            ->with('mensaje', $mensaje);
     }
 
     public function editar(int $id)
@@ -207,9 +213,15 @@ class Comprobante_ProveedorController extends Controller
                 ->with('errores', ['No se pudo actualizar el comprobante: '.$e->getMessage()]);
         }
 
+        $mensaje = 'Comprobante de proveedor actualizado.';
+        $avisos = $this->persistenciaService->ultimosAvisosControles();
+        if ($avisos !== []) {
+            $mensaje .= ' '.implode(' ', $avisos);
+        }
+
         return redirect()
             ->route('editar_comprobante_proveedor', ['id' => $id, 'solapa' => 'asiento'])
-            ->with('mensaje', 'Comprobante de proveedor actualizado.');
+            ->with('mensaje', $mensaje);
     }
 
     /**
@@ -309,6 +321,10 @@ class Comprobante_ProveedorController extends Controller
         if ($comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
             && $comprobante->comprobante_proveedor_recepciones->isEmpty()) {
             $mensaje = 'Comprobante generado desde precarga. Hay COM sin facturar en el legajo: seleccione la recepción correcta antes de contabilizar.';
+        }
+        $avisos = $this->persistenciaService->ultimosAvisosControles();
+        if ($avisos !== []) {
+            $mensaje .= ' '.implode(' ', $avisos);
         }
 
         return redirect()

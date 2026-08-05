@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ValidacionComprobante_Proveedor extends FormRequest
@@ -27,6 +28,8 @@ class ValidacionComprobante_Proveedor extends FormRequest
             'subtotal' => 'nullable|numeric',
             'total' => 'nullable|numeric',
             'cotizacion' => 'nullable|numeric',
+            'numerocae' => 'nullable|string|max:30',
+            'tipo_autorizacion' => 'nullable|string|in:'.implode(',', ComprobanteProveedorTipoAutorizacion::todos()),
             'modo_carga' => 'nullable|string|in:'.implode(',', ComprobanteProveedorModoCarga::todos()),
             'concepto_ivacompra_ids' => 'nullable|array',
             'concepto_ivacompra_ids.*' => 'nullable|integer',

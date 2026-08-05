@@ -80,4 +80,16 @@ final class CierreJornadaProcesoAsientosCentrocostoSupport
 
         return self::idCentrocostoGastronomia();
     }
+
+    /**
+     * Al grabar cierre: exige CC configurado si la cuenta maneja centro de costo.
+     */
+    public static function resolverCentrocostoIdParaCuentacontableOError(int $cuentacontableId): ?int
+    {
+        if (! self::cuentacontableManejaCentroCosto($cuentacontableId)) {
+            return null;
+        }
+
+        return self::idCentrocostoGastronomiaOError();
+    }
 }

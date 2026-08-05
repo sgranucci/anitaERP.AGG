@@ -3,11 +3,12 @@
 namespace App\Services\Stock;
 
 use App\ApiAnita;
+use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Precio de última compra (stkmae.stkm_pre_compra3) vía ApiAnita.
- * Hasta que el ERP tenga ingreso por compras, es la fuente operativa del costo de insumos.
+ * Lectura de precios de compra en Anita stkmae (stkm_pre_compra1/2/3).
+ * Fuente de fallback cuando el ERP no tiene compra (o &lt; 3 recepciones para promedio TITO).
  */
 class StkmaeUltimaCompraAnitaService
 {
@@ -15,7 +16,11 @@ class StkmaeUltimaCompraAnitaService
 
     private const CAMPO_ARTICULO = 'stkm_articulo';
 
-    private const CAMPO_PRECIO = 'stkm_pre_compra3';
+    private const CAMPO_PRECIO1 = 'stkm_pre_compra1';
+
+    private const CAMPO_PRECIO2 = 'stkm_pre_compra2';
+
+    private const CAMPO_PRECIO3 = 'stkm_pre_compra3';
 
     private const CAMPO_MONEDA = 'stkm_cod_mon_co3';
 
@@ -38,31 +43,10 @@ class StkmaeUltimaCompraAnitaService
      */
     public function obtenerPreciosUltimaCompraPorSkus(array $skus): array
     {
-        $skus = array_values(array_unique(array_filter(array_map(
-            static fn ($s) => trim((string) $s),
-            $skus
-        ), static fn ($s) => $s !== '')));
-
-        if ($skus === []) {
-            return [];
-        }
-
-        $codigoPorSku = [];
-        foreach ($skus as $sku) {
-            $codigoPorSku[$sku] = $this->codigoAnitaDesdeSku($sku);
-        }
-
-        $precioPorCodigo = [];
-        $codigos = array_values(array_unique($codigoPorSku));
-        foreach (array_chunk($codigos, self::CHUNK_SIZE) as $chunk) {
-            foreach ($this->consultarStkmaeDatosPorCodigos($chunk) as $codigo => $datos) {
-                $precioPorCodigo[$codigo] = $datos['precio'];
-            }
-        }
-
+        $datos = $this->obtenerDatosUltimaCompraPorSkus($skus);
         $out = [];
-        foreach ($codigoPorSku as $sku => $codigo) {
-            $out[$sku] = $precioPorCodigo[$codigo] ?? null;
+        foreach ($datos as $sku => $dato) {
+            $out[$sku] = $dato['precio'] ?? null;
         }
 
         return $out;
@@ -70,7 +54,7 @@ class StkmaeUltimaCompraAnitaService
 
     /**
      * @param  list<string>  $skus
-     * @return array<string, array{precio: float|null, moneda_id: int|null}> clave = SKU del ERP
+     * @return array<string, array{precio: float|null, moneda_id: int|null, compra1: float|null, compra2: float|null, compra3: float|null}>
      */
     public function obtenerDatosUltimaCompraPorSkus(array $skus): array
     {
@@ -98,36 +82,45 @@ class StkmaeUltimaCompraAnitaService
 
         $out = [];
         foreach ($codigoPorSku as $sku => $codigo) {
-            $out[$sku] = $datosPorCodigo[$codigo] ?? ['precio' => null, 'moneda_id' => null];
+            $out[$sku] = $datosPorCodigo[$codigo] ?? [
+                'precio' => null,
+                'moneda_id' => null,
+                'compra1' => null,
+                'compra2' => null,
+                'compra3' => null,
+            ];
         }
 
         return $out;
     }
 
     /**
-     * Asigna {@see $hijo->costo_ultima_compra} (no persistido) a líneas con artículo.
+     * Promedio (compra1 + compra2 + compra3) / 3. Null si el resultado es ≤ 0.
      *
+     * @param  list<string>  $skus
+     * @return array<string, float|null>
+     */
+    public function obtenerPromedioTresComprasPorSkus(array $skus): array
+    {
+        $datos = $this->obtenerDatosUltimaCompraPorSkus($skus);
+        $out = [];
+        foreach ($datos as $sku => $dato) {
+            $c1 = (float) ($dato['compra1'] ?? 0);
+            $c2 = (float) ($dato['compra2'] ?? 0);
+            $c3 = (float) ($dato['compra3'] ?? 0);
+            $promedio = round(($c1 + $c2 + $c3) / 3, 6);
+            $out[$sku] = $promedio > 0 ? $promedio : null;
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  iterable<object>  $hijos
      */
     public function enriquecerLineasFormulaConCosto(iterable $hijos): void
     {
-        $skus = [];
-        foreach ($hijos as $hijo) {
-            $sku = trim((string) (optional($hijo->articulos)->sku ?? ''));
-            if ($sku !== '') {
-                $skus[] = $sku;
-            }
-        }
-
-        if ($skus === []) {
-            return;
-        }
-
-        $precios = $this->obtenerPreciosUltimaCompraPorSkus($skus);
-        foreach ($hijos as $hijo) {
-            $sku = trim((string) (optional($hijo->articulos)->sku ?? ''));
-            $hijo->costo_ultima_compra = $sku !== '' ? ($precios[$sku] ?? null) : null;
-        }
+        ArticuloPrecioUltimaCompraSupport::enriquecerLineasFormulaConCosto($hijos);
     }
 
     /**
@@ -135,32 +128,12 @@ class StkmaeUltimaCompraAnitaService
      */
     public function enriquecerFormulasPaginadasConCosto(iterable $formulas): void
     {
-        $skus = [];
-        foreach ($formulas as $formula) {
-            foreach ($formula->formula_articulo_hijos ?? [] as $hijo) {
-                $sku = trim((string) (optional($hijo->articulos)->sku ?? ''));
-                if ($sku !== '') {
-                    $skus[] = $sku;
-                }
-            }
-        }
-
-        if ($skus === []) {
-            return;
-        }
-
-        $precios = $this->obtenerPreciosUltimaCompraPorSkus($skus);
-        foreach ($formulas as $formula) {
-            foreach ($formula->formula_articulo_hijos ?? [] as $hijo) {
-                $sku = trim((string) (optional($hijo->articulos)->sku ?? ''));
-                $hijo->costo_ultima_compra = $sku !== '' ? ($precios[$sku] ?? null) : null;
-            }
-        }
+        ArticuloPrecioUltimaCompraSupport::enriquecerFormulasPaginadasConCosto($formulas);
     }
 
     /**
      * @param  list<string>  $codigosAnita  códigos de 13 caracteres
-     * @return array<string, array{precio: float|null, moneda_id: int|null}> clave = código Anita exacto
+     * @return array<string, array{precio: float|null, moneda_id: int|null, compra1: float|null, compra2: float|null, compra3: float|null}>
      */
     private function consultarStkmaeDatosPorCodigos(array $codigosAnita): array
     {
@@ -176,7 +149,13 @@ class StkmaeUltimaCompraAnitaService
         $payload = [
             'acc' => 'list',
             'tabla' => self::TABLA,
-            'campos' => self::CAMPO_ARTICULO.','.self::CAMPO_PRECIO.','.self::CAMPO_MONEDA,
+            'campos' => implode(',', [
+                self::CAMPO_ARTICULO,
+                self::CAMPO_PRECIO1,
+                self::CAMPO_PRECIO2,
+                self::CAMPO_PRECIO3,
+                self::CAMPO_MONEDA,
+            ]),
             'whereArmado' => ' WHERE '.self::CAMPO_ARTICULO.' IN ('.$lista.') ',
         ];
 
@@ -209,14 +188,28 @@ class StkmaeUltimaCompraAnitaService
             if ($codigo === '') {
                 continue;
             }
-            $precioRaw = $row[self::CAMPO_PRECIO] ?? null;
+            $compra1 = self::floatONull($row[self::CAMPO_PRECIO1] ?? null);
+            $compra2 = self::floatONull($row[self::CAMPO_PRECIO2] ?? null);
+            $compra3 = self::floatONull($row[self::CAMPO_PRECIO3] ?? null);
             $monedaRaw = $row[self::CAMPO_MONEDA] ?? null;
             $out[$codigo] = [
-                'precio' => $precioRaw !== null && $precioRaw !== '' ? (float) $precioRaw : null,
+                'precio' => $compra3,
                 'moneda_id' => $monedaRaw !== null && $monedaRaw !== '' ? (int) $monedaRaw : null,
+                'compra1' => $compra1,
+                'compra2' => $compra2,
+                'compra3' => $compra3,
             ];
         }
 
         return $out;
+    }
+
+    private static function floatONull(mixed $raw): ?float
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        return (float) $raw;
     }
 }

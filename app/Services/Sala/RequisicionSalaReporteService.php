@@ -4,9 +4,9 @@ namespace App\Services\Sala;
 
 use App\Models\Sala\RequisicionSalaArticulo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
-use App\Services\Stock\StkmaeUltimaCompraAnitaService;
 use App\Support\Sala\RequisicionSalaReporteCriteriosSupport;
 use App\Support\Sala\RequisicionSalaReporteFiltros;
+use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +15,6 @@ class RequisicionSalaReporteService
 {
     public function __construct(
         private EmpresaRepositoryInterface $empresaRepository,
-        private StkmaeUltimaCompraAnitaService $stkmaeUltimaCompraAnitaService,
     ) {}
 
     /**
@@ -277,7 +276,7 @@ class RequisicionSalaReporteService
             return [];
         }
 
-        return $this->stkmaeUltimaCompraAnitaService->obtenerPreciosUltimaCompraPorSkus($skus);
+        return ArticuloPrecioUltimaCompraSupport::resolverPreciosPorSkus($skus);
     }
 
     /**

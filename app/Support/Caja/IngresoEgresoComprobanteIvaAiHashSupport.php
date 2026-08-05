@@ -25,6 +25,7 @@ final class IngresoEgresoComprobanteIvaAiHashSupport
             'fechaiva' => substr((string) ($cabecera['fechaiva'] ?? ''), 0, 10),
             'total' => round((float) ($cabecera['total'] ?? 0), 2),
             'numerocae' => preg_replace('/\D/', '', (string) ($cabecera['numerocae'] ?? '')),
+            'tipo_autorizacion' => strtoupper(trim((string) ($cabecera['tipo_autorizacion'] ?? ''))),
             'conceptos' => [],
         ];
 

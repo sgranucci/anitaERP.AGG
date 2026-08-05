@@ -3,12 +3,13 @@
 namespace App\Services\Stock;
 
 use App\Models\Stock\Formula_Articulo;
+use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\FormulaArticuloCostoTotalCalculator;
 use App\Support\Stock\FormulaArticuloCostoTotalResult;
 use Illuminate\Support\Collection;
 
 /**
- * Orquesta precios Anita y {@see FormulaArticuloCostoTotalCalculator} para uso en CRUD y otros módulos.
+ * Orquesta precios de última compra (ERP → Anita → artículo) y {@see FormulaArticuloCostoTotalCalculator}.
  */
 class FormulaArticuloCostoTotalService
 {
@@ -16,7 +17,6 @@ class FormulaArticuloCostoTotalService
 
     public function __construct(
         private FormulaArticuloCostoTotalCalculator $calculator,
-        private StkmaeUltimaCompraAnitaService $stkmaeUltimaCompraAnitaService,
     ) {}
 
     /**
@@ -33,7 +33,7 @@ class FormulaArticuloCostoTotalService
         }
 
         $formulasPorId = $this->cargarFormulas(array_unique($formulaIds));
-        $precios = $this->stkmaeUltimaCompraAnitaService->obtenerPreciosUltimaCompraPorSkus(array_unique($skus));
+        $precios = ArticuloPrecioUltimaCompraSupport::resolverPreciosPorSkus(array_unique($skus));
 
         return $this->calculator->calcular(
             $formulaArticuloId,
@@ -70,7 +70,7 @@ class FormulaArticuloCostoTotalService
         }
 
         $formulasPorId = $this->cargarFormulas(array_unique($todosFormulaIds));
-        $precios = $this->stkmaeUltimaCompraAnitaService->obtenerPreciosUltimaCompraPorSkus(array_unique($todosSkus));
+        $precios = ArticuloPrecioUltimaCompraSupport::resolverPreciosPorSkus(array_unique($todosSkus));
 
         foreach ($items as $formula) {
             $fid = (int) ($formula->id ?? 0);

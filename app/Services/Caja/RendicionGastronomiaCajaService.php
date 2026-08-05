@@ -7,6 +7,8 @@ use App\Models\Caja\RendicionGastronomiaMovimientoCaja;
 use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
+use App\Models\Caja\Cuentacaja;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Caja\RendicionGastronomiaCajaListadoFiltros;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
@@ -281,7 +283,8 @@ class RendicionGastronomiaCajaService
         }
 
         $totales = GastronomiaTurnoOperativoTotalesSupport::calcularPorJornada($jornada);
-        $movimientos = $this->movimientosDesdeTotales($totales);
+        $fechaCotiz = $jornada->fecha_jornada?->format('Y-m-d') ?? date('Y-m-d');
+        $movimientos = $this->movimientosDesdeTotales($totales, $fechaCotiz, (int) $jornada->empresa_id);
         $auditoriaJornada = $this->jornadaPresentacionService->datosAuditoriaJornadaParaCaja($jornada);
         $marcadores = $auditoriaJornada;
         $numeracion = $marcadores['numeracion_comprobantes_json'] ?? [];
@@ -599,7 +602,7 @@ class RendicionGastronomiaCajaService
             $mediosContado,
         );
 
-        $movimientos = $this->movimientosDesdeTotales($totales);
+        $movimientos = $this->movimientosDesdeTotales($totales, $fechaJornada, (int) $turno->empresa_id);
 
         return [
             'turno_operativo_gastronomia_id' => (int) $turno->id,
@@ -1241,8 +1244,20 @@ class RendicionGastronomiaCajaService
      * @param  array<string, mixed>  $totales  Resultado de GastronomiaTurnoOperativoTotalesSupport::calcular()
      * @return list<array{cuentacaja_id:int, codigo:string, nombre:string, monto:float, esperado?:float, cotizacion:float, es_nota_credito?:bool, desde_contado_cierre?:bool}>
      */
-    private function movimientosDesdeTotales(array $totales): array
+    private function movimientosDesdeTotales(array $totales, ?string $fecha = null, int $empresaId = 1): array
     {
+        $fechaYmd = $fecha ?: date('Y-m-d');
+        $cuentaIds = [];
+        foreach ($totales['por_medio_pago'] ?? [] as $p) {
+            $cuentaId = (int) ($p['cuentacaja_id'] ?? 0);
+            if ($cuentaId > 0) {
+                $cuentaIds[] = $cuentaId;
+            }
+        }
+        $monedaPorCuenta = Cuentacaja::query()
+            ->whereIn('id', array_values(array_unique($cuentaIds)))
+            ->pluck('moneda_id', 'id');
+
         $movimientos = [];
         foreach ($totales['por_medio_pago'] ?? [] as $p) {
             $cuentaId = (int) ($p['cuentacaja_id'] ?? 0);
@@ -1254,13 +1269,14 @@ class RendicionGastronomiaCajaService
             $monto = $desdeContadoCierre
                 ? round((float) $p['contado'], 2)
                 : $esperado;
+            $monedaId = (int) ($monedaPorCuenta[$cuentaId] ?? 1);
             $movimientos[] = [
                 'cuentacaja_id' => $cuentaId,
                 'codigo' => (string) ($p['codigo'] ?? ''),
                 'nombre' => (string) ($p['nombre'] ?? $p['codigo'] ?? ''),
                 'monto' => $monto,
                 'esperado' => $esperado,
-                'cotizacion' => 1.0,
+                'cotizacion' => CotizacionTesoreriaConsultaSupport::calculaVenta($fechaYmd, $monedaId, $empresaId),
                 'desde_contado_cierre' => $desdeContadoCierre,
             ];
         }

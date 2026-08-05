@@ -3,19 +3,19 @@
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
-    				<label for="sku" class="col-lg-4 col-form-label requerido">Sku</label>
+    				<label for="sku" class="col-lg-4 col-form-label text-right pr-2 requerido">Sku</label>
     				<div class="col-lg-5">
     					<input type="text" name="sku" id="sku" class="form-control sku" value="{{old('sku', $producto->sku ?? '')}}" required readonly/>
                 	</div>
                 </div>
                 <div class="form-group row">
-    				<label for="sku" class="col-lg-4 col-form-label requerido">Descripci&oacute;n</label>
+    				<label for="sku" class="col-lg-4 col-form-label text-right pr-2 requerido">Descripci&oacute;n</label>
     				<div class="col-lg-8">
     					<input type="text" name="descripcion" id="descripcion" class="form-control descripcion" value="{{old('descripcion', $producto->descripcion ?? '')}}" required disabled/>
                 	</div>
                 </div>
 				<div class="form-group row">
-    				<label for="unidadmedida3_id" class="col-lg-4 col-form-label requerido">Unidad de medida</label>
+    				<label for="unidadmedida3_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Unidad de medida</label>
 					<div class="col-lg-4">
 					<select id="unidadmedida3_id" name="unidadmedida3_id" class="form-control unidadmedida" required>
                         <option value="">-- Seleccionar --</option>
@@ -34,7 +34,7 @@
                     </div>
                 </div>
 				<div class="form-group row">
-    				<label for="unidadmedidaalternativa3_id" class="col-lg-4 col-form-label requerido">Unidad de medida alternativa</label>
+    				<label for="unidadmedidaalternativa3_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Unidad de medida alternativa</label>
 					<div class="col-lg-4">
 					<select id="unidadmedidaalternativa3_id" name="unidadmedidaalternativa3_id" class="form-control unidadmedidaalternativa" required>
                         <option value="">-- Seleccionar --</option>
@@ -55,7 +55,7 @@
             </div>
             <div class="col-sm-6">
                 <div class="form-group row">
-                    <label for="oficinacompra_id" class="col-lg-4 col-form-label requerido">Oficina de compras</label>
+                    <label for="oficinacompra_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Oficina de compras</label>
                     <div class="col-lg-8">
                     <select id="oficinacompra_id" name="oficinacompra_id" class="form-control" required>
                         <option value="">-- Seleccionar --</option>
@@ -70,7 +70,7 @@
                     </div>
                 </div>                      
             	<div class="form-group row">
-    				<label for="depositoentrega_id" class="col-lg-4 col-form-label">Depósito entrega</label>
+    				<label for="depositoentrega_id" class="col-lg-4 col-form-label text-right pr-2">Depósito entrega</label>
 					<div class="col-lg-8">
 					<select id="depositoentrega_id" name="depositoentrega_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
@@ -85,7 +85,7 @@
                     </div>
               	</div>    
             	<div class="form-group row">
-    				<label for="periodicidadcompra_id" class="col-lg-4 col-form-label">Periodicidad de compra</label>
+    				<label for="periodicidadcompra_id" class="col-lg-4 col-form-label text-right pr-2">Periodicidad de compra</label>
 					<div class="col-lg-8">
 					<select id="periodicidadcompra_id" name="periodicidadcompra_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
@@ -100,7 +100,7 @@
                     </div>
               	</div>         
             	<div class="form-group row">
-    				<label for="condicionentrega_id" class="col-lg-4 col-form-label">Condición de entrega</label>
+    				<label for="condicionentrega_id" class="col-lg-4 col-form-label text-right pr-2">Condición de entrega</label>
 					<div class="col-lg-8">
 					<select id="condicionentrega_id" name="condicionentrega_id" class="form-control">
                         <option value="">-- Seleccionar --</option>

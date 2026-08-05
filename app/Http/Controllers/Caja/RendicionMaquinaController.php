@@ -311,12 +311,16 @@ class RendicionMaquinaController extends Controller
 
         $request->validate([
             'empresa_id' => ['required', 'integer', 'min:1'],
+            'fecha' => ['nullable', 'date'],
         ]);
 
         $empresaId = (int) $request->input('empresa_id');
         $this->assertAccesoEmpresa($empresaId);
 
-        $lineas = $this->service->lineasValorYGastoParaEmpresa($empresaId);
+        $lineas = $this->service->lineasValorYGastoParaEmpresa(
+            $empresaId,
+            $request->input('fecha')
+        );
 
         return response()->json([
             'ok' => true,

@@ -12,9 +12,9 @@ use Carbon\Carbon;
  *
  * - Salidas de venta (abreviaturas en config stock.precio_movimiento_salida_venta_abreviaturas):
  *   lista de precios de venta vigente (PrecioService / tabla precio).
- * - Resto de movimientos: última compra (Anita → ERP COM → fallback artículo).
+ * - Resto de movimientos: última compra (ERP → Anita → fallback artículo).
  *
- * @see config('stock.precio_movimiento_stock')
+ * @see config('stock.precio_ultima_compra')
  */
 final class ArticuloPrecioMovimientoStockSupport
 {

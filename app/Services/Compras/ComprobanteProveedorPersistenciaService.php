@@ -7,7 +7,9 @@ use App\Models\Compras\Comprobante_Proveedor_Archivo;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
+use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Models\Compras\Proveedor;
 use App\Repositories\Compras\Comprobante_Proveedor_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
@@ -17,6 +19,7 @@ use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use Illuminate\Http\Request;
@@ -25,6 +28,9 @@ use RuntimeException;
 
 class ComprobanteProveedorPersistenciaService
 {
+    /** @var list<string> */
+    private array $ultimosAvisosControles = [];
+
     public function __construct(
         private Comprobante_ProveedorRepositoryInterface $comprobanteRepository,
         private Comprobante_Proveedor_ConceptoRepositoryInterface $conceptoRepository,
@@ -33,7 +39,14 @@ class ComprobanteProveedorPersistenciaService
         private ComprobanteProveedorCondicionPagoDesdeOcService $condicionPagoDesdeOc,
         private ComprobanteProveedorRecepcionesSupport $recepcionesSupport,
         private Comprobante_Proveedor_ArchivoRepositoryInterface $archivoRepository,
+        private ComprobanteProveedorControlesLegajoService $controlesLegajo,
     ) {}
+
+    /** @return list<string> */
+    public function ultimosAvisosControles(): array
+    {
+        return $this->ultimosAvisosControles;
+    }
 
     public function crearDesdeRequest(Request $request): Comprobante_Proveedor
     {
@@ -51,7 +64,11 @@ class ComprobanteProveedorPersistenciaService
             null,
             null,
             (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: 0) ?: null,
+            $payload['numerocae'] ?? null,
+            $payload['tipo_autorizacion'] ?? null,
         );
+
+        $this->ejecutarControlesDesdeRequest($request, $payload, null);
 
         $comprobante = $this->comprobanteRepository->create($payload);
 
@@ -91,7 +108,11 @@ class ComprobanteProveedorPersistenciaService
             null,
             $id,
             (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: 0) ?: null,
+            $payload['numerocae'] ?? null,
+            $payload['tipo_autorizacion'] ?? null,
         );
+
+        $this->ejecutarControlesDesdeRequest($request, $payload, $id);
 
         $this->comprobanteRepository->update($payload, $id);
 
@@ -145,7 +166,43 @@ class ComprobanteProveedorPersistenciaService
             $payload['proveedor_documento_eventual'] ?? null,
             null,
             $precargaId,
+            $payload['numerocae'] ?? null,
+            $payload['tipo_autorizacion'] ?? null,
         );
+
+        $seleccionCom = $prefill['recepciones_seleccionadas'] ?? [];
+        if (is_array($seleccionCom) && $seleccionCom !== []) {
+            $ordencompra = $data->ordencompras
+                ?? (($payload['ordencompra_id'] ?? null)
+                    ? Ordencompra::query()->find((int) $payload['ordencompra_id'])
+                    : null);
+            $condicionivaId = Proveedor::query()->whereKey((int) ($payload['proveedor_id'] ?? 0))->value('condicioniva_id');
+            $conceptos = collect($prefill['conceptos'] ?? [])->map(function ($linea) {
+                $conceptoId = (int) ($linea->concepto_ivacompra_id ?? 0);
+                if ($conceptoId > 0 && empty($linea->concepto_ivacompras)) {
+                    $linea->setRelation(
+                        'concepto_ivacompras',
+                        $this->conceptoIvacompraRepository->find($conceptoId)
+                    );
+                }
+
+                return $linea;
+            });
+            $this->aplicarResultadoControles($this->controlesLegajo->validarYAplicar(
+                $ordencompra,
+                (string) ($payload['modo_carga'] ?? ''),
+                $seleccionCom,
+                (float) ($payload['cotizacion'] ?? 1),
+                (int) ($payload['moneda_id'] ?? 1),
+                (string) ($payload['fechacomprobante'] ?? now()->format('Y-m-d')),
+                (string) ($payload['letra'] ?? ''),
+                $condicionivaId !== null ? (int) $condicionivaId : null,
+                (float) ($payload['total'] ?? 0),
+                (float) ($payload['subtotal'] ?? 0),
+                $conceptos,
+                null,
+            ));
+        }
 
         $comprobante = $this->comprobanteRepository->create($payload);
 
@@ -262,6 +319,9 @@ class ComprobanteProveedorPersistenciaService
             'moneda_id' => (int) $request->input('moneda_id', 1),
             'cotizacion' => (float) $request->input('cotizacion', 1),
             'numerocae' => $request->input('numerocae'),
+            'tipo_autorizacion' => ComprobanteProveedorTipoAutorizacion::normalizar(
+                $request->input('tipo_autorizacion')
+            ) ?? (filled($request->input('numerocae')) ? ComprobanteProveedorTipoAutorizacion::CAE : null),
             'fechavencimientocae' => $request->input('fechavencimientocae'),
             'es_fce' => $request->boolean('es_fce'),
             'leyenda' => $request->input('leyenda'),
@@ -388,12 +448,74 @@ class ComprobanteProveedorPersistenciaService
             throw new RuntimeException('Modo factura contra recepción requiere una orden de compra vinculada.');
         }
 
+        $ids = $request->input('recepcion_proveedor_ids', []);
+        if (! is_array($ids) || $ids === []) {
+            throw new RuntimeException('Debe seleccionar al menos una recepción COM para asociar a la factura del legajo.');
+        }
+
         $this->recepcionesSupport->sincronizar(
             (int) $comprobante->id,
             $ordencompraId,
-            $request->input('recepcion_proveedor_ids', []),
+            $ids,
             $this->contextoLegajoDesdeComprobante($comprobante),
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function ejecutarControlesDesdeRequest(Request $request, array &$payload, ?int $excluirComprobanteId): void
+    {
+        $ordencompraId = (int) ($payload['ordencompra_id'] ?? 0);
+        $ordencompra = $ordencompraId > 0 ? Ordencompra::query()->find($ordencompraId) : null;
+
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
+            $request->input('concepto_ivacompra_ids', []),
+            $request->input('montos', []),
+        );
+        $conceptos = collect($lineas)->map(function (array $linea) {
+            $concepto = $this->conceptoIvacompraRepository->find((int) ($linea['concepto_ivacompra_id'] ?? 0));
+
+            return (object) [
+                'concepto_ivacompra_id' => (int) ($linea['concepto_ivacompra_id'] ?? 0),
+                'monto' => $linea['monto'] ?? 0,
+                'concepto_ivacompras' => $concepto,
+            ];
+        });
+
+        $condicionivaId = Proveedor::query()
+            ->whereKey((int) ($payload['proveedor_id'] ?? 0))
+            ->value('condicioniva_id');
+
+        $modo = (string) ($payload['modo_carga'] ?? '');
+        if ($ordencompra && $this->recepcionesSupport->listarDisponibles($ordencompraId, $excluirComprobanteId)->isNotEmpty()) {
+            $modo = ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+            $payload['modo_carga'] = $modo;
+        }
+
+        $this->aplicarResultadoControles($this->controlesLegajo->validarYAplicar(
+            $ordencompra,
+            $modo,
+            $request->input('recepcion_proveedor_ids', []),
+            (float) ($payload['cotizacion'] ?? 1),
+            (int) ($payload['moneda_id'] ?? 1),
+            (string) ($payload['fechacomprobante'] ?? now()->format('Y-m-d')),
+            (string) ($payload['letra'] ?? ''),
+            $condicionivaId !== null ? (int) $condicionivaId : null,
+            (float) ($payload['total'] ?? 0),
+            (float) ($payload['subtotal'] ?? 0),
+            $conceptos,
+            $excluirComprobanteId,
+        ));
+    }
+
+    /** @param array{ok: bool, avisos: list<string>, errores: list<string>} $resultado */
+    private function aplicarResultadoControles(array $resultado): void
+    {
+        $this->ultimosAvisosControles = $resultado['avisos'] ?? [];
+        if (! ($resultado['ok'] ?? false)) {
+            throw new RuntimeException(implode(' ', $resultado['errores'] ?? ['Control de legajo rechazado.']));
+        }
     }
 
     private function vincularArchivoPrecarga(Comprobante_Proveedor $comprobante): void

@@ -2,11 +2,13 @@
 
 namespace App\Services\Caja;
 
+use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Caja\RendicionEstacionamientoMovimientoCaja;
 use App\Models\Caja\RendicionEstacionamientoSecuenciaEmpresa;
 use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Caja\RendicionEstacionamientoCajaListadoFiltros;
 use App\Support\Caja\RendicionEstacionamientoSecuenciaSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
@@ -273,7 +275,8 @@ class RendicionEstacionamientoCajaService
         }
 
         $totales = EstacionamientoTurnoOperativoTotalesSupport::calcularPorJornada($jornada);
-        $movimientos = $this->movimientosDesdeTotales($totales);
+        $fechaCotiz = $jornada->fecha_jornada?->format('Y-m-d') ?? date('Y-m-d');
+        $movimientos = $this->movimientosDesdeTotales($totales, $fechaCotiz, (int) $jornada->empresa_id);
         $auditoriaJornada = $this->jornadaPresentacionService->datosAuditoriaJornadaParaCaja($jornada);
         $marcadores = $auditoriaJornada;
         $numeracion = $marcadores['numeracion_comprobantes_json'] ?? [];
@@ -562,7 +565,7 @@ class RendicionEstacionamientoCajaService
             $mediosContado,
         );
 
-        $movimientos = $this->movimientosDesdeTotales($totales);
+        $movimientos = $this->movimientosDesdeTotales($totales, $fechaJornada, (int) $turno->empresa_id);
 
         return [
             'turno_operativo_estacionamiento_id' => (int) $turno->id,
@@ -1254,8 +1257,20 @@ class RendicionEstacionamientoCajaService
      * @param  array<string, mixed>  $totales  Resultado de EstacionamientoTurnoOperativoTotalesSupport::calcular()
      * @return list<array{cuentacaja_id:int, codigo:string, nombre:string, monto:float, esperado?:float, cotizacion:float, es_nota_credito?:bool, desde_contado_cierre?:bool}>
      */
-    private function movimientosDesdeTotales(array $totales): array
+    private function movimientosDesdeTotales(array $totales, ?string $fecha = null, int $empresaId = 1): array
     {
+        $fechaYmd = $fecha ?: date('Y-m-d');
+        $cuentaIds = [];
+        foreach ($totales['por_medio_pago'] ?? [] as $p) {
+            $cuentaId = (int) ($p['cuentacaja_id'] ?? 0);
+            if ($cuentaId > 0) {
+                $cuentaIds[] = $cuentaId;
+            }
+        }
+        $monedaPorCuenta = Cuentacaja::query()
+            ->whereIn('id', array_values(array_unique($cuentaIds)))
+            ->pluck('moneda_id', 'id');
+
         $movimientos = [];
         foreach ($totales['por_medio_pago'] ?? [] as $p) {
             $cuentaId = (int) ($p['cuentacaja_id'] ?? 0);
@@ -1267,13 +1282,14 @@ class RendicionEstacionamientoCajaService
             $monto = $desdeContadoCierre
                 ? round((float) $p['contado'], 2)
                 : $esperado;
+            $monedaId = (int) ($monedaPorCuenta[$cuentaId] ?? 1);
             $movimientos[] = [
                 'cuentacaja_id' => $cuentaId,
                 'codigo' => (string) ($p['codigo'] ?? ''),
                 'nombre' => (string) ($p['nombre'] ?? $p['codigo'] ?? ''),
                 'monto' => $monto,
                 'esperado' => $esperado,
-                'cotizacion' => 1.0,
+                'cotizacion' => CotizacionTesoreriaConsultaSupport::calculaVenta($fechaYmd, $monedaId, $empresaId),
                 'desde_contado_cierre' => $desdeContadoCierre,
             ];
         }

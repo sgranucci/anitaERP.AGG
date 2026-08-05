@@ -37,10 +37,39 @@ final class RendicionMaquinaResultadoCalculo
      */
     public function totalesCierre(): array
     {
+        $ventaFicha = $this->get('inputs.venta_ficha');
+        $ventaRuleta = $this->get('inputs.venta_ruleta');
+        $dropEfectivoNeto = round(
+            $this->get('calc.drop_bill_rodillo') + $this->get('calc.drop_bill_ruleta'),
+            2
+        );
+        $dropQrNeto = round(
+            $this->get('inputs.dropqr_rodillo') + $this->get('inputs.dropqr_ruleta'),
+            2
+        );
+        // WIN (reporte Anita, pie): neto drop efectivo + neto drop QR
+        // + venta slot + venta ruleta − pagos manuales − pagos de tito.
+        // No restar impuesto_venta: las ventas ya entran netas (si se resta, se descuenta 2 veces).
+        $win = round(
+            $dropEfectivoNeto
+            + $dropQrNeto
+            + $ventaFicha
+            + $ventaRuleta
+            - $this->get('inputs.pago_manual')
+            - $this->get('inputs.tito')
+            - $this->get('inputs.tito_ruleta'),
+            2
+        );
+
         return [
             'fondo_inicial' => $this->get('inputs.fondo_inicial'),
             'comprobante' => $this->get('calc.comprobante'),
             'fondo_fijo' => $this->get('calc.fondo_fijo'),
+            'venta_ficha' => $ventaFicha,
+            'venta_ruleta' => $ventaRuleta,
+            // Anita: suma cruda slots + ruletas (sin hopper; hopper va por separado en salidas).
+            'total_ventas' => round($ventaFicha + $ventaRuleta, 2),
+            'win' => $win,
             'drop_billete_bruto' => $this->get('inputs.drop_billete_bruto') > 0
                 ? $this->get('inputs.drop_billete_bruto')
                 : round($this->get('inputs.drop_billete') + $this->get('inputs.impuesto_drop'), 2),

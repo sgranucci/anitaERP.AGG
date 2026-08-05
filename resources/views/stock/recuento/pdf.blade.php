@@ -63,8 +63,8 @@
     <h2>Detalle de conteo</h2>
     <p style="margin:0 0 6px 0; color:#555; font-size:8px;">
         Ordenado por tipo de art&iacute;culo y SKU.
-        Costo unitario = precio de &uacute;ltima compra: primero Anita (stkmae.stkm_pre_compra3);
-        si no hay dato, &uacute;ltima COM confirmada en el ERP; si no, costo/PPP del art&iacute;culo.
+        Costo unitario = precio de &uacute;ltima compra: primero ERP (COM confirmada);
+        si no hay dato, Anita (stkmae.stkm_pre_compra3); si no, costo/PPP del art&iacute;culo.
     </p>
     <table>
         <thead>

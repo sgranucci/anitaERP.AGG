@@ -56,12 +56,26 @@
     </div>
     <div class="col-sm-6">
         <div class="form-group row">
-            <label for="numerocae" class="col-lg-3 col-form-label requerido">CAE</label>
+            <label for="tipo_autorizacion" class="col-lg-3 col-form-label">Tipo autorización</label>
+            <div class="col-lg-3">
+                @php
+                    $tipoAutPre = old('tipo_autorizacion', $data->tipo_autorizacion ?? (filled(old('numerocae', $data->numerocae ?? '')) ? 'CAE' : ''));
+                @endphp
+                <select name="tipo_autorizacion" id="tipo_autorizacion" class="form-control">
+                    <option value="">—</option>
+                    @foreach (\App\Support\Compras\ComprobanteProveedorTipoAutorizacion::todos() as $tipoOpt)
+                        <option value="{{ $tipoOpt }}" @selected($tipoAutPre === $tipoOpt)>{{ $tipoOpt }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <label for="numerocae" class="col-lg-2 col-form-label requerido">Nº CAE/CAEA</label>
             <div class="col-lg-4">
                 <input type="text" name="numerocae" id="numerocae" class="form-control" value="{{old('numerocae', $data->numerocae ?? '')}}" readonly/>
             </div>
+		</div>
+        <div class="form-group row">
 			<label for="fechavencimientocaicae" class="col-lg-3 col-form-label requerido">Vencimiento</label>
-			<div class="col-lg-2">
+			<div class="col-lg-3">
 				<input type="date" name="fechavencimientocaicae" id="fechavencimientocaicae" class="form-control" value="{{substr(old('fechavencimientocaicae', $data->fechavencimientocaicae ?? date('Y-m-d')),0,10)}}" readonly>
 			</div>
 		</div>   

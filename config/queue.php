@@ -96,7 +96,7 @@ return [
     | Verificación worker/cola en hora pico gastronomía (schedule + mail SMTP).
     | Comando: php artisan queue:verificar-pico
     */
-    'workers_numprocs' => max(1, (int) env('QUEUE_WORKERS_NUMPROCS', 3)),
+    'workers_numprocs' => max(1, (int) env('QUEUE_WORKERS_NUMPROCS', 4)),
 
     'verificacion_pico' => [
         'habilitada' => filter_var(env('QUEUE_VERIFICACION_PICO_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),

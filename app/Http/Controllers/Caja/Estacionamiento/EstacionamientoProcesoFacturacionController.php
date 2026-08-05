@@ -18,7 +18,7 @@ use App\Services\Caja\Estacionamiento\EstacionamientoFacturaEmisionService;
 use App\Services\Caja\Estacionamiento\EstacionamientoPvService;
 use App\Services\Caja\Estacionamiento\EstacionamientoTurnoOperativoService;
 use App\Services\Caja\Estacionamiento\JornadaEstacionamientoService;
-use App\Services\Configuracion\CotizacionService;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoCuentacajaEfectivo;
 use App\Support\Caja\Estacionamiento\EstacionamientoIdentificadorPc;
 use App\Support\Caja\Estacionamiento\EstacionamientoItemCatalogoSupport;
@@ -386,23 +386,26 @@ class EstacionamientoProcesoFacturacionController extends Controller
         $request->validate([
             'moneda_id' => 'required|integer',
             'fecha' => 'nullable|date',
+            'empresa_id' => 'nullable|integer',
         ]);
 
         $fecha = $request->get('fecha') ?: Carbon::today()->format('Y-m-d');
 
-        /** @var CotizacionService $svc */
-        $svc = app(CotizacionService::class);
-        $cot = $svc->leeCotizacionDiaria($fecha, (int) $request->get('moneda_id'));
-        $valor = 0.;
-        if ($cot && isset($cot['cotizacionventa'])) {
-            $valor = (float) $cot['cotizacionventa'];
-        }
-
+        $monedaId = (int) $request->get('moneda_id');
+        $empresaId = (int) ($request->get('empresa_id') ?: 1);
+        $cot = CotizacionTesoreriaConsultaSupport::leeDiaria($fecha, $monedaId, $empresaId);
+        $valor = (float) ($cot['cotizacionventa'] ?? 0);
         if ($valor <= 0) {
             $valor = 1.;
         }
 
-        return response()->json(['cotizacion' => $valor, 'fecha' => $fecha]);
+        return response()->json([
+            'cotizacion' => $valor,
+            'fecha' => $fecha,
+            'fecha_cotizacion' => $cot['fecha_usada'] ?? $fecha,
+            'empresa_id' => $empresaId,
+            'origen' => 'cotizacion_tesoreria',
+        ]);
     }
 
     public function apiActualizarCuenta(Request $request, int $id)

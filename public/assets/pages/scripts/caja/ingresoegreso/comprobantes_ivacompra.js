@@ -139,6 +139,7 @@
         $('#ie-cp-tipo-tesoreria').val('FONDO_FIJO');
         $('#ie-cp-tipotransaccion-compra-id').val('');
         $('#ie-cp-letra, #ie-cp-sucursal, #ie-cp-numero, #ie-cp-total, #ie-cp-cae').val('');
+        $('#ie-cp-tipo-autorizacion').val('');
         $('#ie-cp-proveedor-id, #ie-cp-proveedor-nombre').val('');
         $('#ie-cp-eventual-nombre, #ie-cp-eventual-documento').val('');
         $('#ie-cp-eventual-condicioniva').val('');
@@ -172,6 +173,7 @@
             $('#ie-cp-total').val(c.total || 0);
             $('#ie-cp-moneda-id').val(c.moneda_id || 1);
             $('#ie-cp-cae').val(c.numerocae || '');
+            $('#ie-cp-tipo-autorizacion').val(c.tipo_autorizacion || (c.numerocae ? 'CAE' : ''));
             $('#ie-cp-pdf-temp-id').val(c.pdf_temp_id || '');
             // Ya estaba en grilla: no descartar al cerrar sin re-aceptar.
             iaDecisionId = c.ai_decision_id || null;
@@ -277,6 +279,7 @@
             moneda_id: parseInt($('#ie-cp-moneda-id').val() || '1', 10),
             cotizacion: 1,
             numerocae: $('#ie-cp-cae').val() || null,
+            tipo_autorizacion: $('#ie-cp-tipo-autorizacion').val() || null,
             pdf_temp_id: ($('#ie-cp-pdf-temp-id').val() || '').trim() || null,
             ai_decision_id: iaDecisionId,
             ai_sugerencia_hash: iaSugerenciaHash,
@@ -454,6 +457,7 @@
             $('#ie-cp-fecha-iva').val((cab.fechaiva || '').slice(0, 10));
             $('#ie-cp-total').val(cab.total || 0);
             $('#ie-cp-cae').val(cab.numerocae || '');
+            $('#ie-cp-tipo-autorizacion').val(cab.tipo_autorizacion || (cab.numerocae ? 'CAE' : ''));
             $('#ie-cp-tbody-conceptos').empty();
             (data.conceptos || []).forEach(function (c) {
                 agregarFilaConcepto(c);

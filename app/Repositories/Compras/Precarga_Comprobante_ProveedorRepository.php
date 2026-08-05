@@ -3,6 +3,7 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -35,6 +36,12 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
     {
         $data['pararevisar'] = $this->normalizarParaRevisar($data);
 
+        $data['tipo_autorizacion'] = ComprobanteProveedorTipoAutorizacion::normalizar(
+            $data['tipo_autorizacion'] ?? null
+        ) ?? (filled($data['numerocae'] ?? null)
+            ? ComprobanteProveedorTipoAutorizacion::CAE
+            : null);
+
         ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
             (int) $data['empresa_id'],
             (int) $data['tipotransaccion_compra_id'],
@@ -42,6 +49,9 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             (int) ($data['sucursal'] ?? 0),
             (int) ($data['numerocomprobante'] ?? 0),
             (int) $data['proveedor_id'],
+            null,
+            $data['numerocae'] ?? null,
+            $data['tipo_autorizacion'] ?? null,
         );
 
         $data['identificacion_proveedor_cuit'] = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
@@ -64,6 +74,14 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
     {
         $data['pararevisar'] = $this->normalizarParaRevisar($data);
 
+        if (array_key_exists('tipo_autorizacion', $data) || array_key_exists('numerocae', $data)) {
+            $data['tipo_autorizacion'] = ComprobanteProveedorTipoAutorizacion::normalizar(
+                $data['tipo_autorizacion'] ?? null
+            ) ?? (filled($data['numerocae'] ?? null)
+                ? ComprobanteProveedorTipoAutorizacion::CAE
+                : null);
+        }
+
         ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
             (int) $data['empresa_id'],
             (int) $data['tipotransaccion_compra_id'],
@@ -72,6 +90,8 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             (int) ($data['numerocomprobante'] ?? 0),
             (int) $data['proveedor_id'],
             (int) $id,
+            $data['numerocae'] ?? null,
+            $data['tipo_autorizacion'] ?? null,
         );
 
         $data['identificacion_proveedor_cuit'] = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(

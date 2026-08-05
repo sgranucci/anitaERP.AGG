@@ -17,6 +17,7 @@ use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\DepmaeControlStockSupport;
 use App\Support\Configuracion\OperacionPublicaTokenSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
+use App\Support\Stock\RecuentoBloqueoSalidaDepositoSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
@@ -302,6 +303,15 @@ class TransferenciaMercaderiaService
             $this->assertDepositoAutorizado($depositoSalidaId);
             if (! TransferenciaMercaderiaIntercompanySupport::depositoSalidaAutorizado($depositoSalidaId, $empresaId)) {
                 return ['ok' => false, 'mensaje' => 'Depósito de salida no autorizado para su usuario o empresa.'];
+            }
+            try {
+                RecuentoBloqueoSalidaDepositoSupport::assertSalidaPermitida(
+                    $depositoSalidaId,
+                    Carbon::now()->toDateString(),
+                    TransferenciaMercaderiaSignoSupport::signoCantidad(true),
+                );
+            } catch (\InvalidArgumentException $e) {
+                return ['ok' => false, 'mensaje' => $e->getMessage()];
             }
         }
         if (! $destinoBienUso && ! TransferenciaMercaderiaIntercompanySupport::depositoEntradaAutorizado($depositoEntradaId, $empresaId)) {

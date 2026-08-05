@@ -12,6 +12,7 @@ use App\Services\Ai\Skills\AiSkillContext;
 use App\Services\Ai\Skills\AiSkillRegistry;
 use App\Services\Compras\Ai\ExtraerFacturaProveedorSkill;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
+use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaProveedor\ComprobanteProveedorPdfIaConceptoMatcherSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorIibbPadronCruceSupport;
@@ -193,6 +194,12 @@ final class ComprobanteProveedorPdfIaService
         $sucursal = $this->normalizarEntero($resuelto['sucursal'] ?? null);
         $numeroFactura = $this->normalizarEntero($resuelto['numero_factura'] ?? null);
 
+        $tipoAutorizacion = ComprobanteProveedorTipoAutorizacion::normalizar(
+            $resuelto['tipo_autorizacion'] ?? null
+        ) ?? (filled($resuelto['numerocae'] ?? null)
+            ? ComprobanteProveedorTipoAutorizacion::CAE
+            : null);
+
         ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
             $empresaId,
             $tipotransaccionId,
@@ -200,6 +207,9 @@ final class ComprobanteProveedorPdfIaService
             $sucursal,
             $numeroFactura,
             $proveedorId,
+            null,
+            $resuelto['numerocae'] ?? null,
+            $tipoAutorizacion,
         );
 
         $rutaAlmacenamiento = $resuelto['ruta_almacenamiento'] ?? null;
@@ -223,6 +233,7 @@ final class ComprobanteProveedorPdfIaService
             'fecharecepcionemail' => $resuelto['fecha_recepcion_email'] ?? now()->format('Y-m-d'),
             'fechavencimientocaicae' => $resuelto['fecha_vto_cai_cae'] ?? null,
             'numerocae' => $resuelto['numerocae'] ?? null,
+            'tipo_autorizacion' => $tipoAutorizacion,
             'numeroordencompra' => $numeroOc,
             'rutaalmacenamiento' => $rutaAlmacenamiento,
             'pararevisar' => $forzarParaRevisar === true

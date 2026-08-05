@@ -10,9 +10,11 @@
 <div id="cp-bloque-recepciones-com" class="mt-4">
     <h4 class="mb-2">Recepciones COM (factura contra recepción)</h4>
     <p class="text-muted small">
-        Seleccione las recepciones COM a facturar. Al contabilizar, el asiento de la recepción no se modifica:
-        la factura debita la provisión (neto COM), los impuestos y —si el neto supera la COM— la diferencia prorrateada
-        en las cuentas de compra de los artículos; el haber va a la cuenta de proveedores.
+        Seleccione las recepciones COM a facturar (obligatorio en legajo). Al guardar, se controla la cotización
+        (moneda extranjera) y la tolerancia de importe vs provisión COM según configuración por centro de costo.
+        Si la cotización difiere y las COM son del mismo mes, se actualiza automáticamente la cotización de las recepciones.
+        Al contabilizar, el asiento de la recepción no se modifica: la factura debita la provisión (neto COM),
+        los impuestos y —si el neto supera la COM— la diferencia prorrateada en las cuentas de compra; el haber va a proveedores.
     </p>
     @if (! empty($comResolucion['importe_comparacion']))
     <p class="text-muted small mb-2">

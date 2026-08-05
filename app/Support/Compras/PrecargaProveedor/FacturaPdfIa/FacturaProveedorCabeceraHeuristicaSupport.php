@@ -24,6 +24,7 @@ final class FacturaProveedorCabeceraHeuristicaSupport
         $comprobante = $this->extraerComprobante($textoNorm);
         $monedaCotiz = $this->extraerMonedaYCotizacion($textoNorm);
         $oc = $this->numeroOcExtractor->extraer($textoNorm);
+        $cae = $this->extraerCae($textoNorm);
 
         return [
             'cuit_destinatario' => $cuits['destinatario'],
@@ -35,7 +36,8 @@ final class FacturaProveedorCabeceraHeuristicaSupport
             'sucursal' => $comprobante['sucursal'],
             'numero_factura' => $comprobante['numero'],
             'fecha_factura' => $this->extraerFechaFactura($textoNorm),
-            'numerocae' => $this->extraerCae($textoNorm),
+            'numerocae' => $cae['numero'],
+            'tipo_autorizacion' => $cae['tipo'],
             'fecha_vto_cai_cae' => $this->extraerFechaVtoCae($textoNorm),
             'subtotal' => $this->extraerSubtotal($textoNorm),
             'total' => $this->extraerTotal($textoNorm),
@@ -178,20 +180,27 @@ final class FacturaProveedorCabeceraHeuristicaSupport
         return sprintf('%04d-%02d-%02d', $year, (int) $m, (int) $d);
     }
 
-    private function extraerCae(string $texto): ?string
+    /** @return array{numero: ?string, tipo: ?string} */
+    private function extraerCae(string $texto): array
     {
-        // C.A.E.: / C-A-E-i / CAE N° — OCR suele separar las letras.
+        // CAEA primero (puede repetirse); luego CAE / CAI.
         $patrones = [
-            '/C[\.\-\s]*A[\.\-\s]*E[\.\-\s]*(?:N[°ºo]\.?)?[:\s]*(\d{10,20})/iu',
-            '/\bCAI\s*(?:N[°ºo]\.?)?[:\s]*(\d{10,20})/iu',
+            ['tipo' => 'CAEA', 'patron' => '/C[\.\-\s]*A[\.\-\s]*E[\.\-\s]*A[\.\-\s]*(?:N[°ºo]\.?)?[:\s]*(\d{10,20})/iu'],
+            ['tipo' => 'CAE', 'patron' => '/C[\.\-\s]*A[\.\-\s]*E[\.\-\s]*(?:N[°ºo]\.?)?[:\s]*(\d{10,20})/iu'],
+            ['tipo' => 'CAI', 'patron' => '/\bCAI\s*(?:N[°ºo]\.?)?[:\s]*(\d{10,20})/iu'],
         ];
-        foreach ($patrones as $patron) {
-            if (preg_match($patron, $texto, $m)) {
-                return $m[1];
+        foreach ($patrones as $item) {
+            if (preg_match($item['patron'], $texto, $m)) {
+                // Evitar que el patrón CAE capture un CAEA ya matcheado como "CAE" + "A…".
+                if ($item['tipo'] === 'CAE' && preg_match('/C[\.\-\s]*A[\.\-\s]*E[\.\-\s]*A/iu', $texto)) {
+                    continue;
+                }
+
+                return ['numero' => $m[1], 'tipo' => $item['tipo']];
             }
         }
 
-        return null;
+        return ['numero' => null, 'tipo' => null];
     }
 
     private function extraerFechaVtoCae(string $texto): ?string

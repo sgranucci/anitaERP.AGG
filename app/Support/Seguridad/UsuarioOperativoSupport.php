@@ -251,6 +251,7 @@ final class UsuarioOperativoSupport
         array $columnas = ['id', 'nombre', 'email', 'usuario'],
         bool $soloConEmail = false,
         array $with = [],
+        ?int $sectorLegajocompraId = null,
     ): Collection {
         $query = self::query()->orderBy('nombre');
 
@@ -266,6 +267,10 @@ final class UsuarioOperativoSupport
 
         if ($centrocostoId !== null && $centrocostoId > 0) {
             $query->where('centrocosto_id', $centrocostoId);
+        }
+
+        if ($sectorLegajocompraId !== null && $sectorLegajocompraId > 0) {
+            $query->where('sector_legajocompra_id', $sectorLegajocompraId);
         }
 
         return $query->get($columnas);

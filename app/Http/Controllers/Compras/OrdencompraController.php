@@ -40,8 +40,10 @@ use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
+use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraListadoFiltros;
+use Illuminate\Http\JsonResponse;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\OrdencompraPdfContextoRequisicion;
 use App\Support\Compras\OrdencompraTotalesCabecera;
@@ -608,19 +610,42 @@ class OrdencompraController extends Controller
             'sector_legajocompra_id' => 'required|integer|exists:sector_legajocompra,id',
             'observacion' => 'nullable|string|max:255',
             'leyenda' => 'nullable|string|max:2000',
+            'factura_pdf' => 'nullable|file|mimes:pdf|max:20480',
         ]);
         $ret = $this->ordencompraGestionService->cambiarSector(
             (int) $id,
             (int) $request->sector_legajocompra_id,
             $request->observacion,
-            $request->leyenda
+            $request->leyenda,
+            $request->file('factura_pdf'),
         );
 
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json($ret);
         }
 
-        return redirect()->back()->with('mensaje', ($ret['mensaje'] ?? '') === 'ok' ? 'Sector actualizado' : ($ret['errores'] ?? 'Error'));
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            return redirect()->back()->with('mensaje', 'Sector actualizado');
+        }
+
+        return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
+    }
+
+    public function gateCuentasAPagar(int $id): JsonResponse
+    {
+        can('actualizar-ordencompra');
+
+        $oc = Ordencompra::query()->find($id);
+        if (! $oc) {
+            return response()->json(['ok' => false, 'errores' => ['Orden de compra inexistente.']], 404);
+        }
+
+        $gate = OrdencompraEnvioCuentasAPagarGateSupport::evaluar($oc);
+        $gate['sector_cuentas_a_pagar_id'] = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR
+        );
+
+        return response()->json($gate);
     }
 
     /**

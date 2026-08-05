@@ -32,7 +32,7 @@
             </div>
             <div class="table-responsive">
                 <table class="table table-sm table-striped" id="tabla-partes-unicas">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>Nº parte</th>
                             <th>Estado</th>

@@ -12,7 +12,7 @@ use App\Models\Contable\Asiento_Archivo;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
-use App\Services\Configuracion\CotizacionService;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Caja\Remesa\RemesaSupport;
 use App\Support\Contable\CuentacajaCuentacontableResolverSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -30,7 +30,6 @@ final class RemesaAsientoService
         private readonly AsientoRepositoryInterface $asientoRepository,
         private readonly Asiento_MovimientoRepositoryInterface $asientoMovimientoRepository,
         private readonly TipoasientoRepositoryInterface $tipoasientoRepository,
-        private readonly CotizacionService $cotizacionService,
     ) {}
 
     /**
@@ -79,7 +78,7 @@ final class RemesaAsientoService
                 $monedaId = (int) $monedaId;
                 $cotizacion = $monedaId === self::MONEDA_DEFAULT
                     ? 1.0
-                    : (float) $this->cotizacionService->calculaCotizacionVenta($fecha, $monedaId);
+                    : CotizacionTesoreriaConsultaSupport::calculaVenta($fecha, $monedaId, (int) $remesa->empresa_id);
 
                 $abrev = (string) ($pack['moneda_abrev'] ?? '');
                 $detalle = $this->detalleAsiento($remesa, $abrev);

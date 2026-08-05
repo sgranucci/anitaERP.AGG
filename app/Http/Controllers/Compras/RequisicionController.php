@@ -31,8 +31,8 @@ use App\Services\Compras\OrdencompraGestionService;
 use App\Services\Compras\RequisicionArticuloCambioService;
 use App\Services\Compras\RequisicionService;
 use App\Services\Configuracion\ArbolaprobacionService;
-use App\Services\Stock\StkmaeUltimaCompraAnitaService;
 use App\Support\Compras\RequisicionLineasOcSupport;
+use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
@@ -62,8 +62,6 @@ class RequisicionController extends Controller
 
     private $partidagastoRepository;
 
-    private $stkmaeUltimaCompraAnitaService;
-
     private $cotizacionQuery;
 
     public function __construct(
@@ -77,7 +75,6 @@ class RequisicionController extends Controller
         Arbolaprobacion_MovimientoRepositoryInterface $arbolaprobacion_movimientorepository,
         ArbolaprobacionService $arbolaprobacionservice,
         PartidagastoRepositoryInterface $partidagastorepository,
-        StkmaeUltimaCompraAnitaService $stkmaeUltimaCompraAnitaService,
         CotizacionQueryInterface $cotizacionquery,
     ) {
         $this->requisicionRepository = $requisicionrepository;
@@ -90,7 +87,6 @@ class RequisicionController extends Controller
         $this->arbolaprobacion_movimientoRepository = $arbolaprobacion_movimientorepository;
         $this->arbolaprobacionService = $arbolaprobacionservice;
         $this->partidagastoRepository = $partidagastorepository;
-        $this->stkmaeUltimaCompraAnitaService = $stkmaeUltimaCompraAnitaService;
         $this->cotizacionQuery = $cotizacionquery;
     }
 
@@ -764,7 +760,7 @@ class RequisicionController extends Controller
     }
 
     /**
-     * Precio y moneda de última compra (Anita stkmae.stkm_pre_compra3 / stkm_cod_mon_co3) para líneas de requisición.
+     * Precio y moneda de última compra (ERP COM → Anita stkm_pre_compra3 → artículo) para líneas de requisición.
      */
     public function precioUltimaCompraArticulo(Request $request)
     {
@@ -779,7 +775,7 @@ class RequisicionController extends Controller
             $skus = [$skus];
         }
 
-        $datos = $this->stkmaeUltimaCompraAnitaService->obtenerDatosUltimaCompraPorSkus($skus);
+        $datos = ArticuloPrecioUltimaCompraSupport::resolverDatosPorSkus($skus);
 
         return response()->json(['datos' => $datos]);
     }

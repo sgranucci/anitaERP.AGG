@@ -104,6 +104,19 @@
                 @if ($rendicion->turno === 'C')
                     <tr><td class="lbl">Dif. caja</td><td class="num">{{ $fmt($rendicion->dif_caja) }}</td></tr>
                 @endif
+                @php
+                    // Ventas ya netas: no restar impuesto_venta (evitar doble descuento).
+                    $winPdf = round(
+                        $calc('drop_bill_rodillo') + $calc('drop_bill_ruleta')
+                        + $inp('dropqr_rodillo') + $inp('dropqr_ruleta')
+                        + $inp('venta_ficha') + $inp('venta_ruleta')
+                        - $inp('pago_manual')
+                        - $inp('tito')
+                        - $inp('tito_ruleta'),
+                        2
+                    );
+                @endphp
+                <tr class="fila-total"><td class="lbl">WIN</td><td class="num">{{ $fmt($winPdf) }}</td></tr>
             </table>
         </td>
         <td>
@@ -121,7 +134,8 @@
                         'drop_ruleta' => 'Drop ruleta',
                         'drop_bill_ant' => 'Drop rodillo anterior',
                         'drop_rul_ant' => 'Drop ruleta anterior',
-                        'venta_ficha' => 'Venta ficha',
+                        'venta_ficha' => 'Venta fichas (slots)',
+                        'venta_ruleta' => 'Venta ruletas',
                         'tito' => 'Tito rodillos',
                         'tito_ruleta' => 'Tito ruletas',
                         'pago_manual' => 'Pago manual',

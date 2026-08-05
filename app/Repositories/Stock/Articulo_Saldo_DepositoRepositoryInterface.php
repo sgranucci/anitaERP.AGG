@@ -31,6 +31,17 @@ interface Articulo_Saldo_DepositoRepositoryInterface
     ): float;
 
     /**
+     * Suma de movimientos de una variante con fecha estrictamente posterior a $fecha.
+     */
+    public function sumaVariantePosteriorAFecha(
+        int $articuloId,
+        int $depositoId,
+        string $fecha,
+        ?int $colorId,
+        ?int $talleId
+    ): float;
+
+    /**
      * @param  array<int, int>  $depositoIds
      * @return array<int, float>  map deposito_id => saldo (suma variantes)
      */

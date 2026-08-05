@@ -13,9 +13,9 @@ use Illuminate\Support\Facades\Schema;
  * Precio unitario de última compra para valorización de stock.
  *
  * Orden de resolución (ver también config/stock.php → precio_ultima_compra):
- * 1. Anita: stkmae.stkm_pre_compra3 (StkmaeUltimaCompraAnitaService)
- * 2. ERP: última COM confirmada (historia de precio OC o línea de recepción)
- * 3. Fallback: articulo.ppp (y costo/precio si existen en la instalación)
+ * 1. ERP: última COM confirmada (historia de precio OC o línea de recepción)
+ * 2. Anita: stkmae.stkm_pre_compra3 (StkmaeUltimaCompraAnitaService)
+ * 3. Fallback: articulo.costo / articulo.ppp / articulo.precio
  */
 final class ArticuloPrecioUltimaCompraSupport
 {
@@ -65,27 +65,24 @@ final class ArticuloPrecioUltimaCompraSupport
             }
         }
 
+        $articuloIds = [];
         $skuPorArticuloId = [];
-        $skus = [];
         foreach ($articulos as $id => $articulo) {
+            $id = (int) $id;
             if (! $articulo instanceof Articulo) {
                 continue;
             }
+            $articuloIds[] = $id;
             $sku = trim((string) ($articulo->sku ?? ''));
-            if ($sku === '') {
-                continue;
+            if ($sku !== '') {
+                $skuPorArticuloId[$id] = $sku;
             }
-            $skuPorArticuloId[(int) $id] = $sku;
-            $skus[] = $sku;
         }
 
-        $anitaService ??= app(StkmaeUltimaCompraAnitaService::class);
-        $datosAnita = $skus !== []
-            ? $anitaService->obtenerDatosUltimaCompraPorSkus(array_values(array_unique($skus)))
-            : [];
-
-        $articuloIdsSinAnita = [];
+        $erpPorId = self::preciosErpPorArticuloIds($articuloIds);
         $out = [];
+        $articuloIdsSinErp = [];
+
         foreach ($articulos as $id => $articulo) {
             $id = (int) $id;
             if (! $articulo instanceof Articulo) {
@@ -94,6 +91,30 @@ final class ArticuloPrecioUltimaCompraSupport
                 continue;
             }
 
+            if (isset($erpPorId[$id])) {
+                $out[$id] = $erpPorId[$id];
+
+                continue;
+            }
+
+            $articuloIdsSinErp[] = $id;
+        }
+
+        $skusAnita = [];
+        foreach ($articuloIdsSinErp as $id) {
+            $sku = $skuPorArticuloId[$id] ?? '';
+            if ($sku !== '') {
+                $skusAnita[] = $sku;
+            }
+        }
+
+        $anitaService ??= app(StkmaeUltimaCompraAnitaService::class);
+        $datosAnita = $skusAnita !== []
+            ? $anitaService->obtenerDatosUltimaCompraPorSkus(array_values(array_unique($skusAnita)))
+            : [];
+
+        foreach ($articuloIdsSinErp as $id) {
+            $articulo = $articulos[$id];
             $sku = $skuPorArticuloId[$id] ?? '';
             if ($sku !== '') {
                 $datoAnita = $datosAnita[$sku] ?? null;
@@ -107,18 +128,6 @@ final class ArticuloPrecioUltimaCompraSupport
 
                     continue;
                 }
-            }
-
-            $articuloIdsSinAnita[] = $id;
-        }
-
-        $erpPorId = self::preciosErpPorArticuloIds($articuloIdsSinAnita);
-        foreach ($articuloIdsSinAnita as $id) {
-            $articulo = $articulos[$id];
-            if (isset($erpPorId[$id])) {
-                $out[$id] = $erpPorId[$id];
-
-                continue;
             }
 
             $fallback = self::fallbackDesdeArticulo($articulo);
@@ -135,6 +144,21 @@ final class ArticuloPrecioUltimaCompraSupport
      * @return array<string, float|null> clave = SKU del ERP
      */
     public static function resolverPreciosPorSkus(array $skus): array
+    {
+        $datos = self::resolverDatosPorSkus($skus);
+        $out = [];
+        foreach ($datos as $sku => $dato) {
+            $out[$sku] = $dato['precio'] ?? null;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $skus
+     * @return array<string, array{precio: float|null, moneda_id: int|null, origen: string|null}>
+     */
+    public static function resolverDatosPorSkus(array $skus): array
     {
         $skus = array_values(array_unique(array_filter(array_map(
             static fn ($s) => trim((string) $s),
@@ -153,12 +177,16 @@ final class ArticuloPrecioUltimaCompraSupport
         $porId = self::resolverPorArticulos($articulos);
         foreach ($articulos as $articulo) {
             $dato = $porId[(int) $articulo->id] ?? null;
-            $porSku[(string) $articulo->sku] = $dato['precio'] ?? null;
+            $porSku[(string) $articulo->sku] = [
+                'precio' => $dato['precio'] ?? null,
+                'moneda_id' => $dato['moneda_id'] ?? null,
+                'origen' => $dato['origen'] ?? null,
+            ];
         }
 
         foreach ($skus as $sku) {
             if (! array_key_exists($sku, $porSku)) {
-                $porSku[$sku] = null;
+                $porSku[$sku] = ['precio' => null, 'moneda_id' => null, 'origen' => null];
             }
         }
 
@@ -194,6 +222,112 @@ final class ArticuloPrecioUltimaCompraSupport
             $linea->{$atributoPrecio} = $dato['precio'];
             $linea->{$atributoOrigen} = $dato['origen'];
         }
+    }
+
+    /**
+     * Asigna {@see $hijo->costo_ultima_compra} (no persistido) a líneas de fórmula con artículo.
+     *
+     * @param  iterable<object>  $hijos
+     */
+    public static function enriquecerLineasFormulaConCosto(iterable $hijos): void
+    {
+        $skus = [];
+        foreach ($hijos as $hijo) {
+            $sku = trim((string) (optional($hijo->articulos)->sku ?? ''));
+            if ($sku !== '') {
+                $skus[] = $sku;
+            }
+        }
+
+        if ($skus === []) {
+            return;
+        }
+
+        $precios = self::resolverPreciosPorSkus($skus);
+        foreach ($hijos as $hijo) {
+            $sku = trim((string) (optional($hijo->articulos)->sku ?? ''));
+            $hijo->costo_ultima_compra = $sku !== '' ? ($precios[$sku] ?? null) : null;
+        }
+    }
+
+    /**
+     * @param  iterable<\Illuminate\Contracts\Pagination\Paginator|\Illuminate\Support\Collection|array>  $formulas
+     */
+    public static function enriquecerFormulasPaginadasConCosto(iterable $formulas): void
+    {
+        $skus = [];
+        foreach ($formulas as $formula) {
+            foreach ($formula->formula_articulo_hijos ?? [] as $hijo) {
+                $sku = trim((string) (optional($hijo->articulos)->sku ?? ''));
+                if ($sku !== '') {
+                    $skus[] = $sku;
+                }
+            }
+        }
+
+        if ($skus === []) {
+            return;
+        }
+
+        $precios = self::resolverPreciosPorSkus($skus);
+        foreach ($formulas as $formula) {
+            foreach ($formula->formula_articulo_hijos ?? [] as $hijo) {
+                $sku = trim((string) (optional($hijo->articulos)->sku ?? ''));
+                $hijo->costo_ultima_compra = $sku !== '' ? ($precios[$sku] ?? null) : null;
+            }
+        }
+    }
+
+    /**
+     * Últimas N recepciones COM confirmadas con precio &gt; 0 (más recientes primero).
+     *
+     * @param  list<int>  $articuloIds
+     * @return array<int, list<float>> articulo_id => precios (máx. $limite)
+     */
+    public static function ultimasRecepcionesConfirmadasPorArticuloIds(array $articuloIds, int $limite = 3): array
+    {
+        $articuloIds = array_values(array_unique(array_filter(array_map('intval', $articuloIds), static fn ($id) => $id > 0)));
+        $limite = max(1, $limite);
+        if ($articuloIds === []) {
+            return [];
+        }
+
+        $recepcionesQuery = DB::table('recepcion_proveedor_articulo as rpa')
+            ->join('recepcion_proveedor as rp', 'rp.id', '=', 'rpa.recepcion_proveedor_id')
+            ->whereIn('rpa.articulo_id', $articuloIds)
+            ->where('rp.estado', RecepcionProveedorEstados::CONFIRMADA)
+            ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+            ->where('rpa.precio', '>', 0);
+
+        if (Schema::hasColumn('recepcion_proveedor', 'deleted_at')) {
+            $recepcionesQuery->whereNull('rp.deleted_at');
+        }
+
+        $recepciones = $recepcionesQuery
+            ->orderByDesc('rp.fecha')
+            ->orderByDesc('rp.id')
+            ->orderByDesc('rpa.id')
+            ->get([
+                'rpa.articulo_id',
+                'rpa.precio',
+            ]);
+
+        $out = [];
+        foreach ($recepciones as $fila) {
+            $articuloId = (int) $fila->articulo_id;
+            if ($articuloId <= 0) {
+                continue;
+            }
+            if (! isset($out[$articuloId])) {
+                $out[$articuloId] = [];
+            }
+            if (count($out[$articuloId]) >= $limite) {
+                continue;
+            }
+            $out[$articuloId][] = round((float) $fila->precio, 6);
+        }
+
+        return $out;
     }
 
     /**

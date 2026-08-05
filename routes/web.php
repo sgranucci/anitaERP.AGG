@@ -2487,6 +2487,15 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::delete('caja/remesa/{id}', 'Caja\RemesaController@anular')->name('anular_remesa');
     Route::post('caja/remesa/api/lineas-empresa', 'Caja\RemesaController@apiLineasEmpresa')->name('remesa_api_lineas_empresa');
 
+    Route::get('caja/cotizacion-tesoreria', 'Caja\CotizacionTesoreriaController@index')->name('cotizacion_tesoreria');
+    Route::get('caja/lista-cotizacion-tesoreria/{formato?}/{busqueda?}', 'Caja\CotizacionTesoreriaController@listar')->name('lista_cotizacion_tesoreria');
+    Route::get('caja/cotizacion-tesoreria/crear', 'Caja\CotizacionTesoreriaController@crear')->name('crear_cotizacion_tesoreria');
+    Route::post('caja/cotizacion-tesoreria/sincronizar-anita', 'Caja\CotizacionTesoreriaController@sincronizarDesdeAnita')->name('sincronizar_cotizacion_tesoreria_anita');
+    Route::post('caja/cotizacion-tesoreria', 'Caja\CotizacionTesoreriaController@guardar')->name('guardar_cotizacion_tesoreria');
+    Route::get('caja/cotizacion-tesoreria/{id}/editar', 'Caja\CotizacionTesoreriaController@editar')->name('editar_cotizacion_tesoreria');
+    Route::put('caja/cotizacion-tesoreria/{id}', 'Caja\CotizacionTesoreriaController@actualizar')->name('actualizar_cotizacion_tesoreria');
+    Route::delete('caja/cotizacion-tesoreria/{id}', 'Caja\CotizacionTesoreriaController@eliminar')->name('eliminar_cotizacion_tesoreria');
+
     Route::get('caja/bingo/concepto-rendicion', 'Caja\Bingo\BingoConceptoRendicionController@index')->name('bingo_concepto_rendicion');
     Route::get('caja/lista-bingo-concepto-rendicion/{formato?}/{busqueda?}', 'Caja\Bingo\BingoConceptoRendicionController@listar')->name('lista_bingo_concepto_rendicion');
     Route::get('caja/bingo/concepto-rendicion/crear', 'Caja\Bingo\BingoConceptoRendicionController@crear')->name('crear_bingo_concepto_rendicion');
@@ -2961,6 +2970,10 @@ Route::post('compras/comprobante-proveedor/validar-proveedor-arca-apoc', 'Compra
 Route::get('compras/comprobante-proveedor/{id}/factura-pdf', 'Compras\Comprobante_ProveedorController@verFacturaPdf')->name('comprobante_proveedor_factura_pdf');
 Route::get('compras/comprobante-proveedor/{id}/archivo/{archivo}', 'Compras\Comprobante_ProveedorController@descargarArchivo')->name('comprobante_proveedor_archivo');
 
+Route::get('compras/configuracion-comprobante-proveedor', 'Compras\ConfiguracionComprobanteProveedorController@index')->name('configuracion_comprobante_proveedor');
+Route::put('compras/configuracion-comprobante-proveedor', 'Compras\ConfiguracionComprobanteProveedorController@actualizar')->name('actualizar_configuracion_comprobante_proveedor');
+Route::post('compras/configuracion-comprobante-proveedor/tolerancias', 'Compras\ConfiguracionComprobanteProveedorController@guardarTolerancias')->name('guardar_tolerancias_comprobante_proveedor');
+
 Route::get('compras/pagoproveedor', 'Compras\PagoproveedorController@index')->name('pagoproveedor');
 Route::get('compras/pagoproveedor/crear', 'Compras\PagoproveedorController@crear')->name('crear_pagoproveedor');
 Route::post('compras/pagoproveedor', 'Compras\PagoproveedorController@guardar')->name('guardar_pagoproveedor');
@@ -3089,6 +3102,7 @@ Route::post('compras/ordencompra/{id}/cambiar-estado', 'Compras\OrdencompraContr
 Route::post('compras/ordencompra/{id}/reactivar', 'Compras\OrdencompraController@reactivarSuspendida')->name('ordencompra_reactivar');
 Route::post('compras/ordencompra/{id}/revertir-cierre-lineas', 'Compras\OrdencompraController@revertirCierreLineas')->name('ordencompra_revertir_cierre_lineas');
 Route::post('compras/ordencompra/{id}/cambiar-sector', 'Compras\OrdencompraController@cambiarSector')->name('ordencompra_cambiar_sector');
+Route::get('compras/ordencompra/{id}/gate-cuentas-a-pagar', 'Compras\OrdencompraController@gateCuentasAPagar')->name('ordencompra_gate_cuentas_a_pagar');
 Route::get('compras/ordencompra/soloconsulta/{id}', 'Compras\OrdencompraController@soloConsulta')->name('solo_consulta_ordencompra');
 Route::get('compras/ordencompra/visualizar/{id}/{hash}', 'Compras\OrdencompraController@visualizar')->name('visualizar_ordencompra');
 

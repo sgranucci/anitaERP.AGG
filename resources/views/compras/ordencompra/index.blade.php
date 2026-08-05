@@ -8,6 +8,7 @@
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
 @if (session('sugerir_envio_oc'))
 <script>
     window.ocSugerirEnvioProveedor = { ordencompra_id: {{ (int) session('sugerir_envio_oc') }} };
@@ -22,14 +23,23 @@ $(function () {
         $('#index_oc_estado_obs').val('');
         $('#modalIndexOcCambiarEstado').modal('show');
     });
+    if (window.OcCambiarSectorLegajo) {
+        window.OcCambiarSectorLegajo.initForm($('#formIndexOcSector'));
+    }
     $('.js-oc-index-abrir-sector').on('click', function () {
-        $('#formIndexOcSector').attr('action', $(this).data('url'));
+        var $form = $('#formIndexOcSector');
+        $form.attr('action', $(this).data('url'));
         var sid = $(this).data('sector-id');
         if (sid) {
             $('#index_oc_sector_nuevo').val(String(sid));
         }
         $('#index_oc_sector_obs').val('');
         $('#index_oc_sector_leyenda').val('');
+        $form.find('input[type=file]').val('');
+        var ocId = $(this).data('ordencompra-id') || '';
+        if (window.OcCambiarSectorLegajo) {
+            window.OcCambiarSectorLegajo.setOrdencompraId($form, ocId);
+        }
         $('#modalIndexOcCambiarSector').modal('show');
     });
 });
@@ -79,7 +89,7 @@ $(function () {
 <div class="modal fade" id="modalIndexOcCambiarSector" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
-            <form method="POST" id="formIndexOcSector" action="">
+            <form method="POST" id="formIndexOcSector" action="" enctype="multipart/form-data">
                 @csrf
                 <div class="modal-header">
                     <h5 class="modal-title">Cambiar sector de legajo</h5>
@@ -94,6 +104,7 @@ $(function () {
                             @endforeach
                         </select>
                     </div>
+                    @include('compras.ordencompra.partials.bloque_factura_legajo_sector', ['prefix' => 'index_oc'])
                     <div class="form-group">
                         <label for="index_oc_sector_obs">Observación</label>
                         <input type="text" name="observacion" id="index_oc_sector_obs" class="form-control" maxlength="255">
@@ -218,7 +229,8 @@ $(function () {
                                         </button>
                                         <button type="button" class="btn-accion-tabla tooltipsC js-oc-index-abrir-sector text-dark" title="Cambiar sector"
                                             data-url="{{ route('ordencompra_cambiar_sector', ['id' => $row->id]) }}"
-                                            data-sector-id="{{ $row->sector_legajocompra_id }}">
+                                            data-sector-id="{{ $row->sector_legajocompra_id }}"
+                                            data-ordencompra-id="{{ $row->id }}">
                                             <i class="fa fa-folder-open"></i>
                                         </button>
                                     @endif

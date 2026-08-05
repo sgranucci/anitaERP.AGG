@@ -5,7 +5,7 @@ namespace App\Support\Stock;
 use App\Models\Stock\Articulo;
 
 /**
- * Costo unitario para líneas de transferencia: última compra (Anita → ERP COM → artículo).
+ * Costo unitario para líneas de transferencia: última compra (ERP → Anita → artículo).
  */
 final class TransferenciaMercaderiaCostoSupport
 {

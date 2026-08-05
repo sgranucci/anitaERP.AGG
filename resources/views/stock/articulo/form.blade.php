@@ -3,13 +3,13 @@
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
-    				<label for="sku" class="col-lg-4 col-form-label requerido">Sku</label>
+    				<label for="sku" class="col-lg-4 col-form-label text-right pr-2 requerido">Sku</label>
     				<div class="col-lg-5">
     					<input type="text" name="sku" id="sku" class="form-control sku" value="{{old('sku', $producto->sku ?? '')}}" required/>
                 	</div>
                 </div>
                 <div class="form-group row">
-    				<label for="descripcion" class="col-lg-4 col-form-label requerido">Descripci&oacute;n</label>
+    				<label for="descripcion" class="col-lg-4 col-form-label text-right pr-2 requerido">Descripci&oacute;n</label>
     				<div class="col-lg-8">
     					<input type="text" name="descripcion" id="descripcion" class="form-control descripcion" value="{{old('descripcion', $producto->descripcion ?? '')}}" required/>
                 	</div>
@@ -17,7 +17,7 @@
             </div>
             <div class="col-sm-6">
 				<div class="form-group row">
-    				<label for="usoarticulo_id" class="col-lg-4 col-form-label requerido">Uso de art&iacute;culo</label>
+    				<label for="usoarticulo_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Uso de art&iacute;culo</label>
 					<div class="col-lg-3">
 					<select id="usoarticulo_id" name="usoarticulo_id" class="form-control" required>
                         <option value="">-- Seleccionar --</option>
@@ -30,13 +30,13 @@
                         @endforeach
                     </select>
                     </div>
-                    <label for="estado" class="col-lg-2 col-form-label">Estado</label>
+                    <label for="estado" class="col-lg-2 col-form-label text-right pr-2">Estado</label>
                     <div class="col-lg-2">
                         <input type="text" name="estado" id="estado" class="form-control" value="{{old('estado', $producto->estado ?? 'ACTIVO')}}" readonly>
                     </div>
               	</div>
 				<div class="form-group row">
-    				<label for="unidadmedida" class="col-lg-4 col-form-label requerido">Unidad de medida</label>
+    				<label for="unidadmedida" class="col-lg-4 col-form-label text-right pr-2 requerido">Unidad de medida</label>
 					<div class="col-lg-4">
 					<select id="unidadmedida_id" name="unidadmedida_id" class="form-control unidadmedida" required>
                         <option value="">-- Seleccionar --</option>
@@ -57,7 +57,7 @@
             </div>
         </div>
         <div class="form-group row">
-            <label for="detalle" class="col-lg-2 col-form-label">Descripci&oacute;n detallada</label>
+            <label for="detalle" class="col-lg-2 col-form-label text-right pr-2">Descripci&oacute;n detallada</label>
             <div class="col-lg-8">
                 <input type="text" name="detalle" id="detalle" class="form-control" value="{{old('detalle', $producto->detalle ?? '')}}"/>
             </div>
@@ -65,13 +65,13 @@
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
-    				<label for="codigobarra" class="col-lg-4 col-form-label">C&oacute;digo de barra</label>
+    				<label for="codigobarra" class="col-lg-4 col-form-label text-right pr-2">C&oacute;digo de barra</label>
     				<div class="col-lg-5">
     					<input type="text" name="codigobarra" id="codigobarra" class="form-control" maxlength="50" value="{{old('codigobarra', $producto->codigobarra ?? '')}}"/>
                 	</div>
                 </div>
 				<div class="form-group row">
-    				<label for="tipoarticulo_id" class="col-lg-4 col-form-label requerido">Tipo del art&iacute;culo</label>
+    				<label for="tipoarticulo_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Tipo del art&iacute;culo</label>
     				<div class="col-lg-8">
     					<select id="tipoarticulo_id" name="tipoarticulo_id" class="form-control" required>
                         <option value="">-- Seleccionar --</option>
@@ -86,7 +86,7 @@
     				</div>
               	</div>
 				<div class="form-group row">
-    				<label for="categoria_id" class="col-lg-4 col-form-label requerido">Categor&iacute;a</label>
+    				<label for="categoria_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Categor&iacute;a</label>
 					<div class="col-lg-8">
 					<select id="categoria_id" name="categoria_id" class="form-control" required>
                         <option value="">-- Seleccionar --</option>
@@ -101,7 +101,7 @@
                     </div>
                 </div>
 				<div class="form-group row">
-    				<label for="subcategoria_id" class="col-lg-4 col-form-label">Subcategor&iacute;a</label>
+    				<label for="subcategoria_id" class="col-lg-4 col-form-label text-right pr-2">Subcategor&iacute;a</label>
 					<div class="col-lg-8">
 					<select id="subcategoria_id" name="subcategoria_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
@@ -117,7 +117,7 @@
                 </div>
                 @if (config('app.empresa') == 'EL BIERZO')
                     <div class="form-group row">
-                        <label for="divide" class="col-lg-4 col-form-label">Divide</label>
+                        <label for="divide" class="col-lg-4 col-form-label text-right pr-2">Divide</label>
                         <div class="col-lg-3">
                         <select id="divide" name="divide" class="form-control">
                             @foreach($divide_enum as $key => $value)
@@ -131,7 +131,7 @@
                         </div>
                     </div>
                     <div class="form-group row">
-                        <label for="enviaalarma" class="col-lg-4 col-form-label">Aviso a producci&oacute;n</label>
+                        <label for="enviaalarma" class="col-lg-4 col-form-label text-right pr-2">Aviso a producci&oacute;n</label>
                         <div class="col-lg-5">
                         <select id="enviaalarma" name="enviaalarma" class="form-control">
                             @foreach($enviaalarma_enum ?? [] as $value)
@@ -152,7 +152,7 @@
             </div>
             <div class="col-sm-6">
 				<div class="form-group row">
-    				<label for="unidadmedidaalternativa_id" class="col-lg-4 col-form-label requerido">Unidad de medida alternativa</label>
+    				<label for="unidadmedidaalternativa_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Unidad de medida alternativa</label>
 					<div class="col-lg-4">
 					<select id="unidadmedidaalternativa_id" name="unidadmedidaalternativa_id" class="form-control unidadmedidaalternativa" required>
                         <option value="">-- Seleccionar --</option>
@@ -172,7 +172,7 @@
                 </div>  
                 @if (config('app.empresa') == 'AGG')
                     <div class="form-group row">
-                        <label for="numeroparte" class="col-lg-4 col-form-label">Número de parte</label>
+                        <label for="numeroparte" class="col-lg-4 col-form-label text-right pr-2">Número de parte</label>
                         <div class="col-lg-3">
                         <select id="numeroparte" name="numeroparte" class="form-control">
                             @foreach($numeroparte_enum as $key => $value)
@@ -184,14 +184,14 @@
                             @endforeach
                         </select>
                         </div>
-                        <label for="ubicacionparte" class="col-lg-2 col-form-label">Ubic. de parte</label>
+                        <label for="ubicacionparte" class="col-lg-2 col-form-label text-right pr-2">Ubic. de parte</label>
                         <div class="col-lg-2">
                             <input type="text" name="ubicacionparte" id="ubicacionparte" class="form-control" value="{{old('ubicacionparte', $producto->ubicacionparte ?? '')}}"/>
                         </div>
                     </div>
                 @endif
                 <div class="form-group row">
-                    <label for="maneja_stock_color_talle" class="col-lg-4 col-form-label">Stock por color y talle</label>
+                    <label for="maneja_stock_color_talle" class="col-lg-4 col-form-label text-right pr-2">Stock por color y talle</label>
                     <div class="col-lg-8">
                         <div class="form-check mt-2">
                             <input type="hidden" name="maneja_stock_color_talle" value="0">
@@ -206,7 +206,7 @@
                     </div>
                 </div>
                 <div class="form-group row">
-    				<label for="mventa_id" class="col-lg-4 col-form-label">Marca</label>
+    				<label for="mventa_id" class="col-lg-4 col-form-label text-right pr-2">Marca</label>
 					<div class="col-lg-8">
 					<select id="mventa_id" name="mventa_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
@@ -221,7 +221,7 @@
                     </div>
                 </div>
 				<div class="form-group row">
-    				<label for="linea_id" class="col-lg-4 col-form-label">Linea</label>
+    				<label for="linea_id" class="col-lg-4 col-form-label text-right pr-2">Linea</label>
 					<div class="col-lg-8">
 					<select id="linea_id" name="linea_id" class="form-control">
                         <option value="">-- Seleccionar --</option>
@@ -255,7 +255,7 @@
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
-                    <label for="codigo_interno_sifab" class="col-lg-4 col-form-label">C&oacute;digo interno SIFAB</label>
+                    <label for="codigo_interno_sifab" class="col-lg-4 col-form-label text-right pr-2">C&oacute;digo interno SIFAB</label>
                     <div class="col-lg-5">
                         <input type="number" name="codigo_interno_sifab" id="codigo_interno_sifab" class="form-control"
                             value="{{ old('codigo_interno_sifab', $producto->codigo_interno_sifab ?? '') }}"/>
@@ -266,7 +266,7 @@
                     'codigoInterno' => $sifabCampos['rubro'],
                     'nombre' => $sifabEtiquetas['rubro']['etiqueta'] ?? ($sifabEtiquetas['rubro']['nombre'] ?? ''),
                     'maestroId' => $sifabEtiquetas['rubro']['id'] ?? 0,
-                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_label' => 'col-lg-4 col-form-label text-right pr-2',
                     'col_input' => 'col-lg-8',
                 ])
                 @include('stock.partials.campo_consulta_sifab_maestro', [
@@ -274,7 +274,7 @@
                     'codigoInterno' => $sifabCampos['subrubro'],
                     'nombre' => $sifabEtiquetas['subrubro']['etiqueta'] ?? ($sifabEtiquetas['subrubro']['nombre'] ?? ''),
                     'maestroId' => $sifabEtiquetas['subrubro']['id'] ?? 0,
-                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_label' => 'col-lg-4 col-form-label text-right pr-2',
                     'col_input' => 'col-lg-8',
                 ])
                 @include('stock.partials.campo_consulta_sifab_maestro', [
@@ -282,7 +282,7 @@
                     'codigoInterno' => $sifabCampos['lineamaterial'],
                     'nombre' => $sifabEtiquetas['lineamaterial']['etiqueta'] ?? ($sifabEtiquetas['lineamaterial']['nombre'] ?? ''),
                     'maestroId' => $sifabEtiquetas['lineamaterial']['id'] ?? 0,
-                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_label' => 'col-lg-4 col-form-label text-right pr-2',
                     'col_input' => 'col-lg-8',
                 ])
             </div>
@@ -292,7 +292,7 @@
                     'codigoInterno' => $sifabCampos['grupoproducto'],
                     'nombre' => $sifabEtiquetas['grupoproducto']['etiqueta'] ?? ($sifabEtiquetas['grupoproducto']['nombre'] ?? ''),
                     'maestroId' => $sifabEtiquetas['grupoproducto']['id'] ?? 0,
-                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_label' => 'col-lg-4 col-form-label text-right pr-2',
                     'col_input' => 'col-lg-8',
                 ])
                 @include('stock.partials.campo_consulta_sifab_maestro', [
@@ -300,7 +300,7 @@
                     'codigoInterno' => $sifabCampos['clasematerial'],
                     'nombre' => $sifabEtiquetas['clasematerial']['etiqueta'] ?? ($sifabEtiquetas['clasematerial']['nombre'] ?? ''),
                     'maestroId' => $sifabEtiquetas['clasematerial']['id'] ?? 0,
-                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_label' => 'col-lg-4 col-form-label text-right pr-2',
                     'col_input' => 'col-lg-8',
                 ])
                 @include('stock.partials.campo_consulta_sifab_maestro', [
@@ -308,14 +308,14 @@
                     'codigoInterno' => $sifabCampos['gestioncompra'],
                     'nombre' => $sifabEtiquetas['gestioncompra']['etiqueta'] ?? ($sifabEtiquetas['gestioncompra']['nombre'] ?? ''),
                     'maestroId' => $sifabEtiquetas['gestioncompra']['id'] ?? 0,
-                    'col_label' => 'col-lg-4 col-form-label',
+                    'col_label' => 'col-lg-4 col-form-label text-right pr-2',
                     'col_input' => 'col-lg-8',
                 ])
             </div>
         </div>
         @endif
         <div class="form-group row">
-            <label for="foto" class="col-lg-3 col-form-label">Foto</label>
+            <label for="foto" class="col-lg-3 col-form-label text-right pr-2">Foto</label>
             <div class="col-lg-5">
                 <input type="file" name="foto_up" id="foto" data-initial-preview="{{isset($producto->foto) ? asset("storage/imagenes/fotos_articulos/$producto->foto") : ''}}" accept="image/*"/>
                 @if ($producto->foto ?? '')

@@ -20,6 +20,7 @@ use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
+use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -285,6 +286,11 @@ class IngresoEgresoComprobanteIvaService
             'moneda_id' => (int) ($payload['moneda_id'] ?? 1),
             'cotizacion' => (float) ($payload['cotizacion'] ?? 1),
             'numerocae' => $payload['numerocae'] ?? null,
+            'tipo_autorizacion' => ComprobanteProveedorTipoAutorizacion::normalizar(
+                $payload['tipo_autorizacion'] ?? null
+            ) ?? (filled($payload['numerocae'] ?? null)
+                ? ComprobanteProveedorTipoAutorizacion::CAE
+                : null),
             'fechavencimientocae' => $payload['fechavencimientocae'] ?? null,
             'modo_carga' => ComprobanteProveedorModoCarga::SIN_RECEPCION,
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO,
@@ -342,21 +348,46 @@ class IngresoEgresoComprobanteIvaService
         $documentoEventual = $proveedorId > 0
             ? null
             : ComprobanteProveedorUnicidadSupport::normalizarCuitDigitos((string) ($payload['proveedor_documento_eventual'] ?? ''));
+        $tipoId = (int) ($payload['tipotransaccion_compra_id'] ?? 0);
+        $numero = (int) ($payload['numerocomprobante'] ?? 0);
 
-        $duplicado = ComprobanteProveedorUnicidadSupport::findDuplicado(
-            $empresaId,
-            (int) ($payload['tipotransaccion_compra_id'] ?? 0),
-            (string) ($payload['letra'] ?? 'B'),
-            (int) ($payload['sucursal'] ?? 0),
-            (int) ($payload['numerocomprobante'] ?? 0),
-            ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
+        if ($empresaId <= 0 || $tipoId <= 0 || $numero <= 0) {
+            return null;
+        }
+
+        $cuit = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
+            $proveedorId > 0 ? $proveedorId : null,
+            $documentoEventual,
+        );
+        if ($cuit === '') {
+            return null;
+        }
+
+        $tipoAutorizacion = ComprobanteProveedorTipoAutorizacion::normalizar(
+            $payload['tipo_autorizacion'] ?? null
+        ) ?? (filled($payload['numerocae'] ?? null)
+            ? ComprobanteProveedorTipoAutorizacion::CAE
+            : null);
+
+        try {
+            ComprobanteProveedorUnicidadSupport::assertUnico(
+                $empresaId,
+                $tipoId,
+                (string) ($payload['letra'] ?? 'B'),
+                (int) ($payload['sucursal'] ?? 0),
+                $numero,
                 $proveedorId > 0 ? $proveedorId : null,
                 $documentoEventual,
-            ),
-            $excluirId,
-        );
+                $excluirId,
+                null,
+                $payload['numerocae'] ?? null,
+                $tipoAutorizacion,
+            );
+        } catch (RuntimeException $e) {
+            return $e->getMessage();
+        }
 
-        return $duplicado !== null ? ComprobanteProveedorUnicidadSupport::mensajeDuplicado($duplicado) : null;
+        return null;
     }
 
     /**
@@ -373,6 +404,9 @@ class IngresoEgresoComprobanteIvaService
             isset($cabecera['proveedor_id']) ? (int) $cabecera['proveedor_id'] : null,
             $cabecera['proveedor_documento_eventual'] ?? null,
             $excluirId,
+            null,
+            $cabecera['numerocae'] ?? null,
+            $cabecera['tipo_autorizacion'] ?? null,
         );
     }
 
@@ -408,6 +442,7 @@ class IngresoEgresoComprobanteIvaService
             'cotizacion' => (float) $cp->cotizacion,
             'total' => (float) $cp->total,
             'numerocae' => $cp->numerocae,
+            'tipo_autorizacion' => $cp->tipo_autorizacion,
             'fechavencimientocae' => $cp->fechavencimientocae?->format('Y-m-d'),
             'leyenda' => $cp->leyenda,
             'tiene_pdf' => $cp->comprobante_proveedor_archivos

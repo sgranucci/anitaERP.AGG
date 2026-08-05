@@ -2654,7 +2654,8 @@
             return;
         }
         try {
-            const cot = await api(`/ventas/gastronomia/api/cotizacion?moneda_id=${mid}`, { headers: hdrJson() });
+            const empQ = empresaId ? `&empresa_id=${encodeURIComponent(empresaId)}` : '';
+            const cot = await api(`/ventas/gastronomia/api/cotizacion?moneda_id=${mid}${empQ}`, { headers: hdrJson() });
             cotizacionExtranjera = {
                 monedaId: mid,
                 cotizacion: parseFloat(cot.cotizacion) || 1,

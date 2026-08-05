@@ -162,6 +162,20 @@ class RecuentoService
         }
 
         $modo = RecuentoModoCierreSupport::resolverModo($modoCierre);
+        $this->assertFechaCierrePermitida($recuento, $modo);
+        $this->assertCierreFechaNoDejaNegativos(
+            $recuento,
+            $modo,
+            $items->map(static function ($item) {
+                return [
+                    'articulo_id' => (int) $item->articulo_id,
+                    'color_id' => (int) ($item->color_id ?? 0),
+                    'talle_id' => (int) ($item->talle_id ?? 0),
+                    'cantidad_contada' => (float) $item->cantidad_contada,
+                    'sku' => (string) (optional($item->articulos)->sku ?? $item->articulo_id),
+                ];
+            })->all()
+        );
 
         return DB::transaction(function () use ($recuento, $items, $obs, $modo) {
             $ajustes = [];
@@ -221,38 +235,54 @@ class RecuentoService
         }
 
         $modo = RecuentoModoCierreSupport::resolverModo($modoCierre);
+        $this->assertFechaCierrePermitida($recuento, $modo);
 
-        return DB::transaction(function () use ($recuento, $obs, $modo) {
-            $conteos = [];
-            $modoCt = null;
-            foreach ($recuento->items as $item) {
-                $articuloId = (int) $item->articulo_id;
-                $colorId = (int) ($item->color_id ?? 0);
-                $talleId = (int) ($item->talle_id ?? 0);
-                [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo(
-                    $colorId > 0 ? $colorId : null,
-                    $talleId > 0 ? $talleId : null
-                );
-                $clave = $this->claveVariante($articuloId, $colorKey, $talleKey);
-                $conteos[$clave] = (float) $item->cantidad_contada;
-                $maneja = ArticuloStockColorTalleSupport::articuloManejaColorTalle($articuloId);
-                if ($modoCt === null) {
-                    $modoCt = $maneja;
-                }
+        $conteos = [];
+        $modoCt = null;
+        $skusPorArticulo = [];
+        foreach ($recuento->items as $item) {
+            $articuloId = (int) $item->articulo_id;
+            $colorId = (int) ($item->color_id ?? 0);
+            $talleId = (int) ($item->talle_id ?? 0);
+            [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo(
+                $colorId > 0 ? $colorId : null,
+                $talleId > 0 ? $talleId : null
+            );
+            $clave = $this->claveVariante($articuloId, $colorKey, $talleKey);
+            $conteos[$clave] = (float) $item->cantidad_contada;
+            $skusPorArticulo[$articuloId] = (string) (optional($item->articulos)->sku ?? $articuloId);
+            $maneja = ArticuloStockColorTalleSupport::articuloManejaColorTalle($articuloId);
+            if ($modoCt === null) {
+                $modoCt = $maneja;
             }
+        }
 
-            $variantes = $this->variantesConStockEnDeposito((int) $recuento->deposito_id, $modoCt);
-            foreach (array_keys($conteos) as $clave) {
-                if (! isset($variantes[$clave])) {
-                    [$articuloId, $colorKey, $talleKey] = array_map('intval', explode('|', $clave));
-                    $variantes[$clave] = [
-                        'articulo_id' => $articuloId,
-                        'color_id' => $colorKey,
-                        'talle_id' => $talleKey,
-                    ];
-                }
+        $variantes = $this->variantesConStockEnDeposito((int) $recuento->deposito_id, $modoCt);
+        foreach (array_keys($conteos) as $clave) {
+            if (! isset($variantes[$clave])) {
+                [$articuloId, $colorKey, $talleKey] = array_map('intval', explode('|', $clave));
+                $variantes[$clave] = [
+                    'articulo_id' => $articuloId,
+                    'color_id' => $colorKey,
+                    'talle_id' => $talleKey,
+                ];
             }
+        }
 
+        $lineasValidacion = [];
+        foreach ($variantes as $clave => $variante) {
+            $articuloId = (int) $variante['articulo_id'];
+            $lineasValidacion[] = [
+                'articulo_id' => $articuloId,
+                'color_id' => (int) $variante['color_id'],
+                'talle_id' => (int) $variante['talle_id'],
+                'cantidad_contada' => (float) ($conteos[$clave] ?? 0),
+                'sku' => $skusPorArticulo[$articuloId] ?? (string) $articuloId,
+            ];
+        }
+        $this->assertCierreFechaNoDejaNegativos($recuento, $modo, $lineasValidacion);
+
+        return DB::transaction(function () use ($recuento, $obs, $modo, $conteos, $variantes) {
             $ajustes = [];
             foreach ($variantes as $clave => $variante) {
                 $articuloId = (int) $variante['articulo_id'];
@@ -332,7 +362,19 @@ class RecuentoService
                 ];
             }
 
-            $movAnulacionId = $this->generarMovimientoAjuste($recuento, $ajustesReverso, 'Anulación de cierre de recuento', 'RCAJR');
+            // Misma fecha que el cierre: si fue FECHA_RECUENTO, el reverso debe
+            // anular el histórico; si usa "hoy", un re-cierre a fecha vieja vuelve a desfasar.
+            $fechaReverso = $movCierre->fecha
+                ? \Carbon\Carbon::parse($movCierre->fecha)->toDateString()
+                : now()->toDateString();
+
+            $movAnulacionId = $this->generarMovimientoAjuste(
+                $recuento,
+                $ajustesReverso,
+                'Anulación de cierre de recuento',
+                'RCAJR',
+                $fechaReverso
+            );
             $estadoAnterior = $recuento->estado;
             $recuento->movimientostock_anulacion_id = $movAnulacionId;
             $recuento->modo_cierre = null;
@@ -780,6 +822,40 @@ class RecuentoService
         }
 
         return $deposito;
+    }
+
+    private function assertFechaCierrePermitida(Recuento $recuento, string $modoCierre): void
+    {
+        if (RecuentoModoCierreSupport::bloqueaCierrePorFechaAntigua($recuento->fecha, $modoCierre)) {
+            throw new \RuntimeException(RecuentoModoCierreSupport::mensajeBloqueoFechaAntigua($recuento));
+        }
+    }
+
+    /**
+     * @param  list<array{articulo_id:int, color_id?:int, talle_id?:int, cantidad_contada:float, sku?:string}>  $lineas
+     */
+    private function assertCierreFechaNoDejaNegativos(Recuento $recuento, string $modoCierre, array $lineas): void
+    {
+        if (RecuentoModoCierreSupport::resolverModo($modoCierre) !== RecuentoModoCierreSupport::MODO_FECHA_RECUENTO) {
+            return;
+        }
+        if (! $recuento->fecha || $lineas === []) {
+            return;
+        }
+
+        $conflictos = RecuentoModoCierreSupport::lineasConSaldoVigenteNegativoTrasCierreFecha(
+            $this->saldoRepository,
+            (int) $recuento->deposito_id,
+            $recuento->fecha->toDateString(),
+            $lineas
+        );
+        if ($conflictos === []) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            RecuentoModoCierreSupport::mensajeBloqueoSaldoNegativoTrasCierreFecha($recuento, $conflictos)
+        );
     }
 
     private function assertEditable(Recuento $recuento): void

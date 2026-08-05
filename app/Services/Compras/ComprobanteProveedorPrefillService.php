@@ -126,6 +126,7 @@ class ComprobanteProveedorPrefillService
             'fecharecepcion' => $fecharecepcion,
             'fechavencimientocae' => $precarga->fechavencimientocaicae,
             'numerocae' => $precarga->numerocae,
+            'tipo_autorizacion' => $precarga->tipo_autorizacion,
             'subtotal' => $precarga->subtotal,
             'total' => $precarga->total,
             'moneda_id' => $monedaId,

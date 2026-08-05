@@ -162,7 +162,7 @@ final class CierreJornadaProcesoAsientosGrabacionSupport
             $debes[] = $debe > 0.0001 ? $debe : '';
             $haberes[] = $haber > 0.0001 ? $haber : '';
             $monedaIds[] = 1;
-            $centrocostoIds[] = CierreJornadaProcesoAsientosCentrocostoSupport::resolverCentrocostoIdParaCuentacontable(
+            $centrocostoIds[] = CierreJornadaProcesoAsientosCentrocostoSupport::resolverCentrocostoIdParaCuentacontableOError(
                 $cuentacontableId,
             );
             $cotizaciones[] = 1.;

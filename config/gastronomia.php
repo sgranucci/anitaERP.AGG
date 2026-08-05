@@ -134,6 +134,8 @@ return [
     'cierre_rendicion_vending_contable' => [
         /** Tolerancia rendiciones vending vs flash_caja.vending / rendgastro Z en conciliación diaria. */
         'conciliacion_flash_tolerancia' => (float) env('VENDING_CIERRE_RENDICION_FLASH_TOLERANCIA', 0.02),
+        /** Centro de costo (código ccosto) en líneas del cierre vending cuando la cuenta maneja CC (default 85). */
+        'centrocosto_codigo' => env('VENDING_CIERRE_RENDICION_CENTROCOSTO_CODIGO', '85'),
     ],
 
     /**

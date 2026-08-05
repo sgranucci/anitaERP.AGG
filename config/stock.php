@@ -112,15 +112,28 @@ return [
     ],
 
     /*
+    | Antigüedad de la fecha del recuento al cerrar en modo FECHA_RECUENTO.
+    | - aviso: muestra alerta en pantalla / confirmación JS
+    | - bloqueo: impide cerrar «a fecha del recuento» (sí permite «al saldo actual»)
+    | Evita el error de cargar inventario con fecha de período vieja y reaplicar ajustes
+    | sobre movimientos posteriores (saldos negativos).
+    */
+    'recuento_dias_aviso_fecha_antigua' => (int) env('STOCK_RECUENTO_DIAS_AVISO_FECHA_ANTIGUA', 3),
+    'recuento_dias_bloqueo_fecha_antigua' => (int) env('STOCK_RECUENTO_DIAS_BLOQUEO_FECHA_ANTIGUA', 15),
+
+    /*
     | Precio unitario de última compra (costo) para recuentos, transferencias y mov. stock.
     | Resolución en ArticuloPrecioUltimaCompraSupport:
-    |   1) Anita stkmae.stkm_pre_compra3
-    |   2) ERP: última recepción COM confirmada (historia OC o línea recepción)
+    |   1) ERP: última recepción COM confirmada (historia OC o línea recepción)
+    |   2) Anita stkmae.stkm_pre_compra3
     |   3) articulo.costo / articulo.ppp
+    | TITO (promedio TRCONT): ArticuloPrecioPromedioCompraSupport
+    |   1) exactamente 3 recepciones COM ERP → promedio
+    |   2) Anita stkm_pre_compra1/2/3 → promedio
     */
     'precio_ultima_compra' => [
-        'fuente_primaria' => 'anita',
-        'fuente_secundaria' => 'erp_com',
+        'fuente_primaria' => 'erp_com',
+        'fuente_secundaria' => 'anita',
     ],
 
     /*

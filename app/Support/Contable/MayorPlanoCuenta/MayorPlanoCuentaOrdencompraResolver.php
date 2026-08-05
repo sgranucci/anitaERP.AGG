@@ -129,14 +129,9 @@ class MayorPlanoCuentaOrdencompraResolver
         $emisor = trim((string) ($mov['emisor'] ?? ''));
         $existente = (int) ($mov['nro_oc'] ?? 0);
 
-        // En Anita el comprobante COM es la OC: el número del documento es el nro de OC.
-        // No pasar por aplicped: aplp_orden / aplp_orden_com son nros de renglón (1, 2, 3…), no de OC.
-        if ($tipo === 'COM' && $nro > 0) {
-            return $nro;
-        }
-
         $desdeAplicped = 0;
 
+        // No usar aplp_orden (es renglón). Solo refs/documentos COM.
         if (in_array($tipo, MayorConceptoMemoriaMotor::TIPOS_REF_IMPUTABLE, true) && $nro > 0) {
             $claveOp = $this->claveOperacionPago($tipo, $nro, $fecha);
             foreach ($this->auxpagPorOp[$claveOp] ?? [] as $axp) {
@@ -166,7 +161,9 @@ class MayorPlanoCuentaOrdencompraResolver
             // Documento de compras en subdiario/ctamov: cadena aplicped (DNS→PEP→COM, FGA→PEP→COM, etc.).
             // No limitar a TIPOS_FACTURA_APLICADA: débitos como DNS tienen OC en aplicped
             // aunque no figuren como factura aplicada en auxpag.
+            // COM: no buscar aplicped para obtener el nro — ver fallback abajo (ctav_o_compra / nro).
             if ($desdeAplicped <= 0
+                && $tipo !== 'COM'
                 && ! MayorPlanoCuentaSupport::esTipoOrdenPago($tipo)
                 && ! $this->mediopagoSupport->esMedioPagoAuxpag($tipo)
                 && ! $this->mediopagoSupport->esAuxpagIgnorado($tipo)
@@ -175,12 +172,21 @@ class MayorPlanoCuentaOrdencompraResolver
             }
         }
 
-        // Preferir COM resuelto por aplicped: ctav_o_compra a veces trae renglón (1/2/3).
         if ($desdeAplicped > 0) {
             return $desdeAplicped;
         }
 
-        return $existente > 0 ? $existente : 0;
+        // ctamov: ctav_o_compra es la OC real (en recepciones COM, ctav_nro es el nro de recepción).
+        if ($existente > 0) {
+            return $existente;
+        }
+
+        // Subdiario COM sin o_compra: el nro del comprobante COM es la OC.
+        if ($tipo === 'COM' && $nro > 0) {
+            return $nro;
+        }
+
+        return 0;
     }
 
     /**
@@ -302,10 +308,8 @@ class MayorPlanoCuentaOrdencompraResolver
         $nroAp = (int) ($aplicacion->axp_nro ?? 0);
         $claveFac = $prov.'|'.$tipoAp.'|'.$letraAp.'|'.$sucAp.'|'.$nroAp;
 
-        // El propio documento aplicado ya es la OC.
-        if ($tipoAp === 'COM' && $nroAp > 0) {
-            return $nroAp;
-        }
+        // No asumir que un documento COM es OC: en ctamov/recepción COM el nro es la
+        // recepción; la OC va en ctav_o_compra. Solo devolver refs COM halladas en aplicped.
 
         $this->resolverClavesComDesdeFactura($aplicacion);
 

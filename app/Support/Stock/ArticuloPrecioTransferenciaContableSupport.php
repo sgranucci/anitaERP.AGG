@@ -3,14 +3,12 @@
 namespace App\Support\Stock;
 
 use App\Models\Stock\Articulo;
-use App\Services\Stock\PrecioPromedioRecepcionAnitaService;
-use App\Services\Stock\StkmaeUltimaCompraAnitaService;
 
 /**
- * Precio unitario para el asiento contable de transferencias.
+ * Precio unitario para el asiento contable de transferencias / mov. stock.
  *
- * - fl_precio_promedio_transferencia: promedio últimas 3 recepciones (Anita recepmov).
- * - resto: última compra (stkmae.stkm_pre_compra3).
+ * - fl_precio_promedio_transferencia (TITO): promedio 3 compras ERP; fallback stkmae compra1/2/3
+ * - resto: última compra ERP → Anita stkm_pre_compra3 → costo/PPP artículo
  */
 final class ArticuloPrecioTransferenciaContableSupport
 {
@@ -19,28 +17,21 @@ final class ArticuloPrecioTransferenciaContableSupport
         return (bool) ($articulo->fl_precio_promedio_transferencia ?? false);
     }
 
-    public static function resolverPrecioUnitario(
-        Articulo $articulo,
-        ?PrecioPromedioRecepcionAnitaService $promedioService = null,
-        ?StkmaeUltimaCompraAnitaService $ultimaCompraService = null,
-    ): ?float {
+    public static function resolverPrecioUnitario(Articulo $articulo): ?float
+    {
         $sku = trim((string) ($articulo->sku ?? ''));
         if ($sku === '') {
             return null;
         }
 
         if (self::usaPrecioPromedio($articulo)) {
-            $promedioService ??= app(PrecioPromedioRecepcionAnitaService::class);
-
-            return $promedioService->calcularParaSku($sku);
+            return ArticuloPrecioPromedioCompraSupport::resolverPrecioUnitario($articulo);
         }
 
-        $ultimaCompraService ??= app(StkmaeUltimaCompraAnitaService::class);
-        $precios = $ultimaCompraService->obtenerPreciosUltimaCompraPorSkus([$sku]);
+        $dato = ArticuloPrecioUltimaCompraSupport::resolverPorArticulo($articulo);
+        $precio = $dato['precio'] ?? null;
 
-        $precio = $precios[$sku] ?? null;
-
-        return $precio !== null ? round((float) $precio, 6) : null;
+        return $precio !== null && (float) $precio > 0 ? round((float) $precio, 6) : null;
     }
 
     /**
@@ -49,9 +40,8 @@ final class ArticuloPrecioTransferenciaContableSupport
      */
     public static function resolverPreciosPorArticulos(iterable $articulos): array
     {
-        $porId = [];
-        $skusPromedio = [];
-        $skusUltima = [];
+        $titos = [];
+        $resto = [];
 
         foreach ($articulos as $articulo) {
             if (! $articulo instanceof Articulo) {
@@ -63,27 +53,30 @@ final class ArticuloPrecioTransferenciaContableSupport
                 continue;
             }
             if (self::usaPrecioPromedio($articulo)) {
-                $skusPromedio[$id] = $sku;
+                $titos[$id] = $articulo;
             } else {
-                $skusUltima[$id] = $sku;
+                $resto[$id] = $articulo;
             }
         }
 
-        $preciosPromedio = $skusPromedio !== []
-            ? app(PrecioPromedioRecepcionAnitaService::class)->obtenerPreciosPromedioPorSkus(array_values($skusPromedio))
-            : [];
+        $porId = [];
 
-        $preciosUltima = $skusUltima !== []
-            ? app(StkmaeUltimaCompraAnitaService::class)->obtenerPreciosUltimaCompraPorSkus(array_values($skusUltima))
-            : [];
-
-        foreach ($skusPromedio as $articuloId => $sku) {
-            $porId[$articuloId] = isset($preciosPromedio[$sku]) ? round((float) $preciosPromedio[$sku], 6) : null;
+        if ($titos !== []) {
+            foreach (ArticuloPrecioPromedioCompraSupport::resolverPorArticulos($titos) as $id => $dato) {
+                $precio = $dato['precio'] ?? null;
+                $porId[$id] = $precio !== null && (float) $precio > 0
+                    ? round((float) $precio, 6)
+                    : null;
+            }
         }
 
-        foreach ($skusUltima as $articuloId => $sku) {
-            $precio = $preciosUltima[$sku] ?? null;
-            $porId[$articuloId] = $precio !== null ? round((float) $precio, 6) : null;
+        if ($resto !== []) {
+            foreach (ArticuloPrecioUltimaCompraSupport::resolverPorArticulos($resto) as $id => $dato) {
+                $precio = $dato['precio'] ?? null;
+                $porId[$id] = $precio !== null && (float) $precio > 0
+                    ? round((float) $precio, 6)
+                    : null;
+            }
         }
 
         return $porId;

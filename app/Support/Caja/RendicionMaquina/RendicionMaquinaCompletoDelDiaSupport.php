@@ -118,9 +118,23 @@ final class RendicionMaquinaCompletoDelDiaSupport
         // Bill emergencia anterior = dropem M/T/N del día anterior.
         self::aplicarBillemAnterior($inputs, $meta, $empresaId, $fechaYmd, $exceptoId);
 
-        // Cierre: fondo/comprobante/vale siempre 0 (calcula_rendicion_turno_completo).
-        // fondo_cierre / resultado_turno vienen de la Noche; transferencia = suma M+T+N.
-        $inputs['fondo_inicial'] = 0.0;
+        // Apertura del día (igual que turno M): fondo inicial + comprobante.
+        // Vale rep. fondo = 0 en Completo. Cierre/resultado = Noche; transfer = suma M+T+N.
+        $previasM = RendicionMaquinaPreviasSupport::resolver(
+            $empresaId,
+            $fechaYmd,
+            RendicionMaquinaTurno::MANIANA,
+            $exceptoId
+        );
+        $inputs['fondo_inicial'] = round((float) ($previasM['fondo_inicial'] ?? 0), 2);
+        $orquestador['comprobante'] = round((float) ($previasM['comprobante'] ?? 0), 2);
+        $orquestador['vale_rep_fondo'] = 0.0;
+        $meta['origen_fondo'] = 'completo_como_m:'.(string) ($previasM['origen_fondo'] ?? 'ninguno');
+        $meta['origen_comprobante'] = 'completo_como_m:'.(string) ($previasM['origen_comprobante'] ?? 'ninguno');
+
+        // Si ERP M/T/N no traían venta_ruleta (campo ausente en pantallas viejas),
+        // completar desde Anita del mismo día (lee_rendiciones_del_dia).
+        self::completarVentasDesdeAnitaSiFaltan($inputs, $meta, $empresaId, $fechaYmd);
 
         return [
             'inputs' => $inputs,
@@ -152,8 +166,14 @@ final class RendicionMaquinaCompletoDelDiaSupport
             $meta['turnos_erp'][] = $turno.'#'.$rend->id;
             $raw = is_array($rend->inputs_json) ? $rend->inputs_json : [];
 
+            $calc = is_array($rend->calc_json) ? $rend->calc_json : [];
+            $vars = is_array($calc['variables'] ?? null) ? $calc['variables'] : [];
+
             foreach (self::CAMPOS_SUMA as $campo) {
-                $inputs[$campo] = round($inputs[$campo] + self::leerInput($raw, $campo), 2);
+                $inputs[$campo] = round(
+                    $inputs[$campo] + self::leerInputOCalc($raw, $vars, $campo),
+                    2
+                );
             }
 
             // Sobrantes + transferencia: solo parciales (Anita excluye C).
@@ -163,8 +183,6 @@ final class RendicionMaquinaCompletoDelDiaSupport
             }
 
             if ($turno === RendicionMaquinaTurno::MANIANA) {
-                $calc = is_array($rend->calc_json) ? $rend->calc_json : [];
-                $vars = is_array($calc['variables'] ?? null) ? $calc['variables'] : [];
                 if (isset($vars['calc.drop_bill_rodillo'])) {
                     $dr = (float) $vars['calc.drop_bill_rodillo'];
                 } elseif (isset($raw['drop_billete_bruto'])) {
@@ -673,6 +691,54 @@ final class RendicionMaquinaCompletoDelDiaSupport
     }
 
     /**
+     * Si el consolidado ERP quedó sin venta ruleta/ficha, suma Anita M/T/N del día.
+     *
+     * @param  array<string, float>  $inputs
+     * @param  array<string, mixed>  $meta
+     */
+    private static function completarVentasDesdeAnitaSiFaltan(
+        array &$inputs,
+        array &$meta,
+        int $empresaId,
+        string $fechaYmd
+    ): void {
+        $faltaFicha = abs((float) ($inputs['venta_ficha'] ?? 0)) < 0.00001;
+        $faltaRuleta = abs((float) ($inputs['venta_ruleta'] ?? 0)) < 0.00001;
+        if (! $faltaFicha && ! $faltaRuleta) {
+            return;
+        }
+
+        $sumaFicha = 0.0;
+        $sumaRuleta = 0.0;
+        $hubo = false;
+        foreach (self::listarCabecerasAnita($empresaId, $fechaYmd) as $fila) {
+            $t = strtoupper(trim((string) ($fila->rendm_turno ?? '')));
+            $turno = RendicionMaquinaTurno::ANITA_A_LETRA[$t] ?? $t;
+            if (! in_array($turno, [
+                RendicionMaquinaTurno::MANIANA,
+                RendicionMaquinaTurno::TARDE,
+                RendicionMaquinaTurno::NOCHE,
+            ], true)) {
+                continue;
+            }
+            $hubo = true;
+            $sumaFicha += (float) ($fila->rendm_venta_ficha ?? 0);
+            $sumaRuleta += (float) ($fila->rendm_venta_ruleta ?? 0);
+        }
+        if (! $hubo) {
+            return;
+        }
+        if ($faltaFicha && abs($sumaFicha) > 0.00001) {
+            $inputs['venta_ficha'] = round($sumaFicha, 2);
+            $meta['origen_venta_ficha'] = 'anita_mtn';
+        }
+        if ($faltaRuleta && abs($sumaRuleta) > 0.00001) {
+            $inputs['venta_ruleta'] = round($sumaRuleta, 2);
+            $meta['origen_venta_ruleta'] = 'anita_mtn';
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $raw
      */
     private static function leerInput(array $raw, string $campo): float
@@ -683,6 +749,42 @@ final class RendicionMaquinaCompletoDelDiaSupport
         $ruta = 'inputs.'.$campo;
         if (array_key_exists($ruta, $raw) && is_numeric($raw[$ruta])) {
             return (float) $raw[$ruta];
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Input del turno, con fallback a calc.* (pantallas que no persistían venta_ruleta).
+     *
+     * @param  array<string, mixed>  $raw
+     * @param  array<string, mixed>  $vars
+     */
+    private static function leerInputOCalc(array $raw, array $vars, string $campo): float
+    {
+        $desdeInput = self::leerInput($raw, $campo);
+        if (abs($desdeInput) > 0.00001) {
+            return $desdeInput;
+        }
+
+        $aliasCalc = match ($campo) {
+            'venta_ruleta' => 'calc.entrada_ruleta',
+            'venta_ficha' => 'calc.venta_ficha',
+            'tito' => 'calc.tito_rodillo',
+            'tito_ruleta' => 'calc.tito_ruleta',
+            default => null,
+        };
+        if ($aliasCalc !== null && isset($vars[$aliasCalc]) && is_numeric($vars[$aliasCalc])) {
+            $calcVal = (float) $vars[$aliasCalc];
+            // calc.venta_ficha = input + hopper: no usar si hay hopper (evitar doble conteo).
+            if ($campo === 'venta_ficha') {
+                $hopper = self::leerInput($raw, 'hopper');
+                if (abs($hopper) > 0.00001) {
+                    return max(0.0, round($calcVal - $hopper, 2));
+                }
+            }
+
+            return $calcVal;
         }
 
         return 0.0;

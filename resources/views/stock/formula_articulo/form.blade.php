@@ -169,7 +169,7 @@
                         <th style="min-width: 300px;">Art&iacute;culo</th>
                         <th style="width:100px;">Cantidad</th>
                         <th style="width:130px;">Factor costo</th>
-                        <th style="width:6.5rem;" class="text-right" title="Anita stkmae.stkm_pre_compra3">Ult. compra</th>
+                        <th style="width:6.5rem;" class="text-right" title="ERP → Anita stkm_pre_compra3">Ult. compra</th>
                         <th>Subf&oacute;rmula</th>
                         @if ($formulaGastronomiaOpcional)
                         <th style="width:90px;">Opcional</th>

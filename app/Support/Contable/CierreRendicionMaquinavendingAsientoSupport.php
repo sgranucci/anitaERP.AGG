@@ -177,7 +177,9 @@ final class CierreRendicionMaquinavendingAsientoSupport
             $debes[] = $debe > 0.0001 ? $debe : '';
             $haberes[] = $haber > 0.0001 ? $haber : '';
             $monedaIds[] = 1;
-            $centrocostoIds[] = null;
+            $centrocostoIds[] = CierreRendicionMaquinavendingCentrocostoSupport::resolverCentrocostoIdParaCuentacontableOError(
+                $cuentacontableId,
+            );
             $cotizaciones[] = 1.;
             $observaciones[] = $observacion;
         }

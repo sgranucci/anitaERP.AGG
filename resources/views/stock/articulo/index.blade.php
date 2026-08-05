@@ -91,7 +91,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>SKU</th>
                             <th>C&oacute;d. barra</th>

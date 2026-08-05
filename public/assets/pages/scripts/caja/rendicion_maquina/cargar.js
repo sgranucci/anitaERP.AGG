@@ -141,12 +141,49 @@
     function recolectarValores() {
         var lineas = [];
         app.querySelectorAll('#tabla-valores-rendicion tbody tr[data-cuentacaja-id]').forEach(function (tr) {
+            var cot = parseFloat(tr.dataset.cotizacion || '0');
+            if (!isFinite(cot) || cot <= 0) {
+                cot = 1;
+            }
             lineas.push({
                 cuentacaja_id: parseInt(tr.dataset.cuentacajaId, 10),
-                monto: parseNum(tr.querySelector('.js-valor-monto')?.value)
+                monto: parseNum(tr.querySelector('.js-valor-monto')?.value),
+                cotizacion: cot,
+                moneda_id: parseInt(tr.dataset.monedaId || '1', 10) || 1
             });
         });
         return lineas;
+    }
+
+    /** Actualiza data-cotizacion de filas existentes según cotizacion_tesoreria de la fecha. */
+    function refrescarCotizacionesValores() {
+        var empresaId = getEmpresaId();
+        var fecha = getFecha();
+        if (empresaId <= 0 || !fecha || !app.dataset.apiLineasEmpresa) {
+            return;
+        }
+        var montos = {};
+        recolectarValores().forEach(function (l) {
+            montos[l.cuentacaja_id] = l.monto;
+        });
+        postJson(app.dataset.apiLineasEmpresa, { empresa_id: empresaId, fecha: fecha })
+            .then(function (data) {
+                if (!data.ok) {
+                    return;
+                }
+                var lineas = (data.cuentas_valor || []).map(function (linea) {
+                    var id = parseInt(linea.cuentacaja_id, 10) || 0;
+                    if (Object.prototype.hasOwnProperty.call(montos, id)) {
+                        linea.monto = montos[id];
+                    }
+                    return linea;
+                });
+                renderValores(lineas);
+                calcularDebounced();
+            })
+            .catch(function () {
+                // Silencioso: el guardado backend también resuelve cotización
+            });
     }
 
     function recolectarGastos() {
@@ -213,6 +250,10 @@
             fondo_inicial: 0,
             comprobante: 0,
             fondo_fijo: 0,
+            venta_ficha: 0,
+            venta_ruleta: 0,
+            total_ventas: 0,
+            win: 0,
             drop_billete_bruto: 0,
             impuesto_drop: 0,
             drop_bill_rodillo: 0,
@@ -276,7 +317,12 @@
             var codigo = escapeHtml(linea.codigo || '');
             var nombre = escapeHtml(linea.nombre || '');
             var monto = fmtMoney(linea.monto || 0);
-            return '<tr data-cuentacaja-id="' + id + '">'
+            var cot = parseFloat(linea.cotizacion);
+            if (!isFinite(cot) || cot <= 0) {
+                cot = 1;
+            }
+            var monedaId = parseInt(linea.moneda_id, 10) || 1;
+            return '<tr data-cuentacaja-id="' + id + '" data-cotizacion="' + cot + '" data-moneda-id="' + monedaId + '">'
                 + '<td class="text-muted col-codigo">' + codigo + '</td>'
                 + '<td class="col-desc" title="' + nombre + '">' + nombre + '</td>'
                 + '<td class="col-monto"><input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-valor-monto js-monto-ar" autocomplete="off" value="' + monto + '"></td>'
@@ -465,7 +511,7 @@
         }
 
         recargandoLineas = true;
-        postJson(app.dataset.apiLineasEmpresa, { empresa_id: empresaId })
+        postJson(app.dataset.apiLineasEmpresa, { empresa_id: empresaId, fecha: getFecha() })
             .then(function (data) {
                 if (data.ok) {
                     renderValores(data.cuentas_valor || []);
@@ -801,6 +847,8 @@
         if (esAlta) {
             blanquearTotales();
             blanquearFondoInput();
+            // Recarga cotizaciones de tesorería para la nueva fecha (conserva montos)
+            refrescarCotizacionesValores();
         }
         if (puedeDispararWigos()) {
             traerWigosDebounced('fecha');

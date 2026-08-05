@@ -52,13 +52,34 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
         ?int $colorId,
         ?int $talleId
     ): float {
+        return $this->sumaVarianteMovimientos($articuloId, $depositoId, $colorId, $talleId, '<=', $fecha);
+    }
+
+    public function sumaVariantePosteriorAFecha(
+        int $articuloId,
+        int $depositoId,
+        string $fecha,
+        ?int $colorId,
+        ?int $talleId
+    ): float {
+        return $this->sumaVarianteMovimientos($articuloId, $depositoId, $colorId, $talleId, '>', $fecha);
+    }
+
+    private function sumaVarianteMovimientos(
+        int $articuloId,
+        int $depositoId,
+        ?int $colorId,
+        ?int $talleId,
+        string $operadorFecha,
+        string $fecha
+    ): float {
         [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo($colorId, $talleId);
 
         $query = DB::table('articulo_movimiento')
             ->where('articulo_id', $articuloId)
             ->where('deposito_id', $depositoId)
             ->whereNull('deleted_at')
-            ->where('fecha', '<=', $fecha);
+            ->where('fecha', $operadorFecha, $fecha);
 
         if ($colorKey === ArticuloStockColorTalleSupport::SIN_VARIANTE) {
             $query->where(function ($q) {

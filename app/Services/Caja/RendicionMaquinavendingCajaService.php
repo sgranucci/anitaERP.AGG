@@ -2,9 +2,11 @@
 
 namespace App\Services\Caja;
 
+use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\RendicionMaquinavendingCaja;
 use App\Models\Caja\RendicionMaquinavendingMovimientoCaja;
 use App\Models\Ventas\MaquinavendingRendicion;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Caja\RendicionMaquinavendingCajaListadoFiltros;
 use App\Support\Caja\RendicionMaquinavendingCajaPermiso;
 use App\Support\Configuracion\EmpresaLogoArchivo;
@@ -428,12 +430,13 @@ class RendicionMaquinavendingCajaService
      * @param  mixed  $raw
      * @return list<array{cuentacaja_id:int, monto:float, cotizacion:float}>
      */
-    public function normalizarMovimientosRequest(mixed $raw): array
+    public function normalizarMovimientosRequest(mixed $raw, ?string $fecha = null, int $empresaId = 1): array
     {
         if (! is_array($raw)) {
             return [];
         }
 
+        $fechaYmd = $fecha ?: date('Y-m-d');
         $movimientos = [];
         foreach ($raw as $row) {
             if (! is_array($row)) {
@@ -444,9 +447,10 @@ class RendicionMaquinavendingCajaService
             if ($cuentacajaId <= 0 || abs($monto) < 0.005) {
                 continue;
             }
-            $cotizacion = round((float) ($row['cotizacion'] ?? 1), 4);
-            if ($cotizacion <= 0) {
-                $cotizacion = 1.0;
+            $cotizacion = isset($row['cotizacion']) ? round((float) $row['cotizacion'], 4) : null;
+            if ($cotizacion === null || $cotizacion <= 0) {
+                $monedaId = (int) (Cuentacaja::query()->whereKey($cuentacajaId)->value('moneda_id') ?? 1);
+                $cotizacion = CotizacionTesoreriaConsultaSupport::calculaVenta($fechaYmd, $monedaId, $empresaId);
             }
             $movimientos[] = [
                 'cuentacaja_id' => $cuentacajaId,

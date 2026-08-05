@@ -5,11 +5,13 @@ namespace App\Support\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Proveedor;
+use App\Models\Compras\Tipotransaccion_Compra;
 use RuntimeException;
 
 /**
- * Unicidad de comprobante por empresa + tipo + letra + sucursal + número + CUIT (11 dígitos).
- * Cruza proveedor del maestro (proveedor_id) y eventual (proveedor_documento_eventual).
+ * Unicidad de factura de proveedor (cualquier origen):
+ * empresa + CUIT proveedor + código AFIP (01/02/…) + letra + sucursal + número.
+ * Si el código de autorización es CAE/CAI (no CAEA), también se controla CUIT + número CAE.
  */
 final class ComprobanteProveedorUnicidadSupport
 {
@@ -18,6 +20,21 @@ final class ComprobanteProveedorUnicidadSupport
         $digits = preg_replace('/\D/', '', trim((string) $cuit)) ?? '';
 
         return strlen($digits) === 11 ? $digits : '';
+    }
+
+    public static function normalizarCodigoAfip(?string $codigo): string
+    {
+        $digits = preg_replace('/\D/', '', trim((string) $codigo)) ?? '';
+        if ($digits === '') {
+            return '';
+        }
+
+        return (string) (int) $digits;
+    }
+
+    public static function normalizarNumeroCae(?string $numerocae): string
+    {
+        return preg_replace('/\D/', '', trim((string) $numerocae)) ?? '';
     }
 
     public static function resolverCuitDigitos(?int $proveedorId, ?string $documentoEventual): string
@@ -39,6 +56,42 @@ final class ComprobanteProveedorUnicidadSupport
         return self::normalizarCuitDigitos(is_string($doc) ? $doc : null);
     }
 
+    public static function codigoAfipDesdeTipoId(int $tipotransaccionCompraId): string
+    {
+        if ($tipotransaccionCompraId <= 0) {
+            return '';
+        }
+
+        $codigo = Tipotransaccion_Compra::query()->whereKey($tipotransaccionCompraId)->value('codigoafip');
+
+        return self::normalizarCodigoAfip(is_string($codigo) ? $codigo : null);
+    }
+
+    /** @var array<string, list<int>> */
+    private static array $cacheTiposPorAfip = [];
+
+    /** @return list<int> */
+    public static function tipotransaccionIdsPorCodigoAfip(string $codigoAfipNorm): array
+    {
+        if ($codigoAfipNorm === '') {
+            return [];
+        }
+
+        if (isset(self::$cacheTiposPorAfip[$codigoAfipNorm])) {
+            return self::$cacheTiposPorAfip[$codigoAfipNorm];
+        }
+
+        self::$cacheTiposPorAfip[$codigoAfipNorm] = Tipotransaccion_Compra::query()
+            ->get(['id', 'codigoafip'])
+            ->filter(fn ($t) => self::normalizarCodigoAfip((string) $t->codigoafip) === $codigoAfipNorm)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+
+        return self::$cacheTiposPorAfip[$codigoAfipNorm];
+    }
+
     /**
      * @throws RuntimeException
      */
@@ -52,6 +105,8 @@ final class ComprobanteProveedorUnicidadSupport
         ?string $documentoEventual,
         ?int $excluirComprobanteId = null,
         ?int $excluirPrecargaId = null,
+        ?string $numerocae = null,
+        ?string $tipoAutorizacion = null,
     ): void {
         $cuit = self::resolverCuitDigitos($proveedorId, $documentoEventual);
         if ($cuit === '') {
@@ -60,9 +115,16 @@ final class ComprobanteProveedorUnicidadSupport
             );
         }
 
-        $duplicado = self::findDuplicado(
+        $codigoAfip = self::codigoAfipDesdeTipoId($tipotransaccionCompraId);
+        if ($codigoAfip === '') {
+            throw new RuntimeException(
+                'El tipo de comprobante no tiene código AFIP configurado; no se puede controlar la unicidad fiscal.'
+            );
+        }
+
+        $duplicado = self::findDuplicadoPorAfip(
             $empresaId,
-            $tipotransaccionCompraId,
+            $codigoAfip,
             $letra,
             $sucursal,
             $numerocomprobante,
@@ -71,12 +133,12 @@ final class ComprobanteProveedorUnicidadSupport
         );
 
         if ($duplicado !== null) {
-            throw new RuntimeException(self::mensajeDuplicado($duplicado));
+            throw new RuntimeException(self::mensajeDuplicado($duplicado, $codigoAfip));
         }
 
-        $duplicadoPrecarga = self::findDuplicadoPrecarga(
+        $duplicadoPrecarga = self::findDuplicadoPrecargaPorAfip(
             $empresaId,
-            $tipotransaccionCompraId,
+            $codigoAfip,
             $letra,
             $sucursal,
             $numerocomprobante,
@@ -85,8 +147,17 @@ final class ComprobanteProveedorUnicidadSupport
         );
 
         if ($duplicadoPrecarga !== null) {
-            throw new RuntimeException(self::mensajeDuplicadoPrecarga($duplicadoPrecarga));
+            throw new RuntimeException(self::mensajeDuplicadoPrecarga($duplicadoPrecarga, $codigoAfip));
         }
+
+        self::assertUnicoPorCae(
+            $empresaId,
+            $cuit,
+            $numerocae,
+            $tipoAutorizacion,
+            $excluirComprobanteId,
+            $excluirPrecargaId,
+        );
     }
 
     /**
@@ -102,112 +173,59 @@ final class ComprobanteProveedorUnicidadSupport
         int $numerocomprobante,
         int $proveedorId,
         ?int $excluirPrecargaId = null,
+        ?string $numerocae = null,
+        ?string $tipoAutorizacion = null,
     ): void {
-        $cuit = self::resolverCuitDigitos($proveedorId, null);
-        if ($cuit === '') {
-            throw new RuntimeException(
-                'Debe indicar un proveedor con CUIT válido (11 dígitos) para registrar la precarga.'
-            );
-        }
-
-        $duplicadoComprobante = self::findDuplicado(
+        self::assertUnico(
             $empresaId,
             $tipotransaccionCompraId,
             $letra,
             $sucursal,
             $numerocomprobante,
-            $cuit,
-        );
-        if ($duplicadoComprobante !== null) {
-            throw new RuntimeException(self::mensajeDuplicado($duplicadoComprobante));
-        }
-
-        $duplicadoPrecarga = self::findDuplicadoPrecarga(
-            $empresaId,
-            $tipotransaccionCompraId,
-            $letra,
-            $sucursal,
-            $numerocomprobante,
-            $cuit,
+            $proveedorId,
+            null,
+            null,
             $excluirPrecargaId,
+            $numerocae,
+            $tipoAutorizacion,
         );
-        if ($duplicadoPrecarga !== null) {
-            throw new RuntimeException(self::mensajeDuplicadoPrecarga($duplicadoPrecarga));
-        }
     }
 
-    public static function findDuplicadoPrecarga(
+    /**
+     * @throws RuntimeException
+     */
+    public static function assertUnicoPorCae(
         int $empresaId,
-        int $tipotransaccionCompraId,
-        string $letra,
-        int $sucursal,
-        int $numerocomprobante,
         string $cuitDigitos,
+        ?string $numerocae,
+        ?string $tipoAutorizacion,
+        ?int $excluirComprobanteId = null,
         ?int $excluirPrecargaId = null,
-    ): ?Precarga_Comprobante_Proveedor {
+    ): void {
+        if (! ComprobanteProveedorTipoAutorizacion::controlaUnicidadCodigo($tipoAutorizacion, $numerocae)) {
+            return;
+        }
+
+        $cae = self::normalizarNumeroCae($numerocae);
         $cuitDigitos = self::normalizarCuitDigitos($cuitDigitos);
-        if ($cuitDigitos === '') {
-            return null;
+        if ($cae === '' || $cuitDigitos === '') {
+            return;
         }
 
-        $letra = strtoupper(substr(trim($letra), 0, 1));
-
-        $query = Precarga_Comprobante_Proveedor::query()
-            ->with(['tipotransaccion_compras', 'proveedores'])
-            ->where('empresa_id', $empresaId)
-            ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
-            ->where('letra', $letra)
-            ->where('sucursal', $sucursal)
-            ->where('numerocomprobante', $numerocomprobante)
-            ->where(function ($q) use ($cuitDigitos): void {
-                $q->where('identificacion_proveedor_cuit', $cuitDigitos)
-                    ->orWhereHas('proveedores', function ($p) use ($cuitDigitos): void {
-                        $p->whereRaw(
-                            "REPLACE(REPLACE(REPLACE(REPLACE(nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', '') = ?",
-                            [$cuitDigitos],
-                        );
-                    });
-            });
-
-        if ($excluirPrecargaId !== null && $excluirPrecargaId > 0) {
-            $query->where('id', '!=', $excluirPrecargaId);
+        $dupCp = self::findDuplicadoPorCae($empresaId, $cuitDigitos, $cae, $excluirComprobanteId);
+        if ($dupCp !== null) {
+            throw new RuntimeException(self::mensajeDuplicadoCaeComprobante($dupCp, $cae));
         }
 
-        return $query->first();
+        $dupPre = self::findDuplicadoPrecargaPorCae($empresaId, $cuitDigitos, $cae, $excluirPrecargaId);
+        if ($dupPre !== null) {
+            throw new RuntimeException(self::mensajeDuplicadoCaePrecarga($dupPre, $cae));
+        }
     }
 
-    public static function mensajeDuplicadoPrecarga(
-        Precarga_Comprobante_Proveedor $existente,
-        ?string $tipoAbreviatura = null,
-    ): string {
-        $existente->loadMissing('tipotransaccion_compras', 'proveedores');
-
-        $tipo = strtoupper($tipoAbreviatura ?? (string) ($existente->tipotransaccion_compras?->abreviatura ?? 'FAC'));
-        $comprobante = trim(sprintf(
-            '%s %s %s-%s',
-            $tipo,
-            strtoupper((string) $existente->letra),
-            $existente->sucursal,
-            $existente->numerocomprobante,
-        ));
-
-        $cuit = self::normalizarCuitDigitos($existente->identificacion_proveedor_cuit ?? $existente->proveedores?->nroinscripcion);
-        $cuitFmt = $cuit !== '' ? self::formatearCuit($cuit) : 'sin CUIT';
-        $oc = trim((string) ($existente->numeroordencompra ?? ''));
-        $detalleOc = $oc !== '' ? ', OC '.$oc : '';
-
-        return sprintf(
-            'Factura duplicada: ya existe una precarga %s para el CUIT %s (id %d%s).',
-            $comprobante,
-            $cuitFmt,
-            $existente->id,
-            $detalleOc,
-        );
-    }
-
-    public static function findDuplicado(
+    public static function findDuplicadoPorAfip(
         int $empresaId,
-        int $tipotransaccionCompraId,
+        string $codigoAfipNorm,
         string $letra,
         int $sucursal,
         int $numerocomprobante,
@@ -215,7 +233,9 @@ final class ComprobanteProveedorUnicidadSupport
         ?int $excluirComprobanteId = null,
     ): ?Comprobante_Proveedor {
         $cuitDigitos = self::normalizarCuitDigitos($cuitDigitos);
-        if ($cuitDigitos === '') {
+        $codigoAfipNorm = self::normalizarCodigoAfip($codigoAfipNorm);
+        $tipoIds = self::tipotransaccionIdsPorCodigoAfip($codigoAfipNorm);
+        if ($cuitDigitos === '' || $codigoAfipNorm === '' || $tipoIds === []) {
             return null;
         }
 
@@ -225,10 +245,14 @@ final class ComprobanteProveedorUnicidadSupport
             ->with(['tipotransaccion_compras', 'proveedores'])
             ->whereNull('deleted_at')
             ->where('empresa_id', $empresaId)
-            ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
+            ->whereIn('tipotransaccion_compra_id', $tipoIds)
             ->where('letra', $letra)
             ->where('sucursal', $sucursal)
             ->where('numerocomprobante', $numerocomprobante)
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhere('estado', '!=', ComprobanteProveedorEstados::ANULADO);
+            })
             ->where(function ($q) use ($cuitDigitos): void {
                 $q->where('identificacion_proveedor_cuit', $cuitDigitos)
                     ->orWhereHas('proveedores', function ($p) use ($cuitDigitos): void {
@@ -251,14 +275,211 @@ final class ComprobanteProveedorUnicidadSupport
         return $query->first();
     }
 
-    public static function mensajeDuplicado(Comprobante_Proveedor $existente): string
+    /** Compat: búsqueda por tipo interno (delega a AFIP). */
+    public static function findDuplicado(
+        int $empresaId,
+        int $tipotransaccionCompraId,
+        string $letra,
+        int $sucursal,
+        int $numerocomprobante,
+        string $cuitDigitos,
+        ?int $excluirComprobanteId = null,
+    ): ?Comprobante_Proveedor {
+        return self::findDuplicadoPorAfip(
+            $empresaId,
+            self::codigoAfipDesdeTipoId($tipotransaccionCompraId),
+            $letra,
+            $sucursal,
+            $numerocomprobante,
+            $cuitDigitos,
+            $excluirComprobanteId,
+        );
+    }
+
+    public static function findDuplicadoPrecargaPorAfip(
+        int $empresaId,
+        string $codigoAfipNorm,
+        string $letra,
+        int $sucursal,
+        int $numerocomprobante,
+        string $cuitDigitos,
+        ?int $excluirPrecargaId = null,
+    ): ?Precarga_Comprobante_Proveedor {
+        $cuitDigitos = self::normalizarCuitDigitos($cuitDigitos);
+        $codigoAfipNorm = self::normalizarCodigoAfip($codigoAfipNorm);
+        $tipoIds = self::tipotransaccionIdsPorCodigoAfip($codigoAfipNorm);
+        if ($cuitDigitos === '' || $codigoAfipNorm === '' || $tipoIds === []) {
+            return null;
+        }
+
+        $letra = strtoupper(substr(trim($letra), 0, 1));
+
+        $query = Precarga_Comprobante_Proveedor::query()
+            ->with(['tipotransaccion_compras', 'proveedores'])
+            ->where('empresa_id', $empresaId)
+            ->whereIn('tipotransaccion_compra_id', $tipoIds)
+            ->where('letra', $letra)
+            ->where('sucursal', $sucursal)
+            ->where('numerocomprobante', $numerocomprobante)
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+            })
+            ->where(function ($q) use ($cuitDigitos): void {
+                $q->where('identificacion_proveedor_cuit', $cuitDigitos)
+                    ->orWhereHas('proveedores', function ($p) use ($cuitDigitos): void {
+                        $p->whereRaw(
+                            "REPLACE(REPLACE(REPLACE(REPLACE(nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', '') = ?",
+                            [$cuitDigitos],
+                        );
+                    });
+            });
+
+        if ($excluirPrecargaId !== null && $excluirPrecargaId > 0) {
+            $query->where('id', '!=', $excluirPrecargaId);
+        }
+
+        return $query->first();
+    }
+
+    public static function findDuplicadoPrecarga(
+        int $empresaId,
+        int $tipotransaccionCompraId,
+        string $letra,
+        int $sucursal,
+        int $numerocomprobante,
+        string $cuitDigitos,
+        ?int $excluirPrecargaId = null,
+    ): ?Precarga_Comprobante_Proveedor {
+        return self::findDuplicadoPrecargaPorAfip(
+            $empresaId,
+            self::codigoAfipDesdeTipoId($tipotransaccionCompraId),
+            $letra,
+            $sucursal,
+            $numerocomprobante,
+            $cuitDigitos,
+            $excluirPrecargaId,
+        );
+    }
+
+    public static function findDuplicadoPorCae(
+        int $empresaId,
+        string $cuitDigitos,
+        string $caeDigitos,
+        ?int $excluirComprobanteId = null,
+    ): ?Comprobante_Proveedor {
+        $query = Comprobante_Proveedor::query()
+            ->with(['tipotransaccion_compras', 'proveedores'])
+            ->whereNull('deleted_at')
+            ->where('empresa_id', $empresaId)
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhere('estado', '!=', ComprobanteProveedorEstados::ANULADO);
+            })
+            ->where(function ($q) {
+                $q->whereNull('tipo_autorizacion')
+                    ->orWhere('tipo_autorizacion', '!=', ComprobanteProveedorTipoAutorizacion::CAEA);
+            })
+            ->whereRaw(
+                "REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(numerocae,''), '-', ''), ' ', ''), '.', ''), '/', '') = ?",
+                [$caeDigitos],
+            )
+            ->where(function ($q) use ($cuitDigitos): void {
+                $q->where('identificacion_proveedor_cuit', $cuitDigitos)
+                    ->orWhereHas('proveedores', function ($p) use ($cuitDigitos): void {
+                        $p->whereRaw(
+                            "REPLACE(REPLACE(REPLACE(REPLACE(nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', '') = ?",
+                            [$cuitDigitos],
+                        );
+                    });
+            });
+
+        if ($excluirComprobanteId !== null && $excluirComprobanteId > 0) {
+            $query->where('id', '!=', $excluirComprobanteId);
+        }
+
+        return $query->first();
+    }
+
+    public static function findDuplicadoPrecargaPorCae(
+        int $empresaId,
+        string $cuitDigitos,
+        string $caeDigitos,
+        ?int $excluirPrecargaId = null,
+    ): ?Precarga_Comprobante_Proveedor {
+        $query = Precarga_Comprobante_Proveedor::query()
+            ->with(['tipotransaccion_compras', 'proveedores'])
+            ->where('empresa_id', $empresaId)
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+            })
+            ->where(function ($q) {
+                $q->whereNull('tipo_autorizacion')
+                    ->orWhere('tipo_autorizacion', '!=', ComprobanteProveedorTipoAutorizacion::CAEA);
+            })
+            ->whereRaw(
+                "REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(numerocae,''), '-', ''), ' ', ''), '.', ''), '/', '') = ?",
+                [$caeDigitos],
+            )
+            ->where(function ($q) use ($cuitDigitos): void {
+                $q->where('identificacion_proveedor_cuit', $cuitDigitos)
+                    ->orWhereHas('proveedores', function ($p) use ($cuitDigitos): void {
+                        $p->whereRaw(
+                            "REPLACE(REPLACE(REPLACE(REPLACE(nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', '') = ?",
+                            [$cuitDigitos],
+                        );
+                    });
+            });
+
+        if ($excluirPrecargaId !== null && $excluirPrecargaId > 0) {
+            $query->where('id', '!=', $excluirPrecargaId);
+        }
+
+        return $query->first();
+    }
+
+    public static function mensajeDuplicadoPrecarga(
+        Precarga_Comprobante_Proveedor $existente,
+        ?string $codigoAfip = null,
+    ): string {
+        $existente->loadMissing('tipotransaccion_compras', 'proveedores');
+
+        $afip = $codigoAfip ?? self::normalizarCodigoAfip((string) ($existente->tipotransaccion_compras?->codigoafip ?? ''));
+        $afipLabel = $afip !== '' ? str_pad($afip, 2, '0', STR_PAD_LEFT) : '??';
+        $comprobante = trim(sprintf(
+            'AFIP %s %s %s-%s',
+            $afipLabel,
+            strtoupper((string) $existente->letra),
+            $existente->sucursal,
+            $existente->numerocomprobante,
+        ));
+
+        $cuit = self::normalizarCuitDigitos($existente->identificacion_proveedor_cuit ?? $existente->proveedores?->nroinscripcion);
+        $cuitFmt = $cuit !== '' ? self::formatearCuit($cuit) : 'sin CUIT';
+        $oc = trim((string) ($existente->numeroordencompra ?? ''));
+        $detalleOc = $oc !== '' ? ', OC '.$oc : '';
+        $origen = PrecargaComprobanteOrigenEntrada::etiqueta($existente->origen_entrada ?? null);
+
+        return sprintf(
+            'Factura duplicada: ya existe una precarga %s para el CUIT %s (id %d, origen %s%s). No se puede cargar dos veces desde distintos orígenes.',
+            $comprobante,
+            $cuitFmt,
+            $existente->id,
+            $origen,
+            $detalleOc,
+        );
+    }
+
+    public static function mensajeDuplicado(Comprobante_Proveedor $existente, ?string $codigoAfip = null): string
     {
         $existente->loadMissing('tipotransaccion_compras');
 
-        $tipo = strtoupper((string) ($existente->tipotransaccion_compras?->abreviatura ?? 'FAC'));
+        $afip = $codigoAfip ?? self::normalizarCodigoAfip((string) ($existente->tipotransaccion_compras?->codigoafip ?? ''));
+        $afipLabel = $afip !== '' ? str_pad($afip, 2, '0', STR_PAD_LEFT) : '??';
         $comprobante = trim(sprintf(
-            '%s %s %s-%s',
-            $tipo,
+            'AFIP %s %s %s-%s',
+            $afipLabel,
             strtoupper((string) $existente->letra),
             $existente->sucursal,
             $existente->numerocomprobante,
@@ -273,11 +494,39 @@ final class ComprobanteProveedorUnicidadSupport
         $cuitFmt = $cuit !== '' ? self::formatearCuit($cuit) : 'sin CUIT';
 
         return sprintf(
-            'Comprobante duplicado: ya existe %s para el CUIT %s (registro #%d en %s).',
+            'Comprobante duplicado: ya existe %s para el CUIT %s (registro #%d en %s, origen %s). No se puede cargar dos veces desde distintos orígenes.',
             $comprobante,
             $cuitFmt,
             $existente->id,
             $modulo,
+            ComprobanteProveedorOrigenEntrada::etiqueta((string) ($existente->origen_entrada ?? '')),
+        );
+    }
+
+    public static function mensajeDuplicadoCaeComprobante(Comprobante_Proveedor $existente, string $cae): string
+    {
+        $existente->loadMissing('tipotransaccion_compras');
+
+        return sprintf(
+            'CAE/CAI duplicado: el código %s ya figura en el comprobante #%d (%s %s %s-%s). Si es CAEA, indique tipo de autorización CAEA.',
+            $cae,
+            $existente->id,
+            strtoupper((string) ($existente->tipotransaccion_compras?->abreviatura ?? 'FAC')),
+            strtoupper((string) $existente->letra),
+            $existente->sucursal,
+            $existente->numerocomprobante,
+        );
+    }
+
+    public static function mensajeDuplicadoCaePrecarga(Precarga_Comprobante_Proveedor $existente, string $cae): string
+    {
+        return sprintf(
+            'CAE/CAI duplicado: el código %s ya figura en la precarga id %d (%s %s-%s). Si es CAEA, indique tipo de autorización CAEA.',
+            $cae,
+            $existente->id,
+            strtoupper((string) $existente->letra),
+            $existente->sucursal,
+            $existente->numerocomprobante,
         );
     }
 

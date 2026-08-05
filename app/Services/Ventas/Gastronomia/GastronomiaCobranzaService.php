@@ -6,8 +6,8 @@ use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Models\Ventas\Venta;
 use App\Services\Caja\CobranzaService;
-use App\Services\Configuracion\CotizacionService;
 use App\Support\Caja\CobranzaMontosAjusteSupport;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use InvalidArgumentException;
 
 /**
@@ -22,7 +22,6 @@ final class GastronomiaCobranzaService
 
     public function __construct(
         private readonly CobranzaService $cobranzaService,
-        private readonly CotizacionService $cotizacionService,
     ) {
     }
 
@@ -72,7 +71,7 @@ final class GastronomiaCobranzaService
             }
             $cotizacion = isset($medio['cotizacion']) && (float) $medio['cotizacion'] > 0
                 ? (float) $medio['cotizacion']
-                : $this->cotizacionParaMoneda($venta->fecha, $monedaId);
+                : $this->cotizacionParaMoneda($venta->fecha, $monedaId, (int) $cfg->empresa_id);
             $lineas[] = [
                 'cuentacaja_id' => $cuentacajaId,
                 'moneda_id' => $monedaId,
@@ -230,15 +229,9 @@ final class GastronomiaCobranzaService
             .' o en .env: GASTRONOMIA_TIPO_TRANSACCION_CAJA_ID=1';
     }
 
-    private function cotizacionParaMoneda(string $fecha, int $monedaId): float
+    private function cotizacionParaMoneda(string $fecha, int $monedaId, int $empresaId): float
     {
-        if ($monedaId <= self::MONEDA_PESOS_ID) {
-            return 1.;
-        }
-        $cot = $this->cotizacionService->leeCotizacionDiaria($fecha, $monedaId);
-        $valor = $cot && isset($cot['cotizacionventa']) ? (float) $cot['cotizacionventa'] : 0.;
-
-        return $valor > 0. ? $valor : 1.;
+        return CotizacionTesoreriaConsultaSupport::calculaVenta($fecha, $monedaId, $empresaId);
     }
 
     private function montoEnPesos(int $monedaId, float $monto, float $cotizacion): float

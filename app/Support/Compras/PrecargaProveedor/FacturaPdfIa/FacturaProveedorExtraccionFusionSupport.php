@@ -22,12 +22,17 @@ final class FacturaProveedorExtraccionFusionSupport
 
         $campos = [
             'numero_oc', 'tipo_comprobante', 'letra',
-            'sucursal', 'numero_factura', 'fecha_factura', 'numerocae', 'fecha_vto_cai_cae',
+            'sucursal', 'numero_factura', 'fecha_factura', 'numerocae', 'tipo_autorizacion', 'fecha_vto_cai_cae',
             'subtotal', 'total', 'moneda', 'cotizacion',
         ];
 
         $fusion = [];
         foreach ($campos as $campo) {
+            // tipo_autorizacion: priorizar heurística (detecta CAEA vs CAE en el texto).
+            if ($campo === 'tipo_autorizacion') {
+                $fusion[$campo] = $this->elegir($heuristica[$campo] ?? null, $ollama[$campo] ?? null);
+                continue;
+            }
             $fusion[$campo] = $this->elegir($ollama[$campo] ?? null, $heuristica[$campo] ?? null);
         }
 

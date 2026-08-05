@@ -8,6 +8,7 @@ use App\Models\Caja\RendicionMaquina;
 use App\Models\Caja\RendicionMaquinaAjusteWigos;
 use App\Models\Caja\Usocuentacaja;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaAjusteWigosSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaCompletoDelDiaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaContextoBuilder;
@@ -181,7 +182,7 @@ final class RendicionMaquinaService
             $turnoNorm = (string) $rendicion->turno;
         }
 
-        $cuentasValor = $this->listarCuentasValor($empresaId, $rendicion);
+        $cuentasValor = $this->listarCuentasValor($empresaId, $rendicion, $fechaYmd);
         $gastos = $this->listarGastos($empresaId, $rendicion);
 
         $inputs = is_array($rendicion?->inputs_json) ? $rendicion->inputs_json : [];
@@ -294,12 +295,17 @@ final class RendicionMaquinaService
         }
 
         // Si vienen en 0 (cambio de fecha blanqueó inputs), completar desde previas.
-        // Tras Traer WIGOS el JS ya carga vale/comprobante de la fecha.
+        // Completo: apertura = misma semilla que M (fondo + comprobante); vale = 0.
         if (RendicionMaquinaTurno::esCompleto($turnoPayload)) {
-            // Completo: comprobante/vale = 0; fondo_cierre/resultado/transfer desde M/T/N.
-            $orq['comprobante'] = 0.0;
             $orq['vale_rep_fondo'] = 0.0;
-            $inputs['fondo_inicial'] = 0.0;
+            if (abs((float) ($inputs['fondo_inicial'] ?? $inputs['inputs.fondo_inicial'] ?? 0)) < 0.00001
+                && abs((float) ($previas['fondo_inicial'] ?? 0)) > 0.00001) {
+                $inputs['fondo_inicial'] = round((float) $previas['fondo_inicial'], 2);
+            }
+            if (abs((float) ($orq['comprobante'] ?? 0)) < 0.00001
+                && abs((float) ($previas['comprobante'] ?? 0)) > 0.00001) {
+                $orq['comprobante'] = round((float) $previas['comprobante'], 2);
+            }
             $faltaCierre = abs((float) ($orq['fondo_cierre'] ?? 0)) < 0.00001
                 || abs((float) ($orq['resultado_turno'] ?? 0)) < 0.00001
                 || ! array_key_exists('transferencia', $orq);
@@ -312,6 +318,12 @@ final class RendicionMaquinaService
                 $orq['fondo_cierre'] = round((float) ($completo['orquestador']['fondo_cierre'] ?? 0), 2);
                 $orq['resultado_turno'] = round((float) ($completo['orquestador']['resultado_turno'] ?? 0), 2);
                 $orq['transferencia'] = round((float) ($completo['orquestador']['transferencia'] ?? 0), 2);
+                if (abs((float) ($orq['comprobante'] ?? 0)) < 0.00001) {
+                    $orq['comprobante'] = round((float) ($completo['orquestador']['comprobante'] ?? 0), 2);
+                }
+                if (abs((float) ($inputs['fondo_inicial'] ?? 0)) < 0.00001) {
+                    $inputs['fondo_inicial'] = round((float) ($completo['inputs']['fondo_inicial'] ?? 0), 2);
+                }
             }
         } else {
             if (abs((float) ($orq['comprobante'] ?? 0)) < 0.00001
@@ -379,9 +391,7 @@ final class RendicionMaquinaService
                 'wigos_json' => $inputs,
                 'previas' => $previasStub,
                 'calc_orquestador' => [
-                    'comprobante' => $esCompleto
-                        ? 0.0
-                        : round((float) ($previasStub['comprobante'] ?? 0), 2),
+                    'comprobante' => round((float) ($previasStub['comprobante'] ?? 0), 2),
                     'vale_rep_fondo' => $esCompleto
                         ? 0.0
                         : round((float) ($previasStub['vale_rep_fondo'] ?? 0), 2),
@@ -407,12 +417,13 @@ final class RendicionMaquinaService
                 foreach ($completo['inputs'] as $clave => $valor) {
                     $stub['inputs'][$clave] = round((float) $valor, 2);
                 }
-                $stub['inputs']['fondo_inicial'] = 0.0;
                 $stub['wigos_json'] = $stub['inputs'];
                 $stub['valores'] = $completo['valores'];
                 $stub['gastos'] = $completo['gastos'];
                 $stub['calc_orquestador'] = $completo['orquestador'];
                 $stub['meta']['completo_del_dia'] = $completo['meta'];
+                $stub['meta']['origen_fondo'] = (string) ($completo['meta']['origen_fondo'] ?? $previasStub['origen_fondo']);
+                $stub['meta']['origen_comprobante'] = (string) ($completo['meta']['origen_comprobante'] ?? 'ninguno');
             }
 
             return $stub;
@@ -446,18 +457,17 @@ final class RendicionMaquinaService
 
         $previas = RendicionMaquinaPreviasSupport::resolver($empresaId, $fechaYmd, $turnoNorm, $exceptoId);
 
-        if ($esCompleto) {
-            // calcula_rendicion_turno_completo: fondo/comprobante/vale = 0
-            $inputs['fondo_inicial'] = 0.0;
-            // impuesto_drop ya viene del M del día siguiente (consolidado)
-        } else {
+        // Completo ya trae fondo/comprobante del consolidado (semilla = M).
+        // Parciales: fondo desde previas; impuesto drop del C anterior solo en M.
+        if (! $esCompleto) {
             $inputs['fondo_inicial'] = round((float) ($previas['fondo_inicial'] ?? 0), 2);
-            // Impuesto drop del C anterior solo en M → neto Anita dr_bill_rod.
             if (RendicionMaquinaTurno::esManiana($turnoNorm)) {
                 $inputs['impuesto_drop'] = round((float) ($previas['impuesto_drop'] ?? 0), 2);
             } else {
                 $inputs['impuesto_drop'] = 0.0;
             }
+        } elseif (abs((float) ($inputs['fondo_inicial'] ?? 0)) < 0.00001) {
+            $inputs['fondo_inicial'] = round((float) ($previas['fondo_inicial'] ?? 0), 2);
         }
 
         // Pantalla: drop_billete = neto (como Anita dr_bill_rod); bruto aparte.
@@ -471,12 +481,12 @@ final class RendicionMaquinaService
         $resultado['wigos_json'] = $inputs;
         $resultado['previas'] = $previas;
         if ($esCompleto) {
-            // lee_rendiciones_del_dia: comprobante/vale=0; fondo_cierre/resultado de Noche; transfer suma M+T+N
+            // Apertura = M; cierre/resultado = Noche; transfer = suma M+T+N; vale = 0
             $orqCompleto = is_array($resultado['calc_orquestador'] ?? null)
                 ? $resultado['calc_orquestador']
                 : [];
             $resultado['calc_orquestador'] = [
-                'comprobante' => 0.0,
+                'comprobante' => round((float) ($orqCompleto['comprobante'] ?? $previas['comprobante'] ?? 0), 2),
                 'vale_rep_fondo' => 0.0,
                 'fondo_cierre' => round((float) ($orqCompleto['fondo_cierre'] ?? 0), 2),
                 'resultado_turno' => round((float) ($orqCompleto['resultado_turno'] ?? 0), 2),
@@ -488,15 +498,17 @@ final class RendicionMaquinaService
                 'vale_rep_fondo' => round((float) ($previas['vale_rep_fondo'] ?? 0), 2),
             ];
         }
-        $resultado['meta']['origen_fondo'] = $esCompleto ? 'completo_cero' : $previas['origen_fondo'];
+        $resultado['meta']['origen_fondo'] = $esCompleto
+            ? (string) ($resultado['crudo']['completo_del_dia']['origen_fondo'] ?? $previas['origen_fondo'])
+            : $previas['origen_fondo'];
         $resultado['meta']['origen_comprobante'] = $esCompleto
-            ? 'completo_cero'
+            ? (string) ($resultado['crudo']['completo_del_dia']['origen_comprobante'] ?? $previas['origen_comprobante'] ?? 'ninguno')
             : ($previas['origen_comprobante'] ?? 'ninguno');
         $resultado['meta']['origen_impuesto_drop'] = $esCompleto
             ? (string) ($resultado['crudo']['completo_del_dia']['origen_impuesto_drop'] ?? 'ninguno')
             : $previas['origen_impuesto_drop'];
         $resultado['meta']['origen_vale_rep_fondo'] = $esCompleto
-            ? 'completo_cero'
+            ? 'completo_sin_vale'
             : $previas['origen_vale_rep_fondo'];
         $resultado['meta']['origen_drop_ant_completo'] = $esCompleto
             ? (string) ($resultado['crudo']['drop_ant_origen'] ?? $previas['origen_drop_ant_completo'] ?? 'ninguno')
@@ -589,11 +601,23 @@ final class RendicionMaquinaService
                 throw new InvalidArgumentException("Cuenta de caja {$cuentacajaId} no válida para la empresa.");
             }
 
+            $cotizacion = isset($linea['cotizacion']) ? round((float) $linea['cotizacion'], 6) : null;
+            if ($cotizacion === null || $cotizacion <= 0) {
+                $cuenta = Cuentacaja::query()->find($cuentacajaId, ['id', 'moneda_id']);
+                $monedaId = (int) ($cuenta->moneda_id ?? 1);
+                $fechaYmd = $rendicion->fecha?->format('Y-m-d') ?? date('Y-m-d');
+                $cotizacion = CotizacionTesoreriaConsultaSupport::calculaVenta(
+                    $fechaYmd,
+                    $monedaId,
+                    (int) $rendicion->empresa_id
+                );
+            }
+
             $rendicion->valores()->create([
                 'cuentacaja_id' => $cuentacajaId,
                 'codigo_valormae' => $this->nullableInt($linea['codigo_valormae'] ?? null),
                 'monto' => $monto,
-                'cotizacion' => isset($linea['cotizacion']) ? round((float) $linea['cotizacion'], 6) : null,
+                'cotizacion' => $cotizacion,
                 'orden' => $ordenValor++,
             ]);
         }
@@ -668,10 +692,10 @@ final class RendicionMaquinaService
      *
      * @return array{cuentas_valor: list<array<string, mixed>>, gastos: list<array<string, mixed>>}
      */
-    public function lineasValorYGastoParaEmpresa(int $empresaId): array
+    public function lineasValorYGastoParaEmpresa(int $empresaId, ?string $fecha = null): array
     {
         return [
-            'cuentas_valor' => $this->listarCuentasValor($empresaId, null),
+            'cuentas_valor' => $this->listarCuentasValor($empresaId, null, $fecha),
             'gastos' => $this->listarGastos($empresaId, null),
         ];
     }
@@ -679,7 +703,7 @@ final class RendicionMaquinaService
     /**
      * @return list<array<string, mixed>>
      */
-    private function listarCuentasValor(int $empresaId, ?RendicionMaquina $rendicion): array
+    private function listarCuentasValor(int $empresaId, ?RendicionMaquina $rendicion, ?string $fecha = null): array
     {
         $usoId = (int) (Usocuentacaja::query()
             ->where('nombre', RendicionMaquinaVariables::USO_CUENTACAJA_NOMBRE)
@@ -700,6 +724,10 @@ final class RendicionMaquinaService
             return [];
         }
 
+        $fechaYmd = $fecha
+            ?? ($rendicion?->fecha?->format('Y-m-d'))
+            ?? date('Y-m-d');
+
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
             ->whereHas('usocuentacajas', fn ($q) => $q->where('usocuentacaja.id', $usoId))
@@ -709,6 +737,11 @@ final class RendicionMaquinaService
         foreach ($cuentas as $cuenta) {
             $saved = $montosGuardados[(int) $cuenta->id] ?? null;
             $etiqueta = $cuenta->etiquetaOperaciones();
+            $monedaId = (int) ($cuenta->moneda_id ?? 1);
+            $cotizacion = $saved['cotizacion'] ?? null;
+            if ($cotizacion === null || $cotizacion <= 0) {
+                $cotizacion = CotizacionTesoreriaConsultaSupport::calculaVenta($fechaYmd, $monedaId, $empresaId);
+            }
             $lineas[] = [
                 'cuentacaja_id' => (int) $cuenta->id,
                 'codigo' => (string) $cuenta->codigo,
@@ -716,9 +749,10 @@ final class RendicionMaquinaService
                 'descripcion_operaciones' => trim((string) ($cuenta->descripcion_operaciones ?? '')),
                 'nombre_maestro' => (string) $cuenta->nombre,
                 'monto' => $saved['monto'] ?? 0.0,
-                'cotizacion' => $saved['cotizacion'] ?? null,
+                'cotizacion' => $cotizacion,
                 'codigo_valormae' => $saved['codigo_valormae'] ?? null,
                 'tipo_valormae' => null,
+                'moneda_id' => $monedaId,
             ];
         }
 

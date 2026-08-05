@@ -168,7 +168,19 @@
                             </div>
                         </div>
                         <div class="form-group row">
-                            <label class="col-lg-4 col-form-label">CAE</label>
+                            <label class="col-lg-4 col-form-label">Tipo autorizaci&oacute;n</label>
+                            <div class="col-lg-8">
+                                <select class="form-control form-control-sm" id="ie-cp-tipo-autorizacion">
+                                    <option value="">—</option>
+                                    @foreach (\App\Support\Compras\ComprobanteProveedorTipoAutorizacion::todos() as $tipoAut)
+                                        <option value="{{ $tipoAut }}">{{ $tipoAut }}</option>
+                                    @endforeach
+                                </select>
+                                <small class="form-text text-muted">CAEA puede repetirse; CAE/CAI se controlan como &uacute;nicos.</small>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label class="col-lg-4 col-form-label">N&ordm; CAE/CAEA</label>
                             <div class="col-lg-8">
                                 <input type="text" class="form-control form-control-sm" id="ie-cp-cae">
                             </div>

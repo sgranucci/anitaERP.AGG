@@ -6,9 +6,11 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Historia;
 use App\Models\Compras\Sector_Legajocompra;
 use App\Models\Configuracion\Arbolaprobacion_OcTrigger;
+use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Configuracion\OcArbolTriggerCatalog;
 use Carbon\Carbon;
+use RuntimeException;
 
 final class OcArbolTriggerAccionFinalService
 {
@@ -50,9 +52,18 @@ final class OcArbolTriggerAccionFinalService
             return;
         }
 
-        $oc = Ordencompra::query()->select('id', 'sector_legajocompra_id')->find($ordencompraId);
+        $oc = Ordencompra::query()->find($ordencompraId);
         if (! $oc || (int) ($oc->sector_legajocompra_id ?? 0) === $sectorDestinoId) {
             return;
+        }
+
+        if (OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorDestinoId)) {
+            $gate = OrdencompraEnvioCuentasAPagarGateSupport::evaluar($oc);
+            if (! $gate['ok']) {
+                throw new RuntimeException(
+                    'No se puede enviar el legajo a Cuentas a pagar (trigger OC): '.implode(' ', $gate['errores'])
+                );
+            }
         }
 
         Ordencompra::query()->whereKey($ordencompraId)->update(['sector_legajocompra_id' => $sectorDestinoId]);

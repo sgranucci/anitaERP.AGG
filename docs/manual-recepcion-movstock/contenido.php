@@ -170,7 +170,7 @@ return [
                 'Por empresa: checkbox «Generar asiento contable al confirmar recepción» y cuentas de provisión, factura anticipada, anticipo bienes de uso y proveedores intangible.',
                 'Tolerancias por centro de costo: porcentaje de cantidad, porcentaje de precio y tolerancia absoluta de precio. Definen cuándo una diferencia exige tratamiento especial.',
                 'Transferencias TRCONT (Stock → Tipos de transacción stock): marque «Genera asiento contable al confirmar» en el tipo de transferencia correspondiente. El operador verá la etiqueta (contabilidad) en Stock → Transferencia.',
-                'Artículos contabilizables en TRCONT: en Stock → Artículos → pestaña Contabilidad, complete cuenta compra, centro de costo compra y cuenta de gastos (grilla por empresa). Artículos TITO: active «Precio promedio transferencia TRCONT» para usar promedio de las 3 últimas recepciones. Artículos «Otros activos»: cuenta compra configurada en catálogo de cuentas automáticas (ej. 117010001).',
+                'Artículos contabilizables en TRCONT: en Stock → Artículos → pestaña Contabilidad, complete cuenta compra, centro de costo compra y cuenta de gastos (grilla por empresa). Artículos TITO: active «Precio promedio transferencia TRCONT» (promedio de exactamente 3 recepciones COM en ERP; si no hay 3, promedio Anita stkm_pre_compra1/2/3). Artículos «Otros activos»: cuenta compra configurada en catálogo de cuentas automáticas (ej. 117010001).',
             ],
         ],
         [
@@ -279,8 +279,8 @@ return [
                 'caption' => 'Familias de artículos en TRCONT',
                 'headers' => ['Familia', 'Cómo se identifica', 'Precio del asiento', 'Requisitos adicionales'],
                 'rows' => [
-                    ['TITO', 'Badge azul TITO en pantalla; flag «Precio promedio transferencia TRCONT» en artículo.', 'Promedio de las 3 últimas recepciones COM (Anita recepmov).', 'Depósito salida = depósito última recepción; cuentas gasto y compra distintas.'],
-                    ['Otros activos', 'Badge gris «Otros activos»; cuenta compra del artículo = cuenta «Otros activos» del catálogo (ej. 117010001).', 'Última compra (stkmae / recepción ERP).', 'Igual que TITO en depósito y cuentas.'],
+                    ['TITO', 'Badge azul TITO en pantalla; flag «Precio promedio transferencia TRCONT» en artículo.', 'Exactamente 3 recepciones COM en ERP → promedio; si no, promedio Anita stkm_pre_compra1/2/3.', 'Depósito salida = depósito última recepción; cuentas gasto y compra distintas.'],
+                    ['Otros activos', 'Badge gris «Otros activos»; cuenta compra del artículo = cuenta «Otros activos» del catálogo (ej. 117010001).', 'Última compra ERP → Anita stkm_pre_compra3 → costo/PPP.', 'Igual que TITO en depósito y cuentas.'],
                     ['No contabilizable', 'Sin badge; artículo no entra en TRCONT.', '—', 'Use otro tipo de transferencia sin contabilidad para mover ese SKU.'],
                 ],
             ],

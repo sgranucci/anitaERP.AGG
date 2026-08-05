@@ -3,19 +3,19 @@
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
-    				<label for="sku" class="col-lg-4 col-form-label requerido">Sku</label>
+    				<label for="sku" class="col-lg-4 col-form-label text-right pr-2 requerido">Sku</label>
     				<div class="col-lg-5">
     					<input type="text" name="sku" id="sku" class="form-control sku" value="{{old('sku', $producto->sku ?? '')}}" required readonly/>
                 	</div>
                 </div>
                 <div class="form-group row">
-    				<label for="sku" class="col-lg-4 col-form-label requerido">Descripci&oacute;n</label>
+    				<label for="sku" class="col-lg-4 col-form-label text-right pr-2 requerido">Descripci&oacute;n</label>
     				<div class="col-lg-8">
     					<input type="text" name="descripcion" id="descripcion" class="form-control descripcion" value="{{old('descripcion', $producto->descripcion ?? '')}}" required disabled/>
                 	</div>
                 </div>
 				<div class="form-group row">
-    				<label for="unidadmedida2_id" class="col-lg-4 col-form-label requerido">Unidad de medida</label>
+    				<label for="unidadmedida2_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Unidad de medida</label>
 					<div class="col-lg-4">
 					<select id="unidadmedida2_id" name="unidadmedida2_id" class="form-control unidadmedida" required>
                         <option value="">-- Seleccionar --</option>
@@ -34,7 +34,7 @@
                     </div>
                 </div>
 				<div class="form-group row">
-    				<label for="unidadmedidaalternativa2_id" class="col-lg-4 col-form-label requerido">Unidad de medida alternativa</label>
+    				<label for="unidadmedidaalternativa2_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Unidad de medida alternativa</label>
 					<div class="col-lg-4">
 					<select id="unidadmedidaalternativa2_id" name="unidadmedidaalternativa2_id" class="form-control unidadmedidaalternativa" required>
                         <option value="">-- Seleccionar --</option>
@@ -54,7 +54,7 @@
                 </div>   
                 @if (config('app.empresa') == 'FRASLE')                       
                     <div class="form-group row">
-                        <label for="tipoproducto_id" class="col-lg-4 col-form-label">Tipo de producto</label>
+                        <label for="tipoproducto_id" class="col-lg-4 col-form-label text-right pr-2">Tipo de producto</label>
                         <div class="col-lg-8">
                             <select id="tipoproducto_id" name="tipoproducto_id" class="form-control">
                                 <option value="">-- Seleccionar --</option>
@@ -71,7 +71,7 @@
                 @endif
 				@if (config('app.empresa') == 'FRASLE')
 					<div class="form-group row">
-						<label for="capacidad_id" class="col-lg-4 col-form-label">Capacidad</label>
+						<label for="capacidad_id" class="col-lg-4 col-form-label text-right pr-2">Capacidad</label>
 						<div class="col-lg-8">
 							<select id="capacidad_id" name="capacidad_id" class="form-control">
 								<option value="">-- Seleccionar --</option>
@@ -89,7 +89,7 @@
             </div>
             <div class="col-sm-6">
                 <div class="form-group row">
-    				<label for="skualternativo" class="col-lg-4 col-form-label" title="SKU alternativo / insumo">SKU Alt./Insumo</label>
+    				<label for="skualternativo" class="col-lg-4 col-form-label text-right pr-2" title="SKU alternativo / insumo">SKU Alt./Insumo</label>
     				<div class="col-lg-5">
     					<input type="text" name="skualternativo" id="skualternativo" class="form-control" value="{{old('skualternativo', $producto->skualternativo ?? '')}}"/>
                 	</div>
@@ -118,18 +118,18 @@
                     </div>
                 </div>
                 <div class="form-group row">
-    				<label for="unidadesxenvase" class="col-lg-4 col-form-label">Unidades x envase</label>
+    				<label for="unidadesxenvase" class="col-lg-4 col-form-label text-right pr-2">Unidades x envase</label>
     				<div class="col-lg-2">
     					<input type="number" name="unidadesxenvase" id="unidadesxenvase" class="form-control" value="{{old('unidadesxenvase', $producto->unidadesxenvase ?? '')}}"/>
                 	</div>
 
-					<label for="peso" class="col-lg-2 col-form-label">Peso</label>
+					<label for="peso" class="col-lg-2 col-form-label text-right pr-2">Peso</label>
     				<div class="col-lg-2">
     					<input type="number" name="peso" id="peso" class="form-control" value="{{old('peso', $producto->peso ?? '')}}"/>
                 	</div>
                 </div>
                 <div class="form-group row">
-    				<label for="coeficienteconversion" class="col-lg-4 col-form-label">Coeficiente de Conversión</label>
+    				<label for="coeficienteconversion" class="col-lg-4 col-form-label text-right pr-2">Coeficiente de Conversión</label>
     				<div class="col-lg-2">
     					<input type="number" name="coeficienteconversion" id="coeficienteconversion" class="form-control" value="{{old('coeficienteconversion', $producto->coeficienteconversion ?? '')}}" step="any" min="0"/>
                 	</div>
@@ -145,7 +145,7 @@
                     @endif
                 </div>    
                 <div class="form-group row">
-    				<label for="formula" class="col-lg-4 col-form-label">Fórmula (id Anita / ERP)</label>
+    				<label for="formula" class="col-lg-4 col-form-label text-right pr-2">Fórmula (id Anita / ERP)</label>
     				<div class="col-lg-2">
     					<input type="number" name="formula" id="formula" class="form-control" value="{{old('formula', $producto->formula ?? '')}}"/>
                 	</div>
@@ -170,7 +170,7 @@
 
 				@if (config('app.empresa') == 'FRASLE')
 					<div class="form-group row">
-						<label for="color_id" class="col-lg-4 col-form-label">Color</label>
+						<label for="color_id" class="col-lg-4 col-form-label text-right pr-2">Color</label>
 						<div class="col-lg-8">
 							<select id="color_id" name="color_id" class="form-control">
 								<option value="">-- Seleccionar --</option>
@@ -187,7 +187,7 @@
 				@endif
 				@if (config('app.empresa') == 'FRASLE')
 					<div class="form-group row">
-						<label for="tipoliquido_id" class="col-lg-4 col-form-label">Tipo l&iacute;quido</label>
+						<label for="tipoliquido_id" class="col-lg-4 col-form-label text-right pr-2">Tipo l&iacute;quido</label>
 						<div class="col-lg-8">
 							<select id="tipoliquido_id" name="tipoliquido_id" class="form-control">
 								<option value="">-- Seleccionar --</option>

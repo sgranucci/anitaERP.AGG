@@ -94,6 +94,7 @@ final class IngresoEgresoComprobanteIvaPdfIaCoreService
                 'fechaiva' => $extraido['fecha_factura'] ?? $extraido['fecha'] ?? date('Y-m-d'),
                 'total' => (float) ($extraido['total'] ?? 0),
                 'numerocae' => $extraido['numerocae'] ?? $extraido['cae'] ?? null,
+                'tipo_autorizacion' => $extraido['tipo_autorizacion'] ?? null,
                 'fechavencimientocae' => $extraido['fecha_vto_cai_cae'] ?? $extraido['vencimiento_cae'] ?? null,
             ],
             'conceptos' => $conceptosAsignados,

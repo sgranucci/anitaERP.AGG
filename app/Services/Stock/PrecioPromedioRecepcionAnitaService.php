@@ -7,8 +7,8 @@ use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Promedio de las últimas 3 recepciones de compra (recepmov) por artículo.
- * Réplica legacy calcula_precio_promedio en a-stkmov.c.
+ * Promedio de las últimas 3 recepciones de compra (recepmov) por artículo vía Anita.
+ * Legacy / diagnóstico. El asiento TRCONT TITO usa {@see \App\Support\Stock\ArticuloPrecioPromedioCompraSupport}.
  */
 class PrecioPromedioRecepcionAnitaService
 {

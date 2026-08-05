@@ -17,7 +17,7 @@ use App\Services\Stock\FormulaArticuloAnitaSyncService;
 use App\Services\Stock\FormulaArticuloService;
 use App\Services\Stock\FormulaArticuloVinculoService;
 use App\Services\Stock\FormulaArticuloCostoTotalService;
-use App\Services\Stock\StkmaeUltimaCompraAnitaService;
+use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\FormulaArticuloGastronomia;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use Auth;
@@ -33,7 +33,6 @@ class FormulaArticuloController extends Controller
         private Formula_Articulo_EstadoRepositoryInterface $formulaArticuloEstadoRepository,
         private FormulaArticuloAnitaSyncService $formulaArticuloAnitaSyncService,
         private FormulaArticuloVinculoService $formulaArticuloVinculoService,
-        private StkmaeUltimaCompraAnitaService $stkmaeUltimaCompraAnitaService,
         private FormulaArticuloCostoTotalService $formulaArticuloCostoTotalService,
     ) {}
 
@@ -45,7 +44,7 @@ class FormulaArticuloController extends Controller
         $conOpcionales = $this->normalizarConOpcionales($request->input('con_opcionales'));
 
         $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, true, true, $conOpcionales);
-        $this->stkmaeUltimaCompraAnitaService->enriquecerFormulasPaginadasConCosto($formulas);
+        ArticuloPrecioUltimaCompraSupport::enriquecerFormulasPaginadasConCosto($formulas);
         $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
         if ($conOpcionales !== null && $busqueda) {
             $formulas->appends(['busqueda' => $busqueda, 'con_opcionales' => $conOpcionales]);
@@ -125,7 +124,7 @@ class FormulaArticuloController extends Controller
         switch ($formato) {
             case 'PDF':
                 $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, false, true, $conOpcionales);
-                $this->stkmaeUltimaCompraAnitaService->enriquecerFormulasPaginadasConCosto($formulas);
+                ArticuloPrecioUltimaCompraSupport::enriquecerFormulasPaginadasConCosto($formulas);
                 $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
                 $view = \View::make('stock.formula_articulo.listado', compact('formulas'))->render();
                 $path = storage_path('pdf/listados');
@@ -151,7 +150,7 @@ class FormulaArticuloController extends Controller
         }
 
         $formulas = $this->formulaArticuloQuery->leeFormulaArticulo($busqueda, true, true, $conOpcionales);
-        $this->stkmaeUltimaCompraAnitaService->enriquecerFormulasPaginadasConCosto($formulas);
+        ArticuloPrecioUltimaCompraSupport::enriquecerFormulasPaginadasConCosto($formulas);
         $this->formulaArticuloCostoTotalService->enriquecerFormulasConCostoTotal($formulas);
 
         return view('stock.formula_articulo.index', [
@@ -203,7 +202,7 @@ class FormulaArticuloController extends Controller
     }
 
     /**
-     * Precio última compra (stkmae.stkm_pre_compra3) para ítems de fórmula; no se persiste en el ERP.
+     * Precio última compra (ERP → Anita stkm_pre_compra3 → artículo) para ítems de fórmula; no se persiste.
      */
     public function costosUltimaCompra(Request $request)
     {
@@ -218,7 +217,7 @@ class FormulaArticuloController extends Controller
             $skus = [$skus];
         }
 
-        $costos = $this->stkmaeUltimaCompraAnitaService->obtenerPreciosUltimaCompraPorSkus($skus);
+        $costos = ArticuloPrecioUltimaCompraSupport::resolverPreciosPorSkus($skus);
 
         return response()->json(['costos' => $costos]);
     }
@@ -251,7 +250,7 @@ class FormulaArticuloController extends Controller
         can('editar-formula-articulo');
 
         $data = $this->formulaArticuloRepository->find($id);
-        $this->stkmaeUltimaCompraAnitaService->enriquecerLineasFormulaConCosto($data->formula_articulo_hijos);
+        ArticuloPrecioUltimaCompraSupport::enriquecerLineasFormulaConCosto($data->formula_articulo_hijos);
         $costoTotal = $this->formulaArticuloCostoTotalService->calcular($id);
         $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
         $estado_enum = Formula_Articulo_Estado::$enumEstado;
@@ -441,7 +440,7 @@ class FormulaArticuloController extends Controller
 
         try {
             $data = $this->formulaArticuloRepository->find($id);
-            $this->stkmaeUltimaCompraAnitaService->enriquecerLineasFormulaConCosto($data->formula_articulo_hijos);
+            ArticuloPrecioUltimaCompraSupport::enriquecerLineasFormulaConCosto($data->formula_articulo_hijos);
             $costoTotal = $this->formulaArticuloCostoTotalService->calcular($id);
         } catch (\Throwable $e) {
             abort(404);

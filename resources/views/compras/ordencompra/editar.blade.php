@@ -19,6 +19,14 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 <script src="{{ asset('assets/pages/scripts/configuracion/arbolaprobacion/panel_ia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/formulario.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
+<script>
+$(function () {
+    if (window.OcCambiarSectorLegajo) {
+        window.OcCambiarSectorLegajo.initForm($('#formOcCambiarSector'));
+    }
+});
+</script>
 @if (!empty($sugerir_envio_oc) && (int) $sugerir_envio_oc === (int) ($data->id ?? 0))
 <script>
     window.ocSugerirEnvioProveedor = { ordencompra_id: {{ (int) $data->id }} };
@@ -76,7 +84,10 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
             <div class="modal fade" id="modalOcCambiarSector" tabindex="-1" role="dialog" aria-hidden="true">
                 <div class="modal-dialog" role="document">
                     <div class="modal-content">
-                        <form method="POST" action="{{ route('ordencompra_cambiar_sector', ['id' => $data->id]) }}">
+                        <form method="POST" action="{{ route('ordencompra_cambiar_sector', ['id' => $data->id]) }}"
+                              id="formOcCambiarSector"
+                              enctype="multipart/form-data"
+                              data-ordencompra-id="{{ $data->id }}">
                             @csrf
                             <div class="modal-header">
                                 <h5 class="modal-title">Cambiar sector de legajo</h5>
@@ -91,6 +102,7 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
                                         @endforeach
                                     </select>
                                 </div>
+                                @include('compras.ordencompra.partials.bloque_factura_legajo_sector', ['prefix' => 'oc'])
                                 <div class="form-group">
                                     <label for="oc_sector_obs">Observación</label>
                                     <input type="text" name="observacion" id="oc_sector_obs" class="form-control" maxlength="255" placeholder="Motivo del traslado">

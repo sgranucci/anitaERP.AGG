@@ -47,6 +47,17 @@ return [
     ), fn (int $id) => $id > 0)),
 
     /*
+     * Cotización tesorería (Informix caja.cotiz_tes) por empresa.
+     * Bridge: Biyemas = ANITA_IP; Kandiko/Rebisco = gastronomia.ticket_tarjeta_anita_por_empresa.
+     */
+    'cotizacion_tesoreria_anita_sistema' => env('CAJA_COTIZACION_TESORERIA_ANITA_SISTEMA', 'caja'),
+    'cotizacion_tesoreria_anita_tabla' => env('CAJA_COTIZACION_TESORERIA_ANITA_TABLA', 'cotiz_tes'),
+    'cotizacion_tesoreria_anita_empresas_sync' => array_values(array_filter(array_map(
+        'intval',
+        explode(',', (string) env('CAJA_COTIZACION_TESORERIA_ANITA_EMPRESAS_SYNC', '1,2,3'))
+    ), fn (int $id) => $id > 0)),
+
+    /*
      * Generación de tickets canje (vales gastronomía) en anitaERP.
      * Numeración movimiento_id + numero_ticket por empresa (código barras 6+6).
      */

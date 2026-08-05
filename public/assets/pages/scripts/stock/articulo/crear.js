@@ -4,8 +4,14 @@ function mostrarSolapaArticulo(numero) {
         : '.form1,.form2,.form3,.form4,.form5,.form6,.form7,.form8,.form9';
     $(secciones).hide();
     $('.form' + numero).show();
-    $('[id^="botonform"]').removeClass('btn-primary').addClass('btn-info');
-    $('#botonform' + numero).removeClass('btn-info').addClass('btn-primary');
+    var $tabs = $('#tabs-articulo');
+    if ($tabs.length) {
+        $tabs.find('[id^="botonform"]').removeClass('active');
+        $('#botonform' + numero).addClass('active');
+    } else {
+        $('[id^="botonform"]').removeClass('btn-primary').addClass('btn-info');
+        $('#botonform' + numero).removeClass('btn-info').addClass('btn-primary');
+    }
 }
 
     $(function () {
@@ -88,7 +94,12 @@ function mostrarSolapaArticulo(numero) {
         });
 
         if ($('#botonform1').length) {
-            $('#botonform1').removeClass('btn-info').addClass('btn-primary');
+            if ($('#tabs-articulo').length) {
+                $('#tabs-articulo').find('[id^="botonform"]').removeClass('active');
+                $('#botonform1').addClass('active');
+            } else {
+                $('#botonform1').removeClass('btn-info').addClass('btn-primary');
+            }
         }
 	             
         $('#descripcion').on('change', function () {                             
@@ -214,6 +225,9 @@ function mostrarSolapaArticulo(numero) {
         $(document).on('click', '.eliminar', borraRenglon);
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+        $(document).on('click', '.eliminar-archivo-articulo', function () {
+            $(this).closest('.articulo-archivo-item').remove();
+        });
         $('#agrega_renglon_cuentacontable').on('click', agregaRenglonCuentaContable);
         $(document).on('click', '.eliminar_cuentacontable', borraRenglonCuentaContable);    
         $(document).on('click', '.replicar_cuentacontable', replicaCuentaContable); 
@@ -285,22 +299,21 @@ function mostrarSolapaArticulo(numero) {
     function agregaRenglonArchivo(){
     	event.preventDefault();
     	var renglon = $('#template-renglon-archivo').html();
-
-    	$("#tbody-tabla-archivo").append(renglon);
+    	var $tbody = $("#tbody-tabla-archivo");
+    	$tbody.append(renglon);
         activa_eventos(false);
     }
 
     function borraRenglonArchivo(event) {
     	event.preventDefault();
-    	$(this).parents('tr').remove();
+    	var $tbody = $("#tbody-tabla-archivo");
+    	var $fila = $(this).parents('tr');
+    	if ($tbody.find('tr').length <= 1) {
+    		$fila.find('input[type="file"]').val('');
+    		return;
+    	}
+    	$fila.remove();
     }
-
-    function actualizaArchivo(elem) {
-	  	var fn = $(elem).val();
-		var filename = fn.match(/[^\\/]*$/)[0]; // remove C:\fakename
-
-		$(elem).parents("tr").find(".nombresanteriores").val(filename);
-	}
 
     function agregaRenglonCuentaContable(event){
     	event.preventDefault();

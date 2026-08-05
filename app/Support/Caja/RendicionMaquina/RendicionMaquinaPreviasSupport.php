@@ -85,15 +85,21 @@ final class RendicionMaquinaPreviasSupport
         self::aplicarImpuestoDrop($out, $empresaId, $fechaYmd, $turno, $exceptoId);
         self::aplicarDropAnteriorCompleto($out, $empresaId, $fechaYmd, $exceptoId);
 
+        // Completo: misma semilla de apertura que la mañana (fondo + comprobante del día).
+        // Vale rep. fondo no aplica en C (calcula_rendicion_turno_completo lo deja en 0).
+        $turnoFondo = RendicionMaquinaTurno::esCompleto($turno)
+            ? RendicionMaquinaTurno::MANIANA
+            : $turno;
+
+        self::aplicarFondoInicial($out, $empresaId, $fechaYmd, $turnoFondo, $exceptoId);
+        self::aplicarComprobante($out, $empresaId, $fechaYmd, $turnoFondo, $exceptoId);
+
         if (RendicionMaquinaTurno::esCompleto($turno)) {
-            $out['origen_fondo'] = 'completo_cero';
-            $out['origen_comprobante'] = 'completo_cero';
+            $out['origen_fondo'] = 'completo_como_m:'.$out['origen_fondo'];
+            $out['origen_comprobante'] = 'completo_como_m:'.$out['origen_comprobante'];
 
             return $out;
         }
-
-        self::aplicarFondoInicial($out, $empresaId, $fechaYmd, $turno, $exceptoId);
-        self::aplicarComprobante($out, $empresaId, $fechaYmd, $turno, $exceptoId);
 
         if (RendicionMaquinaTurno::esManiana($turno)) {
             self::aplicarValeRepFondo($out, $empresaId, $fechaYmd);

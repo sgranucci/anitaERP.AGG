@@ -50,11 +50,14 @@ final class GastronomiaDescuentoReporteService
         $filasRaw = $this->query->filasAgregadas($filtros);
 
         $fechaCosto = trim((string) ($filtros['fecha_hasta'] ?? ''));
-        $listas = GastronomiaInformeGerenteCostoListaSupport::listasDesdeFechaJornada(
-            $fechaCosto !== '' ? $fechaCosto : now()->toDateString(),
-        );
+        if ($fechaCosto === '') {
+            $fechaCosto = now()->toDateString();
+        }
+        $listas = GastronomiaInformeGerenteCostoListaSupport::listasDesdeFechaJornada($fechaCosto);
         $listaCostoId = $this->resolverListaprecioId((string) $listas['lista_actual']);
+        $listaVentaId = $this->resolverListaprecioVentaId();
         $cacheCosto = [];
+        $cacheVenta = [];
 
         $porClave = [];
         foreach ($filasRaw as $fila) {
@@ -72,18 +75,23 @@ final class GastronomiaDescuentoReporteService
                 ]);
             }
 
-            $costoUnit = $this->resolverCostoUnitario(
-                (int) $fila->articulo_id,
+            $articuloId = (int) $fila->articulo_id;
+            $costoUnit = $this->resolverPrecioUnitario(
+                $articuloId,
                 $listaCostoId,
                 $fechaCosto,
                 $cacheCosto,
             );
+            $precioVenta = $this->resolverPrecioUnitario(
+                $articuloId,
+                $listaVentaId,
+                $fechaCosto,
+                $cacheVenta,
+            );
             $unidades = (float) $fila->unidades;
             $totalVenta = (float) $fila->total_venta;
             $costoTotal = round($unidades * $costoUnit, 2);
-            $precioVenta = $unidades > 0.0001 ? round($totalVenta / $unidades, 2) : 0.0;
 
-            $articuloId = (int) $fila->articulo_id;
             if (! isset($porClave[$clave]['filas_map'][$articuloId])) {
                 $tipoId = (int) ($fila->tipoarticulo_id ?? 0);
                 $porClave[$clave]['filas_map'][$articuloId] = [
@@ -95,7 +103,7 @@ final class GastronomiaDescuentoReporteService
                     'unidades' => 0.0,
                     'costo_unitario' => $costoUnit,
                     'costo_total' => 0.0,
-                    'precio_venta' => 0.0,
+                    'precio_venta' => $precioVenta,
                     'total_venta' => 0.0,
                 ];
             }
@@ -104,9 +112,7 @@ final class GastronomiaDescuentoReporteService
             $ref['unidades'] = round($ref['unidades'] + $unidades, 4);
             $ref['costo_total'] = round($ref['costo_total'] + $costoTotal, 2);
             $ref['total_venta'] = round($ref['total_venta'] + $totalVenta, 2);
-            if ($ref['unidades'] > 0.0001) {
-                $ref['precio_venta'] = round($ref['total_venta'] / $ref['unidades'], 2);
-            }
+            $ref['precio_venta'] = $precioVenta;
             if ($costoUnit > 0) {
                 $ref['costo_unitario'] = $costoUnit;
             }
@@ -656,7 +662,7 @@ final class GastronomiaDescuentoReporteService
     /**
      * @param  array<string, float>  $cache
      */
-    private function resolverCostoUnitario(
+    private function resolverPrecioUnitario(
         int $articuloId,
         ?int $listaprecioId,
         string $fechaReferencia,
@@ -689,6 +695,18 @@ final class GastronomiaDescuentoReporteService
         $id = Listaprecio::query()->where('codigo', $codigoLista)->value('id');
 
         return $id !== null ? (int) $id : null;
+    }
+
+    private function resolverListaprecioVentaId(): ?int
+    {
+        $configId = (int) config('gastronomia.ventas_articulos_listaprecio_venta_id', 0);
+        if ($configId > 0) {
+            return $configId;
+        }
+
+        $defaultId = (int) config('precio.listaprecio_default_id', 1);
+
+        return $defaultId > 0 ? $defaultId : null;
     }
 
     /**

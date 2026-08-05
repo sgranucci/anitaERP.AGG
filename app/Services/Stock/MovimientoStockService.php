@@ -19,6 +19,7 @@ use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
+use App\Support\Stock\RecuentoBloqueoSalidaDepositoSupport;
 use Auth;
 use DB;
 use Illuminate\Support\Facades\Log;
@@ -113,6 +114,18 @@ class MovimientoStockService
 			BajaNpuMovimientoStockSupport::validarAntesDeGrabar($data, $tipotransaccion);
 			BajaNpuMovimientoStockSupport::normalizarLineasParaGrabar($data, $tipotransaccion);
 
+			$signoCantidadMovimiento = $data['signo_cantidad'] ?? $tipotransaccion->signo;
+
+			if (empty($data['omitir_validacion_recuento_abierto'])) {
+				RecuentoBloqueoSalidaDepositoSupport::assertSalidaPermitida(
+					(int) ($data['deposito_id'] ?? 0),
+					isset($data['fecha']) ? (string) $data['fecha'] : null,
+					is_string($signoCantidadMovimiento)
+						? $signoCantidadMovimiento
+						: (string) ($tipotransaccion->signo ?? ''),
+				);
+			}
+
 			$existente = null;
 			if ($funcion === 'update' && $id) {
 				$existente = $this->leeMovimientoStock($id);
@@ -121,8 +134,6 @@ class MovimientoStockService
 			if (! $this->omitirAsientoContable($data)) {
 				$this->asientoService->assertCuadreAntesDeGrabar($data, $tipotransaccion, $existente);
 			}
-
-			$signoCantidadMovimiento = $data['signo_cantidad'] ?? $tipotransaccion->signo;
 
 			if ($funcion == 'create')
 			{
