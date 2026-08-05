@@ -25,6 +25,7 @@
                 nombre: '',
                 abreviatura: '',
                 bajaNpu: false,
+                altaNpu: false,
             };
         }
 
@@ -37,6 +38,7 @@
             requiereAprobacion: String($h.attr('data-requiere-aprobacion') || '') === '1',
             avisoOpcional: String($h.attr('data-aviso-opcional') || '') === '1',
             bajaNpu: String($h.attr('data-baja-npu') || '') === '1',
+            altaNpu: String($h.attr('data-alta-npu') || '') === '1',
             nombre: String($('#tipotransaccion_stock_id_descripcion').val() || '').trim(),
             abreviatura: String($('#tipotransaccion_stock_id_abreviatura').val() || '').trim(),
         };
@@ -79,6 +81,7 @@
         $hidden.attr('data-requiere-aprobacion', normalizarFlag(data.requiere_aprobacion) ? '1' : '0');
         $hidden.attr('data-aviso-opcional', normalizarFlag(data.aviso_opcional) ? '1' : '0');
         $hidden.attr('data-baja-npu', normalizarFlag(data.baja_npu) ? '1' : '0');
+        $hidden.attr('data-alta-npu', normalizarFlag(data.alta_npu) ? '1' : '0');
 
         $('#tipotransaccion_stock_id_abreviatura').val(data.abreviatura || '');
         $('#tipotransaccion_stock_id_descripcion').val(data.nombre || data.descripcion || '');
@@ -87,6 +90,9 @@
         $hidden.trigger('change');
         if (typeof window.msAplicarModoBajaNpuEnTabla === 'function') {
             window.msAplicarModoBajaNpuEnTabla();
+        }
+        if (typeof window.msAplicarModoAltaNpuEnTabla === 'function') {
+            window.msAplicarModoAltaNpuEnTabla();
         }
 
         return true;
@@ -104,6 +110,7 @@
             requiere_aprobacion: false,
             aviso_opcional: false,
             baja_npu: false,
+            alta_npu: false,
         });
     };
 

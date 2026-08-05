@@ -25,6 +25,7 @@ use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Repositories\Stock\LoteRepositoryInterface;
 use App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
+use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockEdicionVentanaSupport;
 use App\Support\Stock\MovimientoStockFormLineasSupport;
@@ -239,7 +240,7 @@ class MovimientoStockController extends Controller
 
             $data = $this->movimientoStockService->guardaMovimientoStock($request->all(), 'create');
 			if (is_array($data)) {
-				$mensaje = 'Movimiento de stock creado con éxito';
+				$mensaje = $data['mensaje'] ?? 'Movimiento de stock creado con éxito';
                 MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
 
                 return redirect('stock/movimientostock')->with('mensaje', $mensaje);
@@ -345,6 +346,12 @@ class MovimientoStockController extends Controller
                 return response()->json([
                     'mensaje' => 'ng',
                     'error' => 'Los movimientos de baja NPU no pueden eliminarse; use Revertir para reactivar los NPU.',
+                ], 422);
+            }
+            if (AltaNpuMovimientoStockSupport::esTipoAltaNpu($movimientostock->tipotransaccion_stock)) {
+                return response()->json([
+                    'mensaje' => 'ng',
+                    'error' => 'Los movimientos de alta NPU no pueden eliminarse; use Revertir para eliminar los NPU generados.',
                 ], 422);
             }
             if (! MovimientoStockEdicionVentanaSupport::puedeModificar($movimientostock)) {

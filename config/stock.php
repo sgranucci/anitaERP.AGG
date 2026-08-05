@@ -102,6 +102,7 @@ return [
             'RCAJN' => null,
             'RCAJR' => null,
             'NPUBJ' => null,
+            'NPUAL' => null,
             // Préstamos: solo ERP (sin stkmov Anita).
             'PRSAL' => null,
             'PRING' => null,

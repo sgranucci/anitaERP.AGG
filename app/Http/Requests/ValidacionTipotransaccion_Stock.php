@@ -26,6 +26,7 @@ class ValidacionTipotransaccion_Stock extends FormRequest
             'destino_bien_uso' => 'sometimes|boolean',
             'origen_bien_uso' => 'sometimes|boolean',
             'baja_npu' => 'sometimes|boolean',
+            'alta_npu' => 'sometimes|boolean',
         ];
     }
 
@@ -36,16 +37,28 @@ class ValidacionTipotransaccion_Stock extends FormRequest
                 $validator->errors()->add('aviso_opcional', 'El aviso opcional solo aplica a tipos de operación Transferencia (T).');
             }
 
-            if (! $this->boolean('baja_npu')) {
-                return;
+            if ($this->boolean('baja_npu') && $this->boolean('alta_npu')) {
+                $validator->errors()->add('alta_npu', 'Un tipo no puede ser a la vez baja y alta de NPU.');
             }
 
-            if ($this->input('operacion') !== 'S') {
-                $validator->errors()->add('baja_npu', 'La baja de NPU solo aplica a tipos de salida de stock.');
+            if ($this->boolean('baja_npu')) {
+                if ($this->input('operacion') !== 'S') {
+                    $validator->errors()->add('baja_npu', 'La baja de NPU solo aplica a tipos de salida de stock.');
+                }
+
+                if ($this->input('signo') !== 'R') {
+                    $validator->errors()->add('baja_npu', 'La baja de NPU requiere signo Resta.');
+                }
             }
 
-            if ($this->input('signo') !== 'R') {
-                $validator->errors()->add('baja_npu', 'La baja de NPU requiere signo Resta.');
+            if ($this->boolean('alta_npu')) {
+                if ($this->input('operacion') !== 'E') {
+                    $validator->errors()->add('alta_npu', 'El alta de NPU solo aplica a tipos de entrada de stock.');
+                }
+
+                if ($this->input('signo') !== 'S') {
+                    $validator->errors()->add('alta_npu', 'El alta de NPU requiere signo Suma.');
+                }
             }
         });
     }

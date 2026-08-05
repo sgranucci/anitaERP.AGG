@@ -103,7 +103,7 @@ class Tipotransaccion_StockController extends Controller
         }
 
         $query = Tipotransaccion_Stock::query()
-            ->select('id', 'abreviatura', 'nombre', 'operacion', 'maneja_contabilidad', 'origen_bien_uso', 'destino_bien_uso', 'requiere_aprobacion', 'aviso_opcional', 'baja_npu')
+            ->select('id', 'abreviatura', 'nombre', 'operacion', 'maneja_contabilidad', 'origen_bien_uso', 'destino_bien_uso', 'requiere_aprobacion', 'aviso_opcional', 'baja_npu', 'alta_npu')
             ->where('estado', 'A')
             ->whereIn('operacion', $operaciones);
 
@@ -141,6 +141,7 @@ class Tipotransaccion_StockController extends Controller
                 $output['data'] .= '<td class="requiere-aprobacion d-none">'.e($row->requiere_aprobacion ? '1' : '0').'</td>';
                 $output['data'] .= '<td class="aviso-opcional d-none">'.e($row->aviso_opcional ? '1' : '0').'</td>';
                 $output['data'] .= '<td class="baja-npu d-none">'.e($row->baja_npu ? '1' : '0').'</td>';
+                $output['data'] .= '<td class="alta-npu d-none">'.e($row->alta_npu ? '1' : '0').'</td>';
                 $output['data'] .= '<td class="text-nowrap">';
                 $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultatipotransaccionstock">Elegir</a>';
                 if ($puedeAbrirAbm) {
@@ -205,6 +206,7 @@ class Tipotransaccion_StockController extends Controller
             'requiere_aprobacion' => (bool) $tipo->requiere_aprobacion,
             'aviso_opcional' => (bool) $tipo->aviso_opcional,
             'baja_npu' => (bool) $tipo->baja_npu,
+            'alta_npu' => (bool) $tipo->alta_npu,
         ]);
     }
 
@@ -245,6 +247,7 @@ class Tipotransaccion_StockController extends Controller
         $data['destino_bien_uso'] = $request->boolean('destino_bien_uso');
         $data['origen_bien_uso'] = $request->boolean('origen_bien_uso');
         $data['baja_npu'] = $request->boolean('baja_npu');
+        $data['alta_npu'] = $request->boolean('alta_npu');
         if ($data['origen_bien_uso'] && $data['destino_bien_uso']) {
             $data['destino_bien_uso'] = false;
         }

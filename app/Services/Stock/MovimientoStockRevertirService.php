@@ -7,6 +7,7 @@ use App\Models\Stock\Transferencia_Mercaderia;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use App\Support\Stock\MovimientoStockVisibilidadSupport;
@@ -239,6 +240,10 @@ class MovimientoStockRevertirService
         $movimiento->loadMissing('tipotransaccion_stock');
         if (BajaNpuMovimientoStockSupport::esTipoBajaNpu($movimiento->tipotransaccion_stock)) {
             $payload['reactivar_npu_movimiento_origen_id'] = (int) $movimiento->id;
+            $payload['omitir_asiento_contable'] = true;
+        }
+        if (AltaNpuMovimientoStockSupport::esTipoAltaNpu($movimiento->tipotransaccion_stock)) {
+            $payload['eliminar_npu_movimiento_origen_id'] = (int) $movimiento->id;
             $payload['omitir_asiento_contable'] = true;
         }
 

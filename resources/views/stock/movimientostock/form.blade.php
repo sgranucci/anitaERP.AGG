@@ -92,6 +92,7 @@
                     'requiere_aprobacion' => (bool) ($tipoActual?->requiere_aprobacion ?? false),
                     'aviso_opcional' => (bool) ($tipoActual?->aviso_opcional ?? false),
                     'baja_npu' => (bool) ($tipoActual?->baja_npu ?? false),
+                    'alta_npu' => (bool) ($tipoActual?->alta_npu ?? false),
                     'col_label' => 'col-lg-4 col-form-label',
                     'col_input' => 'col-lg-8',
                 ])
@@ -323,6 +324,10 @@
         <div id="ms-ayuda-baja-npu" class="alert alert-info py-2 small mb-2" style="display:none;">
             <strong>Baja de NPU:</strong> ingrese un NPU por l&iacute;nea (escanee o tipee + Enter).
             El sistema completa el art&iacute;culo y fija cantidad 1. Puede agregar varias l&iacute;neas para dar de baja varios NPU en el mismo comprobante.
+        </div>
+        <div id="ms-ayuda-alta-npu" class="alert alert-info py-2 small mb-2" style="display:none;">
+            <strong>Alta de NPU:</strong> indique art&iacute;culos configurados con n&uacute;mero de parte y una cantidad entera (unidades f&iacute;sicas).
+            Al grabar el sistema genera un NPU nuevo por unidad, ingresa stock al dep&oacute;sito y deja los NPU activos para usar en requisiciones de sala u otros procesos.
         </div>
         <div id="ms-ayuda-color-talle" class="alert alert-info py-2 small mb-2" style="display:none;">
             <strong>Stock por color y talle:</strong> este comprobante solo admite art&iacute;culos con esa gesti&oacute;n.

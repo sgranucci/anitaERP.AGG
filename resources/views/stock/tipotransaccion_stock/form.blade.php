@@ -88,8 +88,14 @@
                 @if (old('baja_npu', $data->baja_npu ?? false)) checked @endif>
             <label class="form-check-label" for="baja_npu">Baja de NPU al confirmar (rotura / no funcional)</label>
         </div>
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="alta_npu" id="alta_npu" value="1"
+                @if (old('alta_npu', $data->alta_npu ?? false)) checked @endif>
+            <label class="form-check-label" for="alta_npu">Alta de NPU al confirmar (ajuste / lab / hist&oacute;rico)</label>
+        </div>
         <small class="form-text text-muted">
             Origen y destino en bien de uso son excluyentes. La baja de NPU exige operaci&oacute;n Salida y signo Resta.
+            El alta de NPU exige operaci&oacute;n Entrada y signo Suma. Baja y alta NPU son excluyentes entre s&iacute;.
             La aprobaci&oacute;n aplica si <code>STOCK_TRANSFERENCIA_MODO_APROBACION=tipo_transaccion</code> en .env.
             <strong>Aviso opcional</strong> solo aplica a Transferencias (T): al grabar se pregunta si env&iacute;a o no el aviso; si dice que no, la transferencia queda directa (sin aviso ni aprobaci&oacute;n).
         </small>

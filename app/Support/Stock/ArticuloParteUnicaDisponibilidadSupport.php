@@ -79,4 +79,13 @@ final class ArticuloParteUnicaDisponibilidadSupport
 
         return (bool) ($tipo->baja_npu ?? false);
     }
+
+    public static function esTipoAltaNpu(?Tipotransaccion_Stock $tipo): bool
+    {
+        if ($tipo === null) {
+            return false;
+        }
+
+        return (bool) ($tipo->alta_npu ?? false);
+    }
 }

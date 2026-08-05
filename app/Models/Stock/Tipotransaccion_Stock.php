@@ -24,6 +24,7 @@ class Tipotransaccion_Stock extends Model
         'destino_bien_uso',
         'origen_bien_uso',
         'baja_npu',
+        'alta_npu',
     ];
 
     protected $casts = [
@@ -33,6 +34,7 @@ class Tipotransaccion_Stock extends Model
         'destino_bien_uso' => 'boolean',
         'origen_bien_uso' => 'boolean',
         'baja_npu' => 'boolean',
+        'alta_npu' => 'boolean',
     ];
 
     protected $table = 'tipotransaccion_stock';

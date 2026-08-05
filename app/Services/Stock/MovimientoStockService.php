@@ -15,6 +15,7 @@ use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
+use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
@@ -113,6 +114,8 @@ class MovimientoStockService
 
 			BajaNpuMovimientoStockSupport::validarAntesDeGrabar($data, $tipotransaccion);
 			BajaNpuMovimientoStockSupport::normalizarLineasParaGrabar($data, $tipotransaccion);
+			AltaNpuMovimientoStockSupport::validarAntesDeGrabar($data, $tipotransaccion);
+			AltaNpuMovimientoStockSupport::normalizarLineasParaGrabar($data, $tipotransaccion);
 
 			$signoCantidadMovimiento = $data['signo_cantidad'] ?? $tipotransaccion->signo;
 
@@ -248,7 +251,8 @@ class MovimientoStockService
 						$modulo = $modulos[$i];
 
 					$precioLinea = (float) str_replace(',', '', (string) ($precios[$i] ?? 0));
-					$forzarUltimaCompra = (bool) ($tipotransaccion->baja_npu ?? false);
+					$forzarUltimaCompra = (bool) ($tipotransaccion->baja_npu ?? false)
+						|| (bool) ($tipotransaccion->alta_npu ?? false);
 					if (($precioLinea <= 0 || $forzarUltimaCompra) && (int) $articulos[$i] > 0) {
 						$datoPrecio = ArticuloPrecioMovimientoStockSupport::resolverParaLinea(
 							(int) $articulos[$i],
@@ -375,6 +379,11 @@ class MovimientoStockService
 						$data,
 						$tipotransaccion,
 					);
+					AltaNpuMovimientoStockSupport::procesarDespuesDeGrabar(
+						(int) $movimientostock_id,
+						$data,
+						$tipotransaccion,
+					);
 				}
 			}
 
@@ -431,7 +440,15 @@ class MovimientoStockService
 			throw $e;
 		}
 		
-		return ['id'=>$movimientostock_id, 'codigo'=>$data['codigo']];
+		$resultado = ['id' => $movimientostock_id, 'codigo' => $data['codigo']];
+		$npusGenerados = $data['_npus_generados_alta'] ?? null;
+		if (is_array($npusGenerados) && $npusGenerados !== []) {
+			$resultado['npus_generados'] = array_values(array_map('intval', $npusGenerados));
+			$resultado['mensaje'] = 'Movimiento de stock creado con éxito. NPUs generados: '
+				.implode(', ', $resultado['npus_generados']).'.';
+		}
+
+		return $resultado;
 	}
 
 	private function resolveTipotransaccionStockId(array $data): int

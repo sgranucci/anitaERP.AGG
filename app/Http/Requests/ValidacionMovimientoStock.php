@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
+use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
@@ -118,11 +119,26 @@ class ValidacionMovimientoStock extends FormRequest
                 );
             }
 
+            if ($tipo && AltaNpuMovimientoStockSupport::esTipoAltaNpu($tipo) && ($this->isMethod('put') || $this->isMethod('patch'))) {
+                $validator->errors()->add(
+                    'tipotransaccion_stock_id',
+                    'Los movimientos de alta NPU no pueden editarse; registre uno nuevo si corresponde.'
+                );
+            }
+
             if ($tipo && BajaNpuMovimientoStockSupport::esTipoBajaNpu($tipo) && ! $this->validarComoTransferenciaNueva()) {
                 try {
                     BajaNpuMovimientoStockSupport::validarAntesDeGrabar($this->all(), $tipo);
                 } catch (\RuntimeException $e) {
                     $validator->errors()->add('numeropartes', $e->getMessage());
+                }
+            }
+
+            if ($tipo && AltaNpuMovimientoStockSupport::esTipoAltaNpu($tipo) && ! $this->validarComoTransferenciaNueva()) {
+                try {
+                    AltaNpuMovimientoStockSupport::validarAntesDeGrabar($this->all(), $tipo);
+                } catch (\RuntimeException $e) {
+                    $validator->errors()->add('cantidades', $e->getMessage());
                 }
             }
 

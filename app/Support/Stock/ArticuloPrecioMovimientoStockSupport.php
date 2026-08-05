@@ -32,6 +32,10 @@ final class ArticuloPrecioMovimientoStockSupport
             return false;
         }
 
+        if ((bool) ($tipo->alta_npu ?? false)) {
+            return false;
+        }
+
         if (($tipo->operacion ?? '') !== 'S') {
             return false;
         }
@@ -64,7 +68,7 @@ final class ArticuloPrecioMovimientoStockSupport
 
         $fechaReferencia ??= Carbon::today();
 
-        if ((bool) ($tipo?->baja_npu ?? false)) {
+        if ((bool) ($tipo?->baja_npu ?? false) || (bool) ($tipo?->alta_npu ?? false)) {
             return self::resolverUltimaCompra($articulo);
         }
 
