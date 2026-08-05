@@ -6,7 +6,7 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Cola dedicada para importación masiva de padrones IIBB (CABA/ARBA)
+    | Cola dedicada para importación masiva de padrones IIBB (CABA/ARBA/Santa Fe)
     |--------------------------------------------------------------------------
     |
     | Worker: deploy/supervisor/anitaERP-queue-padrones.conf
@@ -21,6 +21,8 @@ return [
     'batch_caba' => (int) env('PADRON_IIBB_BATCH_CABA', 2000),
 
     'batch_arba' => (int) env('PADRON_IIBB_BATCH_ARBA', 5000),
+
+    'batch_santafe' => (int) env('PADRON_IIBB_BATCH_SANTAFE', 3000),
 
     'pause_ms' => (int) env('PADRON_IIBB_PAUSE_MS', 20),
 

@@ -13,15 +13,17 @@
         $("#tipopadron").hide();
         $("#codigoprovincia").focus();
 
-        $("#codigoprovincia").change(function(){
-            var codigoprovincia = $(this).val();
-
-            // Si es tucuman activa tipo de padron
-            if (codigoprovincia == 24)
+        function syncTipoPadron() {
+            var codigoprovincia = $("#codigoprovincia").val();
+            if (codigoprovincia == 24) {
                 $("#tipopadron").show();
-            else
+            } else {
                 $("#tipopadron").hide();
-        });
+            }
+        }
+
+        $("#codigoprovincia").on('change blur', syncTipoPadron);
+        syncTipoPadron();
 
         var form = document.getElementById('form-general');
         var overlay = document.getElementById('padron-iibb-import-overlay');
@@ -37,6 +39,11 @@
                 if (!tieneFile && !tieneRuta) {
                     e.preventDefault();
                     alert('Indique un archivo a subir o una ruta en el servidor.');
+                    return;
+                }
+                if (!$('#provincia_id').val()) {
+                    e.preventDefault();
+                    alert('Seleccione la provincia del padrón.');
                     return;
                 }
                 overlay.classList.remove('d-none');
@@ -70,6 +77,10 @@
             <form action="{{route('importar_padron_iibb')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" enctype="multipart/form-data">
                 @csrf
                 <div class="card-body">
+                    <p class="text-muted mb-3">
+                        CABA, ARBA y Santa Fe se encolan en background (cola <code>padrones</code>).
+                        Puede cerrar la pantalla luego del mensaje de confirmación; el resultado llega por mail si está configurado.
+                    </p>
                     @include('configuracion.padron_iibb.formimportar')
                 </div>
                 <div class="card-footer">
@@ -90,6 +101,6 @@
     'tituloId' => 'padron-iibb-import-titulo',
     'subtituloId' => 'padron-iibb-import-subtitulo',
     'titulo' => 'Encolando importación…',
-    'subtitulo' => 'CABA y ARBA se procesan en background. Puede cerrar esta pantalla luego del mensaje de confirmación.',
+    'subtitulo' => 'CABA, ARBA y Santa Fe se procesan en background. Puede cerrar esta pantalla luego del mensaje de confirmación.',
 ])
 @endsection

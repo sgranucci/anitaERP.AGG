@@ -19,6 +19,7 @@ final class PadronIibbArchivoRutaSupport
             realpath(storage_path('app')) ?: storage_path('app'),
             '/home/sergio/padroncaba',
             '/home/sergio/padronarba',
+            '/home/sergio/padronsantafe',
         ];
     }
 
@@ -48,7 +49,7 @@ final class PadronIibbArchivoRutaSupport
         }
 
         throw new InvalidArgumentException(
-            'La ruta no está en un directorio permitido (storage/app, /home/sergio/padroncaba, /home/sergio/padronarba).'
+            'La ruta no está en un directorio permitido (storage/app, /home/sergio/padroncaba, /home/sergio/padronarba, /home/sergio/padronsantafe).'
         );
     }
 

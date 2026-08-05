@@ -1185,6 +1185,69 @@ class ClienteRepository implements ClienteRepositoryInterface
 	}
 
 	/**
+	 * Líneas de leyenda para cliley. Vacío / solo whitespace → sin filas
+	 * (explode("\n",'') devolvía [""] e insertaba clil_linea=0 → duplicate al regrabar).
+	 *
+	 * @return list<string>
+	 */
+	private function lineasLeyendaParaAnita(mixed $leyenda): array
+	{
+		$texto = str_replace(["\r\n", "\r"], "\n", (string) ($leyenda ?? ''));
+		if (trim($texto) === '') {
+			return [];
+		}
+
+		$lineas = explode("\n", $texto);
+		while ($lineas !== [] && trim((string) end($lineas)) === '') {
+			array_pop($lineas);
+		}
+
+		return array_values($lineas);
+	}
+
+	/**
+	 * Reemplaza cliley del cliente en Anita (delete + insert).
+	 */
+	private function sincronizarClileyAnita(ApiAnita $apiAnita, string $codigoCliente, mixed $leyenda): void
+	{
+		$codigoNorm = ltrim(trim($codigoCliente), '0');
+		$codigoPad = str_pad($codigoNorm !== '' ? $codigoNorm : '0', 6, '0', STR_PAD_LEFT);
+
+		$this->apiCallAnitaEscritura($apiAnita, [
+			'acc' => 'delete',
+			'tabla' => $this->tableAnita[1],
+			'sistema' => 'ventas',
+			'whereArmado' => " WHERE clil_cliente = '".$codigoPad."' ",
+		], 'cliley delete');
+
+		foreach ($this->lineasLeyendaParaAnita($leyenda) as $i => $ley) {
+			$payload = [
+				'tabla' => $this->tableAnita[1],
+				'acc' => 'insert',
+				'sistema' => 'ventas',
+				'campos' => 'clil_cliente, clil_linea, clil_leyenda',
+				'valores' => " '".$codigoPad."', '".$i."', '".$this->sqlLit($ley)."' ",
+			];
+
+			try {
+				$this->apiCallAnitaEscritura($apiAnita, $payload, 'cliley insert');
+			} catch (\RuntimeException $e) {
+				if (! str_contains(mb_strtolower($e->getMessage()), 'duplicate')) {
+					throw $e;
+				}
+
+				$this->apiCallAnitaEscritura($apiAnita, [
+					'acc' => 'delete',
+					'tabla' => $this->tableAnita[1],
+					'sistema' => 'ventas',
+					'whereArmado' => " WHERE clil_cliente = '".$codigoPad."' AND clil_linea = '".$i."' ",
+				], 'cliley delete retry');
+				$this->apiCallAnitaEscritura($apiAnita, $payload, 'cliley insert retry');
+			}
+		}
+	}
+
+	/**
 	 * clim_direccion en Informix: solo letras, números y espacios (legacy Anita).
 	 */
 	private function domicilioParaAnita(?string $domicilio): string
@@ -1546,26 +1609,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$data = $this->payloadInsertClimae($request);
         $this->apiCallAnitaEscritura($apiAnita, $data, 'climae insert');
 
-		// Graba leyenda
-		$leyenda = explode("\n", $request['leyenda']);
-		$linea = 0;
-		foreach ($leyenda as $ley)
-		{
-        	$data = array( 'tabla' => $this->tableAnita[1], 'acc' => 'insert',
-							'sistema' => 'ventas',
-            				'campos' => '
-								clil_cliente,
-								clil_linea,
-								clil_leyenda
-										',
-            				'valores' => " 
-								'".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."', 
-								'".$linea++."', 
-								'".preg_replace("/\r/", "", $ley)."' "
-						);
-
-        	$this->apiCallAnitaEscritura($apiAnita, $data, 'cliley insert');
-		}
+		$this->sincronizarClileyAnita($apiAnita, (string) ($request['codigo'] ?? ''), $request['leyenda'] ?? '');
 
 		// stksuspcli: sincronizarAnitaDespuesDeGrabado() tras cliente_articulo_suspendido
 
@@ -1746,31 +1790,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$data = $this->payloadUpdateClimae($request, $id, 'bierzo');
         $this->apiCallAnitaEscritura($apiAnita, $data, 'climae update');
 
-		// Borra leyenda
-        $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
-				'whereArmado' => " WHERE clil_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $this->apiCallAnitaEscritura($apiAnita, $data, 'cliley delete');
-
-		// Graba leyenda
-		$leyenda = explode("\n", $request['leyenda']);
-		$linea = 0;
-		foreach ($leyenda as $ley)
-		{
-        	$data = array( 'tabla' => $this->tableAnita[1], 'acc' => 'insert',
-							'sistema' => 'ventas',
-            				'campos' => '
-								clil_cliente,
-								clil_linea,
-								clil_leyenda
-										',
-            				'valores' => " 
-								'".str_pad($id, 6, "0", STR_PAD_LEFT)."', 
-								'".$linea++."', 
-								'".preg_replace("/\r/", "", $ley)."' "
-						);
-
-        	$this->apiCallAnitaEscritura($apiAnita, $data, 'cliley insert');
-		}
+		$this->sincronizarClileyAnita($apiAnita, (string) $id, $request['leyenda'] ?? '');
 
 		$this->sincronizarStksuspcliAnita(
 			$apiAnita,
@@ -1818,11 +1838,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'whereArmado' => " WHERE clim_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
         $this->apiCallAnitaEscritura($apiAnita, $data, 'climae delete');
 
-		// Borra leyenda
-        $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[1], 
-				'sistema' => 'ventas',
-				'whereArmado' => " WHERE clil_cliente = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
-        $this->apiCallAnitaEscritura($apiAnita, $data, 'cliley delete');
+		$this->sincronizarClileyAnita($apiAnita, (string) $id, '');
 
 		if (config("app.empresa") == "EL BIERZO")
 		{

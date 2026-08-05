@@ -20,6 +20,7 @@ use Illuminate\Validation\Rule;
 use App\Jobs\Padron_Iibb;
 use App\Jobs\Configuracion\ImportarPadronIibbArbaJob;
 use App\Jobs\Configuracion\ImportarPadronIibbCabaJob;
+use App\Jobs\Configuracion\ImportarPadronIibbSantaFeJob;
 use App\Support\Configuracion\PadronIibbArchivoRutaSupport;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
@@ -270,6 +271,27 @@ class Padron_IibbController extends Controller
                 return back()->with(
                     'mensaje',
                     'Importación ARBA encolada. Se procesa en background (cola padrones); no hace falta dejar esta pantalla abierta.'
+                );
+
+            case 921: // Santa Fe API (PARP) → padron_iibb + padron_iibb_tasa (cola padrones)
+                try {
+                    [$archivo, $borrarAlTerminar] = $this->resolverArchivoPadronMasivo($request, ['csv', 'txt', 'zip']);
+                } catch (InvalidArgumentException | Throwable $e) {
+                    return back()->withErrors(['file' => $e->getMessage()]);
+                }
+
+                ImportarPadronIibbSantaFeJob::dispatch(
+                    $archivo,
+                    (int) $provincia->id,
+                    (int) config('padrones_iibb.batch_santafe', 3000),
+                    (int) config('padrones_iibb.pause_ms', 20),
+                    false,
+                    $borrarAlTerminar
+                );
+
+                return back()->with(
+                    'mensaje',
+                    'Importación Santa Fe (API PARP) encolada. Se procesa en background (cola padrones); no hace falta dejar esta pantalla abierta.'
                 );
 
             case 914: // Misiones
