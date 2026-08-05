@@ -143,15 +143,16 @@ class SuitecrmNotaAuditoriaService
     {
         $partes = [];
 
+        $desde = $filtros['fecha_desde'] ?? null;
+        $hasta = $filtros['fecha_hasta'] ?? null;
+        if ($desde !== null || $hasta !== null) {
+            $partes[] = 'DESDE '.($desde !== null ? $this->fechaDisplayCorta($desde) : '…')
+                .' HASTA '.($hasta !== null ? $this->fechaDisplayCorta($hasta) : '…');
+        }
+
         if (($filtros['vendedor_crm_id'] ?? null) !== null) {
             $v = $vendedores->firstWhere('id', $filtros['vendedor_crm_id']);
             $partes[] = 'Vendedor: '.($v->label ?? $filtros['vendedor_crm_id']);
-        }
-        if (($filtros['fecha_desde'] ?? null) !== null) {
-            $partes[] = 'Desde: '.$this->fechaDisplay($filtros['fecha_desde']);
-        }
-        if (($filtros['fecha_hasta'] ?? null) !== null) {
-            $partes[] = 'Hasta: '.$this->fechaDisplay($filtros['fecha_hasta']);
         }
         if (($filtros['parent_type'] ?? '') !== '') {
             $partes[] = 'Tipo: '.(SuitecrmNotaAuditoriaListadoFiltros::TIPOS[$filtros['parent_type']] ?? $filtros['parent_type']);
@@ -335,6 +336,16 @@ class SuitecrmNotaAuditoriaService
     {
         if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $ymd, $m) === 1) {
             return $m[3].'-'.$m[2].'-'.$m[1];
+        }
+
+        return $ymd;
+    }
+
+    /** Formato compacto del ejemplo SuiteCRM: 13/05/26 */
+    private function fechaDisplayCorta(string $ymd): string
+    {
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $ymd, $m) === 1) {
+            return $m[3].'/'.$m[2].'/'.substr($m[1], -2);
         }
 
         return $ymd;

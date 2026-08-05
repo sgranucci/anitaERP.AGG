@@ -15,22 +15,23 @@
                 <strong style="font-size: 16pt;">{{ $titulo ?? 'Auditoría de notas CRM' }}</strong>
             </td>
         </tr>
-        <tr>
-            <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">
-                Generado {{ date('d/m/Y H:i') }}
-            </td>
-        </tr>
         @if (! empty($subtitulo))
             <tr>
-                <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">
+                <td colspan="{{ $colspan }}" style="font-size: 11pt; color: #444;">
                     {{ $subtitulo }}
                 </td>
             </tr>
         @endif
         @if (($totalFilas ?? 0) > 0)
             <tr>
-                <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">
-                    Registros: {{ (int) $totalFilas }}
+                <td colspan="{{ $colspan }}" style="font-size: 9pt; color: #666;">
+                    Registros: {{ (int) $totalFilas }} · Generado {{ date('d/m/Y H:i') }}
+                </td>
+            </tr>
+        @else
+            <tr>
+                <td colspan="{{ $colspan }}" style="font-size: 9pt; color: #666;">
+                    Generado {{ date('d/m/Y H:i') }}
                 </td>
             </tr>
         @endif

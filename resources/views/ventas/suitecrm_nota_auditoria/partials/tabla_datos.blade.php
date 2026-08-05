@@ -9,12 +9,21 @@
         @if ($esPantalla)
             <th>Fecha</th>
         @endif
-        <th>Vendedor</th>
-        <th>Empresa</th>
-        <th>Tipo</th>
-        <th>Cód.</th>
-        <th>Asunto</th>
-        <th>Nota</th>
+        @if ($esExcel)
+            <th style="width: 11;">Vendedor</th>
+            <th style="width: 18;">Empresa</th>
+            <th style="width: 5;">Tipo</th>
+            <th style="width: 6;">Cód.</th>
+            <th style="width: 17;">Asunto</th>
+            <th style="width: 75;">Nota</th>
+        @else
+            <th>Vendedor</th>
+            <th>Empresa</th>
+            <th>Tipo</th>
+            <th>Cód.</th>
+            <th>Asunto</th>
+            <th>Nota</th>
+        @endif
     </tr>
 </thead>
 <tbody>

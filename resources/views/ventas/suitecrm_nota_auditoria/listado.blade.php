@@ -23,18 +23,20 @@
             margin-bottom: 10px;
         }
         table.data td, table.data th {
-            border: 1px solid #cccccc;
+            border: none;
+            border-bottom: 0.6pt solid #b0b0b0;
             text-align: left;
-            padding: 3px 4px;
+            padding: 4px 3px;
             vertical-align: top;
             word-wrap: break-word;
+            overflow-wrap: break-word;
         }
-        table.data tr:nth-child(even) { background-color: #f5f5f5; }
-        table.data thead tr { background-color: #85C1E9; }
-        table.data th {
+        table.data thead th {
+            background-color: #85C1E9;
             font-size: 7.5px;
             font-weight: bold;
             color: #17202A;
+            border-bottom: 1pt solid #2471A3;
         }
         .fecha-grupo {
             font-size: 11px;
@@ -47,6 +49,7 @@
         .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 6px; }
         .listado-header td { vertical-align: middle; border: none; }
         .meta { font-size: 7.5px; color: #444; margin-top: 3px; }
+        .subtitulo-rango { font-size: 9px; font-weight: bold; color: #333; margin-top: 4px; }
         .nota-celda { white-space: pre-wrap; font-size: 7.5px; }
         .leyenda-tipo { font-size: 7px; color: #555; margin: 0 0 6px 0; }
     </style>
@@ -61,10 +64,10 @@
             </td>
             <td style="width: 50%; text-align: center;">
                 <h2 style="margin: 0; font-size: 15px; font-weight: bold;">{{ $tituloReporte }}</h2>
-                <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
                 @if (! empty($subtitulo))
-                    <div class="meta">{{ $subtitulo }}</div>
+                    <div class="subtitulo-rango">{{ $subtitulo }}</div>
                 @endif
+                <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
             </td>
             <td style="width: 22%; text-align: right; font-size: 8px;">
                 @if (! empty($totalFilas))
@@ -91,23 +94,23 @@
             </colgroup>
             <thead>
                 <tr>
-                    <th>Vendedor</th>
-                    <th>Empresa</th>
-                    <th>Tipo</th>
-                    <th>Cód.</th>
-                    <th>Asunto</th>
-                    <th>Nota</th>
+                    <th style="width: 9%;">Vendedor</th>
+                    <th style="width: 14%;">Empresa</th>
+                    <th style="width: 4%;">Tipo</th>
+                    <th style="width: 5%;">Cód.</th>
+                    <th style="width: 13%;">Asunto</th>
+                    <th style="width: 55%;">Nota</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($filasDia as $fila)
                     <tr>
-                        <td>{{ $fila['vendedor'] ?? '' }}</td>
-                        <td>{{ $fila['relacionado'] ?? '' }}</td>
-                        <td>{{ $fila['tipo'] ?? '' }}</td>
-                        <td>{{ $fila['codigo_anita'] ?? '' }}</td>
-                        <td>{{ $fila['asunto'] ?? '' }}</td>
-                        <td class="nota-celda">{{ $fila['nota'] ?? '' }}</td>
+                        <td style="width: 9%;">{{ $fila['vendedor'] ?? '' }}</td>
+                        <td style="width: 14%;">{{ $fila['relacionado'] ?? '' }}</td>
+                        <td style="width: 4%;">{{ $fila['tipo'] ?? '' }}</td>
+                        <td style="width: 5%;">{{ $fila['codigo_anita'] ?? '' }}</td>
+                        <td style="width: 13%;">{{ $fila['asunto'] ?? '' }}</td>
+                        <td style="width: 55%;" class="nota-celda">{{ $fila['nota'] ?? '' }}</td>
                     </tr>
                 @endforeach
             </tbody>
