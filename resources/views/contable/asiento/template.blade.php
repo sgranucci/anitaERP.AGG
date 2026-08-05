@@ -43,17 +43,23 @@
                 @endforeach
             </select>
         </td>
-        <td>
+        <td class="asiento-monto-celda">
             <input type="text" inputmode="decimal" name="debes[]" class="form-control text-right debe" value="">
         </td>
-        <td>
+        <td class="asiento-monto-celda">
             <input type="text" inputmode="decimal" name="haberes[]" class="form-control text-right haber" value="">
         </td>
         <td>
             <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="">
         </td>
-        <td>
-            <input type="text" name="observaciones[]" class="form-control observacion" value="">
+        <td class="asiento-detalle-celda">
+            <textarea name="observaciones[]" class="d-none asiento-ta-detalle observacion" aria-hidden="true"></textarea>
+            <div class="d-flex align-items-center" style="gap: 4px;">
+                <button type="button" title="Agregar detalle de la línea" class="btn btn-sm btn-outline-secondary asiento-abrir-detalle">
+                    <i class="fa fa-align-left"></i>
+                </button>
+                <span class="asiento-detalle-preview is-empty" title="">—</span>
+            </div>
         </td>
         <td>
             <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_cuenta tooltipsC">

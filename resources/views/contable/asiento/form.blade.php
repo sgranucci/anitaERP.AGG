@@ -92,6 +92,48 @@
             border: 0;
             box-shadow: none;
             font-weight: 700;
+            font-size: 1.05rem;
+        }
+        #cuenta-table .debe,
+        #cuenta-table .haber {
+            font-size: 1.05rem;
+            font-weight: 600;
+            min-width: 7.5rem;
+            letter-spacing: 0.01em;
+        }
+        #cuenta-table .cotizacion {
+            font-size: 0.95rem;
+            min-width: 5.5rem;
+        }
+        #cuenta-table td.asiento-monto-celda {
+            min-width: 8rem;
+        }
+        #cuenta-table .asiento-detalle-celda {
+            max-width: 11rem;
+            vertical-align: middle;
+        }
+        #cuenta-table .asiento-detalle-preview {
+            display: block;
+            max-width: 8.5rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.75rem;
+            line-height: 1.2;
+            color: #495057;
+        }
+        #cuenta-table .asiento-detalle-preview.is-empty {
+            color: #adb5bd;
+            font-style: italic;
+        }
+        #cuenta-table .asiento-abrir-detalle {
+            padding: 0.15rem 0.4rem;
+            line-height: 1.2;
+            flex-shrink: 0;
+        }
+        #cuenta-table .asiento-abrir-detalle.has-detalle {
+            border-color: #17a2b8;
+            color: #117a8b;
         }
     </style>
     <div class="card card-outline card-info mb-0">
@@ -102,15 +144,15 @@
         <table class="table table-sm table-bordered" id="cuenta-table">
             <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
-                    <th style="width: 12%;">Código</th>
-                    <th style="width: 18%;">Descripción</th>
-                    <th style="width: 15%;">Centro de costo</th>
-                    <th style="width: 7%;">Moneda</th>
-                    <th style="width: 15%;" class="text-right">Debe</th>
-                    <th style="width: 15%;" class="text-right">Haber</th>
-                    <th style="width: 12%;" class="text-right">Cotizaci&oacute;n</th>
-                    <th style="width: 30%;">Detalle</th>
-                    <th></th>
+                    <th style="width: 12%;">C&oacute;digo</th>
+                    <th style="width: 18%;">Descripci&oacute;n</th>
+                    <th style="width: 13%;">Centro de costo</th>
+                    <th style="width: 6%;">Moneda</th>
+                    <th style="width: 12%;" class="text-right">Debe</th>
+                    <th style="width: 12%;" class="text-right">Haber</th>
+                    <th style="width: 9%;" class="text-right">Cotizaci&oacute;n</th>
+                    <th style="width: 12%;">Detalle</th>
+                    <th style="width: 4%;"></th>
                 </tr>
             </thead>
             <tbody id="tbody-cuenta-table">
@@ -170,13 +212,13 @@
                                 @endforeach
                             </select>
                         </td>
-                        <td>
+                        <td class="asiento-monto-celda">
                             @php
                                 $debeValor = old('debes.'.$loop->index, ($cuenta->monto ?? 0) > 0 ? number_format($cuenta->monto, 2, ',', '.') : '');
                             @endphp
                             <input type="text" inputmode="decimal" name="debes[]" class="form-control text-right debe" value="{{ $debeValor }}">
                         </td>
-                        <td>
+                        <td class="asiento-monto-celda">
                             @php
                                 $haberValor = old('haberes.'.$loop->index, ($cuenta->monto ?? 0) < 0 ? number_format(abs($cuenta->monto), 2, ',', '.') : '');
                             @endphp
@@ -188,8 +230,21 @@
                             @endphp
                             <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="{{ $cotizValor }}">
                         </td>
-                        <td>
-                            <input type="text" name="observaciones[]" class="form-control observacion" value="{{old('observaciones[]', $cuenta->observacion ?? '')}}">
+                        <td class="asiento-detalle-celda">
+                            @php
+                                $detalleLinea = old('observaciones.'.$loop->index, $cuenta->observacion ?? '');
+                                $detalleTrim = trim((string) $detalleLinea);
+                            @endphp
+                            <textarea name="observaciones[]" class="d-none asiento-ta-detalle observacion" aria-hidden="true">{{ $detalleLinea }}</textarea>
+                            <div class="d-flex align-items-center" style="gap: 4px;">
+                                <button type="button"
+                                        title="{{ $detalleTrim !== '' ? 'Editar detalle de la línea' : 'Agregar detalle de la línea' }}"
+                                        class="btn btn-sm btn-outline-secondary asiento-abrir-detalle {{ $detalleTrim !== '' ? 'has-detalle' : '' }}">
+                                    <i class="fa fa-align-left"></i>
+                                </button>
+                                <span class="asiento-detalle-preview {{ $detalleTrim === '' ? 'is-empty' : '' }}"
+                                      title="{{ $detalleTrim }}">{{ $detalleTrim !== '' ? $detalleTrim : '—' }}</span>
+                            </div>
                         </td>
                         <td>
                             <button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_cuenta tooltipsC">
@@ -219,11 +274,32 @@
                 <button id="agrega_renglon_cuenta" type="button" class="btn btn-outline-primary btn-sm">
                     <i class="fa fa-plus"></i> Agrega rengl&oacute;n
                 </button>
+                <span class="text-muted small ml-2">El detalle de la 1.&ordf; l&iacute;nea se copia a los renglones nuevos (y a los vac&iacute;os al guardarlo).</span>
             </div>
         </div>
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalAsientoDetalleLinea" tabindex="-1" role="dialog" aria-labelledby="modalAsientoDetalleLineaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title" id="modalAsientoDetalleLineaLabel">Detalle de la l&iacute;nea</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2">Leyenda / detalle del movimiento contable. Si es la primera l&iacute;nea, al guardar se copia a los renglones sin detalle.</p>
+                <textarea id="asiento_detalle_linea_editor" class="form-control" rows="6" maxlength="255" placeholder="Detalle de la l&iacute;nea…"></textarea>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="asiento_detalle_linea_guardar">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 @include('includes.contable.modalconsultacuentacontable')
 @include('includes.contable.modalconsulta_asiento_ordencompra')

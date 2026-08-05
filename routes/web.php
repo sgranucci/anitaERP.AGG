@@ -972,6 +972,7 @@ Route::put('contable/actualizarasiento/{id}', 'Contable\AsientoController@actual
 Route::delete('contable/asiento/{id}', 'Contable\AsientoController@eliminar')->name('eliminar_asiento');
 Route::get('contable/listaasiento/{formato?}/{busqueda?}', 'Contable\AsientoController@listar')->name('lista_asiento');
 Route::get('contable/asiento/{id}/imprimir-pdf', 'Contable\AsientoController@imprimirPdf')->name('imprimir_pdf_asiento');
+Route::get('contable/asiento/{id}/imprimir-excel', 'Contable\AsientoController@imprimirExcel')->name('imprimir_excel_asiento');
 Route::post('contable/copiar_asiento', 'Contable\AsientoController@copiarAsiento')->name('copiar_asiento');
 Route::post('contable/revertir_asiento', 'Contable\AsientoController@revertirAsiento')->name('revertir_asiento');
 Route::post('contable/asiento/consulta-ordencompra', 'Contable\AsientoReferenciaConsultaController@consultaOrdencompra')->name('asiento_consulta_ordencompra');

@@ -137,6 +137,9 @@
                                 	<a href="{{ route('imprimir_pdf_asiento', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Emitir asiento en PDF" target="_blank" rel="noopener noreferrer">
                                     <i class="fas fa-file-pdf text-danger"></i>
                                 	</a>
+                                	<a href="{{ route('imprimir_excel_asiento', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Emitir asiento en Excel" target="_blank" rel="noopener noreferrer">
+                                    <i class="fas fa-file-excel text-success"></i>
+                                	</a>
 								@endif
                             </td>
                         </tr>

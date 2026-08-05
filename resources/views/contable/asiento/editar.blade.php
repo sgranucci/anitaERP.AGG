@@ -82,6 +82,9 @@
                     <a href="{{ route('imprimir_pdf_asiento', ['id' => $data->id]) }}" class="btn btn-outline-danger btn-sm" title="Emitir asiento en PDF" target="_blank" rel="noopener noreferrer">
                         <i class="fas fa-file-pdf"></i> Emitir PDF
                     </a>
+                    <a href="{{ route('imprimir_excel_asiento', ['id' => $data->id]) }}" class="btn btn-outline-success btn-sm" title="Emitir asiento en Excel" target="_blank" rel="noopener noreferrer">
+                        <i class="fas fa-file-excel"></i> Emitir Excel
+                    </a>
                     @endif
                     <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado

@@ -13,6 +13,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Queries\Contable\AsientoQueryInterface;
+use App\Exports\Contable\AsientoDetalleExport;
 use App\Exports\Contable\AsientoExport;
 use App\Models\Contable\Asiento;
 use App\Services\Contable\AsientoAprobacionService;
@@ -176,6 +177,20 @@ class AsientoController extends Controller
         $nombreArchivo = 'Asiento_'.preg_replace('/[^\w\-]+/', '_', (string) $data->numeroasiento).'.pdf';
 
         return $pdf->download($nombreArchivo);
+    }
+
+    public function imprimirExcel($id)
+    {
+        if (! can('listar-asiento', false) && ! can('editar-asiento', false)) {
+            return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para exportar el asiento');
+        }
+
+        $data = $this->asientoRepository->find((int) $id);
+        $nombreArchivo = 'Asiento_'.preg_replace('/[^\w\-]+/', '_', (string) $data->numeroasiento).'.xlsx';
+
+        return (new AsientoDetalleExport())
+            ->parametros($data)
+            ->download($nombreArchivo);
     }
 
     /**
