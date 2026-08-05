@@ -29,13 +29,13 @@ return new class extends Migration
         'op-Gerencia de Tecnologia',
     ];
 
-    /** @var list<string> */
+    /** @var array<string, string> slug => nombre */
     private const PERMISOS_USUARIO = [
-        'listar-ticket',
-        'crear-ticket',
-        'editar-ticket',
-        'actualizar-ticket',
-        'usuario-ticket',
+        'listar-ticket' => 'Listar ticket',
+        'crear-ticket' => 'Crear ticket',
+        'editar-ticket' => 'Editar ticket',
+        'actualizar-ticket' => 'Actualizar ticket',
+        'usuario-ticket' => 'Usuario ticket (solo propios)',
     ];
 
     public function up(): void
@@ -78,14 +78,24 @@ return new class extends Migration
             ]);
         }
 
-        $permisoIds = DB::table('permiso')
-            ->whereIn('slug', self::PERMISOS_USUARIO)
-            ->pluck('id', 'slug');
-
-        foreach (self::PERMISOS_USUARIO as $slug) {
-            if (! isset($permisoIds[$slug])) {
-                throw new RuntimeException("Falta permiso slug={$slug} en tabla permiso");
+        $permisoIds = [];
+        foreach (self::PERMISOS_USUARIO as $slug => $nombre) {
+            $permisoId = (int) (DB::table('permiso')->where('slug', $slug)->value('id') ?? 0);
+            if ($permisoId === 0) {
+                $permisoId = (int) DB::table('permiso')->insertGetId([
+                    'nombre' => $nombre,
+                    'slug' => $slug,
+                    'menu_id' => $menuCargaId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } else {
+                DB::table('permiso')->where('id', $permisoId)->update([
+                    'menu_id' => $menuCargaId,
+                    'updated_at' => now(),
+                ]);
             }
+            $permisoIds[$slug] = $permisoId;
         }
 
         $rolesSinUsuario = DB::table('rol')
@@ -114,7 +124,7 @@ return new class extends Migration
                 ]);
             }
 
-            foreach (self::PERMISOS_USUARIO as $slug) {
+            foreach (array_keys(self::PERMISOS_USUARIO) as $slug) {
                 if ($slug === 'usuario-ticket' && $omitirUsuarioTicket) {
                     continue;
                 }

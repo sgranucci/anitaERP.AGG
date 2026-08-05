@@ -60,7 +60,8 @@ return new class extends Migration
     {
         $rolOrigenId = (int) (DB::table('rol')->where('nombre', self::ROL_ORIGEN)->value('id') ?? 0);
         if ($rolOrigenId <= 0) {
-            throw new \RuntimeException('No se encontró el rol '.self::ROL_ORIGEN);
+            // Entornos sin Op-tesoreria (ej. Bierzo): no aplica esta carga Flash.
+            return;
         }
 
         $rolNuevoId = $this->upsertRolNuevo($rolOrigenId);
