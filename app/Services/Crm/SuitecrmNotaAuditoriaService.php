@@ -138,16 +138,15 @@ class SuitecrmNotaAuditoriaService
      *     solo_vinculo_erp:bool
      * }  $filtros
      * @param  Collection<int, object>  $vendedores
+     * @param  list<array<string, mixed>>  $filas
      */
-    public function armarSubtitulo(array $filtros, Collection $vendedores): string
+    public function armarSubtitulo(array $filtros, Collection $vendedores, array $filas = []): string
     {
         $partes = [];
 
-        $desde = $filtros['fecha_desde'] ?? null;
-        $hasta = $filtros['fecha_hasta'] ?? null;
-        if ($desde !== null || $hasta !== null) {
-            $partes[] = 'DESDE '.($desde !== null ? $this->fechaDisplayCorta($desde) : '…')
-                .' HASTA '.($hasta !== null ? $this->fechaDisplayCorta($hasta) : '…');
+        $rango = $this->armarRangoFechasSubtitulo($filtros, $filas);
+        if ($rango !== '') {
+            $partes[] = $rango;
         }
 
         if (($filtros['vendedor_crm_id'] ?? null) !== null) {
@@ -165,6 +164,40 @@ class SuitecrmNotaAuditoriaService
         }
 
         return implode(' · ', $partes);
+    }
+
+    /**
+     * Subtítulo principal de impresión: solo el rango (filtros o min/max de las notas).
+     *
+     * @param  array{fecha_desde:?string, fecha_hasta:?string}  $filtros
+     * @param  list<array<string, mixed>>  $filas
+     */
+    public function armarRangoFechasSubtitulo(array $filtros, array $filas = []): string
+    {
+        $desde = $filtros['fecha_desde'] ?? null;
+        $hasta = $filtros['fecha_hasta'] ?? null;
+
+        if (($desde === null || $desde === '') && ($hasta === null || $hasta === '') && $filas !== []) {
+            $fechas = [];
+            foreach ($filas as $fila) {
+                $f = trim((string) ($fila['fecha'] ?? ''));
+                if ($f !== '') {
+                    $fechas[] = $f;
+                }
+            }
+            if ($fechas !== []) {
+                sort($fechas);
+                $desde = $fechas[0];
+                $hasta = $fechas[array_key_last($fechas)];
+            }
+        }
+
+        if (($desde === null || $desde === '') && ($hasta === null || $hasta === '')) {
+            return '';
+        }
+
+        return 'DESDE '.(($desde !== null && $desde !== '') ? $this->fechaDisplayCorta((string) $desde) : '…')
+            .' HASTA '.(($hasta !== null && $hasta !== '') ? $this->fechaDisplayCorta((string) $hasta) : '…');
     }
 
     /**

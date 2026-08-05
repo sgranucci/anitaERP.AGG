@@ -12,28 +12,30 @@
     <title>{{ $tituloReporte }}</title>
     <style>
         @page {
-            margin: 8mm 6mm;
+            size: A4 landscape;
+            margin: 6mm 5mm;
         }
-        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
+        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 10px; color: #1a1a1a; }
         table.data {
             font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
             border-collapse: collapse;
             width: 100%;
             table-layout: fixed;
             margin-bottom: 10px;
+            font-size: 10px;
         }
         table.data td, table.data th {
             border: none;
             border-bottom: 0.6pt solid #b0b0b0;
             text-align: left;
-            padding: 4px 3px;
+            padding: 3px 2px;
             vertical-align: top;
             word-wrap: break-word;
             overflow-wrap: break-word;
         }
         table.data thead th {
             background-color: #85C1E9;
-            font-size: 7.5px;
+            font-size: 9px;
             font-weight: bold;
             color: #17202A;
             border-bottom: 1pt solid #2471A3;
@@ -41,35 +43,34 @@
         .fecha-grupo {
             font-size: 11px;
             font-weight: bold;
-            margin: 12px 0 4px 0;
+            margin: 10px 0 3px 0;
             color: #17202A;
             border-bottom: 1px solid #85C1E9;
             padding-bottom: 2px;
         }
-        .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 6px; }
+        .listado-header { width: 100%; margin-bottom: 6px; border-bottom: 2px solid #333; padding-bottom: 4px; }
         .listado-header td { vertical-align: middle; border: none; }
-        .meta { font-size: 7.5px; color: #444; margin-top: 3px; }
-        .subtitulo-rango { font-size: 9px; font-weight: bold; color: #333; margin-top: 4px; }
-        .nota-celda { white-space: pre-wrap; font-size: 7.5px; }
-        .leyenda-tipo { font-size: 7px; color: #555; margin: 0 0 6px 0; }
+        .meta { font-size: 8px; color: #666; margin-top: 2px; }
+        .subtitulo-rango { font-size: 11px; font-weight: bold; color: #333; margin-top: 4px; }
+        .nota-celda { white-space: pre-wrap; font-size: 10px; }
+        .leyenda-tipo { font-size: 8px; color: #555; margin: 0 0 5px 0; }
     </style>
 </head>
 <body>
     <table class="listado-header">
         <tr>
-            <td style="width: 28%;">
+            <td style="width: 22%;">
                 @foreach ($logosCabecera as $logo)
-                    <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 52px; max-width: 160px; margin-right: 8px; margin-bottom: 4px; vertical-align: middle;">
+                    <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 40px; max-width: 120px; margin-right: 6px; margin-bottom: 2px; vertical-align: middle;">
                 @endforeach
             </td>
-            <td style="width: 50%; text-align: center;">
-                <h2 style="margin: 0; font-size: 15px; font-weight: bold;">{{ $tituloReporte }}</h2>
+            <td style="width: 56%; text-align: center;">
+                <h2 style="margin: 0; font-size: 14px; font-weight: bold;">{{ $tituloReporte }}</h2>
                 @if (! empty($subtitulo))
                     <div class="subtitulo-rango">{{ $subtitulo }}</div>
                 @endif
-                <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
             </td>
-            <td style="width: 22%; text-align: right; font-size: 8px;">
+            <td style="width: 22%; text-align: right; font-size: 8px; color: #666;">
                 @if (! empty($totalFilas))
                     Registros: {{ $totalFilas }}
                 @endif
@@ -85,32 +86,32 @@
         </div>
         <table class="data">
             <colgroup>
-                <col style="width: 9%;">
-                <col style="width: 14%;">
+                <col style="width: 8%;">
+                <col style="width: 12%;">
                 <col style="width: 4%;">
                 <col style="width: 5%;">
-                <col style="width: 13%;">
-                <col style="width: 55%;">
+                <col style="width: 11%;">
+                <col style="width: 60%;">
             </colgroup>
             <thead>
                 <tr>
-                    <th style="width: 9%;">Vendedor</th>
-                    <th style="width: 14%;">Empresa</th>
+                    <th style="width: 8%;">Vendedor</th>
+                    <th style="width: 12%;">Empresa</th>
                     <th style="width: 4%;">Tipo</th>
                     <th style="width: 5%;">Cód.</th>
-                    <th style="width: 13%;">Asunto</th>
-                    <th style="width: 55%;">Nota</th>
+                    <th style="width: 11%;">Asunto</th>
+                    <th style="width: 60%;">Nota</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($filasDia as $fila)
                     <tr>
-                        <td style="width: 9%;">{{ $fila['vendedor'] ?? '' }}</td>
-                        <td style="width: 14%;">{{ $fila['relacionado'] ?? '' }}</td>
+                        <td style="width: 8%;">{{ $fila['vendedor'] ?? '' }}</td>
+                        <td style="width: 12%;">{{ $fila['relacionado'] ?? '' }}</td>
                         <td style="width: 4%;">{{ $fila['tipo'] ?? '' }}</td>
                         <td style="width: 5%;">{{ $fila['codigo_anita'] ?? '' }}</td>
-                        <td style="width: 13%;">{{ $fila['asunto'] ?? '' }}</td>
-                        <td style="width: 55%;" class="nota-celda">{{ $fila['nota'] ?? '' }}</td>
+                        <td style="width: 11%;">{{ $fila['asunto'] ?? '' }}</td>
+                        <td style="width: 60%;" class="nota-celda">{{ $fila['nota'] ?? '' }}</td>
                     </tr>
                 @endforeach
             </tbody>

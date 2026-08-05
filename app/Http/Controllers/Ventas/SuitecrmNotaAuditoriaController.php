@@ -64,7 +64,11 @@ class SuitecrmNotaAuditoriaController extends Controller
             'tipos' => SuitecrmNotaAuditoriaListadoFiltros::TIPOS,
             'resultado' => $resultado,
             'paginator' => $paginator,
-            'subtitulo' => $this->auditoriaService->armarSubtitulo($filtros, $vendedores),
+            'subtitulo' => $this->auditoriaService->armarSubtitulo(
+                $filtros,
+                $vendedores,
+                $resultado['filas'] ?? []
+            ),
             'mostrarLinks' => true,
             'puede_ver_cliente' => can('editar-clientes', false) || can('listar-clientes', false),
         ]);
@@ -83,12 +87,11 @@ class SuitecrmNotaAuditoriaController extends Controller
         ini_set('max_execution_time', '0');
 
         $filtros = SuitecrmNotaAuditoriaListadoFiltros::resolverDesdeRequest($request);
-        $vendedores = $this->auditoriaService->opcionesVendedor();
         $resultado = $this->auditoriaService->generar($filtros);
         $filas = $resultado['filas'];
         $agrupadas = $resultado['agrupadas_por_fecha'];
         $titulo = 'Auditoría de notas CRM';
-        $subtitulo = $this->auditoriaService->armarSubtitulo($filtros, $vendedores);
+        $subtitulo = $this->auditoriaService->armarRangoFechasSubtitulo($filtros, $filas);
         $totalFilas = $resultado['total'];
 
         switch ($formato) {
@@ -103,7 +106,7 @@ class SuitecrmNotaAuditoriaController extends Controller
                 $nombrePdf = 'auditoria_notas_crm_'.date('Ymd_His').'.pdf';
 
                 $pdf = \App::make('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
+                $pdf->setPaper('a4', 'landscape');
                 $pdf->loadHTML($view);
 
                 // Descarga en memoria: evita Permission denied si storage/pdf/listados

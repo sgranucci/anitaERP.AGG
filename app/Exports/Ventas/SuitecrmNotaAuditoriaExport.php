@@ -105,14 +105,15 @@ class SuitecrmNotaAuditoriaExport implements FromView, WithColumnFormatting, Wit
 
     public function columnWidths(): array
     {
-        // Total 132; Nota (F) = 75 → ~57%. Columnas angostas fuerzan wrap a 2 líneas.
+        // Total 100 → entra en A4 landscape sin achicar tanto la letra.
+        // Vendedor/Empresa/Asunto angostas → wrap a 2 líneas; Nota ≥ 50%.
         return [
-            'A' => 11,
-            'B' => 18,
+            'A' => 8,
+            'B' => 12,
             'C' => 5,
             'D' => 6,
-            'E' => 17,
-            'F' => 75,
+            'E' => 11,
+            'F' => 58,
         ];
     }
 
@@ -122,23 +123,22 @@ class SuitecrmNotaAuditoriaExport implements FromView, WithColumnFormatting, Wit
             BeforeSheet::class => function (BeforeSheet $event) {
                 $setup = $event->sheet->getDelegate()->getPageSetup();
                 $setup->setOrientation(PageSetup::ORIENTATION_LANDSCAPE);
-                $setup->setPaperSize(PageSetup::PAPERSIZE_LETTER);
+                $setup->setPaperSize(PageSetup::PAPERSIZE_A4);
                 $setup->setFitToPage(true);
                 $setup->setFitToWidth(1);
                 $setup->setFitToHeight(0);
 
                 $margins = $event->sheet->getDelegate()->getPageMargins();
-                $margins->setLeft(0.3);
-                $margins->setRight(0.3);
-                $margins->setTop(0.4);
-                $margins->setBottom(0.35);
-                $margins->setHeader(0.2);
-                $margins->setFooter(0.2);
+                $margins->setLeft(0.25);
+                $margins->setRight(0.25);
+                $margins->setTop(0.35);
+                $margins->setBottom(0.3);
+                $margins->setHeader(0.15);
+                $margins->setFooter(0.15);
             },
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
 
-                // Forzar anchos (FromView a veces los iguala); Nota ≥ 50%.
                 foreach ($this->columnWidths() as $col => $ancho) {
                     $dim = $sheet->getColumnDimension($col);
                     $dim->setAutoSize(false);
@@ -188,14 +188,14 @@ class SuitecrmNotaAuditoriaExport implements FromView, WithColumnFormatting, Wit
                     ],
                 ]);
 
-                $ultimaMeta = $this->filaInicioMeta + $this->filasMetaEncabezado - 1;
-                if ($ultimaMeta > $this->filaInicioMeta) {
-                    $sheet->getStyle('A'.($this->filaInicioMeta + 1).':'.$colUltima.$ultimaMeta)->applyFromArray([
+                if ($this->filaSubtituloExcel > 0) {
+                    $sheet->getRowDimension($this->filaSubtituloExcel)->setRowHeight(22);
+                    $sheet->getStyle('A'.$this->filaSubtituloExcel.':'.$colUltima.$this->filaSubtituloExcel)->applyFromArray([
                         'font' => [
                             'bold' => true,
-                            'size' => 10,
+                            'size' => 12,
                             'name' => 'Arial',
-                            'color' => ['rgb' => '444444'],
+                            'color' => ['rgb' => '333333'],
                         ],
                         'alignment' => [
                             'horizontal' => Alignment::HORIZONTAL_LEFT,
@@ -205,14 +205,14 @@ class SuitecrmNotaAuditoriaExport implements FromView, WithColumnFormatting, Wit
                     ]);
                 }
 
-                if ($this->filaSubtituloExcel > 0) {
-                    $sheet->getRowDimension($this->filaSubtituloExcel)->setRowHeight(22);
-                    $sheet->getStyle('A'.$this->filaSubtituloExcel)->applyFromArray([
+                $filaRegistros = $this->filaInicioMeta + $this->filasMetaEncabezado - 1;
+                if ($filaRegistros > $this->filaInicioMeta && $filaRegistros !== $this->filaSubtituloExcel) {
+                    $sheet->getStyle('A'.$filaRegistros.':'.$colUltima.$filaRegistros)->applyFromArray([
                         'font' => [
-                            'bold' => true,
-                            'size' => 11,
+                            'bold' => false,
+                            'size' => 9,
                             'name' => 'Arial',
-                            'color' => ['rgb' => '333333'],
+                            'color' => ['rgb' => '666666'],
                         ],
                     ]);
                 }
@@ -221,7 +221,7 @@ class SuitecrmNotaAuditoriaExport implements FromView, WithColumnFormatting, Wit
                     'font' => [
                         'bold' => true,
                         'color' => ['rgb' => '17202A'],
-                        'size' => 11,
+                        'size' => 10,
                         'name' => 'Arial',
                     ],
                     'fill' => [
@@ -234,11 +234,16 @@ class SuitecrmNotaAuditoriaExport implements FromView, WithColumnFormatting, Wit
 
                 $highest = $sheet->getHighestRow();
                 if ($highest >= $this->filaPrimeraDatosExcel) {
-                    // Wrap en columnas angostas (vendedor/empresa/asunto) y nota.
-                    $sheet->getStyle('A'.$this->filaPrimeraDatosExcel.':'.$colUltima.$highest)
-                        ->getAlignment()
-                        ->setWrapText(true)
-                        ->setVertical(Alignment::VERTICAL_TOP);
+                    $sheet->getStyle('A'.$this->filaPrimeraDatosExcel.':'.$colUltima.$highest)->applyFromArray([
+                        'font' => [
+                            'size' => 10,
+                            'name' => 'Arial',
+                        ],
+                        'alignment' => [
+                            'wrapText' => true,
+                            'vertical' => Alignment::VERTICAL_TOP,
+                        ],
+                    ]);
                 }
             },
         ];
@@ -251,9 +256,12 @@ class SuitecrmNotaAuditoriaExport implements FromView, WithColumnFormatting, Wit
 
     private function contarFilasMetaEncabezado(): int
     {
-        // título + generado/registros; subtítulo opcional (rango de fechas).
-        $filasMeta = 2;
+        // título; subtítulo (rango); opcional registros.
+        $filasMeta = 1;
         if (trim($this->subtitulo) !== '') {
+            $filasMeta++;
+        }
+        if (($this->totalFilas > 0 ? $this->totalFilas : count($this->filas)) > 0) {
             $filasMeta++;
         }
 

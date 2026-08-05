@@ -17,21 +17,15 @@
         </tr>
         @if (! empty($subtitulo))
             <tr>
-                <td colspan="{{ $colspan }}" style="font-size: 11pt; color: #444;">
-                    {{ $subtitulo }}
+                <td colspan="{{ $colspan }}" style="font-size: 12pt; color: #333;">
+                    <strong>{{ $subtitulo }}</strong>
                 </td>
             </tr>
         @endif
         @if (($totalFilas ?? 0) > 0)
             <tr>
                 <td colspan="{{ $colspan }}" style="font-size: 9pt; color: #666;">
-                    Registros: {{ (int) $totalFilas }} · Generado {{ date('d/m/Y H:i') }}
-                </td>
-            </tr>
-        @else
-            <tr>
-                <td colspan="{{ $colspan }}" style="font-size: 9pt; color: #666;">
-                    Generado {{ date('d/m/Y H:i') }}
+                    Registros: {{ (int) $totalFilas }}
                 </td>
             </tr>
         @endif
