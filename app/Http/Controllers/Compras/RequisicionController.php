@@ -237,7 +237,7 @@ class RequisicionController extends Controller
                 ->with('mensaje', 'Requisición creada con éxito');
         }
 
-        return redirect()->back()->withInput()->with('mensaje', $ret['errores']);
+        return redirect()->back()->withInput()->with('mensaje-error', $ret['errores']);
     }
 
     /**
@@ -512,7 +512,7 @@ class RequisicionController extends Controller
             return redirect()->route('consultar_requisicion', QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class))
                 ->with('mensaje', $mensaje);
         } else {
-            return redirect()->back()->withInput()->with('mensaje', $ret['errores'] ?? 'No se pudo actualizar la requisición.');
+            return redirect()->back()->withInput()->with('mensaje-error', $ret['errores'] ?? 'No se pudo actualizar la requisición.');
         }
     }
 

@@ -125,10 +125,7 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
                         <strong>Requisición aprobada:</strong> solo puede modificar el <em>proveedor sugerido</em> y guardar con <strong>Actualizar</strong>. El resto de los datos y líneas quedan en solo lectura.
                     </div>
                     @endif
-                    <div id="requisicion-aviso-arbol-grabacion" class="alert alert-secondary mb-3 d-none" role="alert">
-                        <span id="requisicion-aviso-arbol-spinner" class="fa fa-spinner fa-spin mr-1" style="display:none;" aria-hidden="true"></span>
-                        <strong>Aviso:</strong> <span class="texto"></span>
-                    </div>
+                    @include('compras.requisicion.partials.aviso_arbol_grabacion')
                     @endif
                     @include('compras.requisicion.partials.ordenes_compra_vinculadas_texto')
                     @include('compras.requisicion.partials.cambios_articulo_historia', ['cambios_articulo' => $cambios_articulo ?? collect()])

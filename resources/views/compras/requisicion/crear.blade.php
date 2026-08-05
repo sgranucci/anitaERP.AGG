@@ -67,10 +67,7 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
                         <strong>Modo provisorio:</strong> la requisición se guardará sin enviar al árbol ni a Anita. Podrá revisarla y confirmarla después.
                     </div>
                     @else
-                    <div id="requisicion-aviso-arbol-grabacion" class="alert alert-secondary mb-3 d-none" role="alert">
-                        <span id="requisicion-aviso-arbol-spinner" class="fa fa-spinner fa-spin mr-1" style="display:none;" aria-hidden="true"></span>
-                        <strong>Aviso:</strong> <span class="texto"></span>
-                    </div>
+                    @include('compras.requisicion.partials.aviso_arbol_grabacion')
                     @endif
                     @include('compras.requisicion.form')
                     <div class="form4" id="requisicion-solapa-archivos-adjuntos" style="display:none;">

@@ -15,30 +15,156 @@ $(function () {
 		return msg + ' La requisición no se podrá grabar en estado pendiente.';
 	}
 
+	function esAvisoSinArbol(msg) {
+		if (!msg) {
+			return false;
+		}
+		return /no hay un [aá]rbol|m[aá]s de un [aá]rbol|no tiene un nivel aplicable/i.test(msg);
+	}
+
+	function tituloAvisoArbol(msg) {
+		if (esAvisoSinArbol(msg)) {
+			if (/m[aá]s de un [aá]rbol/i.test(msg)) {
+				return 'Árbol de aprobación duplicado';
+			}
+			if (/nivel aplicable/i.test(msg)) {
+				return 'Sin nivel aplicable en el árbol';
+			}
+			return 'Sin árbol de aprobación';
+		}
+		return 'Árbol de aprobación';
+	}
+
+	function varianteAvisoArbol(mode, mensaje) {
+		if (mode === 'loading') {
+			return 'loading';
+		}
+		if (esAvisoSinArbol(mensaje)) {
+			return 'danger';
+		}
+		return 'warning';
+	}
+
+	function aplicarVarianteAviso($el, variante) {
+		$el.removeClass('is-loading is-warning is-danger alert-secondary alert-warning alert-danger')
+			.addClass('is-' + variante);
+	}
+
+	function ocultarOverlayAvisoArbol() {
+		var $ov = $('#requisicion-aviso-arbol-overlay');
+		if (!$ov.length) {
+			return;
+		}
+		$ov.removeClass('is-visible').attr('aria-hidden', 'true');
+	}
+
+	function mostrarOverlayAvisoArbol(mensaje, variante) {
+		var $ov = $('#requisicion-aviso-arbol-overlay');
+		if (!$ov.length) {
+			return;
+		}
+		var $card = $ov.find('.requisicion-aviso-arbol-overlay-card');
+		aplicarVarianteAviso($card, variante);
+		var esLoading = variante === 'loading';
+		$ov.find('.requisicion-aviso-arbol-overlay-icon').toggleClass('d-none', esLoading);
+		$ov.find('.requisicion-aviso-arbol-overlay-spinner').toggleClass('d-none', !esLoading);
+		$('#requisicion-aviso-arbol-overlay-titulo').text(tituloAvisoArbol(mensaje));
+		$ov.find('.texto').text(mensaje || '');
+		$('#requisicion-aviso-arbol-overlay-cerrar').toggleClass('d-none', esLoading);
+		$ov.addClass('is-visible').attr('aria-hidden', 'false');
+		if (!esLoading) {
+			setTimeout(function () {
+				$('#requisicion-aviso-arbol-overlay-cerrar').trigger('focus');
+			}, 50);
+		}
+	}
+
 	function setAvisoArbolEstado(mode, mensaje) {
 		var $box = $('#requisicion-aviso-arbol-grabacion');
 		if (!$box.length) {
 			return;
 		}
 		var $sp = $('#requisicion-aviso-arbol-spinner');
-		if (mode === 'loading') {
-			$box.removeClass('d-none alert-warning').addClass('alert-secondary');
-			$box.find('.texto').text(mensaje || 'Verificando el árbol de aprobación…');
-			if ($sp.length) {
-				$sp.show();
-			}
-			return;
-		}
-		if ($sp.length) {
-			$sp.hide();
-		}
-		if (mode === 'ok' || !mensaje) {
-			$box.addClass('d-none').removeClass('alert-warning').addClass('alert-secondary');
+		var $stripIcon = $box.find('.requisicion-aviso-arbol-strip-icon');
+		var textoFmt = mode === 'loading'
+			? (mensaje || 'Verificando el árbol de aprobación…')
+			: formateaAvisoGrabacion(mensaje);
+		var variante = varianteAvisoArbol(mode, mensaje || textoFmt);
+
+		if (mode === 'ok' || (mode !== 'loading' && !mensaje)) {
+			$box.addClass('d-none');
+			aplicarVarianteAviso($box, 'loading');
 			$box.find('.texto').text('');
+			if ($sp.length) {
+				$sp.hide();
+			}
+			$stripIcon.show();
+			ocultarOverlayAvisoArbol();
 			return;
 		}
-		$box.removeClass('d-none alert-secondary').addClass('alert-warning');
-		$box.find('.texto').text(formateaAvisoGrabacion(mensaje));
+
+		aplicarVarianteAviso($box, variante);
+		$box.removeClass('d-none');
+		$box.find('.texto').text(textoFmt);
+		$box.find('.requisicion-aviso-arbol-strip-titulo').text(tituloAvisoArbol(mensaje || textoFmt));
+		if ($sp.length) {
+			if (mode === 'loading') {
+				$sp.show();
+				$stripIcon.hide();
+			} else {
+				$sp.hide();
+				$stripIcon.show();
+			}
+		}
+
+		// Banner central solo en aviso real (no en loading de verificación).
+		if (mode === 'loading') {
+			return;
+		}
+		mostrarOverlayAvisoArbol(textoFmt, variante);
+	}
+
+	$(document).on('click', '#requisicion-aviso-arbol-overlay-cerrar', function () {
+		ocultarOverlayAvisoArbol();
+	});
+
+	$(document).on('click', '.requisicion-aviso-arbol-strip-reabrir', function (e) {
+		e.preventDefault();
+		var $box = $('#requisicion-aviso-arbol-grabacion');
+		if ($box.hasClass('d-none')) {
+			return;
+		}
+		var msg = ($box.find('.texto').text() || '').trim();
+		if (!msg) {
+			return;
+		}
+		var variante = $box.hasClass('is-danger') ? 'danger' : 'warning';
+		mostrarOverlayAvisoArbol(msg, variante);
+	});
+
+	$(document).on('keydown', function (e) {
+		if (e.key !== 'Escape') {
+			return;
+		}
+		var $ov = $('#requisicion-aviso-arbol-overlay');
+		if ($ov.hasClass('is-visible') && !$ov.find('#requisicion-aviso-arbol-overlay-cerrar').hasClass('d-none')) {
+			ocultarOverlayAvisoArbol();
+		}
+	});
+
+	function mostrarFlashErrorArbolSiCorresponde() {
+		var flash = '';
+		var $err = $('.alert-danger').filter(function () {
+			return /[aá]rbol/i.test($(this).text());
+		}).first();
+		if ($err.length) {
+			flash = ($err.find('li').first().text() || $err.text() || '').replace(/\s+/g, ' ').trim();
+			flash = flash.replace(/^Error\s*/i, '').trim();
+		}
+		if (!flash || !esAvisoSinArbol(flash)) {
+			return;
+		}
+		setAvisoArbolEstado('warn', flash);
 	}
 
 	function actualizaAvisoArbolGrabacion() {
@@ -545,4 +671,6 @@ $(function () {
 	} else if (!aplicarUltimaEmpresaRequisicionSiCorresponde()) {
 		actualizaAvisoArbolGrabacion();
 	}
+
+	mostrarFlashErrorArbolSiCorresponde();
 });
