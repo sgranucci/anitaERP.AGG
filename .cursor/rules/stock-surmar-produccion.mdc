@@ -1,0 +1,63 @@
+---
+description: Stock/producción Surmar (El Bierzo) — procesos aparte de AGG, etiquetas por ID
+globs:
+  - app/**/*Surmar*
+  - app/Support/Stock/Surmar*
+  - resources/views/stock/**/surmar/**
+  - public/assets/pages/scripts/stock/**/surmar/**
+  - database/migrations/*surmar*
+---
+
+# Stock / producción Surmar
+
+Surmar es `empresa_id = 3` (`SurmarSupport::EMPRESA_ID`) en el entorno El Bierzo. **No** tocar recepción ni movimientos AGG.
+
+## Aislamiento
+
+| Capa | Convención |
+|---|---|
+| Menú / URL | `stock/recepcion-proveedor-surmar`, `stock/movimiento-surmar`, `stock/trazabilidad-surmar` |
+| Permisos | slugs `*-surmar` (propios; también para Ferli) |
+| Controllers / Services | `*Surmar*` — no branch en controllers AGG |
+| Vistas / JS | `…/surmar/` bajo el recurso |
+| Persistencia | tablas compartidas (`recepcion_proveedor`, `movimientostock`, `articulo_movimiento`) + **`stock_etiqueta*`** |
+| Gate | `SurmarSupport::esEmpresaSurmar($empresaId)` / filtrar siempre `empresa_id = 3` |
+
+Patrón preferido: **menú y permisos nuevos** (no swap de rutas como Interforming pedidos).
+
+## Etiquetas (`stock_etiqueta`)
+
+- Identificador operativo = **`id`** físico (barcode/QR).
+- Campos Anita (`anita_tipo`, `anita_nro_interno`, `anita_nro_apertura`, `anita_orden`, …) solo para **import / referencia**.
+- Emisión en recepción (COM) y en producción (DES/AP); TRA mueve depósito de la etiqueta.
+- Consumo en DES/AP/TRA vía `stock_etiqueta_consumo` (Anita `apcom` / `tapcom`).
+- Historial etiqueta↔movimiento: `stock_etiqueta_movimiento`.
+
+## Grabado provisorio (recepción y movimientos)
+
+Como Anita (`a-stock.c` / `a-stkmov.c`): la operación **queda en pantalla** mientras se pican ítems.
+
+| Momento | Persistencia |
+|---|---|
+| Inicio | Cabecera `BORRADOR` / provisorio (`origen_carga=SURMAR`) |
+| Cada ítem cerrado | AJAX graba línea + `stock_etiqueta` + **`hora_piqueo`** (visible en grilla) |
+| Confirmar | Genera `movimientostock` / `articulo_movimiento` |
+
+No acumular ítems solo en el DOM hasta un “Guardar” final: cada piqueo debe quedar grabado (igual que `graba_comp` / `recepaper` en el C).
+
+Workbench recepción: `stock/recepcion-proveedor-surmar/{id}/cargar` + `RecepcionProveedorSurmarService::guardarLineaProvisoria`.
+
+
+1. **COM (`a-stock.c`)**: por línea lote proveedor + certificado + vto; obliga lote antes de grabar; emite `recepaper` + etiqueta ZPL (`eti_prod.fc`).
+2. **DES**: al cargar ítem producido, modal de etiquetas consumidas (`APCOM_carga_tracking`); graba consumo y baja stock de esas aperturas.
+3. **TRA**: lee etiqueta existente (`recepaper` / `stkvaper`); puede reimprimir; graba apertura en destino.
+4. **AP**: alta + impresión etiqueta; genera lote interno tipo `YYYYMMDD-seq`.
+5. **Barcode Anita**: `articulo-nro_interno-nro_apertura-tipo-orden` → en ERP nuevo: **`id`** (+ QR JSON v2 con `etiqueta_id`).
+6. **Amparos (F9)** y lista etiquetas (F7/F8): contemplar en movimiento Surmar si el negocio lo pide.
+7. **`lotesmov`**: historial lote por comprobante; en ERP se cubre con etiqueta + consumos + movimientos.
+
+## Prohibido
+
+- Modificar `RecepcionProveedorController` / `RecepcionProveedorService` AGG para lógica Surmar.
+- Usar `nro_interno`+`nro_apertura` como clave operativa de etiquetas nuevas.
+- Mezclar `empresa_id` Surmar en pantallas AGG sin filtro.

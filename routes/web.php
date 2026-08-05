@@ -1338,6 +1338,25 @@ Route::put('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRece
 Route::post('configuracion/recepcion-proveedor/tolerancias', 'Configuracion\ConfiguracionRecepcionProveedorController@guardarTolerancias')->name('guardar_tolerancias_recepcion_proveedor');
 
 /*
+ * Recepción proveedores Surmar (proceso aparte; grabado provisorio por ítem)
+ */
+Route::get('stock/recepcion-proveedor-surmar', 'Stock\RecepcionProveedorSurmarController@index')->name('recepcion_proveedor_surmar');
+Route::get('stock/recepcion-proveedor-surmar/crear', 'Stock\RecepcionProveedorSurmarController@crear')->name('crear_recepcion_proveedor_surmar');
+Route::post('stock/recepcion-proveedor-surmar', 'Stock\RecepcionProveedorSurmarController@guardar')->name('guardar_recepcion_proveedor_surmar');
+Route::get('stock/recepcion-proveedor-surmar/{id}/cargar', 'Stock\RecepcionProveedorSurmarController@cargar')->name('cargar_recepcion_proveedor_surmar');
+Route::post('stock/recepcion-proveedor-surmar/{id}/linea', 'Stock\RecepcionProveedorSurmarController@apiGuardarLinea')->name('api_guardar_linea_recepcion_proveedor_surmar');
+Route::delete('stock/recepcion-proveedor-surmar/{id}/linea/{lineaId}', 'Stock\RecepcionProveedorSurmarController@apiEliminarLinea')->name('api_eliminar_linea_recepcion_proveedor_surmar');
+Route::post('stock/recepcion-proveedor-surmar/{id}/confirmar', 'Stock\RecepcionProveedorSurmarController@confirmar')->name('confirmar_recepcion_proveedor_surmar');
+Route::post('stock/recepcion-proveedor-surmar/{id}/anular', 'Stock\RecepcionProveedorSurmarController@anular')->name('anular_recepcion_proveedor_surmar');
+Route::delete('stock/recepcion-proveedor-surmar/{id}', 'Stock\RecepcionProveedorSurmarController@eliminar')->name('eliminar_recepcion_proveedor_surmar');
+Route::get('stock/etiqueta-surmar/{etiquetaId}/zpl', 'Stock\RecepcionProveedorSurmarController@imprimirEtiqueta')->name('imprimir_etiqueta_surmar');
+
+/*
+ * Trazabilidad Surmar (por etiqueta ID o artículo+lote)
+ */
+Route::get('stock/trazabilidad-surmar', 'Stock\TrazabilidadSurmarController@index')->name('trazabilidad_surmar');
+
+/*
  * Recuento de inventario por depósito
  */
 Route::get('stock/recuento', 'Stock\RecuentoController@index')->name('recuento');
