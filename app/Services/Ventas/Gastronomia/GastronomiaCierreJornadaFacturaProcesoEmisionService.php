@@ -187,19 +187,24 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $puntoventaModel = Puntoventa::query()->findOrFail($puntoventaEmisionId);
         $letraComprobante = $this->letraComprobanteDesdeReceptor($receptor);
         $emisionCaea = ($puntoventaModel->modofacturacion ?? '') === 'A';
-        $fechaFactura = $this->resolverFechaFacturaCaeaCorrelatividad(
-            $puntoventaModel,
-            $tipo,
-            $letraComprobante,
-            $fechaFactura,
-            $fechaJornada,
-            $emisionCaea,
-            $empresaId,
-        );
+        $fechaFacturaPedida = $fechaFactura;
+        $correlatividad = null;
 
         $lockPv = null;
         try {
             $lockPv = GastronomiaPuntoventaEmisionLock::adquirir($puntoventaEmisionId);
+
+            // Dentro del lock: re-evaluar correlatividad (POS pudo emitir entre preview y acá).
+            $correlatividad = $this->resolverFechaFacturaCaeaCorrelatividad(
+                $puntoventaModel,
+                $tipo,
+                $letraComprobante,
+                $fechaFacturaPedida,
+                $fechaJornada,
+                $emisionCaea,
+                $empresaId,
+            );
+            $fechaFactura = (string) $correlatividad['fechafactura'];
 
             $resultado = DB::transaction(function () use (
                 $lotes,
@@ -307,6 +312,7 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                     }
 
                     CierreJornadaProcesoFacturaFechajornadaSupport::asegurarEnVenta($venta, $fechaJornada);
+                    CaeaEmisionFechaCorrelatividadSupport::assertVentaFechaNoRompeCorrelatividad($venta->fresh());
 
                     $cobRes = $this->cobranzaGastronomiaService->registrarCobranzaPos(
                         $venta->fresh(),
@@ -446,13 +452,17 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             $facturas = $resultado['facturas'] ?? [];
             $cantLotes = count($facturas);
             $primera = $facturas[0] ?? [];
+            $mensaje = $cantLotes === 1
+                ? 'Factura del proceso emitida: '.($primera['factura'] ?? '')
+                : 'Se emitieron '.$cantLotes.' facturas CF del proceso.';
+            if (is_array($correlatividad) && ! empty($correlatividad['ajustada']) && ! empty($correlatividad['mensaje'])) {
+                $mensaje .= ' '.$correlatividad['mensaje'];
+            }
 
             return [
                 'ok' => true,
                 'emision_nueva' => true,
-                'mensaje' => $cantLotes === 1
-                    ? 'Factura del proceso emitida: '.($primera['factura'] ?? '')
-                    : 'Se emitieron '.$cantLotes.' facturas CF del proceso.',
+                'mensaje' => $mensaje,
                 'venta_id' => (int) ($primera['venta_id'] ?? 0),
                 'factura' => (string) ($primera['factura'] ?? ''),
                 'facturas' => $facturas,
@@ -468,6 +478,7 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                 ))),
                 'cobranza_id' => $primera['cobranza_id'] ?? null,
                 'ajuste_insumos' => $resultado['ajuste_insumos'] ?? null,
+                'caea_fecha_correlatividad' => $correlatividad,
                 'jornada_proceso' => $this->contextoJornadaProcesoTrasEmision($jornadaId),
             ];
         } catch (InvalidArgumentException $e) {
@@ -546,15 +557,8 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $puntoventaModel = Puntoventa::query()->findOrFail($puntoventaEmisionId);
         $letraComprobante = $this->letraComprobanteDesdeReceptor($receptor);
         $emisionCaea = ($puntoventaModel->modofacturacion ?? '') === 'A';
-        $fechaFactura = $this->resolverFechaFacturaCaeaCorrelatividad(
-            $puntoventaModel,
-            $tipo,
-            $letraComprobante,
-            $fechaFactura,
-            $fechaJornada,
-            $emisionCaea,
-            $empresaId,
-        );
+        $fechaFacturaPedida = $fechaFactura;
+        $correlatividad = null;
 
         $ajustePrevio = is_array($recuperacion['ajuste_insumos'] ?? null) ? $recuperacion['ajuste_insumos'] : null;
         $ajusteMovId = (int) ($ajustePrevio['movimientostock_id'] ?? 0);
@@ -563,6 +567,17 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $lockPv = null;
         try {
             $lockPv = GastronomiaPuntoventaEmisionLock::adquirir($puntoventaEmisionId);
+
+            $correlatividad = $this->resolverFechaFacturaCaeaCorrelatividad(
+                $puntoventaModel,
+                $tipo,
+                $letraComprobante,
+                $fechaFacturaPedida,
+                $fechaJornada,
+                $emisionCaea,
+                $empresaId,
+            );
+            $fechaFactura = (string) $correlatividad['fechafactura'];
 
             $resultado = DB::transaction(function () use (
                 $lotes,
@@ -665,6 +680,7 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                     }
 
                     CierreJornadaProcesoFacturaFechajornadaSupport::asegurarEnVenta($venta, $fechaJornada);
+                    CaeaEmisionFechaCorrelatividadSupport::assertVentaFechaNoRompeCorrelatividad($venta->fresh());
 
                     $cobRes = $this->cobranzaGastronomiaService->registrarCobranzaPos(
                         $venta->fresh(),
@@ -768,13 +784,18 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             );
 
             $facturas = $resultado['facturas'] ?? [];
+            $mensaje = 'Se re-emitieron '.count($facturas).' facturas del proceso (recuperación snapshot).';
+            if (is_array($correlatividad) && ! empty($correlatividad['ajustada']) && ! empty($correlatividad['mensaje'])) {
+                $mensaje .= ' '.$correlatividad['mensaje'];
+            }
 
             return [
                 'ok' => true,
-                'mensaje' => 'Se re-emitieron '.count($facturas).' facturas del proceso (recuperación snapshot).',
+                'mensaje' => $mensaje,
                 'facturas' => $facturas,
                 'venta_id' => (int) ($facturas[0]['venta_id'] ?? 0),
                 'factura' => (string) ($facturas[0]['factura'] ?? ''),
+                'caea_fecha_correlatividad' => $correlatividad,
                 'jornada_proceso' => $this->contextoJornadaProcesoTrasEmision($jornadaId),
             ];
         } catch (InvalidArgumentException $e) {
@@ -1238,6 +1259,17 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
     /**
      * PV CAEA: si la última factura del mismo PV+tipo tiene fecha mayor a la propuesta,
      * eleva solo fechafactura (ARCA 704). fechajornada no se modifica.
+     *
+     * @return array{
+     *     fechafactura: string,
+     *     fechajornada: string,
+     *     ajustada: bool,
+     *     aplica_caea: bool,
+     *     ultima_fecha: ?string,
+     *     ultimo_numero: ?int,
+     *     mensaje: ?string,
+     *     fecha_pedida: string
+     * }
      */
     private function resolverFechaFacturaCaeaCorrelatividad(
         Puntoventa $puntoventa,
@@ -1247,9 +1279,19 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         string $fechaJornada,
         bool $emisionCaea,
         int $empresaId,
-    ): string {
+    ): array {
+        $fechaPedida = $fechaFactura;
         if (! $emisionCaea || $tipo === null) {
-            return $fechaFactura;
+            return [
+                'fechafactura' => $fechaFactura,
+                'fechajornada' => $fechaJornada,
+                'ajustada' => false,
+                'aplica_caea' => false,
+                'ultima_fecha' => null,
+                'ultimo_numero' => null,
+                'mensaje' => null,
+                'fecha_pedida' => $fechaPedida,
+            ];
         }
 
         $resuelto = CaeaEmisionFechaCorrelatividadSupport::resolverFechas(
@@ -1266,7 +1308,7 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         if ($resuelto['ajustada']) {
             Log::info('cierre_jornada_waitry.caea_fecha_correlatividad', [
                 'puntoventa_id' => (int) $puntoventa->id,
-                'fecha_factura_pedida' => $fechaFactura,
+                'fecha_factura_pedida' => $fechaPedida,
                 'fecha_jornada' => $fechaJornada,
                 'fecha_factura' => $resuelto['fechafactura'],
                 'ultima_fecha' => $resuelto['ultima_fecha'],
@@ -1274,7 +1316,46 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             ]);
         }
 
-        return $resuelto['fechafactura'];
+        return [
+            'fechafactura' => (string) $resuelto['fechafactura'],
+            'fechajornada' => (string) $resuelto['fechajornada'],
+            'ajustada' => (bool) $resuelto['ajustada'],
+            'aplica_caea' => (bool) ($resuelto['aplica_caea'] ?? true),
+            'ultima_fecha' => $resuelto['ultima_fecha'],
+            'ultimo_numero' => $resuelto['ultimo_numero'],
+            'mensaje' => $resuelto['mensaje'],
+            'fecha_pedida' => $fechaPedida,
+        ];
+    }
+
+    /**
+     * Preview / modal de emisión: evalúa si hay que elevar CbteFch por correlatividad CAEA.
+     *
+     * @return array<string, mixed>
+     */
+    public function evaluarCorrelatividadFechaEmision(
+        int $empresaId,
+        int $puntoventaId,
+        string $fechaFactura,
+        string $fechaJornada,
+    ): array {
+        $pv = $this->validarPuntoventa($puntoventaId, $empresaId);
+        $puntoventaModel = Puntoventa::query()->findOrFail((int) $pv['id']);
+        $cfg = $this->resolverCfgOperativa($empresaId);
+        $tipo = Tipotransaccion::query()->find($this->resolverTipoFacturaId($cfg));
+        $receptor = $this->receptorFacturacionService->datosVentaReceptorConsumidorFinal();
+        $letra = $this->letraComprobanteDesdeReceptor($receptor);
+        $emisionCaea = ($puntoventaModel->modofacturacion ?? '') === 'A';
+
+        return $this->resolverFechaFacturaCaeaCorrelatividad(
+            $puntoventaModel,
+            $tipo,
+            $letra,
+            $fechaFactura,
+            $fechaJornada,
+            $emisionCaea,
+            $empresaId,
+        );
     }
 
     /**

@@ -25,8 +25,6 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'G';
-
     private bool $hayFilaLogos = false;
 
     private int $filaTituloExcel = 1;
@@ -51,7 +49,13 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
         private array $conciliacion,
         private string $titulo,
         private string $subtitulo = '',
+        private bool $ocultarRazonSocial = false,
     ) {
+    }
+
+    private function colUltima(): string
+    {
+        return $this->ocultarRazonSocial ? 'F' : 'G';
     }
 
     public function view(): View
@@ -86,11 +90,24 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
             'subtitulo' => $this->subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'esExcel' => true,
+            'ocultarRazonSocial' => $this->ocultarRazonSocial,
         ]);
     }
 
     public function columnFormats(): array
     {
+        if ($this->ocultarRazonSocial) {
+            // A Reg. | B Imp. | C Documento | D Fecha | E Base | F Importe
+            return [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'B' => NumberFormat::FORMAT_TEXT,
+                'C' => NumberFormat::FORMAT_TEXT,
+                'D' => NumberFormat::FORMAT_TEXT,
+                'E' => '#,##0.00',
+                'F' => '#,##0.00',
+            ];
+        }
+
         // A Reg. | B Imp. | C Documento | D Razón social | E Fecha | F Base | G Importe
         return [
             'A' => NumberFormat::FORMAT_TEXT,
@@ -112,6 +129,17 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
 
     public function columnWidths(): array
     {
+        if ($this->ocultarRazonSocial) {
+            return [
+                'A' => 8,
+                'B' => 8,
+                'C' => 16,
+                'D' => 12,
+                'E' => 14,
+                'F' => 14,
+            ];
+        }
+
         return [
             'A' => 8,
             'B' => 8,
@@ -133,7 +161,7 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
         return [
             AfterSheet::class => function (AfterSheet $event): void {
                 $sheet = $event->sheet->getDelegate();
-                $colUltima = self::COL_ULTIMA;
+                $colUltima = $this->colUltima();
 
                 // Localizar de forma robusta la cabecera del detalle (fila cuyo primer campo es "Reg.").
                 // El conteo de filas meta puede desalinearse (conciliación, wrap de subtítulo, etc.),
@@ -242,9 +270,11 @@ class SicoreListadoExport implements FromView, WithColumnFormatting, WithColumnW
 
         $mascara = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
         $limite = min($sheet->getHighestRow(), $this->filaCabecerasExcel);
+        // Con razón social oculta el detalle tiene 6 cols; la conciliación sigue en 7 (Estado en G).
+        $colEstado = 'G';
 
         for ($row = 1; $row <= $limite; $row++) {
-            $estado = trim((string) ($sheet->getCell('G'.$row)->getValue() ?? ''));
+            $estado = trim((string) ($sheet->getCell($colEstado.$row)->getValue() ?? ''));
             if ($estado !== 'Cuadra' && $estado !== 'Diferencia') {
                 continue;
             }

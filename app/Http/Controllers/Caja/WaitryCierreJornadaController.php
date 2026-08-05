@@ -363,6 +363,8 @@ class WaitryCierreJornadaController extends Controller
         $request->validate([
             'empresa_id' => 'required|integer|min:1',
             'fecha_jornada' => 'required|date',
+            'fecha_factura' => 'nullable|date',
+            'puntoventa_id' => 'nullable|integer|min:1',
         ]);
 
         $empresaId = (int) $request->input('empresa_id');
@@ -380,12 +382,34 @@ class WaitryCierreJornadaController extends Controller
             $jornada?->fecha_jornada ?? (new \DateTimeImmutable($fechaJornada)),
         );
 
+        $fechaFacturaEval = $request->filled('fecha_factura')
+            ? (string) $request->input('fecha_factura')
+            : $fechaFacturaDefault;
+        $puntoventaEvalId = $request->filled('puntoventa_id')
+            ? (int) $request->input('puntoventa_id')
+            : (int) ($pvDefault['id'] ?? 0);
+
+        $correlatividad = null;
+        if ($puntoventaEvalId > 0) {
+            try {
+                $correlatividad = $emisionService->evaluarCorrelatividadFechaEmision(
+                    $empresaId,
+                    $puntoventaEvalId,
+                    $fechaFacturaEval,
+                    $fechaJornada,
+                );
+            } catch (InvalidArgumentException $e) {
+                return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+            }
+        }
+
         return response()->json([
             'ok' => true,
             'fecha_jornada' => $fechaJornada,
             'fecha_factura_default' => $fechaFacturaDefault,
             'puntoventa_default' => $pvDefault,
             'puntoventas' => $emisionService->listarPuntosVentaElectronicos($empresaId),
+            'caea_fecha_correlatividad' => $correlatividad,
         ]);
     }
 

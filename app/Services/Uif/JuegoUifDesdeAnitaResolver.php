@@ -3,15 +3,25 @@
 namespace App\Services\Uif;
 
 use App\Models\Uif\Juego_Uif;
+use App\Support\Uif\UifMaquinaRuletaBienUsoSupport;
 use Illuminate\Support\Collection;
 
 /**
  * Resuelve juego_uif_id a partir de cdescpremio (Anita) al sincronizar premios UIF.
+ * Si la posición coincide con una ruleta electrónica en bien_uso, fuerza RULETA
+ * (salvo BINGO / COMPRA TARJETA).
  */
 class JuegoUifDesdeAnitaResolver
 {
     /** @var array<string, int>|null */
     private static ?array $juegosPorNombre = null;
+
+    /** Juegos que no se sobrescriben aunque la posición sea ruleta electrónica. */
+    private const PRESERVAR_SI_RULETA_UID = [
+        'BINGO',
+        'COMPRA TARJETA',
+        'RULETA',
+    ];
 
     /** @var array<string, string> Valores Anita / alias → nombre canónico en juego_uif (tabla local) */
     private const ALIAS_ANITA = [
@@ -38,42 +48,81 @@ class JuegoUifDesdeAnitaResolver
         'OTRO' => 'SLOTS',
     ];
 
-    public static function resolveJuegoUifId(?string $cdescpremio): int
-    {
+    /**
+     * @param  bool  $aplicarOverrideRuleta  Solo altas nuevas / forward; no usar en re-sync de existentes.
+     */
+    public static function resolveJuegoUifId(
+        ?string $cdescpremio,
+        ?string $posicion = null,
+        ?int $salaOEmpresaId = null,
+        bool $aplicarOverrideRuleta = false,
+    ): int {
         $texto = self::normalizar($cdescpremio);
         if ($texto === '') {
-            return self::idPorDefecto();
-        }
+            $juegoId = self::idPorDefecto();
+        } else {
+            $juegos = self::juegosPorNombre();
 
-        $juegos = self::juegosPorNombre();
+            if (isset($juegos[$texto])) {
+                $juegoId = $juegos[$texto];
+            } elseif (isset(self::ALIAS_ANITA[$texto])) {
+                $juegoId = self::idDesdeNombreCanonico(self::ALIAS_ANITA[$texto], $juegos);
+            } else {
+                $juegoId = null;
+                foreach (self::FRAGMENTOS as $fragmento => $nombreCanonico) {
+                    if (str_contains($texto, self::normalizar($fragmento))) {
+                        $juegoId = self::idDesdeNombreCanonico($nombreCanonico, $juegos);
+                        break;
+                    }
+                }
 
-        if (isset($juegos[$texto])) {
-            return $juegos[$texto];
-        }
+                if ($juegoId === null) {
+                    foreach ($juegos as $nombre => $id) {
+                        if (str_contains($texto, $nombre)) {
+                            $juegoId = $id;
+                            break;
+                        }
+                    }
+                }
 
-        if (isset(self::ALIAS_ANITA[$texto])) {
-            return self::idDesdeNombreCanonico(self::ALIAS_ANITA[$texto], $juegos);
-        }
+                if ($juegoId === null) {
+                    foreach ($juegos as $nombre => $id) {
+                        if (strlen($texto) >= 3 && str_contains($nombre, $texto)) {
+                            $juegoId = $id;
+                            break;
+                        }
+                    }
+                }
 
-        foreach (self::FRAGMENTOS as $fragmento => $nombreCanonico) {
-            if (str_contains($texto, self::normalizar($fragmento))) {
-                return self::idDesdeNombreCanonico($nombreCanonico, $juegos);
+                $juegoId ??= self::idPorDefecto();
             }
         }
 
-        foreach ($juegos as $nombre => $id) {
-            if (str_contains($texto, $nombre)) {
-                return $id;
-            }
+        if ($aplicarOverrideRuleta) {
+            return self::aplicarOverrideRuletaSiCorresponde($juegoId, $posicion, $salaOEmpresaId);
         }
 
-        foreach ($juegos as $nombre => $id) {
-            if (strlen($texto) >= 3 && str_contains($nombre, $texto)) {
-                return $id;
-            }
+        return $juegoId;
+    }
+
+    /**
+     * Si la posición es UID/código de ruleta en bien_uso → RULETA (salvo juegos a preservar).
+     */
+    public static function aplicarOverrideRuletaSiCorresponde(
+        int $juegoUifId,
+        ?string $posicion,
+        ?int $salaOEmpresaId,
+    ): int {
+        $empresaId = UifMaquinaRuletaBienUsoSupport::empresaIdDesdeSalaUif($salaOEmpresaId);
+        if ($empresaId <= 0 || ! UifMaquinaRuletaBienUsoSupport::esRuletaElectronica($posicion, $empresaId)) {
+            return $juegoUifId;
         }
 
-        return self::idPorDefecto();
+        if (self::debePreservarJuego($juegoUifId)) {
+            return $juegoUifId;
+        }
+
+        return self::idDesdeNombreCanonico('RULETA', self::juegosPorNombre());
     }
 
     /**
@@ -139,6 +188,17 @@ class JuegoUifDesdeAnitaResolver
         $primerId = reset($juegos);
 
         return $primerId !== false ? (int) $primerId : 1;
+    }
+
+    private static function debePreservarJuego(int $juegoUifId): bool
+    {
+        foreach (self::juegosPorNombre() as $nombre => $id) {
+            if ((int) $id === $juegoUifId) {
+                return in_array($nombre, self::PRESERVAR_SI_RULETA_UID, true);
+            }
+        }
+
+        return false;
     }
 
     private static function normalizar(?string $valor): string

@@ -79,6 +79,7 @@
         'totales' => $totales,
         'conciliacion' => $conciliacion,
         'esExcel' => false,
+        'ocultarRazonSocial' => ! empty($ocultarRazonSocial),
     ])
 </body>
 </html>

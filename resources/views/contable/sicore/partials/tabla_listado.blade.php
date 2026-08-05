@@ -3,6 +3,10 @@
     $totales = $totales ?? [];
     $conciliacion = $conciliacion ?? [];
     $esExcel = ! empty($esExcel);
+    $ocultarRazonSocial = ! empty($ocultarRazonSocial);
+    $colsDetalle = $ocultarRazonSocial ? 6 : 7;
+    $colsTotalesLabel = $ocultarRazonSocial ? 4 : 5;
+    $colsConciliacion = 7;
     $mostrarConciliacion = ! empty($conciliacion['habilitada']) && ! empty($conciliacion['items']);
     // Excel: importes como número real (cada PC los muestra según su config regional).
     $fmtMontoExcel = \App\Support\Export\ExcelFormatoNumero::formateadorMonto(
@@ -13,7 +17,7 @@
 @if ($mostrarConciliacion)
     @if ($esExcel)
         <tr>
-            <td colspan="7"><strong>Conciliaci&oacute;n SICORE vs mayor contable</strong></td>
+            <td colspan="{{ $colsConciliacion }}"><strong>Conciliaci&oacute;n SICORE vs mayor contable</strong></td>
         </tr>
         <tr>
             <td><strong>C&oacute;d.</strong></td>
@@ -36,7 +40,7 @@
             </tr>
         @endforeach
         <tr>
-            <td colspan="7"><strong>SICORE a presentar — detalle</strong></td>
+            <td colspan="{{ $colsConciliacion }}"><strong>SICORE a presentar — detalle</strong></td>
         </tr>
     @else
         <h3 style="font-size:10px;margin:8px 0 4px;">Conciliaci&oacute;n SICORE vs mayor contable</h3>
@@ -103,7 +107,9 @@
         <td><strong>Reg.</strong></td>
         <td><strong>Imp.</strong></td>
         <td><strong>Documento</strong></td>
-        <td><strong>Raz&oacute;n social</strong></td>
+        @if (! $ocultarRazonSocial)
+            <td><strong>Raz&oacute;n social</strong></td>
+        @endif
         <td><strong>Fecha</strong></td>
         <td><strong>Base</strong></td>
         <td><strong>Importe</strong></td>
@@ -113,19 +119,21 @@
             <td>{{ str_pad((string) ($reg['cod_regimen'] ?? ''), 3, '0', STR_PAD_LEFT) }}</td>
             <td>{{ $reg['cod_impuesto'] ?? '' }}</td>
             <td>{{ $reg['nro_documento'] ?? '' }}</td>
-            <td>{{ $reg['razon_social'] ?? '' }}</td>
+            @if (! $ocultarRazonSocial)
+                <td>{{ $reg['razon_social'] ?? '' }}</td>
+            @endif
             <td>{{ $reg['fecha_retencion'] ?? '' }}</td>
             <td style="text-align:right;">{{ $fmtMontoExcel($reg['base_calculo'] ?? 0) }}</td>
             <td style="text-align:right;">{{ $fmtMontoExcel($reg['importe'] ?? 0) }}</td>
         </tr>
     @empty
         <tr>
-            <td colspan="7">Sin registros en el per&iacute;odo.</td>
+            <td colspan="{{ $colsDetalle }}">Sin registros en el per&iacute;odo.</td>
         </tr>
     @endforelse
     @if (($totales['registros'] ?? 0) > 0)
         <tr>
-            <td colspan="5"><strong>Totales ({{ $totales['registros'] }} reg.)</strong></td>
+            <td colspan="{{ $colsTotalesLabel }}"><strong>Totales ({{ $totales['registros'] }} reg.)</strong></td>
             <td style="text-align:right;"><strong>{{ $fmtMontoExcel($totales['base_calculo'] ?? 0) }}</strong></td>
             <td style="text-align:right;"><strong>{{ $fmtMontoExcel($totales['importe'] ?? 0) }}</strong></td>
         </tr>
@@ -135,18 +143,22 @@
         <colgroup>
             <col style="width:6%;">
             <col style="width:6%;">
-            <col style="width:16%;">
-            <col style="width:34%;">
+            <col style="width:{{ $ocultarRazonSocial ? '22%' : '16%' }};">
+            @if (! $ocultarRazonSocial)
+                <col style="width:34%;">
+            @endif
             <col style="width:12%;">
-            <col style="width:13%;">
-            <col style="width:13%;">
+            <col style="width:{{ $ocultarRazonSocial ? '27%' : '13%' }};">
+            <col style="width:{{ $ocultarRazonSocial ? '27%' : '13%' }};">
         </colgroup>
         <thead>
             <tr>
                 <th>Reg.</th>
                 <th>Imp.</th>
                 <th>Documento</th>
-                <th>Raz&oacute;n social</th>
+                @if (! $ocultarRazonSocial)
+                    <th>Raz&oacute;n social</th>
+                @endif
                 <th>Fecha</th>
                 <th class="num">Base</th>
                 <th class="num">Importe</th>
@@ -158,21 +170,23 @@
                     <td>{{ str_pad((string) ($reg['cod_regimen'] ?? ''), 3, '0', STR_PAD_LEFT) }}</td>
                     <td>{{ $reg['cod_impuesto'] ?? '' }}</td>
                     <td>{{ $reg['nro_documento'] ?? '' }}</td>
-                    <td>{{ $reg['razon_social'] ?? '' }}</td>
+                    @if (! $ocultarRazonSocial)
+                        <td>{{ $reg['razon_social'] ?? '' }}</td>
+                    @endif
                     <td>{{ $reg['fecha_retencion'] ?? '' }}</td>
                     <td class="num">{{ number_format((float) ($reg['base_calculo'] ?? 0), 2, ',', '.') }}</td>
                     <td class="num">{{ number_format((float) ($reg['importe'] ?? 0), 2, ',', '.') }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" style="text-align:center;">Sin registros en el per&iacute;odo.</td>
+                    <td colspan="{{ $colsDetalle }}" style="text-align:center;">Sin registros en el per&iacute;odo.</td>
                 </tr>
             @endforelse
         </tbody>
         @if (($totales['registros'] ?? 0) > 0)
             <tfoot>
                 <tr>
-                    <td colspan="5"><strong>Totales ({{ $totales['registros'] }} reg.)</strong></td>
+                    <td colspan="{{ $colsTotalesLabel }}"><strong>Totales ({{ $totales['registros'] }} reg.)</strong></td>
                     <td class="num"><strong>{{ number_format((float) ($totales['base_calculo'] ?? 0), 2, ',', '.') }}</strong></td>
                     <td class="num"><strong>{{ number_format((float) ($totales['importe'] ?? 0), 2, ',', '.') }}</strong></td>
                 </tr>

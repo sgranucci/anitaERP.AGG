@@ -272,13 +272,20 @@
                 </div>
                 <div class="card-body p-0 table-responsive">
                     <table class="table table-sm table-striped mb-0" id="tabla-sicore">
+                        @php
+                            $ocultarRazonSocial = (($filtros['criterio'] ?? '') === 'sueldos');
+                            $colsDetalle = $ocultarRazonSocial ? 8 : 9;
+                            $colsTotalesLabel = $ocultarRazonSocial ? 5 : 6;
+                        @endphp
                         <thead style="background-color:#85C1E9;color:#17202A;">
                             <tr>
                                 <th>Reg.</th>
                                 <th>Imp.</th>
                                 <th>Proveedor</th>
                                 <th>Documento</th>
-                                <th>Razón social</th>
+                                @if (! $ocultarRazonSocial)
+                                    <th>Razón social</th>
+                                @endif
                                 <th>Fecha</th>
                                 <th class="text-right">Base</th>
                                 <th class="text-right">Importe</th>
@@ -292,7 +299,9 @@
                                     <td>{{ $reg['cod_impuesto'] ?? '' }}</td>
                                     <td class="text-nowrap">{{ $reg['codigo_proveedor'] ?? '' }}</td>
                                     <td>{{ $reg['nro_documento'] ?? '' }}</td>
-                                    <td>{{ $reg['razon_social'] ?? '' }}</td>
+                                    @if (! $ocultarRazonSocial)
+                                        <td>{{ $reg['razon_social'] ?? '' }}</td>
+                                    @endif
                                     <td>{{ $reg['fecha_retencion'] ?? '' }}</td>
                                     <td class="text-right">{{ number_format((float) ($reg['base_calculo'] ?? 0), 2, ',', '.') }}</td>
                                     <td class="text-right @if (($reg['importe'] ?? 0) < 0) text-danger @endif">{{ number_format((float) ($reg['importe'] ?? 0), 2, ',', '.') }}</td>
@@ -300,14 +309,14 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="text-center text-muted py-4">Sin registros en el período.</td>
+                                    <td colspan="{{ $colsDetalle }}" class="text-center text-muted py-4">Sin registros en el período.</td>
                                 </tr>
                             @endforelse
                         </tbody>
                         @if (($resultado['totales']['registros'] ?? 0) > 0)
                             <tfoot>
                                 <tr class="font-weight-bold">
-                                    <td colspan="6">Totales</td>
+                                    <td colspan="{{ $colsTotalesLabel }}">Totales</td>
                                     <td class="text-right">{{ number_format((float) ($resultado['totales']['base_calculo'] ?? 0), 2, ',', '.') }}</td>
                                     <td class="text-right">{{ number_format((float) ($resultado['totales']['importe'] ?? 0), 2, ',', '.') }}</td>
                                     <td></td>

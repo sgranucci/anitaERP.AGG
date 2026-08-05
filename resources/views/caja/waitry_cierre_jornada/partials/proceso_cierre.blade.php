@@ -766,7 +766,11 @@
                 <div class="form-group">
                     <label for="emitir-proceso-fecha-factura">Fecha de factura</label>
                     <input type="date" id="emitir-proceso-fecha-factura" class="form-control form-control-sm">
+                    <small class="form-text text-muted">
+                        Fecha fiscal (CbteFch). La jornada del cierre no se modifica.
+                    </small>
                 </div>
+                <div id="emitir-proceso-caea-correlatividad" class="alert alert-warning d-none py-2 small" role="alert"></div>
                 <div id="emitir-proceso-lotes-resumen" class="small text-muted mb-2 d-none"></div>
                 <div class="table-responsive" id="emitir-proceso-lotes-wrap" style="max-height: 240px; overflow-y: auto;">
                     <table class="table table-sm table-bordered mb-0 d-none" id="emitir-proceso-lotes-tabla">

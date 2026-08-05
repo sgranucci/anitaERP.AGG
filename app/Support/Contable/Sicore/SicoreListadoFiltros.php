@@ -91,6 +91,8 @@ final class SicoreListadoFiltros
     public static function firma(array $filtros): string
     {
         return md5(json_encode([
+            // v2: créditos 4ta cat. con importe negativo + sin razón social en sueldos
+            'v' => 2,
             'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
             'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),

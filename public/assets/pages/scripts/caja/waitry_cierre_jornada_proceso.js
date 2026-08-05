@@ -1800,8 +1800,14 @@
             lotesResumen.textContent = '';
         }
         procesoEstado.previewLotesEmision = null;
+        procesoEstado.caeaCorrAviso = null;
         selPv.innerHTML = '';
         inpFecha.value = params.fecha_jornada;
+        var corrBox = el('emitir-proceso-caea-correlatividad');
+        if (corrBox) {
+            corrBox.classList.add('d-none');
+            corrBox.textContent = '';
+        }
         if (loading) {
             loading.classList.remove('d-none');
         }
@@ -1841,11 +1847,21 @@
                 selPv.selectedIndex = 0;
             }
             inpFecha.value = data.fecha_factura_default || params.fecha_jornada;
+            aplicarAvisoCaeaCorrelatividad(data.caea_fecha_correlatividad || null);
 
             if (lotesData && lotesData.ok) {
                 renderPreviewLotesFactura(lotesData);
             } else if (lotesData && lotesData.error) {
                 throw new Error(lotesData.error);
+            }
+
+            if (!selPv.dataset.caeaCorrBound) {
+                selPv.dataset.caeaCorrBound = '1';
+                selPv.addEventListener('change', refrescarCaeaCorrelatividadModal);
+            }
+            if (!inpFecha.dataset.caeaCorrBound) {
+                inpFecha.dataset.caeaCorrBound = '1';
+                inpFecha.addEventListener('change', refrescarCaeaCorrelatividadModal);
             }
         }).catch(function (e) {
             if (errBox) {
@@ -1857,6 +1873,73 @@
         }).finally(function () {
             if (loading) {
                 loading.classList.add('d-none');
+            }
+        });
+    }
+
+    function aplicarAvisoCaeaCorrelatividad(corr) {
+        var box = el('emitir-proceso-caea-correlatividad');
+        var inpFecha = el('emitir-proceso-fecha-factura');
+        if (!box) {
+            return;
+        }
+        if (corr && corr.ajustada) {
+            var msg = corr.mensaje
+                || ('Se elevará la fecha fiscal a ' + (corr.fechafactura || '') + ' por correlatividad CAEA (ARCA 704).');
+            procesoEstado.caeaCorrAviso = msg;
+            box.textContent = msg;
+            box.classList.remove('d-none');
+            if (inpFecha && corr.fechafactura && inpFecha.value !== corr.fechafactura) {
+                inpFecha.dataset.caeaCorrSkip = '1';
+                inpFecha.value = corr.fechafactura;
+                delete inpFecha.dataset.caeaCorrSkip;
+            }
+            return;
+        }
+        if (procesoEstado.caeaCorrAviso) {
+            box.textContent = procesoEstado.caeaCorrAviso;
+            box.classList.remove('d-none');
+            return;
+        }
+        box.classList.add('d-none');
+        box.textContent = '';
+    }
+
+    function refrescarCaeaCorrelatividadModal() {
+        var params = empresaYFechaDesdeFormulario();
+        var selPv = el('emitir-proceso-puntoventa');
+        var inpFecha = el('emitir-proceso-fecha-factura');
+        var box = el('emitir-proceso-caea-correlatividad');
+        if (inpFecha && inpFecha.dataset.caeaCorrSkip) {
+            return;
+        }
+        if (!selPv || !inpFecha || params.empresa_id <= 0 || !params.fecha_jornada) {
+            return;
+        }
+        var pvId = parseInt(selPv.value, 10) || 0;
+        var fechaFactura = inpFecha.value || params.fecha_jornada;
+        if (pvId <= 0) {
+            aplicarAvisoCaeaCorrelatividad(null);
+            return;
+        }
+        if (box) {
+            box.classList.remove('d-none');
+            box.textContent = 'Verificando correlatividad de fechas CAEA…';
+        }
+        var url = (CFG.urlOpcionesEmitir || '')
+            + '?empresa_id=' + params.empresa_id
+            + '&fecha_jornada=' + encodeURIComponent(params.fecha_jornada)
+            + '&fecha_factura=' + encodeURIComponent(fechaFactura)
+            + '&puntoventa_id=' + pvId;
+        apiGet(url).then(function (data) {
+            if (!data || !data.ok) {
+                throw new Error((data && data.error) || 'No se pudo verificar correlatividad CAEA.');
+            }
+            aplicarAvisoCaeaCorrelatividad(data.caea_fecha_correlatividad || null);
+        }).catch(function (e) {
+            if (box) {
+                box.classList.remove('d-none');
+                box.textContent = e.message || 'Error al verificar correlatividad CAEA.';
             }
         });
     }

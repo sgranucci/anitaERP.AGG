@@ -4,12 +4,13 @@ namespace App\Support\Stock;
 
 /**
  * Gate y constantes del módulo stock/producción Surmar (El Bierzo).
- * Empresa operativa fija; procesos propios (menú/permisos) sin tocar AGG.
+ * Empresa operativa fija id=3 en Bierzo. En AGG el id 3 es REBISCO: no tratarlo como Surmar.
  */
 final class SurmarSupport
 {
     public const ORIGEN_CARGA_RECEPCION = 'SURMAR';
 
+    /** El Bierzo: Surmar. AGG: ese id es Rebisco — usar esEmpresaSurmar(). */
     public const EMPRESA_ID = 3;
 
     public const ORIGEN_COM = 'COM';
@@ -30,7 +31,15 @@ final class SurmarSupport
 
     public static function esEmpresaSurmar(?int $empresaId): bool
     {
-        return (int) $empresaId === self::EMPRESA_ID;
+        if ((int) $empresaId !== self::EMPRESA_ID) {
+            return false;
+        }
+
+        $nombre = trim((string) \Illuminate\Support\Facades\DB::table('empresa')
+            ->where('id', self::EMPRESA_ID)
+            ->value('nombre'));
+
+        return $nombre !== '' && stripos($nombre, 'surmar') !== false;
     }
 
     public static function abortSiNoSurmar(?int $empresaId = null): void

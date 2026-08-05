@@ -62,14 +62,12 @@ final class SicoreSueldosDatosService
         foreach ($acumulado as $legajo => $totales) {
             $emp = $empleados[$legajo] ?? null;
             $cuit = SicoreFormatoV8Support::normalizarCuit((string) ($emp['emp_afil_jubil'] ?? ''));
-            $nombre = substr(trim((string) ($emp['emp_nombre'] ?? ('Legajo '.$legajo))), 0, 30);
 
             if (abs($totales['ret']) >= 0.001) {
                 $filas[] = $this->filaSueldo(
                     $config,
                     $regimen,
                     $cuit,
-                    $nombre,
                     $fechaIso,
                     $totales['ret'],
                     SicoreFormatoV8Support::COD_COMP_LIQUIDACION,
@@ -82,7 +80,6 @@ final class SicoreSueldosDatosService
                     $config,
                     $regimen,
                     $cuit,
-                    $nombre,
                     $fechaIso,
                     abs($totales['dev']),
                     SicoreFormatoV8Support::COD_COMP_DEVOLUCION,
@@ -114,7 +111,7 @@ final class SicoreSueldosDatosService
                 'acc' => 'list',
                 'sistema' => 'sueldos',
                 'tabla' => 'empleado',
-                'campos' => 'emp_empresa, emp_legajo, emp_nombre, emp_afil_jubil',
+                'campos' => 'emp_empresa, emp_legajo, emp_afil_jubil',
                 'whereArmado' => ' WHERE emp_empresa = '.$empresaAnita
                     .' AND emp_legajo IN ('.implode(',', $lote).')',
                 'orderBy' => 'emp_legajo',
@@ -213,16 +210,16 @@ final class SicoreSueldosDatosService
         Sicore_Config $config,
         int $regimen,
         string $cuit,
-        string $nombre,
         string $fechaIso,
         float $importe,
         int $codComp,
         int $legajo,
     ): array {
-        $importe = round($importe, 2);
-        $base = $codComp === SicoreFormatoV8Support::COD_COMP_DEVOLUCION
-            ? -abs($importe)
-            : abs($importe);
+        // Crédito/devolución (cod_comp 8): Base e Importe negativos en pantalla/totales.
+        // El .dat emite montos en absoluto y tipifica con cod_comp 8.
+        $importeAbs = abs(round($importe, 2));
+        $esDevolucion = $codComp === SicoreFormatoV8Support::COD_COMP_DEVOLUCION;
+        $importeFirmado = $esDevolucion ? -$importeAbs : $importeAbs;
 
         return [
             'origen' => 'sueldos',
@@ -233,17 +230,18 @@ final class SicoreSueldosDatosService
             'cod_comp' => $codComp,
             'fecha_comp' => $fechaIso,
             'nro_comp' => 0,
-            'importe_comp' => abs($importe),
-            'base_calculo' => $base,
+            'importe_comp' => $importeAbs,
+            'base_calculo' => $importeFirmado,
             'fecha_retencion' => $fechaIso,
             'cod_condicion' => 1,
-            'importe' => $importe,
+            'importe' => $importeFirmado,
             'porc_excl' => 0.0,
             'fecha_boletin' => '',
             'cod_documento' => 80,
             'nro_documento' => $cuit,
             'nro_cert' => 0,
-            'razon_social' => $nombre,
+            // Confidencialidad 4ta cat.: el nombre no se muestra en listados; queda vacío.
+            'razon_social' => '',
             'referencia' => 'Legajo '.$legajo,
         ];
     }

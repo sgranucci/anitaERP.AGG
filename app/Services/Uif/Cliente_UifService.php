@@ -303,6 +303,7 @@ class Cliente_UifService
 
 	/**
 	 * Prepara atributos del premio para create/update (fillable + fechas).
+	 * Altas/edición manual: si la posición es ruleta en bien_uso → juego RULETA.
 	 */
 	private function normalizarDatosPremio(array $data): array
 	{
@@ -321,6 +322,14 @@ class Cliente_UifService
 
 		if (empty($data['fechaentrega'])) {
 			throw new Exception('La fecha de entrega del premio es obligatoria.');
+		}
+
+		if (isset($data['juego_uif_id'])) {
+			$data['juego_uif_id'] = JuegoUifDesdeAnitaResolver::aplicarOverrideRuletaSiCorresponde(
+				(int) $data['juego_uif_id'],
+				isset($data['posicion']) ? (string) $data['posicion'] : null,
+				isset($data['sala_id']) ? (int) $data['sala_id'] : null,
+			);
 		}
 
 		$fillable = (new Cliente_Premio_Uif())->getFillable();

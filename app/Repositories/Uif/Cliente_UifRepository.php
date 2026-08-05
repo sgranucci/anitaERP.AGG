@@ -3,6 +3,7 @@
 namespace App\Repositories\Uif;
 
 use App\ApiAnita;
+use App\Models\Uif\Cliente_Premio_Uif;
 use App\Models\Uif\Cliente_Uif;
 use App\Repositories\Configuracion\TipodocumentoRepositoryInterface;
 use App\Services\Uif\ClientePremioUifFotoTesoreria;
@@ -680,8 +681,26 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 
             if (is_array($dataAnita) && count($dataAnita) > 0) {
                 foreach ($dataAnita as $premioAnita) {
+                    $anitaPremioId = (int) ($premioAnita->inropremioid ?? 0);
+                    $posicionAnita = isset($premioAnita->cposicion) ? (string) $premioAnita->cposicion : null;
+
+                    // Override RULETA por bien_uso solo en altas nuevas (no re-sync de existentes).
+                    $esAltaNueva = true;
+                    if ($anitaPremioId > 0) {
+                        $existQ = Cliente_Premio_Uif::query()
+                            ->where('cliente_uif_id', $cliente_uif->id)
+                            ->where('anita_inropremioid', $anitaPremioId);
+                        if ((int) $salaId > 0) {
+                            $existQ->where('sala_id', $salaId);
+                        }
+                        $esAltaNueva = ! $existQ->exists();
+                    }
+
                     $juego_id = JuegoUifDesdeAnitaResolver::resolveJuegoUifId(
-                        isset($premioAnita->cdescpremio) ? (string) $premioAnita->cdescpremio : null
+                        isset($premioAnita->cdescpremio) ? (string) $premioAnita->cdescpremio : null,
+                        $posicionAnita,
+                        (int) $salaId,
+                        $esAltaNueva,
                     );
 
                     $fechaEntrega = $this->fechaSqlDesdeAnitaYyyymmdd($premioAnita->ifechaentrega ?? 0);
@@ -690,8 +709,8 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                         $horaEntrega = '01:00:00';
                     }
 
-                    $premioLocal = $this->cliente_premio_uifRepository->createUnique([
-                        'anita_inropremioid' => (int) $premioAnita->inropremioid,
+                    $premioPayload = [
+                        'anita_inropremioid' => $anitaPremioId,
                         'cliente_uif_id' => $cliente_uif->id,
                         'sala_id' => $salaId,
                         'juego_uif_id' => $juego_id,
@@ -699,12 +718,18 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                         'detalle' => $premioAnita->cdescpremio,
                         'monto' => $premioAnita->fpremio,
                         'moneda_id' => 1,
-                        'posicion' => $premioAnita->cposicion,
+                        'posicion' => $posicionAnita,
                         'numerotito' => $premioAnita->cnroticket,
                         'fechatito' => $this->fechaSqlOpcionalDesdeAnitaYyyymmdd($premioAnita->ifechatito ?? null),
                         'piderecibopago' => $premioAnita->crecibo_pago,
                         'creousuario_id' => Auth::user()->id,
-                    ]);
+                    ];
+                    // Re-sync: no pisar juego_uif_id (histórico / reclasificación manual).
+                    if (! $esAltaNueva) {
+                        unset($premioPayload['juego_uif_id']);
+                    }
+
+                    $premioLocal = $this->cliente_premio_uifRepository->createUnique($premioPayload);
 
                     $this->cliente_premio_archivo_uifRepository->traerArchivosDeAnita(
                         $premioLocal->id,

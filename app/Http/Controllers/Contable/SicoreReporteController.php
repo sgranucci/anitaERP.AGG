@@ -123,6 +123,7 @@ class SicoreReporteController extends Controller
         $periodo = SicoreListadoFiltros::formatearPeriodoTexto($filtros);
         $titulo = 'SICORE — '.$procesoLabel;
         $subtitulo = trim($nombreEmpresa.($periodo !== '' ? ' — '.$periodo : ''));
+        $ocultarRazonSocial = (string) ($filtros['criterio'] ?? '') === SicoreCriteriosSupport::SUELDOS;
 
         switch (strtoupper((string) $formato)) {
             case 'PDF':
@@ -133,6 +134,7 @@ class SicoreReporteController extends Controller
                     'conciliacion' => $conciliacion,
                     'titulo' => $titulo,
                     'subtitulo' => $subtitulo,
+                    'ocultarRazonSocial' => $ocultarRazonSocial,
                 ])->render();
                 $path = storage_path('pdf/listados');
                 if (! is_dir($path)) {
@@ -153,6 +155,7 @@ class SicoreReporteController extends Controller
                     $conciliacion,
                     $titulo,
                     $subtitulo,
+                    $ocultarRazonSocial,
                 ))->download('listado_sicore.xlsx');
 
             case 'CSV':
@@ -163,6 +166,7 @@ class SicoreReporteController extends Controller
                     $conciliacion,
                     $titulo,
                     $subtitulo,
+                    $ocultarRazonSocial,
                 ))->download('listado_sicore.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 

@@ -111,6 +111,7 @@ final class SicoreLiquidacionService
             'SICORE — Compras (retenciones IVA y ganancias)',
             $comprasDesde,
             $comprasHasta,
+            false,
         );
         $this->guardarPdfListado(
             $rutaSueldosPdf,
@@ -119,6 +120,7 @@ final class SicoreLiquidacionService
             'SICORE — Sueldos (4ta categoría)',
             $sueldosDesde,
             $sueldosHasta,
+            true,
         );
 
         // jurosh/pdf-merge default = vertical: si se fuerza P sobre listados legal landscape, corta el borde derecho.
@@ -246,6 +248,7 @@ final class SicoreLiquidacionService
         string $titulo,
         string $fechaDesde,
         string $fechaHasta,
+        bool $ocultarRazonSocial = false,
     ): void {
         $nombreEmpresa = (string) ($empresa->nombre ?? '');
         $filasParaLogo = [(object) ['nombreempresa' => $nombreEmpresa]];
@@ -258,6 +261,7 @@ final class SicoreLiquidacionService
             'conciliacion' => $resultado['conciliacion'] ?? [],
             'titulo' => $titulo,
             'subtitulo' => trim($nombreEmpresa.' — '.$periodo),
+            'ocultarRazonSocial' => $ocultarRazonSocial,
         ])->render();
         $pdf = \App::make('dompdf.wrapper');
         $pdf->setPaper('legal', 'landscape');
