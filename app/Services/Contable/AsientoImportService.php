@@ -275,12 +275,19 @@ class AsientoImportService
 
         DB::beginTransaction();
         try {
+            $payloadAnita['omitir_anita'] = true;
             $asiento = $this->asientoRepository->create($payloadAnita);
             if ($asiento === 'Error' || ! $asiento) {
-                throw new \RuntimeException('Error al grabar el asiento en Anita.');
+                throw new \RuntimeException('Error al grabar el asiento.');
             }
 
             $this->asientoMovimientoRepository->create($payloadMovimientos, $asiento->id);
+
+            if (! $evaluacionCuentas['requiere_aprobacion']) {
+                $fresh = $this->asientoRepository->find($asiento->id);
+                $payloadSync = $this->asientoRepository->armarPayloadAnitaDesdeModelo($fresh);
+                $this->asientoRepository->sincronizarCtamovAnita($payloadSync);
+            }
 
             if ($evaluacionCuentas['requiere_aprobacion']) {
                 $this->asientoAprobacionService->enviarMailAprobacion($asiento->fresh());

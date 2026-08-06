@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\Route;
  * - Gestión de OC: carga (1ª PENDIENTE / created_at) → emisión (1ª APROBADA).
  * - Circuito hasta COM: RQ APROBADA → 1ª recepción de proveedor (COM).
  * - % OC abiertas: OC con saldo pendiente de recepción / total no suspendidas.
- * - Productividad: volumen de OC y ahorro ($ / %) por comprador (creousuario OC / RQ).
+ * - Productividad: volumen de OC y ahorro ($ / %) por comprador
+ *   (solo usuarios con roles Enc-compras / Op-Compras; configurable).
  */
 final class ComprasKpisProcesoProductividadSupport
 {
@@ -29,6 +30,14 @@ final class ComprasKpisProcesoProductividadSupport
     public const META_GESTION_OC_DIAS = 2.0;
 
     public const META_PCT_OC_ABIERTAS = 10.0;
+
+    /** @var list<string> */
+    public const ROLES_COMPRADOR_DEFAULT = ['Enc-compras', 'Op-Compras'];
+
+    /** ID sintético para OC importadas desde Anita (no es un usuario real). */
+    public const USUARIO_ID_ANITA = 0;
+
+    public const NOMBRE_COMPRADOR_ANITA = 'ANITA';
 
     /**
      * @param  array<string,mixed>  $params
@@ -157,10 +166,21 @@ final class ComprasKpisProcesoProductividadSupport
 
         $porComprador = self::ocPorComprador($desde, $hasta, $empresaId);
         $ahorro = self::ahorroPorComprador($desde, $hasta, $empresaId);
+        $rolesEtiqueta = implode(', ', self::nombresRolesComprador());
 
         $totalOc = array_sum(array_column($porComprador, 'oc'));
-        $compradores = count($porComprador);
-        $promedioArea = $compradores > 0 ? $totalOc / $compradores : 0.0;
+        $ocAnita = 0;
+        $ocReales = 0;
+        $compradoresReales = 0;
+        foreach ($porComprador as $row) {
+            if ((int) $row['usuario_id'] === self::USUARIO_ID_ANITA) {
+                $ocAnita = (int) $row['oc'];
+            } else {
+                $ocReales += (int) $row['oc'];
+                $compradoresReales++;
+            }
+        }
+        $promedioArea = $compradoresReales > 0 ? $ocReales / $compradoresReales : 0.0;
 
         $ahorroTotal = array_sum(array_column($ahorro, 'ahorro'));
         $baseTotal = array_sum(array_column($ahorro, 'base'));
@@ -169,9 +189,14 @@ final class ComprasKpisProcesoProductividadSupport
         $parrafos = [
             'KPIs de productividad de Compras (ERP). Período: '
                 .date('d/m/Y', strtotime($desde)).' → '.date('d/m/Y', strtotime($hasta)).'.',
+            'Compradores: usuarios con rol '.$rolesEtiqueta
+                .'. Las OC importadas desde Anita se agrupan en el comprador «'.self::NOMBRE_COMPRADOR_ANITA.'».',
             'OC gestionadas en el período: '.number_format($totalOc, 0, ',', '.')
-                .' por '.$compradores.' comprador(es).',
-            'Productividad del área (OC / comprador): '.self::fmtNum($promedioArea, 1).'.',
+                .' (ERP: '.number_format($ocReales, 0, ',', '.')
+                .' + Anita: '.number_format($ocAnita, 0, ',', '.').')'
+                .' — '.$compradoresReales.' comprador(es) ERP.',
+            'Productividad del área (OC ERP / comprador ERP): '.self::fmtNum($promedioArea, 1)
+                .' (no incluye el bucket Anita en el promedio).',
             'Ahorro generado (precio original − precio × cantidad): $ '
                 .number_format($ahorroTotal, 2, ',', '.')
                 .' ('.self::fmtNum($pctAhorroArea, 1).'% sobre base con precio original).',
@@ -245,10 +270,13 @@ final class ComprasKpisProcesoProductividadSupport
                 'fecha_desde' => $desde,
                 'fecha_hasta' => $hasta,
                 'total_oc' => $totalOc,
-                'compradores' => $compradores,
+                'oc_erp' => $ocReales,
+                'oc_anita' => $ocAnita,
+                'compradores' => $compradoresReales,
                 'productividad_area_oc_por_comprador' => $promedioArea,
                 'ahorro_total' => $ahorroTotal,
                 'ahorro_pct_area' => $pctAhorroArea,
+                'roles_comprador' => self::nombresRolesComprador(),
                 'por_comprador' => $porComprador,
                 'ahorro_por_comprador' => $ahorro,
             ],
@@ -493,70 +521,150 @@ final class ComprasKpisProcesoProductividadSupport
     }
 
     /**
+     * OC de compradores ERP (roles Enc/Op-Compras, sin import Anita)
+     * + bucket sintético «ANITA» para OC importadas desde Anita.
+     *
      * @return list<array{usuario_id: int, nombre: string, oc: int}>
      */
     private static function ocPorComprador(string $desde, string $hasta, ?int $empresaId): array
     {
-        $q = DB::table('ordencompra as o')
-            ->leftJoin('usuario as u', 'u.id', '=', 'o.creousuario_id')
-            ->whereBetween('o.fecha', [$desde, $hasta])
-            ->whereNotNull('o.creousuario_id')
-            ->groupBy('o.creousuario_id', 'u.nombre')
-            ->orderByDesc(DB::raw('COUNT(*)'))
-            ->select([
-                'o.creousuario_id as usuario_id',
-                'u.nombre',
-                DB::raw('COUNT(*) as oc'),
-            ]);
-        if ($empresaId) {
-            $q->where('o.empresa_id', $empresaId);
+        $usuarioIds = self::idsUsuariosComprador();
+        $out = [];
+
+        if ($usuarioIds !== []) {
+            $q = DB::table('ordencompra as o')
+                ->leftJoin('usuario as u', 'u.id', '=', 'o.creousuario_id')
+                ->whereBetween('o.fecha', [$desde, $hasta])
+                ->whereIn('o.creousuario_id', $usuarioIds)
+                ->where(function ($w) {
+                    self::aplicarWhereNoImportadaAnita($w, 'o.comentario');
+                })
+                ->groupBy('o.creousuario_id', 'u.nombre')
+                ->orderByDesc(DB::raw('COUNT(*)'))
+                ->select([
+                    'o.creousuario_id as usuario_id',
+                    'u.nombre',
+                    DB::raw('COUNT(*) as oc'),
+                ]);
+            if ($empresaId) {
+                $q->where('o.empresa_id', $empresaId);
+            }
+
+            foreach ($q->get() as $row) {
+                $uid = (int) $row->usuario_id;
+                $nombre = trim((string) ($row->nombre ?? ''));
+                $out[] = [
+                    'usuario_id' => $uid,
+                    'nombre' => $nombre !== '' ? $nombre : ('Usuario #'.$uid),
+                    'oc' => (int) ($row->oc ?? 0),
+                ];
+            }
         }
 
-        $out = [];
-        foreach ($q->get() as $row) {
-            $uid = (int) $row->usuario_id;
-            $nombre = trim((string) ($row->nombre ?? ''));
-            $out[] = [
-                'usuario_id' => $uid,
-                'nombre' => $nombre !== '' ? $nombre : ('Usuario #'.$uid),
-                'oc' => (int) ($row->oc ?? 0),
-            ];
+        $qAnita = DB::table('ordencompra as o')
+            ->whereBetween('o.fecha', [$desde, $hasta])
+            ->where(function ($w) {
+                self::aplicarWhereImportadaAnita($w, 'o.comentario');
+            });
+        if ($empresaId) {
+            $qAnita->where('o.empresa_id', $empresaId);
+        }
+        $ocAnita = (int) $qAnita->count();
+        if ($ocAnita > 0) {
+            // Bucket Anita al inicio para que se vea en el tablero
+            array_unshift($out, [
+                'usuario_id' => self::USUARIO_ID_ANITA,
+                'nombre' => self::NOMBRE_COMPRADOR_ANITA,
+                'oc' => $ocAnita,
+            ]);
         }
 
         return $out;
     }
 
+    /** OC importada desde Anita (comentario armado por CabeceraFieldMapper). */
+    private static function aplicarWhereImportadaAnita($query, string $columnaComentario): void
+    {
+        $query->where(function ($w) use ($columnaComentario) {
+            $w->where($columnaComentario, 'like', '%Fecha ingreso Anita%')
+                ->orWhere($columnaComentario, 'like', '%Importada desde Anita%')
+                ->orWhere($columnaComentario, 'like', '%Usuario ini:%');
+        });
+    }
+
+    private static function aplicarWhereNoImportadaAnita($query, string $columnaComentario): void
+    {
+        $query->where(function ($w) use ($columnaComentario) {
+            $w->whereNull($columnaComentario)
+                ->orWhere(function ($w2) use ($columnaComentario) {
+                    $w2->where($columnaComentario, 'not like', '%Fecha ingreso Anita%')
+                        ->where($columnaComentario, 'not like', '%Importada desde Anita%')
+                        ->where($columnaComentario, 'not like', '%Usuario ini:%');
+                });
+        });
+    }
+
     /**
-     * Ahorro = (preciooriginal − precio) × cantidad en líneas de RQ con precio original.
-     * Atribuido al usuario creador de la requisición (mismo criterio que el reporte RQ).
+     * Ahorro en líneas de RQ, atribuido al creador de la OC vinculada (requisicion_id)
+     * si es rol de compras; si no hay OC, al creador de la RQ solo si también es comprador.
      *
      * @return list<array{usuario_id: int, nombre: string, ahorro: float, base: float, lineas: int}>
      */
     private static function ahorroPorComprador(string $desde, string $hasta, ?int $empresaId): array
     {
+        $usuarioIds = self::idsUsuariosComprador();
+        if ($usuarioIds === []) {
+            return [];
+        }
+
+        // Una OC representativa por RQ (la de menor id) para no duplicar líneas
+        $ocPorRq = DB::table('ordencompra')
+            ->whereNotNull('requisicion_id')
+            ->whereNotNull('creousuario_id')
+            ->groupBy('requisicion_id')
+            ->select([
+                'requisicion_id',
+                DB::raw('MIN(id) as ordencompra_id'),
+            ]);
+
         $q = DB::table('requisicion_articulo as ra')
             ->join('requisicion as r', 'r.id', '=', 'ra.requisicion_id')
-            ->leftJoin('usuario as u', 'u.id', '=', 'r.creousuario_id')
+            ->leftJoinSub($ocPorRq, 'ocr', 'ocr.requisicion_id', '=', 'r.id')
+            ->leftJoin('ordencompra as o', 'o.id', '=', 'ocr.ordencompra_id')
+            ->leftJoin('usuario as u_oc', 'u_oc.id', '=', 'o.creousuario_id')
+            ->leftJoin('usuario as u_rq', 'u_rq.id', '=', 'r.creousuario_id')
             ->whereBetween('r.fecha', [$desde, $hasta])
             ->where('ra.preciooriginal', '>', 0)
             ->whereColumn('ra.preciooriginal', '>', 'ra.precio')
-            ->whereNotNull('r.creousuario_id')
-            ->groupBy('r.creousuario_id', 'u.nombre')
-            ->orderByDesc(DB::raw('SUM((ra.preciooriginal - ra.precio) * ra.cantidad)'))
+            ->where(function ($w) use ($usuarioIds) {
+                $w->whereIn('o.creousuario_id', $usuarioIds)
+                    ->orWhere(function ($w2) use ($usuarioIds) {
+                        $w2->whereNull('o.id')
+                            ->whereIn('r.creousuario_id', $usuarioIds);
+                    });
+            })
             ->select([
-                'r.creousuario_id as usuario_id',
-                'u.nombre',
+                DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN o.creousuario_id ELSE r.creousuario_id END as usuario_id'),
+                DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN u_oc.nombre ELSE u_rq.nombre END as nombre'),
                 DB::raw('SUM((ra.preciooriginal - ra.precio) * ra.cantidad) as ahorro'),
                 DB::raw('SUM(ra.preciooriginal * ra.cantidad) as base'),
                 DB::raw('COUNT(ra.id) as lineas'),
-            ]);
+            ])
+            ->groupBy(
+                DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN o.creousuario_id ELSE r.creousuario_id END'),
+                DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN u_oc.nombre ELSE u_rq.nombre END')
+            )
+            ->orderByDesc(DB::raw('SUM((ra.preciooriginal - ra.precio) * ra.cantidad)'));
         if ($empresaId) {
             $q->where('r.empresa_id', $empresaId);
         }
 
         $out = [];
         foreach ($q->get() as $row) {
-            $uid = (int) $row->usuario_id;
+            $uid = (int) ($row->usuario_id ?? 0);
+            if ($uid <= 0 || ! in_array($uid, $usuarioIds, true)) {
+                continue;
+            }
             $nombre = trim((string) ($row->nombre ?? ''));
             $out[] = [
                 'usuario_id' => $uid,
@@ -568,6 +676,44 @@ final class ComprasKpisProcesoProductividadSupport
         }
 
         return $out;
+    }
+
+    /** @return list<string> */
+    public static function nombresRolesComprador(): array
+    {
+        $cfg = config('compras.kpis.roles_comprador', self::ROLES_COMPRADOR_DEFAULT);
+        if (! is_array($cfg) || $cfg === []) {
+            return self::ROLES_COMPRADOR_DEFAULT;
+        }
+
+        $out = [];
+        foreach ($cfg as $nombre) {
+            $nombre = trim((string) $nombre);
+            if ($nombre !== '') {
+                $out[] = $nombre;
+            }
+        }
+
+        return $out !== [] ? array_values(array_unique($out)) : self::ROLES_COMPRADOR_DEFAULT;
+    }
+
+    /** @return list<int> */
+    private static function idsUsuariosComprador(): array
+    {
+        $nombres = self::nombresRolesComprador();
+        $rolIds = DB::table('rol')->whereIn('nombre', $nombres)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if ($rolIds === []) {
+            return [];
+        }
+
+        return DB::table('usuario_rol')
+            ->whereIn('rol_id', $rolIds)
+            ->distinct()
+            ->pluck('usuario_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->values()
+            ->all();
     }
 
     /**

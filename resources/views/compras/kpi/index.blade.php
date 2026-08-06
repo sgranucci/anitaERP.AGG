@@ -199,8 +199,13 @@ KPIs de Compras
                     </table>
                 </div>
                 <p class="text-muted small mb-0">
-                    Ahorro: (precio original − precio) × cantidad en líneas de requisición.
-                    OC gestionadas: órdenes creadas por el comprador en el período.
+                    Solo usuarios con rol
+                    {{ implode(', ', $prod['roles_comprador'] ?? ['Enc-compras', 'Op-Compras']) }}
+                    (configurable en COMPRAS_KPI_ROLES_COMPRADOR).
+                    Las OC importadas desde Anita se listan como comprador
+                    <strong>ANITA</strong>
+                    y no distorsionan el promedio OC/comprador ERP.
+                    Ahorro: (precio original − precio) × cantidad; se atribuye al creador de la OC vinculada a la RQ (o al de la RQ si aún no hay OC), siempre que sea rol de compras.
                 </p>
             </div>
         </div>

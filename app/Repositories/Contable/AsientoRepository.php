@@ -12,9 +12,11 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Log;
 use Exception;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -178,6 +180,7 @@ class AsientoRepository implements AsientoRepositoryInterface
         }
 
         $this->assertPeriodoContablePermitido($data);
+        AsientoBalanceSupport::assertBalanceadoDesdePayload($data, 'asiento (Anita ctamov)');
         $this->actualizarAnita($data);
     }
 
@@ -614,75 +617,86 @@ class AsientoRepository implements AsientoRepositoryInterface
 	private function guardarAnita($request) 
 	{
 		// Graba asiento
-		if (isset($request['cuentacontable_ids']))
-		{
-			$apiAnita = new ApiAnita();
+		if (! isset($request['cuentacontable_ids'])) {
+			return 'Success';
+		}
 
-			$centrocostos = $request['centrocosto_ids'] ?? [];
-			$centrocostosPrev = $request['centrocosto_id_previo'] ?? [];
-			$debes = $request['debes'] ?? [];
-			$haberes = $request['haberes'] ?? [];
-			$cuentacontables = $request['cuentacontable_ids'] ?? [];
-			$observaciones = $request['observaciones'] ?? [];
-			$moneda_ids = $request['moneda_ids'] ?? [];
-			$cotizaciones = $request['cotizaciones'] ?? [];
-			
-			$fecha = Carbon::createFromFormat( 'Y-m-d', $request['fecha'])->format('Ymd');
+		AsientoBalanceSupport::assertBalanceadoDesdePayload(
+			is_array($request) ? $request : (array) $request,
+			'asiento (Anita ctamov)'
+		);
 
-			$empresa = $this->empresaRepository->findPorId($request['empresa_id']);
-			
-			if ($empresa)
-				$codigoEmpresa = $empresa->codigo;
-			else
-				$codigoEmpresa = 1;
+		$apiAnita = new ApiAnita();
 
-			$tipoasiento = $this->tipoasientoRepository->find($request['tipoasiento_id']);
-			if ($tipoasiento)
-				$codigoTipoAsiento = $tipoasiento->abreviatura;
-			else
-				$codigoTipoAsiento = 1;
+		$centrocostos = $request['centrocosto_ids'] ?? [];
+		$centrocostosPrev = $request['centrocosto_id_previo'] ?? [];
+		$debes = $request['debes'] ?? [];
+		$haberes = $request['haberes'] ?? [];
+		$cuentacontables = $request['cuentacontable_ids'] ?? [];
+		$observaciones = $request['observaciones'] ?? [];
+		$moneda_ids = $request['moneda_ids'] ?? [];
+		$cotizaciones = $request['cotizaciones'] ?? [];
 
-			if (isset($request['sistema_ctav']) && $request['sistema_ctav'] !== '') {
-				$sistema = $request['sistema_ctav'];
-			} elseif ($codigoTipoAsiento == 'VTA') {
-				$sistema = 'V';
-			} else {
-				$sistema = 'B';
-			}
+		$fecha = Carbon::createFromFormat( 'Y-m-d', $request['fecha'])->format('Ymd');
 
-			$numeroOrdenCompra = (int) ($request['ctav_o_compra'] ?? 0);
+		$empresa = $this->empresaRepository->findPorId($request['empresa_id']);
 
-			// Si el payload trae tipo (sync COM) usarlo; si falta pero el asiento es de recepción,
-			// resolver clave COM para no reescribir ctamov con numeración en blanco.
-			if (isset($request['tipo']) && trim((string) $request['tipo']) !== '') {
-				$tipo = $request['tipo'];
-				$letra = $request['letra'];
-				$sucursal = $request['sucursal'];
-				$nro = $request['nro'];
-			} elseif (! empty($request['recepcionproveedor_id'])) {
-				$recepcion = Recepcion_Proveedor::query()->find((int) $request['recepcionproveedor_id']);
-				if ($recepcion) {
-					$clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
-					$tipo = $clave['tipo'];
-					$letra = $clave['letra'];
-					$sucursal = $clave['sucursal'];
-					$nro = $clave['nro'];
-					if (! isset($request['sistema_ctav']) || $request['sistema_ctav'] === '') {
-						$sistema = 'C';
-					}
-				} else {
-					$tipo = $letra = ' ';
-					$sucursal = $nro = 0;
+		if ($empresa)
+			$codigoEmpresa = $empresa->codigo;
+		else
+			$codigoEmpresa = 1;
+
+		$tipoasiento = $this->tipoasientoRepository->find($request['tipoasiento_id']);
+		if ($tipoasiento)
+			$codigoTipoAsiento = $tipoasiento->abreviatura;
+		else
+			$codigoTipoAsiento = 1;
+
+		if (isset($request['sistema_ctav']) && $request['sistema_ctav'] !== '') {
+			$sistema = $request['sistema_ctav'];
+		} elseif ($codigoTipoAsiento == 'VTA') {
+			$sistema = 'V';
+		} else {
+			$sistema = 'B';
+		}
+
+		$numeroOrdenCompra = (int) ($request['ctav_o_compra'] ?? 0);
+
+		// Si el payload trae tipo (sync COM) usarlo; si falta pero el asiento es de recepción,
+		// resolver clave COM para no reescribir ctamov con numeración en blanco.
+		if (isset($request['tipo']) && trim((string) $request['tipo']) !== '') {
+			$tipo = $request['tipo'];
+			$letra = $request['letra'];
+			$sucursal = $request['sucursal'];
+			$nro = $request['nro'];
+		} elseif (! empty($request['recepcionproveedor_id'])) {
+			$recepcion = Recepcion_Proveedor::query()->find((int) $request['recepcionproveedor_id']);
+			if ($recepcion) {
+				$clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+				$tipo = $clave['tipo'];
+				$letra = $clave['letra'];
+				$sucursal = $clave['sucursal'];
+				$nro = $clave['nro'];
+				if (! isset($request['sistema_ctav']) || $request['sistema_ctav'] === '') {
+					$sistema = 'C';
 				}
 			} else {
 				$tipo = $letra = ' ';
 				$sucursal = $nro = 0;
 			}
+		} else {
+			$tipo = $letra = ' ';
+			$sucursal = $nro = 0;
+		}
 
-			if (($cuentacontables[0] ?? null) != null)
-				$qMovimiento = count($cuentacontables);
-			else
-				$qMovimiento = 0;
+		if (($cuentacontables[0] ?? null) != null)
+			$qMovimiento = count($cuentacontables);
+		else
+			$qMovimiento = 0;
+
+		$lineasInsertadas = 0;
+
+		try {
 			for ($i_movimiento=0; $i_movimiento < $qMovimiento; $i_movimiento++) 
 			{
 				$observacion = preg_replace('([^A-Za-z0-9 ])', '', (string) ($observaciones[$i_movimiento] ?? ''));
@@ -733,7 +747,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 					$codigoMoneda = $moneda->codigo;
 				else
 					$codigoMoneda = '1';
-				
+
 				$data = array( 'tabla' => $this->tableAnita[0], 
 						'acc' => 'insert',
 						'sistema' => 'contab',
@@ -790,9 +804,28 @@ class AsientoRepository implements AsientoRepositoryInterface
       			);
 				if (isset($this->path_sistema))
 					$data['path_sistema'] = $this->path_sistema;	
-        		$asiento = $apiAnita->apiCallEscritura($data);
+        		$apiAnita->apiCallEscritura($data, 'asiento_ctamov_insert');
+				$lineasInsertadas++;
 			}
+		} catch (\Throwable $e) {
+			// Sin TX Informix: si falló a mitad, borrar lo ya insertado para no dejar ctamov desbalanceado.
+			if ($lineasInsertadas > 0) {
+				try {
+					$this->eliminarAnita($codigoEmpresa, (string) $request['numeroasiento']);
+				} catch (\Throwable $cleanupEx) {
+					Log::warning('asiento_ctamov.cleanup_parcial_fallo', [
+						'empresa' => $codigoEmpresa,
+						'numeroasiento' => $request['numeroasiento'] ?? null,
+						'lineas_insertadas' => $lineasInsertadas,
+						'error_original' => $e->getMessage(),
+						'error_cleanup' => $cleanupEx->getMessage(),
+					]);
+				}
+			}
+
+			throw $e;
 		}
+
 		return 'Success';
 	}
 
@@ -812,11 +845,24 @@ class AsientoRepository implements AsientoRepositoryInterface
 									$request['numeroasiento']."' ");
 		if (isset($this->path_sistema))
 			$data['path_sistema'] = $this->path_sistema;										
-        $apiAnita->apiCallEscritura($data);
+        $apiAnita->apiCallEscritura($data, 'asiento_ctamov_delete');
 
-		// Crea el asiento
-		$asiento = Self::guardarAnita($request);
-
+		try {
+			Self::guardarAnita($request);
+		} catch (\Throwable $e) {
+			// Si el reinsert falló a mitad, guardarAnita ya intentó limpiar; reforzar delete.
+			try {
+				$this->eliminarAnita($codigoEmpresa, (string) $request['numeroasiento']);
+			} catch (\Throwable $cleanupEx) {
+				Log::warning('asiento_ctamov.reinsert_cleanup_fallo', [
+					'empresa' => $codigoEmpresa,
+					'numeroasiento' => $request['numeroasiento'] ?? null,
+					'error_original' => $e->getMessage(),
+					'error_cleanup' => $cleanupEx->getMessage(),
+				]);
+			}
+			throw $e;
+		}
 
 		return 'Success';
 	}

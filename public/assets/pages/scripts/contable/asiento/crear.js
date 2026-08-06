@@ -590,6 +590,27 @@
 			AsientoMontosFormato.normalizarAntesDeEnviar('#form-general');
 		}
 
+		sumaMonto();
+		var totDebe = parseMonto($('#totaldebe').val());
+		var totHaber = parseMonto($('#totalhaber').val());
+		var diff = Math.round((totDebe - totHaber) * 100) / 100;
+		if (Math.abs(diff) > 0.01) {
+			alert(
+				'El asiento no balancea: Debe '
+				+ formateaMontoTotal(totDebe)
+				+ ' vs Haber '
+				+ formateaMontoTotal(totHaber)
+				+ ' (diferencia '
+				+ formateaMontoTotal(Math.abs(diff))
+				+ '). Corrija los importes antes de grabar.'
+			);
+			return;
+		}
+		if (totDebe < 0.01) {
+			alert('El asiento no tiene importes. Ingrese al menos dos movimientos con Debe y Haber.');
+			return;
+		}
+
 		let token = $("meta[name='csrf-token']").attr("content");
 		let id = $("#id").val();
 		var url;

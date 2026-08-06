@@ -17,6 +17,7 @@ use App\Exports\Contable\AsientoDetalleExport;
 use App\Exports\Contable\AsientoExport;
 use App\Models\Contable\Asiento;
 use App\Services\Contable\AsientoAprobacionService;
+use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
 use App\Support\Contable\AsientoListadoFiltros;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
@@ -248,6 +249,16 @@ class AsientoController extends Controller
             $data['cuentas_no_autorizadas'] = json_encode($evaluacion['cuentas_no_autorizadas']);
         }
 
+        try {
+            AsientoBalanceSupport::assertBalanceadoDesdePayload($data);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['errores' => $e->getMessage()]);
+        }
+
+        // ERP primero (omitir Anita); sync ctamov al final dentro de la TX.
+        // Evita huérfanos desbalanceados en Anita si falla el alta de movimientos (incidente 363199-363201).
+        $data['omitir_anita'] = true;
+
         DB::beginTransaction();
         try
         {
@@ -256,11 +267,25 @@ class AsientoController extends Controller
             if ($asiento == 'Error')
                 throw new Exception('Error en grabacion anita.');
 
-                // Guarda tablas asociadas
             if ($asiento)
             {
-                $asiento_movimiento = $this->asiento_movimientoRepository->create($request->all(), $asiento->id);
-                $asiento_archivo = $this->asiento_archivoRepository->create($request, $asiento->id);
+                $this->asiento_movimientoRepository->create($request->all(), $asiento->id);
+                $this->asiento_archivoRepository->create($request, $asiento->id);
+            }
+
+            if (
+                $asiento
+                && ($data['estado_aprobacion'] ?? Asiento::ESTADO_APROBACION_CONFIRMADO)
+                    === Asiento::ESTADO_APROBACION_CONFIRMADO
+            ) {
+                $fresh = $this->asientoRepository->find($asiento->id);
+                $payloadAnita = $this->asientoRepository->armarPayloadAnitaDesdeModelo($fresh);
+                foreach (['tipo', 'letra', 'sucursal', 'nro', 'sistema_ctav', 'ctav_o_compra', 'path_sistema'] as $claveAnita) {
+                    if (array_key_exists($claveAnita, $data)) {
+                        $payloadAnita[$claveAnita] = $data[$claveAnita];
+                    }
+                }
+                $this->asientoRepository->sincronizarCtamovAnita($payloadAnita);
             }
 
             DB::commit();
@@ -340,12 +365,19 @@ class AsientoController extends Controller
 
         session(['empresa_id' => $request->empresa_id]);
         session(['tipoasiento_id' => $request->tipoasiento_id]);
+
+        $dataRequest = $request->all();
+        try {
+            AsientoBalanceSupport::assertBalanceadoDesdePayload($dataRequest);
+        } catch (\InvalidArgumentException $e) {
+            return ['errores' => $e->getMessage()];
+        }
         
         DB::beginTransaction();
         try
         {
             $existente = $this->asientoRepository->find($id);
-            $data = AsientoReferenciaAnitaSupport::conservarFksOrigenProceso($request->all(), $existente);
+            $data = AsientoReferenciaAnitaSupport::conservarFksOrigenProceso($dataRequest, $existente);
             $data = AsientoReferenciaAnitaSupport::aplicarAPayload($data);
             // Cabecera ERP primero; Anita se sincroniza al final desde movimientos ya grabados.
             $data['omitir_anita'] = true;
@@ -361,17 +393,44 @@ class AsientoController extends Controller
             $this->asiento_archivoRepository->update($request, $id);
 
             $fresh = $this->asientoRepository->find($id);
-            $payloadAnita = $this->asientoRepository->armarPayloadAnitaDesdeModelo($fresh);
-            foreach (['tipo', 'letra', 'sucursal', 'nro', 'sistema_ctav', 'ctav_o_compra', 'path_sistema'] as $claveAnita) {
-                if (array_key_exists($claveAnita, $data)) {
-                    $payloadAnita[$claveAnita] = $data[$claveAnita];
+            if (
+                ($fresh->estado_aprobacion ?? Asiento::ESTADO_APROBACION_CONFIRMADO)
+                === Asiento::ESTADO_APROBACION_CONFIRMADO
+            ) {
+                $payloadAnita = $this->asientoRepository->armarPayloadAnitaDesdeModelo($fresh);
+                foreach (['tipo', 'letra', 'sucursal', 'nro', 'sistema_ctav', 'ctav_o_compra', 'path_sistema'] as $claveAnita) {
+                    if (array_key_exists($claveAnita, $data)) {
+                        $payloadAnita[$claveAnita] = $data[$claveAnita];
+                    }
                 }
+                $this->asientoRepository->sincronizarCtamovAnita($payloadAnita);
             }
-            $this->asientoRepository->sincronizarCtamovAnita($payloadAnita);
 
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
+
+            // delete+reinsert en Anita no es atómico: si falló a mitad, intentar restaurar
+            // ctamov desde el asiento ERP (ya revertido) para no dejar el mayor sin el asiento.
+            try {
+                $restaurar = $this->asientoRepository->find($id);
+                if (
+                    $restaurar
+                    && ($restaurar->estado_aprobacion ?? Asiento::ESTADO_APROBACION_CONFIRMADO)
+                        === Asiento::ESTADO_APROBACION_CONFIRMADO
+                    && ! empty($restaurar->numeroasiento)
+                ) {
+                    $this->asientoRepository->sincronizarCtamovAnita(
+                        $this->asientoRepository->armarPayloadAnitaDesdeModelo($restaurar)
+                    );
+                }
+            } catch (\Throwable $restoreEx) {
+                \Illuminate\Support\Facades\Log::warning('asiento_ctamov.restaurar_tras_fallo_update', [
+                    'asiento_id' => $id,
+                    'error_original' => $e->getMessage(),
+                    'error_restore' => $restoreEx->getMessage(),
+                ]);
+            }
 
             return ['errores' => $e->getMessage()];
         }
@@ -466,10 +525,18 @@ class AsientoController extends Controller
 
         $data['alcance_cierre_contable'] = \App\Support\Contable\PeriodoContableCierreSupport::ALCANCE_CONTABLE;
 
+        $payloadBalance = array_merge($data, $datas);
+        try {
+            AsientoBalanceSupport::assertBalanceadoDesdePayload($payloadBalance);
+        } catch (\InvalidArgumentException $e) {
+            return ['errores' => $e->getMessage()];
+        }
+
         // Graba el asiento
         DB::beginTransaction();
         try
         {
+            $data['omitir_anita'] = true;
             $asiento = $this->asientoRepository->create($data);
 
             if ($asiento == 'Error')
@@ -478,10 +545,14 @@ class AsientoController extends Controller
             // Guarda tablas asociadas
             if ($asiento)
             {
-                $asiento_movimiento = $this->asiento_movimientoRepository->create($datas, $asiento->id);
-                
+                $this->asiento_movimientoRepository->create($datas, $asiento->id);
+
                 foreach($nombrearchivos as $archivo)
-                    $asiento_archivo = $this->asiento_archivoRepository->copiaArchivo($id, $archivo, $asiento->id);
+                    $this->asiento_archivoRepository->copiaArchivo($id, $archivo, $asiento->id);
+
+                $fresh = $this->asientoRepository->find($asiento->id);
+                $payloadAnita = $this->asientoRepository->armarPayloadAnitaDesdeModelo($fresh);
+                $this->asientoRepository->sincronizarCtamovAnita($payloadAnita);
             }
 
             DB::commit();

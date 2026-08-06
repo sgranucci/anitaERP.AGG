@@ -28,11 +28,17 @@ return [
 
     /*
     | Metas de KPIs de proceso de Compras (tablero + panel IA).
+    | Roles comprador: solo estos cuentan en OC gestionadas / productividad / ahorro.
     */
     'kpis' => [
         'meta_ciclo_dias' => (float) env('COMPRAS_KPI_META_CICLO_DIAS', 2),
         'meta_gestion_oc_dias' => (float) env('COMPRAS_KPI_META_GESTION_OC_DIAS', 2),
         'meta_pct_oc_abiertas' => (float) env('COMPRAS_KPI_META_PCT_OC_ABIERTAS', 10),
+        /** Nombres exactos en tabla rol (Enc-compras, Op-Compras). Separados por coma en .env. */
+        'roles_comprador' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('COMPRAS_KPI_ROLES_COMPRADOR', 'Enc-compras,Op-Compras'))
+        ))),
     ],
 
 ];
