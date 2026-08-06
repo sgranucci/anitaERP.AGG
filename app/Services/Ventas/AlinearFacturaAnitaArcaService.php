@@ -29,6 +29,9 @@ final class AlinearFacturaAnitaArcaService
 
     private const CUENTA_VENTAS = '301100000';
 
+    /** Contrapartida de toda línea de FAC: deudores por ventas. */
+    private const CUENTA_DEUDORES = '113100000';
+
     /** Abasto (ARCA tributo 99) — cuenta vista en FAC Bierzo. */
     private const CUENTA_ABASTO = '302080000';
 
@@ -209,9 +212,10 @@ final class AlinearFacturaAnitaArcaService
 
         usort($stkmov, static fn (array $a, array $b): int => ((int) ($a['stkv_nro_orden'] ?? 0)) <=> ((int) ($b['stkv_nro_orden'] ?? 0)));
 
+        // subd_desc_mov va último: el bridge parte el CSV por `|` y una descripción con `|` corre los campos siguientes.
         $subdiario = $this->listar('subdiario', '
             subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_cuenta,subd_contrapartida,
-            subd_importe,subd_tipo_mov,subd_sistema,subd_fecha
+            subd_importe,subd_tipo_mov,subd_sistema,subd_fecha,subd_emisor,subd_desc_mov
         ', " WHERE subd_sistema='V' AND subd_tipo='{$tipo}' AND subd_letra='{$letra}' AND subd_sucursal='{$sucursal}' AND subd_nro='{$numero}' ");
 
         $venibr = $this->listar('venibr', '
@@ -874,26 +878,42 @@ final class AlinearFacturaAnitaArcaService
             }
 
             if ($filas === [] && $importeNuevo >= 0.005) {
-                // Insertar línea faltante copiando contrapartida/fecha de otra fila del comprobante
-                $plantilla = $sub[0] ?? null;
+                // Insertar línea faltante copiando contrapartida/fecha/emisor/descripción de otra fila del comprobante.
+                // Sin subd_emisor la línea entra al mayor de deudores pero no se puede atribuir a ningún cliente,
+                // y descuadra el control del mayor contra la deuda de cuenta corriente.
+                $plantilla = $this->plantillaSubdiario($sub);
                 if ($plantilla === null) {
                     throw new \RuntimeException("subdiario cuenta {$cuenta}: no hay plantilla para insertar {$this->money($importeNuevo)}");
                 }
+
+                $emisor = trim((string) ($plantilla['subd_emisor'] ?? ''));
+                if ($emisor === '' || ltrim($emisor, '0') === '') {
+                    $emisor = trim((string) ($venta['ven_cliente'] ?? ''));
+                }
+                if ($emisor === '' || ltrim($emisor, '0') === '') {
+                    throw new \RuntimeException(
+                        "subdiario cuenta {$cuenta}: no se pudo resolver el emisor (cliente) para insertar {$this->money($importeNuevo)}"
+                    );
+                }
+
                 $plan[] = [
                     'acc' => 'insert',
                     'tabla' => 'subdiario',
-                    'descripcion' => "subdiario insertar {$cuenta}={$this->money($importeNuevo)}",
-                    'campos' => 'subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_cuenta,subd_contrapartida,subd_importe,subd_tipo_mov,subd_sistema,subd_fecha',
+                    'descripcion' => "subdiario insertar {$cuenta}={$this->money($importeNuevo)} (emisor {$emisor})",
+                    'campos' => 'subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_cuenta,subd_contrapartida,'
+                        .'subd_importe,subd_tipo_mov,subd_sistema,subd_fecha,subd_emisor,subd_desc_mov',
                     'valores' => sprintf(
-                        "'%s','%s','%s','%s','%s','%s','%s','H','V','%s'",
+                        "'%s','%s','%s','%s','%s','%s','%s','H','V','%s','%s','%s'",
                         $tipo,
                         $letra,
                         $sucursal,
                         $numero,
                         $cuenta,
-                        (string) ($plantilla['subd_contrapartida'] ?? '113100000'),
+                        (string) ($plantilla['subd_contrapartida'] ?? self::CUENTA_DEUDORES),
                         $this->money($importeNuevo),
                         (string) ($plantilla['subd_fecha'] ?? $venta['ven_fecha'] ?? ''),
+                        $this->sqlTexto($emisor),
+                        $this->sqlTexto(trim((string) ($plantilla['subd_desc_mov'] ?? ''))),
                     ),
                     'where' => '',
                 ];
@@ -1034,6 +1054,33 @@ final class AlinearFacturaAnitaArcaService
     private function money(float $v): string
     {
         return number_format(round($v, 2), 2, '.', '');
+    }
+
+    /**
+     * Fila de referencia para insertar una línea nueva del comprobante. Prioriza una que
+     * traiga emisor: sin él la línea queda huérfana en el mayor de deudores.
+     *
+     * @param  list<array>  $sub
+     * @return array|null
+     */
+    private function plantillaSubdiario(array $sub): ?array
+    {
+        foreach ($sub as $fila) {
+            $emisor = trim((string) ($fila['subd_emisor'] ?? ''));
+            if ($emisor !== '' && ltrim($emisor, '0') !== '') {
+                return $fila;
+            }
+        }
+
+        return $sub[0] ?? null;
+    }
+
+    /**
+     * Escapa texto para SQL Informix (comilla simple duplicada).
+     */
+    private function sqlTexto(string $valor): string
+    {
+        return str_replace("'", "''", $valor);
     }
 
     private function qty(float $v): string
