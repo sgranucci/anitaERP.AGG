@@ -16,7 +16,7 @@ class Arbolaprobacion_Nivel extends Model implements Auditable
     
     protected $fillable = [
                             'arbolaprobacion_id', 'nivel', 'centrocosto_id', 'usuario_id', 'usuario_orig_id', 'desdemonto', 'hastamonto', 'moneda_id',
-                            'documento_estado_al_aprobar',
+                            'documento_estado_al_aprobar', 'doble_aprobacion',
                         ];
     protected $table = 'arbolaprobacion_nivel';
 

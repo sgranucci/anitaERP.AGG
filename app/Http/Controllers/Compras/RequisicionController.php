@@ -35,6 +35,7 @@ use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionProvisorioSupport;
+use App\Support\Compras\RequisicionSeguimientoAprobacionSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
@@ -128,6 +129,49 @@ class RequisicionController extends Controller
         ];
 
         return view('compras.requisicion.index', $datas);
+    }
+
+    /**
+     * Tablero: requisiciones en circuito de aprobación con responsable y alerta de demora.
+     */
+    public function seguimientoAprobacion(Request $request)
+    {
+        can(RequisicionSeguimientoAprobacionSupport::PERMISO);
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaDefault = optional($empresaQuery->first())->id;
+        $filtros = RequisicionListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+
+        if (! empty($filtros['empresa_id']) && ! $this->empresaRepository->empresaIdPermitida((int) $filtros['empresa_id'])) {
+            $filtros['empresa_id'] = $empresaDefault ? (int) $empresaDefault : null;
+            $filtros['empresa_scope'] = $filtros['empresa_id'] ? 'una' : 'todas';
+        }
+
+        $empresaIdFiltro = (($filtros['empresa_scope'] ?? 'una') === 'todas')
+            ? null
+            : ($filtros['empresa_id'] ?? null);
+
+        $tablero = RequisicionSeguimientoAprobacionSupport::armarTablero(
+            $empresaIdFiltro ? (int) $empresaIdFiltro : null,
+            true
+        );
+
+        $filtrosQuery = RequisicionListadoFiltros::paraQueryStringEmpresa($filtros);
+
+        return view('compras.requisicion.seguimiento_aprobacion', [
+            'filas' => $tablero['filas'],
+            'total' => $tablero['total'],
+            'con_alerta' => $tablero['con_alerta'],
+            'umbral_horas' => $tablero['umbral_horas'],
+            'empresa_query' => $empresaQuery,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'estado_enum' => Requisicion_Estado::$enumEstado,
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -531,7 +575,11 @@ class RequisicionController extends Controller
         $centrocostoArbolId = (int) $request->input('centrocostodestino_arbol_id', 0);
         $centrocostoArbolId = $centrocostoArbolId > 0 ? $centrocostoArbolId : null;
 
-        $ret = $this->requisicionService->confirmarRequisicion($id, $centrocostoArbolId);
+        $observacionEnvio = $this->arbolaprobacionService->normalizarObservacionEnvio(
+            $request->input('observacion_envio')
+        );
+
+        $ret = $this->requisicionService->confirmarRequisicion($id, $centrocostoArbolId, $observacionEnvio ?: null);
 
         if (($ret['mensaje'] ?? '') === 'seleccionar_centrocosto') {
             if ($request->ajax() || $request->wantsJson()) {
@@ -645,7 +693,15 @@ class RequisicionController extends Controller
         $centrocostoArbolId = (int) $request->input('centrocostodestino_arbol_id', 0);
         $centrocostoArbolId = $centrocostoArbolId > 0 ? $centrocostoArbolId : null;
 
-        $ret = $this->requisicionService->enviarArbolAprobacionDesdeEnCompras((int) $id, $destinatarioId, $centrocostoArbolId);
+        $observacionEnvio = $this->arbolaprobacionService
+            ->normalizarObservacionEnvio($request->input('observacion_envio'));
+
+        $ret = $this->requisicionService->enviarArbolAprobacionDesdeEnCompras(
+            (int) $id,
+            $destinatarioId,
+            $centrocostoArbolId,
+            $observacionEnvio !== '' ? $observacionEnvio : null
+        );
 
         if ($ret['mensaje'] === 'ok') {
             $mensaje = 'Requisición enviada al árbol de aprobación; el circuito continúa con el siguiente nivel.';

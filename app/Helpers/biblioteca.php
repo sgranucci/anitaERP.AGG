@@ -427,6 +427,9 @@ function chequeaPermisoTicket()
     if (in_array('encargado-ticket', $permisos))   
         $permiso = 'encargado';
 
+    if (in_array('admin-ticket-sector', $permisos))
+        $permiso = 'admin_sector';
+
     if (in_array('supervisor-ticket', $permisos))   
         $permiso = 'supervisor';
 

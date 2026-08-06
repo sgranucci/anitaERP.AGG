@@ -339,7 +339,8 @@ class ArbolaprobacionService
             $hashVisualizar = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make('VIS'.$comprobante_id.$requisicion->fecha.$requisicion->numerorequisicion));
             $linkVisualizar = ArbolAprobacionEnlaceSupport::enlaceVisualizar($ip, 'compras/requisicion/visualizar', (int) $comprobante_id, $hashVisualizar);
 
-            $mailExtras = $this->armaExtrasMailRequisicion($requisicion, $proximoNivel['documento_estado_al_aprobar']);
+            $observacionEnvio = $this->normalizarObservacionEnvio($opciones['observacion_envio'] ?? null);
+            $mailExtras = $this->armaExtrasMailRequisicion($requisicion, $proximoNivel['documento_estado_al_aprobar'], $observacionEnvio);
             $envioUid = Auth::check() ? Auth::user()->id : $requisicion->creousuario_id;
             $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
 
@@ -396,7 +397,7 @@ class ArbolaprobacionService
                     'destinatariousuario_id' => $uid,
                     'fechaproceso' => null,
                     'estado' => $nombrePendiente,
-                    'observacion' => '',
+                    'observacion' => $observacionEnvio,
                 ]);
             }
 
@@ -510,7 +511,8 @@ class ArbolaprobacionService
             $hashVisualizar = ArbolAprobacionEnlaceSupport::prepararHashAlmacenado(Hash::make('VIS'.$comprobante_id.$ordencompra->fecha.$ordencompra->numeroordencompra));
             $linkVisualizar = ArbolAprobacionEnlaceSupport::enlaceVisualizar($ip, 'compras/ordencompra/visualizar', (int) $comprobante_id, $hashVisualizar);
 
-            $mailExtras = $this->armaExtrasMailOrdencompra($ordencompra, $proximoNivel['documento_estado_al_aprobar']);
+            $observacionEnvio = $this->normalizarObservacionEnvio($opciones['observacion_envio'] ?? null);
+            $mailExtras = $this->armaExtrasMailOrdencompra($ordencompra, $proximoNivel['documento_estado_al_aprobar'], $observacionEnvio);
             $envioUid = Auth::check() ? Auth::user()->id : $ordencompra->creousuario_id;
             $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
 
@@ -558,7 +560,7 @@ class ArbolaprobacionService
                     'destinatariousuario_id' => $uid,
                     'fechaproceso' => null,
                     'estado' => $nombrePendiente,
-                    'observacion' => '',
+                    'observacion' => $observacionEnvio,
                     'circuito_oc' => $circuitoOc,
                     'arbolaprobacion_oc_trigger_id' => $ocTriggerId,
                 ]);
@@ -615,12 +617,20 @@ class ArbolaprobacionService
 
     public function buscaProximoNivel(Arbolaprobacion $arbol, $centrocosto_id, $nivelactual, $fecha, $monto, $moneda_id)
     {
-        $candidatos = [];
+        $nivelesCc = [];
         foreach ($arbol->arbolaprobacion_niveles as $nivel) {
-            if ($nivel->centrocosto_id != $centrocosto_id) {
-                continue;
+            if ((int) $nivel->centrocosto_id === (int) $centrocosto_id) {
+                $nivelesCc[] = $nivel;
             }
+        }
 
+        $dobleAprobacion = $this->centrocostoTieneDobleAprobacion($nivelesCc);
+        $umbralPisoDoble = $dobleAprobacion
+            ? $this->umbralPisoDobleAprobacion($nivelesCc)
+            : null;
+
+        $candidatos = [];
+        foreach ($nivelesCc as $nivel) {
             $coeficienteConversion = 1.;
             if ($nivel->moneda_id != $moneda_id) {
                 $cotizacion = $this->cotizacionService->leeCotizacionDiaria($fecha, $moneda_id);
@@ -631,10 +641,12 @@ class ArbolaprobacionService
             }
 
             $montoEnMonedaNivel = (float) $monto * $coeficienteConversion;
-
-            $enRango = ($nivel->desdemonto != 0 || $nivel->hastamonto != 0)
-                ? ($nivel->desdemonto <= $montoEnMonedaNivel && $nivel->hastamonto >= $montoEnMonedaNivel)
-                : true;
+            $enRango = $this->nivelAplicaPorMonto(
+                $nivel,
+                $montoEnMonedaNivel,
+                $dobleAprobacion,
+                $umbralPisoDoble
+            );
 
             if ($nivelactual < $nivel->nivel && $enRango) {
                 $candidatos[] = [
@@ -680,6 +692,71 @@ class ArbolaprobacionService
             'proximousuarios' => $proximoUsuarios,
             'documento_estado_al_aprobar' => $estadoReq,
         ];
+    }
+
+    /**
+     * Un CC opera en doble aprobación si alguna fila activa del CC tiene doble_aprobacion = S.
+     *
+     * @param  iterable<int, Arbolaprobacion_Nivel>  $nivelesCc
+     */
+    private function centrocostoTieneDobleAprobacion(iterable $nivelesCc): bool
+    {
+        foreach ($nivelesCc as $nivel) {
+            if (strtoupper(trim((string) ($nivel->doble_aprobacion ?? 'N'))) === 'S') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Umbral a partir del cual el matching pasa a piso (estilo SP).
+     * Por debajo se mantienen bandas exclusivas (requis &lt; ~5M sin cambio).
+     *
+     * @param  iterable<int, Arbolaprobacion_Nivel>  $nivelesCc
+     */
+    private function umbralPisoDobleAprobacion(iterable $nivelesCc): float
+    {
+        $minAlto = null;
+        foreach ($nivelesCc as $nivel) {
+            $desde = (float) ($nivel->desdemonto ?? 0);
+            if ($desde >= 5000000.0) {
+                $minAlto = $minAlto === null ? $desde : min($minAlto, $desde);
+            }
+        }
+
+        return $minAlto ?? 5000001.0;
+    }
+
+    /**
+     * Matching de monto por nivel.
+     * - Sin doble / monto &lt; umbral alto: banda exclusiva [desde, hasta] (comportamiento histórico).
+     * - Con doble y monto &gt;= umbral alto: piso desdemonto &lt;= monto (área + umbrales altos en secuencia por nivel).
+     */
+    private function nivelAplicaPorMonto(
+        Arbolaprobacion_Nivel $nivel,
+        float $montoEnMonedaNivel,
+        bool $dobleAprobacion,
+        ?float $umbralPisoDoble
+    ): bool {
+        $desde = (float) ($nivel->desdemonto ?? 0);
+        $hasta = (float) ($nivel->hastamonto ?? 0);
+        $sinTope = ($desde == 0.0 && $hasta == 0.0);
+
+        $usarPiso = $dobleAprobacion
+            && $umbralPisoDoble !== null
+            && $montoEnMonedaNivel >= $umbralPisoDoble;
+
+        if ($usarPiso) {
+            return $sinTope || $desde <= $montoEnMonedaNivel;
+        }
+
+        if ($sinTope) {
+            return true;
+        }
+
+        return $desde <= $montoEnMonedaNivel && $hasta >= $montoEnMonedaNivel;
     }
 
     /**
@@ -743,15 +820,38 @@ class ArbolaprobacionService
      *
      * @return array<string, mixed>
      */
-    private function armaExtrasMailRequisicion(Requisicion $requisicion, ?string $estadoAlAprobarEsteNivel): array
-    {
+    private function armaExtrasMailRequisicion(
+        Requisicion $requisicion,
+        ?string $estadoAlAprobarEsteNivel,
+        string $observacionEnvio = ''
+    ): array {
         $totales = RequisicionTotalesCabecera::desdeModelo($requisicion, $this->cotizacionQuery);
 
         return [
             'estado_tras_aprobar' => $this->estadoRequisicionAlAprobarNivel($estadoAlAprobarEsteNivel),
             'monto_items' => $totales['monto'],
             'moneda_abrev_items' => $totales['monedacabecera_abreviatura'],
+            'solicitante' => optional($requisicion->usuarios)->nombre ?? '',
+            'centrocosto' => trim(
+                (string) (optional($requisicion->centrocostos)->codigo ?? '').' '.
+                (string) (optional($requisicion->centrocostos)->nombre ?? '')
+            ),
+            'historial_aprobaciones' => $this->historialAprobacionesRequisicion((int) $requisicion->id),
+            'comentario_envio' => $observacionEnvio,
         ];
+    }
+
+    /**
+     * Comentario opcional al enviar el documento al árbol (columna observacion del movimiento pendiente).
+     */
+    public function normalizarObservacionEnvio(?string $observacion): string
+    {
+        $texto = trim((string) $observacion);
+        if ($texto === '') {
+            return '';
+        }
+
+        return Str::limit($texto, 255, '');
     }
 
     public function aprobar($tipocomprobante, $comprobante_id, $aprobacion_id, $usuario_id, ?string $observacion = null): array
@@ -1371,8 +1471,11 @@ class ArbolaprobacionService
     /**
      * @return array<string, mixed>
      */
-    private function armaExtrasMailOrdencompra(Ordencompra $ordencompra, ?string $estadoAlAprobarEsteNivel): array
-    {
+    private function armaExtrasMailOrdencompra(
+        Ordencompra $ordencompra,
+        ?string $estadoAlAprobarEsteNivel,
+        string $observacionEnvio = ''
+    ): array {
         $totales = OrdencompraTotalesCabecera::desdeModelo($ordencompra, $this->cotizacionQuery);
 
         return [
@@ -1381,6 +1484,7 @@ class ArbolaprobacionService
                 : null,
             'monto_items' => $totales['monto'],
             'moneda_abrev_items' => $totales['monedacabecera_abreviatura'],
+            'comentario_envio' => $observacionEnvio,
         ];
     }
 
@@ -1428,9 +1532,20 @@ class ArbolaprobacionService
         $montoOriginal,
         $moneda_id
     ): ?Arbolaprobacion_Nivel {
-        $candidatosMismoNivel = [];
+        $nivelesCc = [];
         foreach ($arbol->arbolaprobacion_niveles as $nivel) {
-            if ($nivel->centrocosto_id != $centrocosto_id || (int) $nivel->nivel !== (int) $numeroNivel) {
+            if ((int) $nivel->centrocosto_id === (int) $centrocosto_id) {
+                $nivelesCc[] = $nivel;
+            }
+        }
+        $dobleAprobacion = $this->centrocostoTieneDobleAprobacion($nivelesCc);
+        $umbralPisoDoble = $dobleAprobacion
+            ? $this->umbralPisoDobleAprobacion($nivelesCc)
+            : null;
+
+        $candidatosMismoNivel = [];
+        foreach ($nivelesCc as $nivel) {
+            if ((int) $nivel->nivel !== (int) $numeroNivel) {
                 continue;
             }
 
@@ -1444,9 +1559,12 @@ class ArbolaprobacionService
             }
 
             $montoEnMonedaNivel = (float) $montoOriginal * $coeficienteConversion;
-            $enRango = ($nivel->desdemonto != 0 || $nivel->hastamonto != 0)
-                ? ($nivel->desdemonto <= $montoEnMonedaNivel && $nivel->hastamonto >= $montoEnMonedaNivel)
-                : true;
+            $enRango = $this->nivelAplicaPorMonto(
+                $nivel,
+                $montoEnMonedaNivel,
+                $dobleAprobacion,
+                $umbralPisoDoble
+            );
             if ($enRango) {
                 return $nivel;
             }
@@ -2128,7 +2246,7 @@ class ArbolaprobacionService
     }
 
     /**
-     * @return array{requisicion: Requisicion, movimiento: Arbolaprobacion_Movimiento, estado_tras_aprobar: ?string, monto_items: float, moneda_abrev_items: string}|null
+     * @return array{requisicion: Requisicion, movimiento: Arbolaprobacion_Movimiento, estado_tras_aprobar: ?string, monto_items: float, moneda_abrev_items: string, historial_aprobaciones: list<array<string, mixed>>}|null
      */
     public function portalDatosRequisicionPorHash(int $requisicionId, string $hash, string $modo): ?array
     {
@@ -2150,8 +2268,53 @@ class ArbolaprobacionService
             'estado_tras_aprobar' => $estadoTrasAprobar,
             'monto_items' => (float) ($totales['monto'] ?? 0),
             'moneda_abrev_items' => (string) ($totales['monedacabecera_abreviatura'] ?? '—'),
+            'historial_aprobaciones' => $this->historialAprobacionesRequisicion((int) $requisicionId),
             'ai_contexto_arbol' => $this->panelIaContextoArbol('RE', $requisicion, $mov, $estadoTrasAprobar),
         ];
+    }
+
+    /**
+     * Aprobaciones previas del circuito (para portal/mail del 2° nivel / Finanzas).
+     *
+     * @return list<array{nivel: int, firmante: string, fecha: ?string, observacion: string}>
+     */
+    public function historialAprobacionesRequisicion(int $requisicionId): array
+    {
+        if ($requisicionId <= 0) {
+            return [];
+        }
+
+        $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+
+        $movimientos = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($requisicionId);
+        $salida = [];
+        foreach ($movimientos as $mov) {
+            if ((string) ($mov->estado ?? '') !== $nombreAprobado) {
+                continue;
+            }
+            $firmante = trim((string) (optional($mov->destinatariousuarios)->nombre ?? ''));
+            if ($firmante === '') {
+                $firmante = trim((string) (optional($mov->destinatariousuarios)->usuario ?? ''));
+            }
+            $fecha = null;
+            if (! empty($mov->fechaproceso)) {
+                try {
+                    $fecha = date('d/m/Y H:i', strtotime((string) $mov->fechaproceso));
+                } catch (\Throwable $e) {
+                    $fecha = (string) $mov->fechaproceso;
+                }
+            }
+            $salida[] = [
+                'nivel' => (int) ($mov->nivel ?? 0),
+                'firmante' => $firmante !== '' ? $firmante : '—',
+                'fecha' => $fecha,
+                'observacion' => trim((string) ($mov->observacion ?? '')),
+            ];
+        }
+
+        return $salida;
     }
 
     public function estadoTrasAprobarSegunMovimientoRequisicion(Requisicion $requisicion, Arbolaprobacion_Movimiento $mov): ?string
@@ -2193,8 +2356,11 @@ class ArbolaprobacionService
     /**
      * Al cambiar el legajo de una OC a un sector configurado, dispara el circuito opcional del árbol OC.
      */
-    public function dispararArbolOrdencompraAlCambiarSector(int $ordencompraId, int $sectorLegajocompraId): void
-    {
+    public function dispararArbolOrdencompraAlCambiarSector(
+        int $ordencompraId,
+        int $sectorLegajocompraId,
+        ?string $observacionEnvio = null
+    ): void {
         if ($ordencompraId <= 0 || $sectorLegajocompraId <= 0) {
             return;
         }
@@ -2218,7 +2384,13 @@ class ArbolaprobacionService
             'Reinicio del circuito por cambio de sector'
         );
 
-        $this->procesaArbolaprobacion('OC', $ordencompraId, 'insert', ['circuito_sector' => true]);
+        $opciones = ['circuito_sector' => true];
+        $obs = $this->normalizarObservacionEnvio($observacionEnvio);
+        if ($obs !== '') {
+            $opciones['observacion_envio'] = $obs;
+        }
+
+        $this->procesaArbolaprobacion('OC', $ordencompraId, 'insert', $opciones);
     }
 
     public function arbolOrdencompraActivoParaEmpresa(int $empresaId): ?Arbolaprobacion

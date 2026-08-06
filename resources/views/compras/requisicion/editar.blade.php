@@ -49,6 +49,9 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 @include('compras.requisicion.partials.comprobantes_asociados_modal')
 @include('compras.requisicion.partials.modal_firmante_retome_arbol')
 @include('compras.requisicion.partials.modal_centrocosto_retome_arbol')
+@if(!empty($es_provisorio))
+@include('compras.requisicion.partials.modal_confirmar_envio_arbol')
+@endif
 <div class="row" id="editar">
     <div class="col-lg-12">
         @include('includes.form-error')

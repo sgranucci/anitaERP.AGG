@@ -80,6 +80,9 @@ window.consultaFormulaArticuloConfig = {
 </div>
 @include('includes.contable.modalconsultacuentacontable')
 @include('stock.formula_articulo.partials.modal_ver_formula_articulo')
+@include('includes.stock.modal_articulo_similares_descripcion')
+<input type="hidden" id="articulo-buscar-similares-descripcion-url"
+    value="{{ route('buscar_similares_descripcion_articulo') }}">
 @if (can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false))
 @include('includes.compras.modalconsultaproveedor')
 @endif

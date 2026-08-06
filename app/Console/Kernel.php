@@ -110,6 +110,13 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('prestamo:recordatorios')->dailyAt('07:30');
 
+        $schedule->command('compras:alertas-ordencompra-abiertas')
+            ->dailyAt((string) config('compras.oc_alertas_abiertas.hora', '08:15'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/compras-oc-alertas-abiertas-schedule.log'))
+            ->when(fn () => (bool) config('compras.oc_alertas_abiertas.habilitado', true));
+
         $schedule->command('gastronomia:auditoria-anita-diaria')
             ->dailyAt((string) config('gastronomia.auditoria_anita_diaria.hora', '06:30'))
             ->runInBackground()

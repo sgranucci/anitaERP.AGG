@@ -33,6 +33,13 @@
             @endif
             <dt class="col-sm-4">Comentario</dt>
             <dd class="col-sm-8">{{ $oc->comentario !== null && $oc->comentario !== '' ? $oc->comentario : '—' }}</dd>
+            @php
+                $comentarioEnvioArbolOc = trim((string) (($mov->observacion ?? '') ?: ''));
+            @endphp
+            @if ($comentarioEnvioArbolOc !== '')
+            <dt class="col-sm-4">Comentario al enviar</dt>
+            <dd class="col-sm-8 text-break">{{ $comentarioEnvioArbolOc }}</dd>
+            @endif
             <dt class="col-sm-4">Detalle</dt>
             <dd class="col-sm-8 text-break">{{ $oc->detalle !== null && $oc->detalle !== '' ? $oc->detalle : '—' }}</dd>
         </dl>

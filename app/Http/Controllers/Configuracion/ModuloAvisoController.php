@@ -166,6 +166,16 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'compras' && $codigo === 'ordencompra_alertas_abiertas') {
+            return array_merge($comunes, [
+                '{fecha}', '{dias_sin_recepcion}',
+                '{cantidad_sin_recepcion}', '{oc_sin_recepcion}',
+                '{cantidad_parciales}', '{oc_parcialmente_recibidas}',
+                '{cantidad_vencidas}', '{oc_vencidas}',
+                '{cantidad_saldos_pendientes}', '{saldos_pendientes}',
+            ]);
+        }
+
         return array_merge($comunes, ['{numero}', '{solicitante}', '{empresa}', '{centro_costo}', '{fecha}']);
     }
 }

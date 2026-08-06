@@ -154,7 +154,7 @@ return [
                     ['cliente / cliente_ctacte', 'Ficha y CT cliente', 'listar-clientes / CT'],
                     ['ordencompra / arbol_oc', 'Estado OC y árbol', 'listar/editar-ordencompra'],
                     ['mayor_cuenta / saldo_cuenta / asiento', 'Mayor con filtros (cuenta, CC, empresa, fechas, OC) / saldo / asiento', 'módulo + consulta-ia-contable'],
-                    ['compras_kpi_resumen + OC/RQ KPIs', 'Mediciones: pendientes firma, vencidas, lead time, top proveedores, RQ sin OC', 'listar-ordencompra / RQ / proveedor'],
+                    ['compras_kpi_resumen + OC/RQ KPIs', 'Mediciones: pendientes firma, vencidas, lead time, top proveedores, RQ sin OC, proceso y productividad', 'listar-ordencompra / RQ / proveedor / listar-kpi-compras'],
                     ['pedido_consumo_sector', 'Proyecta pedido por consumo (CC + depósito) → borrador RQ compra o sala', 'artículos / crear-requisicion(-sala)'],
                     ['plan_agente', 'Plan HITL sugerido ante un evento', '(panel)'],
                     ['consultar_manual', 'Pasajes de manuales (RAG)', 'panel + RAG habilitado'],
@@ -164,7 +164,7 @@ return [
                 'Exportar: el panel puede exportar tablas (Excel) respetando el mismo intent y permisos.',
                 'Typos: coincidencia flexible en artículos (ej. muzarella/mozarella) y filtro solo_insumo para gastronomía.',
                 'El mayor se arma desde asientos ERP; admite filtros combinables (cuenta, centro de costo, empresa, rango de fechas y/o OC). No es texto plano del LLM.',
-                'KPIs de Compras: números desde ERP (OC/RQ/recepción/comprobantes). Frases: «resumen operativo de compras», «OC pendientes de firma», «OC vencidas sin recepción», «lead time OC», «top proveedores», «requisiciones sin OC».',
+                'KPIs de Compras: números desde ERP (OC/RQ/recepción/comprobantes). Frases: «resumen operativo de compras», «KPI proceso de compras», «KPI productividad», «OC pendientes de firma», «OC vencidas sin recepción», «lead time OC», «top proveedores», «requisiciones sin OC». Tablero HTML: compras/kpi (permiso listar-kpi-compras, Enc-compras).',
                 'Pedido por consumo: el depósito de consumo es obligatorio; qty = consumo_diario×cobertura − stock − pendientes. Con stock en depósito origen → RQ sala; si no → RQ compra. Confirmar con botón HITL (no auto-graba).',
             ],
         ],
@@ -272,7 +272,7 @@ return [
             'titulo' => '10. Permisos y roles (seguridad operativa)',
             'parrafos' => [
                 'La seguridad sigue el modelo de roles de anitaERP (permiso_rol), no Gates genéricos de Laravel. El helper can(slug) lee el rol en sesión. El rol administrador bypasea chequeos como en el resto del ERP.',
-                'Asignación recomendada: administrador (todo); Enc/Op contaduría e impuestos (ejecutar-consulta-ia + consulta-ia-contable); Enc/Op logística (ejecutar-consulta-ia); Enc-compras (ejecutar-consulta-ia + KPIs/OC/RQ; no Op-Compras salvo política local); gastronomía sin ejecutar-consulta-ia o sin consulta-ia-contable para aislar mayor.',
+                'Asignación recomendada: administrador (todo); Enc/Op contaduría e impuestos (ejecutar-consulta-ia + consulta-ia-contable); Enc/Op logística (ejecutar-consulta-ia); Enc-compras (ejecutar-consulta-ia + KPIs/OC/RQ + listar-kpi-compras; no Op-Compras salvo política local); gastronomía sin ejecutar-consulta-ia o sin consulta-ia-contable para aislar mayor.',
             ],
             'tabla' => [
                 'caption' => 'Permisos IA dedicados',

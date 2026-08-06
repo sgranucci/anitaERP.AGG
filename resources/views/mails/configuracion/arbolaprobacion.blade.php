@@ -100,6 +100,9 @@
             <li>Monto total ítems: {{ $mx['moneda_abrev_items'] ?? '—' }} {{ number_format($mx['monto_items'] ?? 0, 2) }}</li>
             <li>Proveedor: {{ $datosComprobante->proveedores->nombre ?? '—' }}</li>
             <li>Comentarios: {{ $datosComprobante->comentario }}</li>
+            @if (!empty($mx['comentario_envio']))
+            <li><strong>Comentario al enviar al árbol:</strong> {{ $mx['comentario_envio'] }}</li>
+            @endif
             <li>Detalle: {{ $datosComprobante->detalle }}</li>
         </ul>
         <br>
@@ -259,17 +262,46 @@
             @endif
         </p>
     @elseif ($tipoArbol == 'Requisiciones')
-        @php $mx = $mailExtras ?? []; @endphp
+        @php
+            $mx = $mailExtras ?? [];
+            $ccMail = trim((string) ($mx['centrocosto'] ?? ''));
+            if ($ccMail === '') {
+                $ccMail = trim((optional($datosComprobante->centrocostos)->codigo ?? '').' '.(optional($datosComprobante->centrocostos)->nombre ?? ''));
+            }
+            $historialMail = $mx['historial_aprobaciones'] ?? [];
+        @endphp
         <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle en una pantalla adaptable a celular y podrá cargar observaciones antes de confirmar.</p>
         <ul>
             <li>Empresa: {{ $datosComprobante->empresas->nombre ?? '' }}</li>
             <li>Número: {{ $datosComprobante->numerorequisicion }}</li>
             <li>Fecha: {{ date('d/m/Y', strtotime($datosComprobante->fecha ?? '')) }}</li>
+            <li>Solicitante: {{ $mx['solicitante'] ?? (optional($datosComprobante->usuarios)->nombre ?? '—') }}</li>
+            <li>Centro de costo: {{ $ccMail !== '' ? $ccMail : '—' }}</li>
             <li>Monto total ítems (Σ cantidad × precio, moneda del primer ítem, cotización del día según fecha de la requisición): {{ $mx['moneda_abrev_items'] ?? '—' }} {{ number_format($mx['monto_items'] ?? 0, 2) }}</li>
             <li>Proveedor sugerido: {{ $datosComprobante->proveedores->nombre ?? '—' }}</li>
             <li>Comentarios: {{ $datosComprobante->comentario }}</li>
+            @if (!empty($mx['comentario_envio']))
+            <li><strong>Comentario al enviar al árbol:</strong> {{ $mx['comentario_envio'] }}</li>
+            @endif
             <li>Detalle: {{ $datosComprobante->detalle }}</li>
         </ul>
+        @if (!empty($historialMail))
+            <p><strong>Aprobaciones previas del área</strong></p>
+            <ul>
+                @foreach ($historialMail as $h)
+                    <li>
+                        Nivel {{ $h['nivel'] ?? '—' }}:
+                        {{ $h['firmante'] ?? '—' }}
+                        @if (!empty($h['fecha']))
+                            ({{ $h['fecha'] }})
+                        @endif
+                        @if (!empty($h['observacion']))
+                            — {{ $h['observacion'] }}
+                        @endif
+                    </li>
+                @endforeach
+            </ul>
+        @endif
         <br>
         <label for="Autorizar">Autorizar:</label>
         <div><p><a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a></p></div>

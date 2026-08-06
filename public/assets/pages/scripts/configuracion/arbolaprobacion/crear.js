@@ -2,6 +2,10 @@
     $(function () {
         $('#agrega_renglon_arbolaprobacion_nivel').on('click', agregaRenglonArbolaprobacion_Nivel);
         $(document).on('click', '.eliminar_arbolaprobacion_nivel', borraRenglonArbolaprobacion_Nivel);
+		$(document).on('change', '.doble_aprobacion_check', onCambioDobleAprobacion);
+		$(document).on('change', '#tbody-arbolaprobacion-nivel-table .centrocosto', function () {
+			actualizarVisibilidadDobleAprobacion();
+		});
 
 		activa_eventos(true);
 
@@ -32,8 +36,10 @@
 
 		$('#tipoarbol').on('change', function () {
 			actualizarPanelOcArbol();
+			actualizarVisibilidadDobleAprobacion();
 		});
 		actualizarPanelOcArbol();
+		actualizarVisibilidadDobleAprobacion();
 
 		$('#agrega_oc_trigger').on('click', agregaFilaOcTrigger);
 		$(document).on('click', '.eliminar_oc_trigger', function (e) {
@@ -88,6 +94,7 @@
 
     	$("#tbody-arbolaprobacion-nivel-table").append(renglon);
     	actualizaRenglonesArbolaprobacion_Nivel();
+		actualizarVisibilidadDobleAprobacion();
 
 		activa_eventos(false);
     }
@@ -115,6 +122,38 @@
 		}
 	}
 
+	function actualizarVisibilidadDobleAprobacion() {
+		var tipo = $('#tipoarbol').val() || '';
+		var esReq = tipo === 'Requisiciones';
+		$('.col-doble-aprobacion').toggle(esReq);
+		if (!esReq) {
+			$('#tbody-arbolaprobacion-nivel-table tr.item-arbolaprobacion-nivel').each(function () {
+				$(this).find('.doble_aprobacion_valor').val('N');
+				$(this).find('.doble_aprobacion_check').prop('checked', false);
+			});
+		}
+	}
+
+	function onCambioDobleAprobacion() {
+		var $row = $(this).closest('tr');
+		var valor = $(this).is(':checked') ? 'S' : 'N';
+		$row.find('.doble_aprobacion_valor').val(valor);
+
+		var ccId = String($row.find('.centrocosto').val() || '');
+		if (!ccId) {
+			return;
+		}
+
+		$('#tbody-arbolaprobacion-nivel-table tr.item-arbolaprobacion-nivel').each(function () {
+			var $otra = $(this);
+			if (String($otra.find('.centrocosto').val() || '') !== ccId) {
+				return;
+			}
+			$otra.find('.doble_aprobacion_valor').val(valor);
+			$otra.find('.doble_aprobacion_check').prop('checked', valor === 'S');
+		});
+	}
+
 	function agregaFilaOcTrigger(e) {
 		e.preventDefault();
 		var idx = $('#tbody-oc-triggers tr.fila-oc-trigger').length;
@@ -133,4 +172,3 @@
 			$row.find('.oc-trigger-evaluador').prop('disabled', false).show();
 		}
 	}
-

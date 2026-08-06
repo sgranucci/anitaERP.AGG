@@ -59,6 +59,8 @@ return [
                 'rows' => [
                     ['listar-proveedor / crear-proveedor / editar-proveedor', 'Consulta y ABM de proveedores'],
                     ['listar-requisicion / crear-requisicion / editar-requisicion', 'Circuito de requisiciones'],
+                    ['seguimiento-aprobacion-requisicion', 'Tablero de seguimiento del circuito de aprobación'],
+                    ['listar-kpi-compras', 'Tablero KPIs de proceso y productividad (Enc-compras)'],
                     ['usuario-requisicion-compras', 'Usuario del área Compras (gestión central)'],
                     ['usuario-requisicion-resto', 'Usuario solicitante de otros sectores'],
                     ['listar-listaprecio-proveedor', 'Listas de precio de proveedor'],

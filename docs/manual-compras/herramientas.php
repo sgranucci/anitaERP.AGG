@@ -121,6 +121,24 @@ return [
     ],
     'requisicion_listado' => [
         [
+            'herramienta' => 'Seguimiento aprobación',
+            'ubicacion' => $barraListado . ' (botón amarillo)',
+            'accion' => 'Abre el tablero de requisiciones pendientes de aprobación: responsable actual, días desde creación y alerta si supera el plazo (48 hs por defecto). Incluye botón para ver el árbol sin abrir la requisición.',
+            'permiso' => 'seguimiento-aprobacion-requisicion',
+        ],
+        [
+            'herramienta' => 'KPIs',
+            'ubicacion' => $barraListado . ' (botón verde)',
+            'accion' => 'Abre el tablero de KPIs de proceso (ciclo RQ→OC, gestión OC, circuito hasta COM, % OC abiertas) y productividad (OC y ahorro por comprador).',
+            'permiso' => 'listar-kpi-compras',
+        ],
+        [
+            'herramienta' => 'Ver árbol de aprobación',
+            'ubicacion' => 'Tablero seguimiento (ícono sitemap)',
+            'accion' => 'Modal con los movimientos del árbol (envío, nivel, estado, destinatario) sin entrar a editar la requisición.',
+            'permiso' => 'seguimiento-aprobacion-requisicion',
+        ],
+        [
             'herramienta' => 'Editar',
             'ubicacion' => $columnaAcciones,
             'accion' => 'Abre cabecera, líneas, presupuestos y archivos.',
@@ -228,6 +246,12 @@ return [
         ],
     ],
     'ordencompra_listado' => [
+        [
+            'herramienta' => 'KPIs',
+            'ubicacion' => $barraListado . ' (botón verde)',
+            'accion' => 'Tablero de KPIs de proceso y productividad de Compras (metas de ciclo, gestión, % abiertas, OC/ahorro por comprador).',
+            'permiso' => 'listar-kpi-compras',
+        ],
         [
             'herramienta' => 'Editar',
             'ubicacion' => $columnaAcciones,

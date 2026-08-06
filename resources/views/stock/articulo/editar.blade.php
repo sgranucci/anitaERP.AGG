@@ -28,6 +28,9 @@
 @if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-recepciones.js') }}" type="text/javascript"></script>
 @endif
+@if (can('listar-reporte-historial-precios-compra', false))
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-historial-precios.js') }}" type="text/javascript"></script>
+@endif
 @if (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false))
 <script src="{{ asset('assets/pages/scripts/stock/articulo/articulos-compra-insumo.js') }}" type="text/javascript"></script>
 @endif
@@ -102,6 +105,14 @@ window.consultaFormulaArticuloConfig = {
                         data-articulo-sku="{{ $producto->sku ?? '' }}"
                         data-articulo-descripcion="{{ $producto->descripcion ?? '' }}">
                         <i class="fa fa-fw fa-truck"></i> Recepciones
+                    </button>
+                    @endif
+                    @if (can('listar-reporte-historial-precios-compra', false))
+                    <button type="button"
+                        class="btn btn-secondary btn-sm btn-historial-precios-articulo tooltipsC"
+                        title="Historial de precios de compra (último, anterior, variación)"
+                        data-articulo-id="{{ $producto->id }}">
+                        <i class="fa fa-fw fa-chart-line"></i> Hist. precios compra
                     </button>
                     @endif
                     @if (empty($ocultarVolver))
@@ -187,6 +198,9 @@ window.consultaFormulaArticuloConfig = {
 @endif
 @if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
 <input type="hidden" id="recepcion-proveedor-consulta-articulo-url" value="{{ route('recepcion_proveedor_consulta_articulo') }}">
+@endif
+@if (can('listar-reporte-historial-precios-compra', false))
+<input type="hidden" id="historial-precios-articulo-url" value="{{ route('reporte_historial_precios_articulo') }}">
 @endif
 @if (can('listar-formula-articulo', false) || can('editar-formula-articulo', false) || can('listar-articulos', false))
 @include('stock.formula_articulo.partials.modal_articulos_compra_insumo')

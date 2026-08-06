@@ -23,29 +23,37 @@ final class OcArbolTriggerDispatcherService
         private OcArbolTriggerEvaluatorRegistry $evaluatorRegistry,
     ) {}
 
-    public function dispararPorAlta(int $ordencompraId): void
+    public function dispararPorAlta(int $ordencompraId, ?string $observacionEnvio = null): void
     {
-        $this->disparar($ordencompraId, self::CONTEXTO_ALTA, []);
+        $this->disparar($ordencompraId, self::CONTEXTO_ALTA, [], $observacionEnvio);
     }
 
-    public function dispararPorActualizacion(int $ordencompraId): void
+    public function dispararPorActualizacion(int $ordencompraId, ?string $observacionEnvio = null): void
     {
-        $this->disparar($ordencompraId, self::CONTEXTO_ACTUALIZACION, []);
+        $this->disparar($ordencompraId, self::CONTEXTO_ACTUALIZACION, [], $observacionEnvio);
     }
 
-    public function dispararPorCambioSector(int $ordencompraId, ?int $sectorAnteriorId, int $sectorNuevoId): void
-    {
+    public function dispararPorCambioSector(
+        int $ordencompraId,
+        ?int $sectorAnteriorId,
+        int $sectorNuevoId,
+        ?string $observacionEnvio = null
+    ): void {
         $this->disparar($ordencompraId, self::CONTEXTO_CAMBIO_SECTOR, [
             'sector_anterior_id' => $sectorAnteriorId,
             'sector_nuevo_id' => $sectorNuevoId,
-        ]);
+        ], $observacionEnvio);
     }
 
     /**
      * @param  array{sector_anterior_id?: int|null, sector_nuevo_id?: int}  $contexto
      */
-    private function disparar(int $ordencompraId, string $contextoEvento, array $contexto): void
-    {
+    private function disparar(
+        int $ordencompraId,
+        string $contextoEvento,
+        array $contexto,
+        ?string $observacionEnvio = null
+    ): void {
         if ($ordencompraId <= 0) {
             return;
         }
@@ -60,6 +68,8 @@ final class OcArbolTriggerDispatcherService
             return;
         }
 
+        $opcionesArbol = $this->opcionesConObservacionEnvio([], $observacionEnvio);
+
         $triggers = Arbolaprobacion_OcTrigger::query()
             ->where('arbolaprobacion_id', $arbol->id)
             ->where('activo', 'S')
@@ -69,7 +79,7 @@ final class OcArbolTriggerDispatcherService
             ->get();
 
         if ($triggers->isEmpty()) {
-            $this->dispararLegacy($arbol, $ordencompraId, $contextoEvento, $contexto, $oc);
+            $this->dispararLegacy($arbol, $ordencompraId, $contextoEvento, $contexto, $oc, $observacionEnvio);
 
             return;
         }
@@ -85,9 +95,24 @@ final class OcArbolTriggerDispatcherService
             'Reinicio del circuito trigger OC #'.$trigger->id
         );
 
-        $this->arbolaprobacionService->procesaArbolaprobacion('OC', $ordencompraId, 'insert', [
-            'oc_trigger_id' => (int) $trigger->id,
-        ]);
+        $this->arbolaprobacionService->procesaArbolaprobacion('OC', $ordencompraId, 'insert', array_merge(
+            $opcionesArbol,
+            ['oc_trigger_id' => (int) $trigger->id]
+        ));
+    }
+
+    /**
+     * @param  array<string, mixed>  $base
+     * @return array<string, mixed>
+     */
+    private function opcionesConObservacionEnvio(array $base, ?string $observacionEnvio): array
+    {
+        $obs = $this->arbolaprobacionService->normalizarObservacionEnvio($observacionEnvio);
+        if ($obs !== '') {
+            $base['observacion_envio'] = $obs;
+        }
+
+        return $base;
     }
 
     /**
@@ -159,11 +184,14 @@ final class OcArbolTriggerDispatcherService
         int $ordencompraId,
         string $contextoEvento,
         array $contexto,
-        $oc
+        $oc,
+        ?string $observacionEnvio = null
     ): void {
+        $opciones = $this->opcionesConObservacionEnvio([], $observacionEnvio);
+
         if ($contextoEvento === self::CONTEXTO_ALTA) {
             if ($this->arbolaprobacionService->ocDispararArbolAlAlta($arbol)) {
-                $this->arbolaprobacionService->procesaArbolaprobacion('OC', $ordencompraId, 'insert');
+                $this->arbolaprobacionService->procesaArbolaprobacion('OC', $ordencompraId, 'insert', $opciones);
             }
 
             return;
@@ -171,7 +199,11 @@ final class OcArbolTriggerDispatcherService
 
         if ($contextoEvento === self::CONTEXTO_CAMBIO_SECTOR) {
             $sectorNuevo = (int) ($contexto['sector_nuevo_id'] ?? 0);
-            $this->arbolaprobacionService->dispararArbolOrdencompraAlCambiarSector($ordencompraId, $sectorNuevo);
+            $this->arbolaprobacionService->dispararArbolOrdencompraAlCambiarSector(
+                $ordencompraId,
+                $sectorNuevo,
+                $observacionEnvio
+            );
 
             return;
         }
@@ -179,7 +211,7 @@ final class OcArbolTriggerDispatcherService
         if ($contextoEvento === self::CONTEXTO_ACTUALIZACION
             && ($oc->estadoordencompra ?? '') === OrdencompraEstados::PENDIENTE
             && $this->arbolaprobacionService->ocDispararArbolAlAlta($arbol)) {
-            $this->arbolaprobacionService->procesaArbolaprobacion('OC', $ordencompraId, 'insert');
+            $this->arbolaprobacionService->procesaArbolaprobacion('OC', $ordencompraId, 'insert', $opciones);
         }
     }
 }

@@ -69,6 +69,8 @@ Reglas:
 - "qué hago / plan para / desvíos" → plan_agente (params.evento: desvio_conciliacion|deuda_proveedor|deuda_cliente|firma_oc|stock_insumo).
 - "pedido consumo / qué pedimos / planear pedido" → pedido_consumo_sector (params.centrocosto_codigo o codigo, deposito_id o deposito_codigo; opcional fecha_desde/fecha_hasta, dias_cobertura).
 - "KPI / dashboard / resumen operativo de compras" → compras_kpi_resumen.
+- "KPI proceso / ciclo de compra / gestión OC / % OC abiertas / circuito hasta COM" → compras_kpi_proceso.
+- "KPI productividad / OC por comprador / ahorro por comprador" → compras_kpi_productividad.
 - "OC pendientes de firma" → oc_pendientes_firma; "OC vencidas sin recepción" → oc_vencidas_sin_recepcion.
 - "lead time OC recepción" → lead_time_oc_recepcion; "top proveedores por monto" → top_proveedores_monto; "RQ/requisiciones sin OC" → rq_sin_oc.
 - "cómo hago / manual / ayuda / documentación" → consultar_manual (params.valor = frase completa).

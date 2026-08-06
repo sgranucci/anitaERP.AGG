@@ -159,6 +159,9 @@ class TicketController extends Controller
         can('editar-ticket');
 
 		$data = $this->ticketRepository->find($id);
+        if (! \App\Support\Ticket\TicketAlcanceCentrocostoSupport::puedeAccederTicketCarga($data)) {
+            abort(403, 'No tiene acceso a este ticket.');
+        }
         $areadestino_query = $this->areadestinoRepository->all();
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
@@ -181,6 +184,9 @@ class TicketController extends Controller
         // Una vez creado el ticket, el usuario no puede cambiar sala/sector/área/título/comentario
         // ni la categoría/subcategoría que asignó el área técnica.
         $ticket = $this->ticketRepository->find($id);
+        if (! \App\Support\Ticket\TicketAlcanceCentrocostoSupport::puedeAccederTicketCarga($ticket)) {
+            abort(403, 'No tiene acceso a este ticket.');
+        }
         $request->merge([
             'sala_id' => $ticket->sala_id,
             'sector_id' => $ticket->sector_id,
@@ -209,7 +215,7 @@ class TicketController extends Controller
         }
 
         $request->validate([
-            'comentario' => 'required|string|max:2000',
+            'comentario' => 'required|string',
         ]);
 
         try {
@@ -234,6 +240,49 @@ class TicketController extends Controller
             return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 403);
         } catch (Exception $e) {
             return response()->json(['mensaje' => 'ng', 'error' => 'No se pudo guardar el comentario.'], 500);
+        }
+    }
+
+    public function reabrirTicket(Request $request, $ticketId)
+    {
+        if (! can('editar-ticket', false)
+            && ! can('actualizar-ticket', false)
+            && ! can('usuario-ticket', false)) {
+            return response()->json([
+                'mensaje' => 'ng',
+                'error' => 'No tiene permiso para solicitar más ayuda.',
+            ], 403);
+        }
+
+        $request->validate([
+            'comentario' => 'required|string',
+        ]);
+
+        try {
+            $resultado = $this->ticketTareaComentarioUsuarioService->reabrirPorUsuario(
+                (int) $ticketId,
+                (string) $request->input('comentario')
+            );
+
+            $registro = $resultado['comentario'];
+
+            return response()->json([
+                'mensaje' => 'ok',
+                'estado_ticket' => $resultado['estado_ticket'],
+                'ticket_tarea_id' => $resultado['ticket_tarea_id'],
+                'comentario' => [
+                    'id' => $registro->id,
+                    'comentario' => $registro->comentario,
+                    'usuario' => $registro->usuarios->nombre ?? '',
+                    'fecha' => $registro->created_at ? $registro->created_at->format('d/m/Y H:i') : '',
+                ],
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 403);
+        } catch (Exception $e) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'No se pudo reabrir el ticket.'], 500);
         }
     }
 

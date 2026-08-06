@@ -58,21 +58,70 @@
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
         });
 
-		$( ".botonsubmit" ).click(function() {
-			$( "#form-general" ).submit();
-		});
+		// type=button: no submit nativo; avisamos comentarios y luego enviamos
+		$(document).off('click.ticketAdminSubmit', '#btn-actualizar-administracion-ticket, .botonsubmit')
+			.on('click.ticketAdminSubmit', '#btn-actualizar-administracion-ticket, .botonsubmit', function (event) {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+
+				if (! confirmarComentariosPendientesOAbortar()) {
+					return false;
+				}
+
+				let form = document.getElementById('form-general');
+				if (! form) {
+					alert('No se encontró el formulario para guardar.');
+					return false;
+				}
+
+				// submit nativo del prototipo (evita conflicto si existe name/id=submit
+				// y no depende de jquery.validate, que a veces corta el envío en silencio)
+				HTMLFormElement.prototype.submit.call(form);
+			});
     });
+
+	function hayComentariosSinEnviar() {
+		let pendiente = false;
+		$('.comentario-tarea-texto').each(function () {
+			if ($.trim($(this).val()) !== '') {
+				pendiente = true;
+				return false;
+			}
+		});
+		return pendiente;
+	}
+
+	function confirmarComentariosPendientesOAbortar() {
+		if (! hayComentariosSinEnviar()) {
+			return true;
+		}
+		let ok = window.confirm(
+			'Hay comentarios escritos sin enviar. Si actualiza ahora se van a perder.\n\n¿Desea actualizar de todos modos?'
+		);
+		if (! ok) {
+			enfocarPrimerComentarioPendiente();
+			return false;
+		}
+		return true;
+	}
+
+	function enfocarPrimerComentarioPendiente() {
+		$('.comentario-tarea-texto').each(function () {
+			if ($.trim($(this).val()) === '') {
+				return;
+			}
+			let $textarea = $(this);
+			let $panel = $textarea.closest('.panel-comentarios-tarea');
+			if ($panel.length && ! $panel.hasClass('show')) {
+				$panel.collapse('show');
+			}
+			$textarea.focus();
+			return false;
+		});
+	}
 
 	function activa_eventos(flInicio)
 	{
-		// Si esta agregando items desactiva los eventos
-		if (!flInicio)
-		{
-			$('.finalizatarea').off('click');
-			$('.tiempoinsumido').off('change');
-			$('.nombretecnico_ticket').off('change');
-		}
-
 		// Activa eventos de consulta
 		activa_eventos_consultatarea_ticket();
 		activa_eventos_consultatecnico_ticket();
@@ -80,58 +129,108 @@
 		activa_eventos_consultasubcategoria_ticket();
 		activa_eventos_consultaarticulo();
 
-		$(document).on('change', '.nombretecnico_ticket', function (event) {
-			event.preventDefault();
-			let tareaTicket_id = $(this).parents("tr").find(".tarea_ticket_id").val();
-			let tecnicoTicket_id = $(this).parents("tr").find(".tecnico_ticket_id").val();
-		});
+		// Una sola vez: delegados con namespace (evita handlers apilados al agregar renglones)
+		if (flInicio) {
+			$(document).off('click.ticketFinaliza', '.finalizatarea')
+				.on('click.ticketFinaliza', '.finalizatarea', iniciarFinalizacionTarea);
+		}
+	}
 
-		$('.finalizatarea').on('click', function (event) {
-			let fechaFinalizacion = $(this).parents("tr").find(".fechafinalizacion").val();
+	function filaTareaDesde($el) {
+		return $el.closest('tr.item-tarea-ticket');
+	}
 
-			if (fechaFinalizacion.length != 0)
-				alert("No puede dar nuevamente finalizacion de tarea");
+	function fechaHoyYmd() {
+		let fecha = new Date();
+		let day = String(fecha.getDate()).padStart(2, '0');
+		let month = String(fecha.getMonth() + 1).padStart(2, '0');
+		let year = fecha.getFullYear();
+		return year + '-' + month + '-' + day;
+	}
 
-			$(this).parents("tr").find(".tiempoinsumido").attr('readonly', false);
-			$(this).parents("tr").find(".tiempoinsumido").attr('required', 'required');
-			$(this).parents("tr").find(".tiempoinsumido").focus();
-		});
+	function fechaHoyLegible() {
+		let fecha = new Date();
+		let day = String(fecha.getDate()).padStart(2, '0');
+		let month = String(fecha.getMonth() + 1).padStart(2, '0');
+		let year = fecha.getFullYear();
+		return day + '/' + month + '/' + year;
+	}
 
-		$(document).on('change', '.tiempoinsumido', function (event) {
-			let fecha = new Date();
-			let day = fecha.getDate();
-			let month = fecha.getMonth() + 1;
-			let year = fecha.getFullYear();
+	function iniciarFinalizacionTarea(event) {
+		event.preventDefault();
 
-			if (month < 10)
-				var formateada = year + '-0' + month + '-' + day;
-			else
-				var formateada = year + '-' + month + '-' + day;
+		let $tr = filaTareaDesde($(this));
+		let fechaFinalizacion = $.trim($tr.find('.fechafinalizacion').val() || '');
+		let ticketTareaId = $.trim($tr.find('.ticket_tarea_id').val() || '');
+		let $minutos = $tr.find('.tiempoinsumido');
 
-			$(this).parents("tr").find(".fechafinalizacion").val(formateada);
-			let ticket_tarea_id = $(this).parents("tr").find(".ticket_tarea_id").val();
-			let fechafinalizacion = $(this).parents("tr").find(".fechafinalizacion").val();
-			let tiempoinsumido = $(this).parents("tr").find(".tiempoinsumido").val();
-			let $estado = $(this).parents("tr").find(".estadotarea");
+		if (fechaFinalizacion !== '') {
+			alert('La tarea ya está finalizada el ' + fechaFinalizacion.split('-').reverse().join('/') + '.');
+			return;
+		}
 
-			if (tiempoinsumido > 0)
-			{
-				$estado.val("Finalizada");
-				$estado.attr('data-estado-previo', 'Finalizada');
+		if (! ticketTareaId) {
+			alert('Guarde el ticket antes de finalizar la tarea.');
+			return;
+		}
 
-				let url = carpetaBase+'/ticket/finalizar_tarea/'+ticket_tarea_id+'/'+fechafinalizacion+'/'+tiempoinsumido;
+		$minutos.prop('readonly', false).removeAttr('readonly');
+		let valorActual = $.trim($minutos.val() || '');
+		let ingresado = window.prompt(
+			'Ingrese los minutos insumidos para finalizar la tarea.\nSe grabará la fecha de finalización: ' + fechaHoyLegible(),
+			valorActual !== '' ? valorActual : ''
+		);
 
-				$.get(url, function(data, textStatus){
-					if (textStatus == 'success')
-					{
-						calculaEstadoTicket();
-						alert('Tarea finalizada con éxito')
-					}
-					else
-						alert('Ha ocurrido un error finalizando la tarea')
-				});
+		if (ingresado === null) {
+			if (valorActual === '') {
+				$minutos.prop('readonly', true).attr('readonly', 'readonly');
 			}
-		});
+			return;
+		}
+
+		ingresado = $.trim(ingresado).replace(',', '.');
+		let minutos = parseFloat(ingresado);
+		if (! (minutos > 0)) {
+			alert('Indique los minutos insumidos (mayor a 0).');
+			$minutos.focus();
+			return;
+		}
+
+		$minutos.val(ingresado);
+		confirmarFinalizacionTarea($tr, ticketTareaId, ingresado);
+	}
+
+	function confirmarFinalizacionTarea($tr, ticketTareaId, tiempoinsumido) {
+		let $estado = $tr.find('.estadotarea');
+		let formateada = fechaHoyYmd();
+		let legible = fechaHoyLegible();
+
+		$tr.find('.fechafinalizacion').val(formateada);
+		$estado.val('Finalizada');
+		$estado.attr('data-estado-previo', 'Finalizada');
+
+		let url = carpetaBase + '/ticket/finalizar_tarea/' + ticketTareaId + '/' + formateada + '/' + encodeURIComponent(tiempoinsumido);
+
+		$.get(url)
+			.done(function (data) {
+				let body = (typeof data === 'string') ? $.trim(data) : String((data && data.mensaje) || '');
+				if (body === 'ok') {
+					$tr.find('.tiempoinsumido').prop('readonly', true).attr('readonly', 'readonly');
+					$tr.find('.finalizatarea').prop('disabled', true).addClass('d-none');
+					$tr.find('.fechafinalizacion')
+						.addClass('border-success')
+						.css({'background-color': '#d4edda', 'font-weight': 'bold'});
+					calculaEstadoTicket();
+					alert('Tarea finalizada con éxito.\nFecha de finalización: ' + legible + '\nMinutos: ' + tiempoinsumido);
+					return;
+				}
+				$tr.find('.fechafinalizacion').val('');
+				alert('Ha ocurrido un error finalizando la tarea');
+			})
+			.fail(function () {
+				$tr.find('.fechafinalizacion').val('');
+				alert('Ha ocurrido un error finalizando la tarea');
+			});
 	}
 
 	function agregaRenglonTarea_Ticket(event){

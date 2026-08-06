@@ -53,6 +53,10 @@
                 @endforeach
             </select>
         </td>
+        <td class="text-center col-doble-aprobacion">
+            <input type="hidden" name="doble_aprobacions[]" class="doble_aprobacion_valor" value="N">
+            <input type="checkbox" class="doble_aprobacion_check" value="S" title="Doble aprobación para este centro de costo">
+        </td>
         <td>
             <button type="button" style="width: 7%;" title="Elimina esta linea" class="btn-accion-tabla eliminar_arbolaprobacion_nivel tooltipsC">
                 <i class="fa fa-times-circle text-danger"></i>

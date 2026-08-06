@@ -2,6 +2,8 @@
     @php
         $tareasTicket = ($data->ticket_tareas ?? collect())->sortBy('id');
         $ticketId = $data->id;
+        $ticketFinalizado = ($data->estado_ticket ?? '') === 'Finalizado';
+        $puedeSolicitarMasAyuda = $ticketFinalizado && $tareasTicket->isNotEmpty();
     @endphp
     <style>
         #tarea-ticket-table-solo-lectura .comentario-usuario-item {
@@ -12,7 +14,8 @@
             font-size: 15px;
             margin-top: 0.25rem;
         }
-        #tarea-ticket-table-solo-lectura .comentario-tarea-texto {
+        #tarea-ticket-table-solo-lectura .comentario-tarea-texto,
+        #comentario-reabrir-ticket {
             font-size: 14px;
         }
     </style>
@@ -21,6 +24,32 @@
         <p class="text-muted small mb-2">
             Seguimiento de las tareas que el área técnica cargó en su ticket. Puede enviar comentarios al técnico asignado.
         </p>
+
+        @if ($puedeSolicitarMasAyuda)
+            <div id="bloque-reabrir-ticket" class="card card-outline card-info mb-3">
+                <div class="card-header py-2">
+                    <strong><i class="fa fa-reply"></i> Solicitar más ayuda</strong>
+                </div>
+                <div class="card-body py-3">
+                    <p class="mb-2">
+                        Este ticket está <strong>Finalizado</strong>. Si necesita algo más, escriba su pedido:
+                        el ticket volverá a <strong>Pendiente</strong> y se avisará al área técnica.
+                    </p>
+                    <div class="form-group mb-2">
+                        <textarea id="comentario-reabrir-ticket"
+                                  class="form-control comentario-tarea-texto comentario-reabrir-texto"
+                                  rows="4"
+                                  placeholder="Describa qué necesita..."></textarea>
+                    </div>
+                    <button type="button"
+                            id="btn-reabrir-ticket"
+                            class="btn btn-primary btn-sm">
+                        <i class="fa fa-paper-plane"></i> Solicitar más ayuda
+                    </button>
+                </div>
+            </div>
+        @endif
+
         <div class="table-responsive">
             <table style="font-size: 12px;" class="table table-bordered table-sm" id="tarea-ticket-table-solo-lectura">
                 <thead style="background-color: #85C1E9; color: #17202A;">
@@ -78,8 +107,7 @@
                                         </div>
                                         <div class="form-group mb-1">
                                             <textarea class="form-control form-control-sm comentario-tarea-texto"
-                                                      rows="2"
-                                                      maxlength="2000"
+                                                      rows="3"
                                                       placeholder="Escriba un comentario para el técnico asignado..."></textarea>
                                         </div>
                                         <button type="button"
@@ -103,6 +131,7 @@
             </table>
         </div>
         <input type="hidden" id="url_guarda_comentario_tarea" value="{{ url('ticket/ticket/'.$ticketId.'/tarea') }}" />
+        <input type="hidden" id="url_reabrir_ticket" value="{{ url('ticket/ticket/'.$ticketId.'/reabrir') }}" />
     </div>
 
     @include('ticket.partials.comentario_enviando_overlay', [

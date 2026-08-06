@@ -52,8 +52,7 @@
                 <div class="form-nuevo-comentario border rounded bg-white p-2">
                     <div class="form-group mb-1">
                         <textarea class="form-control form-control-sm comentario-tarea-texto"
-                                  rows="2"
-                                  maxlength="2000"
+                                  rows="3"
                                   placeholder="Escriba un comentario para el usuario que generó el ticket..."></textarea>
                     </div>
                     <button type="button"

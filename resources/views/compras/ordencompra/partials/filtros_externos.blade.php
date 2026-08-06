@@ -2,7 +2,7 @@
     $empresaScope = $filtros['empresa_scope'] ?? 'una';
     $empresaActual = (int) ($filtros['empresa_id'] ?? 0);
     $baseQ = $filtrosQuery ?? [];
-    $rutaIndex = 'consultar_ordencompra';
+    $rutaIndex = $rutaIndex ?? 'consultar_ordencompra';
 
     $urlEmpresa = function ($id) use ($baseQ, $rutaIndex) {
         $q = $baseQ;

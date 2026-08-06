@@ -10,7 +10,7 @@
             <input type="date" name="hastafechas[]" class="hastafecha" value="{{date('Y-m-d')}}">
         </td>
         <td>
-            <input type="text" style="WIDTH: 450px;HEIGHT: 29px" name="comentarios[]" class="comentario" value="">
+            <textarea name="comentarios[]" class="comentario form-control form-control-sm" rows="2" style="min-width: 280px;"></textarea>
         </td>		
         <td>
             <div class="form-group row">

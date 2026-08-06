@@ -189,7 +189,7 @@ class RequisicionService
      *
      * @return array{mensaje: string, errores?: string, centros_costo?: list<array<string, mixed>>, centrocosto_arbol_id?: int}
      */
-    public function confirmarRequisicion(int $id, ?int $centrocostoArbolId = null): array
+    public function confirmarRequisicion(int $id, ?int $centrocostoArbolId = null, ?string $observacionEnvio = null): array
     {
         $existente = $this->requisicionRepository->find($id);
         if (! $existente) {
@@ -249,16 +249,25 @@ class RequisicionService
             if ($ccArbol > 0) {
                 $payloadEstado['centrocostodestino_arbol_id'] = $ccArbol;
             }
+            $obsEnvio = $this->arbolaprobacionService->normalizarObservacionEnvio($observacionEnvio);
+            $obsHistoria = 'Confirmación desde provisorio';
+            if ($obsEnvio !== '') {
+                $obsHistoria .= ': '.$obsEnvio;
+            }
             $this->requisicion_estadoRepository->creaEstado(
                 $id,
                 Carbon::now()->toDateTimeString(),
                 $pendiente,
                 Auth::user()->id,
-                'Confirmación desde provisorio'
+                $obsHistoria
             );
             $this->requisicionRepository->update($payloadEstado, $id);
 
-            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert');
+            $opcionesArbol = [];
+            if ($obsEnvio !== '') {
+                $opcionesArbol['observacion_envio'] = $obsEnvio;
+            }
+            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert', $opcionesArbol);
 
             if ($syncAnitaActivo) {
                 $anitaIntentada = true;
@@ -388,8 +397,13 @@ class RequisicionService
         return array_merge(['mensaje' => 'ok'], $preview);
     }
 
-    public function enviarArbolAprobacionDesdeEnCompras(int $id, ?int $destinatarioUsuarioId = null, ?int $centrocostoArbolId = null): array
-    {
+    public function enviarArbolAprobacionDesdeEnCompras(
+        int $id,
+        ?int $destinatarioUsuarioId = null,
+        ?int $centrocostoArbolId = null,
+        ?string $observacionEnvio = null
+    ): array {
+
         $req = $this->requisicionRepository->find($id);
         if (! $req) {
             return ['mensaje' => 'error', 'errores' => 'Requisición no encontrada.'];
@@ -443,6 +457,10 @@ class RequisicionService
         if ($preview['requiere_seleccion'] && $destinatarioUsuarioId > 0) {
             $opcionesArbol['destinatario_usuario_id'] = $destinatarioUsuarioId;
         }
+        $obsEnvio = $this->arbolaprobacionService->normalizarObservacionEnvio($observacionEnvio);
+        if ($obsEnvio !== '') {
+            $opcionesArbol['observacion_envio'] = $obsEnvio;
+        }
 
         DB::beginTransaction();
         try {
@@ -451,12 +469,16 @@ class RequisicionService
             }
 
             $nombreEnArbol = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+            $obsHistoria = 'Enviada al árbol de aprobación (desde EN_COMPRAS)';
+            if ($obsEnvio !== '') {
+                $obsHistoria .= ': '.$obsEnvio;
+            }
             $this->requisicion_estadoRepository->creaEstado(
                 $id,
                 Carbon::now()->toDateTimeString(),
                 $nombreEnArbol,
                 Auth::user()->id,
-                'Enviada al árbol de aprobación (desde EN_COMPRAS)'
+                $obsHistoria
             );
             $this->requisicionRepository->update(['estado' => $nombreEnArbol], $id);
 

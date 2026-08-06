@@ -104,8 +104,8 @@ $(function () {
                                 </div>
                                 @include('compras.ordencompra.partials.bloque_factura_legajo_sector', ['prefix' => 'oc'])
                                 <div class="form-group">
-                                    <label for="oc_sector_obs">Observación</label>
-                                    <input type="text" name="observacion" id="oc_sector_obs" class="form-control" maxlength="255" placeholder="Motivo del traslado">
+                                    <label for="oc_sector_obs">Observaci&oacute;n / comentario al &aacute;rbol</label>
+                                    <input type="text" name="observacion" id="oc_sector_obs" class="form-control" maxlength="255" placeholder="Motivo del traslado (tambi&eacute;n va al &aacute;rbol si aplica)">
                                 </div>
                                 <div class="form-group">
                                     <label for="oc_sector_leyenda">Leyenda / detalle</label>

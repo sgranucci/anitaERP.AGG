@@ -41,9 +41,44 @@
             @endif
             <dt class="col-sm-4">Comentario</dt>
             <dd class="col-sm-8">{{ $req->comentario !== null && $req->comentario !== '' ? $req->comentario : '—' }}</dd>
+            @php
+                $comentarioEnvioArbol = trim((string) ($mov->observacion ?? ''));
+            @endphp
+            @if ($comentarioEnvioArbol !== '')
+            <dt class="col-sm-4">Comentario al enviar</dt>
+            <dd class="col-sm-8 text-break">{{ $comentarioEnvioArbol }}</dd>
+            @endif
             <dt class="col-sm-4">Detalle</dt>
             <dd class="col-sm-8 text-break">{{ $req->detalle !== null && $req->detalle !== '' ? $req->detalle : '—' }}</dd>
         </dl>
+        @php $historial = $historial_aprobaciones ?? []; @endphp
+        @if (!empty($historial))
+            <div class="px-3 pb-3">
+                <h6 class="mb-2">Aprobaciones previas</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th>Nivel</th>
+                                <th>Responsable</th>
+                                <th>Fecha</th>
+                                <th>Observaci&oacute;n / justificaci&oacute;n</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($historial as $h)
+                                <tr>
+                                    <td>{{ $h['nivel'] ?? '—' }}</td>
+                                    <td>{{ $h['firmante'] ?? '—' }}</td>
+                                    <td class="text-nowrap">{{ $h['fecha'] ?? '—' }}</td>
+                                    <td class="text-break">{{ ($h['observacion'] ?? '') !== '' ? $h['observacion'] : '—' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endif
         <div class="px-3 pb-3">
             <a href="{{ route('visualizar_requisicion', ['id' => $req->id, 'hash' => $mov->hashvisualizar]) }}" class="btn btn-outline-secondary btn-sm btn-block mb-2" target="_blank" rel="noopener noreferrer">
                 <i class="fa fa-eye"></i> Ver requisición completa (solo lectura)

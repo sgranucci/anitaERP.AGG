@@ -1,11 +1,13 @@
 /**
  * Banner y anti-doble-submit al confirmar requisición provisoria.
  * Si hay varios CC de destino, usa el mismo modal que EN COMPRAS antes de confirmar.
+ * Permite comentario opcional al árbol de aprobación.
  */
 (function ($) {
     'use strict';
 
     var enviandoConfirmacion = false;
+    var confirmacionPendiente = null;
 
     function asegurarBannerConfirmandoRequisicion() {
         if ($('#requisicion-banner-confirmando').length) {
@@ -41,13 +43,17 @@
         return true;
     }
 
-    function asegurarHiddenCcArbol($form, centrocostoId) {
-        var $hidden = $form.find('input[name="centrocostodestino_arbol_id"]');
+    function asegurarHidden($form, name, value) {
+        var $hidden = $form.find('input[name="' + name + '"]');
         if (!$hidden.length) {
-            $hidden = $('<input type="hidden" name="centrocostodestino_arbol_id">');
+            $hidden = $('<input type="hidden" name="' + name + '">');
             $form.append($hidden);
         }
-        $hidden.val(centrocostoId > 0 ? centrocostoId : '');
+        $hidden.val(value);
+    }
+
+    function asegurarHiddenCcArbol($form, centrocostoId) {
+        asegurarHidden($form, 'centrocostodestino_arbol_id', centrocostoId > 0 ? centrocostoId : '');
     }
 
     function urlPreviewCc($form) {
@@ -56,16 +62,20 @@
             return preview;
         }
         var action = $form.attr('action') || '';
-        // .../confirmar → .../centros-costo-arbol
         return action.replace(/\/confirmar(\?.*)?$/, '/centros-costo-arbol$1');
     }
 
-    function enviarConfirmacionRequisicion($formConfirmar, centrocostoId) {
+    function enviarConfirmacionRequisicion($formConfirmar, centrocostoId, observacionEnvio) {
         if (!$formConfirmar || !$formConfirmar.length) {
             return;
         }
         if (centrocostoId) {
             asegurarHiddenCcArbol($formConfirmar, centrocostoId);
+        }
+        if (observacionEnvio) {
+            asegurarHidden($formConfirmar, 'observacion_envio', observacionEnvio);
+        } else {
+            $formConfirmar.find('input[name="observacion_envio"]').remove();
         }
         if (!mostrarBannerConfirmandoRequisicion()) {
             return;
@@ -73,6 +83,23 @@
         window.setTimeout(function () {
             $formConfirmar.get(0).submit();
         }, 50);
+    }
+
+    function abrirModalComentario($form, centrocostoId) {
+        var $modal = $('#modalRequisicionConfirmarEnvioArbol');
+        if (!$modal.length) {
+            if (!window.confirm('¿Confirmar requisición? Enviará al árbol de aprobación y sincronizará con Anita.')) {
+                return;
+            }
+            enviarConfirmacionRequisicion($form, centrocostoId, '');
+            return;
+        }
+        confirmacionPendiente = {
+            $form: $form,
+            centrocostoId: centrocostoId || null
+        };
+        $('#requisicionConfirmarEnvioArbolObservacion').val('');
+        $modal.modal('show');
     }
 
     function pedirCcSiCorresponde($form, continuar) {
@@ -109,20 +136,22 @@
             });
     }
 
+    function iniciarConfirmacion($form) {
+        if (enviandoConfirmacion || !$form || !$form.length) {
+            return;
+        }
+        pedirCcSiCorresponde($form, function (centrocostoId) {
+            abrirModalComentario($form, centrocostoId);
+        });
+    }
+
     function initConfirmacionDesdeListado() {
         $(document).on('submit', 'form.form-confirmar-requisicion', function (e) {
             e.preventDefault();
             if (enviandoConfirmacion) {
                 return false;
             }
-            var $form = $(this);
-            var msg = $form.data('confirmMsg') || '¿Confirmar requisición? Enviará al árbol de aprobación y sincronizará con Anita.';
-            if (!window.confirm(msg)) {
-                return false;
-            }
-            pedirCcSiCorresponde($form, function (centrocostoId) {
-                enviarConfirmacionRequisicion($form, centrocostoId);
-            });
+            iniciarConfirmacion($(this));
             return false;
         });
     }
@@ -140,15 +169,26 @@
             if (enviandoConfirmacion) {
                 return false;
             }
-            var msg = '¿Confirmar requisición? Enviará al árbol de aprobación y sincronizará con Anita.';
-            if (!window.confirm(msg)) {
-                return false;
-            }
-            var $form = $('#form-requisicion-confirmar');
-            pedirCcSiCorresponde($form, function (centrocostoId) {
-                enviarConfirmacionRequisicion($form, centrocostoId);
-            });
+            iniciarConfirmacion($('#form-requisicion-confirmar'));
             return false;
+        });
+
+        $('#requisicionConfirmarEnvioArbolConfirmar').on('click', function () {
+            if (!confirmacionPendiente || enviandoConfirmacion) {
+                return;
+            }
+            var obs = $.trim($('#requisicionConfirmarEnvioArbolObservacion').val() || '');
+            var pendiente = confirmacionPendiente;
+            confirmacionPendiente = null;
+            $('#modalRequisicionConfirmarEnvioArbol').modal('hide');
+            enviarConfirmacionRequisicion(pendiente.$form, pendiente.centrocostoId, obs);
+        });
+
+        $('#modalRequisicionConfirmarEnvioArbol').on('hidden.bs.modal', function () {
+            if (!enviandoConfirmacion) {
+                confirmacionPendiente = null;
+            }
+            $('#requisicionConfirmarEnvioArbolObservacion').val('');
         });
     });
 })(jQuery);

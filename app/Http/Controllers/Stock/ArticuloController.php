@@ -47,6 +47,7 @@ use App\Services\Stock\StkdepSaldoAnitaService;
 use App\Services\Stock\ArticuloParteUnicaService;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
 use App\Support\Stock\ArticuloSaldosDepositoSupport;
+use App\Support\Stock\ArticuloSimilaresDescripcionSupport;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuRangoSupport;
@@ -1301,6 +1302,26 @@ class ArticuloController extends Controller
         }
 
         return $articulo;
+    }
+
+    /**
+     * JSON: artículos con descripción similar (alerta de duplicados al crear).
+     */
+    public function buscarSimilaresDescripcion(Request $request)
+    {
+        can('crear-articulos');
+
+        $descripcion = trim((string) $request->input('descripcion', ''));
+        $excluirId = (int) $request->input('excluir_articulo_id', 0);
+
+        $similares = ArticuloSimilaresDescripcionSupport::buscar($descripcion, $excluirId);
+
+        return response()->json([
+            'descripcion' => $descripcion,
+            'min_len' => \App\Support\Listado\CoincidenciaFlexibleTexto::LONGITUD_MINIMA_ARTICULO,
+            'total' => $similares->count(),
+            'articulos' => $similares->values()->all(),
+        ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function redondeaCaja($articulo_id, $unidadmedida, $caja, $pieza, $kilo, $descuentoventa_id, $opcion)

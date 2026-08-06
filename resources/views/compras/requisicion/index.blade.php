@@ -25,6 +25,7 @@ Requisiciones
 @endphp
 @include('compras.requisicion.partials.comprobantes_asociados_modal')
 @include('compras.requisicion.partials.modal_firmante_retome_arbol')
+@include('compras.requisicion.partials.modal_confirmar_envio_arbol')
 @include('compras.requisicion.partials.modal_centrocosto_retome_arbol')
 <div class="row">
     <div class="col-lg-12">
@@ -34,6 +35,20 @@ Requisiciones
                 <h3 class="card-title">Requisiciones</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.compras.boton-manual')
+                    @if (can('seguimiento-aprobacion-requisicion', false))
+                        <a href="{{ route('seguimiento_aprobacion_requisicion') }}"
+                           class="btn btn-outline-warning btn-sm mr-1"
+                           title="Tablero de requisiciones pendientes de aprobación">
+                            <i class="fas fa-tasks"></i> Seguimiento aprobación
+                        </a>
+                    @endif
+                    @if (can('listar-kpi-compras', false))
+                        <a href="{{ route('consultar_kpi_compras') }}"
+                           class="btn btn-outline-success btn-sm mr-1"
+                           title="Tablero de KPIs de proceso y productividad">
+                            <i class="fas fa-chart-line"></i> KPIs
+                        </a>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-requisicion',
                         'filtroValor' => $filtros['valor'] ?? '',

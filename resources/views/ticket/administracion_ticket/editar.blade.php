@@ -56,7 +56,11 @@
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-                            @include('includes.boton-form-editar')
+                            <button type="button"
+                                    id="btn-actualizar-administracion-ticket"
+                                    class="btn btn-success">
+                                Actualizar
+                            </button>
                         </div>
                     </div>
                 </div>

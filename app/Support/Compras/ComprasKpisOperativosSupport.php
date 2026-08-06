@@ -46,6 +46,15 @@ final class ComprasKpisOperativosSupport
         $desde = (string) ($params['fecha_desde'] ?? date('Y-m-01'));
         $hasta = (string) ($params['fecha_hasta'] ?? date('Y-m-d'));
         $lead = self::leadTimeStats($desde, $hasta, $empresaId);
+        $proceso = ComprasKpisProcesoProductividadSupport::proceso(array_merge($params, [
+            'fecha_desde' => $desde,
+            'fecha_hasta' => $hasta,
+        ]));
+        $procesoDatos = $proceso['datos'] ?? [];
+        $ciclo = $procesoDatos['ciclo_rq_oc'] ?? ['muestra' => 0];
+        $gestion = $procesoDatos['gestion_oc'] ?? ['muestra' => 0];
+        $abiertas = $procesoDatos['oc_abiertas'] ?? ['porcentaje' => 0, 'abiertas' => 0, 'total' => 0];
+        $metas = $procesoDatos['metas'] ?? [];
 
         $parrafos = [
             'Resumen operativo de Compras (ERP, no estimado por IA).',
@@ -61,6 +70,19 @@ final class ComprasKpisOperativosSupport
         } else {
             $parrafos[] = 'Lead time: sin recepciones en el período para medir.';
         }
+        if (($ciclo['muestra'] ?? 0) > 0) {
+            $parrafos[] = 'Ciclo RQ→OC: '
+                .number_format((float) $ciclo['promedio_dias'], 1, ',', '.')
+                .' días (meta < '.number_format((float) ($metas['ciclo_dias'] ?? 2), 0, ',', '.').').';
+        }
+        if (($gestion['muestra'] ?? 0) > 0) {
+            $parrafos[] = 'Gestión OC: '
+                .number_format((float) $gestion['promedio_dias'], 1, ',', '.')
+                .' días (meta < '.number_format((float) ($metas['gestion_oc_dias'] ?? 2), 0, ',', '.').').';
+        }
+        $parrafos[] = '% OC abiertas: '
+            .number_format((float) ($abiertas['porcentaje'] ?? 0), 1, ',', '.')
+            .'% (meta < '.number_format((float) ($metas['pct_oc_abiertas'] ?? 10), 0, ',', '.').'%).';
         if ($empresaId) {
             $parrafos[] = 'Filtro empresa_id='.$empresaId.'.';
         }
@@ -81,6 +103,22 @@ final class ComprasKpisOperativosSupport
                     'valor' => $lead['muestra'] > 0
                         ? number_format($lead['promedio_dias'], 1, ',', '.')
                         : '—',
+                ],
+                [
+                    'kpi' => 'Ciclo RQ→OC (días)',
+                    'valor' => ($ciclo['muestra'] ?? 0) > 0
+                        ? number_format((float) $ciclo['promedio_dias'], 1, ',', '.')
+                        : '—',
+                ],
+                [
+                    'kpi' => 'Gestión OC (días)',
+                    'valor' => ($gestion['muestra'] ?? 0) > 0
+                        ? number_format((float) $gestion['promedio_dias'], 1, ',', '.')
+                        : '—',
+                ],
+                [
+                    'kpi' => '% OC abiertas',
+                    'valor' => number_format((float) ($abiertas['porcentaje'] ?? 0), 1, ',', '.').'%',
                 ],
             ],
         ];
@@ -106,9 +144,31 @@ final class ComprasKpisOperativosSupport
                 'lineas_rq_pendientes_oc' => $lineasRqPend,
                 'lead_time' => $lead,
                 'top_proveedores' => $top,
+                'ciclo_rq_oc' => $ciclo,
+                'gestion_oc' => $gestion,
+                'oc_abiertas' => $abiertas,
+                'metas_proceso' => $metas,
             ],
             'links' => self::linksCompras(),
         ];
+    }
+
+    /**
+     * @param  array<string,mixed>  $params
+     * @return array{ok: bool, parrafos: list<string>, tabla?: array, datos: array<string,mixed>, links?: list<array>, error?: string}
+     */
+    public static function kpisProceso(array $params): array
+    {
+        return ComprasKpisProcesoProductividadSupport::proceso($params);
+    }
+
+    /**
+     * @param  array<string,mixed>  $params
+     * @return array{ok: bool, parrafos: list<string>, tabla?: array, datos: array<string,mixed>, links?: list<array>, error?: string}
+     */
+    public static function kpisProductividad(array $params): array
+    {
+        return ComprasKpisProcesoProductividadSupport::productividad($params);
     }
 
     /**

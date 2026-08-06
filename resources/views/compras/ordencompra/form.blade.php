@@ -227,6 +227,17 @@
                 </div>
             </div>
 
+            @if (empty($soloLectura) && empty($visualizar))
+            <div class="form-group row">
+                <label for="comentario_envio_arbol" class="col-lg-4 control-label">Comentario al &aacute;rbol</label>
+                <div class="col-lg-8">
+                    <textarea name="comentario_envio_arbol" id="comentario_envio_arbol" class="form-control" rows="2" maxlength="255"
+                        placeholder="Opcional: se env&iacute;a al firmante si esta grabaci&oacute;n dispara el &aacute;rbol de aprobaci&oacute;n">{{ old('comentario_envio_arbol') }}</textarea>
+                    <small class="form-text text-muted">No se guarda en la cabecera de la OC; solo acompa&ntilde;a el env&iacute;o al circuito.</small>
+                </div>
+            </div>
+            @endif
+
             <div class="form-group row">
                 <label for="condicioncompra_id" class="col-lg-4 control-label">Condición compra</label>
                 <div class="col-lg-8">
@@ -913,7 +924,7 @@
         <div id="oc-panel-ia-arbol-solapa" class="d-none mb-3"></div>
         <h5>Movimientos árbol de aprobación</h5>
         <table class="table table-bordered table-sm" id="tabla-movimientos-arbol">
-            <thead><tr><th>Nivel</th><th>Estado mov.</th><th>Indicación OC</th></tr></thead>
+            <thead><tr><th>Nivel</th><th>Estado mov.</th><th>Indicación OC</th><th>Obs.</th></tr></thead>
             <tbody></tbody>
         </table>
     </div>

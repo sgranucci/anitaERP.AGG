@@ -38,6 +38,9 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
     $volverListadoUrl = route('consultar_requisicion', $filtrosQuery ?? []);
 @endphp
 @include('compras.requisicion.partials.modal_centrocosto_retome_arbol')
+@if(!empty($modo_provisorio))
+@include('compras.requisicion.partials.modal_confirmar_envio_arbol')
+@endif
 <div class="row" id="crear">
     <div class="col-lg-12">
         @include('includes.form-error')

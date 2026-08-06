@@ -24,6 +24,9 @@ Art&iacute;culos
 @if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-recepciones.js') }}" type="text/javascript"></script>
 @endif
+@if (can('listar-reporte-historial-precios-compra', false))
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-historial-precios.js') }}" type="text/javascript"></script>
+@endif
 
 <script>
 window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::STOCK_ARTICULO);
@@ -213,6 +216,14 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                         <i class="fa fa-truck text-primary"></i>
                                 	</button>
 								@endif
+                       			@if (can('listar-reporte-historial-precios-compra', false))
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-historial-precios-articulo tooltipsC"
+                                	    title="Historial de precios de compra"
+                                	    data-articulo-id="{{ $articulo->id }}">
+                                        <i class="fa fa-chart-line text-success"></i>
+                                	</button>
+								@endif
                        			@if (can('borrar-articulos', false))
                                 <form action="{{route('eliminar_articulo', ['id' => $articulo->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
@@ -251,5 +262,8 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 @endif
 @if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
 <input type="hidden" id="recepcion-proveedor-consulta-articulo-url" value="{{ route('recepcion_proveedor_consulta_articulo') }}">
+@endif
+@if (can('listar-reporte-historial-precios-compra', false))
+<input type="hidden" id="historial-precios-articulo-url" value="{{ route('reporte_historial_precios_articulo') }}">
 @endif
 @endsection

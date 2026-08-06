@@ -70,6 +70,7 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
         $hastamontos = $data['hastamontos'] ?? [];
         $moneda_ids = $data['moneda_ids'] ?? [];
         $estados_req = $data['documento_estado_al_aprobar'] ?? [];
+        $dobles = $data['doble_aprobacions'] ?? [];
         $tipoarbol = $data['tipoarbol'] ?? DB::table('arbolaprobacion')->where('id', $arbolaprobacion_id)->value('tipoarbol');
         $nombreTipoRequisiciones = Arbolaprobacion::$enumTipoArbol[array_search('RE', array_column(Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
         $estadoAprobadaRequisicion = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
@@ -83,6 +84,8 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
             if ($estReq === null && $tipoarbol === $nombreTipoRequisiciones) {
                 $estReq = $estadoAprobadaRequisicion;
             }
+            $doble = strtoupper(trim((string) ($dobles[$i] ?? 'N')));
+            $doble = $doble === 'S' ? 'S' : 'N';
 
             $payload = [
                 'arbolaprobacion_id' => $arbolaprobacion_id,
@@ -93,6 +96,7 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
                 'hastamonto' => $hastamontos[$i] ?? null,
                 'moneda_id' => $moneda_ids[$i],
                 'documento_estado_al_aprobar' => $estReq,
+                'doble_aprobacion' => $doble,
             ];
 
             if ($rowId) {

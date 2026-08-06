@@ -37,7 +37,7 @@ class ValidacionTicket extends FormRequest
             'subcategoria_ticket_id' => 'nullable|integer|exists:subcategoria_ticket,id',
             'areadestino_id' => 'required',
             'titulo' => 'required|string|max:255',
-            'comentario' => 'required|string|max:255',
+            'comentario' => 'required|string',
         ];
     }
 }

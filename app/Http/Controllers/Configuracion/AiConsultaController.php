@@ -339,6 +339,8 @@ class AiConsultaController extends Controller
             AiConsultaOperativaSupport::INTENT_PLAN_AGENTE => 'desvío / deuda proveedor 475 / firmar OC 1234',
             AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR => 'CC 93 depósito 12 (últimos 60 días)',
             AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_RESUMEN => 'Opcional: empresa biyemas / este mes',
+            AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_PROCESO => 'Opcional: últimos 90 días / empresa biyemas',
+            AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_PRODUCTIVIDAD => 'Opcional: este mes / últimos 90 días / empresa',
             AiConsultaOperativaSupport::INTENT_OC_PENDIENTES_FIRMA,
             AiConsultaOperativaSupport::INTENT_OC_VENCIDAS_SIN_RECEPCION,
             AiConsultaOperativaSupport::INTENT_RQ_SIN_OC => 'Opcional: empresa biyemas o id',
@@ -357,6 +359,8 @@ class AiConsultaController extends Controller
             AiConsultaOperativaSupport::INTENT_ARBOL_OC,
             AiConsultaOperativaSupport::INTENT_COMPROBANTE_PROVEEDOR,
             AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_RESUMEN,
+            AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_PROCESO,
+            AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_PRODUCTIVIDAD,
             AiConsultaOperativaSupport::INTENT_OC_PENDIENTES_FIRMA,
             AiConsultaOperativaSupport::INTENT_OC_VENCIDAS_SIN_RECEPCION,
             AiConsultaOperativaSupport::INTENT_LEAD_TIME_OC_RECEPCION,
@@ -394,6 +398,8 @@ class AiConsultaController extends Controller
     {
         return match ($intent) {
             AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_RESUMEN => 'resumen operativo de compras',
+            AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_PROCESO => 'KPI proceso de compras últimos 90 días',
+            AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_PRODUCTIVIDAD => 'KPI productividad de compras últimos 90 días',
             AiConsultaOperativaSupport::INTENT_OC_PENDIENTES_FIRMA => 'OC pendientes de firma',
             AiConsultaOperativaSupport::INTENT_OC_VENCIDAS_SIN_RECEPCION => 'OC vencidas sin recepción',
             AiConsultaOperativaSupport::INTENT_LEAD_TIME_OC_RECEPCION => 'lead time OC recepción últimos 90 días',

@@ -1174,6 +1174,7 @@ Route::get('stock/leerunarticulo/{articulo_id}', 'Stock\ArticuloController@leeUn
 Route::get('stock/leerunarticuloporsku/{sku}', 'Stock\ArticuloController@leeUnArticuloPorSku')->name('leer_un_articulo_por_sku');
 
 Route::post('stock/articulo/consultaarticulo', 'Stock\ArticuloController@consultaArticulo')->name('consulta_articulo');
+Route::post('stock/articulo/buscar-similares-descripcion', 'Stock\ArticuloController@buscarSimilaresDescripcion')->name('buscar_similares_descripcion_articulo');
 Route::get('stock/articulo/api/saldos-deposito', 'Stock\ArticuloController@apiSaldosDeposito')->name('articulo_saldos_deposito');
 Route::get('stock/articulo/{id}/api/preview-recalcular-transferencias-formula', 'Stock\ArticuloController@apiPreviewRecalcularTransferenciasFormula')->name('articulo_preview_recalcular_transferencias_formula');
 Route::post('stock/articulo/{id}/api/aplicar-recalcular-transferencias-formula', 'Stock\ArticuloController@apiAplicarRecalcularTransferenciasFormula')->name('articulo_aplicar_recalcular_transferencias_formula');
@@ -3028,6 +3029,7 @@ Route::post('compras/requisicion/{id}/confirmar', 'Compras\RequisicionController
 Route::get('compras/requisicion/{id}/centros-costo-arbol', 'Compras\RequisicionController@previewCentrocostoArbol')->name('centros_costo_arbol_requisicion');
 Route::delete('compras/requisicion/{id}/provisorio', 'Compras\RequisicionController@eliminarProvisorio')->name('eliminar_requisicion_provisorio');
 Route::get('compras/requisicion', 'Compras\RequisicionController@index')->name('consultar_requisicion');
+Route::get('compras/requisicion/seguimiento-aprobacion', 'Compras\RequisicionController@seguimientoAprobacion')->name('seguimiento_aprobacion_requisicion');
 Route::get('compras/requisicion-reporte', 'Compras\RequisicionReporteController@index')->name('reporte_requisicion_compras');
 Route::get('compras/listar-requisicion-reporte/{formato?}', 'Compras\RequisicionReporteController@exportar')->name('listar_reporte_requisicion_compras');
 Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->name('crear_requisicion');
@@ -3098,6 +3100,9 @@ Route::post('compras/listaprecio_proveedor/{id}/importar_excel', 'Compras\Listap
 
 Route::get('compras/ordencompra-reporte', 'Compras\OrdencompraReporteController@index')->name('reporte_ordencompra');
 Route::get('compras/listar-ordencompra-reporte/{formato?}', 'Compras\OrdencompraReporteController@exportar')->name('listar_reporte_ordencompra');
+Route::get('compras/historial-precios-articulo', 'Compras\HistorialPreciosArticuloController@index')->name('reporte_historial_precios_articulo');
+Route::get('compras/listar-historial-precios-articulo/{formato?}', 'Compras\HistorialPreciosArticuloController@exportar')->name('listar_reporte_historial_precios_articulo');
+Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');
 Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
 Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');
 Route::post('compras/ordencompra', 'Compras\OrdencompraController@guardar')->name('guardar_ordencompra');
@@ -3369,6 +3374,7 @@ Route::get('ticket/ticket/{id}/editar', 'Ticket\TicketController@editar')->name(
 Route::put('ticket/ticket/{id}', 'Ticket\TicketController@actualizar')->name('actualiza_ticket');
 Route::delete('ticket/ticket/{id}', 'Ticket\TicketController@eliminar')->name('elimina_ticket');
 Route::post('ticket/ticket/{ticketId}/tarea/{ticketTareaId}/comentario', 'Ticket\TicketController@guardarComentarioTarea')->name('guarda_comentario_tarea_ticket');
+Route::post('ticket/ticket/{ticketId}/reabrir', 'Ticket\TicketController@reabrirTicket')->name('reabre_ticket');
 Route::get('ticket/listaticket/{formato?}/{busqueda?}', 'Ticket\TicketController@listar')->name('lista_ticket');
 
 /*

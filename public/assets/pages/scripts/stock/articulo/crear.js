@@ -101,31 +101,215 @@ function mostrarSolapaArticulo(numero) {
                 $('#botonform1').removeClass('btn-info').addClass('btn-primary');
             }
         }
-	             
-        $('#descripcion').on('change', function () {                             
-            let descripcion = $(this).val();
 
+        // --- Alerta de descripciones similares (duplicados) solo en alta ---
+        var articuloSimilaresEstado = {
+            ultimaBusqueda: '',
+            aceptada: '',
+            pendientesSubmit: false,
+            minLen: 5,
+        };
+
+        function articuloSimilaresUrl() {
+            var el = document.getElementById('articulo-buscar-similares-descripcion-url');
+            if (el && el.value) {
+                return el.value;
+            }
+            if (typeof carpetaBase !== 'undefined' && carpetaBase) {
+                return String(carpetaBase).replace(/\/$/, '') + '/stock/articulo/buscar-similares-descripcion';
+            }
+            return '/stock/articulo/buscar-similares-descripcion';
+        }
+
+        function articuloEsAlta() {
+            return $('#form-general').length > 0
+                && $('#articulo-buscar-similares-descripcion-url').length > 0
+                && (!$('#articulo_id').length || !$('#articulo_id').val());
+        }
+
+        function articuloRenderSimilares(articulos) {
+            var $tbody = $('#tbody-articulo-similares-descripcion');
+            $tbody.empty();
+            (articulos || []).forEach(function (row) {
+                var consultar = '';
+                if (row.url_consultar) {
+                    consultar = '<a class="btn btn-info btn-sm" href="' + row.url_consultar +
+                        '" target="_blank" rel="noopener">Consultar</a>';
+                }
+                var estado = row.estado || '';
+                var badge = estado === 'ACTIVO'
+                    ? '<span class="badge badge-success">ACTIVO</span>'
+                    : '<span class="badge badge-secondary">' + $('<div>').text(estado).html() + '</span>';
+                $tbody.append(
+                    '<tr>' +
+                    '<td>' + (row.id || '') + '</td>' +
+                    '<td>' + $('<div>').text(row.sku || '').html() + '</td>' +
+                    '<td>' + $('<div>').text(row.descripcion || '').html() + '</td>' +
+                    '<td>' + badge + '</td>' +
+                    '<td class="text-center text-nowrap">' + consultar + '</td>' +
+                    '</tr>'
+                );
+            });
+        }
+
+        function articuloMostrarModalSimilares(descripcion, articulos) {
+            $('#articulo-similares-descripcion-buscada').text(descripcion);
+            articuloRenderSimilares(articulos);
+            $('#articuloSimilaresDescripcionModal').modal('show');
+        }
+
+        function articuloBuscarSimilaresDescripcion(descripcion, opciones) {
+            opciones = opciones || {};
+            descripcion = String(descripcion || '').trim();
+
+            if (!articuloEsAlta() || descripcion.length < articuloSimilaresEstado.minLen) {
+                if (typeof opciones.onVacio === 'function') {
+                    opciones.onVacio();
+                }
+                return;
+            }
+
+            if (descripcion === articuloSimilaresEstado.aceptada) {
+                if (typeof opciones.onAceptada === 'function') {
+                    opciones.onAceptada();
+                }
+                return;
+            }
+
+            if (descripcion === articuloSimilaresEstado.ultimaBusqueda
+                && !opciones.forzar
+                && typeof opciones.onMismaBusqueda === 'function') {
+                opciones.onMismaBusqueda();
+                return;
+            }
+
+            articuloSimilaresEstado.ultimaBusqueda = descripcion;
+
+            $.ajax({
+                url: articuloSimilaresUrl(),
+                type: 'POST',
+                dataType: 'json',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        || $('input[name="_token"]').val(),
+                },
+                data: { descripcion: descripcion },
+            })
+                .done(function (resp) {
+                    if (resp && resp.min_len) {
+                        articuloSimilaresEstado.minLen = parseInt(resp.min_len, 10) || 5;
+                    }
+                    var lista = (resp && resp.articulos) ? resp.articulos : [];
+                    if (lista.length === 0) {
+                        articuloSimilaresEstado.aceptada = descripcion;
+                        if (typeof opciones.onVacio === 'function') {
+                            opciones.onVacio();
+                        }
+                        return;
+                    }
+                    articuloMostrarModalSimilares(descripcion, lista);
+                    if (typeof opciones.onSimilares === 'function') {
+                        opciones.onSimilares(lista);
+                    }
+                })
+                .fail(function () {
+                    if (typeof opciones.onError === 'function') {
+                        opciones.onError();
+                    }
+                });
+        }
+
+        $('#descripcion').on('change', function () {
+            let descripcion = $(this).val();
             $(".descripcion").val(descripcion);
-        });  
-        
-        $('#sku').on('change', function () {                             
-            let sku = $(this).val();
+        });
+
+        $('#descripcion').on('blur', function () {
+            if (!articuloEsAlta()) {
+                return;
+            }
+            var descripcion = String($(this).val() || '').trim();
+            articuloBuscarSimilaresDescripcion(descripcion);
+        });
+
+        $('#btn-continuar-apesar-similares').on('click', function () {
+            var desc = String($('#descripcion').val() || '').trim();
+            articuloSimilaresEstado.aceptada = desc;
+            $('#articuloSimilaresDescripcionModal').modal('hide');
+            if (articuloSimilaresEstado.pendientesSubmit) {
+                articuloSimilaresEstado.pendientesSubmit = false;
+                var form = document.getElementById('form-general');
+                if (form) {
+                    form.submit();
+                }
+            }
+        });
+
+        $('#articuloSimilaresDescripcionModal').on('hidden.bs.modal', function () {
+            if (articuloSimilaresEstado.pendientesSubmit
+                && articuloSimilaresEstado.aceptada !== String($('#descripcion').val() || '').trim()) {
+                articuloSimilaresEstado.pendientesSubmit = false;
+            }
+        });
+
+        $('#form-general').on('submit', function (e) {
+            if (!articuloEsAlta()) {
+                return;
+            }
+            var desc = String($('#descripcion').val() || '').trim();
+            if (desc.length < articuloSimilaresEstado.minLen) {
+                return;
+            }
+            if (desc === articuloSimilaresEstado.aceptada) {
+                return;
+            }
+
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            articuloSimilaresEstado.pendientesSubmit = true;
+            articuloBuscarSimilaresDescripcion(desc, {
+                forzar: true,
+                onVacio: function () {
+                    articuloSimilaresEstado.pendientesSubmit = false;
+                    articuloSimilaresEstado.aceptada = desc;
+                    $('#form-general')[0].submit();
+                },
+                onAceptada: function () {
+                    articuloSimilaresEstado.pendientesSubmit = false;
+                    $('#form-general')[0].submit();
+                },
+                onError: function () {
+                    articuloSimilaresEstado.pendientesSubmit = false;
+                    $('#form-general')[0].submit();
+                },
+            });
+            return false;
+        });
+
+        $('#sku').on('change', function () {
+            let sku = String($(this).val() || '').trim();
 
             $(".sku").val(sku);
 
-            // busca el sku si existe
-            let url = carpetaBase+'/stock/leerunarticuloporsku/'+sku;
+            if (sku === '') {
+                return;
+            }
 
-            $.get(url, function(articulo){
+            // Evita códigos SKU repetidos
+            let url = carpetaBase + '/stock/leerunarticuloporsku/' + encodeURIComponent(sku);
 
-                if (articulo.id > 0)
-                {
-                    alert('Articulo ya existente '+articulo.id+' Descripcion '+articulo.descripcion);
-
+            $.get(url, function (articulo) {
+                if (articulo && articulo.id > 0) {
+                    alert(
+                        'Ya existe un artículo con el SKU "' + sku + '" (ID ' + articulo.id +
+                        '). Descripción: ' + (articulo.descripcion || '') +
+                        '\n\nNo se pueden crear códigos repetidos. Elija otro SKU.'
+                    );
                     $("#sku").val('');
+                    $(".sku").val('');
                     $("#sku").focus();
                 }
-            });  
+            });
         });
                 
         $('#unidadmedida_id').on('change', function () {                             

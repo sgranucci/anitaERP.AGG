@@ -95,6 +95,11 @@
     Si en un nivel no se asigna usuario, el nivel se considera <strong>aprobado automáticamente</strong>.
     @if($esRequisiciones)
         En requisiciones, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel; si no se define, quedará en <strong>APROBADA</strong>.
+        <br>
+        <strong>Doble aprobación</strong> (por centro de costo): si está activo, el <strong>Desde monto</strong> actúa como umbral de piso
+        (como en solicitudes de pago): el responsable de área (nivel menor) firma primero y los umbrales altos
+        (Beta / Dir, etc.) recién después. Con montos por debajo del umbral alto el circuito sigue igual que hoy.
+        Si está desactivado, se usan bandas exclusivas Desde–Hasta (solo el firmante cuyo rango contiene el monto).
     @elseif($esRequisicionesSala)
         En requisiciones de sala, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel (si está definido).
     @else
@@ -105,20 +110,26 @@
     <table class="table" id="arbolaprobacion-nivel-table">
         <thead>
             <tr>
-                <th style="width: 5%;"></th>
-                <th style="width: 7%;">Nivel</th>
-                <th style="width: 15%;">Centro Costo</th>
-                <th style="width: 28%;" title="Opcional. Si no se asigna usuario, el nivel se aprueba automáticamente.">Usuario (opcional)</th>
-                <th style="width: 10%;">Desde Monto</th>
-                <th style="width: 10%;">Hasta Monto</th>
-                <th style="width: 8%;">Moneda</th>
-                <th style="width: 14%;" title="Estado de la requisición al aprobar este nivel (solo tipo Requisiciones; si queda vacío, APROBADA)">Estado req.</th>
+                <th style="width: 4%;"></th>
+                <th style="width: 6%;">Nivel</th>
+                <th style="width: 14%;">Centro Costo</th>
+                <th style="width: 24%;" title="Opcional. Si no se asigna usuario, el nivel se aprueba automáticamente.">Usuario (opcional)</th>
+                <th style="width: 9%;">Desde Monto</th>
+                <th style="width: 9%;">Hasta Monto</th>
+                <th style="width: 7%;">Moneda</th>
+                <th style="width: 12%;" title="Estado de la requisición al aprobar este nivel (solo tipo Requisiciones; si queda vacío, APROBADA)">Estado req.</th>
+                <th style="width: 8%;" class="col-doble-aprobacion" title="Por centro de costo. Con S: área primero, luego umbrales altos (piso Desde monto).">Doble apr.</th>
                 <th></th>
             </tr>
         </thead>
         <tbody id="tbody-arbolaprobacion-nivel-table">
         @if ($data->arbolaprobacion_niveles ?? '') 
             @foreach (old('arbolaprobacion_nivel', $data->arbolaprobacion_niveles->count() ? $data->arbolaprobacion_niveles : ['']) as $arbolaprobacion_niveles)
+                @php
+                    $idxNivel = $loop->index;
+                    $dobleSel = strtoupper((string) old('doble_aprobacions.'.$idxNivel, $arbolaprobacion_niveles->doble_aprobacion ?? 'N'));
+                    $dobleSel = $dobleSel === 'S' ? 'S' : 'N';
+                @endphp
                 <tr class="item-arbolaprobacion-nivel">
                     <td>
                         <input type="hidden" class="id form-control" name="ids[]" value="{{$arbolaprobacion_niveles->id ?? ''}}">
@@ -169,7 +180,6 @@
                     </td>
                     <td>
                         @php
-                            $idxNivel = $loop->index;
                             $nombreTipoOc = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('OC', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
                             $nombreTipoRs = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('RS', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
                             $tipoArbolSel = old('tipoarbol', isset($data) ? ($data->tipoarbol ?? '') : '');
@@ -189,6 +199,11 @@
                                 <option value="{{ $estDoc['nombre'] }}" {{ $selDoc == $estDoc['nombre'] ? 'selected' : '' }}>{{ str_replace('_', ' ', $estDoc['nombre']) }}</option>
                             @endforeach
                         </select>
+                    </td>
+                    <td class="text-center col-doble-aprobacion">
+                        <input type="hidden" name="doble_aprobacions[]" class="doble_aprobacion_valor" value="{{ $dobleSel }}">
+                        <input type="checkbox" class="doble_aprobacion_check" value="S" title="Doble aprobación para este centro de costo"
+                            {{ $dobleSel === 'S' ? 'checked' : '' }}>
                     </td>
                     <td>
                         <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_arbolaprobacion_nivel tooltipsC">

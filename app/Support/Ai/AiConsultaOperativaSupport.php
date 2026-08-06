@@ -71,6 +71,10 @@ final class AiConsultaOperativaSupport
 
     public const INTENT_COMPRAS_KPI_RESUMEN = 'compras_kpi_resumen';
 
+    public const INTENT_COMPRAS_KPI_PROCESO = 'compras_kpi_proceso';
+
+    public const INTENT_COMPRAS_KPI_PRODUCTIVIDAD = 'compras_kpi_productividad';
+
     public const INTENT_OC_PENDIENTES_FIRMA = 'oc_pendientes_firma';
 
     public const INTENT_OC_VENCIDAS_SIN_RECEPCION = 'oc_vencidas_sin_recepcion';
@@ -102,6 +106,8 @@ final class AiConsultaOperativaSupport
             self::INTENT_CONSULTAR_MANUAL => 'Manual / ayuda (RAG)',
             self::INTENT_PEDIDO_CONSUMO_SECTOR => 'Pedido por consumo (CC + depósito)',
             self::INTENT_COMPRAS_KPI_RESUMEN => 'KPI / resumen operativo de Compras',
+            self::INTENT_COMPRAS_KPI_PROCESO => 'KPI proceso de Compras (ciclo / gestión / COM / % abiertas)',
+            self::INTENT_COMPRAS_KPI_PRODUCTIVIDAD => 'KPI productividad de Compras (OC / ahorro por comprador)',
             self::INTENT_OC_PENDIENTES_FIRMA => 'OC pendientes de firma',
             self::INTENT_OC_VENCIDAS_SIN_RECEPCION => 'OC vencidas sin recepción',
             self::INTENT_LEAD_TIME_OC_RECEPCION => 'Lead time OC → recepción',
@@ -175,14 +181,20 @@ final class AiConsultaOperativaSupport
                 || can('listar-requisicion-sala', false)
                 || can('crear-requisicion-sala', false),
             self::INTENT_COMPRAS_KPI_RESUMEN,
+            self::INTENT_COMPRAS_KPI_PROCESO,
+            self::INTENT_COMPRAS_KPI_PRODUCTIVIDAD,
             self::INTENT_OC_PENDIENTES_FIRMA,
             self::INTENT_LEAD_TIME_OC_RECEPCION,
             self::INTENT_TOP_PROVEEDORES_MONTO => can('listar-ordencompra', false)
                 || can('listar-proveedor', false)
-                || can('listar-comprobante-proveedor', false),
+                || can('listar-comprobante-proveedor', false)
+                || can('listar-kpi-compras', false),
             self::INTENT_OC_VENCIDAS_SIN_RECEPCION => can('listar-ordencompra', false)
-                || can('listar-recepcion-proveedor', false),
-            self::INTENT_RQ_SIN_OC => can('listar-requisicion', false) || can('listar-ordencompra', false),
+                || can('listar-recepcion-proveedor', false)
+                || can('listar-kpi-compras', false),
+            self::INTENT_RQ_SIN_OC => can('listar-requisicion', false)
+                || can('listar-ordencompra', false)
+                || can('listar-kpi-compras', false),
             default => false,
         };
     }
@@ -235,6 +247,14 @@ final class AiConsultaOperativaSupport
             self::INTENT_COMPRAS_KPI_RESUMEN => self::consultarComprasKpi(
                 self::INTENT_COMPRAS_KPI_RESUMEN,
                 fn () => ComprasKpisOperativosSupport::resumen($params)
+            ),
+            self::INTENT_COMPRAS_KPI_PROCESO => self::consultarComprasKpi(
+                self::INTENT_COMPRAS_KPI_PROCESO,
+                fn () => ComprasKpisOperativosSupport::kpisProceso($params)
+            ),
+            self::INTENT_COMPRAS_KPI_PRODUCTIVIDAD => self::consultarComprasKpi(
+                self::INTENT_COMPRAS_KPI_PRODUCTIVIDAD,
+                fn () => ComprasKpisOperativosSupport::kpisProductividad($params)
             ),
             self::INTENT_OC_PENDIENTES_FIRMA => self::consultarComprasKpi(
                 self::INTENT_OC_PENDIENTES_FIRMA,

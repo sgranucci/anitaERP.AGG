@@ -47,6 +47,10 @@
             font-weight: bold;
             margin-top: 2px;
         }
+        .pdf-cabecera-cuit {
+            font-size: 8px;
+            margin-top: 1px;
+        }
         .titulo-doc {
             font-size: 13px;
             font-weight: bold;
@@ -130,6 +134,7 @@
     @php
         use App\Support\Configuracion\EmpresaLogoArchivo;
         $nombreEmpresaOc = trim((string) ($data->empresas->nombre ?? ''));
+        $cuitEmpresaOc = trim((string) ($data->empresas->nroinscripcion ?? ''));
         $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($nombreEmpresaOc !== '' ? $nombreEmpresaOc : null);
         $logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;
         $fechaOc = $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '—';
@@ -142,6 +147,9 @@
                     <img class="logo-empresa" src="{{ $logoEmpresaDataUri }}" alt="">
                 @endif
                 <div class="pdf-cabecera-marca">{{ $nombreEmpresaOc !== '' ? $nombreEmpresaOc : '—' }}</div>
+                @if ($cuitEmpresaOc !== '')
+                    <div class="pdf-cabecera-cuit">CUIT {{ $cuitEmpresaOc }}</div>
+                @endif
             </td>
             <td style="text-align: right;">
                 <p class="titulo-doc">ORDEN DE COMPRA NRO {{ $data->numeroordencompra }}</p>
@@ -161,7 +169,12 @@
             <td class="lbl">Alta sistema</td>
             <td>@if ($data->created_at){{ $data->created_at->format('d/m/Y H:i') }}@else — @endif</td>
             <td class="lbl">Empresa</td>
-            <td>{{ $data->empresas->nombre ?? '—' }}</td>
+            <td>
+                {{ $data->empresas->nombre ?? '—' }}
+                @if ($cuitEmpresaOc !== '')
+                    · CUIT {{ $cuitEmpresaOc }}
+                @endif
+            </td>
         </tr>
         <tr>
             <td class="lbl">Centro costo</td>

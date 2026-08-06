@@ -2140,7 +2140,11 @@ $(function () {
 			var $tb = $('#tabla-movimientos-arbol tbody').empty();
 			var movs = (data && data.movimientos) ? data.movimientos : [];
 			movs.forEach(function (m) {
-				$tb.append('<tr><td>' + m.nivel + '</td><td>' + (m.estado || '') + '</td><td>' + (m.indicacion_estado_ordencompra || '') + '</td></tr>');
+				$tb.append(
+					'<tr><td>' + m.nivel + '</td><td>' + (m.estado || '') + '</td><td>'
+					+ $('<div>').text(m.indicacion_estado_ordencompra || '').html()
+					+ '</td><td>' + $('<div>').text(m.observacion || '').html() + '</td></tr>'
+				);
 			});
 			if (data && data.aviso_grabacion_pendiente) {
 				$('#oc-aviso-arbol').removeClass('d-none').text(data.aviso_grabacion_pendiente);

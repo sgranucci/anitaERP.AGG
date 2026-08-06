@@ -625,6 +625,8 @@ final class AiConsultaOperativaRouterSupport
             'mayor cuenta 211010004 empresa 1 julio',
             'saldo de la cuenta caja y bancos empresa biyemas',
             'resumen operativo de compras',
+            'KPI proceso de compras últimos 90 días',
+            'KPI productividad de compras últimos 90 días',
             'OC pendientes de firma',
             'OC vencidas sin recepción',
             'lead time OC recepción últimos 90 días',
@@ -956,6 +958,44 @@ final class AiConsultaOperativaRouterSupport
                 'intent' => AiConsultaOperativaSupport::INTENT_RQ_SIN_OC,
                 'params' => $params,
                 'interpretacion' => 'Requisiciones con líneas sin OC',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'kpi proceso', 'kpis proceso', 'ciclo de compra', 'ciclo de compras',
+            'gestion de oc', 'gestión de oc', 'circuito de compras', 'circuito hasta com',
+            'porcentaje de oc abiertas', '% oc abiertas', 'oc abiertas',
+            'tiempo promedio ciclo', 'tiempo promedio gestion oc', 'tiempo promedio gestión oc',
+        ])) {
+            if (empty($params['fecha_desde'])) {
+                $params['fecha_desde'] = date('Y-m-d', strtotime('-89 days'));
+                $params['fecha_hasta'] = date('Y-m-d');
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_PROCESO,
+                'params' => $params,
+                'interpretacion' => 'KPI proceso de Compras',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'kpi productividad', 'kpis productividad', 'productividad compras',
+            'productividad del area', 'productividad del área',
+            'oc por comprador', 'oc gestionadas por comprador',
+            'ahorro por comprador', 'ahorro generado',
+        ])) {
+            if (empty($params['fecha_desde'])) {
+                $params['fecha_desde'] = date('Y-m-d', strtotime('-89 days'));
+                $params['fecha_hasta'] = date('Y-m-d');
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_COMPRAS_KPI_PRODUCTIVIDAD,
+                'params' => $params,
+                'interpretacion' => 'KPI productividad de Compras',
             ];
         }
 

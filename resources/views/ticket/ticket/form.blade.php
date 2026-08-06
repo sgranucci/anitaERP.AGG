@@ -129,7 +129,7 @@
         </div>
         <div class="form-group">
             <label for="comentario">Comentario</label>
-            <textarea name="comentario" id="comentario" class="form-control" rows="3" maxlength="255" placeholder="Comentario ..." required
+            <textarea name="comentario" id="comentario" class="form-control" rows="6" placeholder="Comentario ..." required
                 @if ($camposBloqueados)
                     readonly
                 @endif

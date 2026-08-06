@@ -106,8 +106,8 @@ $(function () {
                     </div>
                     @include('compras.ordencompra.partials.bloque_factura_legajo_sector', ['prefix' => 'index_oc'])
                     <div class="form-group">
-                        <label for="index_oc_sector_obs">Observación</label>
-                        <input type="text" name="observacion" id="index_oc_sector_obs" class="form-control" maxlength="255">
+                        <label for="index_oc_sector_obs">Observaci&oacute;n / comentario al &aacute;rbol</label>
+                        <input type="text" name="observacion" id="index_oc_sector_obs" class="form-control" maxlength="255" placeholder="Motivo del traslado (tambi&eacute;n va al &aacute;rbol si aplica)">
                     </div>
                     <div class="form-group">
                         <label for="index_oc_sector_leyenda">Leyenda</label>
@@ -134,6 +134,13 @@ $(function () {
                 <h3 class="card-title">Órdenes de compra</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.compras.boton-manual')
+                    @if (can('listar-kpi-compras', false))
+                        <a href="{{ route('consultar_kpi_compras') }}"
+                           class="btn btn-outline-success btn-sm mr-1"
+                           title="Tablero de KPIs de proceso y productividad">
+                            <i class="fas fa-chart-line"></i> KPIs
+                        </a>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-ordencompra',
                         'filtroValor' => $filtros['valor'] ?? '',

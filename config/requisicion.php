@@ -17,6 +17,17 @@ return [
     ),
 
     /*
+    |--------------------------------------------------------------------------
+    | Tablero seguimiento aprobación
+    |--------------------------------------------------------------------------
+    |
+    | Horas en el nivel actual (o desde creación si aún no hay envío) a partir
+    | de las cuales la fila se marca con alerta de demora.
+    |
+    */
+    'seguimiento_aprobacion_alerta_horas' => (int) env('REQUISICION_SEGUIMIENTO_ALERTA_HORAS', 48),
+
+    /*
     | Numeración Anita: shared numabm código 21 (a-reqmae.c / compras / referencia 1).
     | Misma lógica que recepción COM: max(ERP, reqmae, numabm) + hueco libre.
     */

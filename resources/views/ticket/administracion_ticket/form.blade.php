@@ -9,6 +9,24 @@
                 </div>
             </div>
             <div class="form-group row">
+                <label for="nombre_usuario_genero" class="col-lg-3 col-form-label">Gener&oacute; usuario</label>
+                <div class="col-lg-7">
+                    @php
+                        $nombreUsuarioGenero = old(
+                            'nombre_usuario_genero',
+                            isset($data)
+                                ? ($data->usuarios->nombre ?? $data->usuarios->usuario ?? '')
+                                : (Auth::user()->nombre ?? Auth::user()->usuario ?? '')
+                        );
+                    @endphp
+                    <input type="text"
+                           id="nombre_usuario_genero"
+                           class="form-control"
+                           value="{{ $nombreUsuarioGenero }}"
+                           readonly>
+                </div>
+            </div>
+            <div class="form-group row">
                 <label for="sala" class="col-lg-3 col-form-label">Sala</label>
                 <select name="sala_id" id="sala_id" data-placeholder="Sala" class="col-lg-7 form-control required" data-fouc required>
                     <option value="">-- Seleccionar sala --</option>
@@ -91,7 +109,7 @@
         </div>
         <div class="form-group">
             <label for="comentario">Comentario</label>
-            <textarea name="comentario" id="comentario" class="form-control" rows="3" maxlength="255" placeholder="Comentario ..." required>{{ old('comentario', $data->comentario ?? '') }}</textarea>
+            <textarea name="comentario" id="comentario" class="form-control" rows="6" placeholder="Comentario ..." required>{{ old('comentario', $data->comentario ?? '') }}</textarea>
         </div>
     </div>
     <h4>Tareas</h4>
@@ -179,12 +197,13 @@
                             </select>
                         </td>
                         <td>
-                            @if ($tarea->fechafinalizacion < "2000-01-01")
+                            @php
+                                $tareaFinalizada = ! empty($tarea->fechafinalizacion) && $tarea->fechafinalizacion >= '2000-01-01';
+                            @endphp
+                            @if (! $tareaFinalizada)
                                 <button type="button" title="Finaliza tarea" class="btn-accion-tabla finalizatarea tooltipsC">
                                     <i class="text-danger">Finaliza</i>
                                 </button>
-                            @endif
-                            @if ($tarea->fechafinalizacion < "2000-01-01")
                                 <button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_tarea_ticket tooltipsC">
                                     <i class="fa fa-times-circle text-danger"></i>
                                 </button>

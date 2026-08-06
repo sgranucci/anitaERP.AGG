@@ -445,7 +445,10 @@ class OrdencompraGestionService
                 ]);
             }
 
-            $this->ocArbolTriggerDispatcher->dispararPorAlta((int) $oc->id);
+            $this->ocArbolTriggerDispatcher->dispararPorAlta(
+                (int) $oc->id,
+                $this->observacionEnvioArbolDesdePayload($payload)
+            );
 
             if (! $omitirMarcarRequisicionGeneroOc && ! empty($cab['requisicion_id'])) {
                 $this->sincronizarEstadoRequisicionSegunLineasOc((int) $cab['requisicion_id'], $uid);
@@ -557,7 +560,10 @@ class OrdencompraGestionService
             $this->ordencompraArchivoRepository->update($request, $id);
 
             if (($existente->estadoordencompra ?? '') === OrdencompraEstados::PENDIENTE) {
-                $this->ocArbolTriggerDispatcher->dispararPorActualizacion($id);
+                $this->ocArbolTriggerDispatcher->dispararPorActualizacion(
+                    $id,
+                    $this->observacionEnvioArbolDesdePayload($payload)
+                );
             }
 
             $uidAct = Auth::user()->id;
@@ -698,7 +704,8 @@ class OrdencompraGestionService
             $this->ocArbolTriggerDispatcher->dispararPorCambioSector(
                 $id,
                 $sectorAnteriorId > 0 ? $sectorAnteriorId : null,
-                $sectorLegajocompraId
+                $sectorLegajocompraId,
+                $observacion
             );
 
             DB::commit();
@@ -850,6 +857,18 @@ class OrdencompraGestionService
     /**
      * @param  array<string, mixed>  $payload
      */
+    private function observacionEnvioArbolDesdePayload(array $payload): ?string
+    {
+        $obs = $this->arbolaprobacionService->normalizarObservacionEnvio(
+            $payload['comentario_envio_arbol'] ?? $payload['observacion_envio'] ?? null
+        );
+
+        return $obs !== '' ? $obs : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
     private function armaCabeceraDesdeRequest(array $payload, string $estado, ?int $sectorId, int $creoUsuarioId): array
     {
         return [
@@ -890,6 +909,7 @@ class OrdencompraGestionService
             'empresa_id' => 'required|integer|exists:empresa,id',
             'centrocosto_id' => 'required|integer|exists:centrocosto,id',
             'comentario' => 'nullable|string|max:255',
+            'comentario_envio_arbol' => 'nullable|string|max:255',
             'detalle' => 'required|string',
             'tratamiento' => ['required', 'string', 'max:50', Rule::in(array_column(Ordencompra::$enumTratamientoCompra, 'nombre'))],
             'requisicion_id' => 'nullable|integer|exists:requisicion,id',

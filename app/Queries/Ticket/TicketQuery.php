@@ -7,6 +7,7 @@ use App\Models\Ticket\Ticket_Estado;
 use App\Models\Ticket\Ticket_Tarea;
 use App\Repositories\Ticket\Tecnico_TicketRepositoryInterface;
 use App\Models\Admin\Permiso;
+use App\Support\Ticket\TicketAlcanceCentrocostoSupport;
 use Auth;
 use DB;
 use Carbon\Carbon;
@@ -59,7 +60,7 @@ class TicketQuery implements TicketQueryInterface
             $areadestino_id = $tecnico_ticket[0]->areadestino_id;
 
         // Verifica permisos
-        $flUsuario = $flTecnico = $flSupervisor = $flEncargado = false;
+        $flUsuario = $flTecnico = $flSupervisor = $flEncargado = $flAdminSector = false;
 
         $rolId = session()->get('rol_id');
         $permisos = cache()->tags('Permiso')->rememberForever("Permiso.rolid.$rolId", function () {
@@ -78,6 +79,10 @@ class TicketQuery implements TicketQueryInterface
 
         if (in_array('supervisor-ticket', $permisos))   
             $flSupervisor = true;
+
+        if (in_array('admin-ticket-sector', $permisos)) {
+            $flAdminSector = true;
+        }
 
         $select = [ 'ticket.id as id',
                     'ticket.fecha as fecha',
@@ -140,9 +145,14 @@ class TicketQuery implements TicketQueryInterface
 
         $tickets->where('deleted_at', null);
 
-        // Carga de Tickets: usuario-ticket manda (solo emitidos por el usuario).
-        // Sin ese permiso: encargado / tecnico por área; supervisor sin filtro.
-        if ($flUsuario) {
+        // Carga de Tickets — prioridad:
+        // supervisor (sin filtro) > admin-ticket-sector (mismo CC del emisor)
+        // > usuario-ticket (propios) > encargado / tecnico por área.
+        if ($flSupervisor) {
+            // sin filtro de alcance
+        } elseif ($flAdminSector) {
+            TicketAlcanceCentrocostoSupport::aplicarFiltroEmisoresMismoCentrocosto($tickets);
+        } elseif ($flUsuario) {
             $tickets->where('ticket.usuario_id', $usuario_id);
         } elseif ($flEncargado) {
             $tickets->where('ticket.areadestino_id', $areadestino_id);
