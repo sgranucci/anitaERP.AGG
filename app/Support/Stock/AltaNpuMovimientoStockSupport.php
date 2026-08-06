@@ -6,6 +6,7 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Services\Stock\ArticuloParteUnicaService;
+use Illuminate\Support\Facades\Log;
 
 final class AltaNpuMovimientoStockSupport
 {
@@ -93,6 +94,7 @@ final class AltaNpuMovimientoStockSupport
         $medidas = self::normalizarArray($data['medidas'] ?? []);
         $colores = self::normalizarArray($data['colores_id'] ?? []);
         $talles = self::normalizarArray($data['talles_id'] ?? []);
+        $numeropartes = self::normalizarArray($data['numeropartes'] ?? []);
 
         $outArticulos = [];
         $outCantidades = [];
@@ -125,9 +127,11 @@ final class AltaNpuMovimientoStockSupport
                 continue;
             }
 
+            $npuManual = self::npuManualDeLinea($numeropartes, $i);
+
             $unidades = RecepcionProveedorParteUnicaSupport::unidadesDesdeCantidad($cantidad);
             for ($u = 0; $u < $unidades; $u++) {
-                $parte = $service->crear($articuloId);
+                $parte = $service->crear($articuloId, $npuManual > 0 ? $npuManual : null);
                 $npu = (int) $parte->numeroparte;
                 $npusGenerados[] = $npu;
 
@@ -207,9 +211,11 @@ final class AltaNpuMovimientoStockSupport
 
         $articulos = self::normalizarArray($data['articulos_id'] ?? []);
         $cantidades = self::normalizarArray($data['cantidades'] ?? []);
+        $numeropartes = self::normalizarArray($data['numeropartes'] ?? []);
 
         $lineasValidas = 0;
         $totalUnidades = 0;
+        $npusManuales = [];
 
         foreach ($articulos as $i => $articuloId) {
             $articuloId = (int) $articuloId;
@@ -251,6 +257,23 @@ final class AltaNpuMovimientoStockSupport
                 );
             }
 
+            $npuManual = self::npuManualDeLinea($numeropartes, $i);
+            if ($npuManual > 0) {
+                if ($unidades !== 1) {
+                    throw new \RuntimeException(
+                        'El NPU '.$npuManual.' se indica en una línea con cantidad 1. '
+                        .'Use una línea por NPU o deje el NPU vacío para que el sistema lo genere.'
+                    );
+                }
+
+                if (isset($npusManuales[$npuManual])) {
+                    throw new \RuntimeException('El NPU '.$npuManual.' está repetido en el comprobante.');
+                }
+
+                $npusManuales[$npuManual] = true;
+                self::assertNpuDisponibleParaAlta($npuManual, $articulo);
+            }
+
             $lineasValidas++;
             $totalUnidades += $unidades;
         }
@@ -258,6 +281,69 @@ final class AltaNpuMovimientoStockSupport
         if ($lineasValidas === 0 || $totalUnidades === 0) {
             throw new \RuntimeException('Debe indicar al menos un artículo con cantidad para alta de NPU.');
         }
+    }
+
+    /**
+     * NPU tipeado por el operador en la línea; 0 = lo genera el sistema.
+     *
+     * @param  list<mixed>  $numeropartes
+     *
+     * @throws \RuntimeException
+     */
+    private static function npuManualDeLinea(array $numeropartes, int|string $indice): int
+    {
+        $valor = trim((string) ($numeropartes[$indice] ?? ''));
+        if ($valor === '') {
+            return 0;
+        }
+
+        if (! ctype_digit($valor)) {
+            throw new \RuntimeException("El NPU «{$valor}» debe ser un número entero sin espacios ni letras.");
+        }
+
+        $npu = (int) $valor;
+        if ($npu <= 0) {
+            throw new \RuntimeException('El NPU debe ser mayor a cero.');
+        }
+
+        return $npu;
+    }
+
+    /**
+     * NPU libre en el ERP. Si ya existe en Anita (etiqueta histórica) solo se admite
+     * para el mismo artículo: el alta lo registra en el ERP sin duplicarlo en Anita.
+     *
+     * @throws \RuntimeException
+     */
+    private static function assertNpuDisponibleParaAlta(int $npu, Articulo $articulo): void
+    {
+        $parte = ArticuloParteUnicaDisponibilidadSupport::findPorNumeroparte($npu);
+        if ($parte !== null) {
+            $skuParte = trim((string) ($parte->articulos->sku ?? ''));
+            $detalle = $skuParte !== '' ? " (artículo {$skuParte})" : '';
+            throw new \RuntimeException("El NPU {$npu} ya está registrado en el sistema{$detalle}.");
+        }
+
+        try {
+            $skuAnita = StkParteUnicaAnitaBridgeSupport::skuAnitaDeNumeroparte($npu);
+        } catch (\Throwable $e) {
+            Log::warning('AltaNpuMovimientoStock: no se pudo verificar el NPU en Anita', [
+                'numeroparte' => $npu,
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
+        if ($skuAnita === null || StkParteUnicaAnitaBridgeSupport::mismoSku($skuAnita, $articulo->sku)) {
+            return;
+        }
+
+        $skuLinea = trim((string) ($articulo->sku ?? ''));
+        throw new \RuntimeException(
+            "El NPU {$npu} ya existe en Anita para el artículo ".(ltrim($skuAnita, '0') ?: $skuAnita)
+            .", no para {$skuLinea}."
+        );
     }
 
     /**

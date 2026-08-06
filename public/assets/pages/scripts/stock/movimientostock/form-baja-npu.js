@@ -40,6 +40,16 @@
         }
     }
 
+    function actualizarVisibilidadColumnaNpu() {
+        var $tabla = $('#tabla-items-movimientostock');
+        if (!$tabla.length) {
+            return;
+        }
+
+        var altaNpu = typeof window.msEsModoAltaNpu === 'function' && window.msEsModoAltaNpu();
+        $tabla.find('th.ms-col-npu-baja, td.ms-col-npu-baja').toggle(esModoBajaNpu() || altaNpu);
+    }
+
     function aplicarModoBajaNpuEnTabla() {
         var activo = esModoBajaNpu();
         var $tabla = $('#tabla-items-movimientostock');
@@ -47,7 +57,7 @@
             return;
         }
 
-        $tabla.find('th.ms-col-npu-baja, td.ms-col-npu-baja').toggle(activo);
+        actualizarVisibilidadColumnaNpu();
         $tabla.toggleClass('ms-tabla-baja-npu', activo);
         $('#ms-ayuda-baja-npu').toggle(activo);
 
@@ -124,6 +134,9 @@
             return;
         }
         e.preventDefault();
+        if (!esModoBajaNpu()) {
+            return;
+        }
         resolverNpuEnFila($(this).closest('tr.item-pedido'));
     });
 
@@ -152,6 +165,7 @@
         setTimeout(aplicarModoBajaNpuEnTabla, 200);
     });
 
+    window.msActualizarVisibilidadColumnaNpu = actualizarVisibilidadColumnaNpu;
     window.msAplicarModoBajaNpuEnTabla = aplicarModoBajaNpuEnTabla;
     window.msEsModoBajaNpu = esModoBajaNpu;
     window.msResolverNpuEnFila = resolverNpuEnFila;

@@ -19,7 +19,8 @@ class ImportarAsientosAnitaCommand extends Command
                             {--usuario-id=1 : usuario_id de los asientos importados}
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}
-                            {--reemplazar-diferentes : En --ejecutar, reemplaza duplicados con diferencias}';
+                            {--reemplazar-diferentes : En --ejecutar, reemplaza duplicados con diferencias}
+                            {--importar-resumen-sin-detalle : Importa el resumen V/C/T cuando no hay detalle del sistema en el mes (verificar antes: el detalle puede estar en otro mes)}';
 
     protected $description = 'Importa asientos Anita (ctamov + subdiario/subhist) a ERP. Excluye ctamov resumen V/C/T (no P/PER).';
 
@@ -32,6 +33,7 @@ class ImportarAsientosAnitaCommand extends Command
         $ejecutar = (bool) $this->option('ejecutar');
         $dryRun = ! $ejecutar || (bool) $this->option('dry-run');
         $reemplazar = (bool) $this->option('reemplazar-diferentes');
+        $resumenSinDetalle = (bool) $this->option('importar-resumen-sin-detalle');
 
         if ($ejecutar && (bool) $this->option('dry-run')) {
             $this->error('No combine --ejecutar con --dry-run.');
@@ -58,6 +60,9 @@ class ImportarAsientosAnitaCommand extends Command
             .' con asi_mon_ref≠'.AnitaAsientoImportService::ASI_MON_REF_ORIGEN_ERP
             .' (resumen subdiario; asi_mon_ref=-1 = origen ERP, se importa)');
         $this->line('Detalle: subdiario (abierto) + subhist (cerrado) → numeroasiento = nro_operacion');
+        $this->line('Resumen sin detalle del sistema en el mes: '.($resumenSinDetalle
+            ? 'se importa desde ctamov (omite espejo en otra moneda sin cotización)'
+            : 'solo se reporta (usar --importar-resumen-sin-detalle para importarlo)'));
         $this->line('Anita fuente de verdad hasta '.AnitaAsientoImportService::ANITA_FUENTE_VERDAD_HASTA
             .' (reemplaza diferencias en ERP; conserva FKs de proceso)');
 
@@ -71,6 +76,7 @@ class ImportarAsientosAnitaCommand extends Command
                 $reemplazar,
                 $usuarioId,
                 fn (string $m) => $this->line($m),
+                $resumenSinDetalle,
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
@@ -88,6 +94,7 @@ class ImportarAsientosAnitaCommand extends Command
                 ['subhist filas', (string) $r['subhist_filas_leidas']],
                 ['ctamov excluidos (V/C/T) asientos', (string) $r['ctamov_excluidos_cierre']],
                 ['ctamov excluidos líneas', (string) $r['ctamov_excluidos_lineas']],
+                ['ctamov resumen sin detalle (se importa)', (string) ($r['ctamov_resumen_sin_detalle'] ?? 0)],
                 ['A crear (asientos)', (string) $r['a_crear']],
                 ['A crear (líneas mov.)', (string) $r['lineas_a_crear']],
                 ['Creados', (string) $r['creados']],
@@ -107,6 +114,22 @@ class ImportarAsientosAnitaCommand extends Command
                 $filas[] = [$origen, (string) $cant];
             }
             $this->table(['Origen a crear', 'Asientos'], $filas);
+        }
+
+        if (($r['resumen_sin_detalle_detalle'] ?? []) !== []) {
+            $this->warn('Resúmenes V/C/T sin detalle del sistema en el mes:');
+            $filas = [];
+            foreach ($r['resumen_sin_detalle_detalle'] as $d) {
+                $filas[] = [
+                    (string) $d['numeroasiento'],
+                    (string) $d['empresa_id'],
+                    (string) $d['fecha'],
+                    (string) $d['sistema'],
+                    (string) $d['lineas'],
+                    $d['importado'] ? 'importado' : 'omitido',
+                ];
+            }
+            $this->table(['Nro', 'Emp', 'Fecha', 'Sist', 'Líneas', 'Acción'], $filas);
         }
 
         if (($r['cuentas_faltantes'] ?? []) !== []) {

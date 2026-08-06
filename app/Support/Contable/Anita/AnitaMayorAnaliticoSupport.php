@@ -11,8 +11,12 @@ use App\ApiAnita;
  */
 final class AnitaMayorAnaliticoSupport
 {
+    /**
+     * `*_desc_mov` último: el bridge parte el CSV por `|` sin respetar el escape y una descripción
+     * con `|` corre los campos siguientes.
+     */
     private const SUBDIARIO_CAMPOS = 'subd_fecha,subd_tipo,subd_emisor,subd_nro,subd_tipo_mov,subd_cuenta,'
-        .'subd_contrapartida,subd_importe,subd_desc_mov,subd_nro_operacion,subd_nro_asiento';
+        .'subd_contrapartida,subd_importe,subd_nro_operacion,subd_nro_asiento,subd_desc_mov';
 
     private const CTAMOV_CAMPOS = 'ctav_fecha,ctav_nro_asiento,ctav_nro_linea,ctav_cuenta,ctav_d_h,'
         .'ctav_importe,ctav_desc_mov';

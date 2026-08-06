@@ -5,7 +5,7 @@
 <td class="align-middle ms-col-npu-baja" style="display:none;">
     <div class="d-flex align-items-center flex-nowrap">
         @if($puedeConsultarNpu)
-        <button type="button" title="Consulta NPU activos" class="btn-accion-tabla consultanpubaja flex-shrink-0" style="padding:1px 4px;">
+        <button type="button" title="Consulta NPU activos" class="btn-accion-tabla consultanpubaja ms-npu-consulta-btn flex-shrink-0" style="padding:1px 4px;">
             <i class="fa fa-search text-primary"></i>
         </button>
         @endif

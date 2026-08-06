@@ -327,7 +327,9 @@
         </div>
         <div id="ms-ayuda-alta-npu" class="alert alert-info py-2 small mb-2" style="display:none;">
             <strong>Alta de NPU:</strong> indique art&iacute;culos configurados con n&uacute;mero de parte y una cantidad entera (unidades f&iacute;sicas).
-            Al grabar el sistema genera un NPU nuevo por unidad, ingresa stock al dep&oacute;sito y deja los NPU activos para usar en requisiciones de sala u otros procesos.
+            Si conoce el NPU de la etiqueta (alta hist&oacute;rica), tip&eacute;elo en la columna <strong>NPU</strong>: esa l&iacute;nea queda con cantidad 1 y se registra con ese n&uacute;mero exacto.
+            Si deja el NPU vac&iacute;o, el sistema genera un n&uacute;mero nuevo por unidad. Si el NPU ya existe en Anita para ese mismo art&iacute;culo, queda registrado en el ERP sin duplicarlo.
+            En todos los casos ingresa stock al dep&oacute;sito y deja los NPU activos para requisiciones de sala u otros procesos.
         </div>
         <div id="ms-ayuda-color-talle" class="alert alert-info py-2 small mb-2" style="display:none;">
             <strong>Stock por color y talle:</strong> este comprobante solo admite art&iacute;culos con esa gesti&oacute;n.

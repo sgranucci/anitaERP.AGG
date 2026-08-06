@@ -39,6 +39,22 @@ foreach (AnitaSubdiarioMayorSupport::imputacionesLineaSubdiario($linea) as $imp)
 $imp = AnitaSubdiarioMayorSupport::imputacionLineaCtamov($lineaCtamov);
 ```
 
+## Campos del bridge: descripción al final (obligatorio)
+
+El bridge exporta con `UNLOAD ... DELIMITER '|'` y parte el CSV por `|` **sin respetar el escape** de Informix. Una descripción que contiene `|` inserta un campo extra y **corre todos los campos siguientes**: `ctav_sistema` se lee `1` en vez de `T`, `ctav_cod_mon` toma la cotización, `ctav_balancea` toma el centro de costo, etc. Con el sistema mal leído el resumen no se excluye y el asiento entra duplicando el detalle de `subhist` (incidente 2025: 189 líneas en 39 asientos de rendiciones `OPP`).
+
+En toda lista de campos de **lectura** (`acc => list`), `ctav_desc_mov` / `subd_desc_mov` / `subh_desc_mov` va **último**: así el corrimiento solo puede truncar el texto de la descripción y nunca los datos contables.
+
+```php
+// ✅ lectura
+'ctav_empresa,…,ctav_importe,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_balancea,ctav_desc_mov'
+
+// ❌ lectura: descripción en el medio
+'ctav_empresa,…,ctav_importe,ctav_desc_mov,ctav_cotizacion,ctav_cod_mon,ctav_sistema'
+```
+
+En `acc => insert` el orden debe seguir a `valores`: **no** mover la descripción ahí.
+
 ## Reglas de lectura
 
 1. **Subdiario**: filtrar por `subd_cuenta IN (…)` **OR** `subd_contrapartida IN (…)`; aplicar convención D/H en **ambas** piernas.

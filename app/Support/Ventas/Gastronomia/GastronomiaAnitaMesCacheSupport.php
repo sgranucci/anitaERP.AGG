@@ -26,7 +26,8 @@ final class GastronomiaAnitaMesCacheSupport
 
     private const VENCAE_CAMPOS = 'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae,venc_fecha_vto';
 
-    private const CTAMOV_CAMPOS = 'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_desc_mov,ctav_cotizacion,ctav_cod_mon,ctav_ccosto';
+    /** ctav_desc_mov último: el bridge parte el CSV por `|` y una descripción con `|` corre el resto. */
+    private const CTAMOV_CAMPOS = 'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_cotizacion,ctav_cod_mon,ctav_ccosto,ctav_desc_mov';
 
     public function __construct(
         private readonly RendicionGastronomiaAnitaRendgastroSupport $rendgastroSupport,

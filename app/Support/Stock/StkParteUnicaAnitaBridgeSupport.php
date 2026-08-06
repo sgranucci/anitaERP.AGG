@@ -59,6 +59,31 @@ class StkParteUnicaAnitaBridgeSupport
         return ApiAnita::primeraFilaLista($raw) !== null;
     }
 
+    /**
+     * SKU (13) con el que el NPU está registrado en Anita; null si no existe.
+     */
+    public static function skuAnitaDeNumeroparte(int $numeroparte): ?string
+    {
+        if ($numeroparte <= 0) {
+            return null;
+        }
+
+        $filas = self::listarDesdeAnita(' WHERE stkpu_id = '.$numeroparte, 'FIRST 1');
+        $fila = $filas[0] ?? null;
+
+        return $fila !== null ? trim((string) ($fila->stkpu_articulo ?? '')) : null;
+    }
+
+    /**
+     * Anita guarda el SKU en 13 posiciones con relleno; comparar sin ceros ni espacios.
+     */
+    public static function mismoSku(?string $skuAnita, ?string $skuErp): bool
+    {
+        $clave = self::claveSku($skuAnita);
+
+        return $clave !== '' && $clave === self::claveSku($skuErp);
+    }
+
     public static function insertar(Articulo_ParteUnica $parte): bool
     {
         $parte->loadMissing('articulos');
@@ -187,5 +212,10 @@ class StkParteUnicaAnitaBridgeSupport
     public static function skuAnita13(?Articulo $articulo): string
     {
         return str_pad(substr((string) ($articulo->sku ?? ''), 0, 13), 13, ' ', STR_PAD_RIGHT);
+    }
+
+    private static function claveSku(?string $sku): string
+    {
+        return ltrim(strtoupper(trim((string) $sku)), '0');
     }
 }

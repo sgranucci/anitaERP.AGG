@@ -263,14 +263,18 @@ class MayorConceptoAnitaBridgeReader
         return str_ends_with($this->periodoCacheFirma, '_'.$fechaDesde.'_'.$fechaHasta);
     }
 
+    /**
+     * `*_desc_mov` va último en cada lista: el bridge parte el CSV por `|` sin respetar el escape,
+     * así que una descripción con `|` corre los campos siguientes (cotización, moneda, sistema).
+     */
     private function camposSubdiarioPeriodo(): string
     {
-        return 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,subd_ref_sucursal,subd_ref_nro,subd_importe,subd_cod_mon,subd_cotizacion,subd_desc_mov,subd_nro_asiento,subd_nro_interno,subd_ccosto_cta,subd_ccosto_con';
+        return 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,subd_ref_sucursal,subd_ref_nro,subd_importe,subd_cod_mon,subd_cotizacion,subd_nro_asiento,subd_nro_interno,subd_ccosto_cta,subd_ccosto_con,subd_desc_mov';
     }
 
     private function camposCtamovPeriodo(): string
     {
-        return 'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_desc_mov,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_o_compra';
+        return 'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_o_compra,ctav_desc_mov';
     }
 
     private function camposAuxpagPeriodo(): string
@@ -296,7 +300,7 @@ class MayorConceptoAnitaBridgeReader
         $subdiario = $this->listar(
             'contab',
             'subdiario',
-            'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,subd_ref_sucursal,subd_ref_nro,subd_importe,subd_desc_mov,subd_nro_interno,subd_cod_mon,subd_cotizacion',
+            'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,subd_ref_sucursal,subd_ref_nro,subd_importe,subd_nro_interno,subd_cod_mon,subd_cotizacion,subd_desc_mov',
             ' WHERE subd_empresa='.$empresaId
             .' AND subd_ref_tipo="'.$tipo.'"'
             .' AND subd_ref_sucursal='.$sucursal
@@ -708,7 +712,7 @@ class MayorConceptoAnitaBridgeReader
 
     private function camposSubhistFacturaCompras(): string
     {
-        return 'subh_empresa,subh_sistema,subh_fecha,subh_tipo,subh_letra,subh_sucursal,subh_nro,subh_emisor,subh_tipo_mov,subh_cuenta,subh_contrapartida,subh_importe,subh_desc_mov,subh_nro_operacion,subh_nro_interno,subh_cod_mon,subh_cotizacion,subh_nro_asiento';
+        return 'subh_empresa,subh_sistema,subh_fecha,subh_tipo,subh_letra,subh_sucursal,subh_nro,subh_emisor,subh_tipo_mov,subh_cuenta,subh_contrapartida,subh_importe,subh_nro_operacion,subh_nro_interno,subh_cod_mon,subh_cotizacion,subh_nro_asiento,subh_desc_mov';
     }
 
     /**
@@ -841,7 +845,7 @@ class MayorConceptoAnitaBridgeReader
         return $this->listar(
             'contab',
             'ctamov',
-            'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_desc_mov,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_o_compra',
+            'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_cotizacion,ctav_cod_mon,ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_o_compra,ctav_desc_mov',
             ' WHERE ctav_empresa='.$empresaId
             .' AND ctav_nro_asiento='.$nroAsiento,
             $errores,
@@ -851,7 +855,7 @@ class MayorConceptoAnitaBridgeReader
 
     private function camposSubdiarioFacturaCompras(): string
     {
-        return 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe,subd_desc_mov,subd_nro_operacion,subd_nro_interno,subd_cod_mon,subd_cotizacion';
+        return 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe,subd_nro_operacion,subd_nro_interno,subd_cod_mon,subd_cotizacion,subd_desc_mov';
     }
 
     /**
@@ -1243,7 +1247,7 @@ class MayorConceptoAnitaBridgeReader
             $porClave[$clave] = [];
         }
 
-        $campos = 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe,subd_desc_mov,subd_nro_operacion,subd_cod_mon,subd_cotizacion';
+        $campos = 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_importe,subd_nro_operacion,subd_cod_mon,subd_cotizacion,subd_desc_mov';
 
         foreach (array_chunk($clavesCom, 40) as $lote) {
             $condiciones = [];

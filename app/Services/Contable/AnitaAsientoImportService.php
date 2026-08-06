@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\Log;
  *
  * ctamov resumen de subdiario (sistema V/C/T y ctav_asi_mon_ref ≠ -1) se excluyen;
  * el detalle entra desde subdiario/subhist con numeroasiento = nro_operacion.
+ * Los resúmenes sin detalle del sistema en el mes se reportan y solo se importan con
+ * $importarResumenSinDetalle: el detalle puede existir en subhist con fecha de otro mes
+ * (emp2 jun/2025 se detalla en jul-nov), y ahí importar el resumen duplicaría.
  * Sistema P (PER) se importa desde ctamov: Anita lo graba directo ahí, sin subdiario/subhist.
  * Asientos generados por anitaERP (ctav_asi_mon_ref = -1) se importan desde ctamov
  * aunque tengan sistema V/C/T (no tienen subhist). Equivale a l-mayor es_asiento_resumen()
@@ -48,6 +51,9 @@ final class AnitaAsientoImportService
     public const TAG_SUBHIST = '[SUBH]';
 
     public const TAG_SUBDIARIO = '[SUBD]';
+
+    /** Resumen V/C/T importado por no existir detalle del sistema en el mes. */
+    public const TAG_RESUMEN_SIN_DETALLE = '[RESU]';
 
     /** @var array<string, string> sistema subdiario → abreviatura tipoasiento */
     private const MAPA_SISTEMA_TIPO = [
@@ -80,6 +86,7 @@ final class AnitaAsientoImportService
         bool $reemplazarDiferentes = false,
         int $usuarioId = 1,
         ?callable $logger = null,
+        bool $importarResumenSinDetalle = false,
     ): array {
         $desde = Carbon::createFromFormat('Y-m-d', $desdeYmd)->startOfDay();
         $hasta = Carbon::createFromFormat('Y-m-d', $hastaYmd)->endOfDay();
@@ -148,6 +155,7 @@ final class AnitaAsientoImportService
                     $reemplazarDiferentes,
                     $usuarioId,
                     $logger,
+                    $importarResumenSinDetalle,
                 );
 
                 $this->mergeResumen($resumen, $bloque);
@@ -174,6 +182,7 @@ final class AnitaAsientoImportService
         bool $reemplazarDiferentes,
         int $usuarioId,
         ?callable $logger,
+        bool $importarResumenSinDetalle = false,
     ): array {
         $out = $this->resumenVacio();
         $data = $this->bridgeReader->cargarBloque($empresaAnita, $fechaDesdeYmd, $fechaHastaYmd);
@@ -194,15 +203,39 @@ final class AnitaAsientoImportService
             (float) ($data['timings']['total_ms'] ?? 0),
         ));
 
+        $detalle = array_merge($data['subdiario'], $data['subhist']);
+        $sistemasConDetalle = $this->sistemasConDetallePorMes($detalle);
+
         // 1) Planificar ctamov (excluye resumen V/C/T; importa P/PER) + detalle subdiario/subhist
         $planes = [];
         $gruposCtamov = $this->agruparCtamov($data['ctamov']);
         foreach ($gruposCtamov as $nroAsiento => $lineas) {
             $primera = $lineas[0];
+            $esResumenSinDetalle = false;
             if (self::esAsientoResumenSubdiario($primera)) {
-                $out['ctamov_excluidos_cierre']++;
-                $out['ctamov_excluidos_lineas'] += count($lineas);
-                continue;
+                $sinDetalle = ! $this->hayDetalleParaResumen($primera, $sistemasConDetalle)
+                    && ! $this->esEspejoMonedaSinCotizacion($lineas);
+
+                if ($sinDetalle) {
+                    $out['ctamov_resumen_sin_detalle']++;
+                    $out['resumen_sin_detalle_detalle'][] = [
+                        'numeroasiento' => (int) ($primera->ctav_nro_asiento ?? 0),
+                        'empresa_id' => $empresaErpId,
+                        'fecha' => $this->ymdAIso((int) ($primera->ctav_fecha ?? 0)),
+                        'sistema' => strtoupper(trim((string) ($primera->ctav_sistema ?? ''))),
+                        'lineas' => count($lineas),
+                        'importado' => $importarResumenSinDetalle,
+                    ];
+                }
+
+                if (! $sinDetalle || ! $importarResumenSinDetalle) {
+                    $out['ctamov_excluidos_cierre']++;
+                    $out['ctamov_excluidos_lineas'] += count($lineas);
+
+                    continue;
+                }
+
+                $esResumenSinDetalle = true;
             }
 
             $asientoPlan = $this->planDesdeCtamov(
@@ -212,6 +245,7 @@ final class AnitaAsientoImportService
                 $monedaDefaultId,
                 $usuarioId,
                 $out,
+                $esResumenSinDetalle,
             );
             if ($asientoPlan === null) {
                 continue;
@@ -219,7 +253,6 @@ final class AnitaAsientoImportService
             $planes[] = ['origen' => 'ctamov', 'plan' => $asientoPlan];
         }
 
-        $detalle = array_merge($data['subdiario'], $data['subhist']);
         $gruposDetalle = $this->agruparSubdiario($detalle);
         foreach ($gruposDetalle as $nroOperacion => $lineas) {
             $asientoPlan = $this->planDesdeSubdiario(
@@ -489,6 +522,7 @@ final class AnitaAsientoImportService
         int $monedaDefaultId,
         int $usuarioId,
         array &$out,
+        bool $esResumenSinDetalle = false,
     ): ?array {
         usort($lineas, static fn ($a, $b) => ((int) ($a->ctav_nro_linea ?? 0)) <=> ((int) ($b->ctav_nro_linea ?? 0)));
         $primera = $lineas[0];
@@ -541,7 +575,9 @@ final class AnitaAsientoImportService
         }
 
         $obs = trim(implode(' ', array_filter([
+            $esResumenSinDetalle ? self::TAG_RESUMEN_SIN_DETALLE : null,
             trim((string) ($primera->ctav_sistema ?? '')),
+            $esResumenSinDetalle ? $tipoAbr : null,
             trim((string) ($primera->ctav_tipo ?? '')),
             trim((string) ($primera->ctav_letra ?? '')),
             trim((string) ($primera->ctav_sucursal ?? '')),
@@ -643,6 +679,71 @@ final class AnitaAsientoImportService
             'usuario_id' => $usuarioId,
             'movimientos' => $movimientos,
         ];
+    }
+
+    /**
+     * Sistemas con detalle disponible por mes: 'V|202512' => true.
+     *
+     * @param  list<object>  $detalle  subdiario + subhist del bloque
+     * @return array<string, true>
+     */
+    private function sistemasConDetallePorMes(array $detalle): array
+    {
+        $claves = [];
+        foreach ($detalle as $linea) {
+            $sistema = strtoupper(trim((string) ($linea->subd_sistema ?? '')));
+            $fecha = (int) ($linea->subd_fecha ?? 0);
+            if ($sistema === '' || $fecha <= 0) {
+                continue;
+            }
+            $claves[$sistema.'|'.intdiv($fecha, 100)] = true;
+        }
+
+        return $claves;
+    }
+
+    /**
+     * ¿El resumen tiene detalle en subdiario/subhist para su sistema y mes?
+     *
+     * Sin detalle el resumen puede ser la única fuente del movimiento (asiento de ventas de
+     * dic/2025 de emp1) o el detalle puede estar en subhist con fecha posterior (emp2 jun/2025).
+     * Distinguirlo requiere mirar el ejercicio completo, por eso la importación es opcional.
+     *
+     * @param  array<string, true>  $sistemasConDetalle
+     */
+    private function hayDetalleParaResumen(object $lineaCtamov, array $sistemasConDetalle): bool
+    {
+        $sistema = strtoupper(trim((string) ($lineaCtamov->ctav_sistema ?? '')));
+        $fecha = (int) ($lineaCtamov->ctav_fecha ?? 0);
+        if ($sistema === '' || $fecha <= 0) {
+            return true;
+        }
+
+        return isset($sistemasConDetalle[$sistema.'|'.intdiv($fecha, 100)]);
+    }
+
+    /**
+     * Espejo en moneda extranjera del resumen (par ctav_asi_mon_ref): mismas imputaciones en otra
+     * moneda y sin cotización, por lo que no aporta al mayor en pesos y duplicaría el asiento.
+     *
+     * @param  list<object>  $lineas
+     */
+    private function esEspejoMonedaSinCotizacion(array $lineas): bool
+    {
+        $tienePar = false;
+        foreach ($lineas as $linea) {
+            $par = (int) ($linea->ctav_asi_mon_ref ?? 0);
+            if ($par > 0) {
+                $tienePar = true;
+            }
+            $moneda = trim((string) ($linea->ctav_cod_mon ?? '1'));
+            $cotizacion = (float) ($linea->ctav_cotizacion ?? 0);
+            if (($moneda === '' || $moneda === '1') || $cotizacion >= 0.01) {
+                return false;
+            }
+        }
+
+        return $tienePar && $lineas !== [];
     }
 
     /**
@@ -896,6 +997,8 @@ final class AnitaAsientoImportService
             'subhist_filas_leidas' => 0,
             'ctamov_excluidos_cierre' => 0,
             'ctamov_excluidos_lineas' => 0,
+            'ctamov_resumen_sin_detalle' => 0,
+            'resumen_sin_detalle_detalle' => [],
             'a_crear' => 0,
             'a_crear_por_origen' => [],
             'lineas_a_crear' => 0,
@@ -924,7 +1027,7 @@ final class AnitaAsientoImportService
     {
         foreach ([
             'ctamov_filas_leidas', 'subdiario_filas_leidas', 'subhist_filas_leidas',
-            'ctamov_excluidos_cierre', 'ctamov_excluidos_lineas',
+            'ctamov_excluidos_cierre', 'ctamov_excluidos_lineas', 'ctamov_resumen_sin_detalle',
             'a_crear', 'lineas_a_crear', 'creados', 'reemplazados',
             'duplicados', 'duplicados_dejar', 'duplicados_reemplazar',
             'omitidos_sin_numero', 'omitidos_sin_tipo', 'omitidos_sin_movimientos',
@@ -946,6 +1049,10 @@ final class AnitaAsientoImportService
         $total['duplicados_detalle'] = array_merge(
             $total['duplicados_detalle'] ?? [],
             $bloque['duplicados_detalle'] ?? [],
+        );
+        $total['resumen_sin_detalle_detalle'] = array_merge(
+            $total['resumen_sin_detalle_detalle'] ?? [],
+            $bloque['resumen_sin_detalle_detalle'] ?? [],
         );
         $total['errores'] = array_merge($total['errores'] ?? [], $bloque['errores'] ?? []);
         $total['timings'] = array_merge($total['timings'] ?? [], $bloque['timings'] ?? []);

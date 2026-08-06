@@ -347,7 +347,6 @@ class AsientoRepository implements AsientoRepositoryInterface
 					ctav_sucursal ,
 					ctav_nro,
 					ctav_importe,
-					ctav_desc_mov,
 					ctav_cotizacion,
 					ctav_cod_mon,
 					ctav_sistema,
@@ -358,7 +357,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 					ctav_usuario_umod,
 					ctav_fecha_umod,
 					ctav_hora_umod,
-					ctav_o_compra 
+					ctav_o_compra,
+					ctav_desc_mov 
 			',
             'whereArmado' => " WHERE ".$this->keyFieldAnita[0]." = '".$empresa."' AND ".
 									   $this->keyFieldAnita[1]." = '".$asiento."' AND ".
