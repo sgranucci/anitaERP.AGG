@@ -2,6 +2,7 @@
 
 namespace App\Support\Contable\SumasSaldos;
 
+use App\Services\Contable\AnitaAsientoImportService;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\SumasSaldosListadoFiltros;
@@ -20,6 +21,98 @@ class SumasSaldosProcesador
 {
     /** @var array<string, float> Cache cotización venta por fecha|moneda_id */
     private array $cacheCotizacionDia = [];
+
+    /**
+     * Saldo neto al inicio de un período (suma de cuentacontable_saldo_mes desde
+     * ejercicio hasta el mes anterior), con el mismo recorte de asientos excluidos
+     * que el Balance de Sumas y Saldos. Pensado para reutilizar desde el mayor, etc.
+     *
+     * @param  list<int>  $empresaIds
+     * @param  array<string, mixed>  $filtros  modo_inclusion_asientos, moneda_id,
+     *                                         solo_moneda_origen, cuenta_desde/hasta,
+     *                                         cuentas (list), excluir_origen_subdiario
+     * @return array{
+     *   por_codigo: array<int, float>,
+     *   fuente: string,
+     *   advertencias: list<string>,
+     *   movimientos_restados: int
+     * }
+     */
+    public function saldosInicialesPorCodigo(array $empresaIds, int $periodoDesde, array $filtros = []): array
+    {
+        $empresaIds = array_values(array_unique(array_filter(array_map('intval', $empresaIds), fn (int $id) => $id > 0)));
+        if ($empresaIds === [] || $periodoDesde <= 0) {
+            return [
+                'por_codigo' => [],
+                'fuente' => 'ninguna',
+                'advertencias' => [],
+                'movimientos_restados' => 0,
+            ];
+        }
+
+        $filtrosBase = array_merge([
+            'modo_periodo' => SumasSaldosListadoFiltros::MODO_PERIODOS,
+            'periodo_desde' => $periodoDesde,
+            'periodo_hasta' => $periodoDesde,
+            'consolidar_empresas' => true,
+            'filtro_cuentas' => SumasSaldosListadoFiltros::CUENTAS_CON_MOVIMIENTO,
+            'modo_inclusion_asientos' => 'todos',
+            'moneda_id' => CuentacontableSaldoMesSupport::monedaLocalId(),
+            'solo_moneda_origen' => false,
+            'cuenta_desde' => 0,
+            'cuenta_hasta' => 0,
+            'excluir_origen_subdiario' => false,
+        ], $filtros, [
+            // Forzamos períodos: solo necesitamos saldo_mes_anterior.
+            'modo_periodo' => SumasSaldosListadoFiltros::MODO_PERIODOS,
+            'periodo_desde' => $periodoDesde,
+            'periodo_hasta' => $periodoDesde,
+            'consolidar_empresas' => true,
+        ]);
+
+        if ($this->requiereAsientosPorMoneda($filtrosBase)) {
+            return [
+                'por_codigo' => [],
+                'fuente' => 'asientos',
+                'advertencias' => ['Saldo inicial por moneda extranjera no usa agregado mensual; el mayor debe acumular movimientos.'],
+                'movimientos_restados' => 0,
+            ];
+        }
+
+        $resultado = $this->generarDesdeSaldosMes($empresaIds, $filtrosBase);
+        $porCodigo = [];
+        foreach ($resultado['filas'] ?? [] as $fila) {
+            if (($fila['tipo_fila'] ?? '') !== 'cuenta') {
+                continue;
+            }
+            $codigo = (int) ($fila['codigo'] ?? 0);
+            if ($codigo <= 0) {
+                continue;
+            }
+            $porCodigo[$codigo] = round((float) ($fila['saldo_mes_anterior'] ?? 0), 2);
+        }
+
+        $cuentas = array_values(array_filter(array_map('intval', $filtrosBase['cuentas'] ?? []), fn (int $c) => $c > 0));
+        if ($cuentas !== []) {
+            $allow = array_fill_keys($cuentas, true);
+            $porCodigo = array_filter($porCodigo, fn (float $v, int $c) => isset($allow[$c]), ARRAY_FILTER_USE_BOTH);
+        }
+
+        $movRestados = 0;
+        foreach ($resultado['advertencias'] ?? [] as $adv) {
+            if (preg_match('/Se restaron\s+(\d+)/', (string) $adv, $m)) {
+                $movRestados = (int) $m[1];
+                break;
+            }
+        }
+
+        return [
+            'por_codigo' => $porCodigo,
+            'fuente' => (string) ($resultado['fuente'] ?? 'saldos_mes'),
+            'advertencias' => $resultado['advertencias'] ?? [],
+            'movimientos_restados' => $movRestados,
+        ];
+    }
 
     /**
      * @param  list<int>  $empresaIds
@@ -239,7 +332,8 @@ class SumasSaldosProcesador
         }
 
         $modoInclusion = (string) ($filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion');
-        if ($modoInclusion !== 'todos') {
+        $debeRestarExcluidos = $modoInclusion !== 'todos' || ! empty($filtros['excluir_origen_subdiario']);
+        if ($debeRestarExcluidos) {
             $restados = $this->restarAsientosExcluidos(
                 $acumulado,
                 $empresaIds,
@@ -335,6 +429,7 @@ class SumasSaldosProcesador
         $monedaLocalId = CuentacontableSaldoMesSupport::monedaLocalId();
         $soloOrigen = ! empty($filtros['solo_moneda_origen']);
         $modoInclusion = (string) ($filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion');
+        $excluirSubdiario = ! empty($filtros['excluir_origen_subdiario']);
         $consolidar = ! empty($filtros['consolidar_empresas']);
 
         $query = DB::table('asiento_movimiento as am')
@@ -352,6 +447,7 @@ class SumasSaldosProcesador
                 'c.codigo',
                 'c.nombre',
                 'a.fecha',
+                'a.observacion as asiento_obs',
                 'am.monto',
                 'am.moneda_id',
                 'am.cotizacion',
@@ -367,8 +463,10 @@ class SumasSaldosProcesador
 
         foreach ($query->cursor() as $row) {
             $tipo = (string) ($row->tipo_abrev ?? '');
-            // Solo restar lo que el filtro de inclusión NO muestra.
-            if (MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion)) {
+            $restarPorTipo = ! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion);
+            $restarPorSubdiario = $excluirSubdiario && $this->esOrigenSubdiarioObservacion((string) ($row->asiento_obs ?? ''));
+            // Solo restar lo que el filtro de inclusión / subdiario NO muestra.
+            if (! $restarPorTipo && ! $restarPorSubdiario) {
                 continue;
             }
 
@@ -774,6 +872,13 @@ class SumasSaldosProcesador
      */
     private function aplicarFiltroCodigoCuenta($query, array $filtros, string $columna): void
     {
+        $cuentas = array_values(array_filter(array_map('intval', $filtros['cuentas'] ?? []), fn (int $c) => $c > 0));
+        if ($cuentas !== []) {
+            $query->whereIn($columna, $cuentas);
+
+            return;
+        }
+
         $desde = (int) ($filtros['cuenta_desde'] ?? 0);
         $hasta = (int) ($filtros['cuenta_hasta'] ?? 0);
         if ($desde > 0) {
@@ -782,6 +887,22 @@ class SumasSaldosProcesador
         if ($hasta > 0) {
             $query->where($columna, '<=', $hasta);
         }
+    }
+
+    private function esOrigenSubdiarioObservacion(string $observacion): bool
+    {
+        foreach ([
+            AnitaAsientoImportService::TAG_SUBHIST,
+            AnitaAsientoImportService::TAG_SUBDIARIO,
+            '[subhist]',
+            '[subdiario]',
+        ] as $tag) {
+            if (str_contains($observacion, $tag)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

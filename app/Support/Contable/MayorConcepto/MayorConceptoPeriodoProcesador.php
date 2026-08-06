@@ -15,6 +15,9 @@ class MayorConceptoPeriodoProcesador
     /** @var array<string, list<object>> */
     private array $aplicpedCache = [];
 
+    /** @var array<string, list<object>> aplicped indexado por ref (PEP←COM) + proveedor */
+    private array $aplicpedPorRefCache = [];
+
     /** @var array<string, object|null> */
     private array $promaeCache = [];
 
@@ -331,6 +334,7 @@ class MayorConceptoPeriodoProcesador
     {
         $this->comSubdiarioCache = [];
         $this->aplicpedCache = [];
+        $this->aplicpedPorRefCache = [];
         $this->ordenesComPorFactura = [];
         $this->promaeCache = [];
         $this->erroresBridge = [];
@@ -773,13 +777,16 @@ class MayorConceptoPeriodoProcesador
                 // FIS sin COM solo 114xxx: servicios → 114020-009.
                 $fisServicios = $fisAdelantado && ! $anticipo114040
                     && ! $this->lineasGastoIncluyenResultadoCompras($lineasGasto);
+                $comSubEfectivo = $tieneComGasto
+                    ? $this->cargarComDesdeFacturaEfectivo($aplicacion)
+                    : [];
                 $percepcionesRaw = $tieneComGasto
-                    ? $this->percepcionesRawDesdeLineasSubdiario($this->cargarComDesdeFactura($aplicacion))
+                    ? $this->percepcionesRawDesdeLineasSubdiario($comSubEfectivo)
                     : $this->percepcionesRawDesdeAplicacion($aplicacion);
                 $totalPercepcionesRaw = array_sum($percepcionesRaw);
                 $ivaCreditoRaw = $inscripto
                     ? ($tieneComGasto
-                        ? $this->ivaCreditoRawDesdeLineasSubdiario($this->cargarComDesdeFactura($aplicacion))
+                        ? $this->ivaCreditoRawDesdeLineasSubdiario($comSubEfectivo)
                         : $this->ivaCreditoRawDesdeAplicacion($aplicacion))
                     : [];
                 // COM histórica suele traer solo el neto: el IVA queda en el subdiario de la factura.
@@ -816,17 +823,25 @@ class MayorConceptoPeriodoProcesador
 
                 if ($this->comGastoEsSolo117010($lineasGasto)) {
                     // Misma proporción que un COM de gasto: no absorber IVA/resto en 117010.
+                    // Concepto: 117010 suele ser 0 → reclasificar con axp_concepto / gasto FGA.
                     $netoCom = array_sum(array_map(fn ($l) => (float) ($l->subd_importe ?? 0), $lineasGasto));
                     $importe117 = $baseComprobante > 0
                         ? round($montoImputable * ($netoCom / $baseComprobante), 2)
                         : round($montoImputable, 2);
                     $cuentaCheque = 117010001;
-                    $claveAgrup = $cuentaCheque.'|'.$this->motor->conceptoDeCuenta($empresaId, $cuentaCheque);
+                    $concepto117 = $this->conceptoReclasificacionCuentaTransitoria(
+                        $empresaId,
+                        $aplicacion,
+                        $cuentaCheque,
+                    );
+                    $claveAgrup = $cuentaCheque.'|'.$concepto117;
                     $gastoAgrupadoFactura[$claveAgrup] = [
                         'cuenta' => $cuentaCheque,
-                        'concepto' => $this->motor->conceptoDeCuenta($empresaId, $cuentaCheque),
+                        'concepto' => $concepto117,
                         'importe' => $importe117,
-                        'origen_log' => 'COM cheque 117010',
+                        'origen_log' => $concepto117 > 0
+                            ? 'COM cheque 117010 reclasificado'
+                            : 'COM cheque 117010',
                         'aplicacion' => $aplicacion,
                         'linea_gasto' => null,
                     ];
@@ -858,6 +873,7 @@ class MayorConceptoPeriodoProcesador
                             $tipoAp,
                             $nroOc,
                             trim((string) ($aplicacion->axp_pro ?? '')),
+                            $aplicacion,
                         );
 
                         if ($anticipo114040) {
@@ -994,6 +1010,7 @@ class MayorConceptoPeriodoProcesador
                             $tipoAp,
                             $nroOc,
                             trim((string) ($aplicacion->axp_pro ?? '')),
+                            $aplicacion,
                         );
                         $claveIva = $cuentaIvaVisible.'|'.$conceptoIva.'|iva';
                         if (! isset($gastoAgrupadoFactura[$claveIva])) {
@@ -4829,27 +4846,83 @@ class MayorConceptoPeriodoProcesador
         string $tipoAp,
         int $nroOc = 0,
         string $proveedor = '',
+        ?object $aplicacion = null,
     ): int {
         $tipoAp = strtoupper(trim($tipoAp));
 
-        if ($tipoAp === 'FIS' && $cuenta === 114020009) {
+        // 114020-009 / 114040: cuentas puente sin concepto → axp_concepto u OC.
+        if (($tipoAp === 'FIS' && $cuenta === 114020009)
+            || ($cuenta >= 114040000 && $cuenta < 114050000)) {
+            if ($cuenta >= 114040000 && $cuenta < 114050000) {
+                $concepto = $this->motor->conceptoDeCuenta($empresaId, $cuenta);
+                if ($concepto > 0) {
+                    return $concepto;
+                }
+            }
+
+            if ($nroOc > 0) {
+                $desdeOc = $this->resolverConceptoDesdeOrdenCompra($empresaId, $nroOc, $proveedor);
+                if ($desdeOc > 0) {
+                    return $desdeOc;
+                }
+            }
+
+            return $this->conceptoReclasificacionCuentaTransitoria($empresaId, $aplicacion, $cuenta);
+        }
+
+        $concepto = $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
+        if ($concepto > 0) {
+            return $concepto;
+        }
+
+        // 117010 u otras sin concepto residuales (si no entraron al branch solo-117010).
+        if ($cuenta >= 117010000 && $cuenta < 118000000) {
+            return $this->conceptoReclasificacionCuentaTransitoria($empresaId, $aplicacion, $cuenta);
+        }
+
+        return 0;
+    }
+
+    /**
+     * Concepto para cuentas puente (114020 / 114040 / 117010) sin conceptogasto:
+     * 1) axp_concepto del renglón de pago; 2) concepto de cuentas del comprobante aplicado.
+     */
+    private function conceptoReclasificacionCuentaTransitoria(
+        int $empresaId,
+        ?object $aplicacion,
+        int $cuentaTransitoria,
+    ): int {
+        if ($aplicacion === null) {
             return 0;
         }
 
-        if ($cuenta >= 114040000 && $cuenta < 114050000) {
+        $axp = (int) ($aplicacion->axp_concepto ?? 0);
+        if ($axp > 0) {
+            return $axp;
+        }
+
+        $sub = $this->cargarSubdiarioComprobanteAplicacion($aplicacion);
+        foreach ($sub as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if ($mov !== 'D' || $cuenta <= 0 || $cuenta === $cuentaTransitoria) {
+                continue;
+            }
+            if ($this->motor->esProveedor($cuenta) || $this->motor->esDisponibilidad($cuenta)) {
+                continue;
+            }
+            // Preferir gasto de resultado; si no, 114010-xxx con concepto (ej. gastronomía).
+            if (! $this->lineasGastoIncluyenResultadoCompras([$linea])
+                && ! ($cuenta >= 114010000 && $cuenta < 114040000)) {
+                continue;
+            }
             $concepto = $this->motor->conceptoDeCuenta($empresaId, $cuenta);
             if ($concepto > 0) {
                 return $concepto;
             }
-
-            if ($nroOc > 0) {
-                return $this->resolverConceptoDesdeOrdenCompra($empresaId, $nroOc, $proveedor);
-            }
-
-            return 0;
         }
 
-        return $this->motor->conceptoImputacionCuenta($empresaId, $cuenta);
+        return 0;
     }
 
     /**
@@ -5280,7 +5353,7 @@ class MayorConceptoPeriodoProcesador
      */
     private function aplicacionTieneComGasto(object $aplicacion): bool
     {
-        return $this->filtrarComGasto($this->cargarComDesdeFactura($aplicacion)) !== [];
+        return $this->filtrarComGasto($this->cargarComDesdeFacturaEfectivo($aplicacion)) !== [];
     }
 
     private function claveProcesamientoPagoOp(string $claveOp, int $nroAsiento): string
@@ -5451,7 +5524,22 @@ class MayorConceptoPeriodoProcesador
                 $this->cargarSubdiarioComprobanteAplicacion($aplicacion),
             );
 
-            return $this->resolverGastoFisSubdiario($sub);
+            $desdeSub = $this->resolverGastoFisSubdiario($sub);
+            // Preferir COM vía PEP con gasto 521/115 sobre adelantado 114020/114040 en la FIS.
+            $comViaPepResultado = $this->filtrarLineasResultadoDesdeCom(
+                $this->cargarComDesdeFacturaViaPepHermano($aplicacion),
+            );
+            if ($comViaPepResultado !== []
+                && ($desdeSub === [] || ! $this->lineasGastoIncluyenResultadoCompras($desdeSub))) {
+                return $comViaPepResultado;
+            }
+
+            if ($desdeSub !== []) {
+                return $desdeSub;
+            }
+
+            // FC a recibir (solo 211010-004): FIS→PEP←COM en aplicped (mismo proveedor).
+            return $this->filtrarComGasto($this->cargarComDesdeFacturaViaPepHermano($aplicacion));
         }
 
         if ($tipoAp === 'FGA') {
@@ -5465,6 +5553,8 @@ class MayorConceptoPeriodoProcesador
             if ($lineas !== []) {
                 return $lineas;
             }
+
+            return $this->filtrarComGasto($this->cargarComDesdeFacturaViaPepHermano($aplicacion));
         }
 
         if (in_array($tipoAp, ['FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH', 'FIA'], true)) {
@@ -5474,8 +5564,12 @@ class MayorConceptoPeriodoProcesador
             }
 
             $sub = $this->cargarSubdiarioComprobanteAplicacion($aplicacion);
+            $adelantada = $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub);
+            if ($adelantada !== []) {
+                return $adelantada;
+            }
 
-            return $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub);
+            return $this->filtrarComGasto($this->cargarComDesdeFacturaViaPepHermano($aplicacion));
         }
 
         $comGasto = $this->filtrarComGasto($this->cargarComDesdeFactura($aplicacion));
@@ -5491,7 +5585,12 @@ class MayorConceptoPeriodoProcesador
             return $this->filtrarLineasAnticipoProveedor($adelantada);
         }
 
-        return $this->filtrarLineasGastoNetoComprobanteCompras($sub);
+        $neto = $this->filtrarLineasGastoNetoComprobanteCompras($sub);
+        if ($neto !== []) {
+            return $neto;
+        }
+
+        return $this->filtrarComGasto($this->cargarComDesdeFacturaViaPepHermano($aplicacion));
     }
 
     /**
@@ -5632,6 +5731,20 @@ class MayorConceptoPeriodoProcesador
         }
 
         return false;
+    }
+
+    /**
+     * Líneas de COM con gasto de resultado (521/115…), excluye 117010 y puentes 114.
+     *
+     * @param  list<object>  $comSub
+     * @return list<object>
+     */
+    private function filtrarLineasResultadoDesdeCom(array $comSub): array
+    {
+        return array_values(array_filter(
+            $this->filtrarComGasto($comSub),
+            fn ($linea) => $this->lineasGastoIncluyenResultadoCompras([$linea]),
+        ));
     }
 
     /**
@@ -6602,6 +6715,161 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
+     * COM efectiva de la factura: enlace directo en aplicped, o hermana vía PEP
+     * solo cuando la factura no trae gasto propio (p. ej. 211010-004 FC a recibir).
+     *
+     * @return list<object>
+     */
+    private function cargarComDesdeFacturaEfectivo(object $aplicacion): array
+    {
+        $com = $this->cargarComDesdeFactura($aplicacion);
+        if ($com !== []) {
+            return $com;
+        }
+
+        if ($this->facturaTieneGastoPropioEnSubdiario($aplicacion)) {
+            return [];
+        }
+
+        return $this->cargarComDesdeFacturaViaPepHermano($aplicacion);
+    }
+
+    /**
+     * True si el subdiario de la factura ya aporta gasto/anticipo imputable
+     * (no solo puente proveedor 211010-004).
+     */
+    private function facturaTieneGastoPropioEnSubdiario(object $aplicacion): bool
+    {
+        $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
+        $sub = $this->cargarSubdiarioComprobanteAplicacion($aplicacion);
+
+        if ($tipoAp === 'FIS') {
+            $sub = $this->enriquecerSubdiarioFacturaConCtamov($aplicacion, $sub);
+            $desdeSub = $this->resolverGastoFisSubdiario($sub);
+            if ($desdeSub === []) {
+                return false;
+            }
+
+            // Solo 114xxx adelantado/anticipo: no bloquea hop FIS→PEP←COM (reglas 114020/114040).
+            return $this->lineasGastoIncluyenResultadoCompras($desdeSub);
+        }
+
+        if ($tipoAp === 'FGA') {
+            return $this->filtrarLineasFgaMayorConcepto($sub) !== [];
+        }
+
+        if (in_array($tipoAp, ['FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH', 'FIA'], true)) {
+            return $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub) !== [];
+        }
+
+        $adelantada = $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub);
+        if ($this->subTieneAnticipo114040($adelantada)) {
+            return true;
+        }
+
+        return $this->filtrarLineasGastoNetoComprobanteCompras($sub) !== [];
+    }
+
+    /**
+     * FIS/FGA → PEP ← COM (mismo proveedor): la factura y la COM referencian el PEP.
+     *
+     * @return list<object>
+     */
+    private function cargarComDesdeFacturaViaPepHermano(object $aplicacion): array
+    {
+        $comLineas = [];
+        foreach ($this->resolverClavesComViaPepHermano($aplicacion) as $claveCom) {
+            $comLineas = array_merge($comLineas, $this->resolverComSubdiarioConFallback($claveCom));
+        }
+
+        return $comLineas;
+    }
+
+    /**
+     * Busca COMs que referencian el mismo PEP que la factura (aplicped por ref + proveedor).
+     *
+     * @return list<string> claves COM|letra|suc|nro
+     */
+    private function resolverClavesComViaPepHermano(object $aplicacion): array
+    {
+        $prov = trim((string) ($aplicacion->axp_pro ?? ''));
+        if ($prov === '') {
+            return [];
+        }
+
+        $tipoAp = trim((string) ($aplicacion->axp_tipo_ap ?? ''));
+        $letraAp = trim((string) ($aplicacion->axp_letra_comp ?? ' '));
+        $sucAp = (int) ($aplicacion->axp_sucursal ?? 0);
+        $nroAp = (int) ($aplicacion->axp_nro ?? 0);
+        $claveFac = $prov.'|'.$tipoAp.'|'.$letraAp.'|'.$sucAp.'|'.$nroAp;
+
+        if (! isset($this->aplicpedCache[$claveFac])) {
+            $this->consultasBridgeIndividuales++;
+            $this->aplicpedCache[$claveFac] = $this->reader->cargarAplicpedFactura(
+                $prov, $tipoAp, $letraAp, $sucAp, $nroAp, $this->erroresBridge,
+            );
+        }
+
+        if (! isset($this->ordenesComPorFactura[$claveFac])) {
+            $this->ordenesComPorFactura[$claveFac] = [];
+        }
+
+        $clavesCom = [];
+        $pepsVistos = [];
+
+        foreach ($this->aplicpedCache[$claveFac] as $apl) {
+            $refTipo = strtoupper(trim((string) ($apl->aplp_ref_tipo ?? '')));
+            if ($refTipo !== 'PEP') {
+                continue;
+            }
+
+            $refLetra = trim((string) ($apl->aplp_ref_letra ?? 'X'));
+            $refSuc = (int) ($apl->aplp_ref_sucursal ?? 0);
+            $refNro = (int) ($apl->aplp_ref_nro ?? 0);
+            if ($refNro <= 0) {
+                continue;
+            }
+
+            $clavePep = $prov.'|PEP|'.$refLetra.'|'.$refSuc.'|'.$refNro;
+            if (isset($pepsVistos[$clavePep])) {
+                continue;
+            }
+            $pepsVistos[$clavePep] = true;
+
+            if (! isset($this->aplicpedPorRefCache[$clavePep])) {
+                $this->consultasBridgeIndividuales++;
+                $this->aplicpedPorRefCache[$clavePep] = $this->reader->cargarAplicpedPorReferencia(
+                    'PEP',
+                    $refLetra,
+                    $refSuc,
+                    $refNro,
+                    $prov,
+                    $this->erroresBridge,
+                );
+            }
+
+            foreach ($this->aplicpedPorRefCache[$clavePep] as $hermano) {
+                if (strtoupper(trim((string) ($hermano->aplp_tipo ?? ''))) !== 'COM') {
+                    continue;
+                }
+
+                $comLetra = trim((string) ($hermano->aplp_letra ?? 'X'));
+                $comSuc = (int) ($hermano->aplp_sucursal ?? 0);
+                $comNro = (int) ($hermano->aplp_nro ?? 0);
+                if ($comNro <= 0) {
+                    continue;
+                }
+
+                $claveCom = 'COM|'.$comLetra.'|'.$comSuc.'|'.$comNro;
+                $clavesCom[$claveCom] = $claveCom;
+                $this->ordenesComPorFactura[$claveFac][$claveCom] = $comNro;
+            }
+        }
+
+        return array_values($clavesCom);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function metaRetencionPago(int $empresaId, object $retencion): array
@@ -6647,6 +6915,15 @@ class MayorConceptoPeriodoProcesador
             // Solo COM: aplp_orden es renglón; PEP.ref_nro es pedido, no OC.
             if ($refTipo === 'COM' && $refNro > 0) {
                 return $refNro;
+            }
+        }
+
+        if (! $this->facturaTieneGastoPropioEnSubdiario($aplicacion)) {
+            $this->resolverClavesComViaPepHermano($aplicacion);
+            foreach ($this->ordenesComPorFactura[$claveFac] ?? [] as $orden) {
+                if ($orden > 0) {
+                    return (int) $orden;
+                }
             }
         }
 

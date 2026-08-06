@@ -63,10 +63,8 @@ final class RecepcionProveedorImpuestoInternoSupport
 
     public static function recepcionRequiereImpuestoInterno(Recepcion_Proveedor $recepcion): bool
     {
-        if ($recepcion->tipo !== Recepcion_Proveedor::TIPO_RECEPCION) {
-            return false;
-        }
-
+        // Recepción y devolución: ambas deben llevar II si hay cigarrillos,
+        // para que el asiento COM (y recepmov IMPINTERNO) revierta la pata contable.
         return self::totalCantidadCigarrillos($recepcion) > 0.000001;
     }
 
@@ -85,6 +83,103 @@ final class RecepcionProveedorImpuestoInternoSupport
                 $cantidad = (float) ($linea->cantidad ?? 0);
             }
 
+            $total += $cantidad;
+        }
+
+        return round($total, 6);
+    }
+
+    /**
+     * Prorratea el impuesto interno de la recepción origen según cigarrillos devueltos.
+     *
+     * @param  list<array<string, mixed>>  $itemsDevolucion
+     */
+    public static function calcularImpuestoInternoProporcionalDesdeOrigen(
+        Recepcion_Proveedor $origen,
+        array $itemsDevolucion,
+    ): ?float {
+        $iiOrigen = (float) ($origen->impuesto_interno ?? 0);
+        if ($iiOrigen <= 0.000001) {
+            return null;
+        }
+
+        $qtyOrigen = self::totalCantidadCigarrillos($origen);
+        if ($qtyOrigen <= 0.000001) {
+            return null;
+        }
+
+        $qtyDev = self::totalCantidadCigarrillosDesdeItems($itemsDevolucion);
+        if ($qtyDev <= 0.000001) {
+            return null;
+        }
+
+        return round($iiOrigen * ($qtyDev / $qtyOrigen), 2);
+    }
+
+    public static function calcularImpuestoInternoProporcionalEntreRecepciones(
+        Recepcion_Proveedor $origen,
+        Recepcion_Proveedor $devolucion,
+    ): ?float {
+        $iiOrigen = (float) ($origen->impuesto_interno ?? 0);
+        if ($iiOrigen <= 0.000001) {
+            return null;
+        }
+
+        $qtyOrigen = self::totalCantidadCigarrillos($origen);
+        if ($qtyOrigen <= 0.000001) {
+            return null;
+        }
+
+        $qtyDev = self::totalCantidadCigarrillos($devolucion);
+        if ($qtyDev <= 0.000001) {
+            return null;
+        }
+
+        return round($iiOrigen * ($qtyDev / $qtyOrigen), 2);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     */
+    public static function totalCantidadCigarrillosDesdeItems(array $items): float
+    {
+        $tipoCigarrilloId = self::tipoArticuloCigarrilloId();
+        if ($tipoCigarrilloId === null || $items === []) {
+            return 0.0;
+        }
+
+        $articuloIds = array_values(array_unique(array_filter(array_map(
+            static fn (array $item): int => (int) ($item['articulo_id'] ?? 0),
+            $items
+        ))));
+
+        if ($articuloIds === []) {
+            return 0.0;
+        }
+
+        $tipoPorArticulo = Articulo::query()
+            ->whereIn('id', $articuloIds)
+            ->pluck('tipoarticulo_id', 'id');
+
+        $total = 0.0;
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            if (RecepcionProveedorAccionLineaOc::resolver($item) === RecepcionProveedorAccionLineaOc::PENDIENTE) {
+                continue;
+            }
+            $cantidad = (float) ($item['cantidad'] ?? 0);
+            if ($cantidad <= 0.000001) {
+                continue;
+            }
+            $articuloId = (int) ($item['articulo_id'] ?? 0);
+            if ($articuloId <= 0) {
+                continue;
+            }
+            if ((int) ($tipoPorArticulo[$articuloId] ?? 0) !== $tipoCigarrilloId) {
+                continue;
+            }
             $total += $cantidad;
         }
 
@@ -225,10 +320,73 @@ final class RecepcionProveedorImpuestoInternoSupport
             return;
         }
 
-        if ($recepcion->impuesto_interno === null) {
-            throw new \RuntimeException(
-                'Indique el impuesto interno de la factura (líneas con cigarrillos) y guarde la recepción antes de confirmar.'
-            );
+        $importe = $recepcion->impuesto_interno;
+        if ($importe === null || (float) $importe <= 0.000001) {
+            $msg = $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
+                ? 'La devolución con cigarrillos debe tener impuesto interno (se prorratea desde la recepción origen) antes de confirmar.'
+                : 'Indique el impuesto interno de la factura (líneas con cigarrillos) y guarde la recepción antes de confirmar.';
+
+            throw new \RuntimeException($msg);
         }
+    }
+
+    /**
+     * Auditoría: devolución cuya recepción origen tiene II debe cargar el II proporcional.
+     * Si no, el asiento COM omite la pata de impuesto interno (falso OK vs preview).
+     *
+     * @return array{
+     *     ii_actual: float,
+     *     ii_esperado: float,
+     *     ii_origen: float,
+     *     origen_id: int,
+     *     origen_nro: int,
+     *     mensaje: string
+     * }|null
+     */
+    public static function diagnosticoImpuestoInternoDevolucion(
+        Recepcion_Proveedor $devolucion,
+        float $tolerancia = 0.02,
+    ): ?array {
+        if ($devolucion->tipo !== Recepcion_Proveedor::TIPO_DEVOLUCION) {
+            return null;
+        }
+
+        $devolucion->loadMissing([
+            'recepcion_proveedor_articulos.articulos',
+            'recepcion_referencia.recepcion_proveedor_articulos.articulos',
+        ]);
+
+        $origen = $devolucion->recepcion_referencia;
+        if (! $origen instanceof Recepcion_Proveedor) {
+            return null;
+        }
+
+        $iiEsperado = self::calcularImpuestoInternoProporcionalEntreRecepciones($origen, $devolucion);
+        if ($iiEsperado === null || $iiEsperado <= 0.000001) {
+            return null;
+        }
+
+        $iiActual = round((float) ($devolucion->impuesto_interno ?? 0), 2);
+        if (abs($iiActual - $iiEsperado) < max(0.0, $tolerancia)) {
+            return null;
+        }
+
+        $origenNro = (int) ($origen->numerorecepcion ?? 0);
+        $iiOrigen = round((float) ($origen->impuesto_interno ?? 0), 2);
+
+        return [
+            'ii_actual' => $iiActual,
+            'ii_esperado' => $iiEsperado,
+            'ii_origen' => $iiOrigen,
+            'origen_id' => (int) $origen->id,
+            'origen_nro' => $origenNro,
+            'mensaje' => sprintf(
+                'Devolución sin impuesto interno contable: origen COM %d tiene II %s; esperado en devolución %s (actual %s).',
+                $origenNro,
+                number_format($iiOrigen, 2, ',', '.'),
+                number_format($iiEsperado, 2, ',', '.'),
+                number_format($iiActual, 2, ',', '.'),
+            ),
+        ];
     }
 }

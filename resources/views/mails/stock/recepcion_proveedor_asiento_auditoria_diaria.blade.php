@@ -52,6 +52,7 @@
     <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; font-size:13px; width:100%;">
         <tr style="background:#f0f0f0;">
             <th align="left">COM</th>
+            <th align="left">Tipo</th>
             <th align="left">Empresa</th>
             <th align="left">Asiento ERP</th>
             <th align="right">Debe ERP</th>
@@ -61,6 +62,7 @@
         @foreach ($informe['discrepancias'] as $fila)
             <tr>
                 <td>{{ (int) ($fila['com'] ?? 0) }}</td>
+                <td>{{ $fila['tipo'] ?? '—' }}</td>
                 <td>{{ (int) ($fila['empresa_id'] ?? 0) }}</td>
                 <td>{{ $fila['numero_asiento'] ?? '—' }}</td>
                 <td align="right">{{ isset($fila['debe_erp']) ? $fmt($fila['debe_erp']) : '—' }}</td>
@@ -87,9 +89,10 @@
 @endif
 
 <p style="margin-top:24px; font-size:12px; color:#666;">
-    Criterio: recepciones confirmadas con <code>fecha</code> = día auditado, generadas en ERP.<br>
+    Criterio: recepciones y devoluciones confirmadas con <code>fecha</code> en el alcance, generadas en ERP.<br>
     Clave Anita COM: tipo + letra + <code>empresa_id</code> (sucursal) + <code>numerorecepcion</code>.<br>
     Valida recepmae, asiento ERP, ctamov, importes, fechas, centros de costo y monedas (sin <code>recm_documentoid</code>).<br>
+    Devoluciones: si la recepción origen tiene impuesto interno de cigarrillos, la devolución debe revertirlo (campo + asiento).<br>
     Comando manual:
     <code>php artisan recepcion-proveedor:auditoria-asientos-com --fecha={{ $informe['fecha_calendario'] ?? '' }}</code>
 </p>

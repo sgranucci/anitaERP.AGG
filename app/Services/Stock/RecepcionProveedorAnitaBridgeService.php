@@ -1323,6 +1323,7 @@ class RecepcionProveedorAnitaBridgeService
 
         $articulo->loadMissing(['categorias', 'impuestos']);
         $sku = RecepcionProveedorAnitaEscrituraSupport::skuAnita13((string) ($articulo->sku ?? ''));
+        $signoCantidad = $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION ? -1.0 : 1.0;
 
         $insert = RecepcionProveedorAnitaEscrituraSupport::recepmovImpuestoInternoInsert(
             $codigoProveedor,
@@ -1339,6 +1340,7 @@ class RecepcionProveedorAnitaBridgeService
             (float) ($recepcion->cotizacion ?? 1),
             (string) optional($articulo->categorias)->codigo,
             RecepcionProveedorAnitaEscrituraSupport::tipoIvaAnitaCodigo($articulo),
+            $signoCantidad,
         );
 
         if ($insert === null) {

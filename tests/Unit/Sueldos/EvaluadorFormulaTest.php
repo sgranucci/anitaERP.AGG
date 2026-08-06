@@ -103,8 +103,8 @@ class EvaluadorFormulaTest extends TestCase
 
     public function test_division_por_cero(): void
     {
-        $this->expectException(FormulaException::class);
-        $this->motor()->evaluar('10 / 0', $this->entorno());
+        // Anita: división por 0 → HUGE_VAL / INF (no excepción).
+        $this->assertInfinite($this->motor()->evaluar('10 / 0', $this->entorno()));
     }
 
     public function test_variable_no_definida(): void

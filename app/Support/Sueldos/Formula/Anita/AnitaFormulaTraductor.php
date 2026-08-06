@@ -455,6 +455,12 @@ class AnitaFormulaTraductor
             $args[] = ['t' => 'num', 'v' => 0.0];
             $this->resultado->agregarAdvertencia('«IF(cond, a)» → «si(cond, a, 0)» (falso implícito).');
         }
+        // Typo frecuente en habformula: IF(IF(...)) con un solo argumento → unwrap.
+        if ($nombre === 'IF' && count($args) === 1) {
+            $this->resultado->agregarAdvertencia('«IF(expr)» de 1 argumento → se usa expr (IF redundante en Anita).');
+
+            return $args[0];
+        }
 
         if (! $map['exacto']) {
             $nota = $map['nota'] ?? '';

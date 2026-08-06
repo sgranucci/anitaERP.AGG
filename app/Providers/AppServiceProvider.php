@@ -1886,6 +1886,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Sueldos\Antiguedad_Tabla_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Antiguedad_Tabla_SueldosRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Sueldos\Acumulador_SueldosRepositoryInterface',
             'App\Repositories\Sueldos\Acumulador_SueldosRepository',
         );

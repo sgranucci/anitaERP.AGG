@@ -97,6 +97,7 @@ return [
 
     /*
     | Auditoría diaria asientos COM: ERP ↔ ctamov Anita (recepcion-proveedor:auditoria-asientos-com).
+    | Incluye RECEPCION y DEVOLUCION. Control extra: devolución vs II de la recepción origen.
     */
     'auditoria_asientos_com_diaria' => [
         'habilitada' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
@@ -107,7 +108,7 @@ return [
         'incluir_importadas_anita' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_INCLUIR_IMPORTADAS', false), FILTER_VALIDATE_BOOLEAN),
         // Días calendario inclusive hasta hoy que audita el cron diario (--desde / --hasta).
         'ventana_dias' => max(1, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_VENTANA_DIAS', 7)),
-        // Ante discrepancia ctamov/recepmae: repara desde ERP y re-audita (solo Anita, no toca asiento ERP).
+        // Ante discrepancia: repara Anita (ctamov/recepmae) y, si falta II en devolución, recuadra asiento+II.
         'auto_reparar' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_AUTO_REPARAR', true), FILTER_VALIDATE_BOOLEAN),
     ],
 

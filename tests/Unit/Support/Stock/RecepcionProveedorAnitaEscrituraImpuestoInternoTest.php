@@ -42,12 +42,26 @@ class RecepcionProveedorAnitaEscrituraImpuestoInternoTest extends TestCase
     public function test_importe_no_positivo_devuelve_null(): void
     {
         $this->assertNull($this->construir(0.0, ordenMax: 1));
-        $this->assertNull($this->construir(-50.0, ordenMax: 1));
         $this->assertNull($this->construir(0.001, ordenMax: 1));
     }
 
+    public function test_importe_negativo_usa_valor_absoluto_como_precio(): void
+    {
+        $map = $this->mapa($this->construir(-50.0, ordenMax: 1));
+        $this->assertSame('1.0000', $map['recv_cantidad']);
+        $this->assertSame('50.0000', $map['recv_precio']);
+    }
+
+    public function test_devolucion_usa_cantidad_negativa_y_precio_positivo(): void
+    {
+        $map = $this->mapa($this->construir(396367.89, ordenMax: 1, signoCantidad: -1.0));
+
+        $this->assertSame('-1.0000', $map['recv_cantidad']);
+        $this->assertSame('396367.8900', $map['recv_precio']);
+    }
+
     /** @return array{campos: string, valores: string}|null */
-    private function construir(float $importe, int $ordenMax): ?array
+    private function construir(float $importe, int $ordenMax, float $signoCantidad = 1.0): ?array
     {
         return Esc::recepmovImpuestoInternoInsert(
             '003793',
@@ -64,6 +78,7 @@ class RecepcionProveedorAnitaEscrituraImpuestoInternoTest extends TestCase
             1430.0,
             '0',
             0,
+            $signoCantidad,
         );
     }
 

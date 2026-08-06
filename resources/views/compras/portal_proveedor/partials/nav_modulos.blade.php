@@ -4,6 +4,12 @@
 @endphp
 <ul class="nav portal-nav-modulos" role="tablist">
     <li class="nav-item">
+        <a class="nav-link {{ $moduloActivo === 'ordenes' ? 'active' : '' }}"
+           href="{{ route('portal_proveedores_ordenes', $qid) }}">
+            <i class="fa fa-shopping-cart"></i> Órdenes de compra
+        </a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link {{ $moduloActivo === 'facturas' ? 'active' : '' }}"
            href="{{ route('portal_proveedores', $qid) }}">
             <i class="fa fa-file-text-o"></i> Facturas

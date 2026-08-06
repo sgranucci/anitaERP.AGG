@@ -75,7 +75,7 @@ class AnitaFuncionMapa
         'DNOTRAB' => ['erp' => 'dias_no_trabajados', 'exacto' => false, 'nota' => 'días no trabajados'],
         'MT' => ['erp' => 'meses_trabajados', 'exacto' => false, 'nota' => 'meses trabajados'],
         'TE' => ['erp' => 'tabla_empleado', 'exacto' => false, 'nota' => 'valor de tabla del empleado'],
-        'DTBR' => ['erp' => 'descuento_bruto', 'exacto' => false, 'nota' => 'descuento bruto por factor (retroactivos)'],
+        'DTBR' => ['erp' => 'descuento_bruto', 'exacto' => true, 'nota' => 'factor del concepto si no liquidado en el período'],
         'BCAT' => ['erp' => 'base_categoria', 'exacto' => false, 'nota' => 'base de la categoría'],
         'EMPMAD' => ['erp' => 'es_empresa_madre', 'exacto' => false, 'nota' => 'flag empresa madre'],
         'EASOC' => ['erp' => 'es_asociacion', 'exacto' => false, 'nota' => 'flag asociación'],
@@ -116,12 +116,16 @@ class AnitaFuncionMapa
         'GRRE' => ['tipo' => 'var', 'erp' => 'empleado.grupo_remuneracion', 'exacto' => false],
         'GRDE' => ['tipo' => 'var', 'erp' => 'empleado.grupo_deduccion', 'exacto' => false],
         'GRAP' => ['tipo' => 'var', 'erp' => 'empleado.grupo_aporte', 'exacto' => false],
-        'TLIQ' => ['tipo' => 'var', 'erp' => 'periodo.tipo_liq_n', 'exacto' => false, 'nota' => 'tipo liquidación numérico'],
-        'TLQ' => ['tipo' => 'var', 'erp' => 'periodo.tipo_liq_n', 'exacto' => false, 'nota' => 'alias TLIQ'],
+        // Anita tliq(): frecuencia del legajo (emp_men_quin). Distinto de TLQ.
+        'TLIQ' => ['tipo' => 'var', 'erp' => 'empleado.tliq_n', 'exacto' => true, 'nota' => 'frecuencia liq. del empleado (tliq)'],
+        // Anita tlq(): tipo de maeliq (1=1Q … 3=mensual_squin … 5=vac … 6/7=SAC … 10=mensual).
+        'TLQ' => ['tipo' => 'var', 'erp' => 'periodo.tipo_liq_n', 'exacto' => true, 'nota' => 'tipo corrida maeliq (tlq)'],
         'PLIQ' => ['tipo' => 'var', 'erp' => 'periodo.periodo', 'exacto' => false],
 
         // Aproximadas (acumuladores del ERP; dependen de definición y orden)
-        'BR' => ['tipo' => 'acum', 'erp' => 'BRUTO', 'exacto' => false, 'nota' => 'total bruto (según acumulador BRUTO)'],
+        // Anita p-liquidacion acum_pases: "bruto" / BR = tot_caportes (hab_tipo=1 remunerativo
+        // que va al recibo). No incluye no remunerativo (tot_saportes). Ver case 3 % s/bruto.
+        'BR' => ['tipo' => 'acum', 'erp' => 'REM', 'exacto' => true, 'nota' => 'bruto con aportes Anita (REM; no rem+norem)'],
         'DE' => ['tipo' => 'acum', 'erp' => 'DESC', 'exacto' => false, 'nota' => 'total descuentos (según acumulador DESC)'],
         'AS' => ['tipo' => 'acum', 'erp' => 'ASIG', 'exacto' => false, 'nota' => 'asignaciones familiares'],
         'TG' => ['tipo' => 'acum', 'erp' => 'NETO', 'exacto' => false, 'nota' => 'total general / neto'],

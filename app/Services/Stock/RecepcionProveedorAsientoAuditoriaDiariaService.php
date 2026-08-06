@@ -11,13 +11,14 @@ use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorAsientoAuditoriaSupport;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Auditoría diaria de asientos contables ERP ↔ ctamov Anita para recepciones COM.
+ * Auditoría diaria de asientos contables ERP ↔ ctamov Anita para recepciones/devoluciones COM.
  */
 final class RecepcionProveedorAsientoAuditoriaDiariaService
 {
@@ -25,6 +26,7 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
         private readonly RecepcionProveedorAsientoService $asientoService,
         private readonly RecepcionProveedorAnitaBridgeService $anitaBridge,
         private readonly RecepcionProveedorAnitaTrasConfirmacionService $anitaTrasConfirmacion,
+        private readonly RecepcionProveedorImpuestoInternoDevolucionReparacionService $impuestoInternoDevolucionReparacion,
     ) {
     }
 
@@ -120,12 +122,25 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             if ($autoReparar && ($resultado['estado'] ?? '') === 'discrepancia') {
                 $problemasIniciales = $resultado['problemas'] ?? [];
                 try {
+                    $reparacionIi = null;
+                    if (! empty($resultado['impuesto_interno_devolucion_falla'])) {
+                        // Período puede estar cerrado: forzar recuadre ctamov (misma reparación operativa).
+                        $statsIi = $this->impuestoInternoDevolucionReparacion->ejecutar([
+                            'id' => (int) $recepcion->id,
+                            'forzar' => true,
+                        ]);
+                        $reparacionIi = $statsIi;
+                    }
+
                     $reparacion = $this->anitaTrasConfirmacion->verificarYReparar((int) $recepcion->id);
                     $resultadoPost = $this->auditarRecepcion($recepcion->fresh(), $tol);
                     if (($resultadoPost['estado'] ?? '') === 'ok') {
                         $resultadoPost['reparada_en_auditoria'] = true;
                         $resultadoPost['problemas_iniciales'] = $problemasIniciales;
                         $resultadoPost['reparacion_estado'] = $reparacion['estado'] ?? null;
+                        if ($reparacionIi !== null) {
+                            $resultadoPost['reparacion_impuesto_interno'] = $reparacionIi;
+                        }
                         $informe['ok']++;
                         $informe['reparadas'] = (int) ($informe['reparadas'] ?? 0) + 1;
                         $informe['filas'][] = $resultadoPost;
@@ -133,6 +148,7 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
                             'recepcion_id' => (int) $recepcion->id,
                             'com' => (int) $recepcion->numerorecepcion,
                             'problemas' => $problemasIniciales,
+                            'reparacion_impuesto_interno' => $reparacionIi !== null,
                         ]);
 
                         continue;
@@ -207,18 +223,44 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
         $base = [
             'recepcion_id' => (int) $recepcion->id,
             'com' => (int) $recepcion->numerorecepcion,
+            'tipo' => (string) ($recepcion->tipo ?? Recepcion_Proveedor::TIPO_RECEPCION),
             'empresa_id' => (int) $recepcion->empresa_id,
             'empresa_codigo' => (int) ($recepcion->empresas->codigo ?? 0),
             'fecha' => optional($recepcion->fecha)->format('Y-m-d'),
             'asiento_id' => (int) ($recepcion->asiento_id ?? 0),
             'problemas' => [],
+            'impuesto_interno_devolucion_falla' => false,
         ];
 
+        // Control específico: devolución debe revertir II de la recepción origen (cigarrillos).
+        $diagIi = RecepcionProveedorImpuestoInternoSupport::diagnosticoImpuestoInternoDevolucion(
+            $recepcion,
+            $tol
+        );
+        if ($diagIi !== null) {
+            $base['problemas'][] = $diagIi['mensaje'];
+            $base['impuesto_interno_devolucion_falla'] = true;
+            $base['impuesto_interno_esperado'] = $diagIi['ii_esperado'];
+            $base['impuesto_interno_actual'] = $diagIi['ii_actual'];
+            $base['impuesto_interno_origen'] = $diagIi['ii_origen'];
+            $base['recepcion_origen_com'] = $diagIi['origen_nro'];
+        }
+
         if (! $this->asientoService->debeGenerarAsiento((int) $recepcion->empresa_id)) {
+            if ($base['problemas'] !== []) {
+                return array_merge($base, ['estado' => 'discrepancia']);
+            }
+
             return array_merge($base, ['estado' => 'omitida']);
         }
 
         if ($this->asientoService->recepcionSinImporteContable($recepcion)) {
+            // Devolución con II faltante: el importe "sin II" puede ser > 0 por mercadería;
+            // si además el preview da 0, igual debemos alertar el II.
+            if ($base['problemas'] !== []) {
+                return array_merge($base, ['estado' => 'discrepancia']);
+            }
+
             return array_merge($base, [
                 'estado' => 'omitida',
                 'problemas' => ['Recepción sin importe contable: no requiere asiento COM.'],
@@ -227,18 +269,16 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
 
         $asientoId = (int) ($recepcion->asiento_id ?? 0);
         if ($asientoId <= 0) {
-            return array_merge($base, [
-                'estado' => 'discrepancia',
-                'problemas' => ['Falta asiento contable en el ERP (contabilidad activa).'],
-            ]);
+            $base['problemas'][] = 'Falta asiento contable en el ERP (contabilidad activa).';
+
+            return array_merge($base, ['estado' => 'discrepancia']);
         }
 
         $asiento = $recepcion->asientos;
         if (! $asiento) {
-            return array_merge($base, [
-                'estado' => 'discrepancia',
-                'problemas' => ['La recepción referencia asiento id '.$asientoId.' inexistente en el ERP.'],
-            ]);
+            $base['problemas'][] = 'La recepción referencia asiento id '.$asientoId.' inexistente en el ERP.';
+
+            return array_merge($base, ['estado' => 'discrepancia']);
         }
 
         $numeroAsiento = trim((string) ($asiento->numeroasiento ?? ''));

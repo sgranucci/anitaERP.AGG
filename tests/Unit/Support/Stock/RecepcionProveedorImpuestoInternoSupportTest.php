@@ -53,6 +53,73 @@ class RecepcionProveedorImpuestoInternoSupportTest extends TestCase
         $this->assertSame('IMPINTERNO', RecepcionProveedorImpuestoInternoSupport::skuArticuloImpuestoInterno());
     }
 
+    public function test_devolucion_con_cigarrillos_requiere_impuesto_interno(): void
+    {
+        $devolucion = $this->recepcionConLineas([[10.0, self::TIPO_CIG_ID]], 0.0);
+        $devolucion->tipo = Recepcion_Proveedor::TIPO_DEVOLUCION;
+
+        $this->assertTrue(RecepcionProveedorImpuestoInternoSupport::recepcionRequiereImpuestoInterno($devolucion));
+    }
+
+    public function test_impuesto_interno_proporcional_entre_recepciones(): void
+    {
+        $origen = $this->recepcionConLineas([
+            [100.0, self::TIPO_CIG_ID],
+            [50.0, 1],
+        ], 400.0);
+
+        $devolucion = $this->recepcionConLineas([[50.0, self::TIPO_CIG_ID]], 0.0);
+        $devolucion->tipo = Recepcion_Proveedor::TIPO_DEVOLUCION;
+
+        $iiEntre = RecepcionProveedorImpuestoInternoSupport::calcularImpuestoInternoProporcionalEntreRecepciones(
+            $origen,
+            $devolucion
+        );
+
+        $this->assertSame(200.0, $iiEntre);
+    }
+
+    public function test_assert_impuesto_interno_cero_falla_en_devolucion(): void
+    {
+        $devolucion = $this->recepcionConLineas([[10.0, self::TIPO_CIG_ID]], 0.0);
+        $devolucion->tipo = Recepcion_Proveedor::TIPO_DEVOLUCION;
+        $devolucion->impuesto_interno = 0;
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('impuesto interno');
+        RecepcionProveedorImpuestoInternoSupport::assertImpuestoInternoCumplido($devolucion);
+    }
+
+    public function test_diagnostico_impuesto_interno_devolucion_detecta_falta(): void
+    {
+        $origen = $this->recepcionConLineas([[100.0, self::TIPO_CIG_ID]], 400.0);
+        $origen->numerorecepcion = 165556;
+
+        $devolucion = $this->recepcionConLineas([[100.0, self::TIPO_CIG_ID]], 0.0);
+        $devolucion->tipo = Recepcion_Proveedor::TIPO_DEVOLUCION;
+        $devolucion->impuesto_interno = 0;
+        $devolucion->setRelation('recepcion_referencia', $origen);
+
+        $diag = RecepcionProveedorImpuestoInternoSupport::diagnosticoImpuestoInternoDevolucion($devolucion);
+
+        $this->assertNotNull($diag);
+        $this->assertSame(400.0, $diag['ii_esperado']);
+        $this->assertSame(0.0, $diag['ii_actual']);
+        $this->assertStringContainsString('Devolución sin impuesto interno', $diag['mensaje']);
+    }
+
+    public function test_diagnostico_impuesto_interno_devolucion_ok_si_coincide(): void
+    {
+        $origen = $this->recepcionConLineas([[100.0, self::TIPO_CIG_ID]], 400.0);
+        $devolucion = $this->recepcionConLineas([[50.0, self::TIPO_CIG_ID]], 200.0);
+        $devolucion->tipo = Recepcion_Proveedor::TIPO_DEVOLUCION;
+        $devolucion->setRelation('recepcion_referencia', $origen);
+
+        $this->assertNull(
+            RecepcionProveedorImpuestoInternoSupport::diagnosticoImpuestoInternoDevolucion($devolucion)
+        );
+    }
+
     /** @param list<array{0: float, 1: int}> $lineas */
     private function recepcionConLineas(array $lineas, float $impuestoInterno): Recepcion_Proveedor
     {

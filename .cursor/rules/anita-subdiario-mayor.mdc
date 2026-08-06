@@ -25,6 +25,8 @@ Referencias canónicas:
 | **`D`** | Debe | Haber |
 | **`H`** | Haber | Debe |
 
+Si `subd_contrapartida` **= `subd_cuenta`** (cancelación de caución, reemplazo de cheque) la línea genera igual **las dos piernas** sobre la misma cuenta: l-mayor.c hace las dos pasadas sin excluir la igualdad y el resumen `ctamov` de Anita graba D y H. Descartar la segunda pierna deja el asiento sin balancear y el mayor con Debe/Haber menores que Anita.
+
 ```php
 use App\Support\Contable\Anita\AnitaSubdiarioMayorSupport;
 

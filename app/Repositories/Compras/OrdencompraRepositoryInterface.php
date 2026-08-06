@@ -49,4 +49,31 @@ interface OrdencompraRepositoryInterface
      * Siguiente número de orden de compra (único global, sin filtrar por empresa).
      */
     public function proximoNumeroOrdencompra(): int;
+
+    /**
+     * Listado de OC del portal de proveedores.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection
+     */
+    public function listarPortalProveedor(int $proveedorId, array $filtros = [], bool $paginar = true);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array{
+     *   cantidad: int,
+     *   con_factura: int,
+     *   sin_factura: int,
+     *   monto_oc: float,
+     *   monto_facturado: float
+     * }
+     */
+    public function resumenPortalProveedor(int $proveedorId, array $filtros = []): array;
+
+    /**
+     * Detalle de OC para el portal (facturas, precargas y pagos asociados).
+     *
+     * @return \App\Models\Compras\Ordencompra
+     */
+    public function findPortalProveedor(int $id, int $proveedorId);
 }

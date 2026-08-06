@@ -77,12 +77,14 @@ class MayorConceptoComRecepcionErpSupport
             return $porClave;
         }
 
+        // No filtrar cuentacontable.empresa_id: en multiempresa el plan de cuentas
+        // suele tener el gasto (ej. 115010001) bajo empresa 1 aunque la recepción
+        // sea Kandiko/Rebisco. El asiento ya está acotado por la recepción.
         $movimientos = DB::table('asiento_movimiento as am')
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
             ->whereIn('am.asiento_id', array_keys($clavePorRecepcion))
             ->whereNull('am.deleted_at')
             ->where('am.monto', '>', 0)
-            ->where('cc.empresa_id', $empresaId)
             ->get([
                 'am.asiento_id',
                 'am.monto',

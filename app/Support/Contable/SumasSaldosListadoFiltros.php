@@ -224,6 +224,9 @@ class SumasSaldosListadoFiltros
     /**
      * Inicio de ejercicio contable (YYYYMM) para acumular saldo mes ant. / ejercicio.
      * Equivalente simplificado a EMPM_extrae_ejercicio (01/01 del año del desde).
+     *
+     * No aplica el piso Anita {@see MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD}:
+     * SyS / mayor ERP leen cuentacontable_saldo_mes local (p. ej. 2025 importado).
      */
     public static function periodoInicioEjercicio(int $periodoDesde): int
     {
@@ -232,10 +235,7 @@ class SumasSaldosListadoFiltros
             $anio = (int) date('Y');
         }
 
-        $inicio = (int) ($anio.'01');
-        $minimo = (int) (substr((string) MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD, 0, 6));
-
-        return max($inicio, $minimo);
+        return (int) ($anio.'01');
     }
 
     public static function periodoDesdeFecha(string $fechaYmd): int

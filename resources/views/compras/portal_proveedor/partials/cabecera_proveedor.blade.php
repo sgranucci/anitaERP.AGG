@@ -17,6 +17,8 @@
                 <i class="fa fa-upload"></i> Presentar factura PDF
             </button>
             @endif
+        @elseif (($moduloActivo ?? '') === 'ordenes')
+            <span class="badge badge-light text-dark">OC activas · facturas · pagos</span>
         @elseif (($moduloActivo ?? '') === 'pagos')
             <span class="badge badge-light text-dark">Órdenes de pago y certificados</span>
         @elseif (($moduloActivo ?? '') === 'retenciones')

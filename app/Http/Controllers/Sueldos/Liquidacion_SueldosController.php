@@ -265,9 +265,21 @@ class Liquidacion_SueldosController extends Controller
                 ->with('error', 'No hay conceptos activos para liquidar. Cargue conceptos antes de calcular.');
         }
 
+        $msg = 'Corrida calculada: '.$resumen['recibos'].' recibo(s). Neto total $ '
+            .number_format($resumen['total_neto'], 2, ',', '.');
+        $errN = (int) ($resumen['errores_formula_count'] ?? 0);
+        if ($errN > 0) {
+            $sample = collect($resumen['errores_formula'] ?? [])->take(3)
+                ->map(fn ($e) => 'leg.'.$e['legajo'].' conc.'.$e['concepto'])
+                ->implode(', ');
+
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('mensaje', $msg)
+                ->with('error', $errN.' error(es) de fórmula (concepto omitido con importe 0). Ej: '.$sample);
+        }
+
         return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
-            ->with('mensaje', 'Corrida calculada: '.$resumen['recibos'].' recibo(s). Neto total $ '
-                .number_format($resumen['total_neto'], 2, ',', '.'));
+            ->with('mensaje', $msg);
     }
 
     /**

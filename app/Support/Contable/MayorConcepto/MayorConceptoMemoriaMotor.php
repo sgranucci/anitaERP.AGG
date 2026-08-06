@@ -82,6 +82,14 @@ class MayorConceptoMemoriaMotor
     /** @var array<int, array<int, int>> empresa => [cuenta => concepto] */
     private array $conceptoPorCuenta = [];
 
+    /**
+     * Fallback por código de cuenta cuando la empresa no tiene conceptogasto / ctaconc.
+     * Ej. Kandiko 214010029/521060026 con null/0 mientras Biyemas tiene 8/18.
+     *
+     * @var array<int, int>|null
+     */
+    private ?array $conceptoFallbackPorCodigo = null;
+
     /** @var array<int, string> */
     private array $nombreConcepto = [];
 
@@ -363,6 +371,33 @@ class MayorConceptoMemoriaMotor
         foreach (DB::table('conceptogasto')->get(['id', 'nombre']) as $concepto) {
             $this->nombreConcepto[(int) $concepto->id] = (string) $concepto->nombre;
         }
+
+        $this->asegurarFallbackConceptoPorCodigo();
+    }
+
+    /**
+     * Concepto desde otras empresas (mismo código de cuenta) cuando la local no tiene.
+     */
+    private function asegurarFallbackConceptoPorCodigo(): void
+    {
+        if ($this->conceptoFallbackPorCodigo !== null) {
+            return;
+        }
+
+        $this->conceptoFallbackPorCodigo = [];
+        $rows = DB::table('cuentacontable')
+            ->whereNotNull('conceptogasto_id')
+            ->where('conceptogasto_id', '>', 0)
+            ->orderBy('empresa_id')
+            ->get(['codigo', 'conceptogasto_id']);
+
+        foreach ($rows as $row) {
+            $codigo = (int) $row->codigo;
+            if ($codigo <= 0 || isset($this->conceptoFallbackPorCodigo[$codigo])) {
+                continue;
+            }
+            $this->conceptoFallbackPorCodigo[$codigo] = (int) $row->conceptogasto_id;
+        }
     }
 
     /**
@@ -377,7 +412,9 @@ class MayorConceptoMemoriaMotor
         foreach ($ctaconc as $fila) {
             $cuenta = (int) ($fila->ctaco_cuenta ?? 0);
             $concepto = (int) ($fila->ctaco_concepto ?? 0);
-            if ($cuenta > 0) {
+            // No pisar con 0: en Kandiko ctaconc trae la cuenta en concepto 0 y
+            // borraba el conceptogasto ERP / el fallback multiempresa.
+            if ($cuenta > 0 && $concepto > 0) {
                 $this->conceptoPorCuenta[$empresaId][$cuenta] = $concepto;
             }
         }
@@ -385,7 +422,14 @@ class MayorConceptoMemoriaMotor
 
     public function conceptoDeCuenta(int $empresaId, int $cuenta): int
     {
-        return $this->conceptoPorCuenta[$empresaId][$cuenta] ?? 0;
+        $local = $this->conceptoPorCuenta[$empresaId][$cuenta] ?? 0;
+        if ($local > 0) {
+            return $local;
+        }
+
+        $this->asegurarFallbackConceptoPorCodigo();
+
+        return $this->conceptoFallbackPorCodigo[$cuenta] ?? 0;
     }
 
     /** Concepto Anita/ERP de la cuenta; 0 solo si la cuenta no tiene concepto asignado. */

@@ -2948,6 +2948,10 @@ Route::post('compras/portal-proveedores/pdf-ia/resolver-oc', 'Compras\PortalProv
 Route::post('compras/portal-proveedores/pdf-ia/confirmar', 'Compras\PortalProveedorController@confirmar')->name('portal_proveedores_pdf_ia_confirmar');
 Route::get('compras/portal-proveedores/facturas/{id}', 'Compras\PortalProveedorController@verFactura')->name('portal_proveedores_factura');
 
+Route::get('compras/portal-proveedores/ordenes', 'Compras\PortalProveedorOrdencompraController@index')->name('portal_proveedores_ordenes');
+Route::get('compras/portal-proveedores/ordenes/listar/{formato}', 'Compras\PortalProveedorOrdencompraController@exportar')->name('listar_portal_proveedores_ordenes');
+Route::get('compras/portal-proveedores/ordenes/{id}', 'Compras\PortalProveedorOrdencompraController@show')->name('portal_proveedores_orden');
+
 Route::get('compras/portal-proveedores/pagos', 'Compras\PortalProveedorPagoController@index')->name('portal_proveedores_pagos');
 Route::get('compras/portal-proveedores/pagos/listar/{formato}', 'Compras\PortalProveedorPagoController@exportar')->name('listar_portal_proveedores_pagos');
 Route::get('compras/portal-proveedores/pagos/{id}', 'Compras\PortalProveedorPagoController@show')->name('portal_proveedores_pago');
@@ -4014,6 +4018,15 @@ Route::post('sueldos/parametro', 'Sueldos\Parametro_SueldosController@guardar')-
 Route::get('sueldos/parametro/{id}/editar', 'Sueldos\Parametro_SueldosController@editar')->name('editar_parametro_sueldos');
 Route::put('sueldos/parametro/{id}', 'Sueldos\Parametro_SueldosController@actualizar')->name('actualizar_parametro_sueldos');
 Route::delete('sueldos/parametro/{id}', 'Sueldos\Parametro_SueldosController@eliminar')->name('eliminar_parametro_sueldos');
+
+Route::get('sueldos/antiguedad-tabla', 'Sueldos\Antiguedad_Tabla_SueldosController@index')->name('consultar_antiguedad_tabla_sueldos');
+Route::get('sueldos/listaantiguedadtabla/{formato?}/{busqueda?}', 'Sueldos\Antiguedad_Tabla_SueldosController@listar')->name('lista_antiguedad_tabla_sueldos');
+Route::post('sueldos/antiguedad-tabla/sincronizar-anita', 'Sueldos\Antiguedad_Tabla_SueldosController@sincronizarAnita')->name('sincronizar_antiguedad_tabla_sueldos');
+Route::get('sueldos/antiguedad-tabla/crear', 'Sueldos\Antiguedad_Tabla_SueldosController@crear')->name('crear_antiguedad_tabla_sueldos');
+Route::post('sueldos/antiguedad-tabla', 'Sueldos\Antiguedad_Tabla_SueldosController@guardar')->name('guardar_antiguedad_tabla_sueldos');
+Route::get('sueldos/antiguedad-tabla/{id}/editar', 'Sueldos\Antiguedad_Tabla_SueldosController@editar')->name('editar_antiguedad_tabla_sueldos');
+Route::put('sueldos/antiguedad-tabla/{id}', 'Sueldos\Antiguedad_Tabla_SueldosController@actualizar')->name('actualizar_antiguedad_tabla_sueldos');
+Route::delete('sueldos/antiguedad-tabla/{id}', 'Sueldos\Antiguedad_Tabla_SueldosController@eliminar')->name('eliminar_antiguedad_tabla_sueldos');
 
 /*
  * Acumuladores de liquidación (agrupan importes por tipo de concepto).

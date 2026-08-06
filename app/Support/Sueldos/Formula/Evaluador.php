@@ -120,7 +120,12 @@ class Evaluador
             case '/':
                 $d = $this->aNumero($b);
                 if ($d == 0.0) {
-                    throw FormulaException::evaluacion('división por cero');
+                    // Anita parser.fc: división por 0 → HUGE_VAL (no aborta la fórmula).
+                    if ($this->rastreador !== null) {
+                        $this->rastreador->anotar('división por cero → ∞ (comportamiento Anita)');
+                    }
+
+                    return INF;
                 }
 
                 return $this->aNumero($a) / $d;

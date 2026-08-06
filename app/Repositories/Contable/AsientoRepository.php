@@ -951,6 +951,10 @@ class AsientoRepository implements AsientoRepositoryInterface
 			}
 		}
 
+		if (! empty($data['omitir_validacion'])) {
+			$opciones['omitir_validacion'] = true;
+		}
+
 		PeriodoContableCierreSupport::assertOperacionPermitida(
 			(int) $data['empresa_id'],
 			(string) $data['fecha'],

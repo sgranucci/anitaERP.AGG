@@ -135,12 +135,18 @@ class Agrupamiento_SueldosRepository implements Agrupamiento_SueldosRepositoryIn
             'acc' => 'list',
             'sistema' => 'sueldos',
             'tabla' => $this->tableAnita,
-            'campos' => 'agr_agrupamiento, agr_desc, agr_id_fallo',
+            'campos' => 'agr_agrupamiento, agr_desc, agr_id_fallo, agr_variable1, agr_variable2, agr_variable3, agr_variable4',
             'orderBy' => 'agr_agrupamiento',
         ];
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($data));
 
-        $resultado = ['en_anita' => 0, 'importados' => 0, 'omitidos' => 0, 'errores' => []];
+        $resultado = [
+            'en_anita' => 0,
+            'importados' => 0,
+            'actualizados' => 0,
+            'omitidos' => 0,
+            'errores' => [],
+        ];
         if (! empty($parsed['error_lectura'])) {
             $resultado['errores'][] = (string) $parsed['error_lectura'];
 
@@ -157,21 +163,28 @@ class Agrupamiento_SueldosRepository implements Agrupamiento_SueldosRepositoryIn
                     continue;
                 }
 
-                if ($this->findPorCodigo($codigo)) {
-                    $resultado['omitidos']++;
-                    continue;
-                }
-
                 $descripcion = $this->recortar(trim((string) ($row->agr_desc ?? '')), 30);
                 if ($descripcion === '') {
                     $descripcion = (string) $codigo;
                 }
 
-                $this->model->create([
-                    'codigo' => $codigo,
+                $payload = [
                     'descripcion' => $descripcion,
                     'fallo_tipo' => FalloCajaTipo::desdeCodigoAnita((int) ($row->agr_id_fallo ?? 0)),
-                ]);
+                    'variable1' => (float) ($row->agr_variable1 ?? 0),
+                    'variable2' => (float) ($row->agr_variable2 ?? 0),
+                    'variable3' => (float) ($row->agr_variable3 ?? 0),
+                    'variable4' => (float) ($row->agr_variable4 ?? 0),
+                ];
+
+                $existente = $this->findPorCodigo($codigo);
+                if ($existente) {
+                    $existente->update($payload);
+                    $resultado['actualizados']++;
+                    continue;
+                }
+
+                $this->model->create(array_merge(['codigo' => $codigo], $payload));
                 $resultado['importados']++;
             }
         });
@@ -200,6 +213,10 @@ class Agrupamiento_SueldosRepository implements Agrupamiento_SueldosRepositoryIn
             'codigo' => $codigo,
             'descripcion' => $this->recortar(trim((string) ($data['descripcion'] ?? '')), 30),
             'fallo_tipo' => $falloTipo,
+            'variable1' => (float) ($data['variable1'] ?? $existente?->variable1 ?? 0),
+            'variable2' => (float) ($data['variable2'] ?? $existente?->variable2 ?? 0),
+            'variable3' => (float) ($data['variable3'] ?? $existente?->variable3 ?? 0),
+            'variable4' => (float) ($data['variable4'] ?? $existente?->variable4 ?? 0),
         ];
     }
 

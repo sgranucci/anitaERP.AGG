@@ -34,7 +34,11 @@ final class AnitaSubdiarioMayorSupport
     /**
      * Expande una línea de subdiario en hasta dos imputaciones (cuenta + contrapartida).
      *
-     * @return list<array{cuenta: int, dh: string, importe: float}>
+     * Cuando subd_contrapartida = subd_cuenta (ej. cancelación de caución, reemplazo de cheque)
+     * la línea genera igual las dos piernas: l-mayor.c hace las dos pasadas sin excluir la
+     * igualdad y el resumen ctamov de Anita graba D y H sobre la misma cuenta.
+     *
+     * @return list<array{cuenta: int, dh: string, importe: float, lado: 'cuenta'|'contrapartida'}>
      */
     public static function imputacionesLineaSubdiario(object $linea): array
     {
@@ -53,14 +57,16 @@ final class AnitaSubdiarioMayorSupport
                 'cuenta' => $cuenta,
                 'dh' => $tipoMov,
                 'importe' => $importe,
+                'lado' => 'cuenta',
             ];
         }
 
-        if ($contrapartida > 0 && $contrapartida !== $cuenta) {
+        if ($contrapartida > 0) {
             $out[] = [
                 'cuenta' => $contrapartida,
                 'dh' => self::dhContrapartida($tipoMov),
                 'importe' => $importe,
+                'lado' => 'contrapartida',
             ];
         }
 

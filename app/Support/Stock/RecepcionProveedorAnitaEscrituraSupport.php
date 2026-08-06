@@ -304,11 +304,15 @@ final class RecepcionProveedorAnitaEscrituraSupport
         float $cotizacion,
         string $codigoAgrupacion,
         int $tipoIvaAnita,
+        float $signoCantidad = 1.0,
     ): ?array {
-        $importe = round($importe, 2);
+        $importe = round(abs($importe), 2);
         if ($importe <= 0.000001) {
             return null;
         }
+
+        // Misma convención que las líneas de artículo: cantidad firmada, precio positivo.
+        $cantidad = $signoCantidad < 0 ? -1.0 : 1.0;
 
         return self::recepmovInsert(
             $codigoProveedor,
@@ -316,7 +320,7 @@ final class RecepcionProveedorAnitaEscrituraSupport
             $ordenMax + 1,
             $skuAnita13,
             $descripcion,
-            1.0,
+            $cantidad,
             0.0,
             '',
             $importe,

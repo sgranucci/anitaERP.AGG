@@ -22,7 +22,8 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         // $schedule->command('inspire')->hourly();
-        $schedule->command('cotizacion:leeapi')->daily()->at('06:00');
+        $horaCotizacion = (string) config('cotizacion.hora_command', '11:00');
+        $schedule->command('cotizacion:leeapi')->dailyAt($horaCotizacion);
 
         $horaReclasificacionCheques = (string) config('caja.reclasificar_cheques_diferidos_hora', '06:30');
         $schedule->command('caja:reclasificar-cheques-diferidos')

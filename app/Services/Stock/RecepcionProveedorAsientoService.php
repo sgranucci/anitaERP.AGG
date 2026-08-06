@@ -246,8 +246,10 @@ class RecepcionProveedorAsientoService
 
     /**
      * Regraba movimientos del asiento existente para cuadrar con Σ(cant × precio) de la recepción.
+     *
+     * @param  bool  $omitirCierreContable  Reparaciones operativas (comando) cuando el período ya cerró.
      */
-    public function recuadrarAsientoExistente(Recepcion_Proveedor $recepcion): void
+    public function recuadrarAsientoExistente(Recepcion_Proveedor $recepcion, bool $omitirCierreContable = false): void
     {
         $asientoId = (int) ($recepcion->asiento_id ?? 0);
         if ($asientoId <= 0) {
@@ -275,15 +277,20 @@ class RecepcionProveedorAsientoService
             $this->asientoMovimientoRepository
         );
 
-        $this->sincronizarCtamovAnitaRecepcion($recepcion, $preview);
+        $this->sincronizarCtamovAnitaRecepcion($recepcion, $preview, $omitirCierreContable);
     }
 
     /**
      * Empuja a Anita contab.ctamov el asiento de la recepción (delete + insert por numeroasiento).
      *
      * @param  array{payload_asiento: array<string, mixed>}|null  $preview
+     * @param  bool  $omitirCierreContable  Solo para comandos de reparación en período cerrado.
      */
-    public function sincronizarCtamovAnitaRecepcion(Recepcion_Proveedor $recepcion, ?array $preview = null): void
+    public function sincronizarCtamovAnitaRecepcion(
+        Recepcion_Proveedor $recepcion,
+        ?array $preview = null,
+        bool $omitirCierreContable = false,
+    ): void
     {
         if (! $this->debeGenerarAsiento((int) $recepcion->empresa_id)) {
             return;
@@ -331,6 +338,10 @@ class RecepcionProveedorAsientoService
                 ?? $payload['ctav_o_compra']
                 ?? 0),
         ]);
+
+        if ($omitirCierreContable) {
+            $dataAnita['omitir_validacion'] = true;
+        }
 
         $this->eliminarCtamovAnitaPorComRecepcion($recepcion);
         $this->asientoRepository->sincronizarCtamovAnita($dataAnita);

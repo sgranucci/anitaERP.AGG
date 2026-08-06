@@ -148,7 +148,8 @@ class Agrupamiento_SueldosController extends Controller
         return redirect('sueldos/agrupamiento')->with(
             'mensaje',
             'Sincronización con Anita: '.$resultado['importados'].' importados, '
-                .$resultado['omitidos'].' ya existentes (de '.$resultado['en_anita'].' en Anita).'
+                .($resultado['actualizados'] ?? 0).' actualizados, '
+                .$resultado['omitidos'].' omitidos (de '.$resultado['en_anita'].' en Anita).'
         );
     }
 }

@@ -12,6 +12,8 @@ use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
 use App\Support\Sueldos\ConceptoTipo;
 use App\Support\Sueldos\EmpleadoEstados;
+use App\Support\Sueldos\NovedadSueldosCatalogo;
+use App\Support\Sueldos\NovedadSueldosVigencia;
 use App\Support\Sueldos\ReciboBaseCalculoSupport;
 use App\Support\Sueldos\Formula\ContextoLiquidacion;
 use App\Support\Sueldos\Formula\EvaluadorFormula;
@@ -98,6 +100,7 @@ class LiquidacionCalculadorService
             $numeroRecibo = 0;
             $tot = ['rem' => 0.0, 'norem' => 0.0, 'desc' => 0.0, 'neto' => 0.0];
             $planPendientes = [];
+            $erroresFormula = [];
 
             foreach ($empleados as $emp) {
                 $numeroRecibo++;
@@ -106,7 +109,8 @@ class LiquidacionCalculadorService
                 $conceptosEmp = $this->conceptosParaEmpleado($conceptos, $emp, $liquidacion, $setInfo);
                 $lineas = $this->calcularEmpleado(
                     $ctx, $emp, $conceptosEmp, $overrides, $liquidacion, $planPendientes,
-                    $setInfo['meta'] ?? []
+                    $setInfo['meta'] ?? [],
+                    $erroresFormula
                 );
 
                 $rec = $this->totalesRecibo($lineas);
@@ -211,6 +215,8 @@ class LiquidacionCalculadorService
                 'total_neto' => $tot['neto'],
                 'total_remunerativo' => $tot['rem'],
                 'sin_conceptos' => false,
+                'errores_formula' => $erroresFormula,
+                'errores_formula_count' => count($erroresFormula),
             ];
         });
     }
@@ -220,10 +226,9 @@ class LiquidacionCalculadorService
      *
      * @param  \Illuminate\Support\Collection<int, Concepto_Sueldos>  $conceptos
      * @param  array<int, array<string, array{signo: int, excluir: bool}>>  $overrides
-     * @return array<int, array<string, mixed>>
-     */
-    /**
      * @param  array<int, array{origen?: string, detalle?: string, origen_label?: string}>  $origenMeta
+     * @param  list<array{legajo: int|string, concepto: int, error: string}>  $erroresFormula
+     * @return array<int, array<string, mixed>>
      */
     private function calcularEmpleado(
         ContextoLiquidacion $ctx,
@@ -232,7 +237,8 @@ class LiquidacionCalculadorService
         array $overrides = [],
         ?Liquidacion_Sueldos $liquidacion = null,
         ?array &$planPendientes = null,
-        array $origenMeta = []
+        array $origenMeta = [],
+        ?array &$erroresFormula = null
     ): array {
         $lineas = [];
         $gananciasListo = false;
@@ -242,20 +248,46 @@ class LiquidacionCalculadorService
                 $gananciasListo = true;
             }
 
-            $tieneCantidadExplicita = filled($c->formula_cantidad);
-            $tieneValorExplicito = filled($c->formula_valor);
-            $cantidad = $tieneCantidadExplicita ? $this->evalNum($ctx, $c->formula_cantidad, $c) : 1.0;
-            $valor = $tieneValorExplicito ? $this->evalNum($ctx, $c->formula_valor, $c) : 0.0;
-            $ctx->setEscalares($cantidad, $valor, (float) $c->factor);
+            try {
+                $tieneCantidadExplicita = filled($c->formula_cantidad);
+                $tieneValorExplicito = filled($c->formula_valor);
+                $cantidad = $tieneCantidadExplicita ? $this->evalNum($ctx, $c->formula_cantidad, $c) : 1.0;
+                $valor = $tieneValorExplicito ? $this->evalNum($ctx, $c->formula_valor, $c) : 0.0;
+                $ctx->setEscalares($cantidad, $valor, (float) $c->factor);
 
-            $importe = $c->formula
-                ? $this->evalNum($ctx, $c->formula, $c)
-                : $cantidad * $valor;
-            $importe = round($importe, 2);
+                $importe = $c->formula
+                    ? $this->evalNum($ctx, $c->formula, $c)
+                    : $cantidad * $valor;
+                // INF/NAN (p.ej. división por 0 Anita): no persistir; tratar como 0.
+                if (! is_finite($importe)) {
+                    $importe = 0.0;
+                }
+                $importe = round($importe, 2);
+                if (! is_finite($cantidad)) {
+                    $cantidad = 0.0;
+                }
+                if (! is_finite($valor)) {
+                    $valor = 0.0;
+                }
+            } catch (FormulaException $e) {
+                // No aborta la corrida: registra 0 y sigue (piloto / fórmulas Anita incompletas).
+                $ctx->registrarConcepto((int) $c->codigo, 0.0);
+                if (is_array($erroresFormula)) {
+                    $erroresFormula[] = [
+                        'legajo' => $emp->legajo,
+                        'concepto' => (int) $c->codigo,
+                        'error' => $e->getMessage(),
+                    ];
+                }
+
+                continue;
+            }
 
             $ctx->registrarConcepto((int) $c->codigo, $importe);
-            // Contribución empleador / informativo: no alimentan acumuladores de bruto/neto.
-            if (! in_array((string) $c->tipo, ConceptoTipo::TIPOS_SIN_IMPACTO_TOTALES, true)) {
+            // Anita acum_pases: no acumula si hab_va_recibo=='1' (va_recibo=false) ni tipo 3.
+            // Contribución / informativo tampoco alimentan REM/NOREM/DESC.
+            if ((bool) $c->va_recibo
+                && ! in_array((string) $c->tipo, ConceptoTipo::TIPOS_SIN_IMPACTO_TOTALES, true)) {
                 $ctx->aplicarAcumuladores((string) $c->tipo, $importe, $overrides[$c->id] ?? []);
             }
 
@@ -868,6 +900,11 @@ class LiquidacionCalculadorService
     {
         $t = ['rem' => 0.0, 'norem' => 0.0, 'desc' => 0.0, 'aportes' => 0.0, 'contrib' => 0.0, 'asig' => 0.0];
         foreach ($lineas as $l) {
+            // Internos (Anita hab_va_recibo=1 → va_recibo=false): se calculan para im()/fórmulas
+            // pero no componen bruto/neto/CE del recibo. Ej. 999 BRUTO SIN TOPE.
+            if (empty($l['va_recibo'])) {
+                continue;
+            }
             switch ($l['tipo']) {
                 case 'remunerativo': $t['rem'] += $l['importe']; break;
                 case 'no_remunerativo': $t['norem'] += $l['importe']; break;
@@ -1004,7 +1041,22 @@ class LiquidacionCalculadorService
             $query->where('estado', EmpleadoEstados::ACTIVO);
         }
 
+        // Vacaciones / SAC: si no hay filtro manual, solo legajos con novedad vigente
+        // de esta corrida (evita 287 recibos vacíos cuando no hay novedades cargadas).
         $filtros = $this->filtros($liq);
+        if (
+            empty($filtros['empleado_ids'])
+            && in_array((string) $liq->tipo, ['vacaciones', 'sac'], true)
+        ) {
+            $idsConNovedad = $this->empleadoIdsConNovedadVigente($liq);
+            if ($idsConNovedad !== []) {
+                $query->whereIn('id', $idsConNovedad);
+            } else {
+                // Sin novedades: no arma recibos (corrida quedó solo cabecera).
+                $query->whereRaw('1 = 0');
+            }
+        }
+
         if (! empty($filtros['empleado_ids']) && is_array($filtros['empleado_ids'])) {
             $query->whereIn('id', $filtros['empleado_ids']);
         }
@@ -1034,5 +1086,41 @@ class LiquidacionCalculadorService
         $dec = json_decode((string) $liq->filtros_json, true);
 
         return is_array($dec) ? $dec : [];
+    }
+
+    /**
+     * Legajos con novedad no anulada vigente para esta corrida/período.
+     *
+     * @return list<int>
+     */
+    private function empleadoIdsConNovedadVigente(Liquidacion_Sueldos $liq): array
+    {
+        $liqId = (int) $liq->id;
+        $periodoYm = (int) ($liq->periodo ?? 0);
+        if ($periodoYm <= 0) {
+            $periodoYm = (int) (($liq->periodo_anio ?: 0) * 100 + ($liq->periodo_mes ?: 0));
+        }
+
+        try {
+            $rows = DB::table('novedad_sueldos')
+                ->where('empresa_id', $liq->empresa_id)
+                ->where('estado', '!=', NovedadSueldosCatalogo::ESTADO_ANULADA)
+                ->get(['empleado_id', 'liquidacion_id', 'periodo', 'fecha_desde', 'fecha_hasta']);
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($rows as $r) {
+            if (! NovedadSueldosVigencia::aplicaACorrida($r, $liqId, $periodoYm)) {
+                continue;
+            }
+            $eid = (int) ($r->empleado_id ?? 0);
+            if ($eid > 0) {
+                $ids[$eid] = true;
+            }
+        }
+
+        return array_keys($ids);
     }
 }

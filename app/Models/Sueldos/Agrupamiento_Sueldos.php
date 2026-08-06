@@ -15,9 +15,17 @@ class Agrupamiento_Sueldos extends Model implements Auditable
         'codigo',
         'descripcion',
         'fallo_tipo',
+        'variable1',
+        'variable2',
+        'variable3',
+        'variable4',
     ];
 
     protected $casts = [
         'codigo' => 'integer',
+        'variable1' => 'float',
+        'variable2' => 'float',
+        'variable3' => 'float',
+        'variable4' => 'float',
     ];
 }

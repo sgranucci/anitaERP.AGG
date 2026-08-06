@@ -10,6 +10,7 @@ use App\Models\Sueldos\Grupo_Concepto_Item_Sueldos;
 use App\Models\Sueldos\Grupo_Concepto_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
+use App\Support\Sueldos\ConceptoMomentoCorrida;
 use App\Support\Sueldos\NovedadSueldosCatalogo;
 use App\Support\Sueldos\NovedadSueldosVigencia;
 use Carbon\Carbon;
@@ -37,6 +38,8 @@ class ConceptoSetEfectivoService
     {
         $fechaRef = $this->fechaReferencia($liquidacion);
         $contextoEmp = $this->contextoEmpleado($empleado);
+        $tipoCorrida = (string) ($liquidacion->tipo ?? 'mensual');
+        $momentosGrupo = ConceptoMomentoCorrida::momentosPermitidosEnGrupo($tipoCorrida);
 
         $grupos = $this->gruposDelEmpleado($empleado);
         $meta = [];
@@ -54,6 +57,9 @@ class ConceptoSetEfectivoService
                     ->pluck('concepto_id')
                     ->map(fn ($id) => (int) $id)
                     ->all();
+                if ($momentosGrupo !== null && $items !== []) {
+                    $items = $this->filtrarIdsPorMomentosGrupo($items, $momentosGrupo, $excluidos, $g);
+                }
                 foreach ($items as $cid) {
                     $candidatosIds[$cid] = true;
                     if (! isset($meta[$cid])) {
@@ -67,9 +73,13 @@ class ConceptoSetEfectivoService
         } else {
             // Sin grupo: catálogo activo + elegibilidad (SAP). No es “Anita todos”.
             $modo = ConceptoElegibilidadCatalogo::MODO_SAP;
-            $candidatosIds = Concepto_Sueldos::query()
+            $qCat = Concepto_Sueldos::query()
                 ->where('activo', true)
-                ->where('momento', '!=', 'no_liquida')
+                ->where('momento', '!=', 'no_liquida');
+            if ($momentosGrupo !== null) {
+                $qCat->whereIn('momento', $momentosGrupo);
+            }
+            $candidatosIds = $qCat
                 ->pluck('id')
                 ->mapWithKeys(fn ($id) => [(int) $id => true])
                 ->all();
@@ -142,6 +152,23 @@ class ConceptoSetEfectivoService
             ->orderBy('orden')
             ->orderBy('codigo')
             ->get();
+
+        // cheq_momento: recorta el set final (novedades SIEMPRE sí pasan en vacaciones).
+        $conceptos = $conceptos->filter(function (Concepto_Sueldos $c) use ($tipoCorrida, &$excluidos, &$meta) {
+            if (ConceptoMomentoCorrida::aplica((string) $c->momento, $tipoCorrida)) {
+                return true;
+            }
+            unset($meta[(int) $c->id]);
+            $excluidos[] = [
+                'concepto_id' => (int) $c->id,
+                'codigo' => (int) $c->codigo,
+                'descripcion' => (string) $c->descripcion,
+                'motivo' => 'Momento "'.$c->momento.'" no aplica a corrida '.$tipoCorrida,
+                'etapa' => 'momento',
+            ];
+
+            return false;
+        })->values();
 
         $this->completarExcluidos($excluidos);
 
@@ -285,6 +312,50 @@ class ConceptoSetEfectivoService
         }
 
         return (string) $v;
+    }
+
+    /**
+     * Anita: en corrida vacaciones el grupo solo aporta conceptos con momento vacaciones*.
+     *
+     * @param  list<int>  $conceptoIds
+     * @param  list<string>  $momentosGrupo
+     * @param  list<array<string, mixed>>  $excluidos
+     * @param  array{id: int, codigo: int, descripcion: ?string, orden: int}  $grupo
+     * @return list<int>
+     */
+    private function filtrarIdsPorMomentosGrupo(
+        array $conceptoIds,
+        array $momentosGrupo,
+        array &$excluidos,
+        array $grupo
+    ): array {
+        $momentos = Concepto_Sueldos::query()
+            ->whereIn('id', $conceptoIds)
+            ->get(['id', 'codigo', 'descripcion', 'momento'])
+            ->keyBy('id');
+
+        $ok = [];
+        foreach ($conceptoIds as $cid) {
+            $c = $momentos->get($cid);
+            if ($c === null) {
+                continue;
+            }
+            if (in_array((string) $c->momento, $momentosGrupo, true)) {
+                $ok[] = $cid;
+
+                continue;
+            }
+            $excluidos[] = [
+                'concepto_id' => $cid,
+                'codigo' => (int) $c->codigo,
+                'descripcion' => (string) $c->descripcion,
+                'motivo' => 'Grupo '.$grupo['codigo'].': momento "'.$c->momento.'" omitido en esta corrida (solo '
+                    .implode('/', $momentosGrupo).')',
+                'etapa' => 'momento_grupo',
+            ];
+        }
+
+        return $ok;
     }
 
     /**

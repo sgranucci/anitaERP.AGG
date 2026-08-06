@@ -84,6 +84,7 @@ class Empleado_SueldosController extends Controller
         return redirect('sueldos/empleado')->with(
             'mensaje',
             'Sincronización con Anita: '.$r['importados'].' empleados nuevos, '.$r['ya_existia'].' ya existentes, '
+                .($r['actualizados_egreso'] ?? 0).' egreso/estado actualizados, '
                 .$r['sin_empresa'].' sin empresa ERP (de '.$r['en_anita'].' en Anita). '
                 .'Historia: '.$r['historia'].' · Leyendas: '.$r['leyendas'].' · Bases: '.$r['bases'].'.'
         );

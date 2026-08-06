@@ -4,6 +4,8 @@ namespace App\Support\Sueldos\Formula;
 
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
+use App\Support\Sueldos\AntiguedadTablaResolver;
+use App\Support\Sueldos\CategoriaOrigenBases;
 use App\Support\Sueldos\NovedadSueldosVigencia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -92,7 +94,11 @@ class ContextoLiquidacion implements EntornoFormula
         $this->cargarVariables($empleado, $liquidacion);
         $this->liquidacionId = (int) ($liquidacion->id ?? 0);
         $this->periodoYm = (int) ($liquidacion->periodo ?: ($this->anio * 100 + $this->mes));
-        $this->cargarBases($this->empleadoId);
+        $this->cargarBases($empleado, $this->fechaRef);
+        // Tras cargar bases (categoría T o legajo C), B(1)/sueldo efectivo.
+        if (isset($this->bases['1']) && $this->bases['1'] > 0) {
+            $this->vars['empleado.sueldo_basico'] = $this->bases['1'];
+        }
         $this->cargarHistorico($this->empleadoId, $this->liquidacionId);
         $this->cargarNovedades();
     }
@@ -121,6 +127,7 @@ class ContextoLiquidacion implements EntornoFormula
             $diaEgreso = (int) $this->fechaEgreso->day;
         }
         $codigos = $this->codigosMaestrosEmpleado($emp);
+        $vag = $this->variablesAgrupamiento($emp);
         $tipoVac = $this->tipoCorrida === 'vacaciones' ? 1 : 0;
 
         $this->vars = [
@@ -139,12 +146,13 @@ class ContextoLiquidacion implements EntornoFormula
             'empleado.obrasocial_codigo' => $codigos['obrasocial'],
             'empleado.lugartrabajo_codigo' => $codigos['lugartrabajo'],
             'empleado.empresa_codigo' => $codigos['empresa'],
-            'empleado.agrupamiento_var1' => 0.0,
-            'empleado.agrupamiento_var2' => 0.0,
-            'empleado.agrupamiento_var3' => 0.0,
-            'empleado.agrupamiento_var4' => 0.0,
-            'empleado.modalidad_sijp' => 0,
-            'empleado.mano_obra' => 0,
+            'empleado.agrupamiento_var1' => $vag[1],
+            'empleado.agrupamiento_var2' => $vag[2],
+            'empleado.agrupamiento_var3' => $vag[3],
+            'empleado.agrupamiento_var4' => $vag[4],
+            // Anita emp_modalidad (SIJP); DTBR/1002 y fórmulas de base no imponible.
+            'empleado.modalidad_sijp' => (int) ($emp->modalidad_sijp ?? 0),
+            'empleado.mano_obra' => is_numeric($emp->mano_obra ?? null) ? (int) $emp->mano_obra : 0,
             // Anita GRRE/GRDE / emp_grp*: espejo de los primeros 3 del pivot N (o códigos sync)
             'empleado.grupo_remuneracion' => (int) ($emp->grupo_concepto_1_codigo ?? 0),
             'empleado.grupo_deduccion' => (int) ($emp->grupo_concepto_2_codigo ?? 0),
@@ -168,14 +176,10 @@ class ContextoLiquidacion implements EntornoFormula
             'periodo.periodo' => $this->anio * 100 + $this->mes,
             'periodo.fecha_liq' => (int) $fechaRef->format('Ymd'),
             'periodo.tipo_vacaciones' => $tipoVac,
-            'periodo.tipo_liq_n' => match ((string) $liq->tipo) {
-                'quincena_1' => 1,
-                'quincena_2' => 2,
-                'sac' => 3,
-                'vacaciones' => 4,
-                'final' => 5,
-                default => 0,
-            },
+            // Anita TLQ = tlq() sobre mael_tipo_liq (parser.fc). No confundir con TLIQ.
+            'periodo.tipo_liq_n' => $this->tlqAnita((string) $liq->tipo, $this->mes),
+            // Anita TLIQ = tliq() según emp_men_quin (frecuencia del legajo).
+            'empleado.tliq_n' => $this->tliqAnita($emp),
             'corrida.tipo' => (string) $liq->tipo,
             // Escalares del concepto en curso (los setea el calculador)
             'cantidad' => 0.0,
@@ -221,6 +225,36 @@ class ContextoLiquidacion implements EntornoFormula
     }
 
     /**
+     * Anita VAG1..VAG4 ← agrupamiento.variable1..4 (premio fallo de caja, etc.).
+     *
+     * @return array{1: float, 2: float, 3: float, 4: float}
+     */
+    private function variablesAgrupamiento(Empleado_Sueldos $emp): array
+    {
+        $out = [1 => 0.0, 2 => 0.0, 3 => 0.0, 4 => 0.0];
+        $id = (int) ($emp->agrupamiento_id ?? 0);
+        if ($id <= 0) {
+            return $out;
+        }
+        try {
+            $row = DB::table('agrupamiento_sueldos')->where('id', $id)->first([
+                'variable1', 'variable2', 'variable3', 'variable4',
+            ]);
+            if ($row === null) {
+                return $out;
+            }
+            $out[1] = (float) ($row->variable1 ?? 0);
+            $out[2] = (float) ($row->variable2 ?? 0);
+            $out[3] = (float) ($row->variable3 ?? 0);
+            $out[4] = (float) ($row->variable4 ?? 0);
+        } catch (\Throwable $e) {
+            // Columnas aún no migradas: VAG queda en 0.
+        }
+
+        return $out;
+    }
+
+    /**
      * @return array{0: int, 1: int} [anios, meses totales]
      */
     private function calcularAntiguedad(Empleado_Sueldos $emp, Carbon $ref): array
@@ -259,16 +293,68 @@ class ContextoLiquidacion implements EntornoFormula
         }
     }
 
-    private function cargarBases(int $empleadoId): void
+    /**
+     * Carga nombrebase vigentes: si la categoría es origen T → tabla categoría;
+     * si es C → bases del legajo. Espejo Anita cat_tabla.
+     */
+    private function cargarBases(Empleado_Sueldos $emp, Carbon $fechaRef): void
     {
         try {
-            $filas = DB::table('empleado_base_sueldos as eb')
-                ->join('nombrebase_sueldos as nb', 'nb.id', '=', 'eb.nombrebase_id')
-                ->where('eb.empleado_id', $empleadoId)
-                ->orderBy('eb.fecha_vigencia')
-                ->get(['nb.codigo', 'eb.valor']);
+            $fecha = $fechaRef->toDateString();
+            $origen = null;
+            $categoriaId = (int) ($emp->categoria_id ?? 0);
+            if ($categoriaId > 0) {
+                $origen = DB::table('categoria_sueldos')->where('id', $categoriaId)->value('origen_bases');
+            }
+
+            if ($categoriaId > 0 && CategoriaOrigenBases::usaTablaCategoria($origen)) {
+                $filas = DB::table('categoria_base_sueldos as cb')
+                    ->join('nombrebase_sueldos as nb', 'nb.id', '=', 'cb.nombrebase_id')
+                    ->where('cb.categoria_id', $categoriaId)
+                    ->where(function ($q) use ($fecha) {
+                        $q->whereNull('cb.fecha_vigencia')
+                            ->orWhere('cb.fecha_vigencia', '<=', $fecha);
+                    })
+                    ->orderBy('nb.codigo')
+                    ->orderBy('cb.fecha_vigencia')
+                    ->get(['nb.codigo', 'cb.valor', 'cb.fecha_vigencia']);
+            } else {
+                $filas = DB::table('empleado_base_sueldos as eb')
+                    ->join('nombrebase_sueldos as nb', 'nb.id', '=', 'eb.nombrebase_id')
+                    ->where('eb.empleado_id', (int) $emp->id)
+                    ->where(function ($q) use ($fecha) {
+                        $q->whereNull('eb.fecha_vigencia')
+                            ->orWhere('eb.fecha_vigencia', '<=', $fecha);
+                    })
+                    ->orderBy('nb.codigo')
+                    ->orderBy('eb.fecha_vigencia')
+                    ->get(['nb.codigo', 'eb.valor', 'eb.fecha_vigencia']);
+            }
+
+            // Última vigencia por código (orderBy fecha asc → sobrescribe).
             foreach ($filas as $f) {
-                $this->bases[strtoupper((string) $f->codigo)] = (float) $f->valor;
+                $this->bases[(string) $f->codigo] = (float) $f->valor;
+            }
+
+            // Con origen T (tabla categoría) aún pueden vivir bases de legajo
+            // (ej. mutual B(7) AMUPEJA). Completar códigos ausentes desde el empleado.
+            if ($categoriaId > 0 && CategoriaOrigenBases::usaTablaCategoria($origen)) {
+                $extra = DB::table('empleado_base_sueldos as eb')
+                    ->join('nombrebase_sueldos as nb', 'nb.id', '=', 'eb.nombrebase_id')
+                    ->where('eb.empleado_id', (int) $emp->id)
+                    ->where(function ($q) use ($fecha) {
+                        $q->whereNull('eb.fecha_vigencia')
+                            ->orWhere('eb.fecha_vigencia', '<=', $fecha);
+                    })
+                    ->orderBy('nb.codigo')
+                    ->orderBy('eb.fecha_vigencia')
+                    ->get(['nb.codigo', 'eb.valor']);
+                foreach ($extra as $f) {
+                    $cod = (string) $f->codigo;
+                    if (! isset($this->bases[$cod])) {
+                        $this->bases[$cod] = (float) $f->valor;
+                    }
+                }
             }
         } catch (\Throwable $e) {
             // Sin tabla de bases o esquema distinto: base() devolvera 0.
@@ -674,10 +760,18 @@ class ContextoLiquidacion implements EntornoFormula
             case 'importe_asignacion':
             case 'tabla_empleado':
             case 'descuento_bruto':
+                // Anita DTBR(concepto): factor del haber si no se liquidó ya en el período.
+                return $this->descuentoBruto((int) ($args[0] ?? 0));
             case 'base_categoria':
             case 'im_concepto_rem':
-            case 'antiguedad_tabla':
                 return 0.0;
+            case 'antiguedad_tabla':
+                // Anita ANT(tabla): suma % de tramos con anio <= años de antigüedad.
+                return AntiguedadTablaResolver::porcentaje(
+                    (int) ($args[0] ?? 0),
+                    (float) ($this->vars['empleado.antiguedad_anios'] ?? 0),
+                    $this->empresaId
+                );
             case 'dias_trabajados':
                 return (float) ($this->vars['periodo.dias_trabajados'] ?? $this->vars['periodo.dias'] ?? 0);
             case 'dias_no_trabajados':
@@ -736,6 +830,83 @@ class ContextoLiquidacion implements EntornoFormula
         }
 
         return $this->factores[$codigo] ?? 0.0;
+    }
+
+    /**
+     * Anita tlq() (parser.fc): código numérico del tipo de maeliq.
+     * Biyemas: mensuales suelen ser MENSUAL_SQUIN (=3); finales del mismo corte también.
+     */
+    private function tlqAnita(string $tipoCorrida, int $mes): int
+    {
+        return match ($tipoCorrida) {
+            'quincena_1' => 1,
+            'quincena_2' => 2,
+            'mensual', 'final' => 3, // MAEL_MENSUAL_SQUIN (FFEP/ART fija usa TLQ=3)
+            'semanal' => 4,
+            'vacaciones' => 5,
+            'sac' => ($mes >= 7 ? 7 : 6), // 1er / 2do aguinaldo
+            'ajuste' => 8, // MAEL_ESP_CRET (aprox.)
+            default => 3,
+        };
+    }
+
+    /**
+     * Anita tliq(): frecuencia de liquidación del legajo (emp_men_quin).
+     */
+    private function tliqAnita(Empleado_Sueldos $emp): int
+    {
+        $menQuin = (int) ($emp->codigo_liquidacion ?? 0);
+        if ($menQuin === 1) {
+            // Quincenal: 1 o 2 según corrida actual.
+            return $this->tipoCorrida === 'quincena_2' ? 2 : 1;
+        }
+        if ($menQuin === 2) {
+            return 3;
+        }
+
+        return 4;
+    }
+
+    /**
+     * Anita DTBR(concepto): devuelve hab_factor del concepto si aún no se
+     * liquidó en otra corrida del mismo período; si ya hay importe, 0.
+     */
+    private function descuentoBruto(int $codigoConcepto): float
+    {
+        if ($codigoConcepto <= 0) {
+            return 0.0;
+        }
+
+        $factor = $this->factorConcepto($codigoConcepto);
+        if (abs($factor) < 0.0000001) {
+            return 0.0;
+        }
+
+        // Ya calculado en esta corrida.
+        if (isset($this->conceptos[$codigoConcepto]) && abs($this->conceptos[$codigoConcepto]) > 0.0000001) {
+            return 0.0;
+        }
+
+        // Otras corridas del mismo período / mismo legajo.
+        if ($this->empleadoId > 0 && $this->periodoYm > 0) {
+            try {
+                $ya = (float) DB::table('liquidacion_detalle_sueldos as d')
+                    ->join('liquidacion_recibo_sueldos as r', 'r.id', '=', 'd.recibo_id')
+                    ->join('liquidacion_sueldos as l', 'l.id', '=', 'r.liquidacion_id')
+                    ->where('r.empleado_id', $this->empleadoId)
+                    ->where('d.concepto_codigo', $codigoConcepto)
+                    ->where('l.periodo', (string) $this->periodoYm)
+                    ->when($this->liquidacionId > 0, fn ($q) => $q->where('l.id', '!=', $this->liquidacionId))
+                    ->sum('d.importe');
+                if (abs($ya) > 0.0000001) {
+                    return 0.0;
+                }
+            } catch (\Throwable $e) {
+                // sin tablas: usa factor
+            }
+        }
+
+        return $factor;
     }
 
     /**

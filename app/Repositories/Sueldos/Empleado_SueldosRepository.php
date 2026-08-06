@@ -413,7 +413,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
      * Llenado inicial desde Anita (sueldos.empleado + emping + empley).
      * Inserta solo los empleados faltantes por (empresa, legajo). No genera auditoría ni observers.
      *
-     * @return array{en_anita:int, importados:int, ya_existia:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
+     * @return array{en_anita:int, importados:int, ya_existia:int, actualizados_egreso:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
      */
     public function sincronizarConAnita(): array
     {
@@ -421,7 +421,8 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         ini_set('memory_limit', '1024M');
 
         $res = [
-            'en_anita' => 0, 'importados' => 0, 'ya_existia' => 0, 'sin_empresa' => 0,
+            'en_anita' => 0, 'importados' => 0, 'ya_existia' => 0, 'actualizados_egreso' => 0,
+            'sin_empresa' => 0,
             'omitidos' => 0, 'historia' => 0, 'leyendas' => 0, 'bases' => 0, 'errores' => [],
         ];
 
@@ -456,13 +457,19 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             return $res;
         }
 
-        $existentes = [];
-        foreach (DB::table('empleado_sueldos')->select('empresa_id', 'legajo')->get() as $e) {
-            $existentes[$e->empresa_id.':'.$e->legajo] = true;
+        $existentes = []; // key => ['id'=>, 'estado'=>, 'fecha_egreso'=>, 'motivoegreso_id'=>]
+        foreach (DB::table('empleado_sueldos')->select('id', 'empresa_id', 'legajo', 'estado', 'fecha_egreso', 'motivoegreso_id')->get() as $e) {
+            $existentes[$e->empresa_id.':'.$e->legajo] = [
+                'id' => (int) $e->id,
+                'estado' => (string) $e->estado,
+                'fecha_egreso' => $e->fecha_egreso ? substr((string) $e->fecha_egreso, 0, 10) : null,
+                'motivoegreso_id' => $e->motivoegreso_id !== null ? (int) $e->motivoegreso_id : null,
+            ];
         }
 
         $now = now();
         $insertRows = [];
+        $egresoUpdates = []; // id => patch
         $meta = [];   // key => ['origen'=>?, 'bases'=>[cod=>valor], 'feing'=>?]
         $seen = [];
 
@@ -480,8 +487,35 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 continue;
             }
             $key = $empresaId.':'.$legajo;
+            $feing = VacacionFechaAnita::erpDesdeAnita($f->emp_fec_ing ?? 0);
+            $feegr = VacacionFechaAnita::erpDesdeAnita($f->emp_fec_egr ?? 0);
+            $estado = EmpleadoEstados::desdeFlagAnita($f->emp_flag_estado ?? null);
+            $motivoId = $this->fk($maps['motivoegreso_id'], $f->emp_motivoegr ?? null);
+
             if (isset($existentes[$key])) {
                 $res['ya_existia']++;
+                // Re-sync de baja/egreso: el alta inicial es insert-only y dejaba egresos viejos.
+                $cur = $existentes[$key];
+                $feegrStr = $feegr ? substr((string) $feegr, 0, 10) : null;
+                $patch = [];
+                if ($cur['estado'] !== $estado) {
+                    $patch['estado'] = $estado;
+                }
+                if ($cur['fecha_egreso'] !== $feegrStr) {
+                    $patch['fecha_egreso'] = $feegrStr;
+                }
+                if ($cur['motivoegreso_id'] !== $motivoId) {
+                    $patch['motivoegreso_id'] = $motivoId;
+                }
+                if ($patch !== []) {
+                    $patch['updated_at'] = $now;
+                    $egresoUpdates[$cur['id']] = $patch;
+                    $existentes[$key] = array_merge($cur, [
+                        'estado' => $patch['estado'] ?? $cur['estado'],
+                        'fecha_egreso' => array_key_exists('fecha_egreso', $patch) ? $feegrStr : $cur['fecha_egreso'],
+                        'motivoegreso_id' => array_key_exists('motivoegreso_id', $patch) ? $motivoId : $cur['motivoegreso_id'],
+                    ]);
+                }
                 continue;
             }
             if (isset($seen[$key])) {
@@ -491,9 +525,6 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
 
             $catCod = $this->normCodigo($f->emp_categoria ?? null);
             $categoria = $catCod !== null ? ($categoriaPorCodigo[$catCod] ?? null) : null;
-            $feing = VacacionFechaAnita::erpDesdeAnita($f->emp_fec_ing ?? 0);
-            $feegr = VacacionFechaAnita::erpDesdeAnita($f->emp_fec_egr ?? 0);
-            $estado = EmpleadoEstados::desdeFlagAnita($f->emp_flag_estado ?? null);
 
             $insertRows[] = [
                 'empresa_id' => $empresaId,
@@ -515,7 +546,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'estado' => $estado,
                 'fecha_ingreso' => $feing,
                 'fecha_egreso' => $feegr,
-                'motivoegreso_id' => $this->fk($maps['motivoegreso_id'], $f->emp_motivoegr ?? null),
+                'motivoegreso_id' => $motivoId,
                 'categoria_id' => $categoria['id'] ?? null,
                 'agrupamiento_id' => $this->fk($maps['agrupamiento_id'], $f->emp_cod_agrup ?? null),
                 'lugartrabajo_id' => $this->fk($maps['lugartrabajo_id'], $f->emp_lugartrabajo ?? null),
@@ -562,6 +593,11 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                     11 => $this->num($f->emp_base11 ?? null),
                 ],
             ];
+        }
+
+        foreach ($egresoUpdates as $empId => $patch) {
+            DB::table('empleado_sueldos')->where('id', $empId)->update($patch);
+            $res['actualizados_egreso']++;
         }
 
         foreach (array_chunk($insertRows, 400) as $chunk) {

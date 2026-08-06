@@ -21,6 +21,22 @@
     </div>
 </div>
 <div class="form-group row">
+    <label class="col-lg-3 col-form-label">Variables Anita (VAG)</label>
+    <div class="col-lg-8">
+        <div class="form-row">
+            @foreach ([1, 2, 3, 4] as $n)
+                <div class="col-md-3 mb-2">
+                    <label for="variable{{ $n }}" class="small text-muted mb-0">VAG{{ $n }}</label>
+                    <input type="number" step="0.01" name="variable{{ $n }}" id="variable{{ $n }}"
+                           class="form-control form-control-sm"
+                           value="{{ old('variable'.$n, $data->{'variable'.$n} ?? 0) }}"/>
+                </div>
+            @endforeach
+        </div>
+        <small class="form-text text-muted">Usadas en f&oacute;rmulas (ej. premio fallo de caja = VAG1).</small>
+    </div>
+</div>
+<div class="form-group row">
     <label for="fallo_tipo" class="col-lg-3 col-form-label">Fallo de caja aplicado</label>
     <div class="col-lg-3">
         <select name="fallo_tipo" id="fallo_tipo" class="form-control"

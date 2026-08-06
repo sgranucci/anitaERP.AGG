@@ -4,11 +4,20 @@ namespace App\Support\Contable\MayorPlanoCuenta;
 
 class MayorPlanoCuentaSupport
 {
-    /** @var list<string> */
-    private const TIPOS_ASIENTO_CIERRE = ['CIE', 'CER', 'CIER'];
+    /**
+     * Asientos de cierre de ejercicio (l-mayor help_10 / FILA_valida_tipo_asiento).
+     * Biyemas usa CIR/CIP/CIJ en ctamov; CIE/CER/CIER quedan por compatibilidad.
+     *
+     * @var list<string>
+     */
+    private const TIPOS_ASIENTO_CIERRE = ['CIR', 'CIP', 'CIJ', 'CIE', 'CER', 'CIER'];
 
-    /** @var list<string> */
-    private const TIPOS_ASIENTO_INFLACION = ['INF', 'AJI', 'AJU', 'INFL'];
+    /**
+     * Ajuste por inflación. Biyemas ABM usa AJ; INF/AJI/AJU/INFL por compatibilidad.
+     *
+     * @var list<string>
+     */
+    private const TIPOS_ASIENTO_INFLACION = ['AJ', 'INF', 'AJI', 'AJU', 'INFL'];
 
     /** Asiento de apertura de ejercicio (lee_saldo_inicial lo incluye siempre). */
     public const TIPO_ASIENTO_APERTURA = 'APE';
@@ -57,7 +66,7 @@ class MayorPlanoCuentaSupport
 
     /**
      * Equivalente a FILA_valida_tipo_asiento() según fl_incluye_asi (help_10) en l-mayor.c:
-     * 1 todos | 2 sin cierre (CIE/CER/CIER) | 3 sin inflación (INF/AJI/AJU/INFL) | 4 sin ambos.
+     * 1 todos | 2 sin cierre (CIR/CIP/CIJ + legacy) | 3 sin inflación (AJ + legacy) | 4 sin ambos.
      * APE y demás tipos no se excluyen en ningún modo.
      */
     public static function movimientoVisiblePorTipoAsiento(string $tipoAsiento, string $modoInclusion): bool

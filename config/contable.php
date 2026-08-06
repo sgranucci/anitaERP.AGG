@@ -25,10 +25,13 @@ return [
 
     /*
     | Mayor plano por cuenta (l-mayor). Bridge ctamov + subdiario; volúmenes altos en cierre mensual.
+    | fuente_erp_hasta: Y-m-d o Ymd — hasta esa fecha inclusive lee asientos ERP importados;
+    | después sigue el bridge Anita. Vacío = solo Anita (legacy).
     */
     'mayor_plano_cuenta' => [
         'memory_limit' => env('MAYOR_PLANO_CUENTA_MEMORY_LIMIT', '1024M'),
         'max_execution_time' => (int) env('MAYOR_PLANO_CUENTA_MAX_EXECUTION_TIME', 900),
+        'fuente_erp_hasta' => env('MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA', '2025-12-31'),
     ],
 
     /*

@@ -47,6 +47,11 @@
     .portal-estado-confirmada { background: #d5f5e3; color: #145a32; }
     .portal-estado-revertida { background: #fdebd0; color: #7e5109; }
     .portal-estado-baja { background: #fadbd8; color: #78281f; }
+    .portal-estado-oc-pendiente { background: #fdebd0; color: #7e5109; }
+    .portal-estado-oc-aprobada { background: #d6eaf8; color: #1a5276; }
+    .portal-estado-oc-cumplida { background: #d5f5e3; color: #145a32; }
+    .portal-estado-oc-suspendida { background: #fadbd8; color: #78281f; }
+    .portal-estado-oc-cerrada { background: #e5e8e8; color: #424949; }
     .portal-empty {
         text-align: center;
         padding: 2.5rem 1rem;

@@ -17,7 +17,7 @@ class LeeCotizacionApi extends Command
                             {--desde= : Con --backfill-vacias, desde YYYY-MM-DD}
                             {--hasta= : Con --backfill-vacias, hasta YYYY-MM-DD}';
 
-    protected $description = 'Lee cotización del dólar BNA (parser Python) y la graba en cotizacion / cotizacion_moneda';
+    protected $description = 'Lee cotización dólar oficial BNA (DolarApi + fallback BNA) y la graba en cotizacion / cotizacion_moneda';
 
     public function __construct(
         private CotizacionRepositoryInterface $cotizacionRepository,

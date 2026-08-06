@@ -2,7 +2,9 @@
 
 namespace App\Support\Contable\MayorPlanoCuenta;
 
+use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
+use App\Support\Contable\SumasSaldos\SumasSaldosProcesador;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -18,6 +20,8 @@ class MayorPlanoCuentaProcesador
 
     public function __construct(
         private readonly MayorPlanoCuentaAnitaBridgeReader $reader = new MayorPlanoCuentaAnitaBridgeReader(),
+        private readonly MayorPlanoCuentaErpAsientoReader $erpReader = new MayorPlanoCuentaErpAsientoReader(),
+        private readonly SumasSaldosProcesador $sumasSaldosProcesador = new SumasSaldosProcesador(),
     ) {
     }
 
@@ -60,16 +64,42 @@ class MayorPlanoCuentaProcesador
             $fechaComienzoAjustada,
         );
         $fechaSaldoDesde = (int) ($diagSaldo['fecha_saldo_desde'] ?? MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD);
+        $cutoffErp = $this->fuenteErpHastaYmd();
 
-        $datos = $this->reader->cargarPeriodo(
+        // Tramo cubierto por asientos ERP importados: no aplicar piso Anita 20260101.
+        if ($cutoffErp > 0 && $fechaDesde <= $cutoffErp) {
+            $fechaSaldoDesde = $inicioEjercicio;
+            $diagSaldo['fecha_saldo_desde'] = $fechaSaldoDesde;
+            $diagSaldo['origen'] = 'erp_ejercicio';
+        }
+
+        $planSaldo = $this->planSaldoInicialDesdeSaldosMes(
+            $empresaIds,
+            $fechaDesde,
+            $fechaSaldoDesde,
+            $cutoffErp,
+            $cuentaDesde,
+            $cuentaHasta,
+            $cuentas,
+            $monedaReporteId,
+            $soloMonedaOrigen,
+            $incluyeSubdiario,
+            $modoInclusionAsientos,
+        );
+        $saldosInicialesPorCuenta = $planSaldo['por_codigo'];
+        $omitirCargaSaldoErpCompleto = (bool) ($planSaldo['usar_saldos_mes'] ?? false);
+        $fechaSaldoMovimientosDesde = (int) ($planSaldo['fecha_saldo_movimientos_desde'] ?? $fechaSaldoDesde);
+
+        $datos = $this->cargarPeriodoHibrido(
             $empresaIds,
             $fechaDesde,
             $fechaHasta,
-            $fechaSaldoDesde,
+            $omitirCargaSaldoErpCompleto ? $fechaSaldoMovimientosDesde : $fechaSaldoDesde,
             $incluyeSubdiario,
             $cuentaDesde,
             $cuentaHasta,
             $cuentas,
+            $omitirCargaSaldoErpCompleto && $fechaSaldoMovimientosDesde <= 0,
         );
 
         $erroresBridge = $datos['errores'] ?? [];
@@ -80,12 +110,15 @@ class MayorPlanoCuentaProcesador
         $pago = [];
         $auxpag = [];
         $cargoPagoAuxpag = false;
-        if ($this->reader->hayOrdenesPagoEnMovimientos($datos['ctamov'] ?? [], $datos['subdiario'] ?? [])) {
+        $tramoAnitaDesde = (int) ($datos['tramo_anita_desde'] ?? 0);
+        $tramoAnitaHasta = (int) ($datos['tramo_anita_hasta'] ?? 0);
+        if ($tramoAnitaDesde > 0 && $tramoAnitaHasta >= $tramoAnitaDesde
+            && $this->reader->hayOrdenesPagoEnMovimientos($datos['ctamov'] ?? [], $datos['subdiario'] ?? [])) {
             $cargoPagoAuxpag = true;
             $extra = $this->reader->cargarPagoYAuxpagPeriodo(
                 $empresaIds,
-                $fechaDesde,
-                $fechaHasta,
+                $tramoAnitaDesde,
+                $tramoAnitaHasta,
                 $erroresBridge,
             );
             $pago = $extra['pago'] ?? [];
@@ -116,6 +149,20 @@ class MayorPlanoCuentaProcesador
         $statsOc['movimientos_oc_resueltos'] = $resolverOc->cantidadMovimientosResueltos();
 
         $cuentasSeccion = $this->cuentasEnRango($movimientos, $cuentaDesde, $cuentaHasta, $cuentas);
+        if ($saldosInicialesPorCuenta !== []) {
+            foreach ($saldosInicialesPorCuenta as $codigoSaldo => $importeSaldo) {
+                $codigoSaldo = (int) $codigoSaldo;
+                if ($codigoSaldo <= 0 || abs((float) $importeSaldo) < 0.005) {
+                    continue;
+                }
+                if (! $this->cuentaEnFiltro($codigoSaldo, $cuentaDesde, $cuentaHasta, $cuentas)) {
+                    continue;
+                }
+                $cuentasSeccion[] = $codigoSaldo;
+            }
+            $cuentasSeccion = array_values(array_unique($cuentasSeccion));
+            sort($cuentasSeccion);
+        }
         $secciones = [];
         $totalDebe = 0.0;
         $totalHaber = 0.0;
@@ -127,11 +174,12 @@ class MayorPlanoCuentaProcesador
                 $movimientos,
                 $fechaDesde,
                 $fechaHasta,
-                $fechaSaldoDesde,
+                $omitirCargaSaldoErpCompleto ? $fechaSaldoMovimientosDesde : $fechaSaldoDesde,
                 $monedaConverter,
                 $monedaReporteId,
                 $soloMonedaOrigen,
                 $modoInclusionAsientos,
+                $saldosInicialesPorCuenta[$cuenta] ?? null,
             );
 
             if ($seccion === null) {
@@ -173,6 +221,13 @@ class MayorPlanoCuentaProcesador
                 'solo_moneda_origen' => $soloMonedaOrigen,
                 'incluye_subdiario' => $incluyeSubdiario,
                 'modo_inclusion_asientos' => $modoInclusionAsientos,
+                'fuente_erp_hasta' => (int) ($datos['fuente_erp_hasta'] ?? 0),
+                'tramo_erp_desde' => (int) ($datos['tramo_erp_desde'] ?? 0),
+                'tramo_erp_hasta' => (int) ($datos['tramo_erp_hasta'] ?? 0),
+                'tramo_anita_desde' => (int) ($datos['tramo_anita_desde'] ?? 0),
+                'tramo_anita_hasta' => (int) ($datos['tramo_anita_hasta'] ?? 0),
+                'saldo_inicial_fuente' => (string) ($planSaldo['fuente'] ?? 'movimientos'),
+                'saldo_inicial_usar_saldos_mes' => $omitirCargaSaldoErpCompleto,
             ],
             'secciones' => $secciones,
             'totales' => [
@@ -185,11 +240,282 @@ class MayorPlanoCuentaProcesador
             'stats' => array_merge([
                 'ctamov_filas' => count($datos['ctamov'] ?? []),
                 'subdiario_filas' => count($datos['subdiario'] ?? []),
+                'erp_asientos_filas' => (int) ($datos['timings']['erp_asientos_filas'] ?? 0),
                 'pago_filas' => count($pago),
                 'pago_leyendas_indexadas' => $leyendasPago->cantidadClaves(),
+                'saldo_mes_cuentas' => count($saldosInicialesPorCuenta),
+                'saldo_mes_movimientos_restados' => (int) ($planSaldo['movimientos_restados'] ?? 0),
                 'timings' => $timings,
             ], $statsOc),
         ];
+    }
+
+    /**
+     * Hasta MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA lee asientos ERP; después bridge Anita.
+     *
+     * @param  list<int>  $empresaIds
+     * @param  list<int>  $cuentas
+     * @return array<string, mixed>
+     */
+    private function cargarPeriodoHibrido(
+        array $empresaIds,
+        int $fechaDesde,
+        int $fechaHasta,
+        int $fechaSaldoDesde,
+        bool $incluyeSubdiario,
+        int $cuentaDesde,
+        int $cuentaHasta,
+        array $cuentas,
+        bool $omitirCargaSaldoErp = false,
+    ): array {
+        $cutoff = $this->fuenteErpHastaYmd();
+
+        // Sin cutoff: 100% bridge Anita (comportamiento histórico).
+        if ($cutoff <= 0) {
+            $anita = $this->reader->cargarPeriodo(
+                $empresaIds,
+                $fechaDesde,
+                $fechaHasta,
+                $fechaSaldoDesde,
+                $incluyeSubdiario,
+                $cuentaDesde,
+                $cuentaHasta,
+                $cuentas,
+            );
+
+            return array_merge($anita, [
+                'fuente_erp_hasta' => 0,
+                'tramo_erp_desde' => 0,
+                'tramo_erp_hasta' => 0,
+                'tramo_anita_desde' => $fechaDesde,
+                'tramo_anita_hasta' => $fechaHasta,
+            ]);
+        }
+
+        $errores = [];
+        $timings = [];
+        $ctamov = [];
+        $subdiario = [];
+        $postCutoff = $this->fechaSiguiente($cutoff);
+
+        // 1) Saldo inicial [fechaSaldoDesde, día anterior a fechaDesde], si aplica.
+        //    Si ya se tomó de cuentacontable_saldo_mes (SyS), se omite o solo se lee
+        //    el tramo parcial del mes (fechaDesde no es día 1).
+        $saldoHasta = $this->fechaAnterior($fechaDesde);
+        $tramoErpDesde = 0;
+        $tramoErpHasta = 0;
+        if (! $omitirCargaSaldoErp && $fechaSaldoDesde > 0 && $saldoHasta >= $fechaSaldoDesde) {
+            $erpSaldoDesde = $fechaSaldoDesde;
+            $erpSaldoHasta = min($saldoHasta, $cutoff);
+            if ($erpSaldoDesde <= $erpSaldoHasta) {
+                $tramoErpDesde = $erpSaldoDesde;
+                $tramoErpHasta = $erpSaldoHasta;
+                $erp = $this->erpReader->cargarPeriodo(
+                    $empresaIds,
+                    $erpSaldoDesde,
+                    $erpSaldoHasta,
+                    $incluyeSubdiario,
+                    $cuentaDesde,
+                    $cuentaHasta,
+                    $cuentas,
+                );
+                $ctamov = array_merge($ctamov, $erp['ctamov'] ?? []);
+                $errores = array_merge($errores, $erp['errores'] ?? []);
+                $timings = array_merge($timings, ['erp_saldo' => $erp['timings'] ?? []]);
+            }
+        }
+
+        // 2) Período consultado [fechaDesde, fechaHasta] — siempre, independiente del piso de saldo.
+        $erpPerDesde = $fechaDesde;
+        $erpPerHasta = min($fechaHasta, $cutoff);
+        if ($erpPerDesde <= $erpPerHasta) {
+            if ($tramoErpDesde === 0) {
+                $tramoErpDesde = $erpPerDesde;
+            }
+            $tramoErpHasta = $erpPerHasta;
+            $erp = $this->erpReader->cargarPeriodo(
+                $empresaIds,
+                $erpPerDesde,
+                $erpPerHasta,
+                $incluyeSubdiario,
+                $cuentaDesde,
+                $cuentaHasta,
+                $cuentas,
+            );
+            $ctamov = array_merge($ctamov, $erp['ctamov'] ?? []);
+            $errores = array_merge($errores, $erp['errores'] ?? []);
+            $timings = array_merge($timings, $erp['timings'] ?? []);
+        }
+
+        $tramoAnitaDesde = 0;
+        $tramoAnitaHasta = 0;
+        $anitaPeriodoDesde = max($fechaDesde, $postCutoff);
+        if ($anitaPeriodoDesde > 0 && $fechaHasta >= $anitaPeriodoDesde) {
+            $tramoAnitaDesde = $anitaPeriodoDesde;
+            $tramoAnitaHasta = $fechaHasta;
+            $anitaSaldoPedido = max($fechaSaldoDesde, $postCutoff);
+            // Saldo Anita solo si hay tramo pre-período después del cutoff.
+            if ($anitaSaldoPedido >= $anitaPeriodoDesde) {
+                $anitaSaldoPedido = $anitaPeriodoDesde;
+            }
+            $anita = $this->reader->cargarPeriodo(
+                $empresaIds,
+                $anitaPeriodoDesde,
+                $fechaHasta,
+                $anitaSaldoPedido,
+                $incluyeSubdiario,
+                $cuentaDesde,
+                $cuentaHasta,
+                $cuentas,
+            );
+            $ctamov = array_merge($ctamov, $anita['ctamov'] ?? []);
+            $subdiario = array_merge($subdiario, $anita['subdiario'] ?? []);
+            $errores = array_merge($errores, $anita['errores'] ?? []);
+            $timings = array_merge($timings, $anita['timings'] ?? []);
+        }
+
+        return [
+            'ctamov' => $ctamov,
+            'subdiario' => $subdiario,
+            'pago' => [],
+            'auxpag' => [],
+            'errores' => $errores,
+            'timings' => $timings,
+            'fuente_erp_hasta' => $cutoff,
+            'tramo_erp_desde' => $tramoErpDesde,
+            'tramo_erp_hasta' => $tramoErpHasta,
+            'tramo_anita_desde' => $tramoAnitaDesde,
+            'tramo_anita_hasta' => $tramoAnitaHasta,
+        ];
+    }
+
+    private function fechaAnterior(int $ymd): int
+    {
+        if ($ymd <= 0) {
+            return 0;
+        }
+        $dt = \DateTimeImmutable::createFromFormat('Ymd', (string) $ymd);
+        if (! $dt) {
+            return $ymd - 1;
+        }
+
+        return (int) $dt->modify('-1 day')->format('Ymd');
+    }
+
+    /**
+     * Reutiliza SumasSaldosProcesador (cuentacontable_saldo_mes − exclusiones)
+     * cuando el tramo de saldo inicial está cubierto por ERP.
+     *
+     * @param  list<int>  $empresaIds
+     * @param  list<int>  $cuentas
+     * @return array{
+     *   usar_saldos_mes: bool,
+     *   por_codigo: array<int, float>,
+     *   fuente: string,
+     *   movimientos_restados: int,
+     *   fecha_saldo_movimientos_desde: int,
+     *   advertencias: list<string>
+     * }
+     */
+    private function planSaldoInicialDesdeSaldosMes(
+        array $empresaIds,
+        int $fechaDesde,
+        int $fechaSaldoDesde,
+        int $cutoffErp,
+        int $cuentaDesde,
+        int $cuentaHasta,
+        array $cuentas,
+        int $monedaReporteId,
+        bool $soloMonedaOrigen,
+        bool $incluyeSubdiario,
+        string $modoInclusionAsientos,
+    ): array {
+        $vacio = [
+            'usar_saldos_mes' => false,
+            'por_codigo' => [],
+            'fuente' => 'movimientos',
+            'movimientos_restados' => 0,
+            'fecha_saldo_movimientos_desde' => $fechaSaldoDesde,
+            'advertencias' => [],
+        ];
+
+        if ($cutoffErp <= 0 || $fechaDesde > $cutoffErp || $fechaSaldoDesde <= 0) {
+            return $vacio;
+        }
+
+        $saldoHasta = $this->fechaAnterior($fechaDesde);
+        if ($saldoHasta < $fechaSaldoDesde || $saldoHasta > $cutoffErp) {
+            return $vacio;
+        }
+
+        // Moneda extranjera sin “solo origen” exige cotización por asiento (mismo criterio SyS).
+        if (! $soloMonedaOrigen && $monedaReporteId !== CuentacontableSaldoMesSupport::monedaLocalId()) {
+            return $vacio;
+        }
+
+        $periodoDesde = (int) intdiv($fechaDesde, 100);
+        $t0 = microtime(true);
+        $resultado = $this->sumasSaldosProcesador->saldosInicialesPorCodigo($empresaIds, $periodoDesde, [
+            'modo_inclusion_asientos' => $modoInclusionAsientos,
+            'moneda_id' => $monedaReporteId,
+            'solo_moneda_origen' => $soloMonedaOrigen,
+            'cuenta_desde' => $cuentaDesde,
+            'cuenta_hasta' => $cuentaHasta,
+            'cuentas' => $cuentas,
+            'excluir_origen_subdiario' => ! $incluyeSubdiario,
+        ]);
+
+        if (($resultado['fuente'] ?? '') !== 'saldos_mes') {
+            return array_merge($vacio, [
+                'fuente' => (string) ($resultado['fuente'] ?? 'movimientos'),
+                'advertencias' => $resultado['advertencias'] ?? [],
+            ]);
+        }
+
+        $dia = (int) ($fechaDesde % 100);
+        // Día 1: no hace falta leer movimientos previos. Si no, solo el tramo del mes.
+        $fechaMovDesde = $dia <= 1
+            ? 0
+            : ((int) (intdiv($fechaDesde, 100) * 100) + 1);
+
+        return [
+            'usar_saldos_mes' => true,
+            'por_codigo' => $resultado['por_codigo'] ?? [],
+            'fuente' => 'saldos_mes',
+            'movimientos_restados' => (int) ($resultado['movimientos_restados'] ?? 0),
+            'fecha_saldo_movimientos_desde' => $fechaMovDesde,
+            'advertencias' => $resultado['advertencias'] ?? [],
+            'timings_ms' => round((microtime(true) - $t0) * 1000, 1),
+        ];
+    }
+
+    private function fuenteErpHastaYmd(): int
+    {
+        $raw = trim((string) config('contable.mayor_plano_cuenta.fuente_erp_hasta', ''));
+        if ($raw === '') {
+            return 0;
+        }
+        if (preg_match('/^\d{8}$/', $raw)) {
+            return (int) $raw;
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
+            return (int) str_replace('-', '', $raw);
+        }
+
+        return 0;
+    }
+
+    private function fechaSiguiente(int $ymd): int
+    {
+        if ($ymd <= 0) {
+            return 0;
+        }
+        $dt = \DateTimeImmutable::createFromFormat('Ymd', (string) $ymd);
+        if (! $dt) {
+            return $ymd + 1;
+        }
+
+        return (int) $dt->modify('+1 day')->format('Ymd');
     }
 
     /**
@@ -566,7 +892,7 @@ class MayorPlanoCuentaProcesador
                 (string) ($linea->ctav_desc_mov ?? ''),
             ),
             'cuit' => '',
-            'es_subdiario' => false,
+            'es_subdiario' => ! empty($linea->erp_origen_subdiario),
             'importe_nativo' => $importe,
             'orden_sort' => 0,
         ];
@@ -611,17 +937,18 @@ class MayorPlanoCuentaProcesador
         int $monedaReporteId,
         bool $soloMonedaOrigen,
         string $modoInclusionAsientos,
+        ?float $saldoInicialPrecalculado = null,
     ): ?array {
         $lineasCuenta = array_values(array_filter(
             $movimientos,
             fn (array $m) => (int) ($m['cuenta'] ?? 0) === $cuenta,
         ));
 
-        if ($lineasCuenta === []) {
+        if ($lineasCuenta === [] && $saldoInicialPrecalculado === null) {
             return null;
         }
 
-        $saldoEjercicioInicial = 0.0;
+        $saldoEjercicioInicial = $saldoInicialPrecalculado !== null ? (float) $saldoInicialPrecalculado : 0.0;
         $lineasDetalle = [];
         $totalDebe = 0.0;
         $totalHaber = 0.0;
@@ -634,12 +961,17 @@ class MayorPlanoCuentaProcesador
                 <=> [$b['fecha'], $b['nro_asiento'], $b['orden_sort'], $b['nro_linea']];
         });
 
+        // Con saldo_mes: solo suma el tramo parcial del mes (si hubo). Sin él: acumula desde fechaSaldoDesde.
         foreach ($lineasCuenta as $mov) {
             $fecha = (int) ($mov['fecha'] ?? 0);
             if ($fecha >= $fechaDesde) {
                 break;
             }
-            if ($fecha < $fechaSaldoDesde) {
+            if ($fechaSaldoDesde > 0 && $fecha < $fechaSaldoDesde) {
+                continue;
+            }
+            // Si el SI ya viene de saldos_mes y no hay tramo parcial (fechaSaldoDesde=0), no sumar movs.
+            if ($saldoInicialPrecalculado !== null && $fechaSaldoDesde <= 0) {
                 continue;
             }
 

@@ -112,6 +112,13 @@ class RecepcionProveedorService
 
             $primerItem = $items[0] ?? null;
             $requiereImpuestoInterno = RecepcionProveedorImpuestoInternoSupport::itemsRequierenImpuestoInterno($items);
+            $impuestoInterno = $this->resolverImpuestoInternoParaGuardar(
+                $tipo,
+                $items,
+                $data,
+                isset($data['recepcion_referencia_id']) ? (int) $data['recepcion_referencia_id'] : null,
+                $requiereImpuestoInterno
+            );
 
             $payload = [
                 'ordencompra_id' => $oc->id,
@@ -135,10 +142,7 @@ class RecepcionProveedorService
                 'resumen_diferencias' => $analisis['resumen_diferencias'] ?: null,
                 'resumen_rechazos' => $analisis['resumen_rechazos'] ?: null,
                 'observacion' => $data['observacion'] ?? null,
-                'impuesto_interno' => RecepcionProveedorImpuestoInternoSupport::normalizarImpuestoInternoGuardado(
-                    isset($data['impuesto_interno']) ? (float) $data['impuesto_interno'] : null,
-                    $requiereImpuestoInterno
-                ),
+                'impuesto_interno' => $impuestoInterno,
                 'origen_carga' => $data['origen_carga']
                     ?? (! empty($data['ai_decision_id']) ? 'OCR' : 'MANUAL'),
                 'creousuario_id' => Auth::id(),
@@ -207,6 +211,13 @@ class RecepcionProveedorService
             $items = $analisis['items'];
             $primerItem = $items[0] ?? null;
             $requiereImpuestoInterno = RecepcionProveedorImpuestoInternoSupport::itemsRequierenImpuestoInterno($items);
+            $impuestoInterno = $this->resolverImpuestoInternoParaGuardar(
+                (string) $recepcion->tipo,
+                $items,
+                $data,
+                (int) ($recepcion->recepcion_referencia_id ?? 0) ?: null,
+                $requiereImpuestoInterno
+            );
 
             $recepcion->update([
                 'fecha' => $data['fecha'],
@@ -227,10 +238,7 @@ class RecepcionProveedorService
                 'origen_carga' => ! empty($data['ai_decision_id'])
                     ? 'OCR'
                     : ($data['origen_carga'] ?? $recepcion->origen_carga),
-                'impuesto_interno' => RecepcionProveedorImpuestoInternoSupport::normalizarImpuestoInternoGuardado(
-                    isset($data['impuesto_interno']) ? (float) $data['impuesto_interno'] : null,
-                    $requiereImpuestoInterno
-                ),
+                'impuesto_interno' => $impuestoInterno,
             ]);
 
             $this->reemplazarItems($recepcion, $items);
@@ -638,9 +646,59 @@ class RecepcionProveedorService
             $data['deposito_id'] = $origen->deposito_id;
         }
 
+        // II de la recepción origen prorrateado por cigarrillos devueltos (asiento + recepmov).
+        if (! isset($data['impuesto_interno']) || $data['impuesto_interno'] === '' || $data['impuesto_interno'] === null) {
+            $iiDev = RecepcionProveedorImpuestoInternoSupport::calcularImpuestoInternoProporcionalDesdeOrigen(
+                $origen,
+                $data['items'] ?? []
+            );
+            if ($iiDev !== null) {
+                $data['impuesto_interno'] = $iiDev;
+            }
+        }
+
         $devolucion = $this->guardar($data);
 
         return $this->confirmar($devolucion->id);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @param  array<string, mixed>  $data
+     */
+    private function resolverImpuestoInternoParaGuardar(
+        string $tipo,
+        array $items,
+        array $data,
+        ?int $recepcionReferenciaId,
+        bool $requiereImpuestoInterno,
+    ): ?float {
+        $input = array_key_exists('impuesto_interno', $data) && $data['impuesto_interno'] !== '' && $data['impuesto_interno'] !== null
+            ? (float) $data['impuesto_interno']
+            : null;
+
+        if (
+            $tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
+            && $requiereImpuestoInterno
+            && ($input === null || $input <= 0.000001)
+            && $recepcionReferenciaId !== null
+            && $recepcionReferenciaId > 0
+        ) {
+            $origen = Recepcion_Proveedor::query()
+                ->with(['recepcion_proveedor_articulos.articulos'])
+                ->find($recepcionReferenciaId);
+            if ($origen instanceof Recepcion_Proveedor) {
+                $input = RecepcionProveedorImpuestoInternoSupport::calcularImpuestoInternoProporcionalDesdeOrigen(
+                    $origen,
+                    $items
+                );
+            }
+        }
+
+        return RecepcionProveedorImpuestoInternoSupport::normalizarImpuestoInternoGuardado(
+            $input,
+            $requiereImpuestoInterno
+        );
     }
 
     /** @param list<array<string, mixed>> $items */

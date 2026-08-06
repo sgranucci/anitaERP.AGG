@@ -20,7 +20,7 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
                             {--reparar : Repara ctamov/recepmae ante discrepancia (override config)}
                             {--sin-reparar : No repara aunque auto_reparar esté activo}';
 
-    protected $description = 'Audita recepción ↔ recepmae Anita ↔ asiento ERP ↔ ctamov Anita';
+    protected $description = 'Audita recepción/devolución ↔ recepmae Anita ↔ asiento ERP ↔ ctamov Anita (incluye II en devoluciones)';
 
     public function handle(RecepcionProveedorAsientoAuditoriaDiariaService $service): int
     {
@@ -113,13 +113,14 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
             $this->newLine();
             $this->warn('Discrepancias (recepción vs ERP vs ctamov):');
             $this->table(
-                ['COM', 'Recepción', 'ERP debe', 'Anita debe', 'Problemas'],
+                ['COM', 'Tipo', 'Recepción', 'ERP debe', 'Anita debe', 'Problemas'],
                 array_map(static function (array $fila): array {
                     $problemas = $fila['problemas'] ?? [];
                     $resumen = is_array($problemas) ? implode('; ', array_slice($problemas, 0, 2)) : '';
 
                     return [
                         (string) ($fila['com'] ?? ''),
+                        (string) ($fila['tipo'] ?? ''),
                         isset($fila['total_recepcion']) ? number_format((float) $fila['total_recepcion'], 2, '.', '') : (isset($fila['debe_esperado']) ? number_format((float) $fila['debe_esperado'], 2, '.', '') : '—'),
                         isset($fila['debe_erp']) ? number_format((float) $fila['debe_erp'], 2, '.', '') : '—',
                         isset($fila['debe_anita']) ? number_format((float) $fila['debe_anita'], 2, '.', '') : '—',
@@ -185,6 +186,7 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
 
         fputcsv($handle, [
             'com',
+            'tipo',
             'recepcion_id',
             'estado',
             'total_recepcion',
@@ -193,6 +195,7 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
             'haber_erp',
             'debe_anita',
             'haber_anita',
+            'impuesto_interno_esperado',
             'numero_asiento',
             'problemas',
         ], ';');
@@ -200,6 +203,7 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
         foreach ($filas as $fila) {
             fputcsv($handle, [
                 $fila['com'] ?? '',
+                $fila['tipo'] ?? '',
                 $fila['recepcion_id'] ?? '',
                 $fila['estado'] ?? '',
                 $fila['total_recepcion'] ?? ($fila['debe_esperado'] ?? ''),
@@ -208,6 +212,7 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
                 $fila['haber_erp'] ?? '',
                 $fila['debe_anita'] ?? '',
                 $fila['haber_anita'] ?? '',
+                $fila['impuesto_interno_esperado'] ?? '',
                 $fila['numero_asiento'] ?? '',
                 implode(' | ', $fila['problemas'] ?? []),
             ], ';');
