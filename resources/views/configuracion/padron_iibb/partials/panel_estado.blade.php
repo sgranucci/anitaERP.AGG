@@ -1,11 +1,12 @@
 @php
-    $coberturaPanel = $cobertura ?? [];
+    $vigenciaPanel = $vigencia ?? [];
     $cargasPanel = $ultimas_cargas ?? collect();
     $badgeEstado = [
         'ok' => 'badge-success',
         'error' => 'badge-danger',
         'en_proceso' => 'badge-warning',
     ];
+    $vencidosPanel = collect($vigenciaPanel)->where('vigente', false);
 @endphp
 
 <div class="card card-outline card-info">
@@ -20,42 +21,69 @@
         </div>
     </div>
     <div class="card-body">
-        <h6 class="text-muted mb-2">Período vigente por provincia</h6>
+        <h6 class="text-muted mb-2">Vigencia por jurisdicción donde la empresa percibe o retiene</h6>
+
+        @if ($vencidosPanel->isNotEmpty())
+            <div class="alert alert-warning py-2">
+                <i class="fa fa-exclamation-triangle"></i>
+                <strong>Falta cargar el padrón de {{ $vencidosPanel->pluck('provincia')->implode(', ') }}.</strong>
+                Mientras falte, esas jurisdicciones se facturan con la tasa de descarte en lugar de la
+                alícuota de cada contribuyente.
+            </div>
+        @endif
+
         <div class="table-responsive mb-4">
             <table class="table table-sm table-bordered mb-1">
                 <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
                         <th>Provincia</th>
-                        <th class="text-center">Cód.</th>
                         <th class="text-center">Jurisdicción</th>
-                        <th class="text-center">Período cargado</th>
+                        <th class="text-center">Último período cargado</th>
+                        <th class="text-center">Vigente hoy</th>
+                        <th class="text-center">Descarga</th>
                         <th class="text-right">Registros</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($coberturaPanel as $fila)
-                        <tr>
+                    @forelse ($vigenciaPanel as $fila)
+                        <tr @class(['table-warning' => ! $fila['vigente']])>
                             <td>{{ $fila['provincia'] }}</td>
-                            <td class="text-center">{{ $fila['codigo'] }}</td>
                             <td class="text-center">{{ $fila['jurisdiccion'] }}</td>
                             <td class="text-center">
-                                {{ \Carbon\Carbon::parse($fila['desdefecha'])->format('d/m/Y') }}
-                                @if (! empty($fila['hastafecha']))
-                                    a {{ \Carbon\Carbon::parse($fila['hastafecha'])->format('d/m/Y') }}
+                                @if (! empty($fila['ultimo_periodo']))
+                                    {{ \Carbon\Carbon::parse($fila['ultimo_periodo'])->format('m/Y') }}
+                                @else
+                                    <span class="text-muted">sin datos</span>
                                 @endif
                             </td>
-                            <td class="text-right">{{ number_format($fila['filas'], 0, ',', '.') }}</td>
+                            <td class="text-center">
+                                @if ($fila['vigente'])
+                                    <span class="badge badge-success">Sí</span>
+                                @else
+                                    <span class="badge badge-danger">No</span>
+                                @endif
+                            </td>
+                            <td class="text-center">
+                                @if ($fila['automatico'])
+                                    <span class="badge badge-info">Automática</span>
+                                @else
+                                    <span class="badge badge-secondary">Manual</span>
+                                @endif
+                            </td>
+                            <td class="text-right">
+                                {{ $fila['filas'] === null ? '—' : number_format($fila['filas'], 0, ',', '.') }}
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="text-center text-muted">Todavía no hay padrones provinciales cargados.</td>
+                            <td colspan="6" class="text-center text-muted">Todavía no hay padrones cargados.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
             <small class="form-text text-muted">
-                Corresponde a la tabla de tasas por provincia (Córdoba, Entre Ríos, Misiones, Santa Fe y Tucumán).
-                CABA y ARBA usan tablas propias: su estado se ve en las últimas importaciones.
+                Solo ARBA se baja sola (último día del mes, padrón del mes siguiente). El resto de los
+                organismos exige clave fiscal, así que hay que bajar el archivo y cargarlo desde esta pantalla.
             </small>
         </div>
 

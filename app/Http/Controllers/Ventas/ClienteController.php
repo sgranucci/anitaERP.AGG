@@ -738,22 +738,9 @@ class ClienteController extends Controller
 			$tasaarba = $tasacaba = '';
 	}
 
-    /**
-     * Tasa de percepción IIBB según registro de padrón (ARBA/CABA: modelo; otras jurisd.: array con "tasa").
-     */
     private function tasaPercepcionDesdePadron($registroPadron): ?float
     {
-        if (!$registroPadron) {
-            return null;
-        }
-
-        if (is_array($registroPadron)) {
-            $tasa = $registroPadron['tasapercepcion'] ?? $registroPadron['tasa'] ?? null;
-        } else {
-            $tasa = $registroPadron->tasapercepcion ?? $registroPadron->tasa ?? null;
-        }
-
-        return ($tasa !== null && $tasa !== '') ? (float) $tasa : null;
+        return $this->iibbService->tasaPercepcionDesdePadron($registroPadron);
     }
 
     // Reporte maestro de clientes

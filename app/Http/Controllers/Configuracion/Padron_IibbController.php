@@ -19,6 +19,7 @@ use App\Jobs\Configuracion\ImportarPadronIibbSantaFeJob;
 use App\Support\Configuracion\PadronIibbArchivoRutaSupport;
 use App\Support\Configuracion\PadronIibbCargaRegistroSupport;
 use App\Support\Configuracion\PadronIibbEstadoPanelSupport;
+use App\Support\Configuracion\PadronIibbVigenciaSupport;
 use App\Support\Configuracion\PadronIibb\PadronIibbParserFactory;
 use Illuminate\Support\Facades\Log;
 use DB;
@@ -200,13 +201,13 @@ class Padron_IibbController extends Controller
         PadronIibbCargaRegistroSupport::cerrarColgadas();
 
         $ultimas_cargas = PadronIibbEstadoPanelSupport::ultimasCargas();
-        $cobertura = PadronIibbEstadoPanelSupport::coberturaTasa();
+        $vigencia = PadronIibbVigenciaSupport::estado();
         $hay_carga_en_proceso = $ultimas_cargas->contains(fn ($carga) => $carga->enProceso());
 
         return view('configuracion.padron_iibb.crearimportacion', compact(
             'tipopadron_enum',
             'ultimas_cargas',
-            'cobertura',
+            'vigencia',
             'hay_carga_en_proceso'
         ));
     }
@@ -242,7 +243,7 @@ class Padron_IibbController extends Controller
         }
 
         // El panel de estado se recalcula con los datos de esta carga.
-        PadronIibbEstadoPanelSupport::olvidarCobertura();
+        PadronIibbVigenciaSupport::olvidar();
 
         switch ((int) $provincia->jurisdiccion)
             {

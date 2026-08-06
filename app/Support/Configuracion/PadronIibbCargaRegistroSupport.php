@@ -65,6 +65,10 @@ final class PadronIibbCargaRegistroSupport
             'estado' => Padron_Iibb_Carga::ESTADO_OK,
             'mensaje' => $mensaje,
         ]);
+
+        // La carga terminó dentro del worker: sin esto el panel seguiría mostrando
+        // el período anterior hasta que venza el TTL.
+        PadronIibbVigenciaSupport::olvidar();
     }
 
     public static function fallar(?int $cargaId, string $error): void

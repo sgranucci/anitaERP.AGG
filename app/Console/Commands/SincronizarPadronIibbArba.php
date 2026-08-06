@@ -8,7 +8,9 @@ use App\Jobs\Configuracion\ImportarPadronIibbArbaJob;
 use App\Services\Configuracion\PadronIibbArbaCargaService;
 use App\Services\Configuracion\PadronIibbArbaDescargaService;
 use App\Support\Configuracion\PadronIibbCargaNotificacionSupport;
+use App\Support\Configuracion\PadronIibbCargaRegistroSupport;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class SincronizarPadronIibbArba extends Command
@@ -111,11 +113,20 @@ class SincronizarPadronIibbArba extends Command
             return self::SUCCESS;
         }
 
+        $cargaId = PadronIibbCargaRegistroSupport::iniciar([
+            'provincia_id' => DB::table('provincia')->where('jurisdiccion', '902')->value('id'),
+            'jurisdiccion' => 902,
+            'etiqueta' => 'IIBB ARBA',
+            'origen' => PadronIibbCargaRegistroSupport::ORIGEN_CONSOLA,
+            'archivo' => $info['zip'],
+        ]);
+
         ImportarPadronIibbArbaJob::dispatch(
             $info['zip'],
             (int) config('padrones_iibb.batch_arba', 5000),
             (int) config('padrones_iibb.pause_ms', 20),
-            false
+            false,
+            $cargaId
         );
         $this->info('Importación encolada en cola "' . config('padrones_iibb.cola', 'padrones') . '".');
 

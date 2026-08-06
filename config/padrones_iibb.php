@@ -49,6 +49,9 @@ return [
     /** Destinatarios del mail al terminar (o fallar) la carga. Separados por coma. */
     'notificar_email' => env('PADRON_IIBB_NOTIFICAR_EMAIL', env('QUEUE_VERIFICACION_PICO_EMAIL', '')),
 
+    /** Aviso por mail cuando un padrón no cubre el período en curso. */
+    'alertar_vencidos' => filter_var(env('PADRON_IIBB_ALERTAR_VENCIDOS', true), FILTER_VALIDATE_BOOLEAN),
+
     /*
     |--------------------------------------------------------------------------
     | ARBA DFE — descarga automática (ex bajapadron.sh)

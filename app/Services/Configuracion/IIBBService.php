@@ -62,10 +62,35 @@ class IIBBService
 				break;
 		}
 
-		if ($tasa_iibb)
-			$this->flLeyoPadron = true;
+		// Solo se considera leído el padrón si trajo una alícuota. Las jurisdicciones
+		// que resuelven por array devuelven estructura incluso cuando el CUIT no está.
+		$this->flLeyoPadron = $this->tasaPercepcionDesdePadron($tasa_iibb) !== null;
 
 		return $tasa_iibb;
+	}
+
+	/**
+	 * Alícuota de percepción del padrón, normalizada.
+	 *
+	 * ARBA y CABA devuelven un modelo con "tasapercepcion"; las demás jurisdicciones
+	 * devuelven un array con la alícuota en "tasa".
+	 *
+	 * @param  mixed  $registroPadron
+	 * @return float|null null cuando el CUIT no está en el padrón vigente
+	 */
+	public function tasaPercepcionDesdePadron($registroPadron): ?float
+	{
+		if (! $registroPadron) {
+			return null;
+		}
+
+		if (is_array($registroPadron)) {
+			$tasa = $registroPadron['tasapercepcion'] ?? $registroPadron['tasa'] ?? null;
+		} else {
+			$tasa = $registroPadron->tasapercepcion ?? $registroPadron->tasa ?? null;
+		}
+
+		return ($tasa !== null && $tasa !== '') ? (float) $tasa : null;
 	}
 
 	/**
@@ -202,11 +227,13 @@ class IIBBService
 					}
 					if ($flPercibe)
 					{
-						$tasaPercepcion = self::leeTasaPercepcion($numeroDocumento, $jurisdiccionesPercepcion[$i], $fechaFactura);
+						$registroPadron = $this->leeTasaPercepcion($numeroDocumento, $jurisdiccionesPercepcion[$i], $fechaFactura);
+						$tasaPadron = $this->tasaPercepcionDesdePadron($registroPadron);
 
+						// La alicuota del padron manda, incluso cuando es 0.
 						$tasa = 0.;
-						if (isset($tasaPercepcion['tasapercepcion']))
-							$tasa = $tasaPercepcion['tasapercepcion'];
+						if ($tasaPadron !== null)
+							$tasa = $tasaPadron;
 						else
 						{
 							// Si el cliente esta en la jurisdiccion y no leyo padron asume tasa de descarte

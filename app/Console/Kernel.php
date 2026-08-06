@@ -81,6 +81,15 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/padron-iibb-arba-sincronizar-schedule.log'))
             ->when(fn () => (bool) config('padrones_iibb.arba.sync_habilitado', true));
 
+        // Salvo ARBA, los padrones se bajan a mano con clave fiscal. Se avisa antes
+        // de que arranque el mes y en los primeros días, que es cuando todavía se
+        // puede cargar sin haber facturado con la tasa de descarte.
+        $schedule->command('padron-iibb:alertar-vencidos')
+            ->cron('0 8 1,3,5,26,28 * *')
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/padron-iibb-alertar-vencidos.log'))
+            ->when(fn () => (bool) config('padrones_iibb.alertar_vencidos', true));
+
         $schedule->command('bitacora-acceso:purge')
             ->dailyAt('03:20')
             ->withoutOverlapping(60)
