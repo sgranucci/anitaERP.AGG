@@ -29,6 +29,7 @@
                 <th>Localidad</th>
                 <th>Teléfono</th>
                 <th>E-mail</th>
+                <th>Acciones</th>
               </tr>
           </thead>
           <tbody id="datosbanco"></tbody>

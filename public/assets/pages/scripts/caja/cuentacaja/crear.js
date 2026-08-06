@@ -14,31 +14,15 @@ function limpiarCuentaContable() {
     $('#nombrecuentacontable').val('');
 }
 
-function actualizarRequeridoCbu() {
-    let tieneBanco = $('#banco_id').val() !== '' && $('#banco_id').val() != null;
-
-    if (tieneBanco) {
-        $('#cbu_label').addClass('requerido');
-        $('#cbu').prop('required', true);
-    } else {
-        $('#cbu_label').removeClass('requerido');
-        $('#cbu').prop('required', false).css('borderColor', '');
-    }
-}
-
 $(function () {
     activaEventosConsultaCuentaContableCuentacaja();
-    actualizarRequeridoCbu();
+
+    // CBU nunca obligatorio en UI (mismas reglas que ValidacionCuentacaja)
+    $('#cbu_label').removeClass('requerido');
+    $('#cbu').prop('required', false);
 
     $('#empresa_id').on('change', function () {
         limpiarCuentaContable();
-    });
-
-    $('#banco_id').on('change', function () {
-        if (!$('#banco_id').val()) {
-            $('#cbu').val('').css('borderColor', '');
-        }
-        actualizarRequeridoCbu();
     });
 });
 

@@ -29,7 +29,9 @@ class ValidacionCuentacaja extends FormRequest
             'banco_id' => ['integer', 'nullable'],
             'cuentacontable_id' => 'required|integer',
             'empresa_id' => ['integer', 'nullable'],
-            'cbu' => 'nullable|max:50|required_with:banco_id',
+            // CBU opcional: cuentas de valores/caja (ej. Total Coin) pueden tener banco
+            // de referencia sin CBU; no exigir CBU por el solo hecho de cargar banco_id.
+            'cbu' => ['nullable', 'max:50'],
             'cuenta_interbanking' => 'nullable|max:255',
             'usocuentacaja_ids' => 'nullable|array',
             'usocuentacaja_ids.*' => 'integer|exists:usocuentacaja,id',

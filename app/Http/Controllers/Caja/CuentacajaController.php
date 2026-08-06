@@ -9,7 +9,6 @@ use App\Http\Requests\ValidacionCuentacaja;
 use App\Models\Caja\Cuentacaja;
 use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
-use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\UsocuentacajaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -21,21 +20,18 @@ use App\Exports\Caja\CuentacajaListadoExport;
 class CuentacajaController extends Controller
 {
 	private $repository;
-    private $bancoRepository;
     private $cuentacontableRepository;
     private $empresaRepository;
     private $monedaRepository;
     private $usocuentacajaRepository;
 
     public function __construct(CuentacajaRepositoryInterface $repository,
-                                BancoRepositoryInterface $bancorepository,
                                 CuentacontableRepositoryInterface $cuentacontablerepository,
                                 EmpresaRepositoryInterface $empresarepository,
                                 MonedaRepositoryInterface $monedarepository,
                                 UsocuentacajaRepositoryInterface $usocuentacajarepository)
     {
         $this->repository = $repository;
-        $this->bancoRepository = $bancorepository;
         $this->cuentacontableRepository = $cuentacontablerepository;
         $this->empresaRepository = $empresarepository;
         $this->monedaRepository = $monedarepository;
@@ -115,12 +111,11 @@ class CuentacajaController extends Controller
         $data = new Cuentacaja();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = $this->monedaRepository->all();
-        $banco_query = $this->bancoRepository->all();
         $usocuentacaja_query = $this->usocuentacajaRepository->all();
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, CuentacajaListadoFiltros::class);
 
-        return view('caja.cuentacaja.crear', compact('data', 'empresa_query', 'banco_query',
+        return view('caja.cuentacaja.crear', compact('data', 'empresa_query',
                                                     'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query', 'filtrosQuery'));
     }
 
@@ -155,15 +150,15 @@ class CuentacajaController extends Controller
         }
 
         $data = $this->repository->findOrFail($id);
+        $data->loadMissing('bancos');
         $empresa_query = $this->empresaRepository->allFiltrado();
         $moneda_query = $this->monedaRepository->all();
-        $banco_query = $this->bancoRepository->all();
         $usocuentacaja_query = $this->usocuentacajaRepository->all();
         $tipocuenta_enum = Cuentacaja::$enumTipocuenta;
 
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, CuentacajaListadoFiltros::class);
 
-        return view('caja.cuentacaja.editar', compact('data', 'empresa_query', 'banco_query',
+        return view('caja.cuentacaja.editar', compact('data', 'empresa_query',
                                                     'tipocuenta_enum', 'moneda_query', 'usocuentacaja_query', 'soloConsulta', 'filtrosQuery'));
     }
 

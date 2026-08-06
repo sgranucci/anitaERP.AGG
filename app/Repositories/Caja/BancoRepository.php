@@ -6,6 +6,7 @@ use App\Models\Caja\Banco;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Condicioniva;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Auth;
@@ -91,7 +92,24 @@ class BancoRepository implements BancoRepositoryInterface
 
 	public function findPorCodigo($codigo)
     {
-        return $this->model->where('codigo', $codigo)->first();
+        $codigo = trim((string) $codigo);
+        if ($codigo === '') {
+            return null;
+        }
+
+        $banco = $this->model->where('codigo', $codigo)->first();
+        if ($banco) {
+            return $banco;
+        }
+
+        // Tolera ceros a la izquierda / comparación numérica
+        if (ctype_digit($codigo)) {
+            return $this->model
+                ->whereRaw(SqlDialectSupport::castEntero('codigo').' = ?', [(int) $codigo])
+                ->first();
+        }
+
+        return null;
     }
 
     public function sincronizarConAnita(){
@@ -275,12 +293,12 @@ class BancoRepository implements BancoRepositoryInterface
     public function leeBanco($consulta)
     {
 		$columns = ['banco.id', 'banco.nombre', 'banco.codigo', 'banco.domicilio', 'localidad.nombre', 'banco.telefono', 'banco.email'];
-        $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'nombrelocalidad', 'telefono', 'emails'];
+        $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'nombrelocalidad', 'telefono', 'email'];
 
-		$consulta = strtoupper($consulta);
+		$consulta = strtoupper((string) ($consulta ?? ''));
 
 		$count = count($columns);
-		$data = $this->model->select('banco.id as id',
+		$query = $this->model->select('banco.id as id',
 									'banco.nombre as nombre',
 									'banco.codigo as codigo',
 									'banco.domicilio as domicilio',
@@ -288,16 +306,23 @@ class BancoRepository implements BancoRepositoryInterface
 									'banco.telefono as telefono',
 									'banco.email as email')
 							->leftJoin('localidad', 'localidad.id', 'banco.localidad_id')
-							->orWhere(function ($query) use ($count, $consulta, $columns) {
-                        			for ($i = 0; $i < $count; $i++)
-                            			$query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
-                })	
-				->get();								
+							->orderBy('banco.nombre');
+
+		if ($consulta !== '') {
+			$query->where(function ($q) use ($count, $consulta, $columns) {
+				for ($i = 0; $i < $count; $i++) {
+					$q->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
+				}
+			});
+		}
+
+		$data = $query->limit(100)->get();
 
         $output = [];
 		$output['data'] = '';	
         $flSinDatos = true;
         $count = count($columns);
+		$puedeAbrirAbm = can('editar-banco', false) || can('listar-banco', false);
 		if (count($data) > 0)
 		{
 			foreach ($data as $row)
@@ -305,9 +330,18 @@ class BancoRepository implements BancoRepositoryInterface
                 $flSinDatos = false;
                 $output['data'] .= '<tr>';
                 for ($i = 0; $i < $count; $i++)
-                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';	
-                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultabanco">Elegir</a></td>';
-				$output['data'] .= '<td><a class="btn btn-warning btn-sm consultaunbanco">Consultar</a></td>';
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . e($row->{$columnsOut[$i]} ?? '') . '</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultabanco">Elegir</a>';
+				if ($puedeAbrirAbm) {
+					$url = route('editar_banco', [
+						'id' => $row->id,
+						'origen' => 'modal_consulta',
+						'vista' => 'consulta',
+					]);
+					$output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+				}
+                $output['data'] .= '</td>';
                 $output['data'] .= '</tr>';
 			}
 		}
@@ -315,7 +349,7 @@ class BancoRepository implements BancoRepositoryInterface
         if ($flSinDatos)
 		{
 			$output['data'] .= '<tr>';
-			$output['data'] .= '<td>Sin resultados</td>';
+			$output['data'] .= '<td colspan="8">Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));

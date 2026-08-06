@@ -43,15 +43,28 @@ function activaEventosChequesIngresoEgreso() {
     });
 
     $(document).on('click', '.consultabanco_recibido', function () {
-        ptrbanco_id = $(this).closest('tr').find('.banco_recibido_id');
-        ptrcodigobanco = $(this).closest('tr').find('.codigobanco_recibido');
-        ptrnombrebanco = $(this).closest('tr').find('.nombrebanco_recibido');
+        var $campo = $(this).closest('tr');
+        ptrCampoBanco = $campo;
+        ptrbanco_id = $campo.find('.banco_recibido_id');
+        ptrcodigobanco = $campo.find('.codigobanco_recibido');
+        ptrnombrebanco = $campo.find('.nombrebanco_recibido');
+        $('#consultabanco').val('');
+        if (typeof buscar_datos_banco === 'function') {
+            buscar_datos_banco('');
+        }
         $('#consultabancoModal').modal('show');
     });
 
     $(document).on('click', '.consultabanco_reemplazo', function () {
-        ptrbanco_id = $(this).closest('tr').find('.banco_reemplazo_id');
-        ptrnombrebanco = $(this).closest('tr').find('.nombrebanco_reemplazo');
+        var $campo = $(this).closest('tr');
+        ptrCampoBanco = $campo;
+        ptrbanco_id = $campo.find('.banco_reemplazo_id');
+        ptrcodigobanco = $campo.find('.codigobanco_reemplazo');
+        ptrnombrebanco = $campo.find('.nombrebanco_reemplazo');
+        $('#consultabanco').val('');
+        if (typeof buscar_datos_banco === 'function') {
+            buscar_datos_banco('');
+        }
         $('#consultabancoModal').modal('show');
     });
 
