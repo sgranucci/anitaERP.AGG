@@ -5557,20 +5557,36 @@ class MayorConceptoPeriodoProcesador
             return $this->filtrarComGasto($this->cargarComDesdeFacturaViaPepHermano($aplicacion));
         }
 
+        // --- FIX-FIB-COM-VIA-PEP (2026-08-06) — ver docs/mayor-concepto-fix-fib-com-via-pep.md ---
         if (in_array($tipoAp, ['FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH', 'FIA'], true)) {
             $comGasto = $this->filtrarComGasto($this->cargarComDesdeFactura($aplicacion));
-            if ($comGasto !== []) {
+            if ($comGasto !== [] && $this->lineasGastoIncluyenResultadoCompras($comGasto)) {
                 return $comGasto;
             }
 
             $sub = $this->cargarSubdiarioComprobanteAplicacion($aplicacion);
             $adelantada = $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub);
+
+            // FIB con solo IVA 114010 (concepto 63): preferir gasto COM vía PEP (ej. monitor→521xxx).
+            $comViaPepResultado = $this->filtrarLineasResultadoDesdeCom(
+                $this->cargarComDesdeFacturaViaPepHermano($aplicacion),
+            );
+            if ($comViaPepResultado !== []
+                && ($adelantada === [] || ! $this->lineasGastoIncluyenResultadoCompras($adelantada))) {
+                return $this->escalarComResultadoANetoFacturaAdelantada($comViaPepResultado, $sub);
+            }
+
             if ($adelantada !== []) {
                 return $adelantada;
             }
 
+            if ($comGasto !== []) {
+                return $comGasto;
+            }
+
             return $this->filtrarComGasto($this->cargarComDesdeFacturaViaPepHermano($aplicacion));
         }
+        // --- /FIX-FIB-COM-VIA-PEP ---
 
         $comGasto = $this->filtrarComGasto($this->cargarComDesdeFactura($aplicacion));
         if ($comGasto !== []) {
@@ -5745,6 +5761,61 @@ class MayorConceptoPeriodoProcesador
             $this->filtrarComGasto($comSub),
             fn ($linea) => $this->lineasGastoIncluyenResultadoCompras([$linea]),
         ));
+    }
+
+    /**
+     * FIX-FIB-COM-VIA-PEP: COM ERP a veces guarda el neto en moneda extranjera (ej. 396.5 USD)
+     * mientras el IVA de la FIB ya está en pesos. Escala el gasto COM al Debe 211010-004.
+     * Rollback: docs/mayor-concepto-fix-fib-com-via-pep.md
+     *
+     * @param  list<object>  $comResultado
+     * @param  list<object>  $subFactura
+     * @return list<object>
+     */
+    private function escalarComResultadoANetoFacturaAdelantada(array $comResultado, array $subFactura): array
+    {
+        $netoCom = array_sum(array_map(fn ($l) => (float) ($l->subd_importe ?? 0), $comResultado));
+        if ($netoCom <= 0) {
+            return $comResultado;
+        }
+
+        $netoFactura = 0.0;
+        $ivaFactura = 0.0;
+        foreach ($subFactura as $linea) {
+            $cuenta = (int) ($linea->subd_cuenta ?? 0);
+            $mov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? '')));
+            if ($mov !== 'D') {
+                continue;
+            }
+            $imp = (float) ($linea->subd_importe ?? 0);
+            if ($cuenta >= 211010000 && $cuenta < 212000000) {
+                $netoFactura += $imp;
+            } elseif ($cuenta >= 114010000 && $cuenta < 114040000) {
+                $ivaFactura += $imp;
+            }
+        }
+
+        if ($netoFactura <= 0) {
+            return $comResultado;
+        }
+
+        // Desfasaje típico moneda: COM <<< IVA en pesos de la FIB.
+        if ($ivaFactura > 0 && $netoCom >= $ivaFactura * 0.05) {
+            return $comResultado;
+        }
+        if ($ivaFactura <= 0 && $netoCom >= $netoFactura * 0.5) {
+            return $comResultado;
+        }
+
+        $factor = $netoFactura / $netoCom;
+        $escaladas = [];
+        foreach ($comResultado as $linea) {
+            $copia = clone $linea;
+            $copia->subd_importe = round((float) ($linea->subd_importe ?? 0) * $factor, 2);
+            $escaladas[] = $copia;
+        }
+
+        return $escaladas;
     }
 
     /**
@@ -6758,9 +6829,17 @@ class MayorConceptoPeriodoProcesador
             return $this->filtrarLineasFgaMayorConcepto($sub) !== [];
         }
 
+        // --- FIX-FIB-COM-VIA-PEP (facturaTieneGastoPropio) ---
         if (in_array($tipoAp, ['FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH', 'FIA'], true)) {
-            return $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub) !== [];
+            $adelantada = $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub);
+            if ($adelantada === []) {
+                return false;
+            }
+
+            // Solo IVA 114010 / puente: no bloquea hop FIB→PEP←COM.
+            return $this->lineasGastoIncluyenResultadoCompras($adelantada);
         }
+        // --- /FIX-FIB-COM-VIA-PEP ---
 
         $adelantada = $this->filtrarLineasFacturaAdelantadaMayorConcepto($sub);
         if ($this->subTieneAnticipo114040($adelantada)) {

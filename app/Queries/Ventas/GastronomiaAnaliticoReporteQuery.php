@@ -207,11 +207,12 @@ final class GastronomiaAnaliticoReporteQuery
             (string) ($filtros['fecha_desde'] ?? ''),
             (string) ($filtros['fecha_hasta'] ?? ''),
         );
+        // fechajornada es DATE indexada: comparación directa (whereDate() impide usar el índice).
         if ($desde !== '') {
-            $query->whereDate('v.fechajornada', '>=', $desde);
+            $query->where('v.fechajornada', '>=', $desde);
         }
         if ($hasta !== '') {
-            $query->whereDate('v.fechajornada', '<=', $hasta);
+            $query->where('v.fechajornada', '<=', $hasta);
         }
 
         $tipoVenta = trim((string) ($filtros['tipo_venta'] ?? ''));

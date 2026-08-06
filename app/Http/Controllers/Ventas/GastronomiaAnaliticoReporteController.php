@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Ventas\GastronomiaAnaliticoReporteService;
 use App\Support\Reportes\ReportePreferenciasUsuario;
+use App\Support\Ventas\GastronomiaAnaliticoReporteCacheSupport;
 use App\Support\Ventas\GastronomiaAnaliticoReporteFiltros;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -53,9 +54,14 @@ class GastronomiaAnaliticoReporteController extends Controller
                 'consolidar_empresas' => ! empty($filtros['consolidar_empresas']),
             ]);
 
+            if ($request->boolean('refrescar_cache')) {
+                GastronomiaAnaliticoReporteCacheSupport::limpiar($filtros);
+            }
+
+            $resultado = $this->obtenerResultado($filtros);
             $perPage = max(10, min(200, (int) $request->input('per_page', self::PER_PAGE)));
-            $resultado = $this->reporteService->generar($filtros, true, $perPage);
-            $filas = $resultado['filas'];
+            $page = max(1, (int) $request->input('page', 1));
+            $filas = $this->reporteService->paginarFilas($resultado['filas'] ?? [], $perPage, $page);
         }
 
         $filtrosQuery = GastronomiaAnaliticoReporteFiltros::paraQueryString($filtros);
@@ -127,8 +133,8 @@ class GastronomiaAnaliticoReporteController extends Controller
             return $this->descargarPdfPorEmpresa($filtros, $empresaQuery, $titulo);
         }
 
-        $resultado = $this->reporteService->generar($filtros, false);
-        $filas = $resultado['filas'];
+        $resultado = $this->obtenerResultado($filtros);
+        $filas = collect($resultado['filas'] ?? []);
         $filasDatos = $filas->filter(static fn ($f) => ($f->tipo_fila ?? 'detalle') !== 'header_empresa');
         if ($filasDatos->isEmpty()) {
             return redirect()
@@ -168,12 +174,12 @@ class GastronomiaAnaliticoReporteController extends Controller
 
             case 'EXCEL':
                 return (new GastronomiaAnaliticoReporteExport($this->reporteService))
-                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto)
+                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto, $resultado)
                     ->download('analitico_gastronomia.xlsx');
 
             case 'CSV':
                 return (new GastronomiaAnaliticoReporteExport($this->reporteService))
-                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto)
+                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto, $resultado)
                     ->download('analitico_gastronomia.csv', Excel::CSV);
         }
 
@@ -181,6 +187,25 @@ class GastronomiaAnaliticoReporteController extends Controller
             'gastronomia_analitico_reporte',
             GastronomiaAnaliticoReporteFiltros::paraQueryString($filtros),
         );
+    }
+
+    /**
+     * Snapshot de pantalla: cache file por firma de filtros (export reutiliza sin regenerar).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function obtenerResultado(array $filtros): array
+    {
+        $cached = GastronomiaAnaliticoReporteCacheSupport::recuperar($filtros);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $resultado = $this->reporteService->generar($filtros, false);
+        GastronomiaAnaliticoReporteCacheSupport::guardar($filtros, $resultado);
+
+        return GastronomiaAnaliticoReporteCacheSupport::recuperar($filtros) ?? $resultado;
     }
 
     /**
@@ -326,20 +351,42 @@ class GastronomiaAnaliticoReporteController extends Controller
         $temporales = [];
 
         try {
-            foreach (GastronomiaAnaliticoReporteFiltros::empresaIds($filtros) as $empresaId) {
-                $filtrosEmpresa = array_merge($filtros, [
-                    'empresa_ids' => [(int) $empresaId],
-                    'empresa_id' => (int) $empresaId,
-                    'consolidar_empresas' => true,
-                ]);
+            $resultadoFull = $this->obtenerResultado($filtros);
+            $filasFull = collect($resultadoFull['filas'] ?? []);
 
-                $resultado = $this->reporteService->generar($filtrosEmpresa, false);
-                $filas = $resultado['filas'];
+            foreach (GastronomiaAnaliticoReporteFiltros::empresaIds($filtros) as $empresaId) {
+                $empresaId = (int) $empresaId;
+                $filas = $filasFull
+                    ->filter(static function ($f) use ($empresaId) {
+                        if (($f->tipo_fila ?? 'detalle') === 'header_empresa') {
+                            return false;
+                        }
+
+                        return (int) ($f->empresa_id ?? 0) === $empresaId;
+                    })
+                    ->values();
                 if ($filas->isEmpty()) {
                     continue;
                 }
 
-                $empresaTexto = $this->etiquetaEmpresas([(int) $empresaId], $empresaQuery, true);
+                $cantidadFilas = $filas->count();
+                $cantidadTotal = round((float) $filas->sum(static fn ($f) => (float) ($f->cantidad ?? 0)), 4);
+                $totalImporte = round((float) $filas->sum(static fn ($f) => (float) ($f->total ?? 0)), 2);
+                $costoTotal = round((float) $filas->sum(static fn ($f) => (float) ($f->costo ?? 0)), 2);
+
+                $resultado = [
+                    'filas' => $filas,
+                    'totales' => [
+                        'cantidad_filas' => $cantidadFilas,
+                        'cantidad_total' => $cantidadTotal,
+                        'total_importe' => $totalImporte,
+                        'costo_total' => $costoTotal,
+                    ],
+                    'periodo_texto' => $resultadoFull['periodo_texto'] ?? '',
+                    'lista_costo' => $resultadoFull['lista_costo'] ?? '',
+                ];
+
+                $empresaTexto = $this->etiquetaEmpresas([$empresaId], $empresaQuery, true);
                 $subtitulo = 'Empresa: '.$empresaTexto
                     .' · '.$resultado['periodo_texto']
                     .' · Lista costo '.$resultado['lista_costo']
@@ -347,7 +394,11 @@ class GastronomiaAnaliticoReporteController extends Controller
 
                 $view = \View::make('ventas.gastronomia.analitico_reporte.listado', [
                     'filas' => $filas,
-                    'filtros' => $filtrosEmpresa,
+                    'filtros' => array_merge($filtros, [
+                        'empresa_ids' => [$empresaId],
+                        'empresa_id' => $empresaId,
+                        'consolidar_empresas' => true,
+                    ]),
                     'resultado' => $resultado,
                     'titulo' => $titulo,
                     'subtitulo' => $subtitulo,

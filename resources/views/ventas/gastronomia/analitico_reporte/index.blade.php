@@ -9,6 +9,7 @@
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/listado-filtros.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/analitico_reporte_filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/analitico_reporte_filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/analitico_reporte_export.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/analitico_reporte_export.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -135,4 +136,12 @@
         </div>
     </div>
 </div>
+
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'analitico-gastro-overlay',
+    'tituloId' => 'analitico-gastro-overlay-titulo',
+    'subtituloId' => 'analitico-gastro-overlay-subtitulo',
+    'titulo' => 'Procesando…',
+    'subtitulo' => 'Puede demorar según el período. No cierre la página.',
+])
 @endsection

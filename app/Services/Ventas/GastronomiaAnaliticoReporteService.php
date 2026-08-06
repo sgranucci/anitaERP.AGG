@@ -3,12 +3,14 @@
 namespace App\Services\Ventas;
 
 use App\Models\Stock\Listaprecio;
+use App\Models\Stock\Precio;
 use App\Queries\Ventas\GastronomiaAnaliticoReporteQuery;
-use App\Services\Stock\PrecioService;
 use App\Support\Ventas\Gastronomia\GastronomiaInformeGerenteCostoListaSupport;
 use App\Support\Ventas\GastronomiaAnaliticoReporteFiltros;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection;
 
 final class GastronomiaAnaliticoReporteService
@@ -42,20 +44,29 @@ final class GastronomiaAnaliticoReporteService
 
         $cacheCosto = [];
         $cacheListaMes = [];
+        $itemsBase = $filasRaw instanceof LengthAwarePaginator
+            ? collect($filasRaw->items())
+            : $filasRaw;
+        $this->precargarCacheCostos(
+            $itemsBase,
+            $cacheCosto,
+            $cacheListaMes,
+            $fechaCostoDefault,
+        );
 
         $mapear = function (object $row) use (&$cacheCosto, &$cacheListaMes, $listaCostoId, $fechaCostoDefault): object {
             return $this->enriquecerFila($row, $cacheCosto, $cacheListaMes, $listaCostoId, $fechaCostoDefault);
         };
 
         if ($filasRaw instanceof LengthAwarePaginator) {
-            $items = collect($filasRaw->items())->map($mapear)->values();
+            $items = $itemsBase->map($mapear)->values();
             if (GastronomiaAnaliticoReporteFiltros::debeSepararPorEmpresa($filtros)) {
                 $items = $this->insertarHeadersEmpresa($items, true);
             }
             $filasRaw->setCollection($items);
             $filas = $filasRaw;
         } else {
-            $filas = $filasRaw->map($mapear)->values();
+            $filas = $itemsBase->map($mapear)->values();
             if (GastronomiaAnaliticoReporteFiltros::debeSepararPorEmpresa($filtros)) {
                 $filas = $this->insertarHeadersEmpresa($filas, false);
             }
@@ -78,6 +89,127 @@ final class GastronomiaAnaliticoReporteService
             'periodo_texto' => GastronomiaAnaliticoReporteFiltros::formatearPeriodoTexto($filtros),
             'lista_costo' => $listaCostoCodigo,
         ];
+    }
+
+    /**
+     * Paginación en memoria desde snapshot cacheado.
+     *
+     * @param  Collection<int, object>|array<int, object>  $filas
+     */
+    public function paginarFilas(Collection|array $filas, int $perPage, int $page = 1): LengthAwarePaginator
+    {
+        $coleccion = $filas instanceof Collection ? $filas->values() : collect($filas)->values();
+        $perPage = max(10, min(200, $perPage));
+        $page = max(1, $page);
+        $total = $coleccion->count();
+        $items = $coleccion->slice(($page - 1) * $perPage, $perPage)->values();
+
+        return new PaginatorImpl(
+            $items,
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => Paginator::resolveCurrentPath(),
+                'pageName' => 'page',
+            ],
+        );
+    }
+
+    /**
+     * Carga en una sola query los precios de lista necesarios y arma el cache
+     * articulo|lista|fecha (misma semántica que PrecioService::asignaPrecioPorLista).
+     *
+     * @param  Collection<int, object>  $filas
+     * @param  array<string, float>  $cacheCosto
+     * @param  array<string, int|null>  $cacheListaMes
+     */
+    private function precargarCacheCostos(
+        Collection $filas,
+        array &$cacheCosto,
+        array &$cacheListaMes,
+        string $fechaCostoDefault,
+    ): void {
+        if ($filas->isEmpty()) {
+            return;
+        }
+
+        /** @var array<int, true> $articuloIds */
+        $articuloIds = [];
+        /** @var array<string, array{articulo_id: int, lista_id: int, fecha: string}> $claves */
+        $claves = [];
+
+        foreach ($filas as $row) {
+            $articuloId = (int) ($row->articulo_id ?? 0);
+            if ($articuloId <= 0) {
+                continue;
+            }
+
+            $fechaJornada = $this->ymd($row->fechajornada ?? null);
+            $fechaCosto = $fechaJornada !== '' ? $fechaJornada : $fechaCostoDefault;
+            if ($fechaCosto === '') {
+                continue;
+            }
+
+            try {
+                $mesKey = Carbon::parse($fechaCosto)->format('Y-m');
+            } catch (\Throwable) {
+                continue;
+            }
+            if (! array_key_exists($mesKey, $cacheListaMes)) {
+                $listas = GastronomiaInformeGerenteCostoListaSupport::listasDesdeFechaJornada($fechaCosto);
+                $cacheListaMes[$mesKey] = $this->resolverListaprecioId((string) $listas['lista_actual']);
+            }
+            $listaId = $cacheListaMes[$mesKey];
+            if ($listaId === null) {
+                continue;
+            }
+
+            $articuloIds[$articuloId] = true;
+            $key = $articuloId.'|'.$listaId.'|'.$fechaCosto;
+            $claves[$key] = [
+                'articulo_id' => $articuloId,
+                'lista_id' => $listaId,
+                'fecha' => $fechaCosto,
+            ];
+        }
+
+        if ($articuloIds === [] || $claves === []) {
+            return;
+        }
+
+        $listaIds = array_values(array_unique(array_filter(array_column($claves, 'lista_id'))));
+        if ($listaIds === []) {
+            return;
+        }
+
+        /** @var array<string, list<array{fecha: string, precio: float}>> $porArticuloLista */
+        $porArticuloLista = [];
+        Precio::query()
+            ->select(['articulo_id', 'listaprecio_id', 'fechavigencia', 'precio'])
+            ->whereIn('articulo_id', array_keys($articuloIds))
+            ->whereIn('listaprecio_id', $listaIds)
+            ->orderBy('fechavigencia')
+            ->get()
+            ->each(function ($precio) use (&$porArticuloLista): void {
+                $grupo = ((int) $precio->articulo_id).'|'.((int) $precio->listaprecio_id);
+                $porArticuloLista[$grupo][] = [
+                    'fecha' => $this->ymd($precio->fechavigencia),
+                    'precio' => (float) $precio->precio,
+                ];
+            });
+
+        foreach ($claves as $key => $meta) {
+            $grupo = $meta['articulo_id'].'|'.$meta['lista_id'];
+            $vigencias = $porArticuloLista[$grupo] ?? [];
+            $precioRet = 0.0;
+            foreach ($vigencias as $vigencia) {
+                if ($vigencia['fecha'] !== '' && $vigencia['fecha'] <= $meta['fecha']) {
+                    $precioRet = $vigencia['precio'];
+                }
+            }
+            $cacheCosto[$key] = round($precioRet, 2);
+        }
     }
 
     /**
@@ -238,12 +370,10 @@ final class GastronomiaAnaliticoReporteService
             return $cache[$key];
         }
 
-        $precios = PrecioService::asignaPrecioPorLista($articuloId, $listaprecioId, $fechaReferencia);
-        $cache[$key] = $precios !== []
-            ? round((float) (end($precios)['precio'] ?? 0), 2)
-            : 0.0;
+        // Fallback puntual si no se precargó (no debería ocurrir tras precargarCacheCostos).
+        $cache[$key] = 0.0;
 
-        return $cache[$key];
+        return 0.0;
     }
 
     private function resolverListaprecioId(string $codigoLista): ?int

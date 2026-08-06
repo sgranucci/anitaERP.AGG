@@ -4,10 +4,8 @@ namespace App\Exports\Ventas;
 
 use App\Services\Ventas\GastronomiaAnaliticoReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
-use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
-use Maatwebsite\Excel\Concerns\FromView;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
@@ -20,11 +18,16 @@ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class GastronomiaAnaliticoReporteExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
+/**
+ * Export FromArray (no FromView): con ~50k filas el HTML→Spreadsheet es el cuello de botella.
+ */
+class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
 
     private const COL_ULTIMA = 'X';
+
+    private const COL_COUNT = 24;
 
     /** @var array<string, mixed> */
     private array $filtros = [];
@@ -49,38 +52,50 @@ class GastronomiaAnaliticoReporteExport implements FromView, ShouldAutoSize, Wit
     /** @var array<string, mixed> */
     private array $resultado = [];
 
+    /** @var list<int> */
+    private array $filasHeaderEmpresaExcel = [];
+
     public function __construct(
         private readonly GastronomiaAnaliticoReporteService $reporteService,
     ) {}
 
     /**
      * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|null  $resultadoPrecalculado
      */
-    public function parametros(array $filtros, string $titulo, string $subtitulo, string $empresaNombre = ''): self
-    {
+    public function parametros(
+        array $filtros,
+        string $titulo,
+        string $subtitulo,
+        string $empresaNombre = '',
+        ?array $resultadoPrecalculado = null,
+    ): self {
         $this->filtros = $filtros;
         $this->titulo = $titulo;
         $this->subtitulo = $subtitulo;
         $this->empresaNombre = trim($empresaNombre);
+        $this->resultado = $resultadoPrecalculado ?? [];
 
         return $this;
     }
 
-    public function view(): View
+    public function array(): array
     {
-        $this->resultado = $this->reporteService->generar($this->filtros, false);
-        $filas = $this->resultado['filas'];
-        $coleccionLogo = $filas
-            ->filter(static fn ($f) => ($f->tipo_fila ?? 'detalle') !== 'header_empresa')
-            ->map(static fn ($f) => (object) [
-                'nombreempresa' => trim((string) ($f->nombreempresa ?? $f->sala ?? '')),
-            ])
-            ->filter(static fn ($r) => $r->nombreempresa !== '')
-            ->unique('nombreempresa')
-            ->values();
-        if ($coleccionLogo->isEmpty() && $this->empresaNombre !== '') {
-            $coleccionLogo = collect([(object) ['nombreempresa' => $this->empresaNombre]]);
+        if ($this->resultado === []) {
+            $this->resultado = $this->reporteService->generar($this->filtros, false);
         }
+
+        $filas = collect($this->resultado['filas'] ?? []);
+        $coleccionLogo = $this->empresaNombre !== ''
+            ? collect([(object) ['nombreempresa' => $this->empresaNombre]])
+            : $filas
+                ->filter(static fn ($f) => ($f->tipo_fila ?? 'detalle') !== 'header_empresa')
+                ->map(static fn ($f) => (object) [
+                    'nombreempresa' => trim((string) ($f->nombreempresa ?? $f->sala ?? '')),
+                ])
+                ->filter(static fn ($r) => $r->nombreempresa !== '')
+                ->unique('nombreempresa')
+                ->values();
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogo);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
 
@@ -93,13 +108,94 @@ class GastronomiaAnaliticoReporteExport implements FromView, ShouldAutoSize, Wit
         $this->filaCabecerasExcel = $this->filaTituloExcel + $filasMeta;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
-        return view('exports.ventas.gastronomia_analitico_reporteindex', [
-            'resultado' => $this->resultado,
-            'filas' => $filas,
-            'titulo' => $this->titulo,
-            'subtitulo' => $this->subtitulo,
-            'reservarFilaLogoExcel' => $this->hayFilaLogos,
-        ]);
+        $rows = [];
+        if ($this->hayFilaLogos) {
+            $rows[] = $this->filaVacia();
+        }
+        $rows[] = $this->celdaUnica($this->titulo);
+        $rows[] = $this->celdaUnica('Generado '.date('d/m/Y H:i'));
+        if (trim($this->subtitulo) !== '') {
+            $rows[] = $this->celdaUnica($this->subtitulo);
+        }
+        $rows[] = [
+            'Id', 'Fecha jornada', 'Fecha real', 'Sala', 'Tipo comprobante', 'Punto venta',
+            'Nº comprobante', 'Mozo Id', 'Nombre mozo', 'Legajo mozo', 'Código artículo',
+            'Descripción artículo', 'Tipo venta', 'Cantidad', 'Precio unitario', 'Total', 'Costo',
+            'Tipo descuento', 'Categoría artículo', 'Cliente', 'Año', 'Hora', 'Mes', 'Día',
+        ];
+
+        $excelRow = $this->filaPrimeraDatosExcel;
+        $this->filasHeaderEmpresaExcel = [];
+        foreach ($filas as $f) {
+            if (($f->tipo_fila ?? 'detalle') === 'header_empresa') {
+                $this->filasHeaderEmpresaExcel[] = $excelRow;
+                $rows[] = $this->celdaUnica('Empresa: '.trim((string) ($f->nombreempresa ?? $f->sala ?? '')));
+            } else {
+                $rows[] = [
+                    (string) ($f->id ?? ''),
+                    (string) ($f->fecha_jornada_fmt ?? ''),
+                    (string) ($f->fecha_real_fmt ?? ''),
+                    (string) ($f->sala ?? ''),
+                    (string) ($f->tipo_comprobante ?? ''),
+                    (string) ($f->punto_venta ?? ''),
+                    (string) ($f->numero_comprobante ?? ''),
+                    (string) ($f->mozo_id ?? ''),
+                    (string) ($f->nombre_mozo ?? ''),
+                    (string) ($f->legajo_mozo ?? ''),
+                    (string) ($f->codigo_articulo ?? ''),
+                    (string) ($f->descripcion_articulo ?? ''),
+                    (string) ($f->tipo_venta ?? ''),
+                    round((float) ($f->cantidad ?? 0), 4),
+                    round((float) ($f->precio_unitario ?? 0), 2),
+                    round((float) ($f->total ?? 0), 2),
+                    round((float) ($f->costo ?? 0), 2),
+                    (string) ($f->tipo_descuento ?? ''),
+                    (string) ($f->categoria_articulo ?? ''),
+                    (string) ($f->cliente ?? ''),
+                    (string) ($f->anio ?? ''),
+                    (string) ($f->hora ?? ''),
+                    (string) ($f->mes ?? ''),
+                    (string) ($f->dia ?? ''),
+                ];
+            }
+            $excelRow++;
+        }
+
+        $tot = $this->resultado['totales'] ?? [];
+        if ($tot !== []) {
+            $rows[] = array_merge(
+                ['Totales ('.(int) ($tot['cantidad_filas'] ?? 0).' filas)'],
+                array_fill(0, 12, ''),
+                [
+                    round((float) ($tot['cantidad_total'] ?? 0), 4),
+                    '',
+                    round((float) ($tot['total_importe'] ?? 0), 2),
+                    round((float) ($tot['costo_total'] ?? 0), 2),
+                ],
+                array_fill(0, 7, ''),
+            );
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function filaVacia(): array
+    {
+        return array_fill(0, self::COL_COUNT, '');
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function celdaUnica(string $texto): array
+    {
+        $row = $this->filaVacia();
+        $row[0] = $texto;
+
+        return $row;
     }
 
     public function columnFormats(): array
@@ -183,6 +279,17 @@ class GastronomiaAnaliticoReporteExport implements FromView, ShouldAutoSize, Wit
                 if (trim($this->subtitulo) !== '') {
                     $filaSub = $filaTit + 1;
                     $sheet->mergeCells('A'.$filaSub.':'.$colUltima.$filaSub);
+                }
+
+                foreach ($this->filasHeaderEmpresaExcel as $filaHeader) {
+                    $sheet->mergeCells('A'.$filaHeader.':'.$colUltima.$filaHeader);
+                    $sheet->getStyle('A'.$filaHeader.':'.$colUltima.$filaHeader)->applyFromArray([
+                        'font' => ['bold' => true, 'name' => 'Arial'],
+                        'fill' => [
+                            'fillType' => Fill::FILL_SOLID,
+                            'color' => ['rgb' => 'D6EAF8'],
+                        ],
+                    ]);
                 }
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
