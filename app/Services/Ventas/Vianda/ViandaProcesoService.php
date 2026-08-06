@@ -11,6 +11,7 @@ use App\Models\Ventas\ViandaTipoMenu;
 use App\Models\Ventas\ViandaUsuario;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
+use App\Support\Ventas\Vianda\ViandaCentrocostoEmpleadoSupport;
 use App\Support\Ventas\Vianda\ViandaConsumoLimiteDiarioSupport;
 use App\Support\Ventas\ViandaDiaSemanaSupport;
 use Carbon\Carbon;
@@ -200,6 +201,8 @@ final class ViandaProcesoService
         $empresaId = (int) $cfg->empresa_id;
         $jornada = $this->jornadaService->exigirJornadaAbierta($empresaId);
 
+        $this->completarCentrocostoDesdeEmpleado($usuario, $empresaId);
+
         $menu = $this->menuDelDia($usuario);
         $permitidos = array_flip($menu['articulos_permitidos']);
 
@@ -290,6 +293,29 @@ final class ViandaProcesoService
         $voucher = $this->voucherService->emitir($consumo, $cfg);
 
         return ['consumo' => $consumo, 'voucher' => $voucher];
+    }
+
+    /**
+     * Usuario sin centro de costo (Anita no lo trae): se toma el del legajo de sueldos
+     * por documento antes de marchar, para que el consumo quede imputado.
+     */
+    private function completarCentrocostoDesdeEmpleado(ViandaUsuario $usuario, int $empresaId): void
+    {
+        if ((int) ($usuario->centrocosto_id ?? 0) > 0) {
+            return;
+        }
+
+        $centrocostoId = ViandaCentrocostoEmpleadoSupport::centrocostoIdPorDocumento(
+            $usuario->codigo_usuario,
+            $empresaId,
+        );
+
+        if ($centrocostoId === null) {
+            return;
+        }
+
+        $usuario->centrocosto_id = $centrocostoId;
+        $usuario->save();
     }
 
     /**

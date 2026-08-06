@@ -30,6 +30,7 @@ class ValidacionViandaUsuario extends FormRequest
     {
         $id = (int) $this->route('id');
         $empresaId = (int) $this->input('empresa_id');
+        $esAlta = $id <= 0;
 
         return [
             'empresa_id' => 'required|integer|exists:empresa,id',
@@ -42,7 +43,8 @@ class ValidacionViandaUsuario extends FormRequest
                     ->ignore($id > 0 ? $id : null),
             ],
             'nombre' => 'required|string|max:255',
-            'password' => 'required|string|max:15',
+            // En edición la clave puede no viajar (modo consulta la oculta): sin valor se conserva la actual.
+            'password' => ($esAlta ? 'required' : 'nullable').'|string|max:15',
             'centrocosto_id' => 'required|integer|exists:centrocosto,id',
             'tipo_usuario' => ['required', Rule::in(ViandaUsuarioTipoSupport::tiposValidos())],
             'vianda_tipo_menu_id' => 'nullable|integer|exists:vianda_tipo_menu,id',

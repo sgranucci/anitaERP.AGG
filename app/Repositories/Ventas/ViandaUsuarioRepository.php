@@ -69,7 +69,13 @@ class ViandaUsuarioRepository implements ViandaUsuarioRepositoryInterface
     public function update(array $data, $id)
     {
         $registro = $this->model->findOrFail($id);
-        $registro->update($this->filtrarCabecera($data));
+
+        $cabecera = $this->filtrarCabecera($data);
+        if (! array_key_exists('password', $cabecera) || trim((string) $cabecera['password']) === '') {
+            unset($cabecera['password']);
+        }
+
+        $registro->update($cabecera);
         $registro = $registro->fresh(['empresa', 'centrocosto', 'tipoMenu']);
 
         $centrocostoId = (int) ($registro->centrocosto_id ?? 0);

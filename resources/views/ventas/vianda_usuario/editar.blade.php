@@ -39,6 +39,7 @@
                 @method('PUT')
                 @if ($modoConsulta)
                     <input type="hidden" name="origen" value="modal_consulta">
+                    <input type="hidden" name="vista" value="consulta">
                 @endif
                 <div class="card-body @if($soloLecturaConsulta) pe-none @endif" @if($soloLecturaConsulta) style="opacity:.92" @endif>
                     @include('ventas.vianda_usuario.form', ['soloConsulta' => $modoConsulta])
