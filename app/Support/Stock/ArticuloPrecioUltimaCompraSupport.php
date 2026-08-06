@@ -279,7 +279,39 @@ final class ArticuloPrecioUltimaCompraSupport
     }
 
     /**
+     * Precio de línea COM en moneda local (pesos), misma convención que Anita recepmov / stkmae:
+     * si la moneda no es la local (o la línea trae cotización de divisa), precio × cotización.
+     */
+    public static function precioUnitarioMonedaLocal(float $precio, ?int $monedaId, ?float $cotizacion): float
+    {
+        if ($precio <= 0) {
+            return 0.0;
+        }
+
+        $monedaLocalId = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
+        $monedaId = (int) ($monedaId ?? 0);
+        $cotizacion = (float) ($cotizacion ?? 1);
+        if ($cotizacion <= 0) {
+            $cotizacion = 1.0;
+        }
+
+        // Divisa explícita → convertir
+        if ($monedaId > 0 && $monedaId !== $monedaLocalId) {
+            return round($precio * $cotizacion, 6);
+        }
+
+        // COM importadas desde Anita: a veces quedan moneda=PESOS con precio en divisa
+        // y la cotización real en la línea (recv_cotizacion).
+        if ($cotizacion > 1.0000001) {
+            return round($precio * $cotizacion, 6);
+        }
+
+        return round($precio, 6);
+    }
+
+    /**
      * Últimas N recepciones COM confirmadas con precio &gt; 0 (más recientes primero).
+     * Los precios se devuelven en moneda local (pesos).
      *
      * @param  list<int>  $articuloIds
      * @return array<int, list<float>> articulo_id => precios (máx. $limite)
@@ -310,6 +342,8 @@ final class ArticuloPrecioUltimaCompraSupport
             ->get([
                 'rpa.articulo_id',
                 'rpa.precio',
+                'rpa.moneda_id',
+                'rpa.cotizacion',
             ]);
 
         $out = [];
@@ -324,7 +358,15 @@ final class ArticuloPrecioUltimaCompraSupport
             if (count($out[$articuloId]) >= $limite) {
                 continue;
             }
-            $out[$articuloId][] = round((float) $fila->precio, 6);
+            $precioLocal = self::precioUnitarioMonedaLocal(
+                (float) $fila->precio,
+                isset($fila->moneda_id) ? (int) $fila->moneda_id : null,
+                isset($fila->cotizacion) ? (float) $fila->cotizacion : null,
+            );
+            if ($precioLocal <= 0) {
+                continue;
+            }
+            $out[$articuloId][] = $precioLocal;
         }
 
         return $out;
@@ -383,13 +425,24 @@ final class ArticuloPrecioUltimaCompraSupport
             ->get([
                 'rpa.articulo_id',
                 'rpa.precio',
+                'rpa.moneda_id',
+                'rpa.cotizacion',
                 'rp.fecha',
             ]);
 
         foreach ($recepciones as $fila) {
             $articuloId = (int) $fila->articulo_id;
-            $precio = (float) ($fila->precio ?? 0);
-            if ($articuloId <= 0 || $precio <= 0) {
+            $precioRaw = (float) ($fila->precio ?? 0);
+            if ($articuloId <= 0 || $precioRaw <= 0) {
+                continue;
+            }
+
+            $precio = self::precioUnitarioMonedaLocal(
+                $precioRaw,
+                isset($fila->moneda_id) ? (int) $fila->moneda_id : null,
+                isset($fila->cotizacion) ? (float) $fila->cotizacion : null,
+            );
+            if ($precio <= 0) {
                 continue;
             }
 
@@ -399,8 +452,8 @@ final class ArticuloPrecioUltimaCompraSupport
             }
 
             $candidatos[$articuloId] = [
-                'precio' => round($precio, 6),
-                'moneda_id' => null,
+                'precio' => $precio,
+                'moneda_id' => (int) config('cotizacion.ID_MONEDA_DEFAULT', 1),
                 'origen' => self::ORIGEN_ERP_COM,
                 'ref_ts' => $refTs,
             ];

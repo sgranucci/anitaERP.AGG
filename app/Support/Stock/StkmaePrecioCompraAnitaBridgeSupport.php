@@ -139,7 +139,7 @@ final class StkmaePrecioCompraAnitaBridgeSupport
 
     /**
      * Push stkm_pre_compra3 (y PPP) en artículos destino al confirmar transferencia de stock.
-     * Usa precio_costo_destino (última compra del origen, ÷ coef. si depósito Fórmulas).
+     * Usa precio_costo_destino (TITO: promedio 3 compras; resto: última compra; ÷ coef. si depósito Fórmulas).
      */
     public static function actualizarDesdeTransferencia(Transferencia_Mercaderia $transferencia): int
     {

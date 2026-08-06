@@ -23,6 +23,7 @@ use App\Support\Compras\RequisicionAnitaSyncEstado;
 use App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport;
 use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
+use App\Support\Database\MysqlContencionSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use Auth;
 use Carbon\Carbon;
@@ -137,44 +138,64 @@ class RequisicionService
         $cabecera = self::armaCabecera($data);
         $syncAnitaActivo = config('requisicion.anita.sync_activo', true) && ! $modoProvisorio;
 
-        DB::beginTransaction();
-        $anitaIntentada = false;
-        $numerorequisicion = null;
-
         try {
-            $requisicion = $this->requisicionRepository->create($cabecera);
-            $numerorequisicion = (int) $requisicion->numerorequisicion;
+            $requisicion = MysqlContencionSupport::ejecutarConReintento(
+                function () use ($cabecera, $data, $request, $modoProvisorio, $syncAnitaActivo) {
+                    DB::beginTransaction();
+                    $anitaIntentada = false;
+                    $numerorequisicion = null;
 
-            $this->requisicion_estadoRepository->create($data, $requisicion->id);
+                    try {
+                        $requisicion = $this->requisicionRepository->create($cabecera);
+                        $numerorequisicion = (int) $requisicion->numerorequisicion;
 
-            $payloadArticulos = array_merge($data, ['fecha' => $cabecera['fecha']]);
-            $this->requisicion_articuloRepository->syncFromRequest($payloadArticulos, $requisicion->id);
+                        $this->requisicion_estadoRepository->create($data, $requisicion->id);
 
-            $this->requisicion_archivoRepository->create($request, $requisicion->id);
+                        $payloadArticulos = array_merge($data, ['fecha' => $cabecera['fecha']]);
+                        $this->requisicion_articuloRepository->syncFromRequest($payloadArticulos, $requisicion->id);
 
-            if (! $modoProvisorio) {
-                $this->arbolaprobacionService->procesaArbolaprobacion('RE', $requisicion->id, 'insert');
-            }
+                        $this->requisicion_archivoRepository->create($request, $requisicion->id);
 
-            if ($syncAnitaActivo) {
-                $anitaIntentada = true;
-                $requisicion = $this->requisicionRepository->find($requisicion->id);
-                if (! $requisicion) {
-                    throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
-                }
-                $this->requisicionAnitaSyncService->escribirCreacion($requisicion);
-                $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
-            }
+                        if (! $modoProvisorio) {
+                            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $requisicion->id, 'insert');
+                        }
 
-            DB::commit();
+                        if ($syncAnitaActivo) {
+                            $anitaIntentada = true;
+                            $requisicion = $this->requisicionRepository->find($requisicion->id);
+                            if (! $requisicion) {
+                                throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
+                            }
+                            $this->requisicionAnitaSyncService->escribirCreacion($requisicion);
+                            $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
+                        }
+
+                        DB::commit();
+
+                        return $requisicion;
+                    } catch (\Throwable $e) {
+                        DB::rollBack();
+
+                        if ($anitaIntentada && $numerorequisicion > 0) {
+                            $this->compensarRollbackAnitaCreacion($numerorequisicion);
+                        }
+
+                        throw $e;
+                    }
+                },
+                [
+                    'contexto' => 'requisicion.guarda',
+                    'max_intentos' => 5,
+                    'espera_inicial_ms' => 200,
+                ]
+            );
         } catch (\Throwable $e) {
-            DB::rollBack();
+            Log::error('RequisicionService::guardaRequisicion falló', [
+                'usuario_id' => Auth::id(),
+                'error' => $e->getMessage(),
+            ]);
 
-            if ($anitaIntentada && $numerorequisicion > 0) {
-                $this->compensarRollbackAnitaCreacion($numerorequisicion);
-            }
-
-            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
+            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $syncAnitaActivo)];
         }
 
         return [
@@ -235,59 +256,78 @@ class RequisicionService
         }
 
         $syncAnitaActivo = config('requisicion.anita.sync_activo', true);
-        $numerorequisicion = (int) $existente->numerorequisicion;
-
-        DB::beginTransaction();
-        $anitaIntentada = false;
 
         try {
-            $this->requisicionRepository->renumerarProvisorioSiColisionaGlobal($id);
-            $existente = $this->requisicionRepository->find($id);
-            $numerorequisicion = (int) $existente->numerorequisicion;
+            MysqlContencionSupport::ejecutarConReintento(
+                function () use ($id, $pendiente, $ccArbol, $observacionEnvio, $syncAnitaActivo) {
+                    DB::beginTransaction();
+                    $anitaIntentada = false;
+                    $numerorequisicion = 0;
 
-            $payloadEstado = ['estado' => $pendiente];
-            if ($ccArbol > 0) {
-                $payloadEstado['centrocostodestino_arbol_id'] = $ccArbol;
-            }
-            $obsEnvio = $this->arbolaprobacionService->normalizarObservacionEnvio($observacionEnvio);
-            $obsHistoria = 'Confirmación desde provisorio';
-            if ($obsEnvio !== '') {
-                $obsHistoria .= ': '.$obsEnvio;
-            }
-            $this->requisicion_estadoRepository->creaEstado(
-                $id,
-                Carbon::now()->toDateTimeString(),
-                $pendiente,
-                Auth::user()->id,
-                $obsHistoria
+                    try {
+                        $this->requisicionRepository->renumerarProvisorioSiColisionaGlobal($id);
+                        $existente = $this->requisicionRepository->find($id);
+                        $numerorequisicion = (int) $existente->numerorequisicion;
+
+                        $payloadEstado = ['estado' => $pendiente];
+                        if ($ccArbol > 0) {
+                            $payloadEstado['centrocostodestino_arbol_id'] = $ccArbol;
+                        }
+                        $obsEnvio = $this->arbolaprobacionService->normalizarObservacionEnvio($observacionEnvio);
+                        $obsHistoria = 'Confirmación desde provisorio';
+                        if ($obsEnvio !== '') {
+                            $obsHistoria .= ': '.$obsEnvio;
+                        }
+                        $this->requisicion_estadoRepository->creaEstado(
+                            $id,
+                            Carbon::now()->toDateTimeString(),
+                            $pendiente,
+                            Auth::user()->id,
+                            $obsHistoria
+                        );
+                        $this->requisicionRepository->update($payloadEstado, $id);
+
+                        $opcionesArbol = [];
+                        if ($obsEnvio !== '') {
+                            $opcionesArbol['observacion_envio'] = $obsEnvio;
+                        }
+                        $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert', $opcionesArbol);
+
+                        if ($syncAnitaActivo) {
+                            $anitaIntentada = true;
+                            $requisicion = $this->requisicionRepository->find($id);
+                            if (! $requisicion) {
+                                throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
+                            }
+                            $this->requisicionAnitaSyncService->escribirCreacion($requisicion);
+                            $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
+                        }
+
+                        DB::commit();
+                    } catch (\Throwable $e) {
+                        DB::rollBack();
+
+                        if ($anitaIntentada && $numerorequisicion > 0) {
+                            $this->compensarRollbackAnitaCreacion($numerorequisicion);
+                        }
+
+                        throw $e;
+                    }
+                },
+                [
+                    'contexto' => 'requisicion.confirmar',
+                    'max_intentos' => 5,
+                    'espera_inicial_ms' => 200,
+                ]
             );
-            $this->requisicionRepository->update($payloadEstado, $id);
-
-            $opcionesArbol = [];
-            if ($obsEnvio !== '') {
-                $opcionesArbol['observacion_envio'] = $obsEnvio;
-            }
-            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert', $opcionesArbol);
-
-            if ($syncAnitaActivo) {
-                $anitaIntentada = true;
-                $requisicion = $this->requisicionRepository->find($id);
-                if (! $requisicion) {
-                    throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
-                }
-                $this->requisicionAnitaSyncService->escribirCreacion($requisicion);
-                $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
-            }
-
-            DB::commit();
         } catch (\Throwable $e) {
-            DB::rollBack();
+            Log::error('RequisicionService::confirmarRequisicion falló', [
+                'requisicion_id' => $id,
+                'usuario_id' => Auth::id(),
+                'error' => $e->getMessage(),
+            ]);
 
-            if ($anitaIntentada && $numerorequisicion > 0) {
-                $this->compensarRollbackAnitaCreacion($numerorequisicion);
-            }
-
-            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
+            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $syncAnitaActivo)];
         }
 
         return ['mensaje' => 'ok'];
@@ -613,44 +653,63 @@ class RequisicionService
             && RequisicionAnitaColisionSupport::existeNroEnReqmae((int) $existente->numerorequisicion);
         $numerorequisicion = (int) $existente->numerorequisicion;
 
-        DB::beginTransaction();
-        $anitaIntentada = false;
-
         try {
-            $cabecera = self::armaCabecera($data);
-            $cabecera['estado'] = $data['estado'] ?? null;
-            unset($cabecera['creousuario_id']);
+            MysqlContencionSupport::ejecutarConReintento(
+                function () use ($request, $data, $id, $pendiente, $esProvisorio, $syncAnitaActivo, $habiaEnAnita, $numerorequisicion) {
+                    DB::beginTransaction();
+                    $anitaIntentada = false;
 
-            $this->requisicionRepository->update($cabecera, $id);
+                    try {
+                        $cabecera = self::armaCabecera($data);
+                        $cabecera['estado'] = $data['estado'] ?? null;
+                        unset($cabecera['creousuario_id']);
 
-            $payloadArticulos = array_merge($data, ['fecha' => $cabecera['fecha']]);
-            $this->requisicion_articuloRepository->syncFromRequest($payloadArticulos, $id);
+                        $this->requisicionRepository->update($cabecera, $id);
 
-            $this->requisicion_archivoRepository->update($request, $id);
+                        $payloadArticulos = array_merge($data, ['fecha' => $cabecera['fecha']]);
+                        $this->requisicion_articuloRepository->syncFromRequest($payloadArticulos, $id);
 
-            if (($data['estado'] ?? '') == $pendiente && ! $esProvisorio) {
-                $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert');
-            }
+                        $this->requisicion_archivoRepository->update($request, $id);
 
-            if ($syncAnitaActivo) {
-                $anitaIntentada = true;
-                $requisicion = $this->requisicionRepository->find($id);
-                if (! $requisicion) {
-                    throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
-                }
-                $this->requisicionAnitaSyncService->escribirActualizacion($requisicion);
-                $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
-            }
+                        if (($data['estado'] ?? '') == $pendiente && ! $esProvisorio) {
+                            $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'insert');
+                        }
 
-            DB::commit();
+                        if ($syncAnitaActivo) {
+                            $anitaIntentada = true;
+                            $requisicion = $this->requisicionRepository->find($id);
+                            if (! $requisicion) {
+                                throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
+                            }
+                            $this->requisicionAnitaSyncService->escribirActualizacion($requisicion);
+                            $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
+                        }
+
+                        DB::commit();
+                    } catch (\Throwable $e) {
+                        DB::rollBack();
+
+                        if ($anitaIntentada) {
+                            $this->compensarRollbackAnitaActualizacion((int) $id, $numerorequisicion, $habiaEnAnita);
+                        }
+
+                        throw $e;
+                    }
+                },
+                [
+                    'contexto' => 'requisicion.actualizar',
+                    'max_intentos' => 5,
+                    'espera_inicial_ms' => 200,
+                ]
+            );
         } catch (\Throwable $e) {
-            DB::rollBack();
+            Log::error('RequisicionService::actualizaRequisicion falló', [
+                'requisicion_id' => (int) $id,
+                'usuario_id' => Auth::id(),
+                'error' => $e->getMessage(),
+            ]);
 
-            if ($anitaIntentada) {
-                $this->compensarRollbackAnitaActualizacion((int) $id, $numerorequisicion, $habiaEnAnita);
-            }
-
-            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
+            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $syncAnitaActivo)];
         }
 
         return ['mensaje' => 'ok', 'modo_provisorio' => $esProvisorio];
@@ -675,31 +734,50 @@ class RequisicionService
             && RequisicionAnitaColisionSupport::existeNroEnReqmae((int) $existente->numerorequisicion);
         $numerorequisicion = (int) $existente->numerorequisicion;
 
-        DB::beginTransaction();
-        $anitaIntentada = false;
-
         try {
-            $this->requisicionRepository->update(['proveedor_id' => $proveedorId], $id);
+            MysqlContencionSupport::ejecutarConReintento(
+                function () use ($id, $proveedorId, $syncAnitaActivo, $habiaEnAnita, $numerorequisicion) {
+                    DB::beginTransaction();
+                    $anitaIntentada = false;
 
-            if ($syncAnitaActivo) {
-                $anitaIntentada = true;
-                $requisicion = $this->requisicionRepository->find($id);
-                if (! $requisicion) {
-                    throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
-                }
-                $this->requisicionAnitaSyncService->escribirActualizacion($requisicion);
-                $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
-            }
+                    try {
+                        $this->requisicionRepository->update(['proveedor_id' => $proveedorId], $id);
 
-            DB::commit();
+                        if ($syncAnitaActivo) {
+                            $anitaIntentada = true;
+                            $requisicion = $this->requisicionRepository->find($id);
+                            if (! $requisicion) {
+                                throw new \RuntimeException('No se pudo recargar la requisición para sincronizar con Anita.');
+                            }
+                            $this->requisicionAnitaSyncService->escribirActualizacion($requisicion);
+                            $this->requisicionAnitaSyncService->marcarSyncOk($requisicion);
+                        }
+
+                        DB::commit();
+                    } catch (\Throwable $e) {
+                        DB::rollBack();
+
+                        if ($anitaIntentada) {
+                            $this->compensarRollbackAnitaActualizacion($id, $numerorequisicion, $habiaEnAnita);
+                        }
+
+                        throw $e;
+                    }
+                },
+                [
+                    'contexto' => 'requisicion.actualizar_proveedor_aprobada',
+                    'max_intentos' => 5,
+                    'espera_inicial_ms' => 200,
+                ]
+            );
         } catch (\Throwable $e) {
-            DB::rollBack();
+            Log::error('RequisicionService::actualizaProveedorSugeridoRequisicionAprobada falló', [
+                'requisicion_id' => $id,
+                'usuario_id' => Auth::id(),
+                'error' => $e->getMessage(),
+            ]);
 
-            if ($anitaIntentada) {
-                $this->compensarRollbackAnitaActualizacion($id, $numerorequisicion, $habiaEnAnita);
-            }
-
-            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $anitaIntentada)];
+            return ['mensaje' => 'error', 'errores' => $this->mensajeErrorTransaccion($e, $syncAnitaActivo)];
         }
 
         return ['mensaje' => 'ok', 'solo_proveedor_aprobada' => true];
@@ -1329,7 +1407,13 @@ class RequisicionService
 
     private function mensajeErrorTransaccion(\Throwable $e, bool $anitaInvolucrada): string
     {
-        $mensaje = $e->getMessage();
+        if (MysqlContencionSupport::esErrorReintentable($e)) {
+            $mensaje = 'No se pudo grabar por contención de base de datos (deadlock o espera de lock). '
+                .'Se reintentó automáticamente sin éxito; vuelva a intentar en unos segundos.';
+        } else {
+            $mensaje = $e->getMessage();
+        }
+
         if ($anitaInvolucrada) {
             $mensaje .= ' Se intentó compensar los datos en Anita; si el problema persiste ejecute '
                 .'php artisan requisicion:reintentar-sync-anita.';

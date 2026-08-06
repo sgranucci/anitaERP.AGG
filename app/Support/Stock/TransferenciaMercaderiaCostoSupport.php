@@ -5,12 +5,23 @@ namespace App\Support\Stock;
 use App\Models\Stock\Articulo;
 
 /**
- * Costo unitario para líneas de transferencia: última compra (ERP → Anita → artículo).
+ * Costo unitario para líneas de transferencia.
+ *
+ * - Artículo TITO (`fl_precio_promedio_transferencia`): promedio de las 3 últimas compras
+ *   (misma base que el asiento TRCONT).
+ * - Resto: última compra (ERP → Anita → artículo).
  */
 final class TransferenciaMercaderiaCostoSupport
 {
     public static function resolverCostoUltimaCompra(Articulo $articulo): float
     {
+        if (ArticuloPrecioTransferenciaContableSupport::usaPrecioPromedio($articulo)) {
+            $promedio = ArticuloPrecioPromedioCompraSupport::resolverPrecioUnitario($articulo);
+            if ($promedio !== null && (float) $promedio > 0) {
+                return round((float) $promedio, 6);
+            }
+        }
+
         $dato = ArticuloPrecioUltimaCompraSupport::resolverPorArticulo($articulo);
         $precio = $dato['precio'] ?? null;
 
