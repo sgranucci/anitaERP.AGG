@@ -1357,6 +1357,17 @@ Route::get('stock/etiqueta-surmar/{etiquetaId}/zpl', 'Stock\RecepcionProveedorSu
  */
 Route::get('stock/trazabilidad-surmar', 'Stock\TrazabilidadSurmarController@index')->name('trazabilidad_surmar');
 
+Route::get('stock/certificado-senasa-surmar', 'Stock\CertificadoSenasaSurmarController@index')->name('certificado_senasa_surmar');
+Route::get('stock/certificado-senasa-surmar/crear', 'Stock\CertificadoSenasaSurmarController@crear')->name('crear_certificado_senasa_surmar');
+Route::post('stock/certificado-senasa-surmar', 'Stock\CertificadoSenasaSurmarController@guardar')->name('guardar_certificado_senasa_surmar');
+Route::get('stock/certificado-senasa-surmar/{id}/cargar', 'Stock\CertificadoSenasaSurmarController@cargar')->name('cargar_certificado_senasa_surmar');
+Route::post('stock/certificado-senasa-surmar/{id}/linea', 'Stock\CertificadoSenasaSurmarController@apiGuardarLinea')->name('api_guardar_linea_certificado_senasa_surmar');
+Route::delete('stock/certificado-senasa-surmar/{id}/linea/{lineaId}', 'Stock\CertificadoSenasaSurmarController@apiEliminarLinea')->name('api_eliminar_linea_certificado_senasa_surmar');
+Route::post('stock/certificado-senasa-surmar/resolver-etiqueta', 'Stock\CertificadoSenasaSurmarController@apiResolverEtiqueta')->name('api_resolver_etiqueta_certificado_senasa_surmar');
+Route::post('stock/certificado-senasa-surmar/{id}/confirmar', 'Stock\CertificadoSenasaSurmarController@confirmar')->name('confirmar_certificado_senasa_surmar');
+Route::post('stock/certificado-senasa-surmar/{id}/anular', 'Stock\CertificadoSenasaSurmarController@anular')->name('anular_certificado_senasa_surmar');
+Route::get('stock/certificado-senasa-surmar/{id}/xml', 'Stock\CertificadoSenasaSurmarController@descargarXml')->name('descargar_xml_certificado_senasa_surmar');
+
 /*
  * Recuento de inventario por depósito
  */

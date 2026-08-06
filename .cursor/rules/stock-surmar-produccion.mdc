@@ -20,7 +20,7 @@ Todas las migraciones `*surmar*` (empresa, tablas etiqueta, menú/permisos, colu
 
 | Capa | Convención |
 |---|---|
-| Menú / URL | `stock/recepcion-proveedor-surmar`, `stock/movimiento-surmar`, `stock/trazabilidad-surmar` |
+| Menú / URL | `stock/recepcion-proveedor-surmar`, `stock/movimiento-surmar`, `stock/trazabilidad-surmar`, `stock/certificado-senasa-surmar` |
 | Permisos | slugs `*-surmar` (propios; también para Ferli) |
 | Controllers / Services | `*Surmar*` — no branch en controllers AGG |
 | Vistas / JS | `…/surmar/` bajo el recurso |

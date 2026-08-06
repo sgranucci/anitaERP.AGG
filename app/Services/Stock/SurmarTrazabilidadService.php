@@ -102,6 +102,26 @@ class SurmarTrazabilidadService
             $eventos[] = $mov;
         }
 
+        $certsSenasa = $this->certificadosSenasaDeEtiqueta($etiquetaId);
+        foreach ($certsSenasa as $cs) {
+            $eventos[] = [
+                'tipo' => 'CERT_SENASA',
+                'fecha' => $cs['fecha'] ?? null,
+                'hora' => $cs['hora_piqueo'] ?? null,
+                'titulo' => 'Certificado SENASA '.$cs['etiqueta'],
+                'detalle' => sprintf(
+                    'Estado %s · Remito AFIP %s · Neto asociado %.2f',
+                    $cs['estado'] ?? '—',
+                    $cs['cod_remito'] ?: '—',
+                    (float) ($cs['peso_neto'] ?? 0)
+                ),
+                'ref' => [
+                    'url' => route('cargar_certificado_senasa_surmar', $cs['id']),
+                    'label' => 'Abrir certificado',
+                ],
+            ];
+        }
+
         $consumosDeEsta = $this->consumosDondeSaleEsta($etiquetaId);
         foreach ($consumosDeEsta as $c) {
             $eventos[] = [
@@ -148,7 +168,49 @@ class SurmarTrazabilidadService
             'consumos_de_esta' => $consumosDeEsta,
             'etiquetas_hijas' => $hijas,
             'recepcion' => $recepcion,
+            'certificados_senasa' => $certsSenasa,
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function certificadosSenasaDeEtiqueta(int $etiquetaId): array
+    {
+        if (! Schema::hasTable('certificado_senasa_surmar_etiqueta')) {
+            return [];
+        }
+
+        $rows = DB::table('certificado_senasa_surmar_etiqueta as cse')
+            ->join('certificado_senasa_surmar as cs', 'cs.id', '=', 'cse.certificado_senasa_surmar_id')
+            ->where('cse.etiqueta_id', $etiquetaId)
+            ->where('cse.empresa_id', SurmarSupport::EMPRESA_ID)
+            ->orderByDesc('cs.id')
+            ->get([
+                'cs.id',
+                'cs.numero',
+                'cs.serie',
+                'cs.fecha',
+                'cs.estado',
+                'cs.cod_remito',
+                'cse.peso_neto',
+                'cse.hora_piqueo',
+            ]);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = [
+                'id' => (int) $r->id,
+                'etiqueta' => ($r->serie ?? 'A').'-'.str_pad((string) $r->numero, 6, '0', STR_PAD_LEFT),
+                'fecha' => $r->fecha ? date('d/m/Y', strtotime((string) $r->fecha)) : null,
+                'hora_piqueo' => $r->hora_piqueo,
+                'estado' => $r->estado,
+                'cod_remito' => $r->cod_remito,
+                'peso_neto' => (float) $r->peso_neto,
+            ];
+        }
+
+        return $out;
     }
 
     /** @return list<array<string, mixed>> */
