@@ -15,12 +15,16 @@ final class PadronIibbArchivoRutaSupport
     /** @return list<string> */
     public static function directoriosPermitidos(): array
     {
-        return [
-            realpath(storage_path('app')) ?: storage_path('app'),
-            '/home/sergio/padroncaba',
-            '/home/sergio/padronarba',
-            '/home/sergio/padronsantafe',
-        ];
+        $directorios = [realpath(storage_path('app')) ?: storage_path('app')];
+
+        foreach (preg_split('/[,;]+/', (string) config('padrones_iibb.directorios', '')) ?: [] as $directorio) {
+            $directorio = trim($directorio);
+            if ($directorio !== '') {
+                $directorios[] = rtrim($directorio, DIRECTORY_SEPARATOR);
+            }
+        }
+
+        return array_values(array_unique($directorios));
     }
 
     /**
@@ -37,7 +41,13 @@ final class PadronIibbArchivoRutaSupport
 
         $real = realpath($path);
         if ($real === false || ! is_file($real) || ! is_readable($real)) {
-            throw new InvalidArgumentException("No existe o no se puede leer el archivo: {$path}");
+            // Caso típico: el archivo está en un home de usuario, que no es
+            // accesible para el usuario del servidor web ni para el worker.
+            throw new InvalidArgumentException(
+                "No existe o no se puede leer el archivo: {$path}. "
+                . 'Si el archivo existe, copielo a ' . storage_path('app/padrones')
+                . ' (los directorios personales no son legibles por el servidor).'
+            );
         }
 
         foreach (self::directoriosPermitidos() as $base) {
@@ -49,7 +59,8 @@ final class PadronIibbArchivoRutaSupport
         }
 
         throw new InvalidArgumentException(
-            'La ruta no está en un directorio permitido (storage/app, /home/sergio/padroncaba, /home/sergio/padronarba, /home/sergio/padronsantafe).'
+            'La ruta no está en un directorio permitido. Permitidos: '
+            . implode(', ', self::directoriosPermitidos())
         );
     }
 

@@ -24,7 +24,27 @@ return [
 
     'batch_santafe' => (int) env('PADRON_IIBB_BATCH_SANTAFE', 3000),
 
+    /** Córdoba, Entre Ríos, Misiones y Tucumán (padron_iibb_tasa). */
+    'batch_provincia' => (int) env('PADRON_IIBB_BATCH_PROVINCIA', 3000),
+
     'pause_ms' => (int) env('PADRON_IIBB_PAUSE_MS', 20),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Directorios habilitados para el campo "ruta en servidor"
+    |--------------------------------------------------------------------------
+    |
+    | Separados por coma. storage/app siempre está permitido y no hace falta
+    | listarlo. Evita que la pantalla pueda leer cualquier archivo del servidor.
+    |
+    */
+
+    'directorios' => env(
+        'PADRON_IIBB_DIRS',
+        '/home/sergio/padroncaba,/home/sergio/padronarba,/home/sergio/padronsantafe,'
+        .         '/home/sergio/padronmisiones,/home/sergio/padroncordoba,'
+        . '/home/sergio/padronerios,/home/sergio/padrontucuman'
+    ),
 
     /** Destinatarios del mail al terminar (o fallar) la carga. Separados por coma. */
     'notificar_email' => env('PADRON_IIBB_NOTIFICAR_EMAIL', env('QUEUE_VERIFICACION_PICO_EMAIL', '')),

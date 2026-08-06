@@ -4,11 +4,6 @@ namespace App\Http\Controllers\Configuracion;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\File;
-use Maatwebsite\Excel\Facades\Excel;
-use Maatwebsite\Excel\HeadingRowImport;
-use App\Imports\Configuracion\Padron_IibbImport;
 use App\Http\Requests\ValidacionPadron_Iibb;
 use App\Repositories\Configuracion\Padron_IibbRepositoryInterface;
 use App\Repositories\Configuracion\Padron_Iibb_TasaRepositoryInterface;
@@ -17,15 +12,16 @@ use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use Illuminate\Support\Facades\App;
 use Illuminate\Validation\Rule;
-use App\Jobs\Padron_Iibb;
 use App\Jobs\Configuracion\ImportarPadronIibbArbaJob;
 use App\Jobs\Configuracion\ImportarPadronIibbCabaJob;
+use App\Jobs\Configuracion\ImportarPadronIibbProvinciaJob;
 use App\Jobs\Configuracion\ImportarPadronIibbSantaFeJob;
 use App\Support\Configuracion\PadronIibbArchivoRutaSupport;
-use Illuminate\Support\Facades\Bus;
+use App\Support\Configuracion\PadronIibbCargaRegistroSupport;
+use App\Support\Configuracion\PadronIibbEstadoPanelSupport;
+use App\Support\Configuracion\PadronIibb\PadronIibbParserFactory;
 use Illuminate\Support\Facades\Log;
 use DB;
-use DateTime;
 use InvalidArgumentException;
 use Throwable;
 
@@ -200,8 +196,19 @@ class Padron_IibbController extends Controller
             'T' => 'Tasas',
             'C' => 'Coeficientes'
         ];
-		
-        return view('configuracion.padron_iibb.crearimportacion', compact('tipopadron_enum'));
+
+        PadronIibbCargaRegistroSupport::cerrarColgadas();
+
+        $ultimas_cargas = PadronIibbEstadoPanelSupport::ultimasCargas();
+        $cobertura = PadronIibbEstadoPanelSupport::coberturaTasa();
+        $hay_carga_en_proceso = $ultimas_cargas->contains(fn ($carga) => $carga->enProceso());
+
+        return view('configuracion.padron_iibb.crearimportacion', compact(
+            'tipopadron_enum',
+            'ultimas_cargas',
+            'cobertura',
+            'hay_carga_en_proceso'
+        ));
     }
 
 	public function importarPadron_Iibb(Request $request)
@@ -230,9 +237,14 @@ class Padron_IibbController extends Controller
         // Lee provincia y arma archivos en funcion de jurisdiccion
         $provincia = $this->provinciaRepository->find($request->provincia_id);
 
-        if ($provincia)
-        {
-            switch ($provincia->jurisdiccion)
+        if (! $provincia) {
+            return back()->withErrors(['provincia_id' => 'No se encontró la provincia indicada.']);
+        }
+
+        // El panel de estado se recalcula con los datos de esta carga.
+        PadronIibbEstadoPanelSupport::olvidarCobertura();
+
+        switch ((int) $provincia->jurisdiccion)
             {
             case 901: // CABA → padron_iibb_caba (cola padrones)
                 try {
@@ -246,7 +258,8 @@ class Padron_IibbController extends Controller
                     (int) config('padrones_iibb.batch_caba', 2000),
                     (int) config('padrones_iibb.pause_ms', 20),
                     false,
-                    $borrarAlTerminar
+                    $borrarAlTerminar,
+                    $this->registrarCarga($provincia, 'IIBB CABA (AGIP)', $archivo)
                 );
 
                 return back()->with(
@@ -265,7 +278,8 @@ class Padron_IibbController extends Controller
                     $archivo,
                     (int) config('padrones_iibb.batch_arba', 5000),
                     (int) config('padrones_iibb.pause_ms', 20),
-                    $borrarAlTerminar
+                    $borrarAlTerminar,
+                    $this->registrarCarga($provincia, 'IIBB ARBA', $archivo)
                 );
 
                 return back()->with(
@@ -286,7 +300,8 @@ class Padron_IibbController extends Controller
                     (int) config('padrones_iibb.batch_santafe', 3000),
                     (int) config('padrones_iibb.pause_ms', 20),
                     false,
-                    $borrarAlTerminar
+                    $borrarAlTerminar,
+                    $this->registrarCarga($provincia, 'IIBB Santa Fe (API PARP)', $archivo)
                 );
 
                 return back()->with(
@@ -294,179 +309,94 @@ class Padron_IibbController extends Controller
                     'Importación Santa Fe (API PARP) encolada. Se procesa en background (cola padrones); no hace falta dejar esta pantalla abierta.'
                 );
 
-            case 914: // Misiones
-                // Borra tasas actuales
-                //$this->padron_iibb_tasaRepository->deletePorProvinciaId($provincia->id);
-                
-                $carpetaArchivo = Self::abreArchivo($request);
-
-                $batch = Bus::batch([])->dispatch();
-
-                if ($provincia->jurisdiccion == 924)
-                    $batch->add(new Padron_Iibb($carpetaArchivo, $provincia->jurisdiccion, $provincia->id, $tipoPadron));
-                else
-                    $batch->add(new Padron_Iibb($carpetaArchivo, $provincia->jurisdiccion, $provincia->id));
-
-                //File::delete($carpetaArchivo);
-                return back()
-                    ->with('mensaje', 'Padrón IIBB importado correctamente');
-                break;
-
-            case 908: // Entre Rios
-                $carpetaArchivo = Self::abreArchivo($request);
-
-                if (($handle = fopen($carpetaArchivo, "r")) !== FALSE) {
-                    while (($linea = fgets($handle)) !== FALSE) {
-
-                        $columnas = explode(";", $linea);
-
-                        if (is_numeric(substr($columnas[0], 0, 1)))
-                        {
-                            $desdeFecha = DateTime::createFromFormat('dmY', $columnas[1]);
-                            $hastaFecha = DateTime::createFromFormat('dmY', $columnas[2]);
-
-                            $arrayPadron_Iibb = [
-                                'cuit' => $columnas[3]
-                            ];
-
-                            $padron_iibb = $this->padron_iibbRepository->findPorCuit($columnas[3]);
-
-                            if ($padron_iibb)
-                                $this->padron_iibbRepository->update($arrayPadron_Iibb, $padron_iibb->id);
-                            else
-                                $padron_iibb = $this->padron_iibbRepository->create($arrayPadron_Iibb);
-
-                            $tasaPercepcion = str_replace(',', '.', $columnas[7]);
-                            $tasaRetencion = str_replace(',', '.', $columnas[8]);
-
-                            $arrayPadron_Iibb_Tasa = [
-                                'padron_iibb_id' => $padron_iibb->id,
-                                'provincia_id' => $provincia->id,
-                                'desdefecha' => $desdeFecha->format('Y-m-d'),
-                                'hastafecha' => $hastaFecha->format('Y-m-d'),
-                                'tasapercepcion' => $tasaPercepcion,
-                                'tasaretencion' => $tasaRetencion,
-                                'tasapercepciondiferencial' => null,
-                                'tasaretenciondiferencial' => null,
-                                'coeficiente' => null,
-                                'riesgofiscal' => null,
-                                'tipocontribuyente' => $columnas[4],
-                                'excluido' => null
-                            ];
-                            $padron_iibb_tasa = $this->padron_iibb_tasaRepository->create($arrayPadron_Iibb_Tasa);
-                        }     
-                    }
-                    fclose($handle);
-                }        
-                break;
-                
-            case 924: // Tucuman
-                $carpetaArchivo = Self::abreArchivo($request);
-
-                if (($handle = fopen($carpetaArchivo, "r")) !== FALSE) {
-                    while (($linea = fgets($handle)) !== FALSE) 
-                    {
-                        $columnas = explode(";", $linea);
-
-                        if (is_numeric(substr($columnas[0], 0, 1)))
-                        {
-                            if ($tipoPadron == 'T') // Tasas
-                            {
-                                $cuit = substr($columnas[0],0,11);
-                                $excluido = substr($columnas[0],13,1);
-                                $coeficiente = (float) substr($columnas[0],191,6);
-
-                                if (substr($columnas[0],16,2) == 'CL')
-                                    $tipoContribuyente = 'L';
-                                else
-                                    $tipoContribuyente = 'C';
-
-                                $nombre = substr($columnas[0],40,60);
-
-                                $fecha = DateTime::createFromFormat('Ymd', substr($columnas[0],20,8));
-                                $desdeFecha = $fecha;
-
-                                $fecha = DateTime::createFromFormat('Ymd', substr($columnas[0],30,8));
-                                $hastaFecha = $fecha;
-
-                                $arrayPadron_Iibb = [
-                                    'cuit' => $cuit,
-                                    'nombre' => $nombre
-                                ];
-
-                                $padron_iibb = $this->padron_iibbRepository->findPorCuit($cuit);
-
-                                if ($padron_iibb)
-                                    $this->padron_iibbRepository->update($arrayPadron_Iibb, $padron_iibb->id);
-                                else
-                                    $padron_iibb = $this->padron_iibbRepository->create($arrayPadron_Iibb);
-
-                                // Busca registro de tasas
-                                $padron_iibb_tasa = $this->padron_iibb_tasaRepository->findPorIdProvincia($padron_iibb->id, $provincia->id);
-
-                                $arrayPadron_Iibb_Tasa = [
-                                        'padron_iibb_id' => $padron_iibb->id,
-                                        'provincia_id' => $provincia->id,
-                                        'nombre' => $nombre,
-                                        'desdefecha' => $desdeFecha->format('Y-m-d'),
-                                        'hastafecha' => $hastaFecha->format('Y-m-d'),
-                                        'tasapercepcion' => null,
-                                        'tasaretencion' => null,
-                                        'tasapercepciondiferencial' => null,
-                                        'tasaretenciondiferencial' => null,
-                                        'coeficiente' => $coeficiente,
-                                        'riesgofiscal' => null,
-                                        'tipocontribuyente' => $tipoContribuyente,
-                                        'excluido' => $excluido
-                                    ];
-
-                                if ($padron_iibb_tasa)
-                                    $padron_iibb_tasa = $this->padron_iibb_tasaRepository->update($arrayPadron_Iibb_Tasa, $padron_iibb_tasa->id);
-                                else
-                                    $padron_iibb_tasa = $this->padron_iibb_tasaRepository->create($arrayPadron_Iibb_Tasa);                                
-                            }
-                            else
-                            {
-                                $cuit = substr($columnas[0],0,11);
-                                $excluido = substr($columnas[0],13,1);
-                                $coeficiente = (float) substr($columnas[0],16,6);
-                                $coeficienteFinal = (float) substr($columnas[0],184,6);
-
-                                $tipoContribuyente = 'C';
-
-                                $nombre = substr($columnas[0],32,60);
-
-                                $fecha = DateTime::createFromFormat('Ymd', substr($columnas[0],24,6)."01");
-                                $desdeFecha = $fecha;
-
-                                $fecha = DateTime::createFromFormat('Ymd', substr($columnas[0],24,6)."01");
-                                $hastaFecha = $fecha->modify('last day of this month');
-
-                                // Busca registro de tasas
-                                $padron_iibb_tasa = $this->padron_coeficiente_tucumanRepository->findPorCuit($cuit);
-
-                                $arrayPadron_Coeficiente_Tucuman = [
-                                        'cuit' => $cuit,
-                                        'nombre' => $nombre,
-                                        'desdefecha' => $desdeFecha->format('Y-m-d'),
-                                        'hastafecha' => $hastaFecha->format('Y-m-d'),
-                                        'coeficiente' => $coeficiente,
-                                        'coeficientefinal' => $coeficienteFinal,
-                                        'tipocontribuyente' => $tipoContribuyente,
-                                        'excluido' => $excluido
-                                    ];
-
-                                if ($padron_iibb_tasa)
-                                    $this->padron_coeficiente_tucumanRepository->update($arrayPadron_Coeficiente_Tucuman, $padron_iibb_tasa->id);
-                                else
-                                    $this->padron_coeficiente_tucumanRepository->create($arrayPadron_Coeficiente_Tucuman);
-                            }
-                        }
-                    }
-                }
-                break;                
+            default: // Córdoba (904), Entre Ríos (908), Misiones (914) y Tucumán (924)
+                return $this->encolarImportacionProvincia($request, $provincia, $tipoPadron);
             }
+    }
+
+    /**
+     * @param  \App\Models\Configuracion\Provincia  $provincia
+     */
+    private function registrarCarga($provincia, string $etiqueta, string $archivo): ?int
+    {
+        return PadronIibbCargaRegistroSupport::iniciar([
+            'provincia_id' => (int) $provincia->id,
+            'jurisdiccion' => (int) $provincia->jurisdiccion,
+            'etiqueta' => $etiqueta,
+            'origen' => PadronIibbCargaRegistroSupport::ORIGEN_PANTALLA,
+            'archivo' => $archivo,
+            'usuario_id' => auth()->id(),
+        ]);
+    }
+
+    /**
+     * Encola las provincias que cargan contra padron_iibb_tasa y el padrón de
+     * coeficientes de Tucumán.
+     *
+     * @param  \App\Models\Configuracion\Provincia  $provincia
+     */
+    private function encolarImportacionProvincia(Request $request, $provincia, ?string $tipoPadron)
+    {
+        $jurisdiccion = (int) $provincia->jurisdiccion;
+
+        if (! PadronIibbParserFactory::soporta($jurisdiccion)) {
+            return back()->withErrors([
+                'provincia_id' => 'Todavía no hay importador de padrón IIBB para ' . $provincia->nombre
+                    . ' (jurisdicción ' . $jurisdiccion . ').',
+            ]);
         }
+
+        $esTucuman = $jurisdiccion === PadronIibbParserFactory::JURISDICCION_TUCUMAN;
+        $tipoPadron = $esTucuman ? strtoupper(trim((string) $tipoPadron)) : null;
+
+        if ($esTucuman && ! in_array($tipoPadron, [
+            PadronIibbParserFactory::TUCUMAN_TASAS,
+            PadronIibbParserFactory::TUCUMAN_COEFICIENTES,
+        ], true)) {
+            return back()->withErrors([
+                'tipopadron' => 'Para Tucumán elija el tipo de padrón: tasas o coeficientes.',
+            ]);
+        }
+
+        $esCoeficientesTucuman = PadronIibbParserFactory::esTucumanCoeficientes($jurisdiccion, $tipoPadron);
+
+        try {
+            $etiqueta = $esCoeficientesTucuman
+                ? 'IIBB Tucumán (coeficientes)'
+                : PadronIibbParserFactory::crear($jurisdiccion, $tipoPadron)->etiqueta();
+
+            [$archivo, $borrarAlTerminar] = $this->resolverArchivoPadronMasivo($request, ['csv', 'txt', 'zip']);
+        } catch (InvalidArgumentException | Throwable $e) {
+            return back()->withErrors(['file' => $e->getMessage()]);
+        }
+
+        $cargaId = PadronIibbCargaRegistroSupport::iniciar([
+            'provincia_id' => (int) $provincia->id,
+            'jurisdiccion' => $jurisdiccion,
+            'etiqueta' => $etiqueta,
+            'tipopadron' => $tipoPadron,
+            'origen' => PadronIibbCargaRegistroSupport::ORIGEN_PANTALLA,
+            'archivo' => $archivo,
+            'usuario_id' => auth()->id(),
+        ]);
+
+        ImportarPadronIibbProvinciaJob::dispatch(
+            $archivo,
+            (int) $provincia->id,
+            $jurisdiccion,
+            $tipoPadron,
+            $cargaId,
+            (int) config('padrones_iibb.batch_provincia', 3000),
+            (int) config('padrones_iibb.pause_ms', 20),
+            false,
+            $borrarAlTerminar
+        );
+
+        return back()->with(
+            'mensaje',
+            'Importación ' . $etiqueta . ' encolada. Se procesa en background (cola padrones); '
+            . 'seguí el avance en el panel de estado de esta pantalla.'
+        );
     }
 
     public function leePadronArba()
@@ -491,66 +421,6 @@ class Padron_IibbController extends Controller
                     ));
 
         $response = curl_exec($curl);
-    }
-
-    private function descomprimirArchivo(Request $request)
-    {
-        // 1. Validar que se ha subido un archivo
-        if (!$request->hasFile('file')) {
-            return response()->json(['error' => 'No se encontró el archivo en la solicitud.'], 400);
-        }
-
-        $archivo = $request->file('file');
-
-        // 2. Guardar el archivo subido en un lugar temporal
-        $nombreArchivo = $archivo->getClientOriginalName();
-        $rutaTemporal = 'temp/' . $nombreArchivo;
-        Storage::put($rutaTemporal, file_get_contents($archivo));
-
-        // 3. Definir la carpeta de destino para la descompresión
-        $carpetaDestino = 'descomprimidos/' . pathinfo($nombreArchivo, PATHINFO_FILENAME);
-
-        // 4. Usar ZipArchive para descomprimir
-        $zip = new \ZipArchive;
-        $res = $zip->open(Storage::path($rutaTemporal));
-
-        if ($res === TRUE) {
-            // Crear la carpeta de destino si no existe
-            if (!Storage::exists($carpetaDestino)) {
-                Storage::makeDirectory($carpetaDestino);
-            }
-            
-            // Extraer todo en la carpeta de destino
-            $zip->extractTo(Storage::path($carpetaDestino));
-            $zip->close();
-            
-            // Eliminar el archivo ZIP temporal
-            Storage::delete($rutaTemporal);
-
-            return $carpetaDestino;
-        } else {
-            Log::error("Error al abrir el archivo ZIP: " . $nombreArchivo);
-            return response()->json(['error' => 'Error al descomprimir el archivo ZIP.'], 500);
-        }
-    }    
-
-    private function abreArchivo($request)
-    {
-        // 1. Validar que se ha subido un archivo
-        if (!$request->hasFile('file')) {
-            return response()->json(['error' => 'No se encontró el archivo en la solicitud.'], 400);
-        }
-
-        $archivo = $request->file('file');
-
-        // 2. Guardar el archivo subido en un lugar temporal
-        $nombreArchivo = $archivo->getClientOriginalName();
-        $rutaTemporal = 'temp/' . $nombreArchivo;
-        Storage::put($rutaTemporal, file_get_contents($archivo));
-
-        $rutaAbsolutaDefault = storage_path('app/'.$rutaTemporal); 
-
-        return $rutaAbsolutaDefault;
     }
 
     /**

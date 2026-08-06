@@ -56,6 +56,13 @@
                 overlay.setAttribute('aria-hidden', 'true');
             });
         }
+
+        // Mientras haya una importación corriendo, refrescar el panel de estado.
+        if (@json($hay_carga_en_proceso ?? false)) {
+            setTimeout(function () {
+                window.location.reload();
+            }, 15000);
+        }
     });
 </script>
 @endsection
@@ -78,8 +85,9 @@
                 @csrf
                 <div class="card-body">
                     <p class="text-muted mb-3">
-                        CABA, ARBA y Santa Fe se encolan en background (cola <code>padrones</code>).
-                        Puede cerrar la pantalla luego del mensaje de confirmación; el resultado llega por mail si está configurado.
+                        Todas las provincias se procesan en background (cola <code>padrones</code>).
+                        Puede cerrar la pantalla luego del mensaje de confirmación: el avance queda registrado
+                        en «Padrones cargados» y el resultado llega por mail si está configurado.
                     </p>
                     @include('configuracion.padron_iibb.formimportar')
                 </div>
@@ -93,6 +101,7 @@
                 </div>
             </form>
         </div>
+        @include('configuracion.padron_iibb.partials.panel_estado')
     </div>
 </div>
 @include('includes.configuracion.modalconsultaprovincia')
@@ -101,6 +110,6 @@
     'tituloId' => 'padron-iibb-import-titulo',
     'subtituloId' => 'padron-iibb-import-subtitulo',
     'titulo' => 'Encolando importación…',
-    'subtitulo' => 'CABA, ARBA y Santa Fe se procesan en background. Puede cerrar esta pantalla luego del mensaje de confirmación.',
+    'subtitulo' => 'La importación se procesa en background. Puede cerrar esta pantalla luego del mensaje de confirmación.',
 ])
 @endsection

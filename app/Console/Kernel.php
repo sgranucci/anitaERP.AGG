@@ -47,6 +47,24 @@ class Kernel extends ConsoleKernel
         $schedule->command('interbanking:persistir-transferencias', ['--dias' => 60])
             ->dailyAt('08:00')
             ->when(fn () => InterbankingCalendarioSync::debeSincronizarDiario());
+        // Red de seguridad: si el worker dedicado de supervisor no está levantado,
+        // igual se drenan las importaciones de padrones encoladas desde la pantalla.
+        // Con el worker activo esta corrida no encuentra trabajos y sale enseguida.
+        $schedule->command('queue:work', [
+                'database',
+                '--queue' => (string) config('padrones_iibb.cola', 'padrones'),
+                '--stop-when-empty',
+                '--tries' => 1,
+                '--timeout' => (int) config('padrones_iibb.job_timeout', 7200),
+            ])
+            ->everyMinute()
+            ->runInBackground()
+            // Expiración corta a propósito: si el proceso muere sin liberar el
+            // candado, el drenado se recupera en minutos y no en horas. Que dos
+            // workers se solapen no es problema: la cola bloquea cada job.
+            ->withoutOverlapping(10)
+            ->appendOutputTo(storage_path('logs/queue-padrones-schedule.log'));
+
         $schedule->command('padron-iibb-tasa:purge')->monthlyOn(10, '03:00');
         $schedule->command('padron-iibb-arba:purge')->monthlyOn(10, '03:05');
         $schedule->command('padron-iibb-caba:purge')->monthlyOn(10, '03:10');

@@ -6,6 +6,7 @@ namespace App\Jobs\Configuracion;
 
 use App\Services\Configuracion\PadronIibbArbaCargaService;
 use App\Support\Configuracion\PadronIibbCargaNotificacionSupport;
+use App\Support\Configuracion\PadronIibbCargaRegistroSupport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -30,6 +31,7 @@ class ImportarPadronIibbArbaJob implements ShouldQueue
         public readonly int $batchSize = PadronIibbArbaCargaService::DEFAULT_BATCH,
         public readonly int $pauseMs = PadronIibbArbaCargaService::DEFAULT_PAUSE_MS,
         public readonly bool $borrarArchivoAlTerminar = false,
+        public readonly ?int $cargaId = null,
     ) {
         $this->timeout = max(600, (int) config('padrones_iibb.job_timeout', 7200));
         $this->onQueue((string) config('padrones_iibb.cola', 'padrones'));
@@ -46,6 +48,7 @@ class ImportarPadronIibbArbaJob implements ShouldQueue
                 $this->pauseMs
             );
             Log::info('ImportarPadronIibbArbaJob:ok', $resultado);
+            PadronIibbCargaRegistroSupport::finalizar($this->cargaId, $this->statsAgregadas($resultado));
 
             $resumen = [];
             foreach ($resultado['archivos'] as $i => $stats) {
@@ -78,6 +81,7 @@ class ImportarPadronIibbArbaJob implements ShouldQueue
             'archivo' => $this->archivo,
             'error' => $e?->getMessage(),
         ]);
+        PadronIibbCargaRegistroSupport::fallar($this->cargaId, $e?->getMessage() ?? 'Error desconocido');
         // Si falló antes del catch del handle (p.ej. timeout), avisar igual.
         PadronIibbCargaNotificacionSupport::notificar(
             false,
@@ -88,6 +92,38 @@ class ImportarPadronIibbArbaJob implements ShouldQueue
             $e?->getMessage()
         );
         $this->limpiarArchivoSiCorresponde();
+    }
+
+    /**
+     * ARBA procesa varios archivos en una corrida; el panel muestra el total.
+     *
+     * @param  array<string,mixed>  $resultado
+     * @return array<string,mixed>
+     */
+    private function statsAgregadas(array $resultado): array
+    {
+        $total = [
+            'leidas' => 0,
+            'insertadas' => 0,
+            'actualizadas_tasa' => 0,
+            'omitidas' => 0,
+            'errores' => 0,
+            'desdefecha' => $resultado['desdefecha'] ?? null,
+            'hastafecha' => $resultado['hastafecha'] ?? null,
+            'segundos' => $resultado['segundos'] ?? null,
+        ];
+
+        foreach ($resultado['archivos'] ?? [] as $stats) {
+            $total['leidas'] += (int) ($stats['leidas'] ?? 0);
+            $total['insertadas'] += (int) ($stats['insertadas'] ?? 0);
+            $total['actualizadas_tasa'] += (int) ($stats['actualizadas'] ?? 0);
+            $total['omitidas'] += (int) ($stats['omitidas'] ?? 0);
+            $total['errores'] += (int) ($stats['errores'] ?? 0);
+            $total['desdefecha'] ??= $stats['desdefecha'] ?? null;
+            $total['hastafecha'] ??= $stats['hastafecha'] ?? null;
+        }
+
+        return $total;
     }
 
     private function limpiarArchivoSiCorresponde(): void

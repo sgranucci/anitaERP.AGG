@@ -6,6 +6,7 @@ namespace App\Jobs\Configuracion;
 
 use App\Services\Configuracion\PadronIibbSantaFeCargaService;
 use App\Support\Configuracion\PadronIibbCargaNotificacionSupport;
+use App\Support\Configuracion\PadronIibbCargaRegistroSupport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -32,6 +33,7 @@ class ImportarPadronIibbSantaFeJob implements ShouldQueue
         public readonly int $pauseMs = PadronIibbSantaFeCargaService::DEFAULT_PAUSE_MS,
         public readonly bool $keepPeriod = false,
         public readonly bool $borrarArchivoAlTerminar = false,
+        public readonly ?int $cargaId = null,
     ) {
         $this->timeout = max(600, (int) config('padrones_iibb.job_timeout', 7200));
         $this->onQueue((string) config('padrones_iibb.cola', 'padrones'));
@@ -53,6 +55,7 @@ class ImportarPadronIibbSantaFeJob implements ShouldQueue
                 $this->keepPeriod
             );
             Log::info('ImportarPadronIibbSantaFeJob:ok', $stats);
+            PadronIibbCargaRegistroSupport::finalizar($this->cargaId, $stats);
 
             PadronIibbCargaNotificacionSupport::notificar(
                 true,
@@ -84,6 +87,7 @@ class ImportarPadronIibbSantaFeJob implements ShouldQueue
             'archivo' => $this->archivo,
             'error' => $e?->getMessage(),
         ]);
+        PadronIibbCargaRegistroSupport::fallar($this->cargaId, $e?->getMessage() ?? 'Error desconocido');
         PadronIibbCargaNotificacionSupport::notificar(
             false,
             'IIBB Santa Fe (API)',

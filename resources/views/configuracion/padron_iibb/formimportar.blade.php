@@ -16,7 +16,9 @@
             </div>
         </div>
         <small class="form-text text-muted">
-            Santa Fe = código <code>21</code> (jurisdicción 921). CABA = <code>1</code>. Buenos Aires / ARBA = <code>2</code>.
+            CABA = <code>1</code> &middot; Buenos Aires / ARBA = <code>2</code> &middot; C&oacute;rdoba = <code>4</code> &middot;
+            Entre R&iacute;os = <code>8</code> &middot; Misiones = <code>14</code> &middot; Santa Fe = <code>21</code> &middot;
+            Tucum&aacute;n = <code>24</code>.
         </small>
     </div>
 </div>
@@ -41,11 +43,17 @@
         <small class="form-text text-muted">
             <strong>Santa Fe:</strong> ZIP <code>PARP_YYYYMM.csv.zip</code> o CSV <code>PARP_YYYYMM.csv</code>.
             <br>
-            <strong>CABA (AGIP):</strong> TXT <code>ARDJU….TXT</code>.
+            <strong>CABA (AGIP):</strong> TXT <code>ARDJU&hellip;.TXT</code>.
             <br>
-            <strong>ARBA:</strong> ZIP <code>PadronRGS….zip</code> o TXT Per/Ret.
+            <strong>ARBA:</strong> ZIP <code>PadronRGS&hellip;.zip</code> o TXT Per/Ret.
             <br>
-            Archivos muy grandes (~70&nbsp;MB+) conviene usar la ruta en servidor.
+            <strong>Misiones:</strong> CSV <code>;</code> con cabecera <code>Periodo_fiscal;r&eacute;gimen;cuit;&hellip;</code>.
+            <br>
+            <strong>C&oacute;rdoba:</strong> CSV <code>;</code> con l&iacute;neas P y R. <strong>Entre R&iacute;os:</strong> CSV <code>;</code> con vigencia y al&iacute;cuotas.
+            <br>
+            <strong>Tucum&aacute;n:</strong> archivo de ancho fijo (elegir tasas o coeficientes).
+            <br>
+            Se acepta el archivo comprimido en ZIP. Para archivos muy grandes (~70&nbsp;MB+) conviene usar la ruta en servidor.
         </small>
     </div>
 </div>
@@ -54,12 +62,17 @@
     <label for="ruta_servidor" class="col-lg-3 control-label text-right pr-2">Ruta en servidor</label>
     <div class="col-lg-8">
         <input type="text" name="ruta_servidor" id="ruta_servidor" class="form-control"
-            placeholder="/home/sergio/padronsantafe/PARP_202608.csv.zip"
+            placeholder="{{ storage_path('app/padrones') }}/PARP_202608.csv.zip"
             value="{{ old('ruta_servidor') }}">
         <small class="form-text text-muted">
-            Absoluta, bajo <code>/home/sergio/padronsantafe</code>, <code>/home/sergio/padroncaba</code>,
-            <code>/home/sergio/padronarba</code> o <code>storage/app</code>.
+            Ruta absoluta dentro de alguno de los directorios habilitados:
+            @foreach (\App\Support\Configuracion\PadronIibbArchivoRutaSupport::directoriosPermitidos() as $directorio)
+                <code>{{ $directorio }}</code>@if (! $loop->last), @endif
+            @endforeach.
             Si completa este campo, no hace falta subir el archivo.
+            <br>
+            Deje el archivo en <code>{{ storage_path('app/padrones') }}</code>: los directorios personales
+            (<code>/home/&hellip;</code>) no son legibles por el proceso que importa en background.
         </small>
     </div>
 </div>
