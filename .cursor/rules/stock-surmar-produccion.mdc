@@ -12,6 +12,10 @@ globs:
 
 Surmar es `empresa_id = 3` (`SurmarSupport::EMPRESA_ID`) **solo en El Bierzo**, y el nombre de empresa debe contener «Surmar». En **AGG** el id 3 es **REBISCO S.A.**: `esEmpresaSurmar()` debe devolver false. **Nunca** renombrar empresas AGG 1–3 con la migración Surmar.
 
+## Migraciones
+
+Todas las migraciones `*surmar*` (empresa, tablas etiqueta, menú/permisos, columnas recepción) deben hacer early-return salvo `config('app.empresa') === 'EL BIERZO'`. En AGG no deben crear menú ni schema. Si algo ya entró por error: `2026_08_06_110000_quitar_menu_schema_surmar_en_agg` (solo AGG).
+
 ## Aislamiento
 
 | Capa | Convención |

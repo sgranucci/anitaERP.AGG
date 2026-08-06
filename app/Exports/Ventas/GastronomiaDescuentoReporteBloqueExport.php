@@ -3,6 +3,7 @@
 namespace App\Exports\Ventas;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Ventas\GastronomiaDescuentoReporteExcelLayout;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -36,6 +37,8 @@ class GastronomiaDescuentoReporteBloqueExport implements FromView, ShouldAutoSiz
 
     private bool $hayFilaLogos = false;
 
+    private bool $esCsv = false;
+
     private GastronomiaDescuentoReporteExcelLayout $layout;
 
     private int $filaSubtituloExcel = 0;
@@ -52,12 +55,14 @@ class GastronomiaDescuentoReporteBloqueExport implements FromView, ShouldAutoSiz
         string $empresaNombre,
         string $titulo = 'Reporte descuentos gastronomía',
         string $subtitulo = '',
+        bool $esCsv = false,
     ) {
         $this->bloque = $bloque;
         $this->periodoTexto = $periodoTexto;
         $this->empresaNombre = $empresaNombre;
         $this->titulo = $titulo !== '' ? $titulo : 'Reporte descuentos gastronomía';
         $this->subtitulo = $subtitulo;
+        $this->esCsv = $esCsv;
         $this->layout = new GastronomiaDescuentoReporteExcelLayout(false, 2);
     }
 
@@ -102,18 +107,29 @@ class GastronomiaDescuentoReporteBloqueExport implements FromView, ShouldAutoSiz
             'titulo' => $this->titulo,
             'subtitulo' => $this->subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
     public function columnFormats(): array
     {
+        $mascara = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+
         return [
             'A' => NumberFormat::FORMAT_TEXT,
-            'D' => NumberFormat::FORMAT_NUMBER_00,
-            'E' => NumberFormat::FORMAT_NUMBER_00,
-            'F' => NumberFormat::FORMAT_NUMBER_00,
-            'G' => NumberFormat::FORMAT_NUMBER_00,
+            'C' => $mascara,
+            'D' => $mascara,
+            'E' => $mascara,
+            'F' => $mascara,
+            'G' => $mascara,
         ];
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function styles(Worksheet $sheet)

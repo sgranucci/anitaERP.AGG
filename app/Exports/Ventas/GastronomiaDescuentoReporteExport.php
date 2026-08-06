@@ -4,6 +4,7 @@ namespace App\Exports\Ventas;
 
 use App\Services\Ventas\GastronomiaDescuentoReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Ventas\GastronomiaDescuentoReporteExcelLayout;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -36,6 +37,8 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
 
     private bool $soloTotales = false;
 
+    private bool $esCsv = false;
+
     /** @var array<string, mixed> */
     private array $resultado = [];
 
@@ -64,12 +67,14 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
         string $empresaNombre,
         bool $soloTotales = false,
         ?array $resultadoPrecalculado = null,
+        bool $esCsv = false,
     ): self {
         $this->filtros = $filtros;
         $this->titulo = $titulo;
         $this->subtitulo = $subtitulo;
         $this->empresaNombre = $empresaNombre;
         $this->soloTotales = $soloTotales;
+        $this->esCsv = $esCsv;
         $this->resultado = $resultadoPrecalculado ?? $this->reporteService->generar($filtros);
 
         return $this;
@@ -83,6 +88,8 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogo);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
 
+        $formatoNumero = $this->formatoNumeroEfectivo();
+
         if ($this->soloTotales) {
             return view('exports.ventas.gastronomia_descuento_reporte_totales', [
                 'resultado' => $this->resultado,
@@ -90,6 +97,7 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
                 'titulo' => $this->titulo !== '' ? $this->titulo : 'Reporte descuentos gastronomía',
                 'subtitulo' => $this->subtitulo,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
+                'formatoNumero' => $formatoNumero,
             ]);
         }
 
@@ -117,18 +125,29 @@ class GastronomiaDescuentoReporteExport implements FromView, ShouldAutoSize, Wit
             'empresa_nombre' => $this->empresaNombre,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'bloques' => $bloques,
+            'formatoNumero' => $formatoNumero,
         ]);
     }
 
     public function columnFormats(): array
     {
+        $mascara = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+
         return [
             'A' => NumberFormat::FORMAT_TEXT,
-            'D' => NumberFormat::FORMAT_NUMBER_00,
-            'E' => NumberFormat::FORMAT_NUMBER_00,
-            'F' => NumberFormat::FORMAT_NUMBER_00,
-            'G' => NumberFormat::FORMAT_NUMBER_00,
+            'C' => $mascara,
+            'D' => $mascara,
+            'E' => $mascara,
+            'F' => $mascara,
+            'G' => $mascara,
         ];
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function styles(Worksheet $sheet)

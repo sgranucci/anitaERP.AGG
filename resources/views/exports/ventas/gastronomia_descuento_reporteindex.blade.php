@@ -1,9 +1,13 @@
 @php
+    use App\Support\Export\ExcelFormatoNumero;
     use App\Support\Ventas\GastronomiaDescuentoReporteTipoArticuloSupport;
 
     $colspan = 7;
     $bloques = $bloques ?? [];
     $totalBloques = count($bloques);
+    $formatoNumero = $formatoNumero ?? ExcelFormatoNumero::preferenciaGlobal();
+    $fmtMonto = ExcelFormatoNumero::formateadorMonto($formatoNumero, 2);
+    $fmtUnidades = ExcelFormatoNumero::formateadorMonto($formatoNumero, 2);
     $resumenTotales = null;
     if ($totalBloques > 0) {
         $resumenTotales = [
@@ -21,6 +25,7 @@
         'reservarFilaLogoExcel' => $reservarFilaLogoExcel ?? false,
         'resumen_totales' => $resumenTotales,
         'total_bloques' => $totalBloques,
+        'formatoNumero' => $formatoNumero,
     ])
     @if ($totalBloques > 0)
         <tr>
@@ -58,29 +63,29 @@
                 <tr>
                     <td>{{ $fila['sku'] ?? '' }}</td>
                     <td>{{ $fila['descripcion'] ?? '' }}</td>
-                    <td>{{ $fila['unidades'] ?? 0 }}</td>
-                    <td>{{ $fila['costo_unitario'] ?? 0 }}</td>
-                    <td>{{ $fila['costo_total'] ?? 0 }}</td>
-                    <td>{{ $fila['precio_venta'] ?? 0 }}</td>
-                    <td>{{ $fila['total_venta'] ?? 0 }}</td>
+                    <td>{{ $fmtUnidades($fila['unidades'] ?? 0) }}</td>
+                    <td>{{ $fmtMonto($fila['costo_unitario'] ?? 0) }}</td>
+                    <td>{{ $fmtMonto($fila['costo_total'] ?? 0) }}</td>
+                    <td>{{ $fmtMonto($fila['precio_venta'] ?? 0) }}</td>
+                    <td>{{ $fmtMonto($fila['total_venta'] ?? 0) }}</td>
                 </tr>
             @endforeach
             <tr>
                 <td colspan="2"><strong>Total parcial {{ $grupo['tipo_nombre'] }}</strong></td>
-                <td><strong>{{ $grupo['subtotal_unidades'] ?? 0 }}</strong></td>
+                <td><strong>{{ $fmtUnidades($grupo['subtotal_unidades'] ?? 0) }}</strong></td>
                 <td></td>
-                <td><strong>{{ $grupo['subtotal_costo_total'] ?? 0 }}</strong></td>
+                <td><strong>{{ $fmtMonto($grupo['subtotal_costo_total'] ?? 0) }}</strong></td>
                 <td></td>
-                <td><strong>{{ $grupo['subtotal_total_venta'] ?? 0 }}</strong></td>
+                <td><strong>{{ $fmtMonto($grupo['subtotal_total_venta'] ?? 0) }}</strong></td>
             </tr>
         @endforeach
         <tr>
             <td colspan="2"><strong>Total final</strong></td>
-            <td><strong>{{ $bloque['totales']['unidades'] ?? 0 }}</strong></td>
+            <td><strong>{{ $fmtUnidades($bloque['totales']['unidades'] ?? 0) }}</strong></td>
             <td></td>
-            <td><strong>{{ $bloque['totales']['costo_total'] ?? 0 }}</strong></td>
+            <td><strong>{{ $fmtMonto($bloque['totales']['costo_total'] ?? 0) }}</strong></td>
             <td></td>
-            <td><strong>{{ $bloque['totales']['total_venta'] ?? 0 }}</strong></td>
+            <td><strong>{{ $fmtMonto($bloque['totales']['total_venta'] ?? 0) }}</strong></td>
         </tr>
         <tr><td colspan="{{ $colspan }}"></td></tr>
     @endforeach

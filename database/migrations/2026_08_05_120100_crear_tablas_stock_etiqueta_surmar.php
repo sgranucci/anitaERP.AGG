@@ -8,11 +8,17 @@ use Illuminate\Support\Facades\Schema;
  * Etiquetas físicas Surmar (reemplazo operativo de Anita recepaper).
  * PK `id` = identificador de lectura/impresión. Referencias Anita se conservan
  * solo para importación / trazabilidad histórica.
+ *
+ * Solo corre en EL BIERZO. En AGG no crea tablas Surmar.
  */
 return new class extends Migration
 {
     public function up(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         if (! Schema::hasTable('stock_etiqueta')) {
             Schema::create('stock_etiqueta', function (Blueprint $table) {
                 $table->bigIncrements('id');
@@ -124,8 +130,17 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         Schema::dropIfExists('stock_etiqueta_movimiento');
         Schema::dropIfExists('stock_etiqueta_consumo');
         Schema::dropIfExists('stock_etiqueta');
+    }
+
+    private function esEntornoSurmar(): bool
+    {
+        return strtoupper((string) config('app.empresa')) === 'EL BIERZO';
     }
 };

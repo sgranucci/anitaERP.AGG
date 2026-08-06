@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * AGG: la migración 2026_08_05_120000_crear_empresa_surmar (El Bierzo, id=3)
  * renombró por error a REBISCO S.A. (id=3, CUIT 30-70546459-2) como «Surmar».
- * Restaura el nombre operativo. Surmar no debe pisar empresas AGG existentes.
+ * Restaura el nombre operativo. Solo tiene efecto en AGG.
  */
 return new class extends Migration
 {
@@ -18,6 +18,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (strtoupper((string) config('app.empresa')) !== 'AGG') {
+            return;
+        }
+
         $fila = DB::table('empresa')->where('id', self::EMPRESA_ID)->first();
         if ($fila === null) {
             return;

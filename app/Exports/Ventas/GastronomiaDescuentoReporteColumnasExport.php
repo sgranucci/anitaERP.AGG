@@ -3,19 +3,23 @@
 namespace App\Exports\Ventas;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Ventas\GastronomiaDescuentoReporteExcelLayout;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoSize, WithEvents, WithStyles, WithTitle
+class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
 
@@ -29,6 +33,10 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
     private array $resultado = [];
 
     private bool $hayFilaLogos = false;
+
+    private bool $esCsv = false;
+
+    private int $cantidadColumnas = 7;
 
     private GastronomiaDescuentoReporteExcelLayout $layout;
 
@@ -47,11 +55,13 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
         string $titulo,
         string $subtitulo,
         string $empresaNombre,
+        bool $esCsv = false,
     ): self {
         $this->resultado = $resultado;
         $this->titulo = $titulo;
         $this->subtitulo = $subtitulo;
         $this->empresaNombre = $empresaNombre;
+        $this->esCsv = $esCsv;
 
         return $this;
     }
@@ -60,8 +70,8 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
     {
         $vista = $this->resultado['vista_columnas'] ?? [];
         $columnas = $vista['columnas'] ?? [];
-        $colCount = max(4 + count($columnas) * 3, 7);
-        $this->colUltima = $this->columnaDesdeIndice($colCount - 1);
+        $this->cantidadColumnas = max(4 + count($columnas) * 3, 7);
+        $this->colUltima = Coordinate::stringFromColumnIndex($this->cantidadColumnas);
 
         $coleccionLogo = $this->empresaNombre !== ''
             ? collect([(object) ['nombreempresa' => $this->empresaNombre]])
@@ -90,7 +100,30 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
             'titulo' => $this->titulo,
             'subtitulo' => $this->subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
+    }
+
+    public function columnFormats(): array
+    {
+        $mascara = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+        $formatos = [
+            'A' => NumberFormat::FORMAT_TEXT,
+            'B' => NumberFormat::FORMAT_TEXT,
+        ];
+
+        for ($indice = 3; $indice <= $this->cantidadColumnas; $indice++) {
+            $formatos[Coordinate::stringFromColumnIndex($indice)] = $mascara;
+        }
+
+        return $formatos;
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     public function styles(Worksheet $sheet)
@@ -131,17 +164,5 @@ class GastronomiaDescuentoReporteColumnasExport implements FromView, ShouldAutoS
     public function title(): string
     {
         return 'Consolidado';
-    }
-
-    private function columnaDesdeIndice(int $indice): string
-    {
-        $indice = max(0, $indice);
-        $letra = '';
-        while ($indice >= 0) {
-            $letra = chr(65 + ($indice % 26)).$letra;
-            $indice = intdiv($indice, 26) - 1;
-        }
-
-        return $letra;
     }
 }

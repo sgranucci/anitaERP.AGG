@@ -1,3 +1,9 @@
+@php
+    use App\Support\Export\ExcelFormatoNumero;
+
+    $formatoNumero = $formatoNumero ?? ExcelFormatoNumero::preferenciaGlobal();
+    $fmtMonto = ExcelFormatoNumero::formateadorMonto($formatoNumero, 2);
+@endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
         <tr><td colspan="7" style="height: 52px;"></td></tr>
@@ -40,7 +46,7 @@
             <td></td>
             <td>{{ $fila['codigo'] ?? '' }}</td>
             <td colspan="2">{{ $fila['sector'] ?? '' }}</td>
-            <td>{{ $fila['costo_total'] ?? 0 }}</td>
+            <td>{{ $fmtMonto($fila['costo_total'] ?? 0) }}</td>
             <td colspan="2"></td>
         </tr>
     @endforeach
@@ -48,7 +54,7 @@
         <td></td>
         <td></td>
         <td colspan="2"></td>
-        <td><strong>{{ $resultado['gran_total_costo'] ?? 0 }}</strong></td>
+        <td><strong>{{ $fmtMonto($resultado['gran_total_costo'] ?? 0) }}</strong></td>
         <td colspan="2"></td>
     </tr>
 </table>

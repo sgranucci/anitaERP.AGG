@@ -2,12 +2,12 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Empresa Surmar (El Bierzo) — id fijo 3 solo si el slot está libre o ya es Surmar.
  *
- * En AGG el id 3 es REBISCO S.A. (CUIT 30-70546459-2): NUNCA renombrar.
- * Si id 3 ya existe con otra empresa, no hace nada (Surmar no se despliega sobre AGG).
+ * Solo corre en EL BIERZO. En AGG (y otros) no tiene efecto: el id 3 es REBISCO S.A.
  */
 return new class extends Migration
 {
@@ -22,6 +22,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         $fila = DB::table('empresa')->where('id', self::EMPRESA_ID)->first();
         if ($fila !== null) {
             $cuit = trim((string) ($fila->nroinscripcion ?? ''));
@@ -52,7 +56,7 @@ return new class extends Migration
 
         // Columnas opcionales agregadas en migraciones posteriores
         foreach (['pais_id', 'provincia_id', 'localidad_id', 'codigopostal'] as $col) {
-            if (\Illuminate\Support\Facades\Schema::hasColumn('empresa', $col)) {
+            if (Schema::hasColumn('empresa', $col)) {
                 $payload[$col] = null;
             }
         }
@@ -62,6 +66,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         DB::table('empresa')
             ->where('id', self::EMPRESA_ID)
             ->where('nombre', 'Surmar')
@@ -69,5 +77,10 @@ return new class extends Migration
                 $q->whereNull('nroinscripcion')->orWhere('nroinscripcion', '');
             })
             ->delete();
+    }
+
+    private function esEntornoSurmar(): bool
+    {
+        return strtoupper((string) config('app.empresa')) === 'EL BIERZO';
     }
 };

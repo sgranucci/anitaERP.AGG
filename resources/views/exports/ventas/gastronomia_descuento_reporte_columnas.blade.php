@@ -1,4 +1,5 @@
 @php
+    use App\Support\Export\ExcelFormatoNumero;
     use App\Support\Ventas\GastronomiaDescuentoReporteTipoArticuloSupport;
 
     $vista = $resultado['vista_columnas'] ?? [];
@@ -14,6 +15,9 @@
     $subCols = 3;
     $colsFijas = 4;
     $colCount = max($colsFijas + count($columnas) * $subCols, 7);
+    $formatoNumero = $formatoNumero ?? ExcelFormatoNumero::preferenciaGlobal();
+    $fmtMonto = ExcelFormatoNumero::formateadorMonto($formatoNumero, 2);
+    $fmtUnidades = ExcelFormatoNumero::formateadorMonto($formatoNumero, 2);
     $resumenTotales = [
         'unidades' => $resultado['gran_total_unidades'] ?? 0,
         'costo_total' => $resultado['gran_total_costo'] ?? 0,
@@ -28,6 +32,7 @@
         'reservarFilaLogoExcel' => $reservarFilaLogoExcel ?? false,
         'resumen_totales' => $resumenTotales,
         'total_bloques' => count($columnas),
+        'formatoNumero' => $formatoNumero,
     ])
     <tr>
         <th rowspan="2">Artículo</th>
@@ -56,14 +61,14 @@
             <tr>
                 <td>{{ $fila['sku'] ?? '' }}</td>
                 <td>{{ $fila['descripcion'] ?? '' }}</td>
-                <td>{{ $fila['costo_unitario'] ?? 0 }}</td>
-                <td>{{ $fila['precio_venta'] ?? 0 }}</td>
+                <td>{{ $fmtMonto($fila['costo_unitario'] ?? 0) }}</td>
+                <td>{{ $fmtMonto($fila['precio_venta'] ?? 0) }}</td>
                 @foreach ($columnas as $col)
                     @php $celda = ($fila['celdas'] ?? [])[$col['clave'] ?? ''] ?? null; @endphp
                     @if ($celda)
-                        <td>{{ $celda['unidades'] ?? 0 }}</td>
-                        <td>{{ $celda['costo_total'] ?? 0 }}</td>
-                        <td>{{ $celda['total_venta'] ?? 0 }}</td>
+                        <td>{{ $fmtUnidades($celda['unidades'] ?? 0) }}</td>
+                        <td>{{ $fmtMonto($celda['costo_total'] ?? 0) }}</td>
+                        <td>{{ $fmtMonto($celda['total_venta'] ?? 0) }}</td>
                     @else
                         <td colspan="{{ $subCols }}"></td>
                     @endif
@@ -87,9 +92,9 @@
                         $sumaVenta += (float) ($celda['total_venta'] ?? 0);
                     }
                 @endphp
-                <td><strong>{{ $sumaUnid }}</strong></td>
-                <td><strong>{{ $sumaCosto }}</strong></td>
-                <td><strong>{{ $sumaVenta }}</strong></td>
+                <td><strong>{{ $fmtUnidades($sumaUnid) }}</strong></td>
+                <td><strong>{{ $fmtMonto($sumaCosto) }}</strong></td>
+                <td><strong>{{ $fmtMonto($sumaVenta) }}</strong></td>
             @endforeach
         </tr>
     @endforeach
@@ -98,9 +103,9 @@
             <td colspan="{{ $colsFijas }}"><strong>Total final</strong></td>
             @foreach ($totalesPorColumna as $totCol)
                 @php $tot = $totCol['totales'] ?? []; @endphp
-                <td><strong>{{ $tot['unidades'] ?? 0 }}</strong></td>
-                <td><strong>{{ $tot['costo_total'] ?? 0 }}</strong></td>
-                <td><strong>{{ $tot['total_venta'] ?? 0 }}</strong></td>
+                <td><strong>{{ $fmtUnidades($tot['unidades'] ?? 0) }}</strong></td>
+                <td><strong>{{ $fmtMonto($tot['costo_total'] ?? 0) }}</strong></td>
+                <td><strong>{{ $fmtMonto($tot['total_venta'] ?? 0) }}</strong></td>
             @endforeach
         </tr>
     @endif

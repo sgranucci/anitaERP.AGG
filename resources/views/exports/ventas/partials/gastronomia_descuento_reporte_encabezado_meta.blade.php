@@ -1,5 +1,10 @@
 @php
+    use App\Support\Export\ExcelFormatoNumero;
+
     $colspan = (int) ($colspan ?? 7);
+    $formatoNumero = $formatoNumero ?? ExcelFormatoNumero::preferenciaGlobal();
+    $fmtMonto = ExcelFormatoNumero::formateadorMonto($formatoNumero, 2);
+    $fmtUnidades = ExcelFormatoNumero::formateadorMonto($formatoNumero, 2);
 @endphp
 @if (! empty($reservarFilaLogoExcel))
     <tr>
@@ -26,9 +31,9 @@
 @if (! empty($resumen_totales))
     <tr>
         <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">
-            Unidades: {{ number_format((float) ($resumen_totales['unidades'] ?? 0), 4, ',', '.') }}
-            &middot; Costo total: {{ number_format((float) ($resumen_totales['costo_total'] ?? 0), 2, ',', '.') }}
-            &middot; Total venta: {{ number_format((float) ($resumen_totales['total_venta'] ?? 0), 2, ',', '.') }}
+            Unidades: {{ $fmtUnidades($resumen_totales['unidades'] ?? 0) }}
+            &middot; Costo total: {{ $fmtMonto($resumen_totales['costo_total'] ?? 0) }}
+            &middot; Total venta: {{ $fmtMonto($resumen_totales['total_venta'] ?? 0) }}
         </td>
     </tr>
 @endif

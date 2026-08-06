@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Menú + permisos Surmar (recepción + movimientos + trazabilidad).
- * Independiente del ABM AGG. Misma migración sirve al actualizar Ferli.
+ * Solo EL BIERZO. En AGG no tiene efecto.
  */
 return new class extends Migration
 {
@@ -50,6 +50,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         $stockMenuId = $this->resolverMenuStockId();
         if ($stockMenuId <= 0) {
             return;
@@ -137,6 +141,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         foreach (self::MENUS as $def) {
             foreach ($def['permisos'] as $permiso) {
                 $permisoId = DB::table('permiso')->where('slug', $permiso['slug'])->value('id');
@@ -151,6 +159,11 @@ return new class extends Migration
                 DB::table('menu')->where('id', $menuId)->delete();
             }
         }
+    }
+
+    private function esEntornoSurmar(): bool
+    {
+        return strtoupper((string) config('app.empresa')) === 'EL BIERZO';
     }
 
     private function resolverMenuStockId(): int

@@ -397,12 +397,12 @@ class GastronomiaDescuentoReporteController extends Controller
             case 'CSV':
                 if (GastronomiaDescuentoReporteFiltros::debeUsarVistaColumnas($filtros, $resultado)) {
                     return (new GastronomiaDescuentoReporteColumnasExport())
-                        ->parametros($resultado, $titulo, $subtitulo, $empresaTexto)
+                        ->parametros($resultado, $titulo, $subtitulo, $empresaTexto, true)
                         ->download('descuento_reporte_gastronomia.csv', Excel::CSV);
                 }
 
                 return (new GastronomiaDescuentoReporteExport($this->reporteService))
-                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto, false, $resultado)
+                    ->parametros($filtros, $titulo, $subtitulo, $empresaTexto, false, $resultado, true)
                     ->download('descuento_reporte_gastronomia.csv', Excel::CSV);
         }
 

@@ -99,6 +99,8 @@ class SolicitudpagoAnitaSyncService
 
         $this->sincronizarCuentas($api, $sistema, $porCodigo, $mapas);
         $this->sincronizarCuotas($api, $sistema, $porCodigo);
+        // Anita a veces deja solpm_id_sp_orig=0 en hijas; el vínculo real está en solpagocuota.
+        $madresDesdeCuotas = $this->reconciliarMadresDesdeCuotas();
         $this->sincronizarEstados($api, $sistema, $porCodigo, $mapas);
         $this->sincronizarArchivos($api, $sistema, $porCodigo, $mapas);
 
@@ -106,7 +108,42 @@ class SolicitudpagoAnitaSyncService
             'cabeceras' => count($cabeceras),
             'creados' => $creados,
             'actualizados' => $actualizados,
+            'madres_desde_cuotas' => $madresDesdeCuotas,
         ];
+    }
+
+    /**
+     * Completa solicitudpago_madre_id en hijas apuntadas por cuotas del plan.
+     *
+     * @return int cantidad de hijas actualizadas
+     */
+    private function reconciliarMadresDesdeCuotas(): int
+    {
+        $vinculos = Solicitudpago_Cuota::query()
+            ->whereNotNull('solicitudpago_hija_id')
+            ->where('solicitudpago_hija_id', '>', 0)
+            ->get(['solicitudpago_id', 'solicitudpago_hija_id']);
+
+        $actualizadas = 0;
+        foreach ($vinculos as $cuota) {
+            $madreId = (int) $cuota->solicitudpago_id;
+            $hijaId = (int) $cuota->solicitudpago_hija_id;
+            if ($madreId <= 0 || $hijaId <= 0 || $madreId === $hijaId) {
+                continue;
+            }
+
+            $updated = Solicitudpago::query()
+                ->where('id', $hijaId)
+                ->where(function ($q) use ($madreId) {
+                    $q->whereNull('solicitudpago_madre_id')
+                        ->orWhere('solicitudpago_madre_id', '!=', $madreId);
+                })
+                ->update(['solicitudpago_madre_id' => $madreId]);
+
+            $actualizadas += (int) $updated;
+        }
+
+        return $actualizadas;
     }
 
     /**

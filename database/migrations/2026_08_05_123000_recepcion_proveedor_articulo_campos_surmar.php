@@ -6,12 +6,16 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Campos Surmar en líneas de recepción (lote/pesos/piqueo).
- * Nullable: AGG no los usa.
+ * Solo EL BIERZO. En AGG no tiene efecto.
  */
 return new class extends Migration
 {
     public function up(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         Schema::table('recepcion_proveedor_articulo', function (Blueprint $table) {
             if (! Schema::hasColumn('recepcion_proveedor_articulo', 'lote_proveedor')) {
                 $table->string('lote_proveedor', 30)->nullable()->after('lote_id');
@@ -58,6 +62,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         Schema::table('recepcion_proveedor_articulo', function (Blueprint $table) {
             if (Schema::hasColumn('recepcion_proveedor_articulo', 'stock_etiqueta_id')) {
                 try {
@@ -72,5 +80,10 @@ return new class extends Migration
                 }
             }
         });
+    }
+
+    private function esEntornoSurmar(): bool
+    {
+        return strtoupper((string) config('app.empresa')) === 'EL BIERZO';
     }
 };
