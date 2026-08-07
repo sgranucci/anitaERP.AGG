@@ -182,7 +182,7 @@ final class RendicionMaquinaCabeceraAnitaMapper
             ['columna' => 'rendm_nro_op', 'tipo' => 'entero', 'fijo' => 0],
             ['columna' => 'rendm_imp_drop', 'tipo' => 'decimal', 'ctx' => 'impuesto_drop'],
             ['columna' => 'rendm_imp_venta', 'tipo' => 'decimal', 'ctx' => 'impuesto_venta'],
-            ['columna' => 'rendm_ticket_prom', 'tipo' => 'decimal', 'fijo' => 0],
+            ['columna' => 'rendm_ticket_prom', 'tipo' => 'decimal', 'ctx' => 'ticket_prom'],
             // Campo Anita obsoleto en ERP: siempre 0 (el drop se edita directo).
             ['columna' => 'rendm_aj_wigosd', 'tipo' => 'decimal', 'ctx' => 'ajuste_wigosd'],
             ['columna' => 'rendm_vtaant_gast', 'tipo' => 'decimal', 'fijo' => 0],

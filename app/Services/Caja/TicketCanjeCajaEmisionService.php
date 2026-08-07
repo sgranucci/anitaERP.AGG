@@ -261,6 +261,44 @@ final class TicketCanjeCajaEmisionService
     }
 
     /**
+     * Anula un ticket solo si sigue en Pendiente (actualización atómica vs canje en POS).
+     *
+     * @return array{ok: bool, ticket?: array<string, mixed>, mensaje?: string, error?: string}
+     */
+    public function anular(TicketCanjeCaja $ticket): array
+    {
+        if ($ticket->es_vip || $ticket->estado === TicketCanjeCaja::ESTADO_VIP) {
+            return ['ok' => false, 'error' => 'Los tickets VIP no se anulan.'];
+        }
+        if ($ticket->estado === TicketCanjeCaja::ESTADO_ANULADO) {
+            return ['ok' => false, 'error' => 'El ticket ya está anulado.'];
+        }
+        if ($ticket->estado === TicketCanjeCaja::ESTADO_CANJEADO) {
+            return ['ok' => false, 'error' => 'No se puede anular un ticket ya canjeado.'];
+        }
+        if ($ticket->estado !== TicketCanjeCaja::ESTADO_PENDIENTE) {
+            return ['ok' => false, 'error' => 'Solo se pueden anular tickets en estado Pendiente.'];
+        }
+
+        $afectadas = TicketCanjeCaja::query()
+            ->whereKey($ticket->id)
+            ->where('estado', TicketCanjeCaja::ESTADO_PENDIENTE)
+            ->update(['estado' => TicketCanjeCaja::ESTADO_ANULADO]);
+
+        if ($afectadas < 1) {
+            return ['ok' => false, 'error' => 'No se pudo anular: el ticket ya no está pendiente.'];
+        }
+
+        $ticket->refresh();
+
+        return [
+            'ok' => true,
+            'mensaje' => 'Ticket '.$ticket->etiquetaVale().' anulado.',
+            'ticket' => $this->ticketAArray($ticket),
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function ticketAArray(TicketCanjeCaja $t): array
@@ -278,6 +316,7 @@ final class TicketCanjeCajaEmisionService
             'monto_venta' => (float) $t->monto_venta,
             'monto_ticket' => (float) $t->monto_ticket,
             'estado' => $t->estado,
+            'anulable' => $t->esAnulable(),
         ];
     }
 }

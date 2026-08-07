@@ -2310,6 +2310,7 @@ Route::post('caja/canjes/generacion/api/preview', 'Caja\TicketCanjeCajaControlle
 Route::post('caja/canjes/generacion/api/emitir', 'Caja\TicketCanjeCajaController@apiEmitir')->name('api_ticket_canje_caja_emitir');
 Route::post('caja/canjes/generacion/api/consulta-cliente-vip', 'Caja\TicketCanjeCajaController@consultaClienteVip')->name('api_ticket_canje_caja_consulta_vip');
 Route::post('caja/canjes/generacion/{id}/reimprimir', 'Caja\TicketCanjeCajaController@apiReimprimir')->name('api_ticket_canje_caja_reimprimir');
+Route::post('caja/canjes/generacion/{id}/anular', 'Caja\TicketCanjeCajaController@apiAnular')->name('api_ticket_canje_caja_anular');
 
 Route::get('caja/canjes/informe', 'Caja\TicketCanjeCajaReporteController@index')->name('informe_ticket_canje_caja');
 Route::get('caja/listar-informe-ticket-canje-caja/{formato}', 'Caja\TicketCanjeCajaReporteController@exportar')->name('listar_informe_ticket_canje_caja');

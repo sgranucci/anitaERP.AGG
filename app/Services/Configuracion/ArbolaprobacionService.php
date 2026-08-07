@@ -26,6 +26,7 @@ use App\Repositories\Ordenventa\Ordenventa_EstadoRepositoryInterface;
 use App\Repositories\Ordenventa\OrdenventaRepositoryInterface;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraTotalesCabecera;
+use App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Services\Ai\AiPolicy;
 use App\Services\Ai\Skills\AiSkillContext;
@@ -1813,6 +1814,16 @@ class ArbolaprobacionService
             return $seleccionUsuario;
         }
 
+        // Regla general: un solo CC de destino de renglón manda el circuito.
+        // Excepción Capital Humano: pueden fijar otro CC (p. ej. origen) y conservarlo.
+        if (count($idsDistintos) === 1
+            && ! RequisicionCentrocostoArbolOrigenSupport::permiteCircuitoDistintoDeDestino(
+                (int) ($requisicion->creousuario_id ?? 0)
+            )
+        ) {
+            return (int) reset($idsDistintos);
+        }
+
         $persistido = (int) ($requisicion->centrocostodestino_arbol_id ?? 0);
         if ($persistido > 0) {
             if (Centrocosto::query()->whereKey($persistido)->exists()) {
@@ -1884,20 +1895,13 @@ class ArbolaprobacionService
      */
     public function centroCostoParaArbolAprobacionDesdeModelo(Requisicion $requisicion): int
     {
-        $persistido = (int) ($requisicion->centrocostodestino_arbol_id ?? 0);
-        if ($persistido > 0) {
-            return $persistido;
-        }
-
         $idsDistintos = $this->centrosCostoDestinoDistintosIdsDesdeModelo($requisicion);
-        if (count($idsDistintos) > 1) {
+        $cc = $this->resolverCentroCostoArbolRequisicion($requisicion, null, $idsDistintos);
+        if ($cc === null || $cc <= 0) {
             throw new \RuntimeException('Todos los renglones deben tener el mismo centro de costo de destino para el árbol de aprobación.');
         }
-        if (count($idsDistintos) === 1) {
-            return (int) reset($idsDistintos);
-        }
 
-        return (int) $requisicion->centrocosto_id;
+        return $cc;
     }
 
     /**
@@ -2183,6 +2187,19 @@ class ArbolaprobacionService
      */
     public function resolverCentroCostoArbolDesdeRequest(array $data, ?int $seleccionUsuario, array $idsDistintos): ?int
     {
+        $creousuarioId = (int) ($data['creousuario_id'] ?? 0);
+        if ($creousuarioId <= 0 && ! empty($data['requisicion_id'])) {
+            $creousuarioId = (int) (Requisicion::query()->whereKey((int) $data['requisicion_id'])->value('creousuario_id') ?? 0);
+        }
+        $permiteDistinto = RequisicionCentrocostoArbolOrigenSupport::permiteCircuitoDistintoDeDestino(
+            $creousuarioId > 0 ? $creousuarioId : null
+        );
+
+        // Sin excepción CH: el único destino de renglón gana sobre selección/persistido obsoleto.
+        if (count($idsDistintos) === 1 && ! $permiteDistinto) {
+            return (int) reset($idsDistintos);
+        }
+
         if ($seleccionUsuario !== null && $seleccionUsuario > 0) {
             $this->assertCentrocostoExisteParaArbol($seleccionUsuario);
 

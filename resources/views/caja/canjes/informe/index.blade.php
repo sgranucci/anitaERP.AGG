@@ -44,6 +44,7 @@
                                 <option value="P" @selected(($filtros['estado'] ?? '') === 'P')>Pendiente</option>
                                 <option value="C" @selected(($filtros['estado'] ?? '') === 'C')>Canjeado</option>
                                 <option value="V" @selected(($filtros['estado'] ?? '') === 'V')>VIP</option>
+                                <option value="A" @selected(($filtros['estado'] ?? '') === 'A')>Anulado</option>
                             </select>
                         </div>
                         <div class="form-group col-md-3">

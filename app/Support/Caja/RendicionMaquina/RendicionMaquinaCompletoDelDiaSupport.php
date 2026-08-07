@@ -41,6 +41,7 @@ final class RendicionMaquinaCompletoDelDiaSupport
         'dropem_ruleta',
         'vales',
         'reintegros',
+        'ticket_prom',
         'vta_ant_gastro',
         'pago_diferido',
     ];

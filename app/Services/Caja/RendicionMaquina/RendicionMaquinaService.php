@@ -438,8 +438,7 @@ final class RendicionMaquinaService
                 'variacion_ff',
                 'pago_diferido',
                 'vale_anterior',
-                'vales',
-                'reintegros',
+                'ticket_prom',
                 'vta_ant_gastro',
             ];
             if (is_array($inputsActuales)) {
@@ -843,13 +842,13 @@ final class RendicionMaquinaService
     {
         // Manuales visibles (abajo del bloque WIGOS/impuestos).
         // vta_ant_gastro sigue en fórmulas (D25) pero no en pantalla Anita ventana2.
+        // Vales/reintegros salen de pantalla (van por Gastos). ticket_prom: solo dato/asiento.
         return [
             'fondo_inicial',
             'variacion_ff',
             'pago_diferido',
             'sobrantes',
-            'vales',
-            'reintegros',
+            'ticket_prom',
         ];
     }
 

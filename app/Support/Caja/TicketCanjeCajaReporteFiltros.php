@@ -17,6 +17,8 @@ final class TicketCanjeCajaReporteFiltros
 
     public const ESTADO_VIP = 'V';
 
+    public const ESTADO_ANULADO = 'A';
+
     /**
      * @return array<string, mixed>
      */
@@ -48,6 +50,7 @@ final class TicketCanjeCajaReporteFiltros
             self::ESTADO_PENDIENTE,
             self::ESTADO_CANJEADO,
             self::ESTADO_VIP,
+            self::ESTADO_ANULADO,
         ], true)
             ? $estado
             : self::ESTADO_TODOS;
@@ -111,6 +114,7 @@ final class TicketCanjeCajaReporteFiltros
             self::ESTADO_PENDIENTE => 'Estado: Pendiente',
             self::ESTADO_CANJEADO => 'Estado: Canjeado',
             self::ESTADO_VIP => 'Estado: VIP',
+            self::ESTADO_ANULADO => 'Estado: Anulado',
             default => 'Estado: Todos',
         };
         if (! empty($filtros['usuario_id'])) {

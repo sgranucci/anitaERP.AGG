@@ -30,7 +30,13 @@ Devolución — {{ $recepcion->numerorecepcion }}
                 <input type="hidden" name="tipo" value="DEVOLUCION">
                 <div class="card-body">
                     <div class="alert alert-info">
-                        Devolución contra recepción <strong>{{ $recepcion->numerorecepcion }}</strong>.
+                        Devolución contra recepción <strong>{{ $recepcion->numerorecepcion }}</strong>
+                        @if (optional($recepcion->fecha)->format('d/m/Y'))
+                            (fecha origen {{ $recepcion->fecha->format('d/m/Y') }}).
+                        @else
+                            .
+                        @endif
+                        Se registra con la <strong>fecha de hoy</strong> (no afecta el cierre del período de la recepción).
                         Las cantidades vienen precargadas con lo recepcionado (devolución total habitual).
                         Ajuste solo las líneas que correspondan; no pueden superar lo recepcionado.
                     </div>

@@ -607,16 +607,28 @@ class RequisicionService
         $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
 
         $pendiente = Requisicion_Estado::$enumEstado[array_search('P', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $nombreEnCompras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
         $esProvisorio = RequisicionProvisorioSupport::esEstadoProvisorio($existente->estado);
+        $estadoActual = (string) ($existente->estado ?? '');
 
         if ($esProvisorio) {
             $data['estado'] = RequisicionProvisorioSupport::nombreEstadoProvisorio();
         }
 
-        if (($data['estado'] ?? '') == $pendiente && ! $esProvisorio) {
+        // Recalcular CC del circuito al grabar en PENDIENTE o EN COMPRAS (si cambian destinos de renglón).
+        $debeResolverCcArbol = ! $esProvisorio && (
+            ($data['estado'] ?? '') === $pendiente
+            || $estadoActual === $nombreEnCompras
+        );
+
+        if ($debeResolverCcArbol) {
             $data['requisicion_id'] = $id;
-            if (! empty($existente->centrocostodestino_arbol_id) && empty($data['centrocostodestino_arbol_id'])) {
-                $data['centrocostodestino_arbol_id'] = $existente->centrocostodestino_arbol_id;
+            $data['creousuario_id'] = (int) ($existente->creousuario_id ?? 0);
+            // Solo CH puede conservar un circuito distinto al destino de renglón.
+            if (RequisicionCentrocostoArbolOrigenSupport::usuarioPuedeCargar()) {
+                if (! empty($existente->centrocostodestino_arbol_id) && empty($data['centrocostodestino_arbol_id'])) {
+                    $data['centrocostodestino_arbol_id'] = $existente->centrocostodestino_arbol_id;
+                }
             }
             try {
                 $resolucionCc = $this->resolverCentrocostoArbolParaGrabacion($data);

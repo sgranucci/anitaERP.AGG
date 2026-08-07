@@ -109,7 +109,12 @@ final class RendicionMaquinaPreviasSupport
     }
 
     /**
-     * Fondo inicial: ERP (fondo_cierre − transferencia de previa) → Anita.
+     * Fondo inicial: ERP → Anita.
+     *
+     * Mañana / cierre día ant.: fondo_cierre − transferencia de la previa.
+     * Tarde / noche: fondo_cierre de la previa − suma de transferencias de turnos
+     * anteriores del mismo día (comprobante). Así la noche resta M+T y no solo T
+     * (el fondo_cierre de T vuelve a 1.100M y si se resta solo T se pierde la transf. de M).
      *
      * @param  array<string, mixed>  $out
      */
@@ -123,7 +128,13 @@ final class RendicionMaquinaPreviasSupport
         $prev = self::buscarRendicionPrevia($empresaId, $fechaYmd, $turno, $exceptoId);
         if ($prev !== null) {
             $fondoCierre = round((float) $prev->fondo_cierre, 2);
-            $transferencia = round((float) $prev->transferencia, 2);
+            $transferencia = self::transferenciaARestarFondoInicial(
+                $empresaId,
+                $fechaYmd,
+                $turno,
+                $exceptoId,
+                round((float) $prev->transferencia, 2)
+            );
             $out['fondo_inicial'] = round($fondoCierre - $transferencia, 2);
             $out['prev_fondo_cierre'] = $fondoCierre;
             $out['prev_transferencia'] = $transferencia;
@@ -140,6 +151,26 @@ final class RendicionMaquinaPreviasSupport
         $out['fondo_inicial'] = round((float) $anita['fondo_inicial'], 2);
         $out['prev_transferencia'] = round((float) ($anita['transferencia'] ?? 0), 2);
         $out['origen_fondo'] = $anita['origen'];
+    }
+
+    /**
+     * Monto a restar del fondo_cierre de la previa para obtener fondo_inicial.
+     */
+    private static function transferenciaARestarFondoInicial(
+        int $empresaId,
+        string $fechaYmd,
+        string $turno,
+        ?int $exceptoId,
+        float $transferenciaPrevia
+    ): float {
+        if (in_array($turno, [RendicionMaquinaTurno::TARDE, RendicionMaquinaTurno::NOCHE], true)) {
+            $suma = self::sumaTransferenciasDelDiaAnteriores($empresaId, $fechaYmd, $turno, $exceptoId);
+            if (abs($suma) > 0.00001) {
+                return $suma;
+            }
+        }
+
+        return $transferenciaPrevia;
     }
 
     /**

@@ -16,6 +16,7 @@ window.TICKET_CANJE_CAJA = {
     empresaId: @json((int) ($empresa_id ?? 0)),
     puedeCrear: @json((bool) ($puede_crear ?? false)),
     puedeReimprimir: @json((bool) ($puede_reimprimir ?? false)),
+    puedeAnular: @json((bool) ($puede_anular ?? false)),
     puedeOperar: @json($puedeOperarScript),
     rutas: {
         contexto: @json(route('api_ticket_canje_caja_contexto')),
@@ -194,7 +195,9 @@ window.TICKET_CANJE_CAJA = {
                                 <td class="text-right">{{ number_format((float) $row->monto_venta, 2, ',', '.') }}</td>
                                 <td class="text-right">{{ number_format((float) $row->monto_ticket, 2, ',', '.') }}</td>
                                 <td>
-                                    @if ($row->estado === 'C')
+                                    @if ($row->estado === 'A')
+                                        <span class="badge badge-secondary">Anulado</span>
+                                    @elseif ($row->estado === 'C')
                                         <span class="badge badge-info">Canjeado</span>
                                     @elseif ($row->estado === 'V' || $row->es_vip)
                                         <span class="badge badge-success">VIP</span>
@@ -203,10 +206,18 @@ window.TICKET_CANJE_CAJA = {
                                     @endif
                                 </td>
                                 <td class="text-nowrap">
-                                    @if (($puede_reimprimir ?? false) && ! $row->es_vip && (float) $row->monto_ticket > 0)
+                                    @if (($puede_reimprimir ?? false) && ! $row->es_vip && (float) $row->monto_ticket > 0 && $row->estado !== 'A')
                                         <button type="button" class="btn btn-sm btn-outline-primary js-reimprimir"
                                                 data-id="{{ (int) $row->id }}" title="Imprimir nuevamente">
                                             <i class="fa fa-print"></i>
+                                        </button>
+                                    @endif
+                                    @if (($puede_anular ?? false) && $row->esAnulable())
+                                        <button type="button" class="btn btn-sm btn-outline-danger js-anular"
+                                                data-id="{{ (int) $row->id }}"
+                                                data-vale="{{ $row->etiquetaVale() }}"
+                                                title="Anular ticket pendiente">
+                                            <i class="fa fa-times-circle"></i>
                                         </button>
                                     @endif
                                 </td>

@@ -234,13 +234,22 @@
 
 @include('stock.recepcion_proveedor.partials.aviso_descuento_oc', ['descuentoOc' => $descuentoOcCabecera])
 
+@php
+    // Devolución: siempre fecha del día (no heredar la de la recepción origen / período cerrado).
+    $fechaFormDefault = ($modoDevolucion ?? false)
+        ? date('Y-m-d')
+        : (optional($recepcion->fecha ?? null)->format('Y-m-d') ?? date('Y-m-d'));
+@endphp
 <div class="form-group row">
     <label class="col-lg-2 col-form-label text-right">Fecha</label>
     <div class="col-lg-3">
         <input type="date" id="fecha" name="fecha" class="form-control" required
             max="{{ date('Y-m-d') }}"
-            value="{{ old('fecha', optional($recepcion->fecha ?? null)->format('Y-m-d') ?? date('Y-m-d')) }}"
-            @if($soloLectura) readonly @endif>
+            value="{{ old('fecha', $fechaFormDefault) }}"
+            @if($soloLectura || ($modoDevolucion ?? false)) readonly @endif>
+        @if($modoDevolucion ?? false)
+            <small class="form-text text-muted">La devolución se registra con la fecha de hoy.</small>
+        @endif
     </div>
     <label class="col-lg-2 col-form-label text-right">
         Nº factura remito

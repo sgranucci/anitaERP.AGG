@@ -1,6 +1,7 @@
 /**
  * Intercepta alta/actualización de requisición cuando hay varios CC de destino
  * y pide el mismo modal que el retome desde EN COMPRAS.
+ * En PENDIENTE y EN COMPRAS: al grabar con un solo destino de renglón, actualiza el CC del circuito.
  * Con permiso cargar-centrocosto-arbol-requisicion: no pide modal; usa el CC del formulario
  * (default origen) independientemente de los destinos de renglón.
  */

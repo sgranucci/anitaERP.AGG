@@ -20,6 +20,9 @@ class TicketCanjeCaja extends Model implements Auditable
     /** Cliente VIP: monto ticket 0, no canjeable en POS. */
     public const ESTADO_VIP = 'V';
 
+    /** Anulado por cajero (solo desde Pendiente). */
+    public const ESTADO_ANULADO = 'A';
+
     /**
      * @return array<string, string>
      */
@@ -29,7 +32,15 @@ class TicketCanjeCaja extends Model implements Auditable
             self::ESTADO_PENDIENTE => 'Pendiente',
             self::ESTADO_CANJEADO => 'Canjeado',
             self::ESTADO_VIP => 'VIP',
+            self::ESTADO_ANULADO => 'Anulado',
         ];
+    }
+
+    public function esAnulable(): bool
+    {
+        return $this->estado === self::ESTADO_PENDIENTE
+            && ! $this->es_vip
+            && (float) $this->monto_ticket > 0;
     }
 
     public function etiquetaEstado(): string

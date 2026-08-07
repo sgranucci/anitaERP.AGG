@@ -62,8 +62,14 @@ final class RendicionMaquinaAnitaPreviasSupport
         }
 
         $fondoCierre = round((float) ($elegida->rendm_fondo_cierre ?? 0), 2);
-        $transferencia = round((float) ($elegida->rendm_transfer ?? 0), 2);
-        // Paridad calcula_fondo_inicial: fondo_cierre - transferencia
+        // T/N: restar suma de transferencias de turnos previos del día (no solo la previa).
+        // Así noche = fondo_cierre − (M+T), alineado a fondo diario − comprobantes acumulados.
+        $transferencia = in_array($turno, [RendicionMaquinaTurno::TARDE, RendicionMaquinaTurno::NOCHE], true)
+            ? self::sumaTransferenciasAnterioresMismoDia($filas, $turno)
+            : round((float) ($elegida->rendm_transfer ?? 0), 2);
+        if (abs($transferencia) < 0.00001) {
+            $transferencia = round((float) ($elegida->rendm_transfer ?? 0), 2);
+        }
         $fondo = round($fondoCierre - $transferencia, 2);
 
         return [
@@ -75,6 +81,32 @@ final class RendicionMaquinaAnitaPreviasSupport
                 (string) ($elegida->rendm_turno ?? '')
             ),
         ];
+    }
+
+    /**
+     * @param  list<object>  $filas
+     */
+    private static function sumaTransferenciasAnterioresMismoDia(array $filas, string $turno): float
+    {
+        $anteriores = match ($turno) {
+            RendicionMaquinaTurno::TARDE => [RendicionMaquinaTurno::MANIANA],
+            RendicionMaquinaTurno::NOCHE => [RendicionMaquinaTurno::MANIANA, RendicionMaquinaTurno::TARDE],
+            default => [],
+        };
+        if ($anteriores === []) {
+            return 0.0;
+        }
+
+        $suma = 0.0;
+        foreach ($filas as $fila) {
+            $t = strtoupper(trim((string) ($fila->rendm_turno ?? '')));
+            if (! in_array($t, $anteriores, true)) {
+                continue;
+            }
+            $suma += (float) ($fila->rendm_transfer ?? 0);
+        }
+
+        return round($suma, 2);
     }
 
     /**

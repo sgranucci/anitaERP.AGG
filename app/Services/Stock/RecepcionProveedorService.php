@@ -642,6 +642,8 @@ class RecepcionProveedorService
         $data['centrocosto_id'] = $origen->centrocosto_id
             ?? RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga();
         $data['moneda_id'] = $origen->moneda_id;
+        // Siempre fecha del día: no heredar la de la recepción origen (puede estar en período cerrado).
+        $data['fecha'] = now()->toDateString();
         if (! isset($data['deposito_id']) && $origen->deposito_id) {
             $data['deposito_id'] = $origen->deposito_id;
         }

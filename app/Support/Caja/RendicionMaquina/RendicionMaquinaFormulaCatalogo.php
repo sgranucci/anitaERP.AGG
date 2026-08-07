@@ -112,10 +112,11 @@ final class RendicionMaquinaFormulaCatalogo
             ],
             [
                 // calcula_arqueo_maquina() en a-rendmaquina.c (sin sobrantes):
-                // tot_valores(+cotiz divisa) + vales + reintegros + gastos + vta_ant_gastro
+                // tot_valores(+cotiz divisa) + gastos + vta_ant_gastro
+                // (vales/reintegros dejaron de cargarse a mano: van por Gastos)
                 'codigo' => 'D25',
                 'destino' => 'calc.deposito',
-                'expresion' => 'valores.total + gastos.total + inputs.vales + inputs.reintegros + inputs.vta_ant_gastro',
+                'expresion' => 'valores.total + gastos.total + inputs.vta_ant_gastro',
                 'seccion' => 'salidas',
                 'orden' => 125,
                 'activo' => true,

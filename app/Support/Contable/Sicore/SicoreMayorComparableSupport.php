@@ -39,10 +39,13 @@ final class SicoreMayorComparableSupport
         '/\bPAGO\s+SICORE\b/iu',
         '/\bDDJJ\s+SICORE\b/iu',
         // IIBB / ARBA: pago de liquidación quincenal (no es generación de retención).
-        '/\bRETENCIONES?\s+ARBA\b/iu',
+        // Variantes reales Anita: "RETENCIONES IIBB ARBA 1Q…", "RETENC ARBA 2Q…",
+        // "Rete Arba 1Q…", "Arba Ret IIBB 07.26 1Q rsa" (Rebisco).
+        '/\bRETENC(?:ION(?:ES)?)?\s+ARBA\b/iu',
         '/\bPERCEPCIONES?\s+ARBA\b/iu',
-        '/\bARBA\s*[12]Q\b/iu',
-        '/\bIIBB\s*[12]Q\b/iu',
+        '/\bARBA\s+RET\b/iu',
+        '/\bARBA\b.{0,40}\b[12]Q\b/iu',
+        '/\bIIBB\b.{0,40}\b[12]Q\b/iu',
         '/\bPAGO\s+(DE\s+)?(RETENCIONES?\s+|PERCEPCIONES?\s+)?ARBA\b/iu',
         '/\bPRESENTACI[OÓ]N\s+(ARBA|IIBB)\b/iu',
         '/\bDDJJ\s+(ARBA|IIBB)\b/iu',

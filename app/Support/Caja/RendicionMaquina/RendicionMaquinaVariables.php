@@ -53,6 +53,7 @@ final class RendicionMaquinaVariables
         'inputs.deposito',
         'inputs.vales',
         'inputs.reintegros',
+        'inputs.ticket_prom',
         'inputs.vta_ant_gastro',
         'inputs.variacion_ff',
         'inputs.pago_diferido',

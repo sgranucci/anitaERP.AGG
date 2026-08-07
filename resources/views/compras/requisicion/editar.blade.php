@@ -12,13 +12,15 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/compras/articulo_proveedor/operativo.js")}}" type="text/javascript"></script>
 @php
     $estadoPendienteNombre = \App\Models\Compras\Requisicion_Estado::$enumEstado[array_search('P', array_column(\App\Models\Compras\Requisicion_Estado::$enumEstado, 'valor'))]['nombre'] ?? 'PENDIENTE';
+    $estadoEnComprasNombre = \App\Models\Compras\Requisicion_Estado::$enumEstado[array_search('K', array_column(\App\Models\Compras\Requisicion_Estado::$enumEstado, 'valor'))]['nombre'] ?? 'EN COMPRAS';
+    $pideCcArbolAlGrabar = empty($visualizar) && empty($es_provisorio) && in_array(($data->estado ?? ''), [$estadoPendienteNombre, $estadoEnComprasNombre], true);
 @endphp
 <script>
 window.requisicionLineasConfig = window.requisicionLineasConfig || {};
 window.requisicionLineasConfig.urlPrecioUltimaCompra = @json(route('requisicion_precio_ultima_compra_articulo'));
 window.requisicionLineasConfig.urlCalcularTotales = @json(route('requisicion_calcular_totales'));
 window.requisicionModoProvisorio = @json(!empty($es_provisorio));
-window.requisicionPideCcArbolAlGrabar = @json(empty($visualizar) && empty($es_provisorio) && (($data->estado ?? '') === $estadoPendienteNombre));
+window.requisicionPideCcArbolAlGrabar = @json($pideCcArbolAlGrabar);
 window.requisicionUsaCcOrigenArbol = @json(\App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport::usuarioPuedeCargar());
 window.msColoresOpciones = @json(($color_query ?? collect())->map(fn ($c) => ['id' => (int) $c->id, 'nombre' => $c->nombre])->values());
 window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id' => (int) $t->id, 'nombre' => $t->nombre])->values());

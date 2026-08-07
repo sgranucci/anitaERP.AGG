@@ -180,6 +180,7 @@ final class RendicionMaquinaAnitaContextBuilder
             'vale_anterior' => $input('vale_anterior'),
             'variacion_ff' => $input('variacion_ff'),
             'pago_diferido' => $input('pago_diferido'),
+            'ticket_prom' => $input('ticket_prom'),
             'impuesto_drop' => $input('impuesto_drop'),
             'impuesto_venta' => $input('impuesto_venta'),
             'impuesto_qr' => $input('impuesto_qr'),

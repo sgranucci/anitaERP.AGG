@@ -119,6 +119,7 @@ final class TicketCanjeCajaReporteQuery
             TicketCanjeCajaReporteFiltros::ESTADO_PENDIENTE,
             TicketCanjeCajaReporteFiltros::ESTADO_CANJEADO,
             TicketCanjeCajaReporteFiltros::ESTADO_VIP,
+            TicketCanjeCajaReporteFiltros::ESTADO_ANULADO,
         ], true)) {
             $query->where('ticket_canje_caja.estado', $estado);
         }

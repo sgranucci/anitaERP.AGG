@@ -369,6 +369,42 @@
             });
         });
 
+        $(document).on('click', '.js-anular', function () {
+            if (!C.puedeAnular) {
+                return;
+            }
+            const id = $(this).data('id');
+            const vale = String($(this).data('vale') || id);
+            if (!id) {
+                return;
+            }
+            if (!window.confirm('¿Anular el ticket ' + vale + '? Solo si sigue pendiente.')) {
+                return;
+            }
+            const $btn = $(this);
+            $btn.prop('disabled', true);
+            $.ajax({
+                url: C.rutas.reimprimirBase + '/' + id + '/anular',
+                type: 'POST',
+                dataType: 'json',
+                headers: { 'X-CSRF-TOKEN': csrf(), 'X-Requested-With': 'XMLHttpRequest' },
+                data: { _token: csrf() },
+                success: function (resp) {
+                    toast((resp && (resp.mensaje || resp.error)) || (resp && resp.ok ? 'Anulado' : 'Error'), !!(resp && resp.ok));
+                    if (resp && resp.ok) {
+                        window.location.reload();
+                    } else {
+                        $btn.prop('disabled', false);
+                    }
+                },
+                error: function (xhr) {
+                    const j = xhr.responseJSON;
+                    toast((j && (j.error || j.mensaje)) || 'Error al anular.', false);
+                    $btn.prop('disabled', false);
+                },
+            });
+        });
+
         setTimeout(enfocarDocumento, 150);
     });
 }(jQuery));

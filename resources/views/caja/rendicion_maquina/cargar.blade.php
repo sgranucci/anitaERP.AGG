@@ -459,8 +459,7 @@
                                                 'variacion_ff' => 'Variaci&oacute;n FF',
                                                 'pago_diferido' => 'Pago diferido',
                                                 'sobrantes' => 'Sobrantes',
-                                                'vales' => 'Vales',
-                                                'reintegros' => 'Reintegros',
+                                                'ticket_prom' => 'Ticket promocionales',
                                             ];
                                             $depositoCalc = (float) ($totales['deposito'] ?? $inputs['deposito'] ?? 0);
                                             $fondoFijoCalc = (float) ($totales['fondo_fijo']
@@ -493,7 +492,7 @@
                                         </div>
                                         <div class="form-group col-md-6 col-lg-4 mb-2">
                                             <label class="small mb-0" for="calc_deposito"
-                                                   title="valores + gastos + vales + reintegros (+ vta ant. gastro si hubiera)">
+                                                   title="valores + gastos (+ vta ant. gastro si hubiera)">
                                                 Dep&oacute;sito <span class="text-muted">(calculado)</span>
                                             </label>
                                             <input type="text" id="calc_deposito" readonly

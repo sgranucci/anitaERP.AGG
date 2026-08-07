@@ -70,6 +70,7 @@ class TicketCanjeCajaController extends Controller
             'porcentaje_ticket' => (float) config('caja.ticket_canje_porcentaje', 5),
             'puede_crear' => can('crear-ticket-canje-caja', false),
             'puede_reimprimir' => can('reimprimir-ticket-canje-caja', false),
+            'puede_anular' => can('anular-ticket-canje-caja', false),
         ]);
     }
 
@@ -169,6 +170,22 @@ class TicketCanjeCajaController extends Controller
         }
 
         $resultado = $this->impresionService->imprimir($ticket, $request, 'Duplicado');
+
+        return response()->json($resultado, $resultado['ok'] ? 200 : 422);
+    }
+
+    public function apiAnular(Request $request, int $id)
+    {
+        can('anular-ticket-canje-caja');
+        $ticket = $this->repository->findOrFail($id);
+        if (! $this->empresaRepository->empresaIdPermitida((int) $ticket->empresa_id)) {
+            return response()->json(['ok' => false, 'error' => 'Empresa no permitida.'], 403);
+        }
+        if ((int) $ticket->usuario_id !== (int) Auth::id()) {
+            return response()->json(['ok' => false, 'error' => 'Solo puede anular tickets propios.'], 403);
+        }
+
+        $resultado = $this->emisionService->anular($ticket);
 
         return response()->json($resultado, $resultado['ok'] ? 200 : 422);
     }
