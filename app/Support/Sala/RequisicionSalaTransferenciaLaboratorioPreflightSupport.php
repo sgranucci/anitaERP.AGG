@@ -40,7 +40,7 @@ final class RequisicionSalaTransferenciaLaboratorioPreflightSupport
             return $sinAplicar;
         }
 
-        $depositoLabId = self::resolverDepositoLaboratorioId();
+        $depositoLabId = RequisicionSalaDepositoLaboratorioSupport::resolverId();
         if ($depositoLabId <= 0) {
             return [
                 'aplica' => true,
@@ -116,14 +116,4 @@ final class RequisicionSalaTransferenciaLaboratorioPreflightSupport
         return 'El depósito de origen ('.$nombre.') es centro de consumo: no se valida saldo y la transferencia se registrará igual.';
     }
 
-    private static function resolverDepositoLaboratorioId(): int
-    {
-        $codigo = trim((string) config('sala.requisicion_deposito_laboratorio_codigo', '406'));
-        if ($codigo === '') {
-            return 0;
-        }
-        $id = Depmae::query()->where('codigo', $codigo)->value('id');
-
-        return $id ? (int) $id : 0;
-    }
 }

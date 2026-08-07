@@ -15,6 +15,7 @@ use App\Repositories\Sala\RequisicionSalaRepositoryInterface;
 use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoParcialTrait;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoTrait;
+use App\Support\Sala\RequisicionSalaDepositoLaboratorioSupport;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -45,13 +46,12 @@ class CumplirRequisicionSalaService
 
     public function resolverDepositoLaboratorioId(): int
     {
-        $codigo = trim((string) config('sala.requisicion_deposito_laboratorio_codigo', '406'));
-        if ($codigo === '') {
-            return 0;
-        }
-        $id = Depmae::query()->where('codigo', $codigo)->value('id');
+        return RequisicionSalaDepositoLaboratorioSupport::resolverId();
+    }
 
-        return $id ? (int) $id : 0;
+    public function resolverDepositoLaboratorio(): ?Depmae
+    {
+        return RequisicionSalaDepositoLaboratorioSupport::resolver();
     }
 
     public function puedeCumplir(RequisicionSala $req): bool
@@ -527,7 +527,9 @@ class CumplirRequisicionSalaService
                 'deposito_entrada_id' => $depositoDestinoId,
                 'tipotransaccion_stock_id' => $tipoTransaccionId,
                 'empresa_id' => (int) $req->empresa_id,
-                'observacion' => $obsBase.' — origen dep&oacute;sito '.$depositoOrigenId,
+                'observacion' => $obsBase.' — origen depósito '.$depositoOrigenId,
+                // Origen suele ser 406 Biyemas; destino = depósito de la requisición (otra empresa).
+                'permitir_intercompany' => true,
             ], $lineasAgrupadas);
 
             if (! ($result['ok'] ?? false)) {

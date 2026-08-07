@@ -3,15 +3,17 @@
 namespace App\Services\Sala;
 
 use App\Models\Sala\RequisicionSala;
-use App\Models\Stock\Depmae;
 use App\Services\Stock\TransferenciaMercaderiaService;
+use App\Support\Sala\RequisicionSalaDepositoLaboratorioSupport;
 use App\Support\Sala\RequisicionSalaLineasLaboratorioSupport;
+use App\Support\Sala\RequisicionSalaNpuTransferenciaSupport;
 use App\Support\Sala\RequisicionSalaTransferenciaAsociadaSupport;
 use Auth;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Transferencia de stock al laboratorio tras aprobación del árbol (ítems reparación/devolución).
+ * Destino: depósito laboratorio compartido (código/empresa configurados, tip. 406 Biyemas).
  */
 class RequisicionSalaTransferenciaLaboratorioService
 {
@@ -39,11 +41,14 @@ class RequisicionSalaTransferenciaLaboratorioService
             return;
         }
 
-        $depositoLabId = $this->resolverDepositoLaboratorioId();
+        RequisicionSalaNpuTransferenciaSupport::asegurarRegistrados($lineas);
+
+        $depositoLabId = RequisicionSalaDepositoLaboratorioSupport::resolverId();
         if ($depositoLabId <= 0) {
             Log::warning('RequisicionSala: depósito laboratorio no configurado o inexistente', [
                 'requisicion_sala_id' => $requisicionSalaId,
-                'codigo' => config('sala.requisicion_deposito_laboratorio_codigo'),
+                'codigo' => RequisicionSalaDepositoLaboratorioSupport::codigoConfigurado(),
+                'empresa_id' => RequisicionSalaDepositoLaboratorioSupport::empresaIdConfigurada(),
             ]);
 
             return;
@@ -69,6 +74,8 @@ class RequisicionSalaTransferenciaLaboratorioService
                 'tipotransaccion_stock_id' => (int) config('sala.requisicion_transferencia_tipotransaccion_id', 1),
                 'empresa_id' => (int) $req->empresa_id,
                 'observacion' => $observacion,
+                // Lab usa 406 Biyemas aunque la requisición sea Kandiko/Rebisco.
+                'permitir_intercompany' => true,
             ], $lineas);
         } finally {
             if ($authPrev) {
@@ -92,17 +99,6 @@ class RequisicionSalaTransferenciaLaboratorioService
             'transferencia_id' => $result['transferencia_id'] ?? null,
             'codigo' => $result['codigo'] ?? null,
         ]);
-    }
-
-    private function resolverDepositoLaboratorioId(): int
-    {
-        $codigo = trim((string) config('sala.requisicion_deposito_laboratorio_codigo', '406'));
-        if ($codigo === '') {
-            return 0;
-        }
-        $id = Depmae::query()->where('codigo', $codigo)->value('id');
-
-        return $id ? (int) $id : 0;
     }
 
     private function yaEjecutada(RequisicionSala $req): bool

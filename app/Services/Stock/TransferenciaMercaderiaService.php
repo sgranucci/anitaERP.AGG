@@ -219,6 +219,8 @@ class TransferenciaMercaderiaService
         $tipotransaccionId = (int) ($cabecera['tipotransaccion_stock_id'] ?? $cabecera['tipotransaccion_id'] ?? 0);
         $empresaId = (int) ($cabecera['empresa_id'] ?? 0);
         $usuarioDestinoId = (int) ($cabecera['usuario_destino_id'] ?? 0) ?: null;
+        // Procesos de sistema (ej. TM sala → laboratorio Biyemas) pueden cruzar empresas.
+        $permitirIntercompany = filter_var($cabecera['permitir_intercompany'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         $decisionAvisoUsuario = null;
         if (array_key_exists('enviar_aviso', $cabecera)
@@ -300,8 +302,13 @@ class TransferenciaMercaderiaService
         }
 
         if (! $origenBienUso) {
-            $this->assertDepositoAutorizado($depositoSalidaId);
-            if (! TransferenciaMercaderiaIntercompanySupport::depositoSalidaAutorizado($depositoSalidaId, $empresaId)) {
+            if (! $permitirIntercompany) {
+                $this->assertDepositoAutorizado($depositoSalidaId);
+            }
+            $salidaOk = $permitirIntercompany
+                ? Depmae::query()->whereKey($depositoSalidaId)->exists()
+                : TransferenciaMercaderiaIntercompanySupport::depositoSalidaAutorizado($depositoSalidaId, $empresaId);
+            if (! $salidaOk) {
                 return ['ok' => false, 'mensaje' => 'Depósito de salida no autorizado para su usuario o empresa.'];
             }
             try {
@@ -314,13 +321,18 @@ class TransferenciaMercaderiaService
                 return ['ok' => false, 'mensaje' => $e->getMessage()];
             }
         }
-        if (! $destinoBienUso && ! TransferenciaMercaderiaIntercompanySupport::depositoEntradaAutorizado($depositoEntradaId, $empresaId)) {
-            return [
-                'ok' => false,
-                'mensaje' => TransferenciaMercaderiaIntercompanySupport::puedeUsar()
-                    ? 'Depósito de entrada no válido.'
-                    : 'Depósito de entrada no pertenece a la empresa seleccionada.',
-            ];
+        if (! $destinoBienUso) {
+            $entradaOk = $permitirIntercompany
+                ? Depmae::query()->whereKey($depositoEntradaId)->exists()
+                : TransferenciaMercaderiaIntercompanySupport::depositoEntradaAutorizado($depositoEntradaId, $empresaId);
+            if (! $entradaOk) {
+                return [
+                    'ok' => false,
+                    'mensaje' => TransferenciaMercaderiaIntercompanySupport::puedeUsar()
+                        ? 'Depósito de entrada no válido.'
+                        : 'Depósito de entrada no pertenece a la empresa seleccionada.',
+                ];
+            }
         }
 
         $depositoSalida = $origenBienUso ? null : Depmae::query()->findOrFail($depositoSalidaId);

@@ -14,6 +14,7 @@ use App\Services\Sala\CumplimientoRequisicionSalaRevertirService;
 use App\Services\Sala\CumplirRequisicionSalaPdfService;
 use App\Services\Sala\CumplirRequisicionSalaService;
 use App\Support\Sala\CumplimientoRequisicionSalaListadoFiltros;
+use App\Support\Sala\RequisicionSalaDepositoLaboratorioSupport;
 use App\Support\Stock\DepmaeControlStockSupport;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoParcialTrait;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoTrait;
@@ -75,10 +76,11 @@ class CumplirRequisicionSalaController extends Controller
             }
         }
 
-        $depositoLabId = $this->service->resolverDepositoLaboratorioId();
-        $depositoLab = $depositoLabId > 0
-            ? Depmae::query()->find($depositoLabId)
-            : null;
+        $depositoLab = $this->service->resolverDepositoLaboratorio();
+        $depositoLabId = $depositoLab ? (int) $depositoLab->id : 0;
+        $depositoLabNombreConEmpresa = $depositoLab
+            ? RequisicionSalaDepositoLaboratorioSupport::descripcionConEmpresa($depositoLab)
+            : '';
         $tecnicos = $requisicion
             ? $this->tecnicoRepository->allActivos((int) $requisicion->empresa_id)
             : collect();
@@ -113,6 +115,7 @@ class CumplirRequisicionSalaController extends Controller
             'modoNpu' => $modoNpu,
             'depositoLabId' => $depositoLabId,
             'depositoLab' => $depositoLab,
+            'depositoLabNombreConEmpresa' => $depositoLabNombreConEmpresa,
             'tecnicos' => $tecnicos,
             'pdfToken' => $pdfToken,
             'oldLineas' => $oldLineas,
@@ -204,8 +207,11 @@ class CumplirRequisicionSalaController extends Controller
 
         $req = $resultado['requisicion'];
         $linea = $resultado['linea'];
-        $depositoLabId = $this->service->resolverDepositoLaboratorioId();
-        $depositoLab = $depositoLabId > 0 ? Depmae::query()->find($depositoLabId) : null;
+        $depositoLab = $this->service->resolverDepositoLaboratorio();
+        $depositoLabId = $depositoLab ? (int) $depositoLab->id : 0;
+        $depositoLabNombre = $depositoLab
+            ? RequisicionSalaDepositoLaboratorioSupport::descripcionConEmpresa($depositoLab)
+            : null;
         $tecnicos = $this->tecnicoRepository->allActivos((int) $req->empresa_id);
         $pendiente = (float) $linea->cantidad - (float) ($linea->cantidadentregada ?? 0);
 
@@ -237,7 +243,7 @@ class CumplirRequisicionSalaController extends Controller
                 'requiere_tecnico' => (string) ($linea->destino ?? '') === 'R',
                 'deposito_origen_id' => $depositoLabId,
                 'deposito_origen_codigo' => $depositoLab?->codigo,
-                'deposito_origen_nombre' => $depositoLab?->nombre,
+                'deposito_origen_nombre' => $depositoLabNombre,
             ],
             'tecnicos' => $tecnicos->map(fn ($t) => ['id' => $t->id, 'nombre' => $t->nombre, 'legajo' => $t->legajo]),
         ]);
@@ -254,11 +260,14 @@ class CumplirRequisicionSalaController extends Controller
 
         /** @var RequisicionSala $req */
         $req = $carga['requisicion'];
-        $depositoLabId = $this->service->resolverDepositoLaboratorioId();
-        $depositoLab = $depositoLabId > 0 ? Depmae::query()->find($depositoLabId) : null;
+        $depositoLab = $this->service->resolverDepositoLaboratorio();
+        $depositoLabId = $depositoLab ? (int) $depositoLab->id : 0;
+        $depositoLabNombre = $depositoLab
+            ? RequisicionSalaDepositoLaboratorioSupport::descripcionConEmpresa($depositoLab)
+            : null;
         $tecnicos = $this->tecnicoRepository->allActivos((int) $req->empresa_id);
 
-        $lineas = $carga['lineas']->map(function ($linea) use ($depositoLabId, $depositoLab) {
+        $lineas = $carga['lineas']->map(function ($linea) use ($depositoLabId, $depositoLab, $depositoLabNombre) {
             $pendiente = (float) $linea->cantidad - (float) ($linea->cantidadentregada ?? 0);
 
             return [
@@ -275,7 +284,7 @@ class CumplirRequisicionSalaController extends Controller
                 'requiere_tecnico' => (string) ($linea->destino ?? '') === 'R',
                 'deposito_origen_id' => $depositoLabId,
                 'deposito_origen_codigo' => $depositoLab?->codigo,
-                'deposito_origen_nombre' => $depositoLab?->nombre,
+                'deposito_origen_nombre' => $depositoLabNombre,
             ];
         });
 
@@ -537,7 +546,7 @@ class CumplirRequisicionSalaController extends Controller
 
         $depositos = $depositoIds === []
             ? collect()
-            : Depmae::query()->whereIn('id', $depositoIds)->get()->keyBy('id');
+            : Depmae::query()->with('empresas:id,nombre')->whereIn('id', $depositoIds)->get()->keyBy('id');
 
         $resultado = [];
         foreach ($lineasOld as $lineaOld) {
@@ -574,7 +583,9 @@ class CumplirRequisicionSalaController extends Controller
                 'requiere_tecnico' => (string) ($linea->destino ?? '') === 'R',
                 'deposito_origen_id' => $depositoId,
                 'deposito_origen_codigo' => $deposito?->codigo,
-                'deposito_origen_nombre' => $deposito?->nombre,
+                'deposito_origen_nombre' => $deposito
+                    ? RequisicionSalaDepositoLaboratorioSupport::descripcionConEmpresa($deposito)
+                    : null,
                 'cantidad_entrega' => $lineaOld['cantidad_entrega'] ?? '',
                 'tecnico_laboratorio_id' => $lineaOld['tecnico_laboratorio_id'] ?? '',
                 'estadoparcial' => $lineaOld['estadoparcial'] ?? '',

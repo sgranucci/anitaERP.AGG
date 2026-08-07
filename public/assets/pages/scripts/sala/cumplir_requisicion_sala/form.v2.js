@@ -262,7 +262,7 @@
                 return;
             }
             renderCabecera(resp.requisicion, false);
-            $('#empresa_id').val(resp.requisicion.empresa_id || '');
+            $('#requisicion_empresa_id').val(resp.requisicion.empresa_id || '');
             cacheTecnicos(resp.requisicion.empresa_id, resp.tecnicos);
             renderLineas(resp.lineas, resp.tecnicos, resp.requisicion);
             $('#consultarequisicionsalaCumpleModal').modal('hide');
@@ -292,9 +292,9 @@
             });
             renderCabecera(resp.requisicion, Object.keys(numReqs).length > 1);
             if (Object.keys(numReqs).length === 1) {
-                $('#empresa_id').val(resp.requisicion.empresa_id || '');
+                $('#requisicion_empresa_id').val(resp.requisicion.empresa_id || '');
             } else {
-                $('#empresa_id').val('');
+                $('#requisicion_empresa_id').val('');
             }
             $('#input-npu-cumple').val('').focus();
         }).fail(function (xhr) {
@@ -574,9 +574,9 @@
             var primera = olds[0] && olds[0].requisicion ? olds[0].requisicion : null;
             renderCabecera(primera, multi);
             if (!multi && primera) {
-                $('#empresa_id').val(primera.empresa_id || '');
+                $('#requisicion_empresa_id').val(primera.empresa_id || '');
             } else {
-                $('#empresa_id').val('');
+                $('#requisicion_empresa_id').val('');
             }
             actualizarResumenNpu();
             refrescarSaldosGrilla(true);

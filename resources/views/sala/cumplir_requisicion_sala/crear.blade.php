@@ -39,7 +39,9 @@
             <form action="{{ route('grabar_cumplir_requisicion_sala') }}" method="POST" id="form-cumple-requisicion-sala" autocomplete="off">
                 @csrf
                 <input type="hidden" name="requisicion_sala_id" id="requisicion_sala_id" value="{{ old('requisicion_sala_id', $requisicion->id ?? '') }}">
-                <input type="hidden" id="empresa_id" value="{{ $requisicion->empresa_id ?? '' }}">
+                <input type="hidden" id="requisicion_empresa_id" value="{{ $requisicion->empresa_id ?? '' }}">
+                {{-- Sin #empresa_id: la consulta de depósitos no se acota a la empresa de la req
+                     (el lab usa tip. 406 Biyemas aunque la requisición sea Kandiko/Rebisco). --}}
 
                 <div class="card-body">
                     <ul class="nav nav-tabs mb-3" id="tabs-modo-cumple">
@@ -130,7 +132,7 @@
                                         <th>Descripci&oacute;n</th>
                                         <th class="text-right">Pend.</th>
                                         <th class="text-right" title="Saldo en dep&oacute;sito origen">Saldo</th>
-                                        <th>Dep. origen</th>
+                                        <th title="Dep&oacute;sito de origen (incluye empresa)">Dep. origen</th>
                                         <th>T&eacute;cnico</th>
                                         <th>UID</th>
                                         <th>NPU</th>
@@ -147,7 +149,7 @@
                                                 $oldLinea = $oldLineasPorArticuloId[$linea->id] ?? [];
                                                 $depOrigenId = $oldLinea['deposito_origen_id'] ?? $depositoLabId;
                                                 $depOrigenCodigo = $oldLinea['deposito_origen_codigo'] ?? ($depositoLab->codigo ?? '');
-                                                $depOrigenNombre = $oldLinea['deposito_origen_nombre'] ?? ($depositoLab->nombre ?? '');
+                                                $depOrigenNombre = $oldLinea['deposito_origen_nombre'] ?? ($depositoLabNombreConEmpresa ?? ($depositoLab->nombre ?? ''));
                                                 $tecnicoOld = $oldLinea['tecnico_laboratorio_id'] ?? '';
                                                 $cantidadOld = $oldLinea['cantidad_entrega'] ?? '';
                                                 $npuOld = $oldLinea['numeroparte'] ?? $linea->numeroparte;
@@ -245,6 +247,27 @@
     'estado_linea_enum' => $estado_linea_enum,
 ])
 @include('includes.stock.modalconsultadeposito')
+{{-- Lab elige depósitos de varias empresas (406 Biyemas vs Kandiko): forzar columna Empresa --}}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var $flag = document.getElementById('consultadeposito-mostrar-empresa');
+        if ($flag) {
+            $flag.value = '1';
+        }
+        var thead = document.querySelector('#tabla-data-deposito thead tr');
+        if (thead && !thead.querySelector('.col-empresa-deposito')) {
+            var thAcciones = thead.querySelector('th:last-child');
+            var th = document.createElement('th');
+            th.className = 'col-empresa-deposito';
+            th.textContent = 'Empresa';
+            if (thAcciones) {
+                thead.insertBefore(th, thAcciones);
+            } else {
+                thead.appendChild(th);
+            }
+        }
+    });
+</script>
 @endsection
 
 @section('scripts')
@@ -259,7 +282,8 @@
         urlPdf: @json(url('sala/cumplir-requisicion-sala/pdf')),
         depositoLabId: {{ (int) $depositoLabId }},
         depositoLabCodigo: @json($depositoLab->codigo ?? ''),
-        depositoLabNombre: @json($depositoLab->nombre ?? ''),
+        depositoLabNombre: @json($depositoLabNombreConEmpresa ?? ($depositoLab->nombre ?? '')),
+        forzarEmpresaDeposito: true,
         modoNpu: {{ !empty($modoNpu) ? 'true' : 'false' }},
         estadoParcialEnum: @json($estado_parcial_enum),
         oldLineas: @json($oldLineas ?? []),

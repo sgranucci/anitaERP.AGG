@@ -29,14 +29,15 @@ final class MovimientosArticuloDepositoSupport
     /**
      * Columna Empresa en el modal de consulta de depósitos. Además del criterio de
      * multiempresa, se muestra siempre para usuarios con permiso intercompany (transferencia
-     * o recepción), así el listado documenta a qué empresa pertenece cada depósito y la
-     * cabecera del modal queda alineada con las filas cuando se activa el modo intercompany.
+     * o recepción) o cumplimiento de requisición de sala (lab elige 406 Biyemas u otros),
+     * así el listado documenta a qué empresa pertenece cada depósito.
      */
     public static function mostrarEmpresaConsultaDeposito(): bool
     {
         return self::mostrarEmpresaEnListados()
             || TransferenciaMercaderiaIntercompanySupport::puedeUsar()
-            || RecepcionProveedorIntercompanySupport::puedeUsar();
+            || RecepcionProveedorIntercompanySupport::puedeUsar()
+            || can('cumplir-requisicion-sala', false);
     }
 
     public static function puedeConsultar(): bool

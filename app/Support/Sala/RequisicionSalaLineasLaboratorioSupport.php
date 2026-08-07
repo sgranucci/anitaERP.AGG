@@ -5,7 +5,6 @@ namespace App\Support\Sala;
 use App\Models\Sala\RequisicionSala;
 use App\Models\Sala\RequisicionSalaArticulo;
 use App\Models\Sala\RequisicionSalaEstado;
-use App\Models\Stock\Depmae;
 use Illuminate\Support\Collection;
 
 final class RequisicionSalaLineasLaboratorioSupport
@@ -38,16 +37,21 @@ final class RequisicionSalaLineasLaboratorioSupport
     }
 
     /**
-     * @return list<array{articulo_id: int, cantidad: float}>
+     * @return list<array{articulo_id: int, cantidad: float, numeroparte?: string}>
      */
     public static function payloadLineasTransferencia(RequisicionSala $req): array
     {
         $lineas = [];
         foreach (self::lineasTransferibles($req) as $articulo) {
-            $lineas[] = [
+            $linea = [
                 'articulo_id' => (int) $articulo->articulo_id,
                 'cantidad' => (float) $articulo->cantidad,
             ];
+            $npu = trim((string) ($articulo->numeroparte ?? ''));
+            if ($npu !== '') {
+                $linea['numeroparte'] = $npu;
+            }
+            $lineas[] = $linea;
         }
 
         return $lineas;
@@ -62,11 +66,12 @@ final class RequisicionSalaLineasLaboratorioSupport
             $destino = strtoupper((string) ($linea->destino ?? ''));
             $etiquetaDestino = $destino === 'R' ? 'REPARACIÓN' : ($destino === 'D' ? 'DEVOLUCIÓN' : $destino);
             $partes[] = sprintf(
-                '- %s %s — cant. %.4f (%s)',
+                '- %s %s — cant. %.4f (%s)%s',
                 $sku,
                 $desc,
                 (float) ($linea->cantidad ?? 0),
-                $etiquetaDestino
+                $etiquetaDestino,
+                ($npu = trim((string) ($linea->numeroparte ?? ''))) !== '' ? ' NPU '.$npu : ''
             );
         }
 
@@ -88,15 +93,6 @@ final class RequisicionSalaLineasLaboratorioSupport
 
     public static function etiquetaDepositoLaboratorio(): string
     {
-        $codigo = trim((string) config('sala.requisicion_deposito_laboratorio_codigo', '406'));
-        if ($codigo === '') {
-            return '—';
-        }
-        $dep = Depmae::query()->where('codigo', $codigo)->first();
-        if (! $dep) {
-            return 'Depósito '.$codigo;
-        }
-
-        return Depmae::etiquetaDesdePartes($dep->codigo, $dep->nombre, $dep->id);
+        return RequisicionSalaDepositoLaboratorioSupport::etiqueta();
     }
 }
