@@ -37,7 +37,9 @@ use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
 use App\Services\Compras\OrdencompraRevertirCierreLineaService;
 use App\Services\Stock\RecepcionProveedorPrecioPendienteService;
 use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
+use App\Support\Compras\OrdencompraContratoVencimientoSupport;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
+use App\Support\Seguridad\UsuarioOperativoSupport;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
@@ -944,6 +946,13 @@ class OrdencompraController extends Controller
         $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
         $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
+        $usuario_contrato_query = UsuarioOperativoSupport::listadoParaSelector(
+            columnas: ['id', 'nombre', 'email']
+        );
+        $oc_contrato_resumen = ($id !== null && $data && $data->es_contrato)
+            ? OrdencompraContratoVencimientoSupport::resumenParaFormulario($id)
+            : null;
+
         return view('compras.ordencompra.editar', compact(
             'data',
             'empresa_query',
@@ -974,6 +983,8 @@ class OrdencompraController extends Controller
             'oc_revertir_cierre_lineas',
             'color_query',
             'talle_query',
+            'usuario_contrato_query',
+            'oc_contrato_resumen',
         ));
     }
 }

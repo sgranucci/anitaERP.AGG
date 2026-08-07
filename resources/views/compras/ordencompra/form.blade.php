@@ -311,6 +311,8 @@
         </div>
     </div>
 
+    @include('compras.ordencompra.partials.bloque_contrato')
+
     <div class="card card-outline card-secondary mb-3">
         <div class="card-header">
             <strong>Condiciones de contratación</strong>

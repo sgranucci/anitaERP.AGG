@@ -28,7 +28,7 @@
                         Suba un CSV con el formato Anita (<code>p-cargasolpm</code>):
                         Empresa, Proveedor, Concepto, Sector, Forma de pago, Beneficiario, Moneda,
                         Detalle, Fecha vencimiento, Monto, y pares Cuenta Haber/Importe + Cuenta Debe/Importe.
-                        Separador: coma o punto y coma. Máximo 1000 solicitudes.
+                        Separador: coma o punto y coma. Codificación UTF-8 o Latin-1 (Excel). Máximo 1000 solicitudes.
                     </p>
                     <div class="alert alert-secondary small py-2">
                         <strong>Estado al generar:</strong> AUTORIZADA (igual que en Anita).

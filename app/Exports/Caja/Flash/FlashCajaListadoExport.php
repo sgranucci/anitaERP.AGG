@@ -106,8 +106,8 @@ class FlashCajaListadoExport implements FromView, ShouldAutoSize, WithColumnForm
         }
 
         return [
-            'A' => 8,
-            'B' => 12,
+            'A' => 12,
+            'B' => 8,
             'C' => 28,
             'D' => 14,
             'E' => 14,

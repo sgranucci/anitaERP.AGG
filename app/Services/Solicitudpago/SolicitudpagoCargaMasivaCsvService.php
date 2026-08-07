@@ -12,6 +12,7 @@ use App\Models\Solicitudpago\Formapagosol;
 use App\Models\Solicitudpago\Sector_Solicitudpago;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface;
+use App\Support\Archivo\TextoUtf8Support;
 use App\Support\Solicitudpago\SolicitudpagoCargaMasivaCsvParser;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
@@ -186,12 +187,7 @@ class SolicitudpagoCargaMasivaCsvService
             throw new \InvalidArgumentException('El archivo está vacío o no se pudo leer.');
         }
 
-        // Quitar BOM UTF-8
-        if (str_starts_with($contenido, "\xEF\xBB\xBF")) {
-            $contenido = substr($contenido, 3);
-        }
-
-        return $contenido;
+        return TextoUtf8Support::normalizar($contenido);
     }
 
     /**

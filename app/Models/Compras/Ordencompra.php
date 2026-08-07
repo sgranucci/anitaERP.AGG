@@ -3,6 +3,7 @@
 namespace App\Models\Compras;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Transporte;
@@ -39,6 +40,18 @@ class Ordencompra extends Model
         'comentario', 'detalle', 'lugarentrega', 'transporte_id', 'tratamiento', 'proveedor_id',
         'condicioncompra_id', 'condicionentrega_id', 'condicionpago_id', 'descuento', 'descuento_tipo', 'estadoordencompra', 'sector_legajocompra_id',
         'condiciones_contratacion', 'creousuario_id',
+        'es_contrato', 'contrato_vigencia_desde', 'contrato_vigencia_hasta', 'contrato_monto_tope',
+        'contrato_moneda_id', 'contrato_auto_renovable', 'contrato_dias_preaviso', 'contrato_dias_aviso',
+        'contrato_responsable_id',
+    ];
+
+    protected $casts = [
+        'es_contrato' => 'boolean',
+        'contrato_auto_renovable' => 'boolean',
+        'contrato_vigencia_desde' => 'date',
+        'contrato_vigencia_hasta' => 'date',
+        'contrato_monto_tope' => 'float',
+        'contrato_dias_preaviso' => 'integer',
     ];
 
     public function empresas()
@@ -124,5 +137,20 @@ class Ordencompra extends Model
     public function transportes()
     {
         return $this->belongsTo(Transporte::class, 'transporte_id');
+    }
+
+    public function contrato_responsables()
+    {
+        return $this->belongsTo(Usuario::class, 'contrato_responsable_id');
+    }
+
+    public function contrato_monedas()
+    {
+        return $this->belongsTo(Moneda::class, 'contrato_moneda_id');
+    }
+
+    public function contrato_avisos()
+    {
+        return $this->hasMany(Ordencompra_Contrato_Aviso::class, 'ordencompra_id');
     }
 }

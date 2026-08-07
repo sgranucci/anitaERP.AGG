@@ -13,6 +13,8 @@ return [
         'sala.requisicion_sala_creacion' => App\Services\Configuracion\Handlers\SalaRequisicionSalaCreacionAvisoHandler::class,
         'compras.requisicion_compra_cumplida' => App\Services\Configuracion\Handlers\ComprasRequisicionCumplidaAvisoDespachoHandler::class,
         'compras.ordencompra_alertas_abiertas' => App\Services\Configuracion\Handlers\ComprasOrdencompraAlertasAbiertasAvisoHandler::class,
+        'compras.ordencompra_contrato_vencimiento' => App\Services\Configuracion\Handlers\ComprasOrdencompraContratoVencimientoAvisoHandler::class,
+        'compras.ordencompra_contrato_vencido' => App\Services\Configuracion\Handlers\ComprasOrdencompraContratoVencimientoAvisoHandler::class,
         'stock.prestamo_solicitud' => App\Services\Configuracion\Handlers\StockPrestamoAvisoDespachoHandler::class,
         'stock.prestamo_recordatorio' => App\Services\Configuracion\Handlers\StockPrestamoAvisoDespachoHandler::class,
         'stock.prestamo_aprobado_solicitante' => App\Services\Configuracion\Handlers\StockPrestamoAvisoDespachoHandler::class,

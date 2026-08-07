@@ -46,8 +46,8 @@
     <table class="data">
         <thead>
             <tr>
-                <th>ID</th>
                 <th>Fecha</th>
+                <th>ID</th>
                 <th>Empresa</th>
                 <th>AyB</th>
                 <th>Estac.</th>
@@ -60,8 +60,8 @@
         <tbody>
             @foreach ($datas as $data)
             <tr>
-                <td>{{ $data->id }}</td>
                 <td>{{ $data->fecha?->format('d/m/Y') }}</td>
+                <td>{{ $data->id }}</td>
                 <td>{{ $data->empresa->nombre ?? '' }}</td>
                 <td class="text-right">{{ number_format((float) $data->ayb, 2, ',', '.') }}</td>
                 <td class="text-right">{{ number_format((float) $data->estac, 2, ',', '.') }}</td>

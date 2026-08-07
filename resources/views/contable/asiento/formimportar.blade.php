@@ -160,6 +160,7 @@
     <label for="file" class="col-lg-3 control-label text-right pr-2 requerido">Archivo Excel</label>
     <div class="col-lg-6">
         <input type="file" name="file" id="file" class="form-control" accept=".xlsx,.xls,.csv" required />
+        <small class="form-text text-muted">CSV: UTF-8 o Latin-1 (Excel). XLSX/XLS sin restricción de encoding.</small>
     </div>
     <div class="col-lg-3">
         <button type="button" id="btn-preview-import-asiento" class="btn btn-outline-primary btn-sm" disabled>

@@ -2398,4 +2398,18 @@ $(function () {
 		clearTimeout(window._treqoc);
 		window._treqoc = setTimeout(cargaTablaRequisiciones, 300);
 	});
+
+	function ocSincronizarBloqueContrato() {
+		var esContrato = $('#es_contrato').is(':checked');
+		$('#oc-contrato-campos').toggle(esContrato);
+
+		var autoRenovable = esContrato && $('#contrato_auto_renovable').is(':checked');
+		$('#contrato_dias_preaviso').prop('disabled', !autoRenovable);
+		if (!autoRenovable) {
+			$('#contrato_dias_preaviso').val('');
+		}
+	}
+
+	$(document).on('change', '#es_contrato, #contrato_auto_renovable', ocSincronizarBloqueContrato);
+	ocSincronizarBloqueContrato();
 });

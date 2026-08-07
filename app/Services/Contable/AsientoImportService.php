@@ -9,6 +9,7 @@ use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Archivo\TextoUtf8Support;
 use App\Support\Contable\AsientoImportColumnasSupport;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +60,8 @@ class AsientoImportService
         if ($fecha === '') {
             throw new \InvalidArgumentException('Indique la fecha del asiento.');
         }
+
+        $archivo = TextoUtf8Support::asegurarCsvUtf8($archivo);
 
         $monedaDefault = $monedaDefaultId && $monedaDefaultId > 0
             ? Moneda::query()->find($monedaDefaultId)

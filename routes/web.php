@@ -3111,6 +3111,8 @@ Route::post('compras/listaprecio_proveedor/{id}/importar_excel', 'Compras\Listap
 
 Route::get('compras/ordencompra-reporte', 'Compras\OrdencompraReporteController@index')->name('reporte_ordencompra');
 Route::get('compras/listar-ordencompra-reporte/{formato?}', 'Compras\OrdencompraReporteController@exportar')->name('listar_reporte_ordencompra');
+Route::get('compras/contrato-vencimiento-reporte', 'Compras\ContratoVencimientoReporteController@index')->name('reporte_contrato_vencimiento');
+Route::get('compras/listar-contrato-vencimiento-reporte/{formato?}', 'Compras\ContratoVencimientoReporteController@exportar')->name('listar_reporte_contrato_vencimiento');
 Route::get('compras/historial-precios-articulo', 'Compras\HistorialPreciosArticuloController@index')->name('reporte_historial_precios_articulo');
 Route::get('compras/listar-historial-precios-articulo/{formato?}', 'Compras\HistorialPreciosArticuloController@exportar')->name('listar_reporte_historial_precios_articulo');
 Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');
