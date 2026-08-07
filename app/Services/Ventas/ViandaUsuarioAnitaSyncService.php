@@ -7,6 +7,7 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Ventas\ViandaConsumo;
 use App\Models\Ventas\ViandaTipoMenu;
 use App\Models\Ventas\ViandaUsuario;
+use App\Support\Ventas\Vianda\ViandaCentrocostoEmpleadoSupport;
 use App\Support\Ventas\ViandaTipoMenuAnitaBridgeSupport;
 use App\Support\Ventas\ViandaUsuarioTipoSupport;
 use Illuminate\Support\Facades\DB;
@@ -162,6 +163,11 @@ class ViandaUsuarioAnitaSyncService
                     }
                 }
 
+                // Anita sin ccosto: el código de usuario es el documento, se toma el CC del legajo de sueldos.
+                if ($centrocostoId === null) {
+                    $centrocostoId = ViandaCentrocostoEmpleadoSupport::centrocostoIdPorDocumento($codigoUsuario, $empresaId);
+                }
+
                 try {
                     DB::transaction(function () use (
                         $empresaId,
@@ -197,6 +203,10 @@ class ViandaUsuarioAnitaSyncService
                                 $ret['omitidos']++;
 
                                 return;
+                            }
+                            // Anita sin CC no debe borrar el que gastronomía cargó a mano tras el aviso.
+                            if ($centrocostoId === null && (int) ($usuario->centrocosto_id ?? 0) > 0) {
+                                unset($payload['centrocosto_id']);
                             }
                             $usuario->update($payload);
                             $ret['actualizados']++;

@@ -3,6 +3,7 @@
 namespace App\Support\Contable;
 
 use App\Imports\Contable\AsientoImportLecturaCruda;
+use App\Support\Archivo\TextoUtf8Support;
 use App\Support\Stock\PrecioImportColumnasSupport;
 use Illuminate\Http\UploadedFile;
 use Maatwebsite\Excel\Facades\Excel;
@@ -224,7 +225,7 @@ final class AsientoImportColumnasSupport
             return '';
         }
 
-        return trim((string) $valor);
+        return trim(TextoUtf8Support::normalizar((string) $valor));
     }
 
     public static function normalizarCodigoCuenta(mixed $valor): string

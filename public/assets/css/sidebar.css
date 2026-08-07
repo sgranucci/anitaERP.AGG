@@ -154,6 +154,21 @@
     padding-left: 0.65rem;
 }
 
+/* --- Nombres largos: sangría francesa ---
+   AdminLTE deja el ícono fuera del <p>, así que al cortarse el nombre el segundo
+   renglón arrancaba debajo del ícono. Con el <p> como inline-block acotado, todos
+   los renglones alinean con el texto de la primera línea. */
+.main-sidebar.anita-sidebar .nav-sidebar .nav-link > p {
+    display: inline-block;
+    vertical-align: middle;
+    max-width: calc(100% - 2rem);
+}
+
+/* Ítems con submenú: reservar el ancho del chevron (posicionado absoluto a la derecha). */
+.main-sidebar.anita-sidebar .nav-sidebar .has-treeview > .nav-link > p {
+    max-width: calc(100% - 3.2rem);
+}
+
 /* --- Override AdminLTE: active solo en raíz --- */
 .sidebar-dark-primary.anita-sidebar .nav-sidebar > .nav-item > .nav-link.active,
 .sidebar-dark-primary.anita-sidebar .nav-treeview > .nav-item > .nav-link.active {

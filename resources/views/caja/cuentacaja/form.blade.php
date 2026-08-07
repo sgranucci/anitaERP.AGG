@@ -35,21 +35,29 @@
 		</select>
 	</div>
 </div>
-<div class="form-group row">
-	<label for="banco_id" class="col-lg-3 col-form-label">Banco</label>
-	<div class="col-lg-8">
-		<select name="banco_id" id="banco_id" data-placeholder="Banco" class="form-control" data-fouc>
-			<option value="">-- Seleccionar Banco --</option>
-			@foreach($banco_query as $key => $value)
-				@if( (int) $value->id == (int) old('banco_id', $data->banco_id ?? ''))
-					<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
-				@else
-					<option value="{{ $value->id }}">{{ $value->nombre }}</option>
-				@endif
-			@endforeach
-		</select>
-	</div>
-</div>
+@php
+	$bancoIdForm = old('banco_id', $data->banco_id ?? '');
+	$bancoModelForm = null;
+	if ((int) $bancoIdForm > 0) {
+		if (($data->bancos?->id ?? null) == (int) $bancoIdForm) {
+			$bancoModelForm = $data->bancos;
+		} else {
+			$bancoModelForm = \App\Models\Caja\Banco::query()->find((int) $bancoIdForm);
+		}
+	}
+@endphp
+@include('caja.partials.campo_consulta_banco', [
+	'bancoId' => $bancoIdForm,
+	'codigo' => $bancoModelForm->codigo ?? '',
+	'descripcion' => $bancoModelForm->nombre ?? '',
+	'label' => 'Banco',
+	'inputName' => 'banco_id',
+	'inputId' => 'banco_id',
+	'layout' => 'form_row',
+	'required' => false,
+	'col_label' => 'col-lg-3',
+	'col_input' => 'col-lg-8',
+])
 @include('includes.form-empresa-asignada', [
     'empresa_query' => $empresa_query,
     'empresa_id' => $data->empresa_id ?? null,

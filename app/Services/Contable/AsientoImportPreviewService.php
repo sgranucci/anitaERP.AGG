@@ -6,6 +6,7 @@ use App\Imports\Contable\AsientoImportLecturaCruda;
 use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
+use App\Support\Archivo\TextoUtf8Support;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
 use App\Support\Contable\AsientoImportColumnasSupport;
 use Illuminate\Http\UploadedFile;
@@ -34,6 +35,8 @@ class AsientoImportPreviewService
         ?int $filaEncabezadoManual,
         ?int $hojaIndice1Based = null
     ): array {
+        $archivo = TextoUtf8Support::asegurarCsvUtf8($archivo);
+
         $cols = $this->nombresColumnas(
             $colCuenta,
             $colDebe,

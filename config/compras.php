@@ -27,6 +27,19 @@ return [
     ],
 
     /*
+    | Aviso de vencimiento de contratos / OC abiertas (compras:alertas-contratos-vencimiento).
+    | Destinatarios y plantilla: Configuración → Avisos por módulo
+    | (compras / ordencompra_contrato_vencimiento y ordencompra_contrato_vencido).
+    */
+    'contratos_vencimiento' => [
+        'habilitado' => filter_var(env('COMPRAS_CONTRATOS_ALERTAS_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('COMPRAS_CONTRATOS_ALERTAS_HORA', '08:30'),
+        'dias_aviso' => env('COMPRAS_CONTRATOS_DIAS_AVISO', '60,30,15'),
+        'porcentajes_consumo' => env('COMPRAS_CONTRATOS_PORCENTAJES_CONSUMO', '80,100'),
+        'dias_repeticion_vencido' => max(1, (int) env('COMPRAS_CONTRATOS_DIAS_REPETICION_VENCIDO', 7)),
+    ],
+
+    /*
     | Metas de KPIs de proceso de Compras (tablero + panel IA).
     | Roles comprador: solo estos cuentan en OC gestionadas / productividad / ahorro.
     */

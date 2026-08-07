@@ -54,9 +54,9 @@
                 ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
-                        <tr>
-                            <th class="width20">ID</th>
+                        <tr style="background:#85C1E9;color:#17202A;">
                             <th class="width90">Fecha</th>
+                            <th class="width20">ID</th>
                             <th>Empresa</th>
                             <th class="width100 text-right">AyB</th>
                             <th class="width100 text-right">Estac.</th>
@@ -73,8 +73,8 @@
                     <tbody>
                         @foreach ($datas as $data)
                         <tr>
-                            <td>{{ $data->id }}</td>
                             <td>{{ $data->fecha?->format('d/m/Y') }}</td>
+                            <td>{{ $data->id }}</td>
                             <td>{{ $data->empresa->nombre ?? '' }}</td>
                             <td class="text-right">{{ number_format((float) $data->ayb, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format((float) $data->estac, 2, ',', '.') }}</td>

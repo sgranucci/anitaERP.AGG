@@ -30,9 +30,9 @@
 
     @yield("styles")
 
-    <link rel="stylesheet" href="{{asset("assets/css/custom.css")}}">
-    <link rel="stylesheet" href="{{asset("assets/css/sidebar.css")}}">
-    <link rel="stylesheet" href="{{asset("assets/css/barra-tareas.css")}}">
+    <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}?v={{ @filemtime(public_path('assets/css/custom.css')) ?: time() }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/sidebar.css') }}?v={{ @filemtime(public_path('assets/css/sidebar.css')) ?: time() }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/barra-tareas.css') }}?v={{ @filemtime(public_path('assets/css/barra-tareas.css')) ?: time() }}">
     @auth
         @if (!$modoConsulta && can('ejecutar-consulta-ia', false) && filter_var(config('ai.habilitado', false), FILTER_VALIDATE_BOOLEAN) && filter_var(config('ai.skills.consultar_contexto_operativo.habilitada', false), FILTER_VALIDATE_BOOLEAN))
             <link rel="stylesheet" href="{{ asset('assets/css/ai-consulta-operativa.css') }}?v={{ @filemtime(public_path('assets/css/ai-consulta-operativa.css')) ?: time() }}">

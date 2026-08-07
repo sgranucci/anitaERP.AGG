@@ -79,6 +79,20 @@ class RecepcionProveedorConversionSupport
         return round($base, 2);
     }
 
+    /**
+     * Misma fórmula que importeLinea() (sin descuento de cabecera OC) expresada en SQL,
+     * para sumarizar importes recibidos sin traer las líneas a memoria.
+     */
+    public static function expresionSqlImporteLinea(string $aliasLinea): string
+    {
+        $alias = preg_replace('/[^A-Za-z0-9_]/', '', $aliasLinea) ?: 'rpa';
+
+        return sprintf(
+            '(%1$s.cantidad * %1$s.precio * (1 - COALESCE(%1$s.descuento, 0) / 100))',
+            $alias
+        );
+    }
+
     /** Coeficiente legacy in_dto_final / penmp_dto sobre el neto de línea. */
     public static function factorDescuentoCabeceraOc(float $descuentoCabeceraOc): float
     {

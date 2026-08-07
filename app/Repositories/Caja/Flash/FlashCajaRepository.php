@@ -47,7 +47,10 @@ class FlashCajaRepository implements FlashCajaRepositoryInterface
             FlashCajaListadoFiltros::aplicar($query, $filtros);
         }
 
-        $query->orderByDesc('flash_caja.fecha')->orderByDesc('flash_caja.id');
+        // Más nuevos arriba: fecha → id → empresa
+        $query->orderByDesc('flash_caja.fecha')
+            ->orderByDesc('flash_caja.id')
+            ->orderBy('flash_caja.empresa_id');
 
         return $paginar
             ? $query->paginate(10)->appends(FlashCajaListadoFiltros::paraQueryString($filtros))

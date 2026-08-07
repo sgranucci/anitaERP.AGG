@@ -37,21 +37,26 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
         {
             $permisos = traePermisosUsuario();
 
-            if (in_array("actualiza-arbol-requisiciones", $permisos['permisos']) ||
-                in_array("consulta-arbol-requisiciones", $permisos['permisos']))
-                $tipoarbol[] = Arbolaprobacion::$enumTipoArbol[0]['nombre']; 
+            // Slugs reales en tabla permiso (singular / orden-de-compra).
+            if (in_array('actualiza-arbol-requisicion', $permisos['permisos']) ||
+                in_array('consulta-arbol-requisicion', $permisos['permisos'])) {
+                $tipoarbol[] = Arbolaprobacion::$enumTipoArbol[0]['nombre'];
+            }
 
-            if (in_array("actualiza-arbol-ordenes-de-compra", $permisos['permisos']) ||
-                in_array("consulta-arbol-ordenes-de-compra", $permisos['permisos']))
-                $tipoarbol[] = Arbolaprobacion::$enumTipoArbol[1]['nombre']; 
+            if (in_array('actualiza-arbol-orden-de-compra', $permisos['permisos']) ||
+                in_array('consulta-arbol-orden-de-compra', $permisos['permisos'])) {
+                $tipoarbol[] = Arbolaprobacion::$enumTipoArbol[1]['nombre'];
+            }
 
-            if (in_array("actualiza-arbol-solicitudes-de-pago", $permisos['permisos']) ||
-                in_array("consulta-arbol-solicitudes-de-pago", $permisos['permisos']))
-                $tipoarbol[] = Arbolaprobacion::$enumTipoArbol[2]['nombre']; 
+            if (in_array('actualiza-arbol-solicitudes-de-pago', $permisos['permisos']) ||
+                in_array('consulta-arbol-solicitudes-de-pago', $permisos['permisos'])) {
+                $tipoarbol[] = Arbolaprobacion::$enumTipoArbol[2]['nombre'];
+            }
 
-            if (in_array("actualiza-arbol-ordenes-de-venta", $permisos['permisos']) ||
-                in_array("consulta-arbol-ordenes-de-venta", $permisos['permisos']))
-                $tipoarbol[] = Arbolaprobacion::$enumTipoArbol[3]['nombre'];            
+            if (in_array('actualiza-arbol-ordenes-de-venta', $permisos['permisos']) ||
+                in_array('consulta-arbol-ordenes-de-venta', $permisos['permisos'])) {
+                $tipoarbol[] = Arbolaprobacion::$enumTipoArbol[3]['nombre'];
+            }
         }
 
         // Lee empresas asignadas

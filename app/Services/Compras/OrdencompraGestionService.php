@@ -895,6 +895,52 @@ class OrdencompraGestionService
             'estadoordencompra' => $estado,
             'sector_legajocompra_id' => $sectorId,
             'creousuario_id' => $creoUsuarioId,
+        ] + $this->armaContratoDesdeRequest($payload);
+    }
+
+    /**
+     * Contrato / OC abierta: vigencia, tope y datos de renovación automática.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function armaContratoDesdeRequest(array $payload): array
+    {
+        $esContrato = filter_var($payload['es_contrato'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if (! $esContrato) {
+            return [
+                'es_contrato' => false,
+                'contrato_vigencia_desde' => null,
+                'contrato_vigencia_hasta' => null,
+                'contrato_monto_tope' => null,
+                'contrato_moneda_id' => null,
+                'contrato_auto_renovable' => false,
+                'contrato_dias_preaviso' => null,
+                'contrato_dias_aviso' => null,
+                'contrato_responsable_id' => null,
+            ];
+        }
+
+        $autoRenovable = filter_var($payload['contrato_auto_renovable'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $diasAviso = trim((string) ($payload['contrato_dias_aviso'] ?? ''));
+
+        return [
+            'es_contrato' => true,
+            'contrato_vigencia_desde' => ($payload['contrato_vigencia_desde'] ?? null) ?: null,
+            'contrato_vigencia_hasta' => ($payload['contrato_vigencia_hasta'] ?? null) ?: null,
+            'contrato_monto_tope' => isset($payload['contrato_monto_tope']) && $payload['contrato_monto_tope'] !== ''
+                ? (float) $payload['contrato_monto_tope']
+                : null,
+            'contrato_moneda_id' => ! empty($payload['contrato_moneda_id']) ? (int) $payload['contrato_moneda_id'] : null,
+            'contrato_auto_renovable' => $autoRenovable,
+            'contrato_dias_preaviso' => $autoRenovable && ! empty($payload['contrato_dias_preaviso'])
+                ? (int) $payload['contrato_dias_preaviso']
+                : null,
+            'contrato_dias_aviso' => $diasAviso !== '' ? $diasAviso : null,
+            'contrato_responsable_id' => ! empty($payload['contrato_responsable_id'])
+                ? (int) $payload['contrato_responsable_id']
+                : null,
         ];
     }
 
@@ -921,6 +967,15 @@ class OrdencompraGestionService
             'descuento' => 'nullable|numeric|min:0',
             'descuento_tipo' => 'nullable|string|in:porcentaje,importe',
             'lugarentrega' => 'nullable|string|max:255',
+            'es_contrato' => 'nullable|boolean',
+            'contrato_vigencia_desde' => 'nullable|date',
+            'contrato_vigencia_hasta' => 'nullable|date|after_or_equal:contrato_vigencia_desde',
+            'contrato_monto_tope' => 'nullable|numeric|min:0',
+            'contrato_moneda_id' => 'nullable|integer|exists:moneda,id',
+            'contrato_auto_renovable' => 'nullable|boolean',
+            'contrato_dias_preaviso' => 'nullable|integer|min:0|max:365',
+            'contrato_dias_aviso' => ['nullable', 'string', 'max:60', 'regex:/^\s*\d{1,3}(\s*,\s*\d{1,3})*\s*$/'],
+            'contrato_responsable_id' => 'nullable|integer|exists:usuario,id',
         ];
     }
 
