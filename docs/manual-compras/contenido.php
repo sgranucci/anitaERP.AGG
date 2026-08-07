@@ -229,14 +229,103 @@ return [
             ],
         ],
         [
-            'titulo' => '11. Circuito documental integrado',
+            'titulo' => '11. Contratos y OC abiertas',
+            'herramientas_grupos' => [
+                ['titulo' => 'Bloque Contrato / OC abierta en la orden de compra', 'clave' => 'contrato_bloque_oc'],
+            ],
             'parrafos' => [
-                'El flujo estándar de compras es: Tablas maestras → Proveedor → Requisición (PENDIENTE) → EN COMPRAS (carga presupuestos) → Árbol de aprobación → APROBADA → Orden(es) de compra → Aprobación OC → CUMPLIDA/CERRADA.',
-                'Las listas de precio de proveedor alimentan precios de referencia en requisiciones y OC. Los presupuestos documentan la cotización seleccionada.',
+                'Una OC abierta es la que no se agota con una entrega: abonos, honorarios profesionales, servicios recurrentes, mantenimientos, alquileres, licencias. En lugar de crear un documento distinto, la propia orden de compra se marca como contrato y se le cargan la vigencia, el monto contratado y el responsable. El ERP vigila esos datos y avisa antes del vencimiento, con el mismo criterio que los acuerdos marco de SAP o los purchase agreements de Oracle.',
+                'Se marca en el formulario de la orden de compra (compras/ordencompra/crear o editar) tildando la casilla "Contrato / OC abierta" en el bloque del mismo nombre. Recién al tildarla se despliegan los campos de vigencia, tope y avisos; una OC común no muestra nada de esto.',
+                'Cargar la vigencia es lo mínimo indispensable: sin fecha de fin no hay aviso de vencimiento posible. El monto contratado es opcional, pero es lo que habilita el control de consumo.',
+            ],
+            'items' => [
+                'Vigencia desde / hasta: período del contrato. La fecha "hasta" es la que dispara los avisos de vencimiento.',
+                'Monto contratado (tope): importe máximo que puede consumir el contrato. Vacío significa sin tope, y en ese caso no hay avisos por consumo.',
+                'Moneda del tope: si se elige una moneda, solo se computan las recepciones y facturas de esa misma moneda. Con "Moneda local" se computa el equivalente convertido por cotización.',
+                'Se renueva automáticamente + Días de preaviso para no renovar: si el contrato se renueva solo, lo accionable no es el fin de vigencia sino la fecha límite para notificar que NO se renueva (fin de vigencia menos los días de preaviso). Pasada esa fecha el contrato se renueva por otro período.',
+                'Días de aviso: umbrales propios de este contrato, separados por coma (por ejemplo 90,45). Vacío usa el default del sistema (60,30,15). Cada umbral avisa una sola vez.',
+                'Responsable: usuario dueño del contrato. Recibe siempre los avisos de sus contratos, además de los destinatarios generales configurados.',
+                'Estado actual: debajo del bloque, la OC muestra el consumo acumulado, el porcentaje del tope, el vencimiento y de dónde salió el consumo (recepción, factura o ambos).',
+            ],
+            'tabla' => [
+                'caption' => 'Cómo se calcula el consumo del monto contratado',
+                'headers' => ['Fuente', 'Qué computa', 'Cuándo manda'],
+                'rows' => [
+                    [
+                        'Recepción de proveedor',
+                        'Recepciones confirmadas de la OC, valorizadas por cantidad y precio de cada línea. Las devoluciones restan.',
+                        'Fuente principal: marca el consumo apenas entra el bien o el servicio, sin esperar la factura.',
+                    ],
+                    [
+                        'Factura de proveedor',
+                        'Facturas de la OC que no tienen ninguna recepción vinculada.',
+                        'Respaldo para lo que nunca pasa por recepción: abonos, honorarios, servicios.',
+                    ],
+                    [
+                        'Factura (piso)',
+                        'Total facturado de la OC, cuando resulta mayor que la suma anterior.',
+                        'Red de seguridad si la recepción quedó sin precio o la factura terminó siendo mayor.',
+                    ],
+                ],
             ],
         ],
         [
-            'titulo' => '12. Integración con sistema Anita',
+            'titulo' => '12. Avisos y seguimiento de contratos',
+            'captura_id' => 'contrato_reporte',
+            'herramientas_grupos' => [
+                ['titulo' => 'Reporte de contratos y OC abiertas por vencer', 'clave' => 'contrato_reporte'],
+            ],
+            'parrafos' => [
+                'Un proceso automático diario revisa todos los contratos y envía un mail cuando alguno cruza un umbral. Solo se vigilan las OC marcadas como contrato que están en estado APROBADA o CUMPLIDA: las suspendidas y cerradas quedan afuera porque ya no admiten movimiento.',
+                'Cada umbral avisa una sola vez. Si un contrato ya figuró en el aviso de 60 días, no vuelve a aparecer hasta el umbral de 30. Esto evita el mail diario repetido que termina en que nadie lo lee. La excepción es el escalamiento de contratos vencidos, que se reitera cada 7 días hasta que el contrato se resuelva.',
+                'Los destinatarios y el texto de los mails se configuran en Configuración → Avisos por módulo, en los eventos "Contratos / OC abiertas por vencer" (preventivo) y "Contratos / OC abiertas vencidas (escalamiento)". Son dos eventos separados para que el escalamiento pueda ir a jefatura o gerencia sin sumar a esas personas al aviso preventivo de todos los días.',
+                'Para trabajar la lista completa, sin depender del mail, está el reporte Compras → Reportes → Contratos y OC abiertas (compras/contrato-vencimiento-reporte). Permite filtrar por empresa, tipo de alerta, horizonte de días, proveedor y responsable, y exportar a PDF, Excel o CSV.',
+            ],
+            'items' => [
+                'Filtro Tipo de alerta: Todos, Por vencer (dentro del horizonte), Con preaviso de no renovación pendiente, Consumo del tope en zona de alerta, Vencidos, o Sin fecha de vigencia cargada. Esta última opción sirve para detectar contratos mal cargados, que son los que nunca van a avisar.',
+                'Días de horizonte: cuántos días hacia adelante mirar (90 por defecto).',
+                'Solo sin responsable: contratos sin dueño asignado. Conviene revisarlo periódicamente porque son los que se pierden.',
+                'En la grilla, las filas de contratos vencidos se marcan en rojo y las que vencen dentro de 30 días en amarillo. La columna Situación explica el motivo concreto de la alerta.',
+                'Las columnas Recibido, Facturado y Consumido permiten auditar el consumo: si Recibido y Facturado difieren mucho, hay recepciones sin facturar o facturas sin recepción.',
+                'El número de OC es un enlace: abre la orden de compra en una pestaña nueva para revisar o renovar el contrato.',
+            ],
+            'tabla' => [
+                'caption' => 'Tipos de aviso',
+                'headers' => ['Aviso', 'Cuándo se dispara', 'Qué hay que hacer'],
+                'rows' => [
+                    [
+                        'Por vencer',
+                        'Cuando faltan tantos días para el fin de vigencia como indica el umbral (60, 30 y 15 días por defecto).',
+                        'Renovar, renegociar o dejar vencer con decisión tomada.',
+                    ],
+                    [
+                        'Preaviso de no renovación',
+                        'Contratos con renovación automática, cuando se acerca la fecha límite para notificar la no renovación.',
+                        'Notificar al proveedor antes de esa fecha si no se quiere continuar. Pasada la fecha, el contrato se renueva solo.',
+                    ],
+                    [
+                        'Consumo del tope',
+                        'Cuando el consumo alcanza el porcentaje configurado del monto contratado (80% y 100% por defecto).',
+                        'Ampliar el monto contratado o emitir una OC nueva antes de seguir consumiendo.',
+                    ],
+                    [
+                        'Vencido (escalamiento)',
+                        'Vigencia terminada y el contrato sigue abierto. Se reitera cada 7 días.',
+                        'Renovar, cerrar la OC o darla de baja. Es el aviso que no debería existir.',
+                    ],
+                ],
+            ],
+        ],
+        [
+            'titulo' => '13. Circuito documental integrado',
+            'parrafos' => [
+                'El flujo estándar de compras es: Tablas maestras → Proveedor → Requisición (PENDIENTE) → EN COMPRAS (carga presupuestos) → Árbol de aprobación → APROBADA → Orden(es) de compra → Aprobación OC → CUMPLIDA/CERRADA.',
+                'Las listas de precio de proveedor alimentan precios de referencia en requisiciones y OC. Los presupuestos documentan la cotización seleccionada.',
+                'Las OC marcadas como contrato no siguen ese cierre: quedan vigentes durante todo el período contratado y se van consumiendo con recepciones y facturas sucesivas, hasta que se renuevan o se cierran (ver capítulos 11 y 12).',
+            ],
+        ],
+        [
+            'titulo' => '14. Integración con sistema Anita',
             'parrafos' => [
                 'En entornos migrados, el ERP sincroniza datos históricos desde Anita (Informix) en el primer acceso a ciertos listados vacíos:',
             ],
@@ -248,17 +337,21 @@ return [
             ],
         ],
         [
-            'titulo' => '13. Resolución de problemas frecuentes',
+            'titulo' => '15. Resolución de problemas frecuentes',
             'items' => [
                 'No veo el menú de Compras: verifique rol activo y asignación Menú-Rol con el administrador.',
                 'No puedo editar una requisición: confirme estado (solo PENDIENTE o EN COMPRAS) y permiso/oficina de compra.',
                 'No aparece requisición para generar OC: la requisición debe estar en estado APROBADA.',
                 'El listado tarda mucho: puede estar ejecutándose sincronización inicial con Anita; espere y recargue.',
                 'Error de CUIT duplicado en proveedor: revise tipo de servicio y reglas de unicidad configuradas.',
+                'Un contrato no avisa nunca: verifique que la OC tenga tildado "Contrato / OC abierta", que tenga fecha de vigencia hasta (o monto contratado) y que esté en estado APROBADA o CUMPLIDA. El filtro "Sin fecha de vigencia cargada" del reporte lista justamente estos casos.',
+                'No recibí el mail del contrato: cada umbral avisa una sola vez, así que si el aviso de 60 días ya salió no se repite hasta los 30. Confirme además que su usuario esté como responsable del contrato o como destinatario del evento en Configuración → Avisos por módulo.',
+                'El consumo del contrato no coincide con lo facturado: el consumo toma primero las recepciones confirmadas y suma las facturas sin recepción vinculada. Compare las columnas Recibido, Facturado y Consumido del reporte: la diferencia suele ser mercadería recibida y todavía no facturada.',
+                'El consumo quedó en cero con recepciones cargadas: revise que las líneas de la recepción tengan precio. Si la OC no tenía precio, la recepción se valoriza en cero y el consumo recién aparece cuando llega la factura.',
             ],
         ],
         [
-            'titulo' => '14. Soporte',
+            'titulo' => '16. Soporte',
             'parrafos' => [
                 'Para incidencias técnicas, solicitud de permisos o capacitación adicional, contacte al administrador del sistema o al área de Sistemas de su organización.',
                 'Conserve este manual en formato digital (Word/PDF) para consulta de usuarios finales y personal de Compras.',

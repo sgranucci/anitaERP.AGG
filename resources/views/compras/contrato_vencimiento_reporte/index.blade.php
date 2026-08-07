@@ -23,6 +23,7 @@
             <div class="card-header">
                 <h3 class="card-title">Contratos y OC abiertas por vencer</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    <span class="mr-2">@include('includes.compras.boton-manual')</span>
                     <a href="{{ route('reporte_contrato_vencimiento') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>

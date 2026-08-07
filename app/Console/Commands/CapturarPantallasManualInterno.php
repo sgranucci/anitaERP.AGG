@@ -15,7 +15,8 @@ class CapturarPantallasManualInterno extends Command
 {
     protected $signature = 'manual:capturar-compras-interno
                             {--usuario=admin : Usuario ERP}
-                            {--rol= : ID de rol (opcional, usa el primero si no se indica)}';
+                            {--rol= : ID de rol (opcional, usa el primero si no se indica)}
+                            {--solo= : Capturar solo estas pantallas (nombres separados por coma)}';
 
     protected $description = 'Captura pantallas reales del ERP (render interno, sin Chrome)';
 
@@ -31,6 +32,7 @@ class CapturarPantallasManualInterno extends Command
         'ordencompra-listado' => ['path' => '/compras/ordencompra', 'auth' => true],
         'ordencompra-edicion' => ['path' => '', 'auth' => true],
         'tablas-maestras' => ['path' => '/compras/condicionpago', 'auth' => true],
+        'contrato-vencimiento' => ['path' => '/compras/contrato-vencimiento-reporte?consultar=1', 'auth' => true],
     ];
 
     public function handle(): int
@@ -57,6 +59,16 @@ class CapturarPantallasManualInterno extends Command
             $this->pantallas,
             static fn (array $cfg): bool => ! $cfg['auth'] || ($cfg['path'] ?? '') !== ''
         );
+
+        $solo = array_values(array_filter(array_map('trim', explode(',', (string) $this->option('solo')))));
+        if ($solo !== []) {
+            $this->pantallas = array_intersect_key($this->pantallas, array_flip($solo));
+            if ($this->pantallas === []) {
+                $this->error('Ninguna pantalla coincide con --solo='.implode(',', $solo));
+
+                return self::FAILURE;
+            }
+        }
 
         $outDir = public_path('docs/manual-compras/img');
         File::ensureDirectoryExists($outDir);
@@ -188,6 +200,8 @@ class CapturarPantallasManualInterno extends Command
             $body = $html;
         }
 
+        $body = $this->quitarOverlaysDeProceso($body);
+
         $css = asset("assets/{$theme}/dist/css/adminlte.min.css");
         $cssCustom = asset('assets/css/custom.css');
 
@@ -198,6 +212,19 @@ class CapturarPantallasManualInterno extends Command
             . '<style>body{background:#f4f6f9;margin:0;padding:12px;font-family:DejaVu Sans,sans-serif;}'
             . '.content-wrapper{margin:0!important;}</style></head><body>'
             . $body . '</body></html>';
+    }
+
+    /**
+     * DomPDF no interpreta la clase d-none, así que los overlays de proceso
+     * (includes.proceso_overlay_aviso) se dibujarían encima del título.
+     */
+    private function quitarOverlaysDeProceso(string $body): string
+    {
+        return (string) preg_replace(
+            '/<div\s+id="[a-z0-9_-]*overlay[a-z0-9_-]*"[\s\S]*?<\/div>\s*<\/div>/i',
+            '',
+            $body
+        );
     }
 
     private function pdfPrimeraPaginaAPng(string $pdfPath, string $pngPath): void

@@ -333,6 +333,88 @@ return [
             'permiso' => 'editar-ordencompra',
         ],
     ],
+    'contrato_bloque_oc' => [
+        [
+            'herramienta' => 'Contrato / OC abierta',
+            'ubicacion' => 'Cabecera del bloque Contrato (casilla)',
+            'accion' => 'Marca la OC como contrato y despliega los campos de vigencia, tope y avisos.',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Vigencia desde / hasta',
+            'ubicacion' => 'Bloque Contrato',
+            'accion' => 'Período del contrato. La fecha hasta dispara los avisos de vencimiento.',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Monto contratado + Moneda del tope',
+            'ubicacion' => 'Bloque Contrato',
+            'accion' => 'Tope de consumo y moneda en que se controla. Vacío = sin tope.',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Se renueva automáticamente + Días de preaviso',
+            'ubicacion' => 'Bloque Contrato',
+            'accion' => 'Calcula la fecha límite para notificar la no renovación (fin de vigencia menos los días indicados).',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Días de aviso',
+            'ubicacion' => 'Bloque Contrato',
+            'accion' => 'Umbrales propios del contrato separados por coma. Vacío usa el default del sistema.',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Responsable',
+            'ubicacion' => 'Bloque Contrato',
+            'accion' => 'Usuario dueño del contrato; recibe siempre los avisos de sus contratos.',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Estado actual',
+            'ubicacion' => 'Pie del bloque Contrato',
+            'accion' => 'Muestra consumido, porcentaje del tope, vencimiento y origen del consumo (recepción / factura).',
+            'permiso' => 'listar-ordencompra',
+        ],
+    ],
+    'contrato_reporte' => [
+        [
+            'herramienta' => 'Consultar',
+            'ubicacion' => 'Panel de filtros',
+            'accion' => 'Genera el listado según empresa, tipo de alerta, horizonte de días, proveedor y responsable.',
+            'permiso' => 'listar-reporte-contrato-vencimiento',
+        ],
+        [
+            'herramienta' => 'Tipo de alerta',
+            'ubicacion' => 'Panel de filtros',
+            'accion' => 'Por vencer, preaviso pendiente, consumo en zona de alerta, vencidos o sin vigencia cargada.',
+            'permiso' => 'listar-reporte-contrato-vencimiento',
+        ],
+        [
+            'herramienta' => 'Solo sin responsable',
+            'ubicacion' => 'Panel de filtros',
+            'accion' => 'Aísla los contratos sin dueño asignado, que son los que suelen quedar sin seguimiento.',
+            'permiso' => 'listar-reporte-contrato-vencimiento',
+        ],
+        [
+            'herramienta' => 'PDF / Excel / CSV',
+            'ubicacion' => $sobreGrilla,
+            'accion' => 'Exporta el resultado completo del filtro, no solo la página visible.',
+            'permiso' => 'listar-reporte-contrato-vencimiento',
+        ],
+        [
+            'herramienta' => 'Número de OC (enlace)',
+            'ubicacion' => 'Columna OC de la grilla',
+            'accion' => 'Abre la orden de compra en pestaña nueva para revisar o renovar el contrato.',
+            'permiso' => 'editar-ordencompra o listar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Resumen del filtro',
+            'ubicacion' => 'Franja sobre la grilla',
+            'accion' => 'Totales de contratos, vencidos, por vencer, tope, recibido, facturado, consumido y disponible.',
+            'permiso' => 'listar-reporte-contrato-vencimiento',
+        ],
+    ],
     'tablas_maestras' => [
         [
             'herramienta' => 'Nuevo registro',

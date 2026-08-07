@@ -14,7 +14,7 @@ class AyudaManuales
         return [
             [
                 'modulo' => 'Compras',
-                'bajada' => 'Proveedores, tablas, requisiciones, listas de precio, presupuestos y órdenes de compra.',
+                'bajada' => 'Proveedores, tablas, requisiciones, listas de precio, presupuestos, órdenes de compra y contratos / OC abiertas.',
                 'url' => route('manual_compras'),
                 'icono' => 'fa-shopping-cart',
                 'disponible' => true,
