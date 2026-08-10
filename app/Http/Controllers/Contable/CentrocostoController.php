@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\Contable\Centrocosto;
@@ -127,7 +128,7 @@ class CentrocostoController extends Controller
             });
         }
 
-        $data = $query->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->orderBy('nombre')->limit(200)->get();
+        $data = $query->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->orderBy('nombre')->limit(200)->get();
         $puedeAbrirAbm = can('editar-centro-costo', false) || can('listar-centro-costo', false);
 
         $output = ['data' => ''];

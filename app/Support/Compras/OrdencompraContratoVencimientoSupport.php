@@ -645,7 +645,8 @@ final class OrdencompraContratoVencimientoSupport
      * Recibido por contrato, valorizado con el precio de la línea de recepción.
      *
      * Con moneda de tope definida se suman solo las líneas de esa misma moneda;
-     * sin moneda se suma el equivalente en moneda local (importe × cotización).
+     * sin moneda se suma el equivalente en moneda local (importe × cotización
+     * solo si la línea está en divisa; pesos no se multiplican).
      *
      * @param  list<int>  $contratoIds
      * @return array<int, float>
@@ -655,6 +656,7 @@ final class OrdencompraContratoVencimientoSupport
         $importe = RecepcionProveedorConversionSupport::expresionSqlImporteLinea('rpa');
         $monedaLinea = 'COALESCE(NULLIF(rpa.moneda_id, 0), NULLIF(rp.moneda_id, 0), 1)';
         $cotizacion = 'COALESCE(NULLIF(rpa.cotizacion, 0), NULLIF(rp.cotizacion, 0), 1)';
+        $monedaLocalId = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
 
         $filas = DB::table('recepcion_proveedor as rp')
             ->join('recepcion_proveedor_articulo as rpa', 'rpa.recepcion_proveedor_id', '=', 'rp.id')
@@ -672,7 +674,10 @@ final class OrdencompraContratoVencimientoSupport
                 'SUM('
                 .' (CASE WHEN rp.tipo = ? THEN -1 ELSE 1 END)'
                 .' * '.$importe
-                .' * (CASE WHEN oc.contrato_moneda_id IS NULL THEN '.$cotizacion.' ELSE 1 END)'
+                .' * (CASE'
+                .' WHEN oc.contrato_moneda_id IS NULL AND ('.$monedaLinea.') <> '.$monedaLocalId
+                .' THEN '.$cotizacion
+                .' ELSE 1 END)'
                 .') as recibido',
                 [Recepcion_Proveedor::TIPO_DEVOLUCION]
             )
@@ -690,15 +695,19 @@ final class OrdencompraContratoVencimientoSupport
      * Facturado por contrato: total y porción sin recepción vinculada (respaldo).
      *
      * Con moneda de tope definida se suman solo las facturas de esa misma moneda;
-     * sin moneda se suma el equivalente en moneda local (total × cotización).
+     * sin moneda se suma el equivalente en moneda local (total × cotización
+     * solo si el comprobante está en divisa; pesos no se multiplican).
      *
      * @param  list<int>  $contratoIds
      * @return array<int, array{facturado: float, facturado_sin_recepcion: float}>
      */
     private static function facturadoPorContrato(array $contratoIds): array
     {
-        $monto = 'CASE WHEN oc.contrato_moneda_id IS NULL'
-            .' THEN cp.total * COALESCE(cp.cotizacion, 1)'
+        $monedaLocalId = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
+        $monto = 'CASE'
+            .' WHEN oc.contrato_moneda_id IS NULL'
+            .' AND COALESCE(NULLIF(cp.moneda_id, 0), 1) <> '.$monedaLocalId
+            .' THEN cp.total * COALESCE(NULLIF(cp.cotizacion, 0), 1)'
             .' ELSE cp.total END';
 
         $sinRecepcion = 'NOT EXISTS ('

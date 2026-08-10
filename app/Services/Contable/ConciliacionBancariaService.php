@@ -221,7 +221,18 @@ class ConciliacionBancariaService
         $saldoBancoAjustado = round($saldoBanco + $sumaPendContCaratula - $sumaPendBancoCaratula, 2);
         $diferencia = round($saldoContable - $saldoBancoAjustado, 2);
 
-        $gastosResumen = ConciliacionBancariaCodificacionSupport::resumirGastosDiarios($movimientosBanco);
+        $codigosSaldoExcel = $this->resolverCodigosSaldoExcel(
+            $empresaId,
+            $cuentacajaId,
+            $mes,
+            $anio,
+            $opciones,
+        );
+
+        $gastosResumen = ConciliacionBancariaCodificacionSupport::resumirGastosDiarios(
+            $movimientosBanco,
+            $codigosSaldoExcel,
+        );
 
         $saldoInicialPeriodo = $this->resolverSaldoBanco(
             $empresaId,
@@ -231,6 +242,7 @@ class ConciliacionBancariaService
         $bancoProcesado = ConciliacionBancariaMovimientoBancoSupport::procesarListado(
             $movimientosBanco,
             $saldoInicialPeriodo,
+            $codigosSaldoExcel,
         );
 
         $caratula = $this->armarCaratula(
@@ -307,6 +319,8 @@ class ConciliacionBancariaService
                 'pendientes_cheques_caratula' => count($armPendientes['caratula']),
                 'pendientes_cheques_fuente' => $armPendientes['fuente'],
                 'suma_cheques_caratula' => $armPendientes['suma_caratula'],
+                'codigos_saldo_excel' => $codigosSaldoExcel,
+                'gastos_resumen' => $gastosResumen,
             ],
             'usuario_id' => $usuarioId,
         ]);
@@ -711,6 +725,57 @@ class ConciliacionBancariaService
         $resultado['ai_resumen'] = $eval['resumen'];
 
         return $resultado;
+    }
+
+    /**
+     * Códigos Contaduría (solapa Saldo del Excel): primero del Excel de la corrida,
+     * si no del último snapshot del mismo período (para que la UI no pierda el tipificado).
+     *
+     * @param  array<string, mixed>  $opciones
+     * @return array<string, int>
+     */
+    private function resolverCodigosSaldoExcel(
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+        array $opciones,
+    ): array {
+        $rutaExcel = trim((string) ($opciones['pendientes_excel'] ?? ''));
+        if ($rutaExcel !== '') {
+            try {
+                return ConciliacionBancariaExcelReferenciaSupport::mapaCodigosDesdeSaldo($rutaExcel);
+            } catch (\Throwable) {
+                // sin mapa: sigue clasificación automática
+            }
+        }
+
+        $prev = ConciliacionBancariaEjecucion::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where('mes', $mes)
+            ->where('anio', $anio)
+            ->orderByDesc('id')
+            ->value('resumen_json');
+
+        if (! is_array($prev)) {
+            return [];
+        }
+
+        $mapa = $prev['codigos_saldo_excel'] ?? null;
+        if (! is_array($mapa) || $mapa === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($mapa as $clave => $codigo) {
+            if (! is_string($clave) || ! is_numeric($codigo)) {
+                continue;
+            }
+            $out[$clave] = (int) $codigo;
+        }
+
+        return $out;
     }
 
     /**

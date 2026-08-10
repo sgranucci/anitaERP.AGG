@@ -265,6 +265,14 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/costo-mensual-catalogo-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.costo_mensual_catalogo.habilitado', true));
 
+        // Solicitudes de pago — sync Anita→ERP (faltantes + estados). Temporal mientras se pague en Anita.
+        $schedule->command('solicitudpago:sincronizar-anita')
+            ->dailyAt((string) config('solicitudpago.sync_anita.hora', '06:45'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/solicitudpago-sincronizar-anita-schedule.log'))
+            ->when(fn () => (bool) config('solicitudpago.sync_anita.habilitado', true));
+
         // Solicitudes de pago — generación de hijas por cuota (Anita p-controlsolpm).
         // Cron armado pero DESACTIVADO por defecto (SOLICITUDPAGO_GENERAR_CUOTAS_HABILITADO=false).
         $horariosCuotasSp = config('solicitudpago.generar_cuotas.horarios', ['08:00', '14:00', '18:00']);

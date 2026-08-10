@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionConfiguracionPuntoventaGastronomia;
 use App\Models\Stock\Depmae;
@@ -203,7 +204,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
         return Depmae::query()
             ->paraUsuarioAutorizado()
             ->when($empresaId !== null && $empresaId > 0, fn ($q) => $q->paraEmpresa($empresaId))
-            ->orderByRaw('CAST(codigo AS UNSIGNED) ASC');
+            ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'));
     }
 
     private function cargarSelects(
@@ -232,7 +233,7 @@ class ConfiguracionPuntoventaGastronomiaController extends Controller
         $ubicacion_query = $this->ubicacionGastronomiaRepository->listarParaSelect($empresaId);
         $salida_query = $this->salidaRepository->all()->sortBy('nombre')->values();
         $listaprecio_query = Listaprecio::query()
-            ->orderByRaw('CAST(codigo AS UNSIGNED) ASC')
+            ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
             ->get();
         $tipotransaccion_query = $this->tipotransaccionRepository->all(['V', 'C'], ['A']);
         $tipotransaccion_nota_credito_query = $this->tipotransaccionRepository->all(['C'], ['A']);

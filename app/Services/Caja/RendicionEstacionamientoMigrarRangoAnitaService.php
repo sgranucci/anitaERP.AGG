@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Caja;
 
+use App\Support\Database\SqlDialectSupport;
 use App\ApiAnita;
 use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoCabeceraAnitaMapper;
@@ -49,7 +50,7 @@ final class RendicionEstacionamientoMigrarRangoAnitaService
                     $jq->whereBetween('fecha_jornada', [$fechaDesde, $fechaHasta]);
                 })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
                     $q2->whereDoesntHave('turnoOperativo.jornada')
-                        ->whereBetween(DB::raw('DATE(fecharendicion)'), [$fechaDesde, $fechaHasta]);
+                        ->whereBetween(DB::raw(SqlDialectSupport::fecha('fecharendicion')), [$fechaDesde, $fechaHasta]);
                 });
             })
             ->orderBy('id');

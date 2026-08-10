@@ -2,6 +2,7 @@
 
 namespace App\Services\Sueldos;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Sueldos\Acumulador_Sueldos;
 use App\Models\Sueldos\Concepto_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
@@ -420,7 +421,7 @@ class LiquidacionCalculadorService
             ->where('periodo', $periodoYm)
             ->where('tipo', $tipo)
             ->whereIn('estado', array_merge(Liquidacion_Sueldos::ESTADOS_EDITABLES, ['cerrada', 'contabilizada', 'pagada']))
-            ->orderByRaw("FIELD(estado,'borrador','calculada','revisada','cerrada','contabilizada','pagada')")
+            ->orderByRaw(SqlDialectSupport::ordenPorLista('estado', ['borrador','calculada','revisada','cerrada','contabilizada','pagada']))
             ->orderByDesc('numero')
             ->first();
 
@@ -573,7 +574,7 @@ class LiquidacionCalculadorService
             ->where('periodo', $periodoYm)
             ->where('tipo', $tipo)
             ->whereIn('estado', array_merge(Liquidacion_Sueldos::ESTADOS_EDITABLES, ['cerrada', 'contabilizada', 'pagada']))
-            ->orderByRaw("FIELD(estado,'borrador','calculada','revisada','cerrada','contabilizada','pagada')")
+            ->orderByRaw(SqlDialectSupport::ordenPorLista('estado', ['borrador','calculada','revisada','cerrada','contabilizada','pagada']))
             ->orderByDesc('numero')
             ->first();
 

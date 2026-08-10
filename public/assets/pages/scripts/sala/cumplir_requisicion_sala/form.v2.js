@@ -165,15 +165,15 @@
         return html;
     }
 
-    function refrescarSaldosGrilla(avisar) {
+    function refrescarSaldosGrilla(ajustarCantidad) {
         if (typeof window.crsRefrescarSaldosOrigen === 'function') {
-            window.crsRefrescarSaldosOrigen({ avisar: !!avisar });
+            window.crsRefrescarSaldosOrigen({ ajustarCantidad: !!ajustarCantidad });
         }
     }
 
-    function cargarSaldoFilaNueva($fila, avisar) {
+    function cargarSaldoFilaNueva($fila, ajustarCantidad) {
         if (typeof window.crsCargarSaldoFila === 'function') {
-            window.crsCargarSaldoFila($fila, !!avisar);
+            window.crsCargarSaldoFila($fila, !!ajustarCantidad);
         }
     }
 
@@ -188,7 +188,7 @@
             activa_eventos_consultadeposito();
         }
         actualizarResumenNpu();
-        refrescarSaldosGrilla(true);
+        refrescarSaldosGrilla(false);
     }
 
     function agregarLinea(linea, req, tecnicos) {
@@ -427,17 +427,12 @@
         if (controlaStock && saldoAttr !== '' && saldoAttr !== undefined) {
             var saldo = Number(saldoAttr);
             if (!Number.isNaN(saldo) && saldo + 1e-9 < entrega) {
-                $fila.find('.input-cantidad-entrega').val('0');
-                limpiarEstadoLinea($fila);
-                $fila.removeClass('fila-saldo-insuficiente');
-                alert(
-                    'La cantidad supera el saldo disponible en el dep\u00f3sito origen. Saldo: '
-                    + saldo
-                    + ', solicitado: '
-                    + entrega
-                    + '. Se dej\u00f3 la cantidad en 0: puede cambiar el dep\u00f3sito o la cantidad.'
-                );
+                // Solo marca visual: la validaci\u00f3n bloqueante es al grabar.
+                $fila.addClass('fila-saldo-insuficiente');
+                var $span = $fila.find('.ms-saldo-origen');
+                $span.removeClass('text-muted text-success text-warning').addClass('text-danger font-weight-bold');
                 if (typeof alListo === 'function') {
+                    // En flujo de grabar: no continuar hasta corregir (crsValidarSaldosAntesDeGrabar ya actu\u00f3).
                     alListo(false);
                 }
                 return;
@@ -579,7 +574,7 @@
                 $('#requisicion_empresa_id').val('');
             }
             actualizarResumenNpu();
-            refrescarSaldosGrilla(true);
+            refrescarSaldosGrilla(false);
             return;
         }
 
@@ -591,16 +586,35 @@
             var $fila = $(this);
             aplicarValoresPostEnFila($fila, byId[String($fila.data('linea-id'))]);
         });
-        refrescarSaldosGrilla(true);
+        refrescarSaldosGrilla(false);
     }
 
-    function mostrarErrorCumple(mensaje) {
+    function mostrarErrorCumple(mensaje, lineasExtra) {
+        var lineas = [];
+        if (mensaje) {
+            lineas.push(mensaje);
+        }
+        if (Array.isArray(lineasExtra)) {
+            lineas = lineas.concat(lineasExtra);
+        }
+        if (typeof window.crsMostrarErrorSaldo === 'function') {
+            window.crsMostrarErrorSaldo('Error al grabar cumplimiento', lineas);
+            return;
+        }
         var $box = $('#cumple-alerta-error');
         if (!$box.length) {
             alert(mensaje || 'Error al grabar cumplimiento.');
             return;
         }
-        $box.find('.cumple-alerta-error-texto').text(mensaje || 'Error al grabar cumplimiento.');
+        $box.find('h4').html('<i class="icon fa fa-times"></i> Error');
+        var $ul = $box.find('ul').empty();
+        if (lineas.length === 0) {
+            $ul.append('<li>Error al grabar cumplimiento.</li>');
+        } else {
+            lineas.forEach(function (linea) {
+                $ul.append('<li>' + escapeHtml(linea) + '</li>');
+            });
+        }
         $box.removeClass('d-none');
         var top = $box.offset() ? $box.offset().top - 80 : 0;
         $('html, body').animate({ scrollTop: Math.max(top, 0) }, 200);
@@ -608,6 +622,9 @@
 
     function ocultarErrorCumple() {
         $('#cumple-alerta-error').addClass('d-none');
+        if (typeof window.crsOcultarAvisoSaldo === 'function') {
+            // No oculta avisos de saldo informativos al reintentar grabar.
+        }
     }
 
     function restaurarBotonGrabar() {
@@ -728,6 +745,8 @@
             return;
         }
 
+        ocultarErrorCumple();
+
         if (typeof window.crsValidarSaldosAntesDeGrabar === 'function'
             && !window.crsValidarSaldosAntesDeGrabar()) {
             return;
@@ -742,6 +761,16 @@
         }
 
         actualizarUiModoIntercompanyCrs();
+
+        $(document).on('hidden.bs.modal', '#consultadepositoModal', function () {
+            window.setTimeout(function () {
+                if ($('.modal.show').length) {
+                    return;
+                }
+                $('body').removeClass('modal-open');
+                $('.modal-backdrop').remove();
+            }, 50);
+        });
 
         $(document).on('click', '#crs_btn_intercompany', function () {
             var activo = crsModoIntercompanyActivo();

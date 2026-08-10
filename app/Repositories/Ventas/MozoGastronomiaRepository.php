@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\MozoGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 
@@ -159,7 +160,7 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
         }
 
         $max = (int) $this->queryCodigosNumericosMozo($empresaId)
-            ->selectRaw('MAX(CAST(codigo AS UNSIGNED)) as max_codigo')
+            ->selectRaw('MAX('.SqlDialectSupport::castEntero('codigo').') as max_codigo')
             ->value('max_codigo');
 
         $proximo = (string) ($max + 1);

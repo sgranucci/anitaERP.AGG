@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Compras;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Queries\Compras\ProveedorQueryInterface;
@@ -124,7 +125,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
             ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
-            ->havingRaw('abs(IFNULL(aplicado, 0)) < abs(proveedor_cuentacorriente.total)');
+            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(proveedor_cuentacorriente.total)');
 
         if ($busqueda !== '') {
             $query->where(function ($q) use ($busqueda) {
@@ -170,7 +171,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
             ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
-            ->havingRaw('abs(IFNULL(aplicado, 0)) < abs(proveedor_cuentacorriente.total)')
+            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(proveedor_cuentacorriente.total)')
             ->get();
 
         $total = 0.0;

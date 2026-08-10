@@ -6,10 +6,41 @@ $(function () {
     var articuloId = parseInt($('#articulo_id').val() || '0', 10);
     var puedeConsultarLista = $('#tabla-articulo-proveedor').data('puede-consultar-lista') === 1
         || $('#tabla-articulo-proveedor').data('puede-consultar-lista') === '1';
+    var umArticuloId = parseInt($('#tabla-articulo-proveedor').data('unidadmedida-articulo-id') || '0', 10);
     var $filaProveedorModal = null;
 
     if (typeof activa_eventos_consultaproveedor === 'function') {
         activa_eventos_consultaproveedor();
+    }
+
+    /**
+     * Misma UM compra = UM artículo → coef 1 y campo bloqueado (evita “X100” del nombre).
+     */
+    function sincronizarCoefMismaUm($row) {
+        var $um = $row.find('.ap-um-compra, select[name="ap_unidadmedida_compra_ids[]"]');
+        var $coef = $row.find('.ap-coef-conversion, input[name="ap_coeficientes_conversion[]"]');
+        if (!$um.length || !$coef.length) {
+            return;
+        }
+        var umCompra = parseInt($um.val() || '0', 10);
+        var mismaUm = umArticuloId > 0 && umCompra > 0 && umCompra === umArticuloId;
+        var editable = !$um.prop('disabled');
+        if (mismaUm) {
+            $coef.val('1');
+            $coef.prop('readonly', true);
+            $coef.attr('title', 'UM compra = UM artículo: coeficiente fijo en 1');
+        } else {
+            if (editable) {
+                $coef.prop('readonly', false);
+            }
+            $coef.attr('title', 'Cantidad de unidades de stock por 1 unidad de compra (solo si UM distinta)');
+        }
+    }
+
+    function sincronizarCoefMismaUmTodas() {
+        $('#tbody-articulo-proveedor tr.item-articulo-proveedor').each(function () {
+            sincronizarCoefMismaUm($(this));
+        });
     }
 
     function formatearPrecio(valor) {
@@ -217,6 +248,9 @@ $(function () {
                 $('#tbody-articulo-proveedor').append(html);
             }
         }
+        var $nueva = $('#tbody-articulo-proveedor tr.item-articulo-proveedor').last();
+        sincronizarCoefMismaUm($nueva);
+        marcarDuplicadosEnGrilla();
     });
 
     $(document).on('click', '.eliminar_articulo_proveedor', function (event) {
@@ -287,6 +321,10 @@ $(function () {
         $('#consultaproveedorModal').modal('show');
     });
 
+    $(document).on('change', '#tbody-articulo-proveedor .ap-um-compra, #tbody-articulo-proveedor select[name="ap_unidadmedida_compra_ids[]"]', function () {
+        sincronizarCoefMismaUm($(this).closest('tr.item-articulo-proveedor'));
+    });
+
     $(document).on('input change', '#tbody-articulo-proveedor input[name="ap_codigos_articulo_proveedor[]"]', function () {
         marcarDuplicadosEnGrilla();
     });
@@ -324,4 +362,5 @@ $(function () {
     });
 
     marcarDuplicadosEnGrilla();
+    sincronizarCoefMismaUmTodas();
 });

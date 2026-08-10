@@ -21,6 +21,8 @@ class ValidacionRequisicionSalaEdicionMenor extends FormRequest
             'detalle' => 'nullable|string',
             'requisicion_sala_articulo_ids' => 'nullable|array',
             'requisicion_sala_articulo_ids.*' => 'nullable|integer|exists:requisicion_sala_articulo,id',
+            'articulo_ids' => 'nullable|array',
+            'articulo_ids.*' => 'nullable|integer|exists:articulo,id',
             'detalle_articulos' => 'nullable|array',
             'detalle_articulos.*' => 'nullable|string|max:2000',
             'uids' => 'nullable|array',

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Sueldos;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Http\Controllers\Controller;
 use App\Models\Sueldos\Concepto_Sueldos;
 use App\Models\Sueldos\Empleado_Plan_Cuota_Sueldos;
@@ -138,7 +139,7 @@ class Empleado_PlanCuotaSueldosController extends Controller
         $planes = Empleado_Plan_Cuota_Sueldos::query()
             ->with('concepto:id,codigo,descripcion,tipo')
             ->where('empleado_id', $empleado->id)
-            ->orderByRaw("FIELD(estado,'activa','suspendida','finalizada','cancelada')")
+            ->orderByRaw(SqlDialectSupport::ordenPorLista('estado', ['activa','suspendida','finalizada','cancelada']))
             ->orderByDesc('id')
             ->get();
 

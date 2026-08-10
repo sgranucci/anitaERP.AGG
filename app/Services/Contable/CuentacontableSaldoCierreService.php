@@ -2,6 +2,7 @@
 
 namespace App\Services\Contable;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Contable\Cuentacontable_Saldo_Cierre;
 use App\Models\Contable\Cuentacontable_Saldo_Mes;
 use App\Models\Contable\PeriodoCierreContable;
@@ -99,7 +100,7 @@ class CuentacontableSaldoCierreService
         $cierre = PeriodoCierreContable::query()
             ->where('empresa_id', $empresaId)
             ->where('alcance', PeriodoContableCierreSupport::ALCANCE_GENERAL)
-            ->whereRaw('(YEAR(fecha_hasta) * 100 + MONTH(fecha_hasta)) = ?', [$anioMesHasta])
+            ->whereRaw(SqlDialectSupport::anioMes('fecha_hasta').' = ?', [$anioMesHasta])
             ->orderByDesc('id')
             ->first();
 

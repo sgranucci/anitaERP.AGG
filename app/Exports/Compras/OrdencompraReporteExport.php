@@ -24,7 +24,7 @@ class OrdencompraReporteExport implements FromView, ShouldAutoSize, WithColumnFo
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'AJ';
+    private const COL_ULTIMA = 'AK';
 
     private const FORMAT_IMPORTE = NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2;
 
@@ -112,7 +112,8 @@ class OrdencompraReporteExport implements FromView, ShouldAutoSize, WithColumnFo
             'W' => $fmtImporte,
             'Y' => $fmtImporte,
             'Z' => NumberFormat::FORMAT_TEXT,
-            'AD' => NumberFormat::FORMAT_TEXT,
+            'AA' => NumberFormat::FORMAT_TEXT,
+            'AE' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -140,9 +141,9 @@ class OrdencompraReporteExport implements FromView, ShouldAutoSize, WithColumnFo
             'A' => 12, 'B' => 26, 'C' => 5, 'D' => 8, 'E' => 8, 'F' => 9, 'G' => 5,
             'H' => 9, 'I' => 9, 'J' => 8, 'K' => 8, 'L' => 8, 'M' => 7, 'N' => 7,
             'O' => 10, 'P' => 10, 'Q' => 10, 'R' => 8, 'S' => 10, 'T' => 9, 'U' => 10,
-            'V' => 12, 'W' => 10, 'X' => 9, 'Y' => 10, 'Z' => 10, 'AA' => 7, 'AB' => 7,
-            'AC' => 14, 'AD' => 8, 'AE' => 20, 'AF' => 18, 'AG' => 14, 'AH' => 14,
-            'AI' => 12, 'AJ' => 6,
+            'V' => 12, 'W' => 10, 'X' => 9, 'Y' => 10, 'Z' => 10, 'AA' => 22, 'AB' => 7,
+            'AC' => 7, 'AD' => 14, 'AE' => 8, 'AF' => 20, 'AG' => 18, 'AH' => 14,
+            'AI' => 14, 'AJ' => 12, 'AK' => 6,
         ];
     }
 
@@ -229,7 +230,7 @@ class OrdencompraReporteExport implements FromView, ShouldAutoSize, WithColumnFo
                     ],
                 ]);
 
-                foreach (['B', 'AE', 'AF', 'AG'] as $colWrap) {
+                foreach (['B', 'AA', 'AF', 'AG', 'AH'] as $colWrap) {
                     $sheet->getStyle($colWrap.$this->filaPrimeraDatosExcel.':'.$colWrap.$sheet->getHighestRow())
                         ->getAlignment()
                         ->setWrapText(true);

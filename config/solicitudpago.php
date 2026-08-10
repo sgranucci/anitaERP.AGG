@@ -31,6 +31,15 @@ return [
     ],
 
     /*
+    | Sync diario Anita→ERP (faltantes + estados). Temporal mientras se paguen SP en Anita.
+    | Apagar (habilitado=false) cuando el circuito de pago quede 100% en ERP.
+    */
+    'sync_anita' => [
+        'habilitado' => filter_var(env('SOLICITUDPAGO_SYNC_ANITA_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('SOLICITUDPAGO_SYNC_ANITA_HORA', '06:45'),
+    ],
+
+    /*
     | Disparar árbol de aprobación al generar SP hija por cuota (Anita llama SOLPM_procesa_arbol).
     | Default false: la hija nace AUTORIZADA como en p-controlsolpm.
     */

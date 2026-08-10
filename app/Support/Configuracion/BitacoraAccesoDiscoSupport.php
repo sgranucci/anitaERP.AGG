@@ -2,6 +2,7 @@
 
 namespace App\Support\Configuracion;
 
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -47,17 +48,7 @@ class BitacoraAccesoDiscoSupport
             ];
         }
 
-        $db = DB::getDatabaseName();
-        $meta = DB::selectOne(
-            'SELECT TABLE_ROWS AS filas_aprox,
-                    DATA_LENGTH AS data_bytes,
-                    INDEX_LENGTH AS index_bytes,
-                    (DATA_LENGTH + INDEX_LENGTH) AS total_bytes,
-                    AVG_ROW_LENGTH AS promedio_fila_bytes
-             FROM information_schema.TABLES
-             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
-            [$db, $tabla]
-        );
+        $meta = self::metaTamanoTabla($tabla);
 
         $data = (int) ($meta->data_bytes ?? 0);
         $index = (int) ($meta->index_bytes ?? 0);
@@ -91,6 +82,50 @@ class BitacoraAccesoDiscoSupport
             ];
         }
 
+        $base = self::tamanoTabla('bitacora_acceso');
+        $filasReales = (int) DB::table('bitacora_acceso')->count();
+
+        return [
+            'existe' => true,
+            'filas' => $filasReales,
+            'filas_aprox_motor' => (int) ($base['filas'] ?? 0),
+            'data_bytes' => (int) ($base['data_bytes'] ?? 0),
+            'index_bytes' => (int) ($base['index_bytes'] ?? 0),
+            'total_bytes' => (int) ($base['total_bytes'] ?? 0),
+            'total_humano' => (string) ($base['total_humano'] ?? '0 B'),
+            'data_humano' => (string) ($base['data_humano'] ?? '0 B'),
+            'index_humano' => (string) ($base['index_humano'] ?? '0 B'),
+            'promedio_fila_bytes' => (int) ($base['promedio_fila_bytes'] ?? 0),
+        ];
+    }
+
+    /**
+     * Metadatos de tamaño de tabla según motor (MySQL information_schema / PG pg_class).
+     *
+     * @return object{filas_aprox?:int|float|null,data_bytes?:int|float|null,index_bytes?:int|float|null,total_bytes?:int|float|null,promedio_fila_bytes?:int|float|null}
+     */
+    private static function metaTamanoTabla(string $tabla): object
+    {
+        if (SqlDialectSupport::esPostgres()) {
+            $meta = DB::selectOne(
+                'SELECT c.reltuples::bigint AS filas_aprox,
+                        pg_relation_size(c.oid) AS data_bytes,
+                        pg_indexes_size(c.oid) AS index_bytes,
+                        pg_total_relation_size(c.oid) AS total_bytes,
+                        CASE WHEN c.reltuples > 0
+                             THEN (pg_relation_size(c.oid) / c.reltuples)::bigint
+                             ELSE 0 END AS promedio_fila_bytes
+                 FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = current_schema()
+                   AND c.relname = ?
+                   AND c.relkind = \'r\'',
+                [$tabla]
+            );
+
+            return $meta ?? (object) [];
+        }
+
         $db = DB::getDatabaseName();
         $meta = DB::selectOne(
             'SELECT TABLE_ROWS AS filas_aprox,
@@ -100,26 +135,10 @@ class BitacoraAccesoDiscoSupport
                     AVG_ROW_LENGTH AS promedio_fila_bytes
              FROM information_schema.TABLES
              WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
-            [$db, 'bitacora_acceso']
+            [$db, $tabla]
         );
 
-        $filasReales = (int) DB::table('bitacora_acceso')->count();
-        $data = (int) ($meta->data_bytes ?? 0);
-        $index = (int) ($meta->index_bytes ?? 0);
-        $total = $data + $index;
-
-        return [
-            'existe' => true,
-            'filas' => $filasReales,
-            'filas_aprox_motor' => (int) ($meta->filas_aprox ?? 0),
-            'data_bytes' => $data,
-            'index_bytes' => $index,
-            'total_bytes' => $total,
-            'total_humano' => self::bytesHumanos($total),
-            'data_humano' => self::bytesHumanos($data),
-            'index_humano' => self::bytesHumanos($index),
-            'promedio_fila_bytes' => (int) ($meta->promedio_fila_bytes ?? 0),
-        ];
+        return $meta ?? (object) [];
     }
 
     /**

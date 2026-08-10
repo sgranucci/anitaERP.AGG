@@ -317,6 +317,7 @@ class RequisicionSalaController extends Controller
                 'tiene_transferencia_laboratorio' => false,
                 'transferencia_laboratorio' => null,
                 'lineas_articulo_bloqueadas_por_tm' => [],
+                'lineas_articulo_bloqueadas_por_cumplimiento' => [],
             ];
         }
 
@@ -328,6 +329,7 @@ class RequisicionSalaController extends Controller
                 ? RequisicionSalaTransferenciaAsociadaSupport::transferenciaLaboratorio($data)
                 : null,
             'lineas_articulo_bloqueadas_por_tm' => RequisicionSalaTransferenciaAsociadaSupport::idsLineasArticuloBloqueadas($data),
+            'lineas_articulo_bloqueadas_por_cumplimiento' => RequisicionSalaEdicionSupport::idsLineasConCumplimientoActivo($data),
         ];
     }
 

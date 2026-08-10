@@ -25,6 +25,30 @@ $( "#botonform0" ).click(function() {
         }
     });
 
+    if (!flError) {
+        var monedaRef = null;
+        $("#tbody-cuenta-table tr.item-cuenta").each(function () {
+            var parseM = window.AsientoMontosFormato
+                ? AsientoMontosFormato.parseDecimal.bind(AsientoMontosFormato)
+                : function (v) { return parseFloat(String(v || '').replace(/\./g, '').replace(',', '.')) || 0; };
+            var debe = parseM($(this).find('.debe').val());
+            var haber = parseM($(this).find('.haber').val());
+            if (debe <= 0 && haber <= 0) {
+                return;
+            }
+            var mon = String($(this).find('.moneda').val() || '');
+            if (monedaRef === null) {
+                monedaRef = mon;
+                return;
+            }
+            if (mon !== monedaRef) {
+                alert("El asiento no puede mezclar monedas. La moneda la fija el primer movimiento.");
+                flError = true;
+                return false;
+            }
+        });
+    }
+
     let totDebe = 0;
     let totHaber = 0;
     let parseMonto = window.AsientoMontosFormato

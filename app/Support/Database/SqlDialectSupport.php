@@ -69,4 +69,164 @@ final class SqlDialectSupport
     {
         return 'LOWER('.$columna.')';
     }
+
+    /**
+     * Solo fecha (sin hora).
+     * MySQL: DATE(col) — PostgreSQL: (col)::date
+     */
+    public static function fecha(string $columna, ?string $connection = null): string
+    {
+        if (self::esPostgres($connection)) {
+            return '('.$columna.')::date';
+        }
+
+        return 'DATE('.$columna.')';
+    }
+
+    /**
+     * Año calendario.
+     * MySQL: YEAR(col) — PostgreSQL: EXTRACT(YEAR FROM col)
+     */
+    public static function anio(string $columna, ?string $connection = null): string
+    {
+        if (self::esPostgres($connection)) {
+            return 'EXTRACT(YEAR FROM '.$columna.')';
+        }
+
+        return 'YEAR('.$columna.')';
+    }
+
+    /**
+     * COALESCE portable (reemplazo de IFNULL).
+     * Argumentos: expresiones SQL controladas por código.
+     */
+    public static function coalesce(string ...$expresiones): string
+    {
+        if ($expresiones === []) {
+            throw new \InvalidArgumentException('SqlDialectSupport::coalesce requiere al menos una expresión');
+        }
+
+        return 'COALESCE('.implode(', ', $expresiones).')';
+    }
+
+    /**
+     * Orden por lista de valores (reemplazo portable de FIELD()).
+     * Genera CASE WHEN col = 'a' THEN 1 … END (válido en MySQL y PostgreSQL).
+     *
+     * @param  list<string|int|float>  $valores
+     */
+    public static function ordenPorLista(string $columna, array $valores): string
+    {
+        if ($valores === []) {
+            throw new \InvalidArgumentException('SqlDialectSupport::ordenPorLista requiere valores');
+        }
+
+        $parts = [];
+        foreach (array_values($valores) as $i => $valor) {
+            if (is_int($valor) || is_float($valor)) {
+                $lit = (string) $valor;
+            } else {
+                $lit = "'".str_replace("'", "''", (string) $valor)."'";
+            }
+            $parts[] = 'WHEN '.$columna.' = '.$lit.' THEN '.($i + 1);
+        }
+
+        return '(CASE '.implode(' ', $parts).' ELSE '.(count($valores) + 1).' END)';
+    }
+
+    /**
+     * Período mensual ordenable: YYYY-MM.
+     * MySQL: DATE_FORMAT — PostgreSQL: to_char
+     */
+    public static function periodoAnioMes(string $columna, ?string $connection = null): string
+    {
+        if (self::esPostgres($connection)) {
+            return 'to_char('.$columna.", 'YYYY-MM')";
+        }
+
+        return 'DATE_FORMAT('.$columna.", '%Y-%m')";
+    }
+
+    /**
+     * Período semanal ISO ordenable: YYYY-Www (ej. 2026-W32).
+     * MySQL: YEAR + WEEK modo 3 — PostgreSQL: to_char IYYY/IW
+     */
+    public static function periodoAnioSemanaIso(string $columna, ?string $connection = null): string
+    {
+        if (self::esPostgres($connection)) {
+            return 'to_char('.$columna.", 'IYYY-\"W\"IW')";
+        }
+
+        return "CONCAT(YEAR({$columna}), '-W', LPAD(WEEK({$columna}, 3), 2, '0'))";
+    }
+
+    /**
+     * Posición 1-based de un literal en una expresión (LOCATE / POSITION).
+     * El literal no debe venir de input de usuario.
+     */
+    public static function posicion(string $haystackExpr, string $literal, ?string $connection = null): string
+    {
+        $lit = str_replace("'", "''", $literal);
+        if (self::esPostgres($connection)) {
+            return "POSITION('{$lit}' IN {$haystackExpr})";
+        }
+
+        return "LOCATE('{$lit}', {$haystackExpr})";
+    }
+
+    /**
+     * N-ésima parte (1-based) al dividir por delimitador.
+     * MySQL: SUBSTRING_INDEX anidado — PostgreSQL: split_part
+     */
+    public static function parteDelimitada(
+        string $expr,
+        string $delimitador,
+        int $indice,
+        ?string $connection = null
+    ): string {
+        if ($indice < 1) {
+            throw new \InvalidArgumentException('SqlDialectSupport::parteDelimitada índice debe ser >= 1');
+        }
+        $delim = str_replace("'", "''", $delimitador);
+        if (self::esPostgres($connection)) {
+            return "split_part({$expr}, '{$delim}', {$indice})";
+        }
+
+        return "SUBSTRING_INDEX(SUBSTRING_INDEX({$expr}, '{$delim}', {$indice}), '{$delim}', -1)";
+    }
+
+    /**
+     * Parsea texto a fecha.
+     * $formatoApp: 'Y-m-d' | 'd/m/Y'
+     */
+    public static function aFecha(string $expr, string $formatoApp, ?string $connection = null): string
+    {
+        $mysql = ['Y-m-d' => '%Y-%m-%d', 'd/m/Y' => '%d/%m/%Y'];
+        $pg = ['Y-m-d' => 'YYYY-MM-DD', 'd/m/Y' => 'DD/MM/YYYY'];
+        if (! isset($mysql[$formatoApp])) {
+            throw new \InvalidArgumentException('SqlDialectSupport::aFecha formato no soportado: '.$formatoApp);
+        }
+
+        if (self::esPostgres($connection)) {
+            return 'to_date(('.$expr."), '".$pg[$formatoApp]."')";
+        }
+
+        return 'STR_TO_DATE(('.$expr."), '".$mysql[$formatoApp]."')";
+    }
+
+    /**
+     * Texto de fecha embebido tras un literal (ej. "…jornada 2026-08-10…").
+     * Longitud típica 10 para Y-m-d.
+     */
+    public static function textoTrasLiteral(
+        string $haystackExpr,
+        string $literal,
+        int $offsetTrasLiteral,
+        int $longitud,
+        ?string $connection = null
+    ): string {
+        $pos = self::posicion($haystackExpr, $literal, $connection);
+
+        return 'SUBSTRING('.$haystackExpr.', '.$pos.' + '.$offsetTrasLiteral.', '.$longitud.')';
+    }
 }

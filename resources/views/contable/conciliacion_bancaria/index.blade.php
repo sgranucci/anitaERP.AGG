@@ -22,11 +22,17 @@
                 <div class="card-tools">
                     @if (!empty($filtrosQuery) && ($resultado ?? null))
                         @php
-                            $paramsExport = array_filter($filtrosQuery, fn ($v) => $v !== null && $v !== '' && $v !== 1);
+                            // No filtrar empresa_id=1 / mes=1: array_filter(... !== 1) los borraba y el export redirigía vacío.
+                            $paramsExport = array_filter(
+                                $filtrosQuery,
+                                static fn ($v, $k) => $v !== null && $v !== '' && $k !== 'consultar',
+                                ARRAY_FILTER_USE_BOTH
+                            );
                             $suffixExport = count($paramsExport) ? '?'.http_build_query($paramsExport) : '';
                         @endphp
                         <a href="{{ route('exportar_conciliacion_bancaria', ['formato' => 'EXCEL']).$suffixExport }}"
-                           class="btn btn-app bg-success" title="Exportar conciliación Excel">
+                           class="btn btn-app bg-success" title="Exportar conciliación Excel"
+                           target="_blank" rel="noopener">
                             <i class="fas fa-file-excel"></i> Excel
                         </a>
                     @endif

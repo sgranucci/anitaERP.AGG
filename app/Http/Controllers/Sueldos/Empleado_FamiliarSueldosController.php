@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Sueldos;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Http\Controllers\Controller;
 use App\Models\Sueldos\Empleado_Familiar_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
@@ -90,7 +91,7 @@ class Empleado_FamiliarSueldosController extends Controller
     {
         $familiares = Empleado_Familiar_Sueldos::query()
             ->where('empleado_id', $empleado->id)
-            ->orderByRaw("FIELD(tipo,'CONYUGE','HIJOS','HIJOS_50','HIJO_INCAP')")
+            ->orderByRaw(SqlDialectSupport::ordenPorLista('tipo', ['CONYUGE','HIJOS','HIJOS_50','HIJO_INCAP']))
             ->orderBy('apellido')
             ->orderBy('nombre')
             ->get();

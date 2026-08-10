@@ -8,12 +8,30 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div id="cumple-alerta-error" class="alert alert-danger alert-dismissible d-none" role="alert">
-            <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
+            <button type="button" class="close" aria-label="Cerrar" onclick="$('#cumple-alerta-error').addClass('d-none');">&times;</button>
             <h4><i class="icon fa fa-times"></i> Error</h4>
-            <ul class="mb-0">
-                <li class="cumple-alerta-error-texto"></li>
-            </ul>
+            <ul class="mb-0"></ul>
         </div>
+        <div id="cumple-alerta-aviso" class="alert alert-warning alert-dismissible d-none" role="alert">
+            <button type="button" class="close" aria-label="Cerrar" onclick="$('#cumple-alerta-aviso').addClass('d-none');">&times;</button>
+            <h5 class="mb-2">
+                <i class="icon fa fa-exclamation-triangle"></i>
+                <span class="cumple-alerta-aviso-titulo">Atenci&oacute;n</span>
+            </h5>
+            <ul class="mb-0 cumple-alerta-aviso-lista"></ul>
+        </div>
+        <style>
+            #tabla-lineas-cumple tr.fila-saldo-insuficiente {
+                background-color: #f8d7da !important;
+            }
+            #tabla-lineas-cumple tr.fila-saldo-aviso {
+                background-color: #fff3cd !important;
+            }
+            #tabla-lineas-cumple tr.fila-saldo-insuficiente .input-cantidad-entrega,
+            #tabla-lineas-cumple tr.fila-saldo-aviso .input-cantidad-entrega {
+                border-color: #dc3545;
+            }
+        </style>
         @if (!empty($pdfToken))
             <div class="alert alert-success">
                 Cumplimiento grabado.
@@ -115,9 +133,24 @@
                                 <button type="button" id="crs_btn_intercompany" class="btn btn-outline-secondary btn-sm">
                                     <i class="fa fa-building"></i> Ver dep&oacute;sitos de otras empresas
                                 </button>
+                                <button type="button" id="btn-crs-aplicar-deposito-todas" class="btn btn-outline-primary btn-sm ml-1" title="Copia el dep&oacute;sito origen de la primera l&iacute;nea a todas">
+                                    <i class="fa fa-copy"></i> Aplicar dep&oacute;sito origen a todas las l&iacute;neas
+                                </button>
                                 <input type="hidden" id="crs_modo_intercompany" value="0">
                                 <small class="text-muted d-block mt-1">
-                                    Permite elegir dep&oacute;sito origen de otra empresa al cumplir la requisici&oacute;n.
+                                    El origen por defecto suele ser el dep&oacute;sito laboratorio (406 Biyemas).
+                                    Si no hay saldo, cambie el dep&oacute;sito por l&iacute;nea o apl&iacute;quelo a todas; la validaci&oacute;n de stock se confirma al grabar.
+                                </small>
+                            </div>
+                        </div>
+                        @else
+                        <div class="form-group row mb-2">
+                            <div class="col-lg-12">
+                                <button type="button" id="btn-crs-aplicar-deposito-todas" class="btn btn-outline-primary btn-sm" title="Copia el dep&oacute;sito origen de la primera l&iacute;nea a todas">
+                                    <i class="fa fa-copy"></i> Aplicar dep&oacute;sito origen a todas las l&iacute;neas
+                                </button>
+                                <small class="text-muted d-block mt-1">
+                                    Si el dep&oacute;sito origen no tiene saldo, c&aacute;mbielo por l&iacute;nea o apl&iacute;quelo a todas; la validaci&oacute;n de stock se confirma al grabar.
                                 </small>
                             </div>
                         </div>

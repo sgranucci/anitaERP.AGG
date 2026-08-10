@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Queries\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\GastronomiaInsumosTipoarticuloReporteFiltros;
 use App\Support\Ventas\GastronomiaVentaComprobanteSignoSupport;
 use Illuminate\Support\Collection;
@@ -59,9 +60,9 @@ class GastronomiaControlContableCigarrillosQuery
 
         return $query
             ->select(['ve_cig.articulo_id'])
-            ->selectRaw('DATE(v.fechajornada) as dia')
+            ->selectRaw(SqlDialectSupport::fecha('v.fechajornada').' as dia')
             ->selectRaw('ROUND(AVG(ve_menu.precio), 2) as precio')
-            ->groupBy('ve_cig.articulo_id', DB::raw('DATE(v.fechajornada)'))
+            ->groupBy('ve_cig.articulo_id', DB::raw(SqlDialectSupport::fecha('v.fechajornada')))
             ->get();
     }
 
@@ -107,11 +108,11 @@ class GastronomiaControlContableCigarrillosQuery
 
         return $query
             ->select(['ve.articulo_id'])
-            ->selectRaw('DATE(v.fechajornada) as dia')
+            ->selectRaw(SqlDialectSupport::fecha('v.fechajornada').' as dia')
             ->selectRaw(
                 'ROUND(SUM(('.$cantidadExpr.') * ve.precio) / NULLIF(SUM(ABS('.$cantidadExpr.')), 0), 2) as precio'
             )
-            ->groupBy('ve.articulo_id', DB::raw('DATE(v.fechajornada)'))
+            ->groupBy('ve.articulo_id', DB::raw(SqlDialectSupport::fecha('v.fechajornada')))
             ->get();
     }
 }

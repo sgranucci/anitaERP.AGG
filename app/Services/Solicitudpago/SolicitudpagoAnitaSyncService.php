@@ -2,6 +2,7 @@
 
 namespace App\Services\Solicitudpago;
 
+use App\Support\Database\SqlDialectSupport;
 use App\ApiAnita;
 use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Empresa;
@@ -79,6 +80,11 @@ class SolicitudpagoAnitaSyncService
 
                 $existente = Solicitudpago::query()->where('codigo', $codigo)->first();
                 if ($existente) {
+                    // No pisar detalle ERP ya cargado si Anita viene vacío (histórico frecuente).
+                    $detalleAnita = trim((string) ($attrs['detalle'] ?? ''));
+                    if ($detalleAnita === '' && trim((string) ($existente->detalle ?? '')) !== '') {
+                        unset($attrs['detalle']);
+                    }
                     $existente->update($attrs);
                     $actualizados++;
                 } else {
@@ -253,7 +259,7 @@ class SolicitudpagoAnitaSyncService
                 ->where('empresa_id', $empresaId)
                 ->where(function ($q) use ($codigoCuenta) {
                     $q->where('codigo', $codigoCuenta)
-                        ->orWhereRaw('CAST(codigo AS UNSIGNED) = ?', [(int) $codigoCuenta]);
+                        ->orWhereRaw(SqlDialectSupport::castEntero('codigo').' = ?', [(int) $codigoCuenta]);
                 })
                 ->first();
             if (! $cuenta) {

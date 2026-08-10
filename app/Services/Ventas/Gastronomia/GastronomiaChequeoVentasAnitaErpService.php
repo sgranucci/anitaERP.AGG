@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Support\Database\SqlDialectSupport;
 use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Puntoventa;
@@ -782,7 +783,7 @@ final class GastronomiaChequeoVentasAnitaErpService
         ?string $codigoPv = null,
     ): array {
         $query = Venta::query()
-            ->selectRaw('venta.puntoventa_id, DATE(venta.fechajornada) as fecha_jornada, puntoventa.codigo as codigo_pv')
+            ->selectRaw('venta.puntoventa_id, '.SqlDialectSupport::fecha('venta.fechajornada').' as fecha_jornada, puntoventa.codigo as codigo_pv')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->whereDate('venta.fechajornada', '>=', $fechaDesde)
             ->whereHas('gastronomiaEmision')
@@ -865,7 +866,7 @@ final class GastronomiaChequeoVentasAnitaErpService
         ?string $codigoPv = null,
     ): array {
         $query = Venta::query()
-            ->selectRaw('venta.puntoventa_id, DATE(venta.fecha) as fecha_calendario, puntoventa.codigo as codigo_pv')
+            ->selectRaw('venta.puntoventa_id, '.SqlDialectSupport::fecha('venta.fecha').' as fecha_calendario, puntoventa.codigo as codigo_pv')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->whereDate('venta.fecha', $fechaCalendario)
             ->whereHas('gastronomiaEmision')

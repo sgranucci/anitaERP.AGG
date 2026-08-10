@@ -1,7 +1,8 @@
 # Portabilidad de base de datos (decisión aplazada)
 
-**Estado:** aplazado — retomar cuando anitaERP esté estable en alcance (menos cambios día a día).  
+**Estado:** en curso (boy scout + capa dialecto) — cutover a Postgres sigue aplazado.  
 **Fecha de registro:** 2026-07-27  
+**Última reactivación:** 2026-08-10  
 **Alcance:** motor operativo Laravel (anitaERP). No incluye Anita legacy ni otras BD externas (Wigos, SuiteCRM, etc.).
 
 ## 1. Decisión vigente
@@ -144,31 +145,56 @@ Usar como backlog: un ítem o un archivo hotspot por día/PR. Marcar al cerrar.
 | # | Qué hacer | Qué se toca | Estado |
 |---|-----------|-------------|--------|
 | 2.1 | Crear helper de expresiones SQL portables | `app/Support/Database/SqlDialectSupport.php` | **Hecho** |
-| 2.2 | Generalizar reintentos deadlock | `MysqlContencionSupport` → `DbContencionSupport` | Pendiente |
+| 2.2 | Generalizar reintentos deadlock | `DbContencionSupport` (+ alias `MysqlContencionSupport`) | **Hecho** (2026-08-10) |
 | 2.3 | Regla Cursor uso obligatorio del helper | `.cursor/rules/sql-dialect-portable.mdc` | **Hecho** |
-| 2.4 | Smoke / test unitario puro del helper | `tests/Unit/Support/Database/` sin RefreshDatabase | Pendiente |
+| 2.4 | Smoke / test unitario puro del helper | `tests/Unit/Support/Database/DbContencionSupportTest.php` | **Hecho** (detección errores; sin RefreshDatabase) |
 
-APIs del helper (2.1): `castEntero`, `ordenCodigoAsc`, `hora`, `anioMes`, `lower` — ramas mysql/mariadb vs pgsql solo dentro de esa clase.
+APIs del helper (2.1): `castEntero`, `ordenCodigoAsc`, `hora`, `anio`, `anioMes`, `fecha`, `coalesce`, `ordenPorLista`, `lower` — ramas mysql/mariadb vs pgsql solo dentro de esa clase.
 
-Pilotos Fase 3: `CamionRepository`, `DepmaeController`.
+Pilotos Fase 3 iniciales: `CamionRepository`, `DepmaeController`.  
+**2026-08-10:** cerrado `CAST(... AS UNSIGNED)` en `app/`; `HOUR`/`anioMes`; `DbContencionSupport`; `IFNULL`→`coalesce`; `FIELD`→`ordenPorLista`; bitácora `information_schema` con rama PG (`pg_class`).
+
+#### Inventario Fase 1 (snapshot 2026-08-10, `app/` excl. helper)
+
+| Patrón | Cantidad aprox. | Notas |
+|--------|-----------------|-------|
+| `CAST AS UNSIGNED` | 0 | Cerrado vía helper |
+| `IFNULL` | 0 | Cerrado → `coalesce` |
+| `FIELD(` | 0 | Cerrado → `ordenPorLista` |
+| `information_schema` | encapsulado | Solo rama MySQL en `BitacoraAccesoDiscoSupport` |
+| `GROUP_CONCAT` / `FIND_IN_SET` | 0 en `app/` | — |
+| `DATE_FORMAT` / `Week` OT | **Hecho** | `periodoAnioMes` / `periodoAnioSemanaIso` (labels `YYYY-MM` / `YYYY-Www`) |
+| `STR_TO_DATE` / `SUBSTRING_INDEX` / `LOCATE` | **Hecho** | IVA ventas conciliación vía helper |
+| `DATE(col)` SQL (gastro/caja/cierres) | **Hecho** | → `SqlDialectSupport::fecha` (11 archivos) |
+
+#### Hotspots raw grandes (revisión 2026-08-10)
+
+| Archivo | Raw≈ | Hallazgo |
+|---------|------|----------|
+| `MovimientoStockListadoUnificadoSupport` | 35 | Ya portable (SUM/ABS/MIN) |
+| `GastronomiaArticulosVendidosQuery` | 31 | Ya portable (COALESCE/CONCAT) |
+| `GastronomiaAnaliticoReporteQuery` | 15 | Ya portable |
+| `ComprasKpisProcesoProductividadSupport` | 19 | Ya portable (CASE/MIN) |
 
 #### Fase 3 — Código incremental (el grueso; 1 archivo o módulo por día)
 
 Regla boy scout: si tocás un módulo por otra feature, convertís su raw SQL al helper en el mismo PR.
 
-| # | Bloque | Archivos / carpetas típicas |
-|---|--------|-----------------------------|
-| 3.1 | Contención + numeraciones | `DbContencionSupport`, `CobranzaNumeracion*`, `*NumeracionComprobanteSupport`, servicios de jornada/turno |
-| 3.2 | Filtros listado compartidos | `CoincidenciaFlexibleTexto`, `app/Support/**/*ListadoFiltros.php` |
-| 3.3 | Stock / movimientos | `MovimientoStockListadoUnificadoSupport`, `ExistenciasDepositoReporteService`, `ArticuloController` (casts) |
-| 3.4 | Ventas pedidos / kilos | `PedidoQuery`, `KiloPedidoListadoFiltros`, reportes pedidos |
-| 3.5 | Gastronomía reportes | `app/Queries/Ventas/Gastronomia*.php` |
-| 3.6 | Estacionamiento / caja reportes | `app/Queries/Caja/*`, supports estacionamiento |
-| 3.7 | Contable / saldos | `CuentacontableSaldo*`, `SumasSaldosProcesador`, conciliación IVA |
-| 3.8 | Compras / CC | repos cuentacorriente, unicidad comprobantes |
-| 3.9 | Resto controllers con `UNSIGNED` / raw | grep y ir cerrando lista Fase 1 |
+| # | Bloque | Archivos / carpetas típicas | Estado |
+|---|--------|-----------------------------|--------|
+| 3.1 | Contención + numeraciones | `DbContencionSupport`, numeraciones venta/cobranza/CAEA | **Parcial** |
+| 3.2 | Filtros listado | `CoincidenciaFlexibleTexto` ya usa `LOWER` portable | **OK básico** |
+| 3.3 | Stock / movimientos | casts + saldo depósito `coalesce` | **Parcial** |
+| 3.4 | Ventas pedidos / kilos / OT | `PedidoQuery`, kilos, `Ordentrabajo_TareaRepository` períodos | **Parcial** (OT períodos hechos) |
+| 3.5 | Gastronomía / IVA conciliación | hora + IVA + `DATE(fechajornada)` reportes | **Parcial** |
+| 3.6 | Estacionamiento / caja / cierres | `DATE` en bingo/máquina/estacionamiento + chequeos Anita | **Parcial** (`fecha()`) |
+| 3.7 | Contable / saldos | anioMes | **Parcial** |
+| 3.8 | Compras / CC | IFNULL CC cliente/proveedor | **Hecho** (coalesce) |
+| 3.9 | `UNSIGNED` / `FIELD` / `IFNULL` | — | **Cerrado** en `app/` |
+| 3.10 | Sueldos / ARCA orden listas | liquidación, cuotas, familiar, webservice | **Hecho** |
+| 3.11 | Bitácora meta tablas | `BitacoraAccesoDiscoSupport` | **Hecho** (dual-driver) |
 
-Cada día: **un** hotspot → helper → `php -l` → smoke manual del pantallazo → listo.
+**Siguiente foco sugerido:** boy scout al tocar módulos; o Fase 5 (CI Postgres + migrate vacío). Los dialectismos “clásicos” en `app/` están encapsulados.
 
 #### Fase 4 — Migraciones (continua; ya empezó)
 
@@ -209,8 +235,9 @@ Cada día: **un** hotspot → helper → `php -l` → smoke manual del pantallaz
 
 Ver también conversación de evaluación 2026-07-27. Resumen:
 
-- [ ] Helpers dialecto + contención multi-motor  
-- [ ] Eliminar / encapsular `UNSIGNED`, funciones fecha MySQL, `information_schema`  
+- [x] Helpers dialecto + contención multi-motor (`SqlDialectSupport`, `DbContencionSupport`)  
+- [x] Encapsular `UNSIGNED` en `app/` (vía helper)  
+- [ ] Encapsular resto funciones fecha MySQL / `information_schema` / `GROUP_CONCAT` etc.  
 - [ ] Collations / ordenamiento español  
 - [ ] Tipos: unsigned, enum, boolean, decimales moneda  
 - [ ] Locks y numeraciones bajo carga en ambos motores (cuando haya PG en CI)  
@@ -248,12 +275,14 @@ Usar cuando infra/cliente insista en Postgres solo por WAL:
 ## 7. Referencias en el repo
 
 - `config/database.php` — conexiones `mysql` y `pgsql`
-- `app/Support/Database/MysqlContencionSupport.php` — reintentos deadlock MySQL (a generalizar)
+- `app/Support/Database/DbContencionSupport.php` — reintentos deadlock / lock wait MySQL + PostgreSQL (**activo**)
+- `app/Support/Database/MysqlContencionSupport.php` — alias deprecated → `DbContencionSupport`
 - `deploy/backup/RESTORE.md` — PITR / binlog MySQL–MariaDB
 - `deploy/backup/backup-db.sh` — dump + snapshot binlog
 - `.cursor/rules/migraciones-portables-motor.mdc` — migraciones nuevas neutrales al motor (**activo**)
 - `app/Support/Database/SqlDialectSupport.php` — expresiones SQL portables (**activo**)
 - `.cursor/rules/sql-dialect-portable.mdc` — SQL crudo nuevo vía helper (**activo**)
+- `tests/Unit/Support/Database/DbContencionSupportTest.php` — detección errores reintentables
 - Reglas CRUD/listados: SQL en filtros y reportes (candidatos a Fase 3)
 
 ---
@@ -261,12 +290,11 @@ Usar cuando infra/cliente insista en Postgres solo por WAL:
 ## 8. Qué se puede hacer ya (sin esperar “ERP terminado”)
 
 1. **Migraciones nuevas portables** (Fase 4.1–4.2) — obligatorio desde ahora vía la regla Cursor.  
-2. Boy scout: al tocar archivos con `CAST AS UNSIGNED`, migrar a `SqlDialectSupport` (ej. ya hecho en `CamionRepository`, `DepmaeController`).  
-3. Siguiente formal: Fase 2.2 (`DbContencionSupport`) o más hotspots de orden por código (PV gastronomía, `ArticuloController`, etc.).
+2. Boy scout: raw SQL dialectal → `SqlDialectSupport` / contención → `DbContencionSupport`.  
+3. **Hecho 2026-08-10:** Fase 2.2 + cierre de `CAST AS UNSIGNED` en `app/` + gastronomía hora / anioMes saldo.
 
-## 9. Próximo paso cuando se reactive el proyecto formal
+## 9. Próximo paso
 
-1. Confirmar Fase 0 si aún aplica (estabilidad + motor único).  
-2. Fase 1 inventario completo (matriz hotspots) si no está hecha.  
-3. Fase 2.2 `DbContencionSupport` + seguir boy scout Fase 3 (casts / reportes).  
-4. No spike de Postgres en deploy real sin Fase 5 en verde.
+1. Boy scout al tocar código (regla dialecto activa).  
+2. Opcional: Fase 5 — Postgres en CI + `migrate` en vacío.  
+3. No spike de Postgres en deploy real sin Fase 5 en verde.

@@ -54,4 +54,41 @@ final class OrdencompraAnitaLineaSupport
         $oc->unsetRelation('ordencompra_articulos');
         $oc->load('ordencompra_articulos');
     }
+
+    /**
+     * Anula penvp_nro_interno de líneas cuyo interno no está en el set válido de esta OC
+     * (p. ej. copiados por error de otras OC) para que asignarClavesLineas reserve nuevos.
+     *
+     * @param  array<int, true>  $internosValidosEnEstaOc  penvp_nro_interno => true
+     * @return array<int, array{antes: int, despues: int}> ordencompra_articulo.id => cambio
+     */
+    public static function liberarNroInternosInvalidos(Ordencompra $oc, array $internosValidosEnEstaOc): array
+    {
+        $oc->loadMissing('ordencompra_articulos');
+        $cambios = [];
+
+        foreach ($oc->ordencompra_articulos as $linea) {
+            $nro = (int) ($linea->penvp_nro_interno ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            if (isset($internosValidosEnEstaOc[$nro])) {
+                continue;
+            }
+
+            Ordencompra_Articulo::query()
+                ->whereKey($linea->id)
+                ->where('ordencompra_id', $oc->id)
+                ->update(['penvp_nro_interno' => null]);
+            $linea->penvp_nro_interno = null;
+            $cambios[(int) $linea->id] = ['antes' => $nro, 'despues' => 0];
+        }
+
+        if ($cambios !== []) {
+            $oc->unsetRelation('ordencompra_articulos');
+            $oc->load('ordencompra_articulos');
+        }
+
+        return $cambios;
+    }
 }

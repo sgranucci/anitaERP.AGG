@@ -98,7 +98,7 @@ class ValidacionSolicitudpago extends FormRequest
             'observacion' => 'nullable|string|max:160',
             'estado' => ['nullable', Rule::in(array_column(SolicitudpagoEstados::opciones(), 'valor'))],
             'sector_solicitudpago_id' => 'nullable|exists:sector_solicitudpago,id',
-            'detalle' => 'nullable|string|max:180',
+            'detalle' => 'required|string|max:180',
             'solicitudpago_madre_id' => 'nullable|exists:solicitudpago,id',
             'empresa_ids' => 'nullable|array',
             'empresa_ids.*' => 'nullable|exists:empresa,id',
@@ -285,6 +285,7 @@ class ValidacionSolicitudpago extends FormRequest
             'moneda_id' => 'moneda',
             'fecha_vencimiento' => 'vencimiento',
             'proveedor_id' => 'proveedor',
+            'detalle' => 'detalle',
             'cuentacontable_ids' => 'asiento contable',
             'nro_cuotas' => 'cuotas',
         ];

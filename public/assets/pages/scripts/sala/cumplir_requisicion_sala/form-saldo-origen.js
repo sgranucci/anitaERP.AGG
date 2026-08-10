@@ -3,7 +3,9 @@
 
     var cfg = window.cumpleRequisicionSalaConfig || {};
     var timersSaldo = {};
-    var avisosSaldoPendientes = {};
+    var cargasPendientes = 0;
+    var timerResumenAviso = null;
+    var ultimoResumenFirma = '';
 
     function saldoOrigenUrl() {
         return cfg.urlSaldoOrigen || '';
@@ -37,20 +39,15 @@
     }
 
     function cantidadAValidarFila($tr) {
-        // Solo la cantidad cargada: si est\u00e1 en 0, la l\u00ednea no bloquea.
         return cantidadEntregaFila($tr);
-    }
-
-    function cantidadReferenciaAviso($tr) {
-        var entrega = cantidadEntregaFila($tr);
-        if (entrega > 0) {
-            return entrega;
-        }
-        return pendienteFila($tr);
     }
 
     function skuFila($tr) {
         return $.trim($tr.find('td').eq(1).text() || '');
+    }
+
+    function codigoDepositoFila($tr) {
+        return $.trim($tr.find('.codigodeposito').val() || '');
     }
 
     function saldoInsuficiente($tr, saldo, cantidad) {
@@ -60,6 +57,15 @@
             && saldo !== undefined
             && !Number.isNaN(Number(saldo))
             && Number(saldo) + 1e-9 < qty;
+    }
+
+    function saldoMenorAlPendiente($tr, saldo) {
+        var pendiente = pendienteFila($tr);
+        return pendiente > 0
+            && saldo !== null
+            && saldo !== undefined
+            && !Number.isNaN(Number(saldo))
+            && Number(saldo) + 1e-9 < pendiente;
     }
 
     function limpiarEstadoEntregaFila($tr) {
@@ -78,7 +84,6 @@
         }
         $input.val('0');
         limpiarEstadoEntregaFila($tr);
-        $tr.removeClass('fila-saldo-insuficiente');
     }
 
     function mostrarSaldoFila($tr, saldo, controlaStock, esError) {
@@ -92,57 +97,236 @@
 
         if (controlaStock === false) {
             $span.text('N/A').removeClass('text-danger text-success font-weight-bold').addClass('text-muted');
-            $tr.removeClass('fila-saldo-insuficiente');
+            $tr.removeClass('fila-saldo-insuficiente fila-saldo-aviso');
             return;
         }
 
         if (saldo === null || saldo === undefined || esError) {
             $span.text('\u2014').removeClass('text-danger text-success font-weight-bold').addClass('text-muted');
-            $tr.removeClass('fila-saldo-insuficiente');
+            $tr.removeClass('fila-saldo-insuficiente fila-saldo-aviso');
             return;
         }
 
-        var insuficiente = saldoInsuficiente($tr, saldo);
-        $tr.toggleClass('fila-saldo-insuficiente', insuficiente);
+        var entregaInsuf = saldoInsuficiente($tr, saldo);
+        var avisoPendiente = !entregaInsuf && saldoMenorAlPendiente($tr, saldo);
+        $tr.toggleClass('fila-saldo-insuficiente', entregaInsuf);
+        $tr.toggleClass('fila-saldo-aviso', avisoPendiente);
 
         $span.text(fmtSaldo(saldo))
-            .removeClass('text-muted text-danger text-success font-weight-bold');
+            .removeClass('text-muted text-danger text-success font-weight-bold text-warning');
 
-        if (Number(saldo) < 0 || insuficiente) {
+        if (Number(saldo) < 0 || entregaInsuf) {
             $span.addClass('text-danger font-weight-bold');
+        } else if (avisoPendiente) {
+            $span.addClass('text-warning font-weight-bold');
         } else {
             $span.addClass('text-success font-weight-bold');
         }
     }
 
-    function mensajeSaldoInsuficiente($tr, saldo, cantidad) {
-        var qty = cantidad !== undefined ? cantidad : cantidadReferenciaAviso($tr);
-        return 'Saldo insuficiente para '
-            + (skuFila($tr) || 'el art\u00edculo')
-            + '. Saldo: ' + fmtSaldo(saldo)
-            + ', requerido: ' + fmtSaldo(qty)
-            + '. Se dej\u00f3 la cantidad en 0: cambie el dep\u00f3sito origen o la cantidad.';
+    function escapeHtml(text) {
+        return $('<div/>').text(text || '').html();
     }
 
-    function avisarSaldoInsuficiente($tr, saldo, forzar) {
-        var qtyRef = cantidadReferenciaAviso($tr);
-        if (!saldoInsuficiente($tr, saldo, qtyRef)) {
-            avisosSaldoPendientes[$tr.data('linea-id')] = false;
+    function asegurarBackdropLimpio() {
+        // Evita UI "trabada" si un modal de dep\u00f3sito cerr\u00f3 mal.
+        window.setTimeout(function () {
+            if ($('.modal.show').length) {
+                return;
+            }
+            $('body').removeClass('modal-open');
+            $('.modal-backdrop').remove();
+        }, 50);
+    }
+
+    function ocultarAvisoSaldo() {
+        $('#cumple-alerta-aviso').addClass('d-none');
+        ultimoResumenFirma = '';
+    }
+
+    function mostrarAvisoSaldo(titulo, lineas) {
+        var $box = $('#cumple-alerta-aviso');
+        if (!$box.length) {
             return;
         }
+        var lista = Array.isArray(lineas) ? lineas.filter(Boolean) : [];
+        var firma = titulo + '|' + lista.join('|');
+        if (firma === ultimoResumenFirma && !$box.hasClass('d-none')) {
+            return;
+        }
+        ultimoResumenFirma = firma;
 
+        $box.find('.cumple-alerta-aviso-titulo').text(titulo || 'Atenci\u00f3n');
+        var $ul = $box.find('.cumple-alerta-aviso-lista').empty();
+        if (lista.length === 0) {
+            $ul.append('<li>Revise los dep\u00f3sitos origen y las cantidades.</li>');
+        } else {
+            lista.forEach(function (linea) {
+                $ul.append('<li>' + escapeHtml(linea) + '</li>');
+            });
+        }
+        $box.removeClass('d-none');
+    }
+
+    function mostrarErrorSaldo(titulo, lineas) {
+        var $box = $('#cumple-alerta-error');
+        if (!$box.length) {
+            window.alert((titulo || 'Error') + '\n' + (lineas || []).join('\n'));
+            return;
+        }
+        $box.find('h4').html('<i class="icon fa fa-times"></i> ' + escapeHtml(titulo || 'Error'));
+        var $ul = $box.find('ul').empty();
+        (lineas || []).forEach(function (linea) {
+            $ul.append('<li>' + escapeHtml(linea) + '</li>');
+        });
+        if (!(lineas || []).length) {
+            $ul.append('<li>Revise los datos e intente nuevamente.</li>');
+        }
+        $box.removeClass('d-none');
+        var top = $box.offset() ? $box.offset().top - 80 : 0;
+        $('html, body').animate({ scrollTop: Math.max(top, 0) }, 200);
+    }
+
+    function recolectarInconsistenciasSaldos(opciones) {
+        var opts = opciones || {};
+        var soloConEntrega = !!opts.soloConEntrega;
+        var problemas = [];
+        var demanda = {};
+
+        $('#tabla-lineas-cumple tbody tr.fila-cumple-linea').each(function () {
+            var $tr = $(this);
+            if ($tr.attr('data-controla-stock') === '0') {
+                return;
+            }
+            var entrega = cantidadEntregaFila($tr);
+            var pendiente = pendienteFila($tr);
+            var articuloId = articuloIdFila($tr);
+            var depositoId = depositoIdFila($tr);
+            var saldoAttr = $tr.attr('data-saldo-origen');
+            var sku = skuFila($tr) || 'Art\u00edculo';
+            var depCod = codigoDepositoFila($tr);
+
+            if (soloConEntrega) {
+                if (entrega <= 0 || articuloId <= 0 || depositoId <= 0) {
+                    return;
+                }
+                var clave = articuloId + ':' + depositoId;
+                if (!demanda[clave]) {
+                    demanda[clave] = {
+                        sku: sku,
+                        depCod: depCod,
+                        cantidad: 0,
+                        saldo: saldoAttr,
+                        $trs: [],
+                    };
+                }
+                demanda[clave].cantidad += entrega;
+                demanda[clave].$trs.push($tr);
+                if (demanda[clave].saldo === '' || demanda[clave].saldo === undefined) {
+                    demanda[clave].saldo = saldoAttr;
+                }
+                return;
+            }
+
+            // Resumen informativo: saldo vs pendiente (aunque cantidad a\u00fan sea 0).
+            if (pendiente <= 0 || articuloId <= 0 || depositoId <= 0) {
+                return;
+            }
+            if (saldoAttr === '' || saldoAttr === undefined) {
+                return;
+            }
+            var saldo = Number(saldoAttr);
+            if (Number.isNaN(saldo)) {
+                return;
+            }
+            if (saldo + 1e-9 < pendiente) {
+                problemas.push(
+                    sku
+                    + ' (dep. '
+                    + (depCod || depositoId)
+                    + '): saldo '
+                    + fmtSaldo(saldo)
+                    + ', pendiente '
+                    + fmtSaldo(pendiente)
+                );
+            }
+        });
+
+        if (soloConEntrega) {
+            Object.keys(demanda).forEach(function (clave) {
+                var item = demanda[clave];
+                if (item.saldo === '' || item.saldo === undefined || item.saldo === null) {
+                    problemas.push(
+                        (item.sku || 'Art\u00edculo')
+                        + ': no se pudo verificar el saldo del dep\u00f3sito origen. Espere a que cargue o revise el dep\u00f3sito.'
+                    );
+                    return;
+                }
+                var saldo = Number(item.saldo);
+                if (Number.isNaN(saldo) || saldo + 1e-9 < item.cantidad) {
+                    problemas.push(
+                        (item.sku || 'Art\u00edculo')
+                        + ' (dep. '
+                        + (item.depCod || '')
+                        + '): saldo '
+                        + fmtSaldo(saldo)
+                        + ', solicitado '
+                        + fmtSaldo(item.cantidad)
+                    );
+                    item.$trs.forEach(function ($tr) {
+                        forzarCantidadCero($tr);
+                        if (!Number.isNaN(saldo)) {
+                            mostrarSaldoFila($tr, saldo, true);
+                        }
+                    });
+                }
+            });
+        }
+
+        return problemas;
+    }
+
+    function programarResumenAviso() {
+        clearTimeout(timerResumenAviso);
+        timerResumenAviso = setTimeout(function () {
+            if (cargasPendientes > 0) {
+                return;
+            }
+            var problemas = recolectarInconsistenciasSaldos({ soloConEntrega: false });
+            if (problemas.length === 0) {
+                ocultarAvisoSaldo();
+                return;
+            }
+            mostrarAvisoSaldo(
+                'Hay l\u00edneas sin saldo suficiente en el dep\u00f3sito origen. '
+                + 'Cambie el dep\u00f3sito o ajuste la cantidad antes de grabar.',
+                problemas
+            );
+        }, 250);
+    }
+
+    function inicioCargaSaldo() {
+        cargasPendientes += 1;
+    }
+
+    function finCargaSaldo() {
+        cargasPendientes = Math.max(0, cargasPendientes - 1);
+        if (cargasPendientes === 0) {
+            programarResumenAviso();
+        }
+    }
+
+    /**
+     * Si la cantidad cargada supera el saldo, la deja en 0 sin alert (no bloquea la UI).
+     */
+    function ajustarCantidadSiSuperaSaldo($tr, saldo) {
+        var entrega = cantidadEntregaFila($tr);
+        if (!saldoInsuficiente($tr, saldo, entrega)) {
+            return false;
+        }
         forzarCantidadCero($tr);
         mostrarSaldoFila($tr, saldo, true);
-
-        var key = String($tr.data('linea-id') || $tr.index());
-        if (!forzar && avisosSaldoPendientes[key]) {
-            return;
-        }
-        avisosSaldoPendientes[key] = true;
-        // Diferir el alert para no bloquear el cierre de modales Bootstrap (backdrop pegado).
-        window.setTimeout(function () {
-            alert(mensajeSaldoInsuficiente($tr, saldo, qtyRef));
-        }, 0);
+        return true;
     }
 
     function cargarSaldoFila($tr, opciones) {
@@ -160,6 +344,7 @@
             return;
         }
 
+        inicioCargaSaldo();
         $.get(saldoUrl, {
             articulo_id: articuloId,
             deposito_id: depId,
@@ -171,11 +356,14 @@
             var controla = data.controla_stock !== false;
             var saldo = controla ? (data.saldo !== undefined ? data.saldo : 0) : null;
             mostrarSaldoFila($tr, saldo, controla);
-            if (opts.avisar && controla) {
-                avisarSaldoInsuficiente($tr, saldo, !!opts.forzarAviso);
+            if (opts.ajustarCantidad && controla) {
+                ajustarCantidadSiSuperaSaldo($tr, saldo);
             }
         }).fail(function () {
             mostrarSaldoFila($tr, null, true, true);
+        }).always(function () {
+            finCargaSaldo();
+            asegurarBackdropLimpio();
         });
     }
 
@@ -188,105 +376,78 @@
     }
 
     function refrescarSaldosOrigen(opciones) {
+        var opts = opciones || {};
         $('#tabla-lineas-cumple tbody tr.fila-cumple-linea').each(function () {
-            programarSaldoFila($(this), opciones);
+            programarSaldoFila($(this), opts);
         });
     }
 
     function validarSaldosAntesDeGrabar() {
-        var problemas = [];
-        var demanda = {};
-
-        $('#tabla-lineas-cumple tbody tr.fila-cumple-linea').each(function () {
-            var $tr = $(this);
-            if ($tr.attr('data-controla-stock') === '0') {
-                return;
-            }
-            var entrega = cantidadEntregaFila($tr);
-            if (entrega <= 0) {
-                return;
-            }
-            var articuloId = articuloIdFila($tr);
-            var depositoId = depositoIdFila($tr);
-            if (articuloId <= 0 || depositoId <= 0) {
-                return;
-            }
-            var clave = articuloId + ':' + depositoId;
-            if (!demanda[clave]) {
-                demanda[clave] = {
-                    articuloId: articuloId,
-                    depositoId: depositoId,
-                    sku: skuFila($tr),
-                    cantidad: 0,
-                    saldo: $tr.attr('data-saldo-origen'),
-                    $tr: $tr,
-                };
-            }
-            demanda[clave].cantidad += entrega;
-            if (demanda[clave].saldo === '' || demanda[clave].saldo === undefined) {
-                demanda[clave].saldo = $tr.attr('data-saldo-origen');
-            }
-        });
-
-        Object.keys(demanda).forEach(function (clave) {
-            var item = demanda[clave];
-            if (item.saldo === '' || item.saldo === undefined || item.saldo === null) {
-                problemas.push(
-                    (item.sku || 'Art\u00edculo')
-                    + ': no se pudo verificar el saldo del dep\u00f3sito origen. Espere a que cargue o revise el dep\u00f3sito.'
-                );
-                return;
-            }
-            var saldo = Number(item.saldo);
-            if (Number.isNaN(saldo) || saldo + 1e-9 < item.cantidad) {
-                problemas.push(
-                    (item.sku || 'Art\u00edculo')
-                    + ': saldo ' + fmtSaldo(saldo)
-                    + ', solicitado ' + fmtSaldo(item.cantidad)
-                    + ' (cantidad en 0 para corregir)'
-                );
-                forzarCantidadCero(item.$tr);
-                if (!Number.isNaN(saldo)) {
-                    mostrarSaldoFila(item.$tr, saldo, true);
-                }
-            }
-        });
-
+        var problemas = recolectarInconsistenciasSaldos({ soloConEntrega: true });
         if (problemas.length === 0) {
+            ocultarAvisoSaldo();
             return true;
         }
 
-        alert(
-            'No se puede grabar: hay l\u00edneas con saldo insuficiente en el dep\u00f3sito origen.\n'
-            + 'Se dej\u00f3 cantidad 0 en esas l\u00edneas; cambie dep\u00f3sito o cantidad y vuelva a grabar.\n\n'
-            + problemas.join('\n')
+        mostrarErrorSaldo(
+            'No se puede grabar: saldo insuficiente en dep\u00f3sito origen',
+            ['Se dej\u00f3 cantidad 0 en esas l\u00edneas. Cambie dep\u00f3sito o cantidad y vuelva a grabar.'].concat(problemas)
         );
+        programarResumenAviso();
         return false;
+    }
+
+    function aplicarDepositoATodasLasLineas($origen) {
+        var $src = $origen && $origen.length
+            ? $origen.closest('tr.fila-cumple-linea')
+            : $('#tabla-lineas-cumple tbody tr.fila-cumple-linea').first();
+        if (!$src.length) {
+            return false;
+        }
+        var depId = $src.find('.deposito_id').val();
+        var codigo = $src.find('.codigodeposito').val();
+        var nombre = $src.find('.descripciondeposito').val();
+        if (!depId) {
+            mostrarAvisoSaldo(
+                'Elija primero un dep\u00f3sito origen en una l\u00ednea.',
+                []
+            );
+            return false;
+        }
+        $('#tabla-lineas-cumple tbody tr.fila-cumple-linea').each(function () {
+            var $tr = $(this);
+            $tr.find('.deposito_id').val(depId);
+            $tr.find('.codigodeposito').val(codigo);
+            $tr.find('.descripciondeposito').val(nombre);
+        });
+        refrescarSaldosOrigen({ ajustarCantidad: true });
+        return true;
     }
 
     window.crsRefrescarSaldosOrigen = refrescarSaldosOrigen;
     window.crsValidarSaldosAntesDeGrabar = validarSaldosAntesDeGrabar;
-    window.crsCargarSaldoFila = function ($tr, avisar) {
-        programarSaldoFila($tr, { avisar: !!avisar, forzarAviso: !!avisar });
+    window.crsAplicarDepositoATodas = aplicarDepositoATodasLasLineas;
+    window.crsMostrarErrorSaldo = mostrarErrorSaldo;
+    window.crsOcultarAvisoSaldo = ocultarAvisoSaldo;
+    window.crsCargarSaldoFila = function ($tr, ajustarCantidad) {
+        programarSaldoFila($tr, { ajustarCantidad: !!ajustarCantidad });
     };
 
     $(document).on('change input', '#tabla-lineas-cumple .deposito_id', function () {
         var $tr = $(this).closest('tr.fila-cumple-linea');
-        avisosSaldoPendientes[$tr.data('linea-id')] = false;
-        programarSaldoFila($tr, { avisar: true, forzarAviso: true });
+        programarSaldoFila($tr, { ajustarCantidad: true });
     });
 
     $(document).on('blur', '#tabla-lineas-cumple .codigodeposito', function () {
         var $tr = $(this).closest('tr.fila-cumple-linea');
-        avisosSaldoPendientes[$tr.data('linea-id')] = false;
-        programarSaldoFila($tr, { avisar: true, forzarAviso: true });
+        programarSaldoFila($tr, { ajustarCantidad: true });
     });
 
     $(document).on('input change', '#tabla-lineas-cumple .input-cantidad-entrega', function () {
         var $tr = $(this).closest('tr.fila-cumple-linea');
         var saldoAttr = $tr.attr('data-saldo-origen');
         if ($tr.attr('data-controla-stock') === '0') {
-            $tr.removeClass('fila-saldo-insuficiente');
+            $tr.removeClass('fila-saldo-insuficiente fila-saldo-aviso');
             return;
         }
         if (saldoAttr === '' || saldoAttr === undefined) {
@@ -294,15 +455,11 @@
             return;
         }
         var saldo = Number(saldoAttr);
-        var insuficiente = saldoInsuficiente($tr, saldo, cantidadEntregaFila($tr));
-        $tr.toggleClass('fila-saldo-insuficiente', insuficiente);
-        var $span = $tr.find('.ms-saldo-origen');
-        $span.removeClass('text-muted text-danger text-success font-weight-bold');
-        if (insuficiente || saldo < 0) {
-            $span.addClass('text-danger font-weight-bold');
-        } else {
-            $span.addClass('text-success font-weight-bold');
-        }
+        mostrarSaldoFila($tr, saldo, true);
+    });
+
+    $(document).on('click', '#btn-crs-aplicar-deposito-todas', function () {
+        aplicarDepositoATodasLasLineas();
     });
 
     $(function () {
@@ -311,17 +468,18 @@
             if (typeof prevOnDeposito === 'function') {
                 prevOnDeposito(data, $ctx);
             }
+            asegurarBackdropLimpio();
             var $tr = $ctx && $ctx.closest
                 ? $ctx.closest('tr.fila-cumple-linea')
                 : ($ctx && $ctx.length ? $ctx.closest('tr.fila-cumple-linea') : $());
             if ($tr && $tr.length) {
-                avisosSaldoPendientes[$tr.data('linea-id')] = false;
-                programarSaldoFila($tr, { avisar: true, forzarAviso: true });
+                programarSaldoFila($tr, { ajustarCantidad: true });
                 return;
             }
-            refrescarSaldosOrigen({ avisar: true });
+            refrescarSaldosOrigen({ ajustarCantidad: true });
         };
 
-        refrescarSaldosOrigen({ avisar: true });
+        // Solo pinta saldos y un aviso consolidado; no alerta por \u00edtem.
+        refrescarSaldosOrigen({ ajustarCantidad: false });
     });
 }(jQuery));

@@ -4,6 +4,7 @@
     $modoEdicionMenor = ! empty($modoEdicionMenor);
     $campoBloqueado = $soloLectura || $bloqueoEstructural;
     $lineasTmBloqueadas = array_flip($lineas_articulo_bloqueadas_por_tm ?? []);
+    $lineasCumplimientoBloqueadas = array_flip($lineas_articulo_bloqueadas_por_cumplimiento ?? []);
     $lineas = (isset($data) && $data && $data->requisicion_sala_articulos && $data->requisicion_sala_articulos->count())
         ? $data->requisicion_sala_articulos
         : collect([new \App\Models\Sala\RequisicionSalaArticulo()]);
@@ -170,12 +171,14 @@
         <tbody>
             @foreach ($lineas as $idx => $linea)
             @php
-                $lineaBloqueadaTm = ! $soloLectura && ! $bloqueoEstructural && isset($lineasTmBloqueadas[(int) ($linea->id ?? 0)]);
-                $soloLecturaArticulo = $soloLectura || $bloqueoEstructural || $lineaBloqueadaTm;
+                $lineaIdInt = (int) ($linea->id ?? 0);
+                $lineaBloqueadaTm = ! $soloLectura && isset($lineasTmBloqueadas[$lineaIdInt]);
+                $lineaBloqueadaCumplimiento = ! $soloLectura && isset($lineasCumplimientoBloqueadas[$lineaIdInt]);
+                $soloLecturaArticulo = $soloLectura || $lineaBloqueadaTm || $lineaBloqueadaCumplimiento;
                 $leyendaLinea = old('detalle_articulos.'.$idx, $linea->detalle ?? '');
                 $tieneLeyenda = trim((string) $leyendaLinea) !== '';
             @endphp
-            <tr class="item-requisicion-sala-articulo @if($lineaBloqueadaTm) linea-articulo-bloqueada-tm @endif">
+            <tr class="item-requisicion-sala-articulo @if($lineaBloqueadaTm || $lineaBloqueadaCumplimiento) linea-articulo-bloqueada-tm @endif">
                 <td class="align-middle">
                     <input type="hidden" class="requisicion_sala_articulo_id" name="requisicion_sala_articulo_ids[]" value="{{ old('requisicion_sala_articulo_ids.'.$idx, $linea->id ?? '') }}">
                     <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}">
@@ -186,6 +189,8 @@
                     ])
                     @if($lineaBloqueadaTm)
                         <small class="text-muted d-block mt-1" title="Incluido en transferencia al laboratorio">Art. bloqueado (TM)</small>
+                    @elseif($lineaBloqueadaCumplimiento)
+                        <small class="text-muted d-block mt-1" title="Tiene cumplimientos activos">Art. bloqueado (cumplimiento)</small>
                     @endif
                 </td>
                 <td class="col-desc-celda align-middle">

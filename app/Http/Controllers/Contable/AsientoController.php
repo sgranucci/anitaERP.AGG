@@ -250,7 +250,7 @@ class AsientoController extends Controller
         }
 
         try {
-            AsientoBalanceSupport::assertBalanceadoDesdePayload($data);
+            AsientoBalanceSupport::assertValidoParaCrudAsiento($data);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['errores' => $e->getMessage()]);
         }
@@ -368,7 +368,7 @@ class AsientoController extends Controller
 
         $dataRequest = $request->all();
         try {
-            AsientoBalanceSupport::assertBalanceadoDesdePayload($dataRequest);
+            AsientoBalanceSupport::assertValidoParaCrudAsiento($dataRequest);
         } catch (\InvalidArgumentException $e) {
             return ['errores' => $e->getMessage()];
         }
@@ -527,7 +527,7 @@ class AsientoController extends Controller
 
         $payloadBalance = array_merge($data, $datas);
         try {
-            AsientoBalanceSupport::assertBalanceadoDesdePayload($payloadBalance);
+            AsientoBalanceSupport::assertValidoParaCrudAsiento($payloadBalance);
         } catch (\InvalidArgumentException $e) {
             return ['errores' => $e->getMessage()];
         }

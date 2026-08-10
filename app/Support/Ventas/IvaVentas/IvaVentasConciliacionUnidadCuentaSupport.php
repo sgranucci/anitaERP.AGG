@@ -8,6 +8,7 @@ use App\Support\Contable\CierreRendicionEstacionamientoAsientoSupport;
 use App\Support\Contable\CierreRendicionEstacionamientoConfigSupport;
 use App\Support\Contable\CierreRendicionMaquinavendingAsientoSupport;
 use App\Support\Contable\CierreRendicionMaquinavendingConfigSupport;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosGrabacionSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
@@ -158,18 +159,22 @@ final class IvaVentasConciliacionUnidadCuentaSupport
     public static function sqlDiaContableExpr(string $ordenFecha): string
     {
         if ($ordenFecha !== IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA) {
-            return 'DATE(a.fecha)';
+            return SqlDialectSupport::fecha('a.fecha');
         }
 
         $estPat = addslashes(CierreRendicionEstacionamientoAsientoSupport::DESCRIPCION_ASIENTO);
         $vendPat = addslashes(CierreRendicionMaquinavendingAsientoSupport::DESCRIPCION_ASIENTO);
         $fechaCierreRendicion = self::sqlFechaJornadaDesdeObservacionCierreRendicion('a.observacion');
+        $fechaTrasJornada = SqlDialectSupport::aFecha(
+            SqlDialectSupport::textoTrasLiteral('a.observacion', 'jornada', 8, 10),
+            'Y-m-d'
+        );
 
         return 'CASE '
-            .'WHEN a.venta_id IS NOT NULL THEN DATE(v.fechajornada) '
-            .'WHEN a.observacion LIKE "%jornada%" THEN STR_TO_DATE(SUBSTRING(a.observacion, LOCATE("jornada", a.observacion) + 8, 10), "%Y-%m-%d") '
+            .'WHEN a.venta_id IS NOT NULL THEN '.SqlDialectSupport::fecha('v.fechajornada').' '
+            .'WHEN a.observacion LIKE "%jornada%" THEN '.$fechaTrasJornada.' '
             ."WHEN a.observacion LIKE '{$estPat}%' OR a.observacion LIKE '{$vendPat}%' THEN {$fechaCierreRendicion} "
-            .'ELSE DATE(a.fecha) '
+            .'ELSE '.SqlDialectSupport::fecha('a.fecha').' '
             .'END';
     }
 
@@ -196,13 +201,14 @@ final class IvaVentasConciliacionUnidadCuentaSupport
         $estPat = CierreRendicionEstacionamientoAsientoSupport::DESCRIPCION_ASIENTO;
         $vendPat = CierreRendicionMaquinavendingAsientoSupport::DESCRIPCION_ASIENTO;
         $fechaCierreRendicion = self::sqlFechaJornadaDesdeObservacionCierreRendicion('a.observacion');
+        $textoJornada = SqlDialectSupport::textoTrasLiteral('a.observacion', 'jornada', 8, 10);
 
-        $query->where(function ($q) use ($fechaDesde, $fechaHasta, $estPat, $vendPat, $fechaCierreRendicion) {
-            $q->where(function ($q2) use ($fechaDesde, $fechaHasta) {
+        $query->where(function ($q) use ($fechaDesde, $fechaHasta, $estPat, $vendPat, $fechaCierreRendicion, $textoJornada) {
+            $q->where(function ($q2) use ($fechaDesde, $fechaHasta, $textoJornada) {
                 $q2->whereNull('a.venta_id')
                     ->where('a.observacion', 'like', '%jornada%')
                     ->whereRaw(
-                        'SUBSTRING(a.observacion, LOCATE("jornada", a.observacion) + 8, 10) BETWEEN ? AND ?',
+                        $textoJornada.' BETWEEN ? AND ?',
                         [$fechaDesde, $fechaHasta],
                     );
             })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
@@ -283,7 +289,10 @@ final class IvaVentasConciliacionUnidadCuentaSupport
      */
     private static function sqlFechaJornadaDesdeObservacionCierreRendicion(string $columnaObservacion): string
     {
-        return 'STR_TO_DATE(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX('.$columnaObservacion.", ' — ', 2), ' — ', -1)), '%d/%m/%Y')";
+        return SqlDialectSupport::aFecha(
+            'TRIM('.SqlDialectSupport::parteDelimitada($columnaObservacion, ' — ', 2).')',
+            'd/m/Y'
+        );
     }
 
     /**

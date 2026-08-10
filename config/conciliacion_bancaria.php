@@ -93,16 +93,27 @@ return [
      * @var array<string, list<array{codigo: int, descripcion: string, patrones_concepto?: list<string>, patrones_descripcion?: list<string>}>>
      */
     'pcc_ambiguos' => [
+        // Contaduría: retención (SIRCREB / RET) ≠ percepción IIBB (PBS).
+        // IB usa concepto RET.IN.BRU también en percepciones: desambiguar por descripción.
+        // AGIP (CABA) Contaduría lo agrupa en código 3; PBS/BSAS en código 4.
         '6 6 5' => [
+            [
+                'codigo' => 4,
+                'descripcion' => 'II.BB. PERCEPCION',
+                'patrones_descripcion' => [
+                    'PERCIBBSAS',
+                    'PERCEPCION IN',
+                    'PERCIB',
+                    'IIBBPERCEP',
+                    'PER IIBB PBS',
+                    'PERCEPCION BSAS',
+                ],
+            ],
             [
                 'codigo' => 3,
                 'descripcion' => 'I BRUTOS RETENCION POR 3 ROS',
                 'patrones_concepto' => ['RET.IN.BRU'],
-            ],
-            [
-                'codigo' => 4,
-                'descripcion' => 'II.BB. PERCEPCION',
-                'patrones_descripcion' => ['PERCEPCION IN', 'PERCIB', 'IIBBPERCEP', 'AGIP'],
+                'patrones_descripcion' => ['AGIP', 'PER IIBB AGIP', 'IIBBSIRCRE'],
             ],
         ],
         '9 8 1' => [
@@ -147,6 +158,7 @@ return [
         'IMPUESTO AL DEBITO' => ['codigo' => 2, 'descripcion' => 'IMPUESTO AL DEBITO/CREDITO'],
         'IMPUESTO AL CREDITO' => ['codigo' => 2, 'descripcion' => 'IMPUESTO AL DEBITO/CREDITO'],
         'RRSIRCREB' => ['codigo' => 3, 'descripcion' => 'I BRUTOS RETENCION POR 3 ROS'],
+        // RET.IN.BRU sin P.C.C.: si la descripción es percepción BSAS va a 4 (ver desambiguación abajo).
         'RET.IN.BRU' => ['codigo' => 3, 'descripcion' => 'I BRUTOS RETENCION POR 3 ROS'],
     ],
 
@@ -186,7 +198,17 @@ return [
         ],
         4 => [
             'descripcion' => 'II.BB. PERCEPCION',
-            'patrones' => ['II.BB. PERCEPCION', 'IIBBPERCEP', 'IMPUESTO I.BRUTOS - PE', ' AGIP', 'PERCEPCION CABA', 'PERCEPCION BSAS', 'PERCIB'],
+            // No incluir AGIP: Contaduría lo agrupa en código 3 (CABA). PBS/BSAS → 4.
+            'patrones' => [
+                'II.BB. PERCEPCION',
+                'IIBBPERCEP',
+                'IMPUESTO I.BRUTOS - PE',
+                'PERCIBBSAS',
+                'PERCEPCION BSAS',
+                'PER IIBB PBS',
+                'PERCEPCION IN',
+                'PERCIB',
+            ],
         ],
         5 => [
             'descripcion' => 'IVA AL 21%',

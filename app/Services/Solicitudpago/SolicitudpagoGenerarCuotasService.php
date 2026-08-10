@@ -94,6 +94,10 @@ class SolicitudpagoGenerarCuotasService
             $coef = $montoMadre > 0.0 ? ($montoMadre / max($montoCuota, 0.00001)) : 1.0;
 
             $detalle = trim((string) ($madre->detalle ?? ''));
+            if ($detalle === '') {
+                $madre->loadMissing('conceptos');
+                $detalle = trim((string) ($madre->conceptos->nombre ?? ''));
+            }
             $sufijo = ' SP '.$madre->codigo.' Cuota Nro. '.$cuota->nro_cuota;
             $detalle = mb_substr($detalle.$sufijo, 0, 180);
 

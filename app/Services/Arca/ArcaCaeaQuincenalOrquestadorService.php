@@ -2,6 +2,7 @@
 
 namespace App\Services\Arca;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\CaeaQuincenaSupport;
@@ -120,7 +121,7 @@ class ArcaCaeaQuincenalOrquestadorService
             ->where('modofacturacion', 'A')
             ->whereIn('webservice', ['wsfev1', 'wsmtxca'])
             ->where('estado', 'A')
-            ->orderByRaw("FIELD(webservice, 'wsmtxca', 'wsfev1')")
+            ->orderByRaw(SqlDialectSupport::ordenPorLista('webservice', ['wsmtxca', 'wsfev1']))
             ->first();
 
         return (string) ($pv->webservice ?? 'wsfev1');

@@ -95,6 +95,98 @@ final class AsientoBalanceSupport
     }
 
     /**
+     * Validación del ABM Contable (CRUD asiento): balance + moneda única.
+     * No usar en imports Anita, Excel, OP/TES u otros orígenes de proceso:
+     * ahí solo {@see assertBalanceadoDesdePayload}.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function assertValidoParaCrudAsiento(array $payload, string $contexto = 'asiento'): void
+    {
+        self::assertBalanceadoDesdePayload($payload, $contexto);
+        self::assertMonedaUnicaDesdePayload($payload, $contexto);
+    }
+
+    /**
+     * @deprecated Usar {@see assertValidoParaCrudAsiento}; se mantiene como alias del CRUD.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function assertValidoParaGrabar(array $payload, string $contexto = 'asiento'): void
+    {
+        self::assertValidoParaCrudAsiento($payload, $contexto);
+    }
+
+    /**
+     * Solo ABM Contable: todas las líneas con importe = moneda del primer movimiento.
+     * Imports / otros sistemas pueden mezclar monedas (ej. OP con banco USD + IIBB PES).
+     *
+     * @param  array<string, mixed>  $payload  moneda_ids[] + debes[] / haberes[]
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function assertMonedaUnicaDesdePayload(array $payload, string $contexto = 'asiento'): void
+    {
+        $monedaIds = $payload['moneda_ids'] ?? [];
+        $debes = $payload['debes'] ?? [];
+        $haberes = $payload['haberes'] ?? [];
+
+        if (! is_array($monedaIds)) {
+            $monedaIds = [];
+        }
+        if (! is_array($debes)) {
+            $debes = [];
+        }
+        if (! is_array($haberes)) {
+            $haberes = [];
+        }
+
+        $q = max(count($monedaIds), count($debes), count($haberes));
+        $monedaReferencia = null;
+
+        for ($i = 0; $i < $q; $i++) {
+            $debe = self::parseMonto($debes[$i] ?? null);
+            $haber = self::parseMonto($haberes[$i] ?? null);
+            if ($debe <= 0 && $haber <= 0) {
+                continue;
+            }
+
+            $monedaRaw = $monedaIds[$i] ?? null;
+            if ($monedaRaw === null || $monedaRaw === '') {
+                throw new \InvalidArgumentException(
+                    'El '.$contexto.' tiene un movimiento sin moneda.'
+                );
+            }
+
+            $monedaClave = is_numeric($monedaRaw)
+                ? (string) (int) $monedaRaw
+                : trim((string) $monedaRaw);
+
+            if ($monedaClave === '' || $monedaClave === '0') {
+                throw new \InvalidArgumentException(
+                    'El '.$contexto.' tiene un movimiento sin moneda.'
+                );
+            }
+
+            if ($monedaReferencia === null) {
+                $monedaReferencia = $monedaClave;
+                continue;
+            }
+
+            if ($monedaClave !== $monedaReferencia) {
+                throw new \InvalidArgumentException(
+                    'El '.$contexto.' no puede mezclar monedas. '
+                    .'La moneda la fija el primer movimiento; todas las líneas deben usar la misma.'
+                );
+            }
+        }
+    }
+
+    /**
      * @param  array{total_debe: float, total_haber: float, diferencia: float}  $totales
      */
     public static function mensajeDesbalance(array $totales, string $contexto = 'asiento'): string

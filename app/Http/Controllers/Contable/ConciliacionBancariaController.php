@@ -97,15 +97,31 @@ class ConciliacionBancariaController extends Controller
 
     public function exportar(Request $request, string $formato)
     {
-        can('exportar-conciliacion-bancaria');
+        // Quien puede ejecutar la conciliación también puede bajar el Excel.
+        if (! can('exportar-conciliacion-bancaria', false) && ! can('ejecutar-conciliacion-bancaria', false)) {
+            can('exportar-conciliacion-bancaria');
+        }
+
+        ini_set('memory_limit', (string) config('conciliacion_bancaria.memory_limit', '2048M'));
+        set_time_limit(600);
 
         $empresaId = (int) $request->input('empresa_id');
         $cuentacajaId = (int) $request->input('cuentacaja_id');
         $mes = max(1, min(12, (int) $request->input('mes')));
         $anio = max(2000, (int) $request->input('anio'));
 
+        $queryVolver = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'cuentacaja_id' => $cuentacajaId > 0 ? $cuentacajaId : null,
+            'mes' => $mes,
+            'anio' => $anio,
+            'consultar' => 1,
+        ], static fn ($v) => $v !== null && $v !== '');
+
         if ($empresaId <= 0 || $cuentacajaId <= 0) {
-            return redirect()->route('conciliacion_bancaria');
+            return redirect()
+                ->route('conciliacion_bancaria', $queryVolver)
+                ->with('errores', ['Faltan empresa o cuenta de caja para exportar. Volvé a conciliar e intentá de nuevo.']);
         }
 
         if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
@@ -113,14 +129,22 @@ class ConciliacionBancariaController extends Controller
         }
 
         if (strtoupper($formato) !== 'EXCEL') {
-            return redirect()->route('conciliacion_bancaria', $request->query());
+            return redirect()->route('conciliacion_bancaria', $queryVolver);
         }
 
-        $resultado = $this->service->ejecutar($empresaId, $cuentacajaId, $mes, $anio, (int) Auth::id(), false);
-        $cc = $resultado['cuentacaja'];
-        $nombre = sprintf('conciliacion_bancaria_%s_%02d_%d.xlsx', $cc->codigo ?? 'cuenta', $mes, $anio);
+        try {
+            $resultado = $this->service->ejecutar($empresaId, $cuentacajaId, $mes, $anio, (int) Auth::id(), false);
+            $cc = $resultado['cuentacaja'];
+            $nombre = sprintf('conciliacion_bancaria_%s_%02d_%d.xlsx', $cc->codigo ?? 'cuenta', $mes, $anio);
 
-        return (new ConciliacionBancariaExport)->parametros($resultado)->descargar($nombre);
+            return (new ConciliacionBancariaExport)->parametros($resultado)->descargar($nombre);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('conciliacion_bancaria', $queryVolver)
+                ->with('errores', ['No se pudo generar el Excel: '.$e->getMessage()]);
+        }
     }
 
     public function apiEngancheCuentacaja(Request $request)

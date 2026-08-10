@@ -2,6 +2,7 @@
 
 namespace App\Queries\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\GastronomiaVentaComprobanteSignoSupport;
 use App\Support\Ventas\GastronomiaVentaHoraReporteFiltros;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,8 @@ final class GastronomiaVentaHoraReporteQuery
         );
 
         $importe = GastronomiaVentaComprobanteSignoSupport::sqlTotalComprobante();
+        $hora = SqlDialectSupport::hora('v.created_at');
+        $jornada = SqlDialectSupport::fecha('v.fechajornada');
 
         $query = DB::table('venta as v')
             ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'v.id')
@@ -27,13 +30,13 @@ final class GastronomiaVentaHoraReporteQuery
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->whereNull('v.deleted_at')
             ->where('pv.empresa_id', (int) ($filtros['empresa_id'] ?? 0))
-            ->selectRaw('DATE(v.fechajornada) as jornada')
-            ->selectRaw('HOUR(v.created_at) as hora')
+            ->selectRaw("{$jornada} as jornada")
+            ->selectRaw("{$hora} as hora")
             ->selectRaw("SUM({$importe}) as importe")
             ->selectRaw('COUNT(DISTINCT v.id) as cantidad_comprobantes')
-            ->groupBy(DB::raw('DATE(v.fechajornada)'), DB::raw('HOUR(v.created_at)'))
+            ->groupBy(DB::raw($jornada), DB::raw($hora))
             ->orderBy('jornada')
-            ->orderByRaw('CASE WHEN HOUR(v.created_at) >= 7 THEN HOUR(v.created_at) ELSE HOUR(v.created_at) + 24 END');
+            ->orderByRaw("CASE WHEN {$hora} >= 7 THEN {$hora} ELSE {$hora} + 24 END");
 
         if ($desde !== '') {
             $query->whereDate('v.fechajornada', '>=', $desde);
@@ -44,7 +47,7 @@ final class GastronomiaVentaHoraReporteQuery
 
         $horas = GastronomiaVentaHoraReporteFiltros::horasSeleccionadas($filtros);
         if ($horas !== []) {
-            $query->whereIn(DB::raw('HOUR(v.created_at)'), $horas);
+            $query->whereIn(DB::raw($hora), $horas);
         }
 
         return $query->get()->map(static fn ($row): object => (object) [

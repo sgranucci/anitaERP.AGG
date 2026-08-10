@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 
@@ -136,7 +137,7 @@ final class KiloPedidoListadoFiltros
             [$desdeNum, $hastaNum] = [$hastaNum, $desdeNum];
         }
 
-        $query->whereRaw('CAST(transporte.codigo AS UNSIGNED) BETWEEN ? AND ?', [$desdeNum, $hastaNum]);
+        $query->whereRaw(SqlDialectSupport::castEntero('transporte.codigo').' BETWEEN ? AND ?', [$desdeNum, $hastaNum]);
     }
 
     /**

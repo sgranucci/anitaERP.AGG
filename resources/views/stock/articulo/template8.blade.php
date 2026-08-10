@@ -30,7 +30,7 @@
             <input type="text" class="form-control form-control-sm ap-vigencia-lista" readonly tabindex="-1" value="—">
         </td>
         <td>
-            <select name="ap_unidadmedida_compra_ids[]" class="form-control form-control-sm">
+            <select name="ap_unidadmedida_compra_ids[]" class="form-control form-control-sm ap-um-compra">
                 <option value="">—</option>
                 @foreach ($unidadmedida as $um)
                     <option value="{{ $um->id }}" @if(isset($producto) && (int) $um->id === (int) ($producto->unidadmedida_id ?? 0)) selected @endif>{{ $um->nombre }}</option>
@@ -38,7 +38,7 @@
             </select>
         </td>
         <td>
-            <input type="number" step="0.000001" min="0.000001" name="ap_coeficientes_conversion[]" class="form-control form-control-sm" value="1">
+            <input type="number" step="0.000001" min="0.000001" name="ap_coeficientes_conversion[]" class="form-control form-control-sm ap-coef-conversion" value="1" title="Solo si UM compra ≠ UM artículo">
         </td>
         <td class="col-activo text-center align-middle">
             <input type="hidden" name="ap_activos[]" class="ap-activo-val" value="1">

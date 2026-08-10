@@ -237,7 +237,25 @@
 
     function validarRequisicionSalaAntesDeEnviar(form) {
         if (esEdicionMenor()) {
-            return { valido: true, primerInvalido: null, cantidadInvalidos: 0 };
+            var resultadoMenor = { valido: true, primerInvalido: null, cantidadInvalidos: 0 };
+            limpiarMarcasValidacionLineas();
+            filasArticulo().each(function () {
+                var $tr = $(this);
+                if ($tr.hasClass('linea-articulo-bloqueada-tm')) {
+                    return;
+                }
+                var articuloId = parseInt($tr.find('.articulo_id').val() || '0', 10);
+                var skuInp = $tr.find('.codigoarticulo')[0];
+                if (articuloId <= 0) {
+                    resultadoMenor.valido = false;
+                    resultadoMenor.cantidadInvalidos = (resultadoMenor.cantidadInvalidos || 0) + 1;
+                    marcarCampoInvalido(skuInp, true);
+                    if (!resultadoMenor.primerInvalido) {
+                        resultadoMenor.primerInvalido = skuInp;
+                    }
+                }
+            });
+            return resultadoMenor;
         }
 
         var resultado = typeof validarCamposObligatoriosFormulario === 'function'

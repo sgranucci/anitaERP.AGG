@@ -2,6 +2,7 @@
 
 namespace App\Services\Contable;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Caja\RendicionMaquina;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
@@ -615,7 +616,7 @@ class CierreRendicionMaquinaService
     {
         $q = $this->queryPendientesEmpresa($empresaId);
 
-        $min = $q->min(DB::raw('DATE(rendicion_maquina.fecha)'));
+        $min = $q->min(DB::raw(SqlDialectSupport::fecha('rendicion_maquina.fecha')));
         if ($min === null || trim((string) $min) === '') {
             return null;
         }
@@ -628,7 +629,7 @@ class CierreRendicionMaquinaService
         $q = $this->queryPendientesEmpresa($empresaId)
             ->whereDate('rendicion_maquina.fecha', '<', $fechaDia);
 
-        $min = $q->min(DB::raw('DATE(rendicion_maquina.fecha)'));
+        $min = $q->min(DB::raw(SqlDialectSupport::fecha('rendicion_maquina.fecha')));
         if ($min === null || trim((string) $min) === '') {
             return null;
         }

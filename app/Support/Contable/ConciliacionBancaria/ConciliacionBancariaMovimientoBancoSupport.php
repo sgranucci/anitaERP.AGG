@@ -36,12 +36,13 @@ final class ConciliacionBancariaMovimientoBancoSupport
 
     /**
      * @param  array<string, mixed>  $mov
+     * @param  array<string, int|string>  $overridesSaldo
      * @return array<string, mixed>
      */
-    public static function filaSaldo(array $mov, float $saldoCorriente): array
+    public static function filaSaldo(array $mov, float $saldoCorriente, array $overridesSaldo = []): array
     {
         $importe = ConciliacionBancariaHashSupport::importeFirmadoBanco($mov);
-        $clasif = ConciliacionBancariaCodificacionSupport::clasificarMovimientoBanco($mov);
+        $clasif = ConciliacionBancariaCodificacionSupport::clasificarMovimientoBanco($mov, $overridesSaldo);
         $referencia = self::formatearReferencia($mov['voucher_number'] ?? null);
 
         return [
@@ -60,9 +61,10 @@ final class ConciliacionBancariaMovimientoBancoSupport
 
     /**
      * @param  list<array<string, mixed>>  $movimientos  Orden cronológico asc
+     * @param  array<string, int|string>  $overridesSaldo
      * @return array{extracto: list<array<string,mixed>>, saldo: list<array<string,mixed>>, saldo_inicial: float, saldo_final: float}
      */
-    public static function procesarListado(array $movimientos, float $saldoInicial): array
+    public static function procesarListado(array $movimientos, float $saldoInicial, array $overridesSaldo = []): array
     {
         $extracto = [];
         $saldo = [];
@@ -71,7 +73,7 @@ final class ConciliacionBancariaMovimientoBancoSupport
         foreach ($movimientos as $mov) {
             $extracto[] = self::filaExtracto($mov);
             $corriente += ConciliacionBancariaHashSupport::importeFirmadoBanco($mov);
-            $saldo[] = self::filaSaldo($mov, $corriente);
+            $saldo[] = self::filaSaldo($mov, $corriente, $overridesSaldo);
         }
 
         return [

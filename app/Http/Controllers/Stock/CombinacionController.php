@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Stock;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Serigrafia;
@@ -489,7 +490,7 @@ class CombinacionController extends Controller
 
     public function catalogo()
     {
-        $linea_query = Linea::orderByRaw('CAST(codigo AS UNSIGNED), codigo','asc')->where('nombre','!=',' ')->get();
+        $linea_query = Linea::orderByRaw(SqlDialectSupport::castEntero('codigo').', codigo ASC')->where('nombre','!=',' ')->get();
 		$linea_query->prepend((object) ['id'=>'0','nombre'=>'Primera','codigo'=>'0','tiponumeracion_id'=>'0','maxhorma'=>'0','numeracion_id'=>'0','listaprecio_id'=>'0','created_at'=>'','updated_at'=>'']);
 		$linea_query->push((object) ['id'=>'999999','nombre'=>'Ultima','codigo'=>'999999','tiponumeracion_id'=>'0','maxhorma'=>'0','numeracion_id'=>'0','listaprecio_id'=>'0','created_at'=>'','updated_at'=>'']);
         $mventa_query = Mventa::orderBy('id','asc')->get();
@@ -651,7 +652,7 @@ class CombinacionController extends Controller
 			return response()->download($path.'/catalogo.pdf');
 		}
 
-        $linea_query = Linea::orderByRaw('CAST(codigo AS UNSIGNED), codigo','asc')->where('nombre','!=',' ')->get();
+        $linea_query = Linea::orderByRaw(SqlDialectSupport::castEntero('codigo').', codigo ASC')->where('nombre','!=',' ')->get();
 		$linea_query->prepend((object) ['id'=>'0','nombre'=>'Primera','codigo'=>'0','tiponumeracion_id'=>'0','maxhorma'=>'0','numeracion_id'=>'0','listaprecio_id'=>'0','created_at'=>'','updated_at'=>'']);
 		$linea_query->push((object) ['id'=>'999999','nombre'=>'Ultima','codigo'=>'999999','tiponumeracion_id'=>'0','maxhorma'=>'0','numeracion_id'=>'0','listaprecio_id'=>'0','created_at'=>'','updated_at'=>'']);
 		$mventa_query = Mventa::orderBy('nombre','asc')->get();

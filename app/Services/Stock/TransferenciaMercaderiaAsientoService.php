@@ -188,4 +188,62 @@ class TransferenciaMercaderiaAsientoService
 
         $this->asientoRepository->sincronizarCtamovAnita($dataAnita);
     }
+
+    /**
+     * Reescribe movimientos del asiento existente con precios actuales (última compra / promedio)
+     * y re-sincroniza ctamov Anita. Usar tras corregir reglas de costo (ej. pesos×cotización).
+     */
+    public function regenerarAsientoExistente(Transferencia_Mercaderia $transferencia): array
+    {
+        $transferencia->loadMissing([
+            'articulos.articuloOrigen.articulo_cuentacontables',
+            'tipotransaccion_stock',
+            'asientos',
+        ]);
+
+        if (! $this->debeGenerarAsiento($transferencia->tipotransaccion_stock)) {
+            throw new \RuntimeException('La transferencia no maneja contabilidad.');
+        }
+
+        $asientoId = (int) ($transferencia->asiento_id ?? 0);
+        if ($asientoId <= 0 || $transferencia->asientos === null) {
+            throw new \RuntimeException('La transferencia no tiene asiento contable asociado.');
+        }
+
+        PeriodoContableCierreSupport::assertOperacionPermitida(
+            (int) $transferencia->empresa_id,
+            $transferencia->fecha?->format('Y-m-d') ?? now()->format('Y-m-d'),
+            PeriodoContableCierreSupport::ALCANCE_TRANSFERENCIA
+        );
+
+        $preview = TransferenciaMercaderiaAsientoSupport::armarPreview(
+            $transferencia,
+            $this->tipoasientoRepository
+        );
+        MovimientoStockCuadreContableSupport::assertPreview($preview);
+
+        $payloadAsiento = $preview['payload_asiento'];
+        $payloadAsiento['omitir_anita'] = true;
+        $this->asientoMovimientoRepository->update($payloadAsiento, $asientoId);
+        MovimientoStockCuadreContableSupport::assertPersistido(
+            $asientoId,
+            $preview,
+            $this->asientoMovimientoRepository
+        );
+
+        $this->sincronizarCtamovAnitaTransferencia($transferencia->fresh(['asientos', 'tipotransaccion_stock']), $preview);
+
+        Log::info('TransferenciaMercaderiaAsiento: asiento regenerado', [
+            'transferencia_id' => $transferencia->id,
+            'asiento_id' => $asientoId,
+            'total' => $preview['total_debe'],
+        ]);
+
+        return [
+            'transferencia_id' => (int) $transferencia->id,
+            'asiento_id' => $asientoId,
+            'total_debe' => (float) $preview['total_debe'],
+            'total_haber' => (float) $preview['total_haber'],
+        ];
+    }
 }

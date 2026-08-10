@@ -538,8 +538,6 @@ final class IvaVentasConciliacionContableService
      */
     private function totalesContablesPorDia(int $empresaId, array $filtros, array $cuentas): array
     {
-        $fechaDesde = (string) ($filtros['fecha_desde'] ?? '');
-        $fechaHasta = (string) ($filtros['fecha_hasta'] ?? '');
         $ordenFecha = (string) ($filtros['orden_fecha'] ?? IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA);
 
         $idsVentas = array_merge(
@@ -556,13 +554,7 @@ final class IvaVentasConciliacionContableService
             return [];
         }
 
-        $diaExpr = $ordenFecha === IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA
-            ? 'CASE '
-                .'WHEN a.venta_id IS NOT NULL THEN DATE(v.fechajornada) '
-                .'WHEN a.observacion LIKE "%jornada%" THEN STR_TO_DATE(SUBSTRING(a.observacion, LOCATE("jornada", a.observacion) + 8, 10), "%Y-%m-%d") '
-                .'ELSE DATE(a.fecha) '
-                .'END'
-            : 'DATE(a.fecha)';
+        $diaExpr = IvaVentasConciliacionUnidadCuentaSupport::sqlDiaContableExpr($ordenFecha);
 
         $query = DB::table('asiento as a')
             ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
@@ -573,30 +565,7 @@ final class IvaVentasConciliacionContableService
             ->where('a.empresa_id', $empresaId)
             ->whereIn('cc.id', $idsTodos);
 
-        if ($ordenFecha === IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA) {
-            $query->where(function ($q) use ($fechaDesde, $fechaHasta) {
-                $q->where(function ($q2) use ($fechaDesde, $fechaHasta) {
-                    $q2->whereNull('a.venta_id')
-                        ->where('a.observacion', 'like', '%jornada%')
-                        ->whereRaw(
-                            'SUBSTRING(a.observacion, LOCATE("jornada", a.observacion) + 8, 10) BETWEEN ? AND ?',
-                            [$fechaDesde, $fechaHasta],
-                        );
-                })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
-                    $q2->whereNotNull('a.venta_id')
-                        ->whereDate('v.fechajornada', '>=', $fechaDesde)
-                        ->whereDate('v.fechajornada', '<=', $fechaHasta);
-                })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
-                    $q2->whereNull('a.venta_id')
-                        ->where('a.observacion', 'not like', '%jornada%')
-                        ->whereDate('a.fecha', '>=', $fechaDesde)
-                        ->whereDate('a.fecha', '<=', $fechaHasta);
-                });
-            });
-        } else {
-            $query->whereDate('a.fecha', '>=', $fechaDesde)
-                ->whereDate('a.fecha', '<=', $fechaHasta);
-        }
+        IvaVentasConciliacionUnidadCuentaSupport::aplicarFiltroPeriodoConciliacion($query, $filtros);
 
         $rows = $query
             ->selectRaw($diaExpr.' as dia, cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')
@@ -642,10 +611,6 @@ final class IvaVentasConciliacionContableService
      */
     private function totalesContablesEmpresa(int $empresaId, array $filtros, array $cuentas): array
     {
-        $fechaDesde = (string) ($filtros['fecha_desde'] ?? '');
-        $fechaHasta = (string) ($filtros['fecha_hasta'] ?? '');
-        $ordenFecha = (string) ($filtros['orden_fecha'] ?? IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA);
-
         $idsVentas = array_merge(
             $cuentas['ventas_gravadas'] ?? [],
             $cuentas['ventas_kiosco'] ?? [],
@@ -668,39 +633,13 @@ final class IvaVentasConciliacionContableService
         $query = DB::table('asiento as a')
             ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
+            ->leftJoin('venta as v', function ($join) {
+                $join->on('v.id', '=', 'a.venta_id')->whereNull('v.deleted_at');
+            })
             ->where('a.empresa_id', $empresaId)
             ->whereIn('cc.id', $idsTodos);
 
-        if ($ordenFecha === IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA) {
-            $query->where(function ($q) use ($fechaDesde, $fechaHasta) {
-                $q->where(function ($q2) use ($fechaDesde, $fechaHasta) {
-                    $q2->whereNull('a.venta_id')
-                        ->where('a.observacion', 'like', '%jornada%')
-                        ->whereRaw(
-                            'SUBSTRING(a.observacion, LOCATE("jornada", a.observacion) + 8, 10) BETWEEN ? AND ?',
-                            [$fechaDesde, $fechaHasta],
-                        );
-                })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
-                    $q2->whereNotNull('a.venta_id')
-                        ->whereExists(function ($sub) use ($fechaDesde, $fechaHasta) {
-                            $sub->select(DB::raw(1))
-                                ->from('venta as v')
-                                ->whereColumn('v.id', 'a.venta_id')
-                                ->whereNull('v.deleted_at')
-                                ->whereDate('v.fechajornada', '>=', $fechaDesde)
-                                ->whereDate('v.fechajornada', '<=', $fechaHasta);
-                        });
-                })->orWhere(function ($q2) use ($fechaDesde, $fechaHasta) {
-                    $q2->whereNull('a.venta_id')
-                        ->where('a.observacion', 'not like', '%jornada%')
-                        ->whereDate('a.fecha', '>=', $fechaDesde)
-                        ->whereDate('a.fecha', '<=', $fechaHasta);
-                });
-            });
-        } else {
-            $query->whereDate('a.fecha', '>=', $fechaDesde)
-                ->whereDate('a.fecha', '<=', $fechaHasta);
-        }
+        IvaVentasConciliacionUnidadCuentaSupport::aplicarFiltroPeriodoConciliacion($query, $filtros);
 
         $rows = $query
             ->selectRaw('cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')

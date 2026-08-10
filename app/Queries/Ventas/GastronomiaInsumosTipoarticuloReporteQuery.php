@@ -2,6 +2,7 @@
 
 namespace App\Queries\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Stock\Articulo;
 use App\Support\Ventas\GastronomiaInsumosTipoarticuloReporteFiltros;
 use App\Support\Ventas\GastronomiaVentaComprobanteSignoSupport;
@@ -57,9 +58,9 @@ class GastronomiaInsumosTipoarticuloReporteQuery
                 'a.sku',
                 'a.descripcion',
             ])
-            ->selectRaw('DATE(v.fechajornada) as dia')
+            ->selectRaw(SqlDialectSupport::fecha('v.fechajornada').' as dia')
             ->selectRaw('SUM('.$cantidadExpr.') as cantidad')
-            ->groupBy('ve.articulo_id', 'a.sku', 'a.descripcion', DB::raw('DATE(v.fechajornada)'))
+            ->groupBy('ve.articulo_id', 'a.sku', 'a.descripcion', DB::raw(SqlDialectSupport::fecha('v.fechajornada')))
             ->orderBy('a.sku')
             ->orderBy('dia')
             ->get();

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaMesCacheSupport;
@@ -374,9 +375,9 @@ final class GastronomiaControlCtamovRendgDiaAnitaService
                         ->whereDate('venta.fecha', '<=', $hasta);
                 });
             })
-            ->selectRaw('DATE(COALESCE(venta.fechajornada, venta.fecha)) as fecha_jornada')
+            ->selectRaw(SqlDialectSupport::fecha('COALESCE(venta.fechajornada, venta.fecha)').' as fecha_jornada')
             ->selectRaw('SUM('.$netoSql.') as neto')
-            ->groupByRaw('DATE(COALESCE(venta.fechajornada, venta.fecha))')
+            ->groupByRaw(SqlDialectSupport::fecha('COALESCE(venta.fechajornada, venta.fecha)'))
             ->get();
 
         $map = [];

@@ -2,8 +2,10 @@
 
 namespace App\Repositories\Stock;
 
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Proveedor;
 use App\Support\Compras\ArticuloProveedorCodigoSyncSupport;
+use App\Support\Stock\RecepcionProveedorConversionSupport;
 use InvalidArgumentException;
 
 class Articulo_ProveedorRepository implements Articulo_ProveedorRepositoryInterface
@@ -56,6 +58,13 @@ class Articulo_ProveedorRepository implements Articulo_ProveedorRepositoryInterf
 
             $activo = ($data['ap_activos'][$i] ?? '1') === '1' || ($data['ap_activos'][$i] ?? 1) === 1;
             $proveedorIdInt = (int) $proveedorId;
+            $umCompraId = ! empty($data['ap_unidadmedida_compra_ids'][$i]) ? (int) $data['ap_unidadmedida_compra_ids'][$i] : null;
+            $umArticuloId = (int) (Articulo::query()->whereKey($articuloId)->value('unidadmedida_id') ?? 0);
+            $coef = RecepcionProveedorConversionSupport::normalizarCoeficienteMismaUm(
+                $coef,
+                $umCompraId,
+                $umArticuloId > 0 ? $umArticuloId : null,
+            );
 
             $payload = [
                 'articulo_id' => $articuloId,
@@ -63,7 +72,7 @@ class Articulo_ProveedorRepository implements Articulo_ProveedorRepositoryInterf
                 'nombre_articulo_proveedor' => substr((string) ($data['ap_nombres_articulo_proveedor'][$i] ?? ''), 0, 255) ?: null,
                 'codigobarra' => substr((string) ($data['ap_codigosbarra'][$i] ?? ''), 0, 50) ?: null,
                 'codigo_articulo_proveedor' => substr((string) ($data['ap_codigos_articulo_proveedor'][$i] ?? ''), 0, 100) ?: null,
-                'unidadmedida_compra_id' => ! empty($data['ap_unidadmedida_compra_ids'][$i]) ? (int) $data['ap_unidadmedida_compra_ids'][$i] : null,
+                'unidadmedida_compra_id' => $umCompraId,
                 'coeficiente_conversion' => $coef,
                 'activo' => $activo,
                 'preferido' => $preferidoProveedorId !== null && $preferidoProveedorId === $proveedorIdInt,

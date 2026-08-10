@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\Ordentrabajo_Tarea;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
@@ -170,8 +171,8 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 				$ordentrabajo_tarea = $this->model->select(
 					'ordentrabajo_tarea.tarea_id as tarea_id',
 					'tarea.nombre as nombre',
-					DB::raw("DATE_FORMAT(ordentrabajo_tarea.hastafecha,'%Y') as year"),
-					DB::raw("Week(ordentrabajo_tarea.hastafecha,'%M %Y') as periodo"),
+					DB::raw(SqlDialectSupport::anio('ordentrabajo_tarea.hastafecha').' as year'),
+					DB::raw(SqlDialectSupport::periodoAnioSemanaIso('ordentrabajo_tarea.hastafecha').' as periodo'),
 					DB::raw('sum(pedido_combinacion_talle.cantidad) as pares'))
 					->leftJoin('tarea', 'tarea.id', 'ordentrabajo_tarea.tarea_id')
 					->leftJoin('ordentrabajo_combinacion_talle', 'ordentrabajo_combinacion_talle.ordentrabajo_id', 'ordentrabajo_tarea.ordentrabajo_id')
@@ -184,7 +185,7 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 				$ordentrabajo_tarea = $this->model->select(
 					'ordentrabajo_tarea.tarea_id as tarea_id',
 					'tarea.nombre as nombre',
-					DB::raw("DATE_FORMAT(ordentrabajo_tarea.hastafecha,'%M %Y') as periodo"),
+					DB::raw(SqlDialectSupport::periodoAnioMes('ordentrabajo_tarea.hastafecha').' as periodo'),
 					DB::raw('sum(pedido_combinacion_talle.cantidad) as pares'))
 					->leftJoin('tarea', 'tarea.id', 'ordentrabajo_tarea.tarea_id')
 					->leftJoin('ordentrabajo_combinacion_talle', 'ordentrabajo_combinacion_talle.ordentrabajo_id', 'ordentrabajo_tarea.ordentrabajo_id')

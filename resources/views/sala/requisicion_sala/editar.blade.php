@@ -43,8 +43,9 @@ Requisición de sala
         @if($modoEdicionMenor)
         <div class="alert alert-warning mx-0 mb-0 rounded-0 border-left-0 border-right-0">
             <strong>Edición menor (aprobación vigente).</strong>
-            Podés corregir comentario, detalle, zona, prioridad, fecha de entrega, leyenda, UID y Nº parte única.
-            Para cambiar artículo, cantidad, destino o depósito usá <strong>Reabrir / desaprobar</strong>.
+            Podés corregir comentario, detalle, zona, prioridad, fecha de entrega, leyenda, UID, Nº parte y artículo.
+            Para cambiar cantidad, destino o depósito usá <strong>Reabrir / desaprobar</strong>.
+            Líneas con transferencia al laboratorio o cumplimientos activos mantienen el artículo bloqueado.
         </div>
         @elseif(!empty($tiene_transferencia_laboratorio) && $modoEdicionCompleta)
         <div class="alert alert-info mx-0 mb-0 rounded-0 border-left-0 border-right-0">

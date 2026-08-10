@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Configuracion\Condicioniva;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Puntoventa;
@@ -314,7 +315,7 @@ final class CaeaEmisionFechaCorrelatividadSupport
         $letraNorm = strtoupper(trim($letra));
         $bases = TipotransaccionCodigoAfipSupport::codigosBaseAlmacenadosPosibles($codigoAfip, $letraNorm);
         if ($bases !== []) {
-            $query->whereIn(DB::raw('CAST(tt.codigo AS UNSIGNED)'), $bases);
+            $query->whereIn(DB::raw(SqlDialectSupport::castEntero('tt.codigo')), $bases);
         }
         if ($letraNorm !== '') {
             $query->where(static function ($q) use ($letraNorm): void {

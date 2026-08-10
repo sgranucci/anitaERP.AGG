@@ -279,8 +279,12 @@ final class ArticuloPrecioUltimaCompraSupport
     }
 
     /**
-     * Precio de línea COM en moneda local (pesos), misma convención que Anita recepmov / stkmae:
-     * si la moneda no es la local (o la línea trae cotización de divisa), precio × cotización.
+     * Precio de línea COM en moneda local (pesos).
+     *
+     * Solo convierte cuando la moneda de la línea es divisa (≠ moneda local).
+     * No multiplicar cotización si moneda = pesos: en COM Anita/manual la cotización
+     * del día suele quedar cargada aunque el precio ya esté en pesos (incidente TRA
+     * Otros Activos ago/2026: LIB0036 4941×1405 → 6.9M, LIB0184 3200×1405 → 4.5M).
      */
     public static function precioUnitarioMonedaLocal(float $precio, ?int $monedaId, ?float $cotizacion): float
     {
@@ -295,14 +299,7 @@ final class ArticuloPrecioUltimaCompraSupport
             $cotizacion = 1.0;
         }
 
-        // Divisa explícita → convertir
         if ($monedaId > 0 && $monedaId !== $monedaLocalId) {
-            return round($precio * $cotizacion, 6);
-        }
-
-        // COM importadas desde Anita: a veces quedan moneda=PESOS con precio en divisa
-        // y la cotización real en la línea (recv_cotizacion).
-        if ($cotizacion > 1.0000001) {
             return round($precio * $cotizacion, 6);
         }
 

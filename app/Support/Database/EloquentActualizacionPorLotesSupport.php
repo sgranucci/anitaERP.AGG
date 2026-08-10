@@ -56,7 +56,7 @@ final class EloquentActualizacionPorLotesSupport
 
             $ultimoId = (int) $ids->max();
 
-            $afectadas = (int) MysqlContencionSupport::ejecutarConReintento(
+            $afectadas = (int) DbContencionSupport::ejecutarConReintento(
                 function () use ($queryCandidatos, $ids, $valoresUpdate, $keyName): int {
                     return (clone $queryCandidatos)
                         ->whereIn($keyName, $ids->all())

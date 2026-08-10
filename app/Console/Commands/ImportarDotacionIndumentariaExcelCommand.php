@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Stock\Color;
 use App\Models\Sueldos\Agrupamiento_Sueldos;
 use App\Models\Sueldos\Prenda_Agrupamiento_Sueldos;
@@ -331,7 +332,7 @@ class ImportarDotacionIndumentariaExcelCommand extends Command
         if (Color::query()->whereRaw('UPPER(nombre) = ?', [$nombre])->exists()) {
             return;
         }
-        $max = (int) Color::query()->max(DB::raw('CAST(codigo AS UNSIGNED)'));
+        $max = (int) Color::query()->max(DB::raw(SqlDialectSupport::castEntero('codigo')));
         Color::create(['codigo' => (string) ($max + 1), 'nombre' => $nombre]);
         $this->line("Color creado: {$nombre}");
     }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Solicitudpago;
 
+use App\Support\Database\SqlDialectSupport;
 use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Centrocosto;
@@ -248,7 +249,7 @@ class ConceptoSolicitudpagoAnitaSyncService
                 ->where(function ($q) use ($codigoAnita, $codigoCuenta) {
                     $q->where('codigo', $codigoAnita)
                         ->orWhere('codigo', $codigoCuenta)
-                        ->orWhereRaw('CAST(codigo AS UNSIGNED) = ?', [(int) $codigoAnita]);
+                        ->orWhereRaw(SqlDialectSupport::castEntero('codigo').' = ?', [(int) $codigoAnita]);
                 });
 
             if ($empresaCodigo > 0) {

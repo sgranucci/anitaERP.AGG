@@ -2,6 +2,7 @@
 
 namespace App\Services\Contable;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Caja\Bingo\RendicionBingoCaja;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
@@ -598,7 +599,7 @@ class CierreRendicionBingoService
     {
         $q = $this->queryPendientesEmpresa($empresaId);
 
-        $min = $q->min(DB::raw('DATE(rendicion_bingo_caja.fecha_jornada)'));
+        $min = $q->min(DB::raw(SqlDialectSupport::fecha('rendicion_bingo_caja.fecha_jornada')));
         if ($min === null || trim((string) $min) === '') {
             return null;
         }
@@ -611,7 +612,7 @@ class CierreRendicionBingoService
         $q = $this->queryPendientesEmpresa($empresaId)
             ->whereDate('rendicion_bingo_caja.fecha_jornada', '<', $fechaDia);
 
-        $min = $q->min(DB::raw('DATE(rendicion_bingo_caja.fecha_jornada)'));
+        $min = $q->min(DB::raw(SqlDialectSupport::fecha('rendicion_bingo_caja.fecha_jornada')));
         if ($min === null || trim((string) $min) === '') {
             return null;
         }

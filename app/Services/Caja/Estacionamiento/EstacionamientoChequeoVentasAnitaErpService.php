@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Caja\Estacionamiento;
 
+use App\Support\Database\SqlDialectSupport;
 use App\ApiAnita;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
@@ -65,7 +66,7 @@ final class EstacionamientoChequeoVentasAnitaErpService
         ?string $codigoPv = null,
     ): array {
         $query = Venta::query()
-            ->selectRaw('venta.puntoventa_id, DATE(venta.fechajornada) as fecha_jornada, puntoventa.codigo as codigo_pv')
+            ->selectRaw('venta.puntoventa_id, '.SqlDialectSupport::fecha('venta.fechajornada').' as fecha_jornada, puntoventa.codigo as codigo_pv')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->whereDate('venta.fechajornada', '>=', $fechaDesde)
             ->whereHas('estacionamientoEmision')

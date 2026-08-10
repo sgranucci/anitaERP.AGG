@@ -9,7 +9,7 @@
     $puedeVerProveedor = ! $paraPdf && ($puede_ver_proveedor ?? false);
     $puedeVerCapex = ! $paraPdf && ($puede_ver_capex ?? false);
     $puedeVerRecepcion = ! $paraPdf && ($puede_ver_recepcion ?? false);
-    $colSpan = 36;
+    $colSpan = 37;
     $formatearNum = static function ($v, $dec = 2) use ($paraExcel) {
         if ($paraExcel && $dec === 2) {
             return (float) $v;
@@ -64,6 +64,7 @@
         <th>F.Fact.</th>
         <th class="text-right">Sdo.Fact.</th>
         <th>Nro.Cta.</th>
+        <th>Cuenta contable</th>
         <th>C.Cos.</th>
         <th>CC.Dest</th>
         <th>CAPEX</th>
@@ -104,6 +105,7 @@
         <th>F.Fact.</th>
         <th>Sdo.Fact.</th>
         <th>Nro.Cta.</th>
+        <th>Cuenta contable</th>
         <th>C.Cos.</th>
         <th>CC.Dest</th>
         <th>CAPEX</th>
@@ -233,7 +235,7 @@
                 <td></td>
                 <td class="text-right">{{ $formatearNum($fila['total_importe_pendiente'] ?? 0) }}</td>
                 <td class="text-right">{{ $formatearNum($fila['total_importe_oc'] ?? 0) }}</td>
-                <td colspan="19"></td>
+                <td colspan="20"></td>
             </tr>
             @if (! $paraPdf)
                 <tr class="oc-reporte-grupo-spacer"><td colspan="{{ $colSpan }}">&nbsp;</td></tr>
@@ -254,7 +256,7 @@
                 <td></td>
                 <td class="text-right">{{ $formatearNum($fila['total_importe_pendiente'] ?? 0) }}</td>
                 <td class="text-right">{{ $formatearNum($fila['total_importe_oc'] ?? 0) }}</td>
-                <td colspan="19"></td>
+                <td colspan="20"></td>
             </tr>
         @else
             <tr class="oc-reporte-grupo-detalle oc-reporte-grupo-{{ $fila['grupo_id'] ?? 0 }}">
@@ -331,7 +333,8 @@
                         {{ $formatearNum($fila['saldo_pendiente_factura'] ?? 0) }}
                     @endif
                 </td>
-                <td title="{{ $fila['cuenta_nombre'] ?? '' }}">{{ $fila['cuenta_codigo'] ?? '' }}</td>
+                <td>{{ $fila['cuenta_codigo'] ?? '' }}</td>
+                <td><small>{{ $fila['cuenta_nombre'] ?? '' }}</small></td>
                 <td>
                     @if ($puedeVerCentrocosto && (int) ($fila['centrocosto_id'] ?? 0) > 0)
                         <a href="{{ route('editar_centrocosto', array_merge(['id' => $fila['centrocosto_id']], $queryConsulta)) }}"

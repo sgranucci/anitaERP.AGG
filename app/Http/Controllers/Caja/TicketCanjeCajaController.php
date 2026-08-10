@@ -49,6 +49,10 @@ class TicketCanjeCajaController extends Controller
         }
 
         $filtros['usuario_id'] = (int) (Auth::id() ?? 0);
+        // Quien puede anular ve todos los tickets de la empresa (puede anular ajenos).
+        if (can('anular-ticket-canje-caja', false)) {
+            $filtros['solo_propios'] = false;
+        }
         $filtros['empresas_asignadas'] = $this->empresaRepository->traeEmpresasAsignadas();
 
         $datas = $empresaId > 0
@@ -180,9 +184,6 @@ class TicketCanjeCajaController extends Controller
         $ticket = $this->repository->findOrFail($id);
         if (! $this->empresaRepository->empresaIdPermitida((int) $ticket->empresa_id)) {
             return response()->json(['ok' => false, 'error' => 'Empresa no permitida.'], 403);
-        }
-        if ((int) $ticket->usuario_id !== (int) Auth::id()) {
-            return response()->json(['ok' => false, 'error' => 'Solo puede anular tickets propios.'], 403);
         }
 
         $resultado = $this->emisionService->anular($ticket);

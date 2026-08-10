@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Http\Controllers\Controller;
 use App\Models\Ventas\Camion;
 use App\Models\Ventas\CertificadoSanitario;
@@ -37,10 +38,10 @@ class CertificadoSanitarioController extends Controller
     {
         can('crear-certificado-sanitario');
 
-        $camiones = Camion::query()->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
+        $camiones = Camion::query()->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->get();
         if ($camiones->isEmpty()) {
             app(\App\Repositories\Ventas\CamionRepositoryInterface::class)->all();
-            $camiones = Camion::query()->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
+            $camiones = Camion::query()->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->get();
         }
 
         $transportes = Transporte::query()->orderBy('nombre')->get(['id', 'codigo', 'nombre']);

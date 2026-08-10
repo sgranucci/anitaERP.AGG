@@ -169,17 +169,14 @@ class RecepcionProveedorOrdencompraResolverService
             $codigoAp = $apCatalogo
                 ? trim((string) ($apCatalogo->codigo_articulo_proveedor ?? ''))
                 : '';
+            // Solo vía coeficienteProveedor (aplica misma UM compra/artículo → coef 1).
+            // No usar articulo_proveedor.coeficiente_conversion crudo: el “X100” del nombre
+            // contaminaba precio_stock / Anita / inventarios (DES0061 / Gonzanio).
             $coefProveedor = RecepcionProveedorDepositoSupport::coeficienteProveedor(
                 (int) $ocArt->articulo_id,
                 $proveedorId,
                 $codigoAp !== '' ? $codigoAp : null
             );
-            if ($apCatalogo !== null) {
-                $coefAp = (float) ($apCatalogo->coeficiente_conversion ?? 0);
-                if ($coefAp > 0) {
-                    $coefProveedor = $coefAp;
-                }
-            }
 
             $depositoEntregaId = RecepcionProveedorDepositoSupport::depositoEntregaVisible(
                 (int) ($articulo->depositoentrega_id ?? 0) ?: null,

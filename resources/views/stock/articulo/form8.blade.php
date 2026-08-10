@@ -12,6 +12,8 @@
             La clave del cat&aacute;logo es <strong>proveedor + c&oacute;digo art&iacute;culo proveedor</strong>.
             El precio y la moneda se consultan de la lista de precios activa y vigente del proveedor; no se guardan en esta tabla.
             El c&oacute;digo de art&iacute;culo proveedor se sincroniza con la l&iacute;nea vigente de la lista activa cuando existe en ambos lados.
+            <strong>Coef. conv.</strong> solo aplica cuando la UM de compra es distinta a la UM del art&iacute;culo (cu&aacute;ntas unidades de stock por 1 unidad de compra).
+            Si las UM coinciden, el coeficiente queda en <strong>1</strong> (el precio ya es por caja/paquete de stock; no poner el &ldquo;X100&rdquo; del nombre).
         </p>
         @if ($soloLecturaProveedores && can('editar-compras-articulos', false))
             <p class="text-info small mb-2">Solo consulta: necesita permiso <em>actualizar-compras-articulos</em> para modificar proveedores.</p>
@@ -35,7 +37,8 @@
         </style>
         <div class="table-responsive">
             <table class="table table-sm" id="tabla-articulo-proveedor"
-                data-puede-consultar-lista="{{ ListaprecioProveedorConsultaDesdeModal::puedeConsultar() ? '1' : '0' }}">
+                data-puede-consultar-lista="{{ ListaprecioProveedorConsultaDesdeModal::puedeConsultar() ? '1' : '0' }}"
+                data-unidadmedida-articulo-id="{{ (int) ($producto->unidadmedida_id ?? 0) }}">
                 <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
                         <th class="col-proveedor">Proveedor</th>
@@ -106,7 +109,7 @@
                                 <input type="text" class="form-control form-control-sm ap-vigencia-lista" readonly tabindex="-1" value="{{ $fechaVigente !== '' ? $fechaVigente : '—' }}">
                             </td>
                             <td>
-                                <select name="ap_unidadmedida_compra_ids[]" class="form-control form-control-sm" {{ $soloLecturaProveedores ? 'disabled' : '' }}>
+                                <select name="ap_unidadmedida_compra_ids[]" class="form-control form-control-sm ap-um-compra" {{ $soloLecturaProveedores ? 'disabled' : '' }}>
                                     <option value="">—</option>
                                     @foreach ($unidadmedida as $um)
                                         <option value="{{ $um->id }}" {{ (int) old('ap_unidadmedida_compra_ids.'.$idx, $linea->unidadmedida_compra_id ?? ($producto->unidadmedida_id ?? 0)) === (int) $um->id ? 'selected' : '' }}>
@@ -116,7 +119,7 @@
                                 </select>
                             </td>
                             <td>
-                                <input type="number" step="0.000001" min="0.000001" name="ap_coeficientes_conversion[]" class="form-control form-control-sm" value="{{ old('ap_coeficientes_conversion.'.$idx, $linea->coeficiente_conversion ?? 1) }}" {{ $soloLecturaProveedores ? 'readonly' : '' }}>
+                                <input type="number" step="0.000001" min="0.000001" name="ap_coeficientes_conversion[]" class="form-control form-control-sm ap-coef-conversion" value="{{ old('ap_coeficientes_conversion.'.$idx, $linea->coeficiente_conversion ?? 1) }}" title="Solo si UM compra ≠ UM artículo" {{ $soloLecturaProveedores ? 'readonly' : '' }}>
                             </td>
                             <td class="col-activo text-center align-middle">
                                 <input type="hidden" name="ap_activos[]" class="ap-activo-val" value="{{ $activoLinea ? '1' : '0' }}">

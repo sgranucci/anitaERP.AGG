@@ -332,6 +332,57 @@ final class ConciliacionBancariaExcelReferenciaSupport
         ];
     }
 
+    /**
+     * Códigos Contaduría de la solapa Saldo (fecha+importe → código).
+     * Sirve para alinear gastos (p.ej. RET.IN.BRU / PERCIBBSAS: algunos en 3, otros en 4).
+     *
+     * @return array<string, int> clave {@see ConciliacionBancariaCodificacionSupport::claveOverrideSaldo}
+     */
+    public static function mapaCodigosDesdeSaldo(string $ruta): array
+    {
+        if (! is_readable($ruta)) {
+            throw new RuntimeException('No se puede leer el Excel de referencia: '.$ruta);
+        }
+
+        try {
+            $libro = IOFactory::load($ruta);
+        } catch (Throwable $e) {
+            throw new RuntimeException('Error abriendo Excel de referencia: '.$e->getMessage(), 0, $e);
+        }
+
+        $hoja = $libro->getSheetByName('Saldo');
+        if ($hoja === null) {
+            return [];
+        }
+
+        $out = [];
+        $max = (int) $hoja->getHighestRow();
+        for ($r = 1; $r <= $max; $r++) {
+            $codRaw = $hoja->getCellByColumnAndRow(3, $r)->getCalculatedValue();
+            if (! is_numeric($codRaw)) {
+                continue;
+            }
+            $codigo = (int) $codRaw;
+            if ($codigo <= 0) {
+                continue;
+            }
+            $importe = self::floatOrNull($hoja->getCellByColumnAndRow(5, $r)->getCalculatedValue());
+            if ($importe === null || abs($importe) < 0.005) {
+                continue;
+            }
+            $fecha = self::celdaFechaAYmd($hoja->getCellByColumnAndRow(1, $r)->getCalculatedValue());
+            if ($fecha === null) {
+                continue;
+            }
+            $concepto = trim((string) $hoja->getCellByColumnAndRow(4, $r)->getCalculatedValue());
+            $clave = ConciliacionBancariaCodificacionSupport::claveOverrideSaldo($fecha, $importe, $concepto);
+            // Primera aparición gana (evitar pisar si hay colisión rara).
+            $out[$clave] ??= $codigo;
+        }
+
+        return $out;
+    }
+
     public static function soloDigitos(string $valor): string
     {
         $d = preg_replace('/\D/', '', $valor) ?? '';

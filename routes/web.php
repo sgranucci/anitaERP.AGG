@@ -3116,6 +3116,8 @@ Route::get('compras/contrato-vencimiento-reporte', 'Compras\ContratoVencimientoR
 Route::get('compras/listar-contrato-vencimiento-reporte/{formato?}', 'Compras\ContratoVencimientoReporteController@exportar')->name('listar_reporte_contrato_vencimiento');
 Route::get('compras/historial-precios-articulo', 'Compras\HistorialPreciosArticuloController@index')->name('reporte_historial_precios_articulo');
 Route::get('compras/listar-historial-precios-articulo/{formato?}', 'Compras\HistorialPreciosArticuloController@exportar')->name('listar_reporte_historial_precios_articulo');
+Route::get('compras/articulo-cuenta-oc-reporte', 'Compras\ArticuloCuentaOcReporteController@index')->name('reporte_articulo_cuenta_oc');
+Route::get('compras/listar-articulo-cuenta-oc-reporte/{formato?}', 'Compras\ArticuloCuentaOcReporteController@exportar')->name('listar_reporte_articulo_cuenta_oc');
 Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');
 Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
 Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');

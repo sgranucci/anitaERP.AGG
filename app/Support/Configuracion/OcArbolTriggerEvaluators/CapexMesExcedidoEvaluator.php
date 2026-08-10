@@ -115,8 +115,16 @@ final class CapexMesExcedidoEvaluator implements OcArbolTriggerEvaluatorInterfac
         }
 
         $bruto = $cantidad * $precio * (1 - $descuento / 100);
+        $monedaLocalId = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
+        $monedaLineaId = (int) ($linea->moneda_id ?? 0) ?: $monedaLocalId;
+        // Solo convierte si la línea está en divisa; pesos con cotización del día no se multiplican.
+        $coef = (float) calculaCoeficienteMoneda(
+            $monedaLocalId,
+            $monedaLineaId,
+            ['cotizacionventa' => $cotizacion],
+        );
 
-        return round($bruto * $cotizacion, 4);
+        return round($bruto * $coef, 4);
     }
 
     private function montoComprometidoCapexMes(int $capexId, string $periodoYmd, int $excluirOrdencompraId): float
@@ -135,9 +143,10 @@ final class CapexMesExcedidoEvaluator implements OcArbolTriggerEvaluatorInterfac
         }
 
         $filas = $q->select([
-            'oca.cantidad', 'oca.precio', 'oca.descuento', 'oca.cotizacion',
+            'oca.cantidad', 'oca.precio', 'oca.descuento', 'oca.cotizacion', 'oca.moneda_id',
         ])->get();
 
+        $monedaLocalId = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
         $total = 0.0;
         foreach ($filas as $f) {
             $cantidad = (float) ($f->cantidad ?? 0);
@@ -147,7 +156,13 @@ final class CapexMesExcedidoEvaluator implements OcArbolTriggerEvaluatorInterfac
             if ($cotizacion <= 0) {
                 $cotizacion = 1.0;
             }
-            $total += $cantidad * $precio * (1 - $descuento / 100) * $cotizacion;
+            $monedaLineaId = (int) ($f->moneda_id ?? 0) ?: $monedaLocalId;
+            $coef = (float) calculaCoeficienteMoneda(
+                $monedaLocalId,
+                $monedaLineaId,
+                ['cotizacionventa' => $cotizacion],
+            );
+            $total += $cantidad * $precio * (1 - $descuento / 100) * $coef;
         }
 
         return round($total, 4);

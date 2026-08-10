@@ -159,6 +159,11 @@ class RequisicionSalaService
 
         $data = $request->all();
 
+        $errorArticulo = RequisicionSalaEdicionSupport::validarCambioArticuloEdicionMenor($existente, $data);
+        if ($errorArticulo !== null) {
+            return ['mensaje' => 'error', 'errores' => $errorArticulo];
+        }
+
         DB::beginTransaction();
         try {
             $this->requisicionSalaRepository->update([
@@ -176,7 +181,7 @@ class RequisicionSalaService
                 Carbon::now()->toDateTimeString(),
                 $existente->estado,
                 Auth::user()->id,
-                'Corrección de datos menores (sin reabrir aprobación)'
+                'Corrección de datos menores / artículo (sin reabrir aprobación)'
             );
 
             if (method_exists($this->requisicionSalaArchivoRepository, 'update')) {

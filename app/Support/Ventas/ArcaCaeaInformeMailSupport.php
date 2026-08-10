@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\ArcaCaea;
 use Illuminate\Support\Facades\DB;
 
@@ -208,7 +209,7 @@ final class ArcaCaeaInformeMailSupport
                 ->where('puntoventa.empresa_id', $empresaId)
                 ->where('puntoventa.modofacturacion', 'A')
                 ->whereIn('puntoventa.webservice', ['wsfev1', 'wsmtxca'])
-                ->whereRaw('CAST(puntoventa.codigo AS UNSIGNED) = ?', [$pto])
+                ->whereRaw(SqlDialectSupport::castEntero('puntoventa.codigo').' = ?', [$pto])
                 ->where('venta.numerocomprobante', '>=', $desde)
                 ->whereNotNull('venta.cae')
                 ->where('venta.cae', '!=', '')

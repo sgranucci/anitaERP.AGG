@@ -2,6 +2,7 @@
 
 namespace App\Services\Arca;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\ArcaTipoComprobante;
 use App\Models\Ventas\Puntoventa;
@@ -242,7 +243,7 @@ class ArcaTiposComprobanteCatalogoService
                 ->where('empresa_id', $empresaId)
                 ->where('estado', 'A')
                 ->whereIn('webservice', [self::WS_WSFE, self::WS_MTXCA])
-                ->orderByRaw("FIELD(webservice, '".self::WS_MTXCA."', '".self::WS_WSFE."')")
+                ->orderByRaw(SqlDialectSupport::ordenPorLista('webservice', [self::WS_MTXCA, self::WS_WSFE]))
                 ->first();
 
             return (string) ($pv->webservice ?? self::WS_WSFE);

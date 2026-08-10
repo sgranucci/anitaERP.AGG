@@ -2,6 +2,7 @@
 
 namespace App\Services\Stock;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Configuracion\Empresa;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Categoria;
@@ -249,7 +250,7 @@ class ExistenciasDepositoReporteService
     $query = Depmae::query()
       ->select('id', 'codigo', 'nombre', 'empresa_id')
       ->paraUsuarioAutorizado()
-      ->orderByRaw('CAST(codigo AS UNSIGNED) ASC');
+      ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'));
 
     $empresaId = (int) ($filtros['empresa_id'] ?? 0);
     if ($empresaId > 0) {

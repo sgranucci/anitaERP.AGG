@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Stock;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Exports\Stock\ArticuloExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionArticulo;
@@ -763,7 +764,7 @@ class ArticuloController extends Controller
         $unidadmedida = Unidadmedida::orderBy('nombre')->get();
         $usosArticulos = Usoarticulo::all();
         $tiposArticulos = Tipoarticulo::all();
-        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
+        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->get();
         $oficinacompra_query = $this->oficinacompraRepository->all();
         $periodicidadcompra_query = $this->periodicidadcompraRepository->all();
         $condicionentrega_query = $this->condicionentregaRepository->all();
@@ -905,7 +906,7 @@ class ArticuloController extends Controller
         $usosArticulos = Usoarticulo::all();
         $tiposArticulos = Tipoarticulo::all();
         $codimp = Impuesto::all();
-        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw('CAST(codigo AS UNSIGNED) ASC')->get();
+        $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->get();
         $oficinacompra_query = $this->oficinacompraRepository->all();
         $periodicidadcompra_query = $this->periodicidadcompraRepository->all();
         $condicionentrega_query = $this->condicionentregaRepository->all();

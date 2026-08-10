@@ -2,6 +2,7 @@
 
 namespace App\Queries\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\Pedido;
 use App\Models\Stock\Capeart;
 use App\Models\Stock\Avioart;
@@ -608,7 +609,7 @@ class PedidoQuery implements PedidoQueryInterface
         );
 
         if ($tipolistado == 'TOTAL') {
-            return $pedido->orderByRaw('CAST(transporte.codigo AS UNSIGNED)')
+            return $pedido->orderByRaw(SqlDialectSupport::castEntero('transporte.codigo'))
                     ->orderBy('pedido.codigo')
                     ->groupBy(
                         'pedido.id',
@@ -627,7 +628,7 @@ class PedidoQuery implements PedidoQueryInterface
                     ->get();
         }
 
-        return $pedido->orderByRaw('CAST(transporte.codigo AS UNSIGNED)')
+        return $pedido->orderByRaw(SqlDialectSupport::castEntero('transporte.codigo'))
                 ->orderBy('articulo.sku')
                 ->groupBy(
                     'transporte.id',

@@ -279,9 +279,7 @@ class RequisicionSalaListadoFiltros
             return;
         }
         if ($type === 'entero') {
-            if ($valor !== '' && is_numeric($valor)) {
-                $query->where($column, (int) $valor);
-            }
+            self::aplicarEntero($query, $column, $operador, $valor);
 
             return;
         }
@@ -300,6 +298,19 @@ class RequisicionSalaListadoFiltros
                     CoincidenciaFlexibleTexto::aplicar($q, $column, $valor, false);
                 }
             }),
+        };
+    }
+
+    private static function aplicarEntero(Builder $query, string $column, string $operador, string $valor): void
+    {
+        if ($valor === '' || ! is_numeric($valor)) {
+            return;
+        }
+        $id = (int) $valor;
+        match ($operador) {
+            'mayor' => $query->where($column, '>', $id),
+            'menor' => $query->where($column, '<', $id),
+            default => $query->where($column, '=', $id),
         };
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -122,7 +123,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ->whereNull('cliente_cuentacorriente.deleted_at')
             ->whereNotNull('cliente_cuentacorriente.venta_id')
             ->whereNull('cliente_cuentacorriente.cobranza_id')
-            ->havingRaw('abs(IFNULL(aplicado, 0)) < abs(cliente_cuentacorriente.total)');
+            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(cliente_cuentacorriente.total)');
 
         if ($busqueda !== '') {
             $query->where(function ($q) use ($busqueda) {
@@ -164,7 +165,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ->whereNull('cliente_cuentacorriente.deleted_at')
             ->whereNotNull('cliente_cuentacorriente.venta_id')
             ->whereNull('cliente_cuentacorriente.cobranza_id')
-            ->havingRaw('abs(IFNULL(aplicado, 0)) < abs(cliente_cuentacorriente.total)')
+            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(cliente_cuentacorriente.total)')
             ->get();
 
         $total = 0.0;

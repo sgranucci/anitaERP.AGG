@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\DescuentoGastronomia;
 
 class DescuentoGastronomiaRepository implements DescuentoGastronomiaRepositoryInterface
@@ -66,7 +67,7 @@ class DescuentoGastronomiaRepository implements DescuentoGastronomiaRepositoryIn
         }
 
         $data = $query
-            ->orderByRaw('CAST(descuento_gastronomia.codigo AS UNSIGNED) ASC')
+            ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('descuento_gastronomia.codigo'))
             ->orderBy('descuento_gastronomia.codigo')
             ->limit(200)
             ->get();

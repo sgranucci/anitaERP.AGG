@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\ApiAnita;
 use App\Models\Ventas\Cliente;
 use Illuminate\Support\Facades\DB;
@@ -86,7 +87,7 @@ final class ClienteAnitaColisionSupport
             ->whereNotNull('codigo')
             ->where('codigo', '!=', '')
             ->whereRaw("codigo REGEXP '^[0-9]+$'")
-            ->max(DB::raw('CAST(codigo AS UNSIGNED)'));
+            ->max(DB::raw(SqlDialectSupport::castEntero('codigo')));
 
         return max(0, (int) $max);
     }

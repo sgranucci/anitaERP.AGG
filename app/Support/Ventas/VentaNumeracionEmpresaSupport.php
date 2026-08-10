@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use Illuminate\Support\Facades\DB;
@@ -62,7 +63,7 @@ final class VentaNumeracionEmpresaSupport
             $letra = strtoupper(trim($letraEmision));
             $bases = TipotransaccionCodigoAfipSupport::codigosBaseAlmacenadosPosibles($codigoAfipObjetivo, $letra);
             if ($bases !== []) {
-                $query->whereIn(DB::raw('CAST(tt.codigo AS UNSIGNED)'), $bases);
+                $query->whereIn(DB::raw(SqlDialectSupport::castEntero('tt.codigo')), $bases);
             }
             $query->where(static function ($q) use ($letra): void {
                 $q->where('venta.codigo', 'like', '% '.$letra.'-%')

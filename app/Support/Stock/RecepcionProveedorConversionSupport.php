@@ -2,12 +2,15 @@
 
 namespace App\Support\Stock;
 
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Proveedor;
 
 class RecepcionProveedorConversionSupport
 {
     /**
      * Resuelve coeficiente de conversión UM compra proveedor → UM stock ERP.
+     * Si la UM de compra del proveedor es la misma que la UM del artículo, el coef es 1
+     * (el precio ya está en unidad de stock; no dividir por “X100” del nombre).
      */
     public static function resolverCoeficiente(int $articuloId, int $proveedorId, ?string $codigoArticuloProveedor = null): float
     {
@@ -30,9 +33,39 @@ class RecepcionProveedorConversionSupport
             ->orderBy('id')
             ->first();
 
+        if ($fila === null) {
+            return 1.0;
+        }
+
+        $umCompraId = (int) ($fila->unidadmedida_compra_id ?? 0);
+        if ($umCompraId > 0) {
+            $umArticuloId = (int) (Articulo::query()->whereKey($articuloId)->value('unidadmedida_id') ?? 0);
+            if ($umArticuloId > 0 && $umCompraId === $umArticuloId) {
+                return 1.0;
+            }
+        }
+
         $coef = (float) ($fila->coeficiente_conversion ?? 0);
 
         return $coef > 0 ? $coef : 1.0;
+    }
+
+    /**
+     * Normaliza coeficiente al guardar maestro proveedor: misma UM compra/artículo → 1.
+     */
+    public static function normalizarCoeficienteMismaUm(
+        float $coeficiente,
+        ?int $unidadmedidaCompraId,
+        ?int $unidadmedidaArticuloId,
+    ): float {
+        $coef = $coeficiente > 0 ? $coeficiente : 1.0;
+        $umCompra = (int) ($unidadmedidaCompraId ?? 0);
+        $umArt = (int) ($unidadmedidaArticuloId ?? 0);
+        if ($umCompra > 0 && $umArt > 0 && $umCompra === $umArt) {
+            return 1.0;
+        }
+
+        return $coef;
     }
 
     public static function cantidadStock(float $cantidadCompra, float $coeficiente): float

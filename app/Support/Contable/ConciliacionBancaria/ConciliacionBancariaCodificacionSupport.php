@@ -14,10 +14,39 @@ namespace App\Support\Contable\ConciliacionBancaria;
 final class ConciliacionBancariaCodificacionSupport
 {
     /**
+     * Clave fecha+importe+concepto para overrides Contaduría (solapa Saldo del Excel).
+     */
+    public static function claveOverrideSaldo(string $fechaYmd, float $importe, string $concepto = ''): string
+    {
+        $conc = strtoupper(trim(preg_replace('/\s+/', ' ', $concepto) ?? ''));
+
+        return substr($fechaYmd, 0, 10).'|'.(int) round($importe * 100).'|'.$conc;
+    }
+
+    /**
+     * @param  array<string, int|string>  $overridesSaldo  clave fecha|centavos|concepto → código Contaduría
      * @return array{codigo: int|string, descripcion: string, metodo: string}
      */
-    public static function clasificarMovimientoBanco(array $movimiento): array
+    public static function clasificarMovimientoBanco(array $movimiento, array $overridesSaldo = []): array
     {
+        if ($overridesSaldo !== []) {
+            $fecha = ConciliacionBancariaMovimientoBancoSupport::fechaMovimiento($movimiento);
+            if ($fecha !== null && $fecha !== '') {
+                $importe = ConciliacionBancariaHashSupport::importeFirmadoBanco($movimiento);
+                $concepto = trim((string) ($movimiento['code_description_ib'] ?? ''));
+                $clave = self::claveOverrideSaldo((string) $fecha, $importe, $concepto);
+                if (isset($overridesSaldo[$clave])) {
+                    $codigo = $overridesSaldo[$clave];
+
+                    return self::respuestaCodigo(
+                        $codigo,
+                        self::descripcionCodigoNumerico($codigo),
+                        'excel_saldo',
+                    );
+                }
+            }
+        }
+
         $concepto = strtoupper(trim((string) ($movimiento['code_description_ib'] ?? '')));
         $pcc = ConciliacionBancariaMovimientoBancoSupport::normalizarPcc($movimiento['grouping_code_ib'] ?? null);
         $codOp = strtoupper(trim((string) ($movimiento['operation_code_ib'] ?? '')));
@@ -25,6 +54,13 @@ final class ConciliacionBancariaCodificacionSupport
             (string) ($movimiento['code_description_bank'] ?? ''),
             (string) ($movimiento['depositor_description'] ?? ''),
         ])));
+
+        // Percepción IIBB BSAS: IB etiqueta concepto RET.IN.BRU; Contaduría la separa (código 4).
+        // Si Contaduría tipificó distinto en Saldo (override), ya se aplicó arriba.
+        $iibbPerc = self::clasificarPercepcionIibbSiCorresponde($concepto, $textoDesc);
+        if ($iibbPerc !== null) {
+            return $iibbPerc;
+        }
 
         if ($pcc !== '') {
             $porPcc = self::clasificarPorPcc($pcc, $concepto, $textoDesc);
@@ -65,6 +101,45 @@ final class ConciliacionBancariaCodificacionSupport
             'descripcion' => 'TRANSFERENCIAS/PAGOS/DEPOSITOS',
             'metodo' => 'default_transferencia',
         ];
+    }
+
+    /**
+     * Percepción IIBB provincia BSAS (no retención SIRCREB).
+     * AGIP/CABA Contaduría lo deja en código 3; no se captura acá.
+     *
+     * @return array{codigo: int|string, descripcion: string, metodo: string}|null
+     */
+    private static function clasificarPercepcionIibbSiCorresponde(string $concepto, string $textoDesc): ?array
+    {
+        $blob = trim($concepto.' '.$textoDesc);
+        if ($blob === '') {
+            return null;
+        }
+
+        // AGIP = CABA → código 3 (convención Contaduría / ING-GTOS).
+        foreach (['PER IIBB AGIP', 'AGIP'] as $agip) {
+            if (str_contains($textoDesc, $agip)) {
+                return self::respuestaCodigo(3, 'I BRUTOS RETENCION POR 3 ROS', 'iibb_agip');
+            }
+        }
+
+        $esPercepcionBsas = false;
+        foreach (['PERCIBBSAS', 'PER IIBB PBS', 'PERCEPCION BSAS', 'PERCEPCION IN', 'IIBBPERCEP'] as $pat) {
+            if (str_contains($textoDesc, $pat) || str_contains($concepto, $pat)) {
+                $esPercepcionBsas = true;
+                break;
+            }
+        }
+        // "PERCIB" solo si no es IVA u otro impuesto.
+        if (! $esPercepcionBsas && str_contains($textoDesc, 'PERCIB') && ! str_contains($textoDesc, 'IVA')) {
+            $esPercepcionBsas = true;
+        }
+
+        if (! $esPercepcionBsas) {
+            return null;
+        }
+
+        return self::respuestaCodigo(4, 'II.BB. PERCEPCION', 'iibb_percepcion');
     }
 
     /**
@@ -225,14 +300,15 @@ final class ConciliacionBancariaCodificacionSupport
      * Resumen ING-GTOS DIARIOS: solo códigos numéricos de gasto (excluye AC y transferencias netas positivas).
      *
      * @param  list<array<string, mixed>>  $movimientos
+     * @param  array<string, int|string>  $overridesSaldo
      * @return list<array<string, mixed>>
      */
-    public static function resumirGastosDiarios(array $movimientos): array
+    public static function resumirGastosDiarios(array $movimientos, array $overridesSaldo = []): array
     {
         $grupos = [];
 
         foreach ($movimientos as $mov) {
-            $clasif = self::clasificarMovimientoBanco($mov);
+            $clasif = self::clasificarMovimientoBanco($mov, $overridesSaldo);
             $codigo = $clasif['codigo'];
             if ($codigo === 'AC' || (int) $codigo === (int) config('conciliacion_bancaria.codigo_transferencia_default', 10)) {
                 continue;

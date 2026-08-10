@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cobranza;
 use Illuminate\Support\Facades\Cache;
@@ -201,7 +202,7 @@ final class CobranzaNumeracionTransaccion
             ->where('empresa_id', $empresaId)
             ->where('tipotransaccion_caja_id', $tipotransaccionCajaId)
             ->whereRaw('numerotransaccion REGEXP ?', [self::PATRON_SOLO_DIGITOS])
-            ->selectRaw('MAX(CAST(numerotransaccion AS UNSIGNED)) as max_nro')
+            ->selectRaw('MAX('.SqlDialectSupport::castEntero('numerotransaccion').') as max_nro')
             ->value('max_nro');
 
         return (int) ($valor ?? 0);

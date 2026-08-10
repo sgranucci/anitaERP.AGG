@@ -328,6 +328,17 @@ class SolicitudpagoCargaMasivaCsvService
             $errores[] = 'Sin cuentas contables válidas';
         }
 
+        $detalle = trim((string) ($raw['detalle'] ?? ''));
+        if ($detalle === '' && $concepto !== null) {
+            $detalle = trim((string) ($concepto->nombre ?? ''));
+        }
+        if ($detalle === '') {
+            $errores[] = 'Detalle vacío (obligatorio; si falta en CSV se usa el nombre del concepto)';
+        } elseif (mb_strlen($detalle) > 180) {
+            $detalle = mb_substr($detalle, 0, 180);
+        }
+
+
         if ($errores === [] && $cuentaIds !== []) {
             $totalDebe = 0.0;
             $totalHaber = 0.0;
@@ -361,7 +372,7 @@ class SolicitudpagoCargaMasivaCsvService
             'forma_pago_codigo' => $fpCod,
             'forma_pago_nombre' => $fp?->nombre ?? '',
             'beneficiario' => $raw['beneficiario'],
-            'detalle' => $raw['detalle'],
+            'detalle' => $detalle,
             'fecha_vencimiento' => $raw['fecha_vencimiento'],
             'monto' => $monto,
             'n_cuentas' => count($cuentaIds),
@@ -392,7 +403,7 @@ class SolicitudpagoCargaMasivaCsvService
             'estado' => SolicitudpagoEstados::AUTORIZADA,
             'sector_solicitudpago_id' => $sector ? (int) $sector->id : null,
             'centrocosto_id' => $ccLinea,
-            'detalle' => $raw['detalle'] !== '' ? $raw['detalle'] : null,
+            'detalle' => $detalle,
             'solicitudpago_madre_id' => null,
             'empresa_ids' => $empresaIds,
             'cuentacontable_ids' => $cuentaIds,

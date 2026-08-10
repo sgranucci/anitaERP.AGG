@@ -242,9 +242,9 @@
 <div class="row">
     <div class="col-lg-12">
         <div class="form-group row">
-            <label for="detalle" class="col-lg-2 col-form-label">Detalle</label>
+            <label for="detalle" class="col-lg-2 col-form-label requerido">Detalle</label>
             <div class="col-lg-10">
-                <input type="text" name="detalle" id="detalle" class="form-control" maxlength="180"
+                <input type="text" name="detalle" id="detalle" class="form-control" maxlength="180" required
                        value="{{ old('detalle', $data->detalle ?? '') }}"/>
             </div>
         </div>

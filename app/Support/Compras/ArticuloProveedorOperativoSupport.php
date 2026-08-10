@@ -3,6 +3,7 @@
 namespace App\Support\Compras;
 
 use App\Models\Stock\Articulo_Proveedor;
+use App\Support\Stock\RecepcionProveedorConversionSupport;
 use Illuminate\Support\Collection;
 
 /**
@@ -169,10 +170,13 @@ class ArticuloProveedorOperativoSupport
 
         $proveedor = $linea->proveedores;
         $um = $linea->unidadesmedidacompra;
-        $coef = (float) ($linea->coeficiente_conversion ?? 1);
-        if ($coef <= 0) {
-            $coef = 1.0;
-        }
+        $linea->loadMissing('articulos');
+        $umArticuloId = (int) (optional($linea->articulos)->unidadmedida_id ?? 0);
+        $coef = RecepcionProveedorConversionSupport::normalizarCoeficienteMismaUm(
+            (float) ($linea->coeficiente_conversion ?? 1),
+            $linea->unidadmedida_compra_id ? (int) $linea->unidadmedida_compra_id : null,
+            $umArticuloId > 0 ? $umArticuloId : null,
+        );
 
         return [
             'articulo_proveedor_id' => (int) $linea->id,

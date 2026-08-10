@@ -66,10 +66,10 @@
 			</div>
 			<div class="col-sm-6">
 				<div class="form-group row">
-    				<label for="telefono" class="col-lg-3 col-form-label requerido">Teléfono</label>
+    				<label for="telefono" class="col-lg-3 col-form-label">Teléfono</label>
                     <span class="input-group-text"><i class="fas fa-phone"></i></span>
     				<div class="col-lg-8">
-    				<input type="text" name="telefono" id="telefono" class="form-control" value="{{old('telefono', $data->telefono ?? '')}}" required/>
+    				<input type="text" name="telefono" id="telefono" class="form-control" value="{{old('telefono', $data->telefono ?? '')}}" placeholder="Ingrese teléfono"/>
     				</div>
 				</div>
 				<div class="form-group row">

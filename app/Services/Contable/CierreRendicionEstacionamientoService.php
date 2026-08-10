@@ -2,6 +2,7 @@
 
 namespace App\Services\Contable;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
@@ -460,7 +461,7 @@ class CierreRendicionEstacionamientoService
 
         CierreRendicionEstacionamientoListadoFiltros::aplicarScopeTurno($q);
 
-        $ultima = $q->max(DB::raw('COALESCE(DATE(j.fecha_jornada), DATE(rendicion_estacionamiento_caja.fecharendicion))'));
+        $ultima = $q->max(DB::raw('COALESCE('.SqlDialectSupport::fecha('j.fecha_jornada').', '.SqlDialectSupport::fecha('rendicion_estacionamiento_caja.fecharendicion').')'));
 
         if ($ultima === null || trim((string) $ultima) === '') {
             return null;

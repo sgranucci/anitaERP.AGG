@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\ApiAnita;
 use App\Models\Compras\Ordencompra;
+use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEscrituraSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaErpContext;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaLineaSupport;
@@ -343,7 +344,9 @@ class OrdencompraAnitaBridgeService
             }
 
             $lineasAnita = $this->listarPendmovp($clave);
-            if (count($lineasAnita) > $oc->ordencompra_articulos->count() && $oc->ordencompra_articulos->isNotEmpty()) {
+            $esperadas = $oc->ordencompra_articulos->count();
+            // Faltan líneas (0 tras rollback incompleto) o sobran (duplicados): regrabar detalle.
+            if ($esperadas > 0 && count($lineasAnita) !== $esperadas) {
                 foreach ($lineasAnita as $linea) {
                     $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
                     if ($nroInterno > 0) {
@@ -353,10 +356,29 @@ class OrdencompraAnitaBridgeService
                         );
                     }
                 }
-                $this->eliminarDetalle($clave);
+
+                $internosValidos = [];
+                foreach ($lineasAnita as $linea) {
+                    $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
+                    if ($nroInterno > 0) {
+                        $internosValidos[$nroInterno] = true;
+                    }
+                }
+                $liberados = OrdencompraAnitaLineaSupport::liberarNroInternosInvalidos($oc, $internosValidos);
+                if ($liberados !== []) {
+                    $acciones[] = 'reasignó '.count($liberados).' penvp_nro_interno inválidos';
+                }
+                OrdencompraAnitaLineaSupport::asignarClavesLineas($oc);
+                $this->cargarRelaciones($oc);
+
+                // Preserva cantentr solo si el interno sigue siendo el mismo; remapear con
+                // repararPendmovpFaltanteDesdeRecepciones cuando los internos cambiaron.
+                $this->eliminarDetalle($clave, false);
                 $this->grabarDetalle($oc, $ctx, $clave);
                 $this->restaurarCantentrLineas($clave, $cantentrPreserve);
-                $acciones[] = 'eliminó líneas duplicadas y regrabó detalle';
+                $acciones[] = count($lineasAnita) > $esperadas
+                    ? 'eliminó líneas duplicadas y regrabó detalle'
+                    : 'regrabó pendmovp faltante (Anita='.count($lineasAnita).', ERP='.$esperadas.')';
             }
         }
 
@@ -391,6 +413,243 @@ class OrdencompraAnitaBridgeService
             'acciones' => $acciones,
             'problemas_restantes' => $restantes,
         ];
+    }
+
+    /**
+     * Repara OC con cabecera Anita sin pendmovp (o internos ERP que no pertenecen a esta OC):
+     * reasigna penvp_nro_interno, alinea líneas de recepción/devolución y regraba detalle
+     * con penvp_cantentr neto de recepciones confirmadas.
+     *
+     * @return array{
+     *   numero: int,
+     *   acciones: list<string>,
+     *   mapa_internos: array<int, int>,
+     *   cantentr: array<int, float>,
+     *   problemas_restantes: list<string>
+     * }
+     */
+    public function repararPendmovpFaltanteDesdeRecepciones(Ordencompra $oc): array
+    {
+        if (! $this->habilitado()) {
+            throw new \RuntimeException('Escritura OC Anita deshabilitada.');
+        }
+
+        $this->cargarRelaciones($oc);
+        $this->validarCabeceraMinima($oc);
+
+        $numero = (int) $oc->numeroordencompra;
+        $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
+        $acciones = [];
+
+        $lineasAnita = $this->listarPendmovp($clave);
+        $internosValidos = [];
+        foreach ($lineasAnita as $linea) {
+            $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
+            if ($nroInterno > 0) {
+                $internosValidos[$nroInterno] = true;
+            }
+        }
+
+        $antesPorOcArt = [];
+        foreach ($oc->ordencompra_articulos as $ocArt) {
+            $antesPorOcArt[(int) $ocArt->id] = (int) ($ocArt->penvp_nro_interno ?? 0);
+        }
+
+        $liberados = OrdencompraAnitaLineaSupport::liberarNroInternosInvalidos($oc, $internosValidos);
+        if ($liberados !== []) {
+            $acciones[] = 'liberó '.count($liberados).' penvp_nro_interno inválidos';
+        }
+
+        OrdencompraAnitaLineaSupport::asignarClavesLineas($oc);
+        $this->cargarRelaciones($oc);
+
+        $mapaInternos = [];
+        foreach ($oc->ordencompra_articulos as $ocArt) {
+            $id = (int) $ocArt->id;
+            $nuevo = (int) ($ocArt->penvp_nro_interno ?? 0);
+            $mapaInternos[$id] = $nuevo;
+            $antes = $antesPorOcArt[$id] ?? 0;
+            if ($antes !== $nuevo && $nuevo > 0) {
+                $acciones[] = "oc_art {$id}: interno {$antes} → {$nuevo}";
+            }
+        }
+
+        $alineadas = $this->alinearPenvpRecepcionesConOc($oc, $mapaInternos);
+        if ($alineadas > 0) {
+            $acciones[] = "alineó {$alineadas} línea(s) de recepción/devolución";
+        }
+
+        $cantentrPorInterno = $this->cantentrNetoDesdeRecepcionesConfirmadas($oc);
+        $acciones[] = 'cantentr neto: '.json_encode($cantentrPorInterno);
+
+        $ctx = OrdencompraAnitaErpContext::desdeUsuarioId(
+            $oc->creousuario_id !== null ? (int) $oc->creousuario_id : null
+        );
+
+        if ($this->leerCabeceraPendmaep($clave) === null) {
+            $this->insertarPendmaep($oc, $ctx, $clave);
+            $acciones[] = 'insertó pendmaep';
+        }
+
+        $this->eliminarDetalle($clave, false);
+        $this->grabarDetalle($oc, $ctx, $clave);
+        $this->restaurarCantentrLineas($clave, $cantentrPorInterno);
+        $acciones[] = 'regrabó pendmovp/movpresup con cantentr';
+
+        $estadoAnita = $this->resolverEstadoCabeceraDesdeCantentr($oc, $cantentrPorInterno);
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'update',
+            'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
+            'tabla' => config('ordencompra_anita.tablas.cabecera'),
+            'valores' => RecepcionProveedorAnitaEscrituraSupport::penmpEstadoUpdateSet($estadoAnita),
+            'whereArmado' => OrdencompraAnitaWhereSupport::pendmaep($clave),
+        ], 'ordencompra pendmaep estado reparacion pendmovp');
+        $acciones[] = 'estado cabecera='.$estadoAnita;
+
+        $aux = $this->repararRegistrosAnitaFaltantes($oc);
+        if (($aux['legcompra'] ?? '') === 'insertado') {
+            $acciones[] = 'insertó legcompra';
+        }
+        if (($aux['pendfecha'] ?? '') === 'insertado') {
+            $acciones[] = 'insertó pendfecha';
+        }
+
+        return [
+            'numero' => $numero,
+            'acciones' => $acciones,
+            'mapa_internos' => $mapaInternos,
+            'cantentr' => $cantentrPorInterno,
+            'problemas_restantes' => $this->diagnosticarSincronizacionAnita($oc)['problemas'],
+        ];
+    }
+
+    /**
+     * @param  array<int, int>  $mapaInternos  ordencompra_articulo.id => penvp_nro_interno
+     */
+    private function alinearPenvpRecepcionesConOc(Ordencompra $oc, array $mapaInternos): int
+    {
+        $oc->loadMissing('ordencompra_articulos');
+        $datosPorOcArt = [];
+        foreach ($oc->ordencompra_articulos as $ocArt) {
+            $datosPorOcArt[(int) $ocArt->id] = [
+                'penvp_orden' => (int) ($ocArt->penvp_orden ?? 0),
+                'penvp_nro_interno' => (int) ($mapaInternos[(int) $ocArt->id] ?? $ocArt->penvp_nro_interno ?? 0),
+            ];
+        }
+
+        $recepciones = Recepcion_Proveedor::query()
+            ->where('ordencompra_id', $oc->id)
+            ->with('recepcion_proveedor_articulos')
+            ->get();
+
+        $alineadas = 0;
+        foreach ($recepciones as $recepcion) {
+            foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
+                $fuenteId = (int) ($linea->ordencompra_articulo_id ?? 0);
+                if ($fuenteId <= 0) {
+                    $fuenteId = (int) ($linea->ordencompra_articulo_sustituido_id ?? 0);
+                }
+                if ($fuenteId <= 0 || ! isset($datosPorOcArt[$fuenteId])) {
+                    continue;
+                }
+                $datos = $datosPorOcArt[$fuenteId];
+                $cambios = [];
+                if ($datos['penvp_nro_interno'] > 0
+                    && (int) ($linea->penvp_nro_interno ?? 0) !== $datos['penvp_nro_interno']) {
+                    $cambios['penvp_nro_interno'] = $datos['penvp_nro_interno'];
+                }
+                if ($datos['penvp_orden'] > 0
+                    && (int) ($linea->penvp_orden ?? 0) !== $datos['penvp_orden']) {
+                    $cambios['penvp_orden'] = $datos['penvp_orden'];
+                }
+                if ($cambios !== []) {
+                    $linea->update($cambios);
+                    $alineadas++;
+                }
+            }
+        }
+
+        return $alineadas;
+    }
+
+    /**
+     * @return array<int, float> penvp_nro_interno => cantentr neto
+     */
+    private function cantentrNetoDesdeRecepcionesConfirmadas(Ordencompra $oc): array
+    {
+        $oc->loadMissing('ordencompra_articulos');
+        $netoPorOcArt = [];
+        foreach ($oc->ordencompra_articulos as $ocArt) {
+            $netoPorOcArt[(int) $ocArt->id] = 0.0;
+        }
+
+        $recepciones = Recepcion_Proveedor::query()
+            ->where('ordencompra_id', $oc->id)
+            ->where('estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
+            ->with('recepcion_proveedor_articulos')
+            ->get();
+
+        foreach ($recepciones as $recepcion) {
+            $signo = $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION ? -1.0 : 1.0;
+            foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
+                $fuenteId = (int) ($linea->ordencompra_articulo_id ?? 0);
+                if ($fuenteId <= 0) {
+                    $fuenteId = (int) ($linea->ordencompra_articulo_sustituido_id ?? 0);
+                }
+                if ($fuenteId <= 0 || ! array_key_exists($fuenteId, $netoPorOcArt)) {
+                    continue;
+                }
+                $delta = ((float) $linea->cantidad + (float) ($linea->cantidad_rechazada ?? 0)) * $signo;
+                $netoPorOcArt[$fuenteId] += $delta;
+            }
+        }
+
+        $porInterno = [];
+        foreach ($oc->ordencompra_articulos as $ocArt) {
+            $nro = (int) ($ocArt->penvp_nro_interno ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            $neto = max(0.0, (float) ($netoPorOcArt[(int) $ocArt->id] ?? 0));
+            $porInterno[$nro] = $neto;
+        }
+
+        return $porInterno;
+    }
+
+    /**
+     * @param  array<int, float>  $cantentrPorInterno
+     */
+    private function resolverEstadoCabeceraDesdeCantentr(Ordencompra $oc, array $cantentrPorInterno): string
+    {
+        $oc->loadMissing('ordencompra_articulos');
+        if ($oc->ordencompra_articulos->isEmpty()) {
+            return '0';
+        }
+
+        $todasCompletas = true;
+        $algunaEntrada = false;
+        foreach ($oc->ordencompra_articulos as $ocArt) {
+            $nro = (int) ($ocArt->penvp_nro_interno ?? 0);
+            $pedida = (float) ($ocArt->cantidad ?? 0);
+            $entr = (float) ($cantentrPorInterno[$nro] ?? 0);
+            if ($entr > 0.000001) {
+                $algunaEntrada = true;
+            }
+            if ($entr + 0.000001 < $pedida) {
+                $todasCompletas = false;
+            }
+        }
+
+        if ($todasCompletas && $algunaEntrada) {
+            return '2';
+        }
+        if ($algunaEntrada) {
+            return '1';
+        }
+
+        return '0';
     }
 
     /**
@@ -966,9 +1225,11 @@ class OrdencompraAnitaBridgeService
     }
 
     /** @param array{tipo: string, letra: string, sucursal: int, nro: int} $clave */
-    private function eliminarDetalle(array $clave): void
+    private function eliminarDetalle(array $clave, bool $incluirCuotas = true): void
     {
-        $this->eliminarComprobantesCuotas($clave);
+        if ($incluirCuotas) {
+            $this->eliminarComprobantesCuotas($clave);
+        }
 
         $api = new ApiAnita;
         $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
@@ -1165,26 +1426,52 @@ class OrdencompraAnitaBridgeService
      */
     private function revertirConBackup(array $clave, array $estado, array $backup): void
     {
+        $numero = $estado['numero'] ?? null;
+        $errores = [];
+
+        // Cada paso en try propio: un lock en cabecera no debe impedir restaurar pendmovp
+        // (incidente OC 221962: eliminarDetalle + fallo restore cabecera → OC sin líneas).
+        $detalleFueTocado = ! empty($estado['detalle_grabado'])
+            || ! empty($estado['comprobantes_grabados']);
+        $backupTieneDetalle = ($backup['lineas'] ?? []) !== []
+            || ($backup['movpresup'] ?? []) !== []
+            || ($backup['occuota'] ?? []) !== []
+            || ($backup['ocvley'] ?? []) !== [];
+
+        if ($detalleFueTocado || $backupTieneDetalle) {
+            try {
+                $this->eliminarDetalle($clave);
+                $this->restaurarDetalleDesdeBackup($backup, $clave);
+            } catch (\Throwable $e) {
+                $errores[] = 'detalle: '.$e->getMessage();
+            }
+        }
+
         try {
-            $this->eliminarDetalle($clave);
             if ($estado['cabecera_nueva']) {
                 $this->eliminarPendmaep($clave);
             } elseif ($backup['cabecera'] !== null) {
                 $this->restaurarCabeceraDesdeBackup($backup['cabecera'], $clave);
             }
+        } catch (\Throwable $e) {
+            $errores[] = 'cabecera: '.$e->getMessage();
+        }
 
-            $this->restaurarDetalleDesdeBackup($backup, $clave);
-
-            if ($estado['pendfecha_grabado'] ?? false) {
+        if ($estado['pendfecha_grabado'] ?? false) {
+            try {
                 $this->eliminarPendfecha($clave, $this->proveedor6DesdeClave($clave));
                 if ($backup['pendfecha'] !== null) {
                     $this->restaurarPendfechaDesdeBackup($backup['pendfecha']);
                 }
+            } catch (\Throwable $e) {
+                $errores[] = 'pendfecha: '.$e->getMessage();
             }
-        } catch (\Throwable $e) {
+        }
+
+        if ($errores !== []) {
             Log::error('OrdencompraAnitaBridge: rollback actualización incompleto', [
-                'numero_oc' => $estado['numero'] ?? null,
-                'error' => $e->getMessage(),
+                'numero_oc' => $numero,
+                'error' => implode(' | ', $errores),
             ]);
         }
     }

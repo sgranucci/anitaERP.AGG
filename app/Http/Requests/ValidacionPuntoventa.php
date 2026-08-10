@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\Puntoventa;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -67,7 +68,7 @@ class ValidacionPuntoventa extends FormRequest
                         ->where(function ($q) use ($codigoNorm, $numeroPv): void {
                             $q->where('codigo', $codigoNorm);
                             if ($numeroPv > 0) {
-                                $q->orWhereRaw('CAST(TRIM(codigo) AS UNSIGNED) = ?', [$numeroPv]);
+                                $q->orWhereRaw(SqlDialectSupport::castEntero('TRIM(codigo)').' = ?', [$numeroPv]);
                             }
                         });
 

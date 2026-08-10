@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Stock;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Exports\Stock\PrecioExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPrecio;
@@ -140,7 +141,7 @@ class PrecioController extends Controller
     private function listasPrecioParaFiltro()
     {
         return Listaprecio::query()
-            ->orderByRaw('CAST(codigo AS UNSIGNED) ASC')
+            ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
             ->orderBy('codigo')
             ->get(['id', 'codigo', 'nombre']);
     }

@@ -274,7 +274,7 @@
                 <button id="agrega_renglon_cuenta" type="button" class="btn btn-outline-primary btn-sm">
                     <i class="fa fa-plus"></i> Agrega rengl&oacute;n
                 </button>
-                <span class="text-muted small ml-2">El detalle de la 1.&ordf; l&iacute;nea se copia a los renglones nuevos (y a los vac&iacute;os al guardarlo).</span>
+                <span class="text-muted small ml-2">El detalle de la 1.&ordf; l&iacute;nea se copia a los renglones nuevos (y a los vac&iacute;os al guardarlo). En este ABM la moneda la fija el 1.&ordf; movimiento (no se pueden mezclar monedas).</span>
             </div>
         </div>
         </div>

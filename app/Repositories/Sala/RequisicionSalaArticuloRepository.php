@@ -122,7 +122,12 @@ class RequisicionSalaArticuloRepository implements RequisicionSalaArticuloReposi
                 continue;
             }
 
+            $nuevoArticuloId = isset($data['articulo_ids'][$i]) && $data['articulo_ids'][$i] !== ''
+                ? (int) $data['articulo_ids'][$i]
+                : 0;
+
             $registro->update([
+                'articulo_id' => $nuevoArticuloId > 0 ? $nuevoArticuloId : $registro->articulo_id,
                 'detalle' => $data['detalle_articulos'][$i] ?? ($registro->detalle ?? ''),
                 'uid' => $data['uids'][$i] ?? ($registro->uid ?? ''),
                 'numeroparte' => $data['numeropartes'][$i] ?? ($registro->numeroparte ?? ''),

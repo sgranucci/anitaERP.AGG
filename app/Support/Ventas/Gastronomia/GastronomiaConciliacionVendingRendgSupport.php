@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas\Gastronomia;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\MaquinavendingRendicion;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
@@ -141,9 +142,9 @@ final class GastronomiaConciliacionVendingRendgSupport
             ->where('empresa_id', $empresaId)
             ->whereDate('fecha_jornada', '>=', $desde)
             ->whereDate('fecha_jornada', '<=', $hasta)
-            ->selectRaw('DATE(fecha_jornada) as fecha_jornada')
+            ->selectRaw(SqlDialectSupport::fecha('fecha_jornada').' as fecha_jornada')
             ->selectRaw('SUM(total_ventas) as neto')
-            ->groupByRaw('DATE(fecha_jornada)')
+            ->groupByRaw(SqlDialectSupport::fecha('fecha_jornada'))
             ->get();
 
         $map = [];

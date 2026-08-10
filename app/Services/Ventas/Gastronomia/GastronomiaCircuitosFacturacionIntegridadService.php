@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Ventas\Gastronomia;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\CuentaGastronomiaLinea;
 use App\Models\Ventas\JornadaGastronomia;
@@ -44,7 +45,7 @@ final class GastronomiaCircuitosFacturacionIntegridadService
             ->join('venta_estacionamiento_emision as vee', 'vee.venta_id', '=', 'v.id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->where('pv.empresa_id', $empresaId)
-            ->whereBetween(DB::raw('DATE(COALESCE(v.fechajornada, v.fecha))'), [$fechaDesde, $fechaHasta])
+            ->whereBetween(DB::raw(SqlDialectSupport::fecha('COALESCE(v.fechajornada, v.fecha)')), [$fechaDesde, $fechaHasta])
             ->orderBy('v.fechajornada')
             ->orderBy('v.id')
             ->get([

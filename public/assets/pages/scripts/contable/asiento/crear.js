@@ -5,6 +5,7 @@
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
 
 		activa_eventos(true);
+		asientoAplicarMonedaDesdePrimera(false);
 
 		if (typeof activa_eventos_consulta_cuentacontable === 'function') {
 			activa_eventos_consulta_cuentacontable();
@@ -211,8 +212,81 @@
 
 		$('.moneda').on('change', function (event) {
 			event.preventDefault();
-			leeCotizacion(this);
+			asientoOnMonedaChange(this);
 		});
+	}
+
+	/**
+	 * Regla: la moneda del asiento la fija el 1.er movimiento.
+	 * El resto de renglones se alinean; no se permite mezclar PES/DOL/etc.
+	 */
+	function asientoMonedaPrimeraId() {
+		return $("#tbody-cuenta-table tr.item-cuenta").first().find('.moneda').val();
+	}
+
+	function asientoAplicarMonedaDesdePrimera(releerCotizacion) {
+		var monedaId = asientoMonedaPrimeraId();
+		if (!monedaId) {
+			return;
+		}
+		$("#tbody-cuenta-table tr.item-cuenta").each(function (idx) {
+			if (idx === 0) {
+				return;
+			}
+			var $sel = $(this).find('.moneda');
+			if (String($sel.val()) === String(monedaId)) {
+				return;
+			}
+			$sel.val(monedaId);
+			if (releerCotizacion) {
+				leeCotizacion($sel);
+			}
+		});
+	}
+
+	function asientoOnMonedaChange(ptr) {
+		var $tr = $(ptr).closest('tr.item-cuenta');
+		var $primera = $("#tbody-cuenta-table tr.item-cuenta").first();
+		var esPrimera = $tr.length && $primera.length && $tr[0] === $primera[0];
+
+		if (esPrimera) {
+			leeCotizacion(ptr);
+			asientoAplicarMonedaDesdePrimera(true);
+			return;
+		}
+
+		var monedaFija = asientoMonedaPrimeraId();
+		if (monedaFija && String($(ptr).val()) !== String(monedaFija)) {
+			$(ptr).val(monedaFija);
+			alert('La moneda la fija el primer movimiento del asiento; no se pueden mezclar monedas.');
+		}
+		leeCotizacion(ptr);
+	}
+
+	function asientoValidarMonedaUnica() {
+		var monedaRef = null;
+		var ok = true;
+		$("#tbody-cuenta-table tr.item-cuenta").each(function () {
+			var debe = parseMonto($(this).find('.debe').val());
+			var haber = parseMonto($(this).find('.haber').val());
+			if (debe <= 0 && haber <= 0) {
+				return;
+			}
+			var mon = $(this).find('.moneda').val();
+			if (!mon) {
+				ok = false;
+				return false;
+			}
+			if (monedaRef === null) {
+				monedaRef = String(mon);
+				return;
+			}
+			if (String(mon) !== monedaRef) {
+				ok = false;
+				return false;
+			}
+		});
+		return ok;
 	}
 
     function agregaRenglonCuenta(){
@@ -236,6 +310,7 @@
 
 		// Lee cotizacion de la moneda
 		leeCotizacion($nuevo.find('.moneda'));
+		asientoAplicarMonedaDesdePrimera(false);
 
 		activa_eventos(false);
 
@@ -608,6 +683,11 @@
 		}
 		if (totDebe < 0.01) {
 			alert('El asiento no tiene importes. Ingrese al menos dos movimientos con Debe y Haber.');
+			return;
+		}
+		asientoAplicarMonedaDesdePrimera(false);
+		if (!asientoValidarMonedaUnica()) {
+			alert('El asiento no puede mezclar monedas. La moneda la fija el primer movimiento.');
 			return;
 		}
 

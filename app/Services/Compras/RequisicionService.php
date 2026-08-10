@@ -23,7 +23,7 @@ use App\Support\Compras\RequisicionAnitaSyncEstado;
 use App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport;
 use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
-use App\Support\Database\MysqlContencionSupport;
+use App\Support\Database\DbContencionSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use Auth;
 use Carbon\Carbon;
@@ -139,7 +139,7 @@ class RequisicionService
         $syncAnitaActivo = config('requisicion.anita.sync_activo', true) && ! $modoProvisorio;
 
         try {
-            $requisicion = MysqlContencionSupport::ejecutarConReintento(
+            $requisicion = DbContencionSupport::ejecutarConReintento(
                 function () use ($cabecera, $data, $request, $modoProvisorio, $syncAnitaActivo) {
                     DB::beginTransaction();
                     $anitaIntentada = false;
@@ -258,7 +258,7 @@ class RequisicionService
         $syncAnitaActivo = config('requisicion.anita.sync_activo', true);
 
         try {
-            MysqlContencionSupport::ejecutarConReintento(
+            DbContencionSupport::ejecutarConReintento(
                 function () use ($id, $pendiente, $ccArbol, $observacionEnvio, $syncAnitaActivo) {
                     DB::beginTransaction();
                     $anitaIntentada = false;
@@ -666,7 +666,7 @@ class RequisicionService
         $numerorequisicion = (int) $existente->numerorequisicion;
 
         try {
-            MysqlContencionSupport::ejecutarConReintento(
+            DbContencionSupport::ejecutarConReintento(
                 function () use ($request, $data, $id, $pendiente, $esProvisorio, $syncAnitaActivo, $habiaEnAnita, $numerorequisicion) {
                     DB::beginTransaction();
                     $anitaIntentada = false;
@@ -747,7 +747,7 @@ class RequisicionService
         $numerorequisicion = (int) $existente->numerorequisicion;
 
         try {
-            MysqlContencionSupport::ejecutarConReintento(
+            DbContencionSupport::ejecutarConReintento(
                 function () use ($id, $proveedorId, $syncAnitaActivo, $habiaEnAnita, $numerorequisicion) {
                     DB::beginTransaction();
                     $anitaIntentada = false;
@@ -1419,7 +1419,7 @@ class RequisicionService
 
     private function mensajeErrorTransaccion(\Throwable $e, bool $anitaInvolucrada): string
     {
-        if (MysqlContencionSupport::esErrorReintentable($e)) {
+        if (DbContencionSupport::esErrorReintentable($e)) {
             $mensaje = 'No se pudo grabar por contención de base de datos (deadlock o espera de lock). '
                 .'Se reintentó automáticamente sin éxito; vuelva a intentar en unos segundos.';
         } else {

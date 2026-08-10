@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Stock;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Models\Stock\Articulo_Saldo_Deposito;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
 use Illuminate\Support\Facades\DB;
@@ -140,8 +141,8 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
     {
         $registros = 0;
         DB::transaction(function () use ($depositoId, &$registros) {
-            $colorExpr = 'IFNULL(NULLIF(color_id, 0), 0)';
-            $talleExpr = 'IFNULL(NULLIF(talle_id, 0), 0)';
+            $colorExpr = SqlDialectSupport::coalesce('NULLIF(color_id, 0)', '0');
+            $talleExpr = SqlDialectSupport::coalesce('NULLIF(talle_id, 0)', '0');
 
             if ($depositoId) {
                 Articulo_Saldo_Deposito::where('deposito_id', $depositoId)->delete();

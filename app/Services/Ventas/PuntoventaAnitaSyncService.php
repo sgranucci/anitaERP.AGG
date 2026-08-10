@@ -2,6 +2,7 @@
 
 namespace App\Services\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Localidad;
@@ -151,7 +152,7 @@ class PuntoventaAnitaSyncService
             ->where(function ($q) use ($codigoNorm, $numeroPv) {
                 $q->where('codigo', $codigoNorm);
                 if ($numeroPv > 0) {
-                    $q->orWhereRaw('CAST(TRIM(codigo) AS UNSIGNED) = ?', [$numeroPv]);
+                    $q->orWhereRaw(SqlDialectSupport::castEntero('TRIM(codigo)').' = ?', [$numeroPv]);
                 }
             })
             ->orderByRaw('CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END')
