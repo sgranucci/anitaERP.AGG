@@ -22,6 +22,32 @@
         return !!(m && m.classList.contains('show'));
     }
 
+    function sincronizarProvinciaDesdeLocalidad(data) {
+        if (!data) {
+            return;
+        }
+        var provId = data.provincia_id || (data.provincias && data.provincias.id);
+        if (!provId) {
+            return;
+        }
+        var provNombre = (data.provincias && data.provincias.nombre)
+            || data.nombreprovincia
+            || '';
+        var $prov = $('#provincia_id');
+        if (!$prov.length) {
+            return;
+        }
+        if (String($prov.val()) !== String(provId)) {
+            $prov.val(String(provId));
+        }
+        if (!provNombre) {
+            provNombre = $.trim($prov.find('option:selected').text());
+        }
+        if (provNombre) {
+            $('#desc_provincia').val(provNombre);
+        }
+    }
+
     function resolverLocalidadDesdeCodigo(codigo) {
         var cod = $.trim(codigo);
         if (cod === '') {
@@ -38,9 +64,13 @@
                 if (data.codigopostal) {
                     $('#codigopostal').val(data.codigopostal);
                 }
+                sincronizarProvinciaDesdeLocalidad(data);
             }
         });
     }
+
+    // Expuesto para el modal de consulta de localidades
+    window.sincronizarProvinciaDesdeLocalidad = sincronizarProvinciaDesdeLocalidad;
 
     function resolverProvinciaDesdeInput($input) {
         var cod = $.trim($input.val());

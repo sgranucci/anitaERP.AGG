@@ -88,6 +88,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 		if ($data['condicioniibb_id'] == null)
 			$data['condicioniibb_id'] = '4';
 
+		$data = $this->alinearProvinciaConLocalidad($data);
+
         $cliente = $this->model->create($data);
 
 		return $cliente;
@@ -110,6 +112,8 @@ class ClienteRepository implements ClienteRepositoryInterface
             $this->assertEstadoRegularizadoPermitido($data);
             $data['tiposuspension_id'] = null;
         }
+
+		$data = $this->alinearProvinciaConLocalidad($data);
 
         $cliente = $this->model->findOrFail($id)
             ->update($data);
@@ -1256,6 +1260,41 @@ class ClienteRepository implements ClienteRepositoryInterface
 	}
 
 	/**
+	 * Si hay localidad, fuerza provincia_id/desc_provincia de esa localidad
+	 * (evita Capital Federal + localidad de otra provincia).
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	private function alinearProvinciaConLocalidad(array $data): array
+	{
+		$localidadId = (int) ($data['localidad_id'] ?? 0);
+		if ($localidadId <= 0) {
+			return $data;
+		}
+
+		$localidad = Localidad::query()
+			->with('provincias:id,nombre')
+			->find($localidadId);
+		if ($localidad === null || (int) $localidad->provincia_id <= 0) {
+			return $data;
+		}
+
+		$provinciaLocalidad = (int) $localidad->provincia_id;
+		if ((int) ($data['provincia_id'] ?? 0) === $provinciaLocalidad) {
+			return $data;
+		}
+
+		$data['provincia_id'] = $provinciaLocalidad;
+		$nombreProvincia = trim((string) ($localidad->provincias?->nombre ?? ''));
+		if ($nombreProvincia !== '') {
+			$data['desc_provincia'] = $nombreProvincia;
+		}
+
+		return $data;
+	}
+
+	/**
 	 * Resuelve desc_localidad / desc_provincia desde los IDs del ERP (fuente de verdad para Anita).
 	 *
 	 * @param  array<string, mixed>  $request
@@ -1263,7 +1302,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	 */
 	private function prepararDatosAnitaCliente(array $request, ?Cliente $cliente = null): array
 	{
-		$prepared = $request;
+		$prepared = $this->alinearProvinciaConLocalidad($request);
 
 		if (! empty($prepared['localidad_id'])) {
 			$nombreLocalidad = Localidad::query()
@@ -1403,9 +1442,9 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'".$codigopais."',
 				'".$condicioniibb."',
 				'".$this->sqlLit($request['nroiibb'] ?? '')."',
-				' ',
-				' ',
-				' ',
+				'".$this->sqlLit($domicilio)."',
+				'".$this->sqlLit($request['desc_localidad'] ?? '')."',
+				'".$this->sqlLit($request['codigopostal'] ?? '')."',
 				'".$this->sqlLit($request['fantasia'] ?? '')."',
 				'".$fecha."',
 				' ',
@@ -1689,9 +1728,9 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_nombre 	                = '".$nombre."',
                 clim_contacto 	                = '".$contacto."',
                 clim_direccion 	                = '".$this->sqlLit($domicilio)."',
-                clim_localidad 	                = '".$request['desc_localidad']."',
-                clim_cod_postal 	            = '".$request['codigopostal']."',
-                clim_provincia 	                = '".$request['desc_provincia']."',
+                clim_localidad 	                = '".$this->sqlLit($request['desc_localidad'] ?? '')."',
+                clim_cod_postal 	            = '".$this->sqlLit($request['codigopostal'] ?? '')."',
+                clim_provincia 	                = '".$this->sqlLit($request['desc_provincia'] ?? '')."',
                 clim_telefono 	                = '".$request['telefono']."',
                 clim_cuit 	                    = '".$documento."',
                 clim_cond_iva 	                = '".$condicioniva."',
@@ -1713,6 +1752,10 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_pais 	                    = '".$codigopais."',
                 clim_perc_ing_br 	            = '".$condicioniibb."',
                 ".$campo_ing_bruto."            = '".$request['nroiibb']."',
+                clim_dir_postal 	            = '".$this->sqlLit($domicilio)."',
+                clim_loc_postal 	            = '".$this->sqlLit($request['desc_localidad'] ?? '')."',
+                clim_cp_postal 	                = '".$this->sqlLit($request['codigopostal'] ?? '')."',
+                clim_prov_postal 	            = '".$this->sqlLit($request['desc_provincia'] ?? '')."',
                 clim_fantasia 	                = '".$request['fantasia']."',
                 clim_fecha_alta 	            = '".$fecha."',
                 clim_e_mail 	                = '".substr($request['email'], 0, 40)."'".

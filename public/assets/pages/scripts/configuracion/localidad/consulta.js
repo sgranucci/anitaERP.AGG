@@ -66,11 +66,26 @@ function activa_eventos_consultalocalidad()
         let nombre = $(this).parents("tr").find(".nombre").html();
         let codigo = $(this).parents("tr").find(".codigo").html();
         let codigopostal = $(this).parents("tr").find(".codigopostal").html();
+        let provincia_id = $(this).parents("tr").find(".provincia_id").html();
+        let nombreprovincia = $(this).parents("tr").find(".nombreprovincia").html();
 
         $("#localidad_id").val(seleccion);
         $("#nombrelocalidad").val(nombre);
         $("#codigolocalidad").val(codigo);
         $("#codigopostal").val(codigopostal);
+
+        if (typeof window.sincronizarProvinciaDesdeLocalidad === 'function') {
+            window.sincronizarProvinciaDesdeLocalidad({
+                provincia_id: provincia_id,
+                nombreprovincia: nombreprovincia,
+                provincias: { id: provincia_id, nombre: nombreprovincia }
+            });
+        } else if (provincia_id && $('#provincia_id').length) {
+            $('#provincia_id').val(String(provincia_id));
+            if (nombreprovincia) {
+                $('#desc_provincia').val($.trim(nombreprovincia));
+            }
+        }
 
         $('#consultalocalidadModal').modal('hide');
     });
@@ -102,6 +117,15 @@ function activa_eventos_consultalocalidad()
                 $("#localidad").val(data.nombre);
                 $("#codigolocalidad").val(data.codigo);
                 $("#codigopostal").val(data.codigopostal);
+                if (typeof window.sincronizarProvinciaDesdeLocalidad === 'function') {
+                    window.sincronizarProvinciaDesdeLocalidad(data);
+                } else if (data.provincia_id && $('#provincia_id').length) {
+                    $('#provincia_id').val(String(data.provincia_id));
+                    var nombreProv = (data.provincias && data.provincias.nombre) || '';
+                    if (nombreProv) {
+                        $('#desc_provincia').val(nombreProv);
+                    }
+                }
             }
         });
     });

@@ -321,11 +321,12 @@ class ConstanciaInscripcionService
     {
         $key = $this->normalizarKey($descripcionProvincia);
 
-        // Alias comunes que vienen en ARCA / AFIP
+        // Alias ARCA/AFIP → nombre del maestro ERP (provincia.nombre)
         $aliases = [
-            'CABA' => 'CIUDAD AUTONOMA DE BUENOS AIRES',
-            'CAPITAL FEDERAL' => 'CIUDAD AUTONOMA DE BUENOS AIRES',
-            'CIUDAD DE BUENOS AIRES' => 'CIUDAD AUTONOMA DE BUENOS AIRES',
+            'CABA' => 'CAPITAL FEDERAL',
+            'CAPITAL FEDERAL' => 'CAPITAL FEDERAL',
+            'CIUDAD DE BUENOS AIRES' => 'CAPITAL FEDERAL',
+            'CIUDAD AUTONOMA DE BUENOS AIRES' => 'CAPITAL FEDERAL',
             'BUENOS AIRES' => 'BUENOS AIRES',
         ];
         if (isset($aliases[$key])) {
