@@ -19,7 +19,8 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Genera rendgastro / rendvalor en Anita al cerrar el proceso Waitry (post-asientos).
+ * Genera rendgastro / rendvalor en Anita a partir de las facturas post-cierre (ventas).
+ * No depende de asientos contables: el total CIERRE-WAITRY sale del total facturado ERP.
  */
 final class GastronomiaCierreJornadaProcesoRendicionAnitaService
 {
@@ -45,8 +46,14 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
 
         $payload = is_array($snapshot->payload) ? $snapshot->payload : [];
 
-        if (empty($payload['asientos_proceso_grabacion']['asientos'])) {
-            throw new InvalidArgumentException('Debe grabar los asientos del proceso antes de la rendición Anita.');
+        $emisionPrevia = is_array($payload['factura_proceso_emision'] ?? null)
+            ? $payload['factura_proceso_emision']
+            : [];
+        if (! CierreJornadaProcesoJornadaSupport::facturaProcesoConsideradaEmitida($emisionPrevia)
+            && ! CierreJornadaProcesoJornadaSupport::emisionProcesoOmitida($emisionPrevia)) {
+            throw new InvalidArgumentException(
+                'Debe emitir las facturas del proceso (ventas) antes de la rendición Anita (rendgastro).',
+            );
         }
 
         $rendSnap = is_array($payload['rendicion_proceso_anita'] ?? null)

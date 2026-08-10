@@ -67,7 +67,8 @@ final class CierreJornadaProcesoJornadaSupport
         $facturaEmitida = self::facturaProcesoConsideradaEmitida($emisionSnap);
         $asientosGrabados = ! empty($payloadSnap['asientos_proceso_grabacion']['asientos']);
         $rendicionAnitaGrabada = ! empty($payloadSnap['rendicion_proceso_anita']['nro_oper']);
-        $rendicionAnitaPendiente = $asientosGrabados && ! $rendicionAnitaGrabada;
+        // Rendgastro cuelga de las ventas emitidas (no de asientos).
+        $rendicionAnitaPendiente = $facturaEmitida && ! $rendicionAnitaGrabada;
 
         if ($puedeFacturar && ! $requiereEmisionProceso && ! $facturaEmitida) {
             $motivoBloqueo = 'No hay comandas Waitry sin facturar ni ajuste de insumos. '
@@ -84,7 +85,8 @@ final class CierreJornadaProcesoJornadaSupport
             $motivoBloqueoAsientos = 'Pulse «Analizar tramo» con la jornada cerrada para confirmar que no hay comandas Waitry a facturar.';
         } elseif ($asientosGrabados && $rendicionAnitaGrabada) {
             $motivoBloqueoAsientos = 'Ya se grabaron los asientos del proceso para esta jornada.';
-        } elseif ($rendicionAnitaPendiente) {
+        } elseif ($asientosGrabados && ! $rendicionAnitaGrabada) {
+            // Red de seguridad: reintentar rendgastro vía botón asientos si falló al emitir.
             $puedeGrabarAsientos = true;
         } else {
             $puedeGrabarAsientos = true;

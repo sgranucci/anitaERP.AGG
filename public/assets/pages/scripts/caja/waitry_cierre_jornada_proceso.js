@@ -2041,14 +2041,21 @@
                     window.jQuery('#modal-emitir-factura-proceso').modal('hide');
                 }
                 var msg = data.mensaje || 'Facturas del proceso emitidas correctamente.';
-                if (data.emision_omitida) {
-                    msg += '\n\nYa puede usar «Grabar asientos contables».';
-                } else {
                 if (data.ajuste_insumos && data.ajuste_insumos.movimientostock_id) {
                     msg += '\nAjuste de insumos: movimiento #' + data.ajuste_insumos.movimientostock_id + '.';
                 }
-                msg += '\n\nYa puede usar «Grabar asientos contables». El botón «Emitir facturas» queda deshabilitado (emisión completada).';
-                msg += '\n\nPara imprimir los comprobantes, use «Imprimir PDFs» o la columna Acciones del panel de resultado.';
+                var jpResp = data.jornada_proceso || {};
+                if (jpResp.rendicion_anita_grabada || (data.rendicion_anita && data.rendicion_anita.ok)) {
+                    msg += '\n\nRendgastro (CIERRE-WAITRY) actualizado con el total de las facturas emitidas.';
+                } else if (!data.emision_omitida) {
+                    msg += '\n\nAtención: no quedó registrada la rendición Anita (rendgastro).';
+                }
+                if (jpResp.puede_grabar_asientos_proceso && !jpResp.asientos_grabados) {
+                    msg += '\n\nSiguiente paso manual: «Grabar asientos contables».';
+                }
+                if (!data.emision_omitida) {
+                    msg += '\n\nEl botón «Emitir facturas» queda deshabilitado (emisión completada).';
+                    msg += '\n\nPara imprimir los comprobantes, use «Imprimir PDFs» o la columna Acciones del panel de resultado.';
                 }
                 alert(msg);
                 analizar({

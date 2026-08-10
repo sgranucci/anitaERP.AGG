@@ -16,6 +16,7 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoGrillaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoMedioSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaRecuperacionSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRedistribucionSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
@@ -26,6 +27,8 @@ use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryOrdenEstadoSupport;
 use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
 
 /**
  * Proceso de cierre de jornada gastronomía: conciliación Waitry, redistribución QR/efectivo y preview de asientos.
@@ -162,13 +165,72 @@ final class GastronomiaCierreJornadaProcesoService
         $jornada = $this->resolverJornada($jornadaId);
         $fecha = $fechaFactura ?? ($jornada->fecha_jornada?->format('Y-m-d') ?? '');
 
-        return app(GastronomiaCierreJornadaFacturaProcesoEmisionService::class)->emitir(
+        $resultado = app(GastronomiaCierreJornadaFacturaProcesoEmisionService::class)->emitir(
             $jornadaId,
             $porcentaje,
             $puntoventaId,
             $fecha,
             $usarRecuperacionSnapshot,
         );
+
+        if (! ($resultado['ok'] ?? false)) {
+            return $resultado;
+        }
+
+        // Manual: emitir ≠ asientos. Rendgastro cuelga de las ventas emitidas.
+        // Automático sigue grabando asientos en su propio paso.
+        return $this->completarRendgastroTrasEmision($jornadaId, $resultado);
+    }
+
+    /**
+     * Persiste rendgastro CIERRE-WAITRY a partir de las facturas del proceso (ventas),
+     * sin depender de asientos contables.
+     *
+     * @param  array<string, mixed>  $resultadoEmision
+     * @return array<string, mixed>
+     */
+    private function completarRendgastroTrasEmision(int $jornadaId, array $resultadoEmision): array
+    {
+        $jornada = $this->resolverJornada($jornadaId);
+        $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()
+            ->where('jornada_gastronomia_id', $jornadaId)
+            ->first();
+        $payload = is_array($snapshot?->payload) ? $snapshot->payload : [];
+        $emision = is_array($payload['factura_proceso_emision'] ?? null)
+            ? $payload['factura_proceso_emision']
+            : [];
+
+        if (CierreJornadaProcesoJornadaSupport::emisionProcesoOmitida($emision)
+            && CierreJornadaProcesoFacturaRecuperacionSupport::ventaIdsDesdeRecuperacion($emision) === []) {
+            $resultadoEmision['jornada_proceso'] = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
+
+            return $resultadoEmision;
+        }
+
+        try {
+            $rendicion = app(GastronomiaCierreJornadaProcesoRendicionAnitaService::class)->grabar($jornadaId);
+        } catch (Throwable $e) {
+            $msgEmision = trim((string) ($resultadoEmision['mensaje'] ?? 'Facturas del proceso emitidas.'));
+            throw new RuntimeException(
+                $msgEmision.' Luego falló la rendición Anita (rendgastro): '.$e->getMessage(),
+                0,
+                $e,
+            );
+        }
+
+        $resultadoEmision['rendicion_anita'] = $rendicion;
+        $msgRend = trim((string) ($rendicion['mensaje'] ?? ''));
+        if ($msgRend !== '' && empty($rendicion['ya_existia'])) {
+            $base = trim((string) ($resultadoEmision['mensaje'] ?? ''));
+            $resultadoEmision['mensaje'] = $base === '' ? $msgRend : ($base.' '.$msgRend);
+        }
+
+        $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()
+            ->where('jornada_gastronomia_id', $jornadaId)
+            ->first();
+        $resultadoEmision['jornada_proceso'] = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
+
+        return $resultadoEmision;
     }
 
     /**

@@ -172,13 +172,15 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
             );
         }
 
+        // Rendgastro cuelga de las ventas (se graba al emitir). Acá solo reintento de seguridad
+        // si la emisión no llegó a persistir CIERRE-WAITRY.
         $rendicionAnita = null;
         try {
             $rendicionAnita = app(GastronomiaCierreJornadaProcesoRendicionAnitaService::class)
                 ->grabar($jornadaId);
         } catch (Throwable $e) {
             throw new RuntimeException(
-                'Asientos grabados, pero falló la rendición Anita: '.$e->getMessage(),
+                'Asientos grabados, pero falló la rendición Anita (red de seguridad post-emisión): '.$e->getMessage(),
                 0,
                 $e,
             );
@@ -192,12 +194,15 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
             $guardrail = $this->guardrailMediosZ($empresaId, $fechaJornada);
         }
 
+        $msg = 'Se grabaron '.count($grabados).' asiento(s) contable(s) del proceso.';
+        if ($rendicionAnita && empty($rendicionAnita['ya_existia'])) {
+            $msg = 'Se grabaron '.count($grabados).' asiento(s) contable(s) del proceso'
+                .' y se completó la rendición Anita (rendgastro) pendiente.';
+        }
+
         return [
             'ok' => true,
-            'mensaje' => 'Se grabaron '.count($grabados).' asiento(s) contable(s) del proceso'
-                .($rendicionAnita && empty($rendicionAnita['ya_existia'])
-                    ? ' y la rendición Anita (rendgastro).'
-                    : '.'),
+            'mensaje' => $msg,
             'cantidad_asientos' => count($grabados),
             'asientos' => $grabados,
             'rendicion_anita' => $rendicionAnita,

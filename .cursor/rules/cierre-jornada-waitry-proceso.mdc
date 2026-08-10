@@ -70,8 +70,9 @@ Consola: `php artisan gastronomia:diagnostico-cuadro-cierre {empresa} {fecha} {f
 | % sobre facturado Anita | OK | input UI; objetivo en **pesos enteros** |
 | Recalcular redistribución QR ↔ efectivo | OK | `CierreJornadaProcesoRedistribucionSupport` — Waitry QR→efectivo + compensación mismo importe en facturas Anita efectivo→QR (**solo memoria**); cuadro «Facturado Anita» muestra QR contable tras compensación |
 | Preview asientos (sin grabar) | OK | `CierreJornadaProcesoAsientosPreviewSupport` — requiere **Recalcular** |
-| Grabado asientos | **Implementado** | `GastronomiaCierreJornadaAsientosGrabacionService` → `AsientoRepository` / ctamov; tras factura proceso |
-| Facturación única proceso | **Implementado** | `GastronomiaCierreJornadaFacturaProcesoEmisionService`; botón panel inferior + modal PV/fecha |
+| Grabado asientos | **Implementado** | `GastronomiaCierreJornadaAsientosGrabacionService` → cuelga de ventas/cuadro; botón manual aparte; automático lo ejecuta después de emitir |
+| Facturación única proceso | **Implementado** | `GastronomiaCierreJornadaFacturaProcesoEmisionService`; al emitir, `emitirFacturaProceso` graba `rendgastro` CIERRE-WAITRY (no asientos) |
+| Rendgastro post-cierre | **Implementado** | Cuelga de **ventas** emitidas (`GastronomiaCierreJornadaProcesoRendicionAnitaService`); asientos solo reintentan si faltó al emitir |
 | Facturación unitaria | **Pendiente** | una factura por permiso → alivio de carga servidor |
 
 ## Punto de venta del proceso (por empresa)
