@@ -326,7 +326,9 @@ class ConciliacionBancariaService
         ]);
         $resultado['ejecucion_id'] = $ejecucion->id;
 
-        if (($opciones['persistir_pendientes'] ?? true) && $persistirPares) {
+        // Persistir cheques aunque no se graben pares (p. ej. export): si no, la
+        // ejecución queda sin snapshot y envenena la próxima semilla de carátula.
+        if ($opciones['persistir_pendientes'] ?? true) {
             $this->persistirPendientesCheques(
                 (int) $ejecucion->id,
                 $empresaId,
@@ -799,14 +801,26 @@ class ConciliacionBancariaService
     ): array {
         $support = new ConciliacionBancariaPendientesCpromaeSupport();
         $semilla = [];
+        $origenSemilla = 'ninguna';
         $rutaExcel = trim((string) ($opciones['pendientes_excel'] ?? ''));
         if ($rutaExcel !== '') {
             $detalle = ConciliacionBancariaExcelReferenciaSupport::leerPendientesDetalle($rutaExcel);
             $semilla = ConciliacionBancariaPendientesCpromaeSupport::semillaDesdeExcelDetalle($detalle['cheques']);
+            if ($semilla !== []) {
+                $origenSemilla = 'excel';
+            }
         }
 
         if ($semilla === []) {
-            $semilla = $this->semillaDesdeSnapshotPrevio($empresaId, $cuentacajaId);
+            $semilla = $this->semillaDesdeSnapshotPrevio(
+                $empresaId,
+                $cuentacajaId,
+                (int) $fechaCorte->month,
+                (int) $fechaCorte->year,
+            );
+            if ($semilla !== []) {
+                $origenSemilla = 'snapshot';
+            }
         }
 
         $numeros = array_keys($semilla);
@@ -820,7 +834,7 @@ class ConciliacionBancariaService
             $numeros = array_values(array_unique($numeros));
         }
 
-        return $support->armar(
+        $arm = $support->armar(
             $codigoCuentacaja,
             $empresaId,
             $fechaCorte,
@@ -828,28 +842,65 @@ class ConciliacionBancariaService
             $semilla,
             $semilla === [],
         );
+
+        // Distinguir Excel vs snapshot: ambos usan semilla; "por_numeros" es solo Ch: del mayor.
+        if ($origenSemilla === 'excel') {
+            $arm['fuente'] = 'cpromae_semilla_excel';
+        } elseif ($origenSemilla === 'snapshot') {
+            $arm['fuente'] = 'cpromae_semilla_snapshot';
+        }
+
+        return $arm;
     }
 
     /**
+     * Semilla Contaduría desde la última ejecución con cheques persistidos.
+     * Evita ejecuciones vacías (export sin persistir) y prioriza solapa Excel del mismo período
+     * frente a corridas armadas solo con Ch: del mayor (que desplazan la carátula ~millones).
+     *
      * @return array<string, array{tip: string, importe: float, fecha_emision?: string|null, fecha_cheque?: string|null}>
      */
-    private function semillaDesdeSnapshotPrevio(int $empresaId, int $cuentacajaId): array
-    {
+    private function semillaDesdeSnapshotPrevio(
+        int $empresaId,
+        int $cuentacajaId,
+        ?int $mes = null,
+        ?int $anio = null,
+    ): array {
         if (! \Illuminate\Support\Facades\Schema::hasTable('conciliacion_bancaria_cheque_pendiente')) {
             return [];
         }
 
-        $ejecucionId = ConciliacionBancariaEjecucion::query()
+        $candidatos = ConciliacionBancariaEjecucion::query()
             ->where('empresa_id', $empresaId)
             ->where('cuentacaja_id', $cuentacajaId)
+            ->whereHas('chequesPendientes')
             ->orderByDesc('id')
-            ->value('id');
-        if (! $ejecucionId) {
+            ->limit(40)
+            ->get(['id', 'mes', 'anio', 'resumen_json']);
+
+        if ($candidatos->isEmpty()) {
+            return [];
+        }
+
+        $mejor = $candidatos->sortBy(function (ConciliacionBancariaEjecucion $e) use ($mes, $anio): array {
+            $resumen = is_array($e->resumen_json) ? $e->resumen_json : [];
+            $fuente = (string) ($resumen['pendientes_cheques_fuente'] ?? '');
+            $mismoPeriodo = ($mes && $anio && (int) $e->mes === $mes && (int) $e->anio === $anio) ? 0 : 1;
+            $prioFuente = match ($fuente) {
+                'cpromae_semilla_excel' => 0,
+                'cpromae_semilla_snapshot' => 1,
+                default => 2,
+            };
+
+            return [$mismoPeriodo, $prioFuente, -1 * (int) $e->id];
+        })->first();
+
+        if (! $mejor) {
             return [];
         }
 
         $rows = ConciliacionBancariaChequePendiente::query()
-            ->where('ejecucion_id', $ejecucionId)
+            ->where('ejecucion_id', $mejor->id)
             ->get();
         if ($rows->isEmpty()) {
             return [];

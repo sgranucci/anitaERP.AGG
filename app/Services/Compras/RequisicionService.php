@@ -1147,7 +1147,8 @@ class RequisicionService
             // Asume forma de pago TRANSFERENCIA
             $formapago_id = 2;
 
-            switch ($dataRequisicion->reqm_estado) {
+            // Nombres ERP canónicos (espacios, no guiones bajos). Ver Requisicion_EstadoTrait + RequisicionAnitaEstadoMapper.
+            switch ((string) $dataRequisicion->reqm_estado) {
                 case '0':
                     $estado = 'PENDIENTE';
                     break;
@@ -1164,19 +1165,19 @@ class RequisicionService
                     $estado = 'SUSPENDIDA';
                     break;
                 case '5':
-                    $estado = 'EN_COMPRAS';
+                    $estado = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
                     break;
                 case '6':
-                    $estado = 'A_AUTORIZAR';
+                    $estado = 'A AUTORIZAR';
                     break;
                 case 'T':
                     $estado = 'TRANSFERIDA';
                     break;
                 case 'E':
-                    $estado = 'AUT_ESPECIAL';
+                    $estado = 'AUT ESPECIAL';
                     break;
                 case 'A':
-                    $estado = 'EN_ARBOL_APROBACION';
+                    $estado = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
                     break;
                 default:
                     $estado = 'PENDIENTE';
@@ -1204,6 +1205,9 @@ class RequisicionService
                 'estado' => $estado,
                 'creousuario_id' => $usuario_id,
                 'oficinacompra_id' => null,
+                'anita_sync_estado' => RequisicionAnitaSyncEstado::SYNC_OK,
+                'anita_sync_error' => null,
+                'anita_sync_at' => Carbon::now(),
             ];
 
             $requisicion = $this->requisicionRepository->createDesdeAnita($arrayCampos);
