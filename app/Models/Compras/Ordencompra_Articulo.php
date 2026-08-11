@@ -18,7 +18,8 @@ class Ordencompra_Articulo extends Model
 
     protected $fillable = [
         'ordencompra_id', 'requisicion_articulo_id', 'fechaentrega', 'articulo_id', 'articulo_proveedor_id',
-        'color_id', 'talle_id', 'penvp_orden', 'penvp_nro_interno', 'estado_linea_oc', 'cantidad', 'precio', 'moneda_id', 'cotizacion',
+        'color_id', 'talle_id', 'penvp_orden', 'penvp_nro_interno', 'lote_transferencia', 'peso_unitario',
+        'estado_linea_oc', 'cantidad', 'precio', 'moneda_id', 'cotizacion',
         'descuento', 'cantidadalternativa', 'detalle', 'centrocostodestino_id', 'partidagasto_id', 'capex_id',
         'precio_origen_tipo', 'precio_origen_ref_id', 'precio_origen_etiqueta',
     ];

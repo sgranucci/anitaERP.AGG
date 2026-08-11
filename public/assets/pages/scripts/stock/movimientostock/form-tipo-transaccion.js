@@ -88,11 +88,15 @@
 
         actualizarLinkEditarTipotransaccionStock($ctx, id);
         $hidden.trigger('change');
+        $(document).trigger('ms:tipotransaccion-changed');
         if (typeof window.msAplicarModoBajaNpuEnTabla === 'function') {
             window.msAplicarModoBajaNpuEnTabla();
         }
         if (typeof window.msAplicarModoAltaNpuEnTabla === 'function') {
             window.msAplicarModoAltaNpuEnTabla();
+        }
+        if (typeof window.msSurmarEtiquetasToggle === 'function') {
+            window.msSurmarEtiquetasToggle();
         }
 
         return true;

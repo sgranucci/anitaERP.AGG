@@ -12,6 +12,31 @@ var CONSULTA_ARTICULO_DEBOUNCE_MS = 280;
 var CONSULTA_ARTICULO_MIN_LEN = 2;
 var CONSULTA_ARTICULO_URL_EDITAR_QUERY = '?origen=modal_consulta&vista=consulta';
 
+function empresaIdConsultaArticulo() {
+    var $emp = $('#empresa_id');
+    if (!$emp.length) {
+        return '';
+    }
+    var v = parseInt(String($emp.val() || '0'), 10);
+    return v > 0 ? String(v) : '';
+}
+
+function urlLeerArticuloPorSku(sku, queryExtra) {
+    var url = carpetaBase + '/stock/leerunarticuloporsku/' + encodeURIComponent(sku || '');
+    var parts = [];
+    if (queryExtra) {
+        parts.push(String(queryExtra).replace(/^\?/, ''));
+    }
+    var empresaId = empresaIdConsultaArticulo();
+    if (empresaId !== '') {
+        parts.push('empresa_id=' + encodeURIComponent(empresaId));
+    }
+    if (parts.length) {
+        url += '?' + parts.join('&');
+    }
+    return url;
+}
+
 window.listaprecioIdEsValidoLineaVentas = function (listaprecioId) {
     if (listaprecioId == null || listaprecioId === '') {
         return false;
@@ -255,6 +280,10 @@ function buscar_datos_articulo(consulta) {
     }
     if ($('#consultaarticuloModal').data('articuloSoloInsumoGastronomia')) {
         postData.solo_insumo_gastronomia = 1;
+    }
+    var empresaIdConsulta = empresaIdConsultaArticulo();
+    if (empresaIdConsulta !== '') {
+        postData.empresa_id = empresaIdConsulta;
     }
     consultaArticuloAjax = $.ajax({
         url: carpetaBase+'/stock/articulo/consultaarticulo',
@@ -585,10 +614,7 @@ function activa_eventos_consultaarticulo()
             return;
         }
 
-        let url_res = carpetaBase + '/stock/leerunarticuloporsku/' + encodeURIComponent(sku);
-        if (consultaArticuloRequiereSoloFacturable($tr)) {
-            url_res += '?solo_facturable=1';
-        }
+        let url_res = urlLeerArticuloPorSku(sku, consultaArticuloRequiereSoloFacturable($tr) ? 'solo_facturable=1' : '');
 
         $.get(url_res, function (data) {
             if (!data || !data.id) {
@@ -666,7 +692,7 @@ function activa_eventos_consultaarticulo()
 
 
         let sku = $(this).val();
-        let url_res = carpetaBase+'/stock/leerunarticuloporsku/'+sku;
+        let url_res = urlLeerArticuloPorSku(sku);
 
         $.get(url_res, function(data){
             if (data)

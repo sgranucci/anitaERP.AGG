@@ -8,6 +8,46 @@ Movimientos de Stock
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/revertir.js') }}" type="text/javascript"></script>
+@php $surmarImprimir = session('surmar_imprimir_etiquetas', []); @endphp
+@if (is_array($surmarImprimir) && count($surmarImprimir))
+<script>
+(function ($) {
+    var ids = @json(array_values(array_map('intval', $surmarImprimir)));
+    var url = @json(route('movimientostock_zpl_etiquetas_surmar'));
+    function enviarZpl(zpl) {
+        if (!zpl) return;
+        if (window.BrowserPrint) {
+            try {
+                BrowserPrint.getDefaultDevice('printer', function (device) {
+                    if (device) device.send(zpl);
+                    else descargar(zpl);
+                }, function () { descargar(zpl); });
+                return;
+            } catch (e) {}
+        }
+        descargar(zpl);
+    }
+    function descargar(zpl) {
+        var blob = new Blob([zpl], { type: 'text/plain' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'etiqueta_surmar.zpl';
+        a.click();
+    }
+    $(function () {
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: { _token: $('meta[name="csrf-token"]').attr('content'), ids: ids },
+            success: function (resp) {
+                if (!resp || !resp.ok || !resp.etiquetas) return;
+                resp.etiquetas.forEach(function (e) { enviarZpl(e.zpl); });
+            }
+        });
+    });
+})(jQuery);
+</script>
+@endif
 @endsection
 
 <?php use App\Support\Stock\MovimientoStockFerliSupport;

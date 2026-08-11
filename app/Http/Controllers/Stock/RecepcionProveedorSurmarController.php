@@ -8,7 +8,9 @@ use App\Models\Stock\RecepcionProveedorArticuloSurmar;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorSurmarService;
 use App\Support\Stock\RecepcionProveedorSurmarListadoFiltros;
+use App\Support\Stock\Surmar\RecepcionProveedorSurmarOcSupport;
 use App\Support\Stock\SurmarSupport;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -51,7 +53,8 @@ class RecepcionProveedorSurmarController extends Controller
         can('crear-recepcion-proveedor-surmar');
 
         $data = $request->validate([
-            'proveedor_id' => 'required|integer|min:1',
+            'ordencompra_id' => 'required|integer|min:1',
+            'proveedor_id' => 'nullable|integer|min:1',
             'deposito_id' => 'required|integer|min:1',
             'fecha' => 'required|date',
             'observacion' => 'nullable|string|max:500',
@@ -65,9 +68,16 @@ class RecepcionProveedorSurmarController extends Controller
             return back()->withErrors($e->errors())->withInput();
         }
 
+        $nroOc = optional($recepcion->ordencompras)->numeroordencompra;
+
         return redirect()
             ->route('cargar_recepcion_proveedor_surmar', $recepcion->id)
-            ->with('mensaje', 'Recepción provisoria Nº '.$recepcion->numerorecepcion.'. Picá ítems; cada uno se graba al confirmar la línea.');
+            ->with(
+                'mensaje',
+                'Recepción provisoria Nº '.$recepcion->numerorecepcion
+                .($nroOc ? ' (OC '.$nroOc.')' : '')
+                .'. Cargue ítems con lote/peso; cada línea se graba y emite etiqueta al aceptar.'
+            );
     }
 
     public function cargar(int $id)
@@ -88,8 +98,54 @@ class RecepcionProveedorSurmarController extends Controller
         return view('stock.recepcion_proveedor_surmar.cargar', [
             'recepcion' => $recepcion,
             'lineas' => $lineas,
+            'lineasOc' => $this->service->lineasOcPendientes($recepcion),
             'editable' => $recepcion->estado === Recepcion_Proveedor::ESTADO_BORRADOR,
             'empresa_id' => SurmarSupport::EMPRESA_ID,
+        ]);
+    }
+
+    public function apiBuscarOcPendientes(Request $request): JsonResponse
+    {
+        can('crear-recepcion-proveedor-surmar');
+        $consulta = $request->query('q');
+        $consulta = is_string($consulta) ? trim($consulta) : null;
+
+        return response()->json(
+            RecepcionProveedorSurmarOcSupport::buscarPendientes($consulta !== '' ? $consulta : null)
+        );
+    }
+
+    public function apiPrecargaOc(Request $request): JsonResponse
+    {
+        can('crear-recepcion-proveedor-surmar');
+
+        $ordencompraId = (int) $request->input('ordencompra_id', 0);
+        $numeroOc = (int) $request->input('numero_oc', 0);
+
+        try {
+            if ($ordencompraId > 0) {
+                $data = RecepcionProveedorSurmarOcSupport::resolver($ordencompraId, true);
+            } elseif ($numeroOc > 0) {
+                $data = RecepcionProveedorSurmarOcSupport::resolverPorNumero($numeroOc, true);
+            } else {
+                return response()->json(['error' => 'Indique número de OC o selecciónela del listado.'], 422);
+            }
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        $oc = $data['cabecera'];
+
+        return response()->json([
+            'ordencompra_id' => $oc->id,
+            'numeroordencompra' => $oc->numeroordencompra,
+            'empresa_id' => $oc->empresa_id,
+            'centrocosto_id' => $oc->centrocosto_id,
+            'proveedor_id' => $oc->proveedor_id,
+            'proveedor_nombre' => optional($oc->proveedores)->nombre,
+            'proveedor_codigo' => optional($oc->proveedores)->codigo,
+            'empresa_nombre' => optional($oc->empresas)->nombre,
+            'lineas' => $data['lineas'],
         ]);
     }
 
@@ -98,6 +154,7 @@ class RecepcionProveedorSurmarController extends Controller
         can('editar-recepcion-proveedor-surmar');
 
         $data = $request->validate([
+            'ordencompra_articulo_id' => 'required|integer|min:1',
             'articulo_id' => 'required|integer|min:1',
             'lote_proveedor' => 'required|string|max:30',
             'certificado' => 'nullable|string|max:30',
@@ -117,9 +174,12 @@ class RecepcionProveedorSurmarController extends Controller
             return response()->json(['ok' => false, 'errors' => $e->errors()], 422);
         }
 
+        $recepcion = $this->service->buscar($id);
+
         return response()->json([
             'ok' => true,
             'linea' => $this->service->lineaPayload($result['linea']),
+            'lineas_oc' => $this->service->lineasOcPendientes($recepcion),
             'etiqueta_id' => $result['etiqueta']->id,
             'zpl' => ! empty($data['imprimir']) ? $result['zpl'] : null,
             'mensaje' => 'Ítem grabado '.$result['linea']->hora_piqueo.' — etiqueta #'.$result['etiqueta']->id,
@@ -136,7 +196,12 @@ class RecepcionProveedorSurmarController extends Controller
             return response()->json(['ok' => false, 'errors' => $e->errors()], 422);
         }
 
-        return response()->json(['ok' => true]);
+        $recepcion = $this->service->buscar($id);
+
+        return response()->json([
+            'ok' => true,
+            'lineas_oc' => $this->service->lineasOcPendientes($recepcion),
+        ]);
     }
 
     public function confirmar(int $id)

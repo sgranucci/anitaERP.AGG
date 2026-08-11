@@ -408,33 +408,35 @@ class CertificadoSenasaSurmarService
     }
 
     /**
-     * Resolver etiqueta por ID (barcode Surmar) para el workbench.
+     * Resolver etiqueta por ID ERP o barcode Anita (nint-nap / sku-nint-nap).
      *
      * @return array<string, mixed>
      */
-    public function resolverEtiqueta(int $etiquetaId): array
+    public function resolverEtiqueta(string|int $codigo): array
     {
-        $eti = Stock_Etiqueta::query()
-            ->with('articulos')
-            ->where('empresa_id', SurmarSupport::EMPRESA_ID)
-            ->whereKey($etiquetaId)
-            ->first();
-        if (! $eti) {
-            throw ValidationException::withMessages(['etiqueta_id' => 'Etiqueta no encontrada.']);
-        }
+        $raw = trim((string) $codigo);
+        $resolved = \App\Support\Stock\Surmar\SurmarEtiquetaLookupSupport::resolver(
+            $raw,
+            SurmarSupport::EMPRESA_ID,
+            soloDisponible: false,
+            rechazarAnulada: true,
+        );
+        $p = $resolved['payload'];
 
         return [
-            'etiqueta_id' => $eti->id,
-            'articulo_id' => $eti->articulo_id,
-            'sku' => $eti->articulos->sku ?? '',
-            'descripcion' => $eti->articulos->descripcion ?? $eti->descripcion_snapshot,
-            'peso_neto' => (float) $eti->peso_neto,
-            'peso_bruto' => (float) $eti->peso_bruto,
-            'cant_pieza' => (float) $eti->cant_pieza,
-            'lote_proveedor' => $eti->lote_proveedor,
-            'estado' => $eti->estado,
-            'grupocarne' => (int) ($eti->articulos->grupocarne ?? 0),
-            'tipocarne' => (int) ($eti->articulos->tipocarne ?? 0),
+            'etiqueta_id' => $p['etiqueta_id'],
+            'articulo_id' => $p['articulo_id'],
+            'sku' => $p['sku'],
+            'descripcion' => $p['descripcion'],
+            'peso_neto' => $p['peso_neto'],
+            'peso_bruto' => $p['peso_bruto'],
+            'cant_pieza' => $p['cant_pieza'],
+            'lote_proveedor' => $p['lote_proveedor'],
+            'estado' => $p['estado'],
+            'grupocarne' => $p['grupocarne'],
+            'tipocarne' => $p['tipocarne'],
+            'anita_nro_interno' => $p['anita_nro_interno'],
+            'anita_nro_apertura' => $p['anita_nro_apertura'],
         ];
     }
 

@@ -4,6 +4,7 @@ namespace App\Services\Stock;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Stock\MovimientoStockRepositoryInterface;
 use App\Services\Stock\Articulo_MovimientoService;
+use App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Repositories\Ventas\PedidoRepositoryInterface;
 use App\Repositories\Ventas\Pedido_ArticuloRepositoryInterface;
@@ -183,6 +184,9 @@ class MovimientoStockService
 				// Borra los registros de movimientos antes de grabar nuevamente
 				if ($funcion == 'update')
 				{
+					// Surmar: revertir piqueo (consumos/hijas) antes de borrar líneas AM
+					app(MovimientoStockSurmarEtiquetaService::class)
+						->revertirEtiquetasPorMovimientos([(int) $movimientostock_id]);
 					$this->articulo_movimientoService->deletePorMovimientoStockId($movimientostock_id);
 				}
 				$articulos = $this->normalizarArrayLineasFormulario($data['articulos_id'] ?? []);
@@ -373,17 +377,26 @@ class MovimientoStockService
 				$ctamovSincronizadoEnEdicion = (bool) ($resultadoAsiento['ctamov_sincronizado_edicion'] ?? false);
 				$movimientoIdCtamovResync = $ctamovSincronizadoEnEdicion ? $movimientostock_id : null;
 
-				if ($funcion === 'create' && $movimientostock_id > 0) {
-					BajaNpuMovimientoStockSupport::procesarDespuesDeGrabar(
-						(int) $movimientostock_id,
-						$data,
-						$tipotransaccion,
-					);
-					AltaNpuMovimientoStockSupport::procesarDespuesDeGrabar(
-						(int) $movimientostock_id,
-						$data,
-						$tipotransaccion,
-					);
+				if (in_array($funcion, ['create', 'update'], true) && $movimientostock_id > 0) {
+					if ($funcion === 'create') {
+						BajaNpuMovimientoStockSupport::procesarDespuesDeGrabar(
+							(int) $movimientostock_id,
+							$data,
+							$tipotransaccion,
+						);
+						AltaNpuMovimientoStockSupport::procesarDespuesDeGrabar(
+							(int) $movimientostock_id,
+							$data,
+							$tipotransaccion,
+						);
+					}
+
+					$movFresh = MovimientoStock::query()->find($movimientostock_id);
+					if ($movFresh) {
+						$surmarStats = app(MovimientoStockSurmarEtiquetaService::class)
+							->procesarDespuesDeGrabar($movFresh, $tipotransaccion, $data, $funcion);
+						$data['_surmar_etiquetas'] = $surmarStats;
+					}
 				}
 			}
 
@@ -447,6 +460,17 @@ class MovimientoStockService
 			$resultado['mensaje'] = 'Movimiento de stock creado con éxito. NPUs generados: '
 				.implode(', ', $resultado['npus_generados']).'.';
 		}
+		$surmar = $data['_surmar_etiquetas'] ?? null;
+		if (is_array($surmar) && (int) ($surmar['consumos'] ?? 0) > 0) {
+			$resultado['surmar_etiquetas'] = $surmar;
+			$resultado['surmar_hijas_ids'] = array_values(array_map('intval', $surmar['hijas_ids'] ?? []));
+			$extra = ' Surmar: '.$surmar['consumos'].' etiqueta(s) consumida(s)';
+			if ((int) ($surmar['etiquetas_hijas'] ?? 0) > 0) {
+				$extra .= ', '.$surmar['etiquetas_hijas'].' etiqueta(s) nueva(s)';
+			}
+			$extra .= '.';
+			$resultado['mensaje'] = ($resultado['mensaje'] ?? 'Movimiento de stock creado con éxito').$extra;
+		}
 
 		return $resultado;
 	}
@@ -472,6 +496,9 @@ class MovimientoStockService
 			if ((int) ($movimiento->asiento_id ?? 0) > 0) {
 				$this->asientoService->anularAsiento($movimiento);
 			}
+
+			app(MovimientoStockSurmarEtiquetaService::class)
+				->revertirEtiquetasPorMovimientos([(int) $id]);
 
 			$this->articulo_movimientoService->deletePorMovimientoStockId($id);
 			$movimientostock = $this->movimientostockRepository->deletePorId($id);

@@ -37,7 +37,23 @@ function parsearHtmlConsultaProveedor(respuesta) {
     }
 }
 
+function empresaIdConsultaProveedor() {
+    var $emp = $('#empresa_id');
+    if (!$emp.length) {
+        return '';
+    }
+    var v = parseInt(String($emp.val() || '0'), 10);
+    return v > 0 ? String(v) : '';
+}
+
 function buscar_datos_proveedor(consulta) {
+    var payload = {
+        consulta: consulta
+    };
+    var empresaId = empresaIdConsultaProveedor();
+    if (empresaId !== '') {
+        payload.empresa_id = empresaId;
+    }
     $.ajax({
         url: carpetaBase + '/compras/proveedor/consultaproveedor',
         type: 'POST',
@@ -45,9 +61,7 @@ function buscar_datos_proveedor(consulta) {
         headers: {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
         },
-        data: {
-            consulta: consulta
-        },
+        data: payload,
     })
         .done(function (respuesta) {
             $('#datosproveedor').html(parsearHtmlConsultaProveedor(respuesta));
@@ -213,6 +227,10 @@ function leeUnProveedor(proveedorId, codigoproveedor) {
         url = carpetaBase + '/compras/leerproveedor/' + proveedorId;
     } else if (codigoproveedor !== undefined && codigoproveedor !== null && String(codigoproveedor).trim() !== '') {
         url = carpetaBase + '/compras/leerproveedorporcodigo/' + encodeURIComponent(String(codigoproveedor).trim());
+        var empresaId = empresaIdConsultaProveedor();
+        if (empresaId !== '') {
+            url += (url.indexOf('?') >= 0 ? '&' : '?') + 'empresa_id=' + encodeURIComponent(empresaId);
+        }
     } else {
         limpiarProveedorEnPantalla();
         return;

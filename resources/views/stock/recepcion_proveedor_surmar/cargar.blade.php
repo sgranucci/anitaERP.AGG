@@ -6,20 +6,22 @@ Recepción Surmar Nº {{ $recepcion->numerorecepcion }}
 @section('scripts')
 <style>
     .surmar-wb thead th { background:#85C1E9; color:#17202A; }
-    .surmar-wb .hora-piqueo { font-variant-numeric: tabular-nums; font-weight: 600; color: #1B4F72; }
+    .surmar-wb .hora-carga { font-variant-numeric: tabular-nums; font-weight: 600; color: #1B4F72; }
     .surmar-wb-sticky {
         position: sticky; bottom: 0; z-index: 20;
         background: #fff; border-top: 2px solid #85C1E9;
         box-shadow: 0 -4px 12px rgba(23,32,42,.1); padding: .75rem 1rem;
     }
     .surmar-estado-vivo { font-size: .85rem; }
+    #tabla-oc-pendientes-surmar tbody tr.js-oc-elegida { background: #D6EAF8; }
+    #tabla-oc-pendientes-surmar tbody tr { cursor: pointer; }
 </style>
-<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script>
 window.SURMAR_RECEPCION = {
     id: {{ (int) $recepcion->id }},
     editable: @json((bool) $editable),
     lineas: @json($lineas),
+    lineasOc: @json($lineasOc ?? []),
     urls: {
         guardarLinea: @json(route('api_guardar_linea_recepcion_proveedor_surmar', $recepcion->id)),
         eliminarLinea: @json(url('stock/recepcion-proveedor-surmar/'.$recepcion->id.'/linea')),
@@ -33,6 +35,10 @@ window.SURMAR_RECEPCION = {
 @endsection
 
 @section('contenido')
+@php
+    $oc = $recepcion->ordencompras;
+    $puedeConsultarOc = $oc && (can('editar-ordencompra', false) || can('listar-ordencompra', false));
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -40,7 +46,7 @@ window.SURMAR_RECEPCION = {
         <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">
-                    <i class="fa fa-barcode"></i>
+                    <i class="fa fa-truck"></i>
                     Recepción Surmar Nº {{ $recepcion->numerorecepcion }}
                     @if ($recepcion->estado === 'BORRADOR')
                         <span class="badge badge-warning ml-2">Provisorio</span>
@@ -56,29 +62,66 @@ window.SURMAR_RECEPCION = {
             </div>
             <div class="card-body">
                 <div class="row mb-3">
-                    <div class="col-md-3"><strong>Fecha:</strong> {{ optional($recepcion->fecha)->format('d/m/Y') }}</div>
+                    <div class="col-md-2"><strong>Fecha:</strong> {{ optional($recepcion->fecha)->format('d/m/Y') }}</div>
+                    <div class="col-md-2">
+                        <strong>OC:</strong>
+                        @if ($oc)
+                            @if ($puedeConsultarOc)
+                                <a href="{{ route('editar_ordencompra', ['id' => $oc->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                   class="text-primary" target="_blank" rel="noopener">{{ $oc->numeroordencompra }}</a>
+                            @else
+                                {{ $oc->numeroordencompra }}
+                            @endif
+                        @else
+                            —
+                        @endif
+                    </div>
                     <div class="col-md-4"><strong>Proveedor:</strong> {{ $recepcion->proveedores->nombre ?? '—' }}</div>
-                    <div class="col-md-3"><strong>Depósito:</strong> {{ $recepcion->depositos->nombre ?? $recepcion->depositos->descripcion ?? '—' }}</div>
+                    <div class="col-md-2"><strong>Depósito:</strong> {{ $recepcion->depositos->nombre ?? $recepcion->depositos->descripcion ?? '—' }}</div>
                     <div class="col-md-2 surmar-estado-vivo text-right">
-                        <span id="surmar-msg-vivo" class="text-muted">Listo para picar</span>
+                        <span id="surmar-msg-vivo" class="text-muted">Listo para cargar ítems</span>
                     </div>
                 </div>
+
+                @if (!empty($lineasOc) || $editable)
+                <div class="card card-outline card-info mb-3">
+                    <div class="card-header py-2">
+                        <strong>Líneas OC pendientes</strong>
+                        <span class="text-muted small ml-1">— elija una línea (como Anita al asignar pedido) y complete lote/pesos</span>
+                    </div>
+                    <div class="card-body p-0 table-responsive">
+                        <table class="table table-sm table-bordered table-hover mb-0 surmar-wb" id="tabla-oc-pendientes-surmar">
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    <th>SKU</th>
+                                    <th>Descripción</th>
+                                    <th class="text-right">Pedida</th>
+                                    <th class="text-right">Recibida</th>
+                                    <th class="text-right">Pendiente</th>
+                                    <th class="text-right">Precio</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                @endif
 
                 @if ($editable)
                 <div class="card card-outline card-info mb-3">
                     <div class="card-header py-2"><strong>Nuevo ítem</strong> — al aceptar se graba al instante y se emite etiqueta</div>
                     <div class="card-body">
                         <input type="hidden" id="empresa_id" value="{{ $empresa_id }}">
+                        <input type="hidden" id="ordencompra_articulo_id" value="">
+                        <input type="hidden" id="articulo_id" value="">
+                        <input type="hidden" id="precio_oc" value="">
                         <div class="form-row">
                             <div class="form-group col-md-4">
-                                <label class="control-label">Artículo</label>
+                                <label class="control-label">Artículo (desde OC)</label>
                                 <div class="input-group input-group-sm">
-                                    <input type="hidden" id="articulo_id" class="articulo_id">
-                                    <input type="text" id="codigoarticulo" class="form-control codigoarticulo" placeholder="SKU" style="max-width:7rem;">
-                                    <input type="text" id="descripcionarticulo" class="form-control descripcionarticulo" placeholder="Descripción" readonly>
-                                    <div class="input-group-append">
-                                        <button type="button" class="btn btn-outline-secondary consultaarticulo" title="Consultar artículos (F1)"><i class="fa fa-search"></i></button>
-                                    </div>
+                                    <input type="text" id="codigoarticulo" class="form-control" placeholder="SKU" style="max-width:7rem;" readonly>
+                                    <input type="text" id="descripcionarticulo" class="form-control" placeholder="Elija una línea OC" readonly>
                                 </div>
                             </div>
                             <div class="form-group col-md-2">
@@ -120,7 +163,7 @@ window.SURMAR_RECEPCION = {
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <th>Hora piqueo</th>
+                                <th>Hora carga</th>
                                 <th>SKU</th>
                                 <th>Descripción</th>
                                 <th>Lote</th>
@@ -163,7 +206,6 @@ window.SURMAR_RECEPCION = {
         </div>
     </div>
 </div>
-@include('includes.stock.modalconsultaarticulo')
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'surmar-overlay',
     'tituloId' => 'surmar-overlay-titulo',

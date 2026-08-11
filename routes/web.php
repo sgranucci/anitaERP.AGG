@@ -1240,6 +1240,9 @@ Route::match(['get', 'post'], 'stock/movimientostock/preview-asiento', 'Stock\Mo
 Route::match(['get', 'post'], 'stock/movimientostock/preview-conversion-formula', 'Stock\MovimientoStockController@previewConversionFormula')->name('preview_conversion_formula_movimientostock');
 Route::get('stock/movimientostock/api/saldo-articulo', 'Stock\MovimientoStockController@saldoArticuloDeposito')->name('movimientostock_saldo_articulo');
 Route::get('stock/movimientostock/api/precio-linea', 'Stock\MovimientoStockController@precioLineaArticulo')->name('movimientostock_precio_linea');
+Route::post('stock/movimientostock/api/resolver-etiqueta-surmar', 'Stock\MovimientoStockController@resolverEtiquetaSurmar')->name('movimientostock_resolver_etiqueta_surmar');
+Route::post('stock/movimientostock/api/zpl-etiquetas-surmar', 'Stock\MovimientoStockController@zplEtiquetasSurmarBatch')->name('movimientostock_zpl_etiquetas_surmar');
+Route::get('stock/movimientostock/etiqueta-surmar/{etiquetaId}/zpl', 'Stock\MovimientoStockController@imprimirEtiquetaSurmar')->name('movimientostock_etiqueta_surmar_zpl');
 Route::get('stock/movimientostock/api/resolver-npu-baja', 'Stock\MovimientoStockController@resolverNpuBaja')->name('movimientostock_resolver_npu_baja');
 Route::post('stock/movimientostock/consulta-npu-baja', 'Stock\MovimientoStockController@consultaNpuBaja')->name('movimientostock_consulta_npu_baja');
 Route::match(['get', 'post'], 'stock/movimientostock/{id}/preview-asiento', 'Stock\MovimientoStockController@previewAsientoContable')->name('preview_asiento_movimientostock');
@@ -1344,6 +1347,8 @@ Route::post('configuracion/recepcion-proveedor/tolerancias', 'Configuracion\Conf
 Route::get('stock/recepcion-proveedor-surmar', 'Stock\RecepcionProveedorSurmarController@index')->name('recepcion_proveedor_surmar');
 Route::get('stock/recepcion-proveedor-surmar/crear', 'Stock\RecepcionProveedorSurmarController@crear')->name('crear_recepcion_proveedor_surmar');
 Route::post('stock/recepcion-proveedor-surmar', 'Stock\RecepcionProveedorSurmarController@guardar')->name('guardar_recepcion_proveedor_surmar');
+Route::get('stock/recepcion-proveedor-surmar/api/buscar-oc-pendientes', 'Stock\RecepcionProveedorSurmarController@apiBuscarOcPendientes')->name('recepcion_proveedor_surmar_buscar_oc_pendientes');
+Route::get('stock/recepcion-proveedor-surmar/api/precarga-oc', 'Stock\RecepcionProveedorSurmarController@apiPrecargaOc')->name('recepcion_proveedor_surmar_precarga_oc');
 Route::get('stock/recepcion-proveedor-surmar/{id}/cargar', 'Stock\RecepcionProveedorSurmarController@cargar')->name('cargar_recepcion_proveedor_surmar');
 Route::post('stock/recepcion-proveedor-surmar/{id}/linea', 'Stock\RecepcionProveedorSurmarController@apiGuardarLinea')->name('api_guardar_linea_recepcion_proveedor_surmar');
 Route::delete('stock/recepcion-proveedor-surmar/{id}/linea/{lineaId}', 'Stock\RecepcionProveedorSurmarController@apiEliminarLinea')->name('api_eliminar_linea_recepcion_proveedor_surmar');

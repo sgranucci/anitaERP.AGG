@@ -112,6 +112,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     public function create(array $data)
     {
 		$data = \App\Support\Compras\ProveedorImpuestosRetencionRules::normalizar($data);
+		$data = $this->normalizarEmpresaId($data);
 
 		$data['codigo'] = $this->resolverCodigoAlta($data);
 
@@ -138,6 +139,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     public function update(array $data, $id)
     {
 		$data = \App\Support\Compras\ProveedorImpuestosRetencionRules::normalizar($data);
+		$data = $this->normalizarEmpresaId($data);
 
         $proveedor = $this->model->findOrFail($id)
             ->update($data);
@@ -203,9 +205,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 									->where('nroinscripcion', $numerodocumento)->get();
     }
 
-    public function findPorCodigo($codigo)
+    public function findPorCodigo($codigo, ?int $empresaId = null)
     {
-        return $this->model->with("proveedor_exclusiones")
+        $query = $this->model->with("proveedor_exclusiones")
 									->with("proveedor_archivos")
 									->with("proveedor_formapagos")
 									->with("tipossuspensionproveedores")
@@ -221,7 +223,13 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 									->with("retencionsusss")
 									->with("conceptogastos")
 									->with("centrocostocompras")
-									->where('codigo',$codigo)->first();
+									->where('codigo',$codigo);
+
+        if (config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0) {
+            $query->paraEmpresa($empresaId);
+        }
+
+        return $query->first();
     }
 
     public function findOrFail($id)
@@ -300,7 +308,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
      *     dry_run: bool
      * }
      */
-    public function resincronizarDesdeAnita(bool $dryRun = false): array
+    public function resincronizarDesdeAnita(bool $dryRun = false, ?int $empresaId = null): array
     {
         ini_set('max_execution_time', '0');
         ini_set('memory_limit', '512M');
@@ -351,7 +359,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             }
 
             try {
-                $resultado = $this->traerRegistroDeAnita($codigoAnita);
+                $resultado = $this->traerRegistroDeAnita($codigoAnita, null, $empresaId);
                 if ($resultado === 'insertado') {
                     $stats['insertados']++;
                 } elseif ($resultado === 'actualizado') {
@@ -379,21 +387,73 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         return $stats;
     }
 
-    public function sincronizarConAnita(){
-		$this->resincronizarDesdeAnita(false);
+    public function sincronizarConAnita(?int $empresaId = null){
+		$this->resincronizarDesdeAnita(false, $empresaId);
     }
 
     /**
      * @return 'insertado'|'actualizado'|null
      */
-    public function traerRegistroDeAnita(string $codigoAnita, ?bool $fl_crea_registro = null): ?string
+    /**
+     * Campos promae legibles en Anita.
+     * Surmar/Bierzo (filtro_empresa): sin columnas AGG (cta_me, cc_default, ag_perc_*, etc.).
+     */
+    private function camposPromaeLecturaAnita(): string
     {
-        $key = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge($codigoAnita);
-        $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->tableAnita[0], 
-			'sistema' => 'compras',
-            'campos' => '
+        if (config('proveedor.filtro_empresa')) {
+            return '
+				prom_proveedor,
+				prom_nombre,
+				prom_contacto,
+				prom_direccion,
+				prom_localidad,
+				prom_cod_postal,
+				prom_provincia,
+				prom_telefono,
+				prom_cuit,
+				prom_cond_iva,
+				prom_letra,
+				prom_cond_pago,
+				prom_cta_contable,
+				prom_credito,
+				prom_dias_atraso,
+				prom_nro_interno,
+				prom_agente_ret,
+				prom_cond_gan,
+				prom_incl_impuesto,
+				prom_cond_compra,
+				prom_cond_entrega,
+				prom_tipo_empresa,
+				prom_prov_vario,
+				prom_retiene_iva,
+				prom_cod_retgan,
+				prom_cod_retiva,
+				prom_a_nombre_de,
+				prom_ret_suss,
+				prom_ret_ibr,
+				prom_nro_ret_ibr,
+				prom_nro_reemp_ib,
+				prom_excl_retiva,
+				prom_pais,
+				prom_fecha_alta,
+				prom_estado_pro,
+				prom_fantasia,
+				prom_regimen,
+				prom_fecha_excl,
+				prom_excl_retgan,
+				prom_fecha_exclrg,
+				prom_cod_localidad,
+				prom_tipo_emp_alfa,
+				prom_e_mail,
+				prom_fax,
+				prom_fecha_boletin,
+				prom_ret_ibr_bsas,
+				prom_emite_cert,
+				prom_nro_estab
+			';
+        }
+
+        return '
 				prom_proveedor ,
 				prom_nombre,
 				prom_contacto,
@@ -452,7 +512,43 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				prom_fe_ini_exclib,
 				prom_ag_perc_ib,
 				prom_ag_perc_iva
-			',
+			';
+    }
+
+    private function normalizarFilaPromaeAnita(object $data): object
+    {
+        $defaults = [
+            'prom_cod_ret_suss' => 0,
+            'prom_cta_cont_me' => 0,
+            'prom_cta_default' => 0,
+            'prom_cc_default' => 0,
+            'prom_concepto' => 0,
+            'prom_descuento' => 0,
+            'prom_fecha_exclib' => 0,
+            'prom_excl_retib' => 0,
+            'prom_fe_ini_excl' => 0,
+            'prom_fe_ini_exclrg' => 0,
+            'prom_fe_ini_exclib' => 0,
+            'prom_ag_perc_ib' => 'N',
+            'prom_ag_perc_iva' => 'N',
+        ];
+        foreach ($defaults as $campo => $valor) {
+            if (! isset($data->{$campo})) {
+                $data->{$campo} = $valor;
+            }
+        }
+
+        return $data;
+    }
+
+    public function traerRegistroDeAnita(string $codigoAnita, ?bool $fl_crea_registro = null, ?int $empresaId = null): ?string
+    {
+        $key = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge($codigoAnita);
+        $apiAnita = new ApiAnita();
+        $data = array( 
+            'acc' => 'list', 'tabla' => $this->tableAnita[0], 
+			'sistema' => 'compras',
+            'campos' => $this->camposPromaeLecturaAnita(),
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
@@ -468,17 +564,22 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         );
         $dataleyAnita = json_decode($apiAnita->apiCall($data));
 
-		$data = array( 
-            'acc' => 'list', 'tabla' => 'promadic', 
-			'sistema' => 'compras',
-            'campos' => '
-			proad_proveedor,
-    		proad_e_mail_oc,
-			proad_semaforo
-			',
-            'whereArmado' => " WHERE proad_proveedor = '".$key."' " 
-        );
-        $dataAdicionalAnita = json_decode($apiAnita->apiCall($data));
+		// Surmar: promadic/proexcl/propago no están alineados o no existen; el bridge puede
+		// devolver filas ajenas si el WHERE no aplica. Solo leerlas en esquema AGG.
+		$dataAdicionalAnita = [];
+		if (! config('proveedor.filtro_empresa')) {
+			$data = array(
+				'acc' => 'list', 'tabla' => 'promadic',
+				'sistema' => 'compras',
+				'campos' => '
+				proad_proveedor,
+				proad_e_mail_oc,
+				proad_semaforo
+				',
+				'whereArmado' => " WHERE proad_proveedor = '".$key."' ",
+			);
+			$dataAdicionalAnita = json_decode($apiAnita->apiCall($data));
+		}
 
 		$usuario_id = Auth::id() ?? (int) (Usuario::query()->orderBy('id')->value('id') ?? 1);
 
@@ -486,8 +587,20 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             return null;
         }
 
+        if (! is_array($dataleyAnita)) {
+            $dataleyAnita = [];
+        }
+        if (! is_array($dataAdicionalAnita)) {
+            $dataAdicionalAnita = [];
+        }
+		// Descartar adicionales de otro proveedor (bridge Surmar).
+		if (isset($dataAdicionalAnita[0])
+			&& ProveedorExclusionAnitaSupport::codigoAnitaParaBridge((string) ($dataAdicionalAnita[0]->proad_proveedor ?? '')) !== $key) {
+			$dataAdicionalAnita = [];
+		}
+
         if (isset($dataAnita)) {
-            $data = $dataAnita[0];
+            $data = $this->normalizarFilaPromaeAnita($dataAnita[0]);
             $codigoErp = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita((string) $data->prom_proveedor);
             if ($fl_crea_registro === null) {
                 $fl_crea_registro = ! $this->existeProveedorPorCodigo($codigoErp);
@@ -516,7 +629,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			if ($tipoempresa)
 				$tipoempresa_id = $tipoempresa->id;
 			else
-				$tipoempresa_id = 1;
+				$tipoempresa_id = null;
 						
 			$cuenta = $this->cuentacontableRepository->findPorCodigo(1, $data->prom_cta_contable);
 			if ($cuenta)
@@ -535,12 +648,25 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				$cuentacontablecompra_id = $cuenta->id;
 			else
 				$cuentacontablecompra_id = NULL;
+
+			// proveedor.cuentacontable_id es NOT NULL: fallback a la cuenta hallada o primera disponible.
+			if (empty($cuentacontable_id)) {
+				$cuentacontable_id = $cuentacontableme_id
+					?: $cuentacontablecompra_id
+					?: (int) (\App\Models\Contable\Cuentacontable::query()->orderBy('id')->value('id') ?? 0);
+				if ($cuentacontable_id <= 0) {
+					$cuentacontable_id = null;
+				}
+			}
+			if (empty($cuentacontableme_id)) {
+				$cuentacontableme_id = $cuentacontable_id;
+			}
 				
 			$centrocosto = $this->centrocostoRepository->findPorCodigo($data->prom_cc_default);
 			if ($centrocosto)
 				$centrocostocompra_id = $centrocosto->id;
 			else
-				$centrocostocompra_id = 1;
+				$centrocostocompra_id = null;
 				
 			$condicioniva_id = 1;
 			switch($data->prom_cond_iva)
@@ -692,6 +818,12 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				case 'V':
 					$tipoServicio_id = 3; // Eventual
 			}
+			if (! \App\Models\Compras\Tiposervicio_Proveedor::query()->whereKey($tipoServicio_id)->exists()) {
+				$tipoServicio_id = (int) (\App\Models\Compras\Tiposervicio_Proveedor::query()->orderBy('id')->value('id') ?? 0);
+				if ($tipoServicio_id <= 0) {
+					$tipoServicio_id = null;
+				}
+			}
 
 			// Lee las leyendas
 			$leyenda = "";
@@ -741,6 +873,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				"tiposervicio_proveedor_id" => $tipoServicio_id,
 				"usuario_id" => $usuario_id,
             	];
+
+			if (config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0) {
+				$arr_campos['empresa_id'] = $empresaId;
+			}
 	
 			if ($fl_crea_registro) {
             	$proveedor = $this->model->create($arr_campos);
@@ -751,6 +887,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
                     $proveedor = $this->model->create($arr_campos);
                     $resultado = 'insertado';
                 } else {
+					// En update no pisar empresa_id salvo que se pida explícitamente.
+					if (! array_key_exists('empresa_id', $arr_campos)) {
+						unset($arr_campos['empresa_id']);
+					}
                     $proveedor->update($arr_campos);
                     $proveedor = $proveedor->fresh();
                     $resultado = 'actualizado';
@@ -771,11 +911,16 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
     private function consultarPromaeAnita(ApiAnita $apiAnita, string $key): ?object
     {
-        $data = [
-            'acc' => 'list',
-            'tabla' => $this->tableAnita[0],
-            'sistema' => 'compras',
-            'campos' => '
+        $campos = config('proveedor.filtro_empresa')
+            ? '
+				prom_proveedor,
+				prom_nombre,
+				prom_excl_retiva,
+				prom_fecha_excl,
+				prom_excl_retgan,
+				prom_fecha_exclrg
+			'
+            : '
 				prom_proveedor,
 				prom_nombre,
 				prom_excl_retiva,
@@ -787,12 +932,18 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				prom_excl_retib,
 				prom_fecha_exclib,
 				prom_fe_ini_exclib
-			',
+			';
+        $data = [
+            'acc' => 'list',
+            'tabla' => $this->tableAnita[0],
+            'sistema' => 'compras',
+            'campos' => $campos,
             'whereArmado' => " WHERE {$this->keyFieldAnita} = '{$key}' ",
         ];
         $filas = ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
+        $fila = $filas[0] ?? null;
 
-        return $filas[0] ?? null;
+        return $fila ? $this->normalizarFilaPromaeAnita($fila) : null;
     }
 
     /**
@@ -800,6 +951,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
      */
     private function consultarProexclAnita(ApiAnita $apiAnita, string $key): array
     {
+        if (config('proveedor.filtro_empresa')) {
+            return [];
+        }
+
         $data = [
             'acc' => 'list',
             'tabla' => $this->tableAnita[2],
@@ -824,6 +979,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
      */
     private function consultarPropagoAnita(ApiAnita $apiAnita, string $key): array
     {
+        if (config('proveedor.filtro_empresa')) {
+            return [];
+        }
+
         $data = [
             'acc' => 'list',
             'tabla' => $this->tableAnita[3],
@@ -1800,6 +1959,32 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		}		
 	}
 
+	/**
+	 * Con flag off ignora empresa_id del request; con flag on acepta null (= todas).
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	private function normalizarEmpresaId(array $data): array
+	{
+		if (! config('proveedor.filtro_empresa')) {
+			unset($data['empresa_id']);
+
+			return $data;
+		}
+
+		if (! array_key_exists('empresa_id', $data) || $data['empresa_id'] === '' || $data['empresa_id'] === null) {
+			$data['empresa_id'] = null;
+		} else {
+			$data['empresa_id'] = (int) $data['empresa_id'];
+			if ($data['empresa_id'] <= 0) {
+				$data['empresa_id'] = null;
+			}
+		}
+
+		return $data;
+	}
+
 	public function leeProveedor($filtros, $flPaginando = null)
     {
         ini_set('memory_limit', '-1');
@@ -1807,14 +1992,15 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
         if (is_string($filtros)) {
             $texto = trim($filtros);
-            $filtros = [
+            $filtros = array_merge(ProveedorListadoFiltros::filtrosVacios(), [
                 'modo' => ProveedorListadoFiltros::MODO_TODOS,
                 'campo' => 'nombre',
                 'operador' => 'contiene',
                 'valor' => $texto,
                 'valor_hasta' => '',
                 'busqueda' => $texto,
-            ];
+                'empresa_scope' => 'todas',
+            ]);
         } elseif (! is_array($filtros)) {
             $filtros = ProveedorListadoFiltros::filtrosVacios();
         }
@@ -1825,17 +2011,18 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 										'proveedor.nroinscripcion as numerodocumento',
                                         'proveedor.domicilio as domicilio',
 										'proveedor.codigo as codigo',
+                                        'proveedor.empresa_id as empresa_id',
+                                        'empresa.nombre as nombreempresa',
                                         'localidad.nombre as nombrelocalidad',
 										'provincia.nombre as nombreprovincia',
 										'proveedor.estado as estado',
                                         'proveedor.facturas_apocrifas as facturas_apocrifas',
                                         'proveedor.facturas_apocrifas_consulta_at as facturas_apocrifas_consulta_at')
                                 ->leftjoin('localidad', 'localidad.id', 'proveedor.localidad_id')
-								->leftjoin('provincia', 'provincia.id', 'proveedor.provincia_id');
+								->leftjoin('provincia', 'provincia.id', 'proveedor.provincia_id')
+                                ->leftJoin('empresa', 'empresa.id', '=', 'proveedor.empresa_id');
 
-        if (ProveedorListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            ProveedorListadoFiltros::aplicar($proveedor, $filtros);
-        }
+        ProveedorListadoFiltros::aplicar($proveedor, $filtros);
 
 		$proveedor = $proveedor->orderby('id', 'DESC');
 

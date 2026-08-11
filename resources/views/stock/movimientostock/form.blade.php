@@ -465,6 +465,8 @@
        	</table>
         </div>
 		@include('stock.movimientostock.template')
+        @include('stock.movimientostock.partials.panel_etiquetas_surmar')
+
         <div class="row mt-2">
         	<div class="col-md-8">
                	<div class="form-group mb-0">

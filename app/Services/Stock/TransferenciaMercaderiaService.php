@@ -12,6 +12,7 @@ use App\Models\Stock\Transferencia_Mercaderia_Token;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
+use App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\DepmaeControlStockSupport;
@@ -1367,6 +1368,12 @@ class TransferenciaMercaderiaService
             $manejaContabilidad,
             $tipo
         ) {
+            // Surmar TRA: liberar consumos (salida) y anular hijas (entrada) del original.
+            app(MovimientoStockSurmarEtiquetaService::class)->revertirEtiquetasPorMovimientos([
+                (int) ($transferencia->movimientostock_salida_id ?? 0),
+                (int) ($transferencia->movimientostock_entrada_id ?? 0),
+            ]);
+
             $revert = Transferencia_Mercaderia::create([
                 'codigo' => $codigoReverso,
                 'lote' => $lote,

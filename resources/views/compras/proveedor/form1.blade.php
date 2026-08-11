@@ -40,6 +40,17 @@
 				</div>
 			</div>
 			<div class="col-sm-6">
+				@if (\App\Support\Compras\ProveedorListadoFiltros::filtroEmpresaActivo())
+					@include('includes.form-empresa-asignada', [
+						'empresa_query' => $empresa_query ?? collect(),
+						'empresa_id' => old('empresa_id', $data->empresa_id ?? null),
+						'required' => false,
+						'permite_vacio' => true,
+						'opcion_vacia' => '-- Para todas las empresas --',
+						'col_label' => 'col-lg-3',
+						'col_input' => 'col-lg-8',
+					])
+				@endif
 				<div class="form-group row">
    					<label for="email" class="col-lg-3 col-form-label">Email</label>
    					<span class="input-group-text"><i class="fas fa-envelope"></i></span>

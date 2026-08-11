@@ -11,7 +11,9 @@ use App\Services\Stock\MovimientoStockAsientoService;
 use App\Services\Stock\MovimientoStockPdfService;
 use App\Services\Stock\MovimientoStockRevertirService;
 use App\Services\Stock\MovimientoStockService;
+use App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService;
 use App\Services\Stock\TransferenciaMercaderiaPdfService;
+use App\Support\Stock\SurmarSupport;
 use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Models\Contable\BienUso;
 use App\Models\Stock\Tipotransaccion_Stock;
@@ -228,14 +230,23 @@ class MovimientoStockController extends Controller
             $tipoStockId = (int) ($request->input('tipotransaccion_stock_id') ?: $request->input('tipotransaccion_id'));
 
             if ($this->requestEsTransferenciaStock($request)) {
+                $this->assertSurmarTraEtiquetasAntesDeGrabar($request, $tipoStockId);
+
                 $resultado = $this->grabarTransferenciaDesdeMovimientoStock($request);
                 if (! ($resultado['ok'] ?? false)) {
                     throw new \Exception($resultado['mensaje'] ?? 'No se pudo registrar la transferencia.');
                 }
 
+                $surmarFlash = $this->procesarSurmarTrasTransferencia($request, $tipoStockId, $resultado);
                 MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
 
-                return redirect('stock/movimientostock')->with('mensaje', $resultado['mensaje'] ?? 'Transferencia registrada.');
+                $redirect = redirect('stock/movimientostock')
+                    ->with('mensaje', ($resultado['mensaje'] ?? 'Transferencia registrada.').($surmarFlash['mensaje_extra'] ?? ''));
+                if (! empty($surmarFlash['hijas_ids'])) {
+                    $redirect->with('surmar_imprimir_etiquetas', $surmarFlash['hijas_ids']);
+                }
+
+                return $redirect;
             }
 
             $data = $this->movimientoStockService->guardaMovimientoStock($request->all(), 'create');
@@ -243,13 +254,23 @@ class MovimientoStockController extends Controller
 				$mensaje = $data['mensaje'] ?? 'Movimiento de stock creado con éxito';
                 MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
 
-                return redirect('stock/movimientostock')->with('mensaje', $mensaje);
+                $redirect = redirect('stock/movimientostock')->with('mensaje', $mensaje);
+                $hijas = $data['surmar_hijas_ids'] ?? [];
+                if (is_array($hijas) && $hijas !== [] && $request->boolean('imprimir_etiquetas_surmar', true)) {
+                    $redirect->with('surmar_imprimir_etiquetas', array_values(array_map('intval', $hijas)));
+                }
+
+                return $redirect;
 			}
 
             if ($data) {
                 return redirect()->back()->withInput()->with('mensaje', $data);
             }
-		} catch (\Exception $e)
+		} catch (\Illuminate\Validation\ValidationException $e) {
+            $msg = collect($e->errors())->flatten()->first() ?: $e->getMessage();
+
+            return redirect()->back()->withInput()->with('mensaje', $msg);
+        } catch (\Exception $e)
 		{
 			return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
 		}
@@ -515,6 +536,126 @@ class MovimientoStockController extends Controller
         return response()->json([
             'saldo' => $saldo,
         ]);
+    }
+
+    public function resolverEtiquetaSurmar(Request $request, MovimientoStockSurmarEtiquetaService $surmarEtiquetas): JsonResponse
+    {
+        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+            return response()->json(['ok' => false, 'message' => 'No tiene permisos.'], 403);
+        }
+
+        $empresaId = (int) $request->input('empresa_id', SurmarSupport::EMPRESA_ID);
+        $codigo = trim((string) $request->input('codigo', $request->input('etiqueta', '')));
+        if ($codigo === '') {
+            return response()->json(['ok' => false, 'message' => 'Indique ID o código de etiqueta.'], 422);
+        }
+
+        try {
+            $etiqueta = $surmarEtiquetas->resolverEscaneo($codigo, $empresaId, true);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $msg = collect($e->errors())->flatten()->first() ?: 'Etiqueta inválida.';
+
+            return response()->json(['ok' => false, 'message' => $msg, 'errors' => $e->errors()], 422);
+        }
+
+        return response()->json(['ok' => true, 'etiqueta' => $etiqueta]);
+    }
+
+    public function imprimirEtiquetaSurmar(int $etiquetaId, MovimientoStockSurmarEtiquetaService $surmarEtiquetas)
+    {
+        if (! can('crear-movimientos-de-stock', false)
+            && ! can('editar-movimientos-de-stock', false)
+            && ! can('listar-trazabilidad-surmar', false)) {
+            abort(403);
+        }
+
+        try {
+            $zpl = $surmarEtiquetas->zplParaEtiqueta($etiquetaId);
+        } catch (\Throwable $e) {
+            abort(404, $e->getMessage());
+        }
+
+        return response($zpl, 200, [
+            'Content-Type' => 'text/plain; charset=UTF-8',
+            'Content-Disposition' => 'inline; filename="etiqueta_'.$etiquetaId.'.zpl"',
+        ]);
+    }
+
+    public function zplEtiquetasSurmarBatch(Request $request, MovimientoStockSurmarEtiquetaService $surmarEtiquetas): JsonResponse
+    {
+        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+            return response()->json(['ok' => false, 'message' => 'No tiene permisos.'], 403);
+        }
+
+        $ids = $request->input('ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if ($ids === []) {
+            return response()->json(['ok' => false, 'message' => 'Sin etiquetas.'], 422);
+        }
+
+        try {
+            $items = $surmarEtiquetas->zplsParaIds($ids);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'etiquetas' => $items]);
+    }
+
+    private function assertSurmarTraEtiquetasAntesDeGrabar(Request $request, int $tipoStockId): void
+    {
+        $tipo = Tipotransaccion_Stock::query()->find($tipoStockId);
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $surmar = app(MovimientoStockSurmarEtiquetaService::class);
+        if (! $surmar->debeProcesar($empresaId, $tipo)) {
+            return;
+        }
+        if (strtoupper(trim((string) ($tipo->abreviatura ?? ''))) !== 'TRA') {
+            return;
+        }
+        $ids = $surmar->idsEtiquetasDesdeRequest($request->all());
+        if ($ids === []) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'etiquetas_consumo_id' => 'TRA Surmar: piqueá al menos una etiqueta DISPONIBLE.',
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @return array{mensaje_extra:string, hijas_ids:list<int>}
+     */
+    private function procesarSurmarTrasTransferencia(Request $request, int $tipoStockId, array $resultado): array
+    {
+        $out = ['mensaje_extra' => '', 'hijas_ids' => []];
+        $tipo = Tipotransaccion_Stock::query()->find($tipoStockId);
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $surmar = app(MovimientoStockSurmarEtiquetaService::class);
+        if (! $surmar->debeProcesar($empresaId, $tipo)) {
+            return $out;
+        }
+
+        $transferenciaId = (int) ($resultado['transferencia_id'] ?? 0);
+        if ($transferenciaId <= 0) {
+            return $out;
+        }
+
+        $transferencia = Transferencia_Mercaderia::query()->find($transferenciaId);
+        if (! $transferencia) {
+            return $out;
+        }
+
+        $stats = $surmar->procesarDespuesDeTransferencia($transferencia, $tipo, $request->all());
+        $out['mensaje_extra'] = ' Surmar TRA: '.$stats['consumos'].' consumida(s), '.$stats['etiquetas_hijas'].' nueva(s).';
+        $out['hijas_ids'] = $stats['hijas_ids'] ?? [];
+        if ($out['hijas_ids'] !== [] && ! $request->boolean('imprimir_etiquetas_surmar', true)) {
+            $out['hijas_ids'] = [];
+        }
+
+        return $out;
     }
 
     public function precioLineaArticulo(Request $request): JsonResponse

@@ -25,6 +25,7 @@ class ProveedorListadoFiltros
         'domicilio' => ['column' => 'proveedor.domicilio', 'type' => 'texto', 'label' => 'Domicilio'],
         'localidad' => ['column' => 'localidad.nombre', 'type' => 'texto', 'label' => 'Localidad'],
         'provincia' => ['column' => 'provincia.nombre', 'type' => 'texto', 'label' => 'Provincia'],
+        'empresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
         'codigo' => ['column' => 'proveedor.codigo', 'type' => 'texto', 'label' => 'Código'],
         'estado' => ['column' => 'proveedor.estado', 'type' => 'texto', 'label' => 'Estado'],
     ];
@@ -37,7 +38,13 @@ class ProveedorListadoFiltros
         'proveedor.nroinscripcion',
         'localidad.nombre',
         'provincia.nombre',
+        'empresa.nombre',
     ];
+
+    public static function filtroEmpresaActivo(): bool
+    {
+        return (bool) config('proveedor.filtro_empresa', false);
+    }
 
     /** @var array<string, string> */
     public const OPERADORES_TEXTO = [
@@ -56,10 +63,17 @@ class ProveedorListadoFiltros
         'menor' => 'Menor que',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::filtroEmpresaActivo()
+            ? self::resolverEmpresaExterna($request, $empresaDefault)
+            : [null, 'todas'];
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId,
+                'empresa_scope' => $empresaScope,
+            ]);
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -72,6 +86,9 @@ class ProveedorListadoFiltros
 
         $campo = (string) $request->input('filtro_campo', 'nombre');
         if (! isset(self::CAMPOS[$campo])) {
+            $campo = 'nombre';
+        }
+        if ($campo === 'empresa' && ! self::filtroEmpresaActivo()) {
             $campo = 'nombre';
         }
 
@@ -92,10 +109,30 @@ class ProveedorListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
+            'empresa_id' => $empresaId,
+            'empresa_scope' => $empresaScope,
         ];
     }
 
-    public static function tieneCriteriosAplicados(array $filtros): bool
+    /**
+     * @return array{0:?int,1:string}
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
+    public static function tieneCriteriosTexto(array $filtros): bool
     {
         if (($filtros['operador'] ?? '') === 'vacio') {
             return true;
@@ -120,8 +157,13 @@ class ProveedorListadoFiltros
         return false;
     }
 
+    public static function tieneCriteriosAplicados(array $filtros): bool
+    {
+        return self::tieneCriteriosTexto($filtros);
+    }
+
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, empresa_id: ?int, empresa_scope: string}
      */
     public static function filtrosVacios(): array
     {
@@ -132,7 +174,27 @@ class ProveedorListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'busqueda' => '',
+            'empresa_id' => null,
+            'empresa_scope' => 'una',
         ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (! self::filtroEmpresaActivo()) {
+            return [];
+        }
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     /**
@@ -140,7 +202,7 @@ class ProveedorListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = [];
+        $params = self::paraQueryStringEmpresa($filtros);
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
         }
@@ -165,11 +227,19 @@ class ProveedorListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
-        $valor = trim((string) ($filtros['valor'] ?? ''));
-        if ($valor === '' && ($filtros['operador'] ?? '') !== 'vacio') {
+        if (self::filtroEmpresaActivo() && ! empty($filtros['empresa_id'])) {
+            $eid = (int) $filtros['empresa_id'];
+            $query->where(function ($q) use ($eid) {
+                $q->where('proveedor.empresa_id', $eid)
+                    ->orWhereNull('proveedor.empresa_id');
+            });
+        }
+
+        if (! self::tieneCriteriosTexto($filtros)) {
             return;
         }
 
+        $valor = trim((string) ($filtros['valor'] ?? ''));
         $modo = $filtros['modo'] ?? self::MODO_TODOS;
         $operador = $filtros['operador'] ?? 'contiene';
 
@@ -220,6 +290,9 @@ class ProveedorListadoFiltros
                 'localidad.nombre',
                 'provincia.nombre',
             ];
+            if (self::filtroEmpresaActivo()) {
+                $textCols[] = 'empresa.nombre';
+            }
             foreach ($textCols as $col) {
                 $q->orWhere($col, 'like', $like);
                 if ($operador === 'contiene' && self::usaCoincidenciaFlexibleEnColumna($col)) {

@@ -21,6 +21,20 @@ class ValidacionProveedor extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! config('proveedor.filtro_empresa')) {
+            $this->request->remove('empresa_id');
+
+            return;
+        }
+
+        $eid = $this->input('empresa_id');
+        if ($eid === '' || $eid === null) {
+            $this->merge(['empresa_id' => null]);
+        }
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -35,7 +49,7 @@ class ValidacionProveedor extends FormRequest
                 ->whereNull('deleted_at');
         }
 
-        return [
+        $rules = [
             'nombre' => 'required|max:255|',
             'domicilio' => 'required|max:255|',
             'localidad_id' => ['integer', 'nullable'],
@@ -59,6 +73,12 @@ class ValidacionProveedor extends FormRequest
             'mediopago_ids' => 'nullable|array',
             'emails' => 'nullable|array',
         ];
+
+        if (config('proveedor.filtro_empresa')) {
+            $rules['empresa_id'] = ['nullable', 'integer', 'exists:empresa,id'];
+        }
+
+        return $rules;
     }
 
     public function withValidator(Validator $validator): void

@@ -33,6 +33,7 @@ use App\Services\Configuracion\IIBBService;
 use App\Services\Compras\RequisicionService;
 use App\Services\Compras\OrdencompraService;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
@@ -177,16 +178,25 @@ class ProveedorController extends Controller
 			$this->proveedor_archivoRepository->sincronizarConAnita();
 		}
 
-        $filtros = ProveedorListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltrosListado($request);
+        $empresa_query = ProveedorListadoFiltros::filtroEmpresaActivo()
+            ? app(EmpresaRepositoryInterface::class)->allFiltrado()
+            : collect();
 
         $proveedores = $this->proveedorRepository->leeProveedor($filtros, true);
+
+        $camposFiltro = ProveedorListadoFiltros::CAMPOS;
+        if (! ProveedorListadoFiltros::filtroEmpresaActivo()) {
+            unset($camposFiltro['empresa']);
+        }
 
         return view('compras.proveedor.index', [
             'proveedores' => $proveedores,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
             'filtrosQuery' => ProveedorListadoFiltros::paraQueryString($filtros),
-            'camposFiltro' => ProveedorListadoFiltros::CAMPOS,
+            'camposFiltro' => $camposFiltro,
+            'empresa_query' => $empresa_query,
         ]);
     }
 
@@ -197,7 +207,7 @@ class ProveedorController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = ProveedorListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
 
         switch($formato)
         {
@@ -233,6 +243,24 @@ class ProveedorController extends Controller
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaDefault = null;
+        if (ProveedorListadoFiltros::filtroEmpresaActivo()) {
+            $empresaDefault = optional(app(EmpresaRepositoryInterface::class)->allFiltrado()->first())->id;
+            $empresaDefault = $empresaDefault ? (int) $empresaDefault : null;
+        }
+
+        return ProveedorListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault
+        );
+    }
+
+    /**
      * Show the form for creating a new resource.
      *
      * @return \Illuminate\Http\Response
@@ -260,6 +288,9 @@ class ProveedorController extends Controller
             $tipoalta = substr(config("proveedor.tipoalta"),0,1);
 
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, ProveedorListadoFiltros::class);
+        $empresa_query = ProveedorListadoFiltros::filtroEmpresaActivo()
+            ? app(EmpresaRepositoryInterface::class)->allFiltrado()
+            : collect();
 
         return view('compras.proveedor.crear', compact('pais_query', 'provincia_query', 'tipoempresa_query',
 			'condicioniva_query', 'condicionIIBB_query',
@@ -270,7 +301,8 @@ class ProveedorController extends Controller
             'centrocosto_query', 'conceptogasto_query', 'agentepercepcioniva_enum', 'agentepercepcionIIBB_enum',
             'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta', 'semaforo_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
-            'tiporetencion_enum', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery'));
+            'tiporetencion_enum', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery',
+            'empresa_query'));
     }
 
     /**
@@ -350,6 +382,9 @@ class ProveedorController extends Controller
 		$tipoalta = $data->tipoalta;
 
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, ProveedorListadoFiltros::class);
+        $empresa_query = ProveedorListadoFiltros::filtroEmpresaActivo()
+            ? app(EmpresaRepositoryInterface::class)->allFiltrado()
+            : collect();
 
         return view('compras.proveedor.editar', compact('data', 'pais_query', 'provincia_query', 'tipoempresa_query',
 			'condicioniva_query', 'condicionIIBB_query',
@@ -361,7 +396,8 @@ class ProveedorController extends Controller
             'estado_enum', 'tasaarba', 'tasacaba', 'tipoalta', 'semaforo_enum',
 		    'tiposuspensionproveedor_query', 'agentepercepcioniva_enum', 'agentepercepcionIIBB_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
-            'tiporetencion_enum', 'tipoconsulta', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery'));
+            'tiporetencion_enum', 'tipoconsulta', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery',
+            'empresa_query'));
     }
 
     /**
@@ -549,7 +585,12 @@ class ProveedorController extends Controller
     // Consulta de proveedores (lupa)
     public function consultaProveedor(Request $request)
     {
-        return ($this->proveedorQuery->consultaProveedor($request->consulta));
+        $empresaId = null;
+        if (ProveedorListadoFiltros::filtroEmpresaActivo() && $request->filled('empresa_id')) {
+            $empresaId = (int) $request->input('empresa_id');
+        }
+
+        return $this->proveedorQuery->consultaProveedor($request->consulta, $empresaId > 0 ? $empresaId : null);
 	}
 
     /**
@@ -675,9 +716,14 @@ class ProveedorController extends Controller
         return $this->proveedorRepository->find($proveedor_id);
     }
 
-    public function leeProveedorPorCodigo($codigo)
+    public function leeProveedorPorCodigo(Request $request, $codigo)
     {
-        return $this->proveedorRepository->findPorCodigo($codigo);
+        $empresaId = null;
+        if (ProveedorListadoFiltros::filtroEmpresaActivo() && $request->filled('empresa_id')) {
+            $empresaId = (int) $request->input('empresa_id');
+        }
+
+        return $this->proveedorRepository->findPorCodigo($codigo, $empresaId > 0 ? $empresaId : null);
     }    
 
     public function generarEncuesta($codigoProveedor, $encuesta_id, $origen, $hash)

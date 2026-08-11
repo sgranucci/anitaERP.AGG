@@ -56,15 +56,19 @@
 		</tr>
 	</table>
 	<table class="data">
+		@php $filtroEmpresaActivo = \App\Support\Stock\ArticuloListadoFiltros::filtroEmpresaActivo(); @endphp
 		<thead>
 			<tr>
 				<th style="width: 10%;">Código</th>
-				<th style="width: 28%;">Descripción</th>
+				<th style="width: 24%;">Descripción</th>
 				<th style="width: 10%;">Unidad de Medida</th>
 				<th style="width: 12%;">Categoría</th>
-				<th style="width: 12%;">Tipo de Artículo</th>
-				<th style="width: 10%;">Uso</th>
-				<th style="width: 10%;">Facturable</th>
+				<th style="width: 10%;">Tipo de Artículo</th>
+				<th style="width: 8%;">Uso</th>
+				@if ($filtroEmpresaActivo)
+					<th style="width: 10%;">Empresa</th>
+				@endif
+				<th style="width: 8%;">Facturable</th>
 				<th style="width: 8%;">Estado</th>
 			</tr>
 		</thead>
@@ -77,6 +81,9 @@
 					<td>{{ $articulo->nombrecategoria ?? '' }}</td>
 					<td>{{ $articulo->nombretipoarticulo ?? '' }}</td>
 					<td>{{ $articulo->nombreusoarticulo ?? '' }}</td>
+					@if ($filtroEmpresaActivo)
+						<td>{{ $articulo->nombreempresa ?: 'Todas' }}</td>
+					@endif
 					<td>{{ ($articulo->nofactura == '0' ? 'Facturable' : ($articulo->nofactura == '1' ? 'No facturable' : '' )) }}</td>
 					<td>{{ $articulo->estado }}</td>
 				</tr>

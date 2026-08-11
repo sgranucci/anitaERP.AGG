@@ -9,6 +9,9 @@
 		<th>Domicilio</th>
 		<th>Localidad</th>
 		<th>Provincia</th>
+		@if (\App\Support\Compras\ProveedorListadoFiltros::filtroEmpresaActivo())
+			<th>Empresa</th>
+		@endif
 		<th class="width10">C&oacute;d.</th>
 		<th>Estado</th>
 	</tr>
@@ -23,6 +26,9 @@
 			<td><small>{{$data->domicilio}}</small></td>
 			<td><small>{{$data->nombrelocalidad ?? ''}}</small></td>
 			<td><small>{{$data->nombreprovincia ?? ''}}</small></td>
+			@if (\App\Support\Compras\ProveedorListadoFiltros::filtroEmpresaActivo())
+				<td><small>{{ $data->nombreempresa ?: 'Todas' }}</small></td>
+			@endif
 			<td><small>{{$data->codigo}}</small></td>
 			<td><small>{{$data->estado}}</small></td>
 		</tr>

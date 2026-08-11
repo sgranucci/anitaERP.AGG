@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
+use App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
@@ -69,6 +70,10 @@ class MovimientoStockRevertirService
         $this->validarSaldoReversoMovimiento($movimiento, $payload, $signoReverso);
 
         return DB::transaction(function () use ($movimiento, $payload, $fechaOperacion) {
+            // Surmar: liberar etiquetas del original antes del compensatorio (no piquea el reverso).
+            app(MovimientoStockSurmarEtiquetaService::class)
+                ->revertirEtiquetasPorMovimientos([(int) $movimiento->id]);
+
             $resultado = $this->movimientoStockService->guardaMovimientoStock($payload, 'create');
             if (! is_array($resultado) || empty($resultado['id'])) {
                 throw new \RuntimeException(is_string($resultado) ? $resultado : 'No se pudo grabar el movimiento de reversión.');
@@ -219,6 +224,7 @@ class MovimientoStockRevertirService
             'pedido' => '',
             'empresa' => config('app.empresa'),
             'omitir_asiento_contable' => (int) ($movimiento->asiento_id ?? 0) > 0,
+            'omitir_surmar_etiquetas' => true,
             'articulos_id' => $articulosId,
             'skus' => array_fill(0, $n, ''),
             'combinaciones_id' => array_fill(0, $n, null),

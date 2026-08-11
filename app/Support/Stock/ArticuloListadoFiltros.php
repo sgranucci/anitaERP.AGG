@@ -40,6 +40,7 @@ class ArticuloListadoFiltros
         'categoria' => ['column' => 'categoria.nombre', 'type' => 'texto', 'label' => 'Categoría'],
         'tipoarticulo' => ['column' => 'tipoarticulo.nombre', 'type' => 'texto', 'label' => 'Tipo de artículo'],
         'usoarticulo' => ['column' => 'usoarticulo.nombre', 'type' => 'texto', 'label' => 'Uso'],
+        'empresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
         'numeroparte' => ['column' => 'articulo.numeroparte', 'type' => 'texto', 'label' => 'Nro. parte'],
         'ubicacionparte' => ['column' => 'articulo.ubicacionparte', 'type' => 'texto', 'label' => 'Ubic. parte'],
         'cuentaventa' => ['column' => 'cuentacontable.codigo', 'type' => 'cuenta_imputacion', 'label' => 'Cta. contable venta'],
@@ -47,6 +48,55 @@ class ArticuloListadoFiltros
         'cuentagasto' => ['column' => 'cuentacontable.codigo', 'type' => 'cuenta_imputacion', 'label' => 'Cta. contable gasto'],
         'nofactura' => ['column' => 'articulo.nofactura', 'type' => 'texto', 'label' => 'Facturable (0/1)'],
     ];
+
+    public static function filtroEmpresaActivo(): bool
+    {
+        return (bool) config('articulo.filtro_empresa', false);
+    }
+
+    /**
+     * Normaliza empresa_id en create/update ABM.
+     * Flag off: no toca el campo (comportamiento histórico AGG).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function normalizarEmpresaIdEnData(array $data): array
+    {
+        if (! self::filtroEmpresaActivo()) {
+            unset($data['empresa_id']);
+
+            return $data;
+        }
+
+        if (! array_key_exists('empresa_id', $data) || $data['empresa_id'] === '' || $data['empresa_id'] === null) {
+            $data['empresa_id'] = null;
+        } else {
+            $data['empresa_id'] = (int) $data['empresa_id'];
+            if ($data['empresa_id'] <= 0) {
+                $data['empresa_id'] = null;
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * empresa_id al persistir desde Anita (stkmae).
+     * Flag on: usa el id indicado (null = todas). Flag off: histórico 1, salvo El Bierzo (maestro compartido → null).
+     */
+    public static function empresaIdDesdeSyncAnita(?int $empresaId = null): ?int
+    {
+        if (self::filtroEmpresaActivo()) {
+            return ($empresaId !== null && $empresaId > 0) ? $empresaId : null;
+        }
+
+        if (strtoupper((string) config('app.empresa')) === 'EL BIERZO') {
+            return null;
+        }
+
+        return 1;
+    }
 
     /** @var array<string, string> */
     public const OPERADORES_TEXTO = [
@@ -73,6 +123,7 @@ class ArticuloListadoFiltros
         'categoria.nombre',
         'tipoarticulo.nombre',
         'usoarticulo.nombre',
+        'empresa.nombre',
         'cuentacontable.nombre',
         'cuentacontable.codigo',
     ];
@@ -84,13 +135,18 @@ class ArticuloListadoFiltros
         'menor' => 'Menor que',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
         $estado = self::resolverEstadoExterno($request);
+        [$empresaId, $empresaScope] = self::filtroEmpresaActivo()
+            ? self::resolverEmpresaExterna($request, $empresaDefault)
+            : [null, 'todas'];
 
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
             return array_merge(self::filtrosVacios(), [
                 'estado' => $estado,
+                'empresa_id' => $empresaId,
+                'empresa_scope' => $empresaScope,
             ]);
         }
 
@@ -104,6 +160,9 @@ class ArticuloListadoFiltros
 
         $campo = (string) $request->input('filtro_campo', 'descripcion');
         if (! isset(self::CAMPOS[$campo])) {
+            $campo = 'descripcion';
+        }
+        if ($campo === 'empresa' && ! self::filtroEmpresaActivo()) {
             $campo = 'descripcion';
         }
 
@@ -125,7 +184,27 @@ class ArticuloListadoFiltros
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
             'estado' => $estado,
+            'empresa_id' => $empresaId,
+            'empresa_scope' => $empresaScope,
         ];
+    }
+
+    /**
+     * @return array{0:?int,1:string}
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
     }
 
     /**
@@ -187,7 +266,7 @@ class ArticuloListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, estado: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, estado: string, empresa_id: ?int, empresa_scope: string}
      */
     public static function filtrosVacios(): array
     {
@@ -199,7 +278,27 @@ class ArticuloListadoFiltros
             'valor_hasta' => '',
             'busqueda' => '',
             'estado' => self::ESTADO_ACTIVO,
+            'empresa_id' => null,
+            'empresa_scope' => 'una',
         ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (! self::filtroEmpresaActivo()) {
+            return [];
+        }
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     /**
@@ -207,7 +306,7 @@ class ArticuloListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = [];
+        $params = self::paraQueryStringEmpresa($filtros);
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
         }
@@ -238,6 +337,14 @@ class ArticuloListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
+        if (self::filtroEmpresaActivo() && ! empty($filtros['empresa_id'])) {
+            $eid = (int) $filtros['empresa_id'];
+            $query->where(function ($q) use ($eid) {
+                $q->where('articulo.empresa_id', $eid)
+                    ->orWhereNull('articulo.empresa_id');
+            });
+        }
+
         $estado = $filtros['estado'] ?? self::ESTADO_ACTIVO;
         if ($estado !== '') {
             $query->where('articulo.estado', $estado);
@@ -300,6 +407,9 @@ class ArticuloListadoFiltros
                 'usoarticulo.nombre',
                 'articulo.nofactura',
             ];
+            if (self::filtroEmpresaActivo()) {
+                $textCols[] = 'empresa.nombre';
+            }
             foreach ($textCols as $col) {
                 $q->orWhereRaw(self::expresionTextoMinusculas($col).' LIKE ?', [self::normalizarTextoBusqueda($like)]);
                 if ($operador === 'contiene' && self::usaCoincidenciaFlexibleEnColumna($col)) {

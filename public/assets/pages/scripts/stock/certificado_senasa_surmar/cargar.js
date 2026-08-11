@@ -103,26 +103,24 @@
         if (!cfg.editable) return;
         var raw = String($('#etiqueta_scan').val() || '').trim();
         if (!raw) return;
-        var id = parseInt(raw.replace(/\D+/g, ''), 10);
-        if (!id) {
-            $msg.text('ID de etiqueta inválido').removeClass('text-success').addClass('text-danger');
-            return;
-        }
-        if (etiquetasPendientes.some(function (e) { return e.etiqueta_id === id; })) {
-            $msg.text('Etiqueta ya agregada').removeClass('text-success').addClass('text-danger');
-            return;
+        if (etiquetasPendientes.some(function (e) { return String(e.etiqueta_id) === String(raw) || String(e.etiqueta_id) === String(parseInt(raw, 10)); })) {
+            // puede ser barcode Anita; se valida tras resolver
         }
         $msg.text('Resolviendo etiqueta…').removeClass('text-danger text-success');
         $.ajax({
             url: cfg.urls.resolverEtiqueta,
             method: 'POST',
-            data: { _token: cfg.urls.token, etiqueta_id: id },
+            data: { _token: cfg.urls.token, codigo: raw },
             success: function (resp) {
                 if (!resp || !resp.ok) {
                     $msg.text('No se pudo resolver').addClass('text-danger');
                     return;
                 }
                 var e = resp.etiqueta;
+                if (etiquetasPendientes.some(function (x) { return x.etiqueta_id === e.etiqueta_id; })) {
+                    $msg.text('Etiqueta ya agregada').removeClass('text-success').addClass('text-danger');
+                    return;
+                }
                 if ($('#articulo_id').val() && String($('#articulo_id').val()) !== String(e.articulo_id)) {
                     $msg.text('La etiqueta es de otro artículo').addClass('text-danger');
                     return;

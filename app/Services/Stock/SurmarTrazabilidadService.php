@@ -19,8 +19,30 @@ class SurmarTrazabilidadService
     /**
      * @return Collection<int, Stock_Etiqueta>
      */
-    public function buscarEtiquetas(?int $etiquetaId, ?int $articuloId, ?string $lote): Collection
-    {
+    public function buscarEtiquetas(
+        ?int $etiquetaId,
+        ?int $articuloId,
+        ?string $lote,
+        ?string $codigo = null,
+        ?int $anitaNroInterno = null,
+        ?int $anitaNroApertura = null,
+    ): Collection {
+        $codigo = trim((string) $codigo);
+        if ($codigo !== '') {
+            try {
+                $resolved = \App\Support\Stock\Surmar\SurmarEtiquetaLookupSupport::resolver(
+                    $codigo,
+                    SurmarSupport::EMPRESA_ID,
+                    soloDisponible: false,
+                    rechazarAnulada: false,
+                );
+
+                return collect([$resolved['etiqueta']]);
+            } catch (\Illuminate\Validation\ValidationException) {
+                return collect();
+            }
+        }
+
         $q = Stock_Etiqueta::query()
             ->with(['articulos', 'depositos', 'unidadesmedida'])
             ->where('empresa_id', SurmarSupport::EMPRESA_ID)
@@ -28,6 +50,11 @@ class SurmarTrazabilidadService
 
         if ($etiquetaId && $etiquetaId > 0) {
             $q->whereKey($etiquetaId);
+        } elseif ($anitaNroInterno && $anitaNroInterno > 0) {
+            $q->where('anita_nro_interno', $anitaNroInterno);
+            if ($anitaNroApertura && $anitaNroApertura > 0) {
+                $q->where('anita_nro_apertura', $anitaNroApertura);
+            }
         } else {
             if ($articuloId && $articuloId > 0) {
                 $q->where('articulo_id', $articuloId);

@@ -38,6 +38,7 @@
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-alta-npu.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/consulta-npu-baja.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-grabando.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/surmar_etiquetas.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/movimientostock/surmar_etiquetas.js')) ?: time() }}" type="text/javascript"></script>
 @if(\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/form-kardex-linea.js') }}" type="text/javascript"></script>

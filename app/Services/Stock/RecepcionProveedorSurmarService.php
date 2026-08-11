@@ -2,6 +2,8 @@
 
 namespace App\Services\Stock;
 
+use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Compras\Proveedor;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Movimiento;
@@ -15,6 +17,7 @@ use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\RecepcionProveedorSurmarListadoFiltros;
+use App\Support\Stock\Surmar\RecepcionProveedorSurmarOcSupport;
 use App\Support\Stock\SurmarEtiquetaZplSupport;
 use App\Support\Stock\SurmarSupport;
 use Auth;
@@ -22,8 +25,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Recepción Surmar: cabecera en BORRADOR + grabado provisorio por ítem (como Anita a-stock.c).
- * Cada línea se persiste al cerrar el piqueo y emite stock_etiqueta (ID físico).
+ * Recepción Surmar: cabecera en BORRADOR + grabado provisorio por ítem (como Anita a-stock.c COM).
+ * Referencia OC (igual AGG / carga_referencia+asigna_pedido). Cada línea se persiste al cerrarla y emite etiqueta.
  */
 class RecepcionProveedorSurmarService
 {
@@ -42,10 +45,12 @@ class RecepcionProveedorSurmarService
                 'recepcion_proveedor.*',
                 'empresa.nombre as nombreempresa',
                 'proveedor.nombre as nombreproveedor',
+                'ordencompra.numeroordencompra as numeroordencompra',
             ])
             ->withCount('recepcion_proveedor_articulos')
             ->join('empresa', 'empresa.id', '=', 'recepcion_proveedor.empresa_id')
             ->join('proveedor', 'proveedor.id', '=', 'recepcion_proveedor.proveedor_id')
+            ->leftJoin('ordencompra', 'ordencompra.id', '=', 'recepcion_proveedor.ordencompra_id')
             ->where('recepcion_proveedor.empresa_id', SurmarSupport::EMPRESA_ID)
             ->where('recepcion_proveedor.origen_carga', self::ORIGEN_CARGA)
             ->orderByDesc('recepcion_proveedor.id');
@@ -64,6 +69,7 @@ class RecepcionProveedorSurmarService
                 'proveedores',
                 'depositos',
                 'empresas',
+                'ordencompras',
                 'recepcion_proveedor_articulos' => fn ($q) => $q->orderBy('orden')->orderBy('id'),
                 'recepcion_proveedor_articulos.articulos',
                 'recepcion_proveedor_articulos.unidadesmedida',
@@ -77,31 +83,48 @@ class RecepcionProveedorSurmarService
     }
 
     /**
-     * Alta de cabecera provisoria (pantalla queda abierta para picar ítems).
+     * Alta de cabecera provisoria con OC de referencia (como carga_referencia en a-stock.c / AGG).
      *
      * @param  array<string, mixed>  $data
      */
     public function iniciar(array $data): Recepcion_Proveedor
     {
         $empresaId = SurmarSupport::EMPRESA_ID;
-        $proveedorId = (int) ($data['proveedor_id'] ?? 0);
+        $ordencompraId = (int) ($data['ordencompra_id'] ?? 0);
         $depositoId = (int) ($data['deposito_id'] ?? 0);
         $fecha = (string) ($data['fecha'] ?? now()->toDateString());
 
+        if ($ordencompraId <= 0) {
+            throw ValidationException::withMessages(['ordencompra_id' => 'Debe indicar la orden de compra.']);
+        }
+
+        try {
+            $ocData = RecepcionProveedorSurmarOcSupport::resolver($ordencompraId, true);
+        } catch (\Throwable $e) {
+            throw ValidationException::withMessages(['ordencompra_id' => $e->getMessage()]);
+        }
+
+        /** @var Ordencompra $oc */
+        $oc = $ocData['cabecera'];
+        $proveedorId = (int) $oc->proveedor_id;
         if ($proveedorId <= 0 || ! Proveedor::query()->whereKey($proveedorId)->exists()) {
-            throw ValidationException::withMessages(['proveedor_id' => 'Proveedor inválido.']);
+            throw ValidationException::withMessages(['proveedor_id' => 'Proveedor de la OC inválido.']);
         }
         if ($depositoId <= 0 || ! Depmae::query()->whereKey($depositoId)->exists()) {
             throw ValidationException::withMessages(['deposito_id' => 'Depósito inválido.']);
         }
+        if ($ocData['lineas'] === []) {
+            throw ValidationException::withMessages(['ordencompra_id' => 'La OC no tiene líneas pendientes de recepción.']);
+        }
 
-        return DB::transaction(function () use ($data, $empresaId, $proveedorId, $depositoId, $fecha) {
+        return DB::transaction(function () use ($data, $empresaId, $proveedorId, $depositoId, $fecha, $oc) {
             $recepcion = $this->repository->create([
-                'ordencompra_id' => null,
+                'ordencompra_id' => $oc->id,
                 'tipo' => Recepcion_Proveedor::TIPO_RECEPCION,
                 'empresa_id' => $empresaId,
                 'proveedor_id' => $proveedorId,
                 'deposito_id' => $depositoId,
+                'centrocosto_id' => (int) ($oc->centrocosto_id ?? 0) ?: null,
                 'fecha' => $fecha,
                 'moneda_id' => (int) ($data['moneda_id'] ?? 1),
                 'cotizacion' => (float) ($data['cotizacion'] ?? 1),
@@ -117,15 +140,32 @@ class RecepcionProveedorSurmarService
                 'estado' => Recepcion_Proveedor::ESTADO_BORRADOR,
                 'fecha' => now(),
                 'usuario_id' => Auth::id(),
-                'observacion' => 'Inicio recepción Surmar (provisorio)',
+                'observacion' => 'Inicio recepción Surmar OC '.$oc->numeroordencompra.' (provisorio)',
             ]);
 
-            return $recepcion->fresh();
+            return $recepcion->fresh(['ordencompras', 'proveedores']);
         });
     }
 
+    /** @return list<array<string, mixed>> */
+    public function lineasOcPendientes(Recepcion_Proveedor $recepcion): array
+    {
+        $ocId = (int) ($recepcion->ordencompra_id ?? 0);
+        if ($ocId <= 0) {
+            return [];
+        }
+
+        try {
+            $oc = RecepcionProveedorSurmarOcSupport::cargarOc($ocId);
+        } catch (\Throwable) {
+            return [];
+        }
+
+        return RecepcionProveedorSurmarOcSupport::armarLineasPendientes($oc);
+    }
+
     /**
-     * Graba un ítem terminado de picar: línea + etiqueta (como graba_comp / recepaper en Anita).
+     * Graba un ítem de recepción: línea + etiqueta (como graba_comp / recepaper en Anita COM).
      *
      * @param  array<string, mixed>  $data
      * @return array{linea: RecepcionProveedorArticuloSurmar, etiqueta: Stock_Etiqueta, zpl: string}
@@ -135,7 +175,8 @@ class RecepcionProveedorSurmarService
         $recepcion = $this->buscar($recepcionId);
         $this->assertBorrador($recepcion);
 
-        $articuloId = (int) ($data['articulo_id'] ?? 0);
+        $ocLinea = $this->resolverLineaOcParaGrabar($recepcion, $data);
+        $articuloId = (int) ($ocLinea['articulo_id'] ?? $data['articulo_id'] ?? 0);
         $articulo = Articulo::query()->whereKey($articuloId)->first();
         if (! $articulo) {
             throw ValidationException::withMessages(['articulo_id' => 'Artículo inválido.']);
@@ -153,37 +194,44 @@ class RecepcionProveedorSurmarService
         }
 
         $cantidad = $pesoNeto; // Surmar: cantidad de stock = kilos netos (como Anita)
+        $precio = (float) ($data['precio'] ?? $ocLinea['precio'] ?? 0);
         $ahora = now();
-        $horaPiqueo = $ahora->format('H:i');
+        $horaCarga = $ahora->format('H:i');
 
         return DB::transaction(function () use (
-            $recepcion, $articulo, $data, $pesoNeto, $pesoBruto, $cantPieza, $lote, $cantidad, $ahora, $horaPiqueo
+            $recepcion, $articulo, $data, $ocLinea, $pesoNeto, $pesoBruto, $cantPieza, $lote, $cantidad, $precio, $ahora, $horaCarga
         ) {
             $orden = (int) (RecepcionProveedorArticuloSurmar::query()
                 ->where('recepcion_proveedor_id', $recepcion->id)
                 ->max('orden') ?? 0) + 1;
 
-            $umdId = (int) ($data['unidadmedida_id'] ?? $articulo->unidadmedida_id ?? 0);
+            $umdId = (int) ($data['unidadmedida_id'] ?? $ocLinea['unidadmedida_id'] ?? $articulo->unidadmedida_id ?? 0);
             if ($umdId <= 0) {
                 $umdId = null;
             }
 
             $linea = RecepcionProveedorArticuloSurmar::create([
                 'recepcion_proveedor_id' => $recepcion->id,
+                'ordencompra_articulo_id' => $ocLinea['ordencompra_articulo_id'] ?? null,
+                'penvp_orden' => $ocLinea['penvp_orden'] ?? null,
+                'penvp_nro_interno' => $ocLinea['penvp_nro_interno'] ?? null,
+                'tipo_linea' => ($ocLinea['ordencompra_articulo_id'] ?? null) ? 'OC' : null,
                 'orden' => $orden,
                 'articulo_id' => $articulo->id,
                 'cantidad' => $cantidad,
                 'cantidad_stock' => $cantidad,
-                'cantidad_oc' => 0,
+                'cantidad_oc' => (float) ($ocLinea['cantidad_pendiente'] ?? $ocLinea['cantidad_oc'] ?? 0),
                 'unidadmedida_id' => $umdId,
                 'coeficienteconversion' => 1,
-                'precio' => (float) ($data['precio'] ?? 0),
-                'precio_stock' => (float) ($data['precio'] ?? 0),
+                'precio' => $precio,
+                'precio_ordencompra' => (float) ($ocLinea['precio_ordencompra'] ?? $precio),
+                'precio_stock' => $precio,
                 'moneda_id' => $recepcion->moneda_id,
                 'cotizacion' => $recepcion->cotizacion,
                 'descuento' => 0,
                 'deposito_id' => $recepcion->deposito_id,
-                'detalle' => (string) ($data['detalle'] ?? ''),
+                'centrocosto_id' => $recepcion->centrocosto_id,
+                'detalle' => (string) ($data['detalle'] ?? $ocLinea['detalle'] ?? ''),
                 'estado' => 'ACTIVA',
                 'lote_proveedor' => $lote,
                 'certificado' => trim((string) ($data['certificado'] ?? $lote)),
@@ -191,7 +239,7 @@ class RecepcionProveedorSurmarService
                 'peso_bruto' => $pesoBruto,
                 'peso_neto' => $pesoNeto,
                 'cant_pieza' => $cantPieza,
-                'hora_piqueo' => $horaPiqueo,
+                'hora_piqueo' => $horaCarga,
                 'piqueado_at' => $ahora,
             ]);
 
@@ -207,7 +255,7 @@ class RecepcionProveedorSurmarService
                 'lote_proveedor' => $lote,
                 'fecha_vto' => $data['fecha_vto'] ?? null,
                 'fecha_emision' => $recepcion->fecha?->format('Y-m-d') ?? $ahora->toDateString(),
-                'hora_emision' => $horaPiqueo,
+                'hora_emision' => $horaCarga,
                 'cant_pieza' => $cantPieza,
                 'peso_bruto' => $pesoBruto,
                 'peso_neto' => $pesoNeto,
@@ -268,7 +316,7 @@ class RecepcionProveedorSurmarService
             ->get();
 
         if ($lineas->isEmpty()) {
-            throw ValidationException::withMessages(['items' => 'Debe picar al menos un ítem antes de confirmar.']);
+            throw ValidationException::withMessages(['items' => 'Debe cargar al menos un ítem antes de confirmar.']);
         }
 
         return DB::transaction(function () use ($recepcion, $lineas) {
@@ -394,6 +442,70 @@ class RecepcionProveedorSurmarService
             'hora_piqueo' => $linea->hora_piqueo,
             'piqueado_at' => optional($linea->piqueado_at)->format('d/m/Y H:i:s'),
             'stock_etiqueta_id' => $linea->stock_etiqueta_id,
+            'ordencompra_articulo_id' => $linea->ordencompra_articulo_id,
+            'cantidad_oc' => (float) ($linea->cantidad_oc ?? 0),
+            'precio' => (float) ($linea->precio ?? 0),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function resolverLineaOcParaGrabar(Recepcion_Proveedor $recepcion, array $data): array
+    {
+        $ocArtId = (int) ($data['ordencompra_articulo_id'] ?? 0);
+        $ocId = (int) ($recepcion->ordencompra_id ?? 0);
+
+        if ($ocArtId <= 0) {
+            if ($ocId > 0) {
+                throw ValidationException::withMessages([
+                    'ordencompra_articulo_id' => 'Seleccione la línea de la OC (como en Anita / recepción AGG).',
+                ]);
+            }
+
+            return [];
+        }
+
+        if ($ocId <= 0) {
+            throw ValidationException::withMessages(['ordencompra_id' => 'La recepción no tiene OC vinculada.']);
+        }
+
+        $ocArt = Ordencompra_Articulo::query()
+            ->with('articulos')
+            ->whereKey($ocArtId)
+            ->where('ordencompra_id', $ocId)
+            ->first();
+
+        if (! $ocArt) {
+            throw ValidationException::withMessages([
+                'ordencompra_articulo_id' => 'La línea no pertenece a la OC de esta recepción.',
+            ]);
+        }
+
+        $pendientes = RecepcionProveedorSurmarOcSupport::armarLineasPendientes(
+            RecepcionProveedorSurmarOcSupport::cargarOc($ocId)
+        );
+        foreach ($pendientes as $pend) {
+            if ((int) $pend['ordencompra_articulo_id'] === $ocArtId) {
+                return $pend;
+            }
+        }
+
+        // Permite otra etiqueta de la misma línea OC en este borrador (saldo OC = COM confirmadas).
+        $art = $ocArt->articulos;
+
+        return [
+            'ordencompra_articulo_id' => (int) $ocArt->id,
+            'penvp_orden' => (int) ($ocArt->penvp_orden ?? 0) ?: null,
+            'penvp_nro_interno' => (int) ($ocArt->penvp_nro_interno ?? 0) ?: null,
+            'articulo_id' => (int) $ocArt->articulo_id,
+            'precio' => (float) ($ocArt->precio ?? 0),
+            'precio_ordencompra' => (float) ($ocArt->precio ?? 0),
+            'cantidad_oc' => (float) ($ocArt->cantidad ?? 0),
+            'cantidad_pendiente' => (float) ($ocArt->cantidad ?? 0),
+            'unidadmedida_id' => (int) ($art->unidadmedida_id ?? 0) ?: null,
+            'detalle' => (string) ($ocArt->detalle ?? ''),
         ];
     }
 

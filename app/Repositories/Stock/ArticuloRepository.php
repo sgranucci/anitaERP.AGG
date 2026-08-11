@@ -37,6 +37,8 @@ class ArticuloRepository implements ArticuloRepositoryInterface
 
     public function create(array $data)
     {
+        $data = ArticuloListadoFiltros::normalizarEmpresaIdEnData($data);
+
         return $this->model->create($data);
     }
 
@@ -61,7 +63,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
         return $articulo;
     }
 
-   	public function findPorSku($codigo)
+   	public function findPorSku($codigo, ?int $empresaId = null)
     {
         $query = $this->model->where('sku', $codigo)
             ->with('categorias')
@@ -71,6 +73,10 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             ->with('subcategorias')
             ->with('lineas')
             ->with('mventas');
+
+        if (ArticuloListadoFiltros::filtroEmpresaActivo() && $empresaId !== null && $empresaId > 0) {
+            $query->paraEmpresa($empresaId);
+        }
 
         if (config('app.empresa') === 'FRASLE') {
             $query = $query->with('tipoproductos')->with('capacidades')->with('colores')->with('tipoliquidos');
@@ -110,6 +116,8 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 'categoria.nombre as nombrecategoria',
                                 'tipoarticulo.nombre as nombretipoarticulo',
                                 'usoarticulo.nombre as nombreusoarticulo',
+                                'articulo.empresa_id as empresa_id',
+                                'empresa.nombre as nombreempresa',
                                 'articulo.numeroparte as numeroparte',
                                 'articulo.ubicacionparte as ubicacionparte',
                                 'articulo.depositoentrega_id as depositoentrega_id',
@@ -120,6 +128,7 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
                                 ->leftJoin('tipoarticulo', 'articulo.tipoarticulo_id', '=', 'tipoarticulo.id')
                                 ->leftJoin('usoarticulo', 'articulo.usoarticulo_id', '=', 'usoarticulo.id')
+                                ->leftJoin('empresa', 'empresa.id', '=', 'articulo.empresa_id')
                                 ->orderby('articulo.sku', 'asc');
 
         ArticuloListadoFiltros::aplicar($articulo, $filtros);

@@ -15,6 +15,8 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route('proveedor', ProveedorListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
+    $filtroEmpresaActivo = ProveedorListadoFiltros::filtroEmpresaActivo();
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -27,8 +29,8 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-proveedor',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => ProveedorListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('proveedor'),
+                        'tieneCriterios' => ProveedorListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-proveedor',
                         'toggleId' => 'btn-toggle-filtros-proveedor',
@@ -40,16 +42,17 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
             </div>
             <form method="get" action="{{ route('proveedor') }}" id="form-filtros-proveedor" class="mb-0">
                 @include('compras.proveedor.partials.filtros_listado', [
-                    'limpiarUrl' => route('proveedor'),
+                    'limpiarUrl' => $limpiarUrl,
                 ])
             </form>
+            @include('compras.proveedor.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_proveedor',
                     'queryparams' => $filtrosQuery ?? [],
                 ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width10">ID</th>
                             <th>Nombre</th>
@@ -58,6 +61,9 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
                             <th>Domicilio</th>
                             <th>Localidad</th>
                             <th>Provincia</th>
+                            @if ($filtroEmpresaActivo)
+                                <th>Empresa</th>
+                            @endif
                             <th class="width10">C&oacute;d.</th>
                             <th>Estado</th>
                             <th class="width10">APOC</th>
@@ -78,6 +84,9 @@ use App\Support\Compras\ProveedorListadoFiltros; ?>
                             <td><small>{{$data->domicilio}}</small></td>
                             <td><small>{{$data->nombrelocalidad ?? ''}}</small></td>
                             <td><small>{{$data->nombreprovincia ?? ''}}</small></td>
+                            @if ($filtroEmpresaActivo)
+                                <td><small>{{ $data->nombreempresa ?: 'Todas' }}</small></td>
+                            @endif
                             <td><small>{{$data->codigo}}</small></td>
                             <td><small>{{$data->estado}}</small></td>
                             <td class="text-center">

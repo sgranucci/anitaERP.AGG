@@ -11,6 +11,7 @@ use App\ApiAnita;
 use App\Models\Seguridad\Usuario;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Contable\Centrocosto;
+use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
@@ -35,7 +36,7 @@ class Proveedor extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [
-                            'nombre', 'codigo', 'contacto', 'fantasia', 'email', 'telefono', 'urlweb', 'domicilio',
+                            'nombre', 'codigo', 'empresa_id', 'contacto', 'fantasia', 'email', 'telefono', 'urlweb', 'domicilio',
                             'localidad_id', 'provincia_id', 'pais_id', 'codigopostal', 'tipoempresa_id', 
                             'nroinscripcion', 'condicioniva_id', 'agentepercepcioniva', 'retieneiva', 'retencioniva_id',
                             'retieneganancia', 'condicionganancia', 'retencionganancia_id', 'retienesuss', 
@@ -72,6 +73,47 @@ class Proveedor extends Model implements Auditable
     public function tipossuspensionproveedores()
     {
         return $this->belongsTo(Tiposuspensionproveedor::class, 'tiposuspension_id');
+    }
+
+    public function empresas()
+    {
+        return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    /**
+     * Multiempresa: null aplica a todas; N solo a esa empresa (y null en listados filtrados).
+     */
+    public function scopeParaEmpresa($query, int $empresaId)
+    {
+        if ($empresaId <= 0) {
+            return $query;
+        }
+
+        return $query->where(function ($q) use ($empresaId) {
+            $q->where('proveedor.empresa_id', $empresaId)->orWhereNull('proveedor.empresa_id');
+        });
+    }
+
+    public static function existeParaEmpresa(int $proveedorId, int $empresaId): bool
+    {
+        if ($proveedorId <= 0) {
+            return false;
+        }
+
+        $query = static::query()->whereKey($proveedorId);
+
+        return $empresaId > 0
+            ? $query->paraEmpresa($empresaId)->exists()
+            : $query->exists();
+    }
+
+    public function perteneceAEmpresa(int $empresaId): bool
+    {
+        if ($empresaId <= 0) {
+            return true;
+        }
+
+        return $this->empresa_id === null || (int) $this->empresa_id === $empresaId;
     }
 
     public function tipoempresas()

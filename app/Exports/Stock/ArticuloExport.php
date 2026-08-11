@@ -4,6 +4,7 @@ namespace App\Exports\Stock;
 
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Stock\ArticuloListadoFiltros;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -22,9 +23,12 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'H';
-
     private ArticuloRepositoryInterface $articuloRepository;
+
+    private function colUltima(): string
+    {
+        return ArticuloListadoFiltros::filtroEmpresaActivo() ? 'I' : 'H';
+    }
 
     /** @var array<string, mixed>|string|null */
     private $filtros;
@@ -65,7 +69,7 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
 
     public function columnFormats(): array
     {
-        return [
+        $formats = [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'C' => NumberFormat::FORMAT_TEXT,
@@ -75,6 +79,11 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
             'G' => NumberFormat::FORMAT_TEXT,
             'H' => NumberFormat::FORMAT_TEXT,
         ];
+        if (ArticuloListadoFiltros::filtroEmpresaActivo()) {
+            $formats['I'] = NumberFormat::FORMAT_TEXT;
+        }
+
+        return $formats;
     }
 
     public function styles(Worksheet $sheet)
@@ -97,7 +106,7 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
 
     public function columnWidths(): array
     {
-        return [
+        $widths = [
             'A' => 14,
             'B' => 40,
             'C' => 14,
@@ -107,6 +116,11 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
             'G' => 14,
             'H' => 12,
         ];
+        if (ArticuloListadoFiltros::filtroEmpresaActivo()) {
+            $widths['I'] = 16;
+        }
+
+        return $widths;
     }
 
     public function registerEvents(): array
@@ -137,10 +151,11 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
                     }
                 }
 
+                $colUltima = $this->colUltima();
                 $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit);
+                $sheet->mergeCells('A'.$filaTit.':'.$colUltima.$filaTit);
                 $sheet->getRowDimension($filaTit)->setRowHeight(28);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$colUltima.$filaTit)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 16,
@@ -150,8 +165,8 @@ class ArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, 
                 ]);
 
                 $filaGen = $filaTit + 1;
-                $sheet->mergeCells('A'.$filaGen.':'.self::COL_ULTIMA.$filaGen);
-                $sheet->getStyle('A'.$filaGen.':'.self::COL_ULTIMA.$filaGen)->applyFromArray([
+                $sheet->mergeCells('A'.$filaGen.':'.$colUltima.$filaGen);
+                $sheet->getStyle('A'.$filaGen.':'.$colUltima.$filaGen)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 10,

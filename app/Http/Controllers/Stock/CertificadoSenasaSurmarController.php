@@ -146,12 +146,13 @@ class CertificadoSenasaSurmarController extends Controller
     {
         can('editar-certificado-senasa-surmar');
 
-        $data = $request->validate([
-            'etiqueta_id' => 'required|integer|min:1',
-        ]);
+        $codigo = trim((string) $request->input('codigo', $request->input('etiqueta_id', '')));
+        if ($codigo === '') {
+            return response()->json(['ok' => false, 'errors' => ['etiqueta' => ['Indique ID o código Anita.']]], 422);
+        }
 
         try {
-            $payload = $this->service->resolverEtiqueta((int) $data['etiqueta_id']);
+            $payload = $this->service->resolverEtiqueta($codigo);
         } catch (ValidationException $e) {
             return response()->json(['ok' => false, 'errors' => $e->errors()], 422);
         }

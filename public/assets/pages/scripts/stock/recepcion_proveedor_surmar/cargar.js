@@ -3,9 +3,12 @@
 
     var cfg = window.SURMAR_RECEPCION || {};
     var lineas = Array.isArray(cfg.lineas) ? cfg.lineas.slice() : [];
+    var lineasOc = Array.isArray(cfg.lineasOc) ? cfg.lineasOc.slice() : [];
     var $tbody = $('#tabla-lineas-surmar tbody');
+    var $tbodyOc = $('#tabla-oc-pendientes-surmar tbody');
     var $msg = $('#surmar-msg-vivo');
     var overlay = document.getElementById('surmar-overlay');
+    var ocElegidaId = null;
 
     function mostrarOverlay(titulo) {
         if (!overlay) return;
@@ -29,6 +32,48 @@
         return (Number(n) || 0).toFixed(2);
     }
 
+    function renderOc() {
+        if (!$tbodyOc.length) return;
+        $tbodyOc.empty();
+        if (!lineasOc.length) {
+            $tbodyOc.append(
+                $('<tr/>').append(
+                    $('<td colspan="7" class="text-center text-muted py-3"/>')
+                        .text('Sin líneas pendientes en la OC (o ya cubiertas por COM confirmadas).')
+                )
+            );
+            return;
+        }
+        lineasOc.forEach(function (l) {
+            var tr = $('<tr/>').attr('data-oc-art-id', l.ordencompra_articulo_id);
+            if (String(ocElegidaId) === String(l.ordencompra_articulo_id)) {
+                tr.addClass('js-oc-elegida');
+            }
+            tr.append($('<td/>').html('<button type="button" class="btn btn-warning btn-xs js-elegir-oc">Elegir</button>'));
+            tr.append($('<td/>').text(l.sku || ''));
+            tr.append($('<td/>').text(l.descripcion || ''));
+            tr.append($('<td class="text-right"/>').text(fmt(l.cantidad_oc)));
+            tr.append($('<td class="text-right"/>').text(fmt(l.cantidad_recibida)));
+            tr.append($('<td class="text-right"/>').text(fmt(l.cantidad_pendiente)));
+            tr.append($('<td class="text-right"/>').text(fmt(l.precio)));
+            tr.data('ocLinea', l);
+            $tbodyOc.append(tr);
+        });
+    }
+
+    function elegirLineaOc(l) {
+        if (!l || !cfg.editable) return;
+        ocElegidaId = l.ordencompra_articulo_id;
+        $('#ordencompra_articulo_id').val(l.ordencompra_articulo_id || '');
+        $('#articulo_id').val(l.articulo_id || '');
+        $('#codigoarticulo').val(l.sku || '');
+        $('#descripcionarticulo').val(l.descripcion || '');
+        $('#precio_oc').val(l.precio != null ? l.precio : '');
+        renderOc();
+        $('#lote_proveedor').focus();
+        $msg.text('Línea OC seleccionada — complete lote y pesos').removeClass('text-danger text-success').addClass('text-muted');
+    }
+
     function render() {
         $tbody.empty();
         var totalNeto = 0;
@@ -36,7 +81,7 @@
             totalNeto += Number(l.peso_neto) || 0;
             var tr = $('<tr/>');
             tr.append($('<td/>').text(l.orden || (idx + 1)));
-            tr.append($('<td class="hora-piqueo"/>').text(l.hora_piqueo || '—'));
+            tr.append($('<td class="hora-carga"/>').text(l.hora_piqueo || '—'));
             tr.append($('<td/>').text(l.codigo || ''));
             tr.append($('<td/>').text(l.descripcion || ''));
             tr.append($('<td/>').text(l.lote_proveedor || ''));
@@ -72,15 +117,18 @@
     }
 
     function limpiarForm() {
+        ocElegidaId = null;
+        $('#ordencompra_articulo_id').val('');
         $('#articulo_id').val('');
         $('#codigoarticulo').val('');
         $('#descripcionarticulo').val('');
+        $('#precio_oc').val('');
         $('#lote_proveedor').val('');
         $('#fecha_vto').val('');
         $('#cant_pieza').val('1');
         $('#peso_bruto').val('');
         $('#peso_neto').val('');
-        $('#codigoarticulo').focus();
+        renderOc();
     }
 
     function token() {
@@ -91,7 +139,6 @@
         if (!zpl) return;
         try {
             if (window.BrowserPrint && typeof window.BrowserPrint.getDefaultDevice === 'function') {
-                // Zebra Browser Print si está disponible
                 window.BrowserPrint.getDefaultDevice('printer', function (device) {
                     if (device) device.send(zpl);
                 }, function () {
@@ -121,6 +168,7 @@
         if (!cfg.editable) return;
         var payload = {
             _token: token(),
+            ordencompra_articulo_id: $('#ordencompra_articulo_id').val(),
             articulo_id: $('#articulo_id').val(),
             lote_proveedor: $.trim($('#lote_proveedor').val()),
             certificado: $.trim($('#lote_proveedor').val()),
@@ -128,11 +176,11 @@
             cant_pieza: $('#cant_pieza').val() || 1,
             peso_bruto: $('#peso_bruto').val() || $('#peso_neto').val(),
             peso_neto: $('#peso_neto').val(),
+            precio: $('#precio_oc').val() || 0,
             imprimir: $('#imprimir_etiqueta').is(':checked') ? 1 : 0
         };
-        if (!payload.articulo_id) {
-            alert('Seleccione un artículo.');
-            $('#codigoarticulo').focus();
+        if (!payload.ordencompra_articulo_id || !payload.articulo_id) {
+            alert('Elija una línea de la OC.');
             return;
         }
         if (!payload.lote_proveedor) {
@@ -160,6 +208,9 @@
                 return;
             }
             lineas.push(res.linea);
+            if (Array.isArray(res.lineas_oc)) {
+                lineasOc = res.lineas_oc;
+            }
             render();
             limpiarForm();
             $msg.text(res.mensaje || ('Grabado ' + (res.linea.hora_piqueo || ''))).removeClass('text-muted text-danger').addClass('text-success');
@@ -189,6 +240,10 @@
         }).done(function (res) {
             if (!res || !res.ok) return;
             lineas = lineas.filter(function (l) { return String(l.id) !== String(lineaId); });
+            if (Array.isArray(res.lineas_oc)) {
+                lineasOc = res.lineas_oc;
+                renderOc();
+            }
             render();
             $msg.text('Ítem quitado').addClass('text-muted');
         }).fail(function () {
@@ -198,12 +253,19 @@
 
     $(function () {
         render();
-        if (typeof window.activa_eventos_consultaarticulo === 'function') {
-            window.activa_eventos_consultaarticulo();
-        }
+        renderOc();
         $('#btn-agregar-item-surmar').on('click', guardarItem);
         $tbody.on('click', '.js-quitar-linea', function () {
             quitarLinea($(this).data('id'));
+        });
+        $tbodyOc.on('click', 'tr', function (e) {
+            if (!cfg.editable) return;
+            var l = $(this).data('ocLinea');
+            if (!l) return;
+            if ($(e.target).closest('button').length || $(e.target).is('button')) {
+                e.preventDefault();
+            }
+            elegirLineaOc(l);
         });
         $('#peso_neto, #lote_proveedor').on('keydown', function (e) {
             if (e.key === 'Enter') {
@@ -212,5 +274,8 @@
             }
         });
         window.addEventListener('pageshow', ocultarOverlay);
+        if (cfg.editable && lineasOc.length === 1) {
+            elegirLineaOc(lineasOc[0]);
+        }
     });
 })(jQuery);

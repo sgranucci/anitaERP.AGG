@@ -11,6 +11,7 @@ final class RecepcionProveedorSurmarListadoFiltros
 {
     public const CAMPOS = [
         'numerorecepcion' => ['label' => 'Nº recepción', 'tipo' => 'entero'],
+        'numeroordencompra' => ['label' => 'Nº OC', 'tipo' => 'entero'],
         'nombreproveedor' => ['label' => 'Proveedor', 'tipo' => 'texto'],
         'estado' => ['label' => 'Estado', 'tipo' => 'texto'],
         'fecha' => ['label' => 'Fecha', 'tipo' => 'texto'],
@@ -103,8 +104,12 @@ final class RecepcionProveedorSurmarListadoFiltros
         if ($rapida) {
             $query->where(function (Builder $q) use ($valor) {
                 $q->where('recepcion_proveedor.numerorecepcion', 'like', '%'.$valor.'%')
+                    ->orWhere('ordencompra.numeroordencompra', 'like', '%'.$valor.'%')
                     ->orWhere('proveedor.nombre', 'like', '%'.$valor.'%')
                     ->orWhere('recepcion_proveedor.estado', 'like', '%'.$valor.'%');
+                if (ctype_digit($valor)) {
+                    $q->orWhere('ordencompra.numeroordencompra', (int) $valor);
+                }
                 CoincidenciaFlexibleTexto::aplicar($q, 'proveedor.nombre', $valor);
             });
 
@@ -113,6 +118,12 @@ final class RecepcionProveedorSurmarListadoFiltros
 
         if ($campo === 'numerorecepcion') {
             $query->where('recepcion_proveedor.numerorecepcion', 'like', '%'.$valor.'%');
+        } elseif ($campo === 'numeroordencompra') {
+            if (ctype_digit($valor)) {
+                $query->where('ordencompra.numeroordencompra', (int) $valor);
+            } else {
+                $query->where('ordencompra.numeroordencompra', 'like', '%'.$valor.'%');
+            }
         } elseif ($campo === 'nombreproveedor') {
             $query->where(function (Builder $q) use ($valor) {
                 $q->where('proveedor.nombre', 'like', '%'.$valor.'%');

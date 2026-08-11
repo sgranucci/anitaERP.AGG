@@ -54,9 +54,14 @@ class ProveedorQuery implements ProveedorQueryInterface
         return($proveedor);
     }
 
-    public function traeProveedorporCodigo($codigo)
+    public function traeProveedorporCodigo($codigo, ?int $empresaId = null)
     {
-        return $this->model->select('id','codigo','nombre')->where('codigo',$codigo)->first();
+        $query = $this->model->select('id','codigo','nombre','empresa_id')->where('codigo',$codigo);
+        if (config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0) {
+            $query->paraEmpresa($empresaId);
+        }
+
+        return $query->first();
     }
 
     public function traeProveedorporId($id, $campos = null)
@@ -111,7 +116,7 @@ class ProveedorQuery implements ProveedorQueryInterface
         return $data;
     }
 
-    public function consultaProveedor($consulta)
+    public function consultaProveedor($consulta, ?int $empresaId = null)
     {
 		$columns = ['proveedor.id', 'proveedor.codigo', 'proveedor.nombre', 'proveedor.domicilio', 'localidad.nombre', 'proveedor.telefono'];
 		$columnsOut = ['proveedor_id', 'codigoproveedor', 'nombreproveedor', 'domicilio', 'localidad', 'telefono'];
@@ -124,6 +129,10 @@ class ProveedorQuery implements ProveedorQueryInterface
                 'proveedor.telefono as telefono', 'proveedor.estado as estado')
 				->leftJoin('localidad', 'proveedor.localidad_id', '=', 'localidad.id')
                 ->whereIn('proveedor.estado', ProveedorTrait::$estadosHabilitadosOperacion);
+
+        if (config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0) {
+            $query->paraEmpresa($empresaId);
+        }
 
         if ($consulta !== '') {
             $query->where(function ($q) use ($count, $consulta, $columns) {

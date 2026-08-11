@@ -94,6 +94,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                    @php $filtroEmpresaActivo = ArticuloListadoFiltros::filtroEmpresaActivo(); @endphp
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>SKU</th>
@@ -103,6 +104,9 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                             <th>Categoría</th>
                             <th>Tipo de Artículo</th>
                             <th>Uso</th>
+                            @if ($filtroEmpresaActivo)
+                                <th>Empresa</th>
+                            @endif
                             <th>Nro.Parte</th>
                             <th>Ubic.Parte</th>
                             <th class="text-right" title="Saldo en Anita (stkdep) para artículos LAB con depósito de entrega">Saldo dep.</th>
@@ -138,6 +142,9 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 <td>
                                     {{ $articulo->nombreusoarticulo ?? '' }}
                                 </td>
+                                @if ($filtroEmpresaActivo)
+                                    <td><small>{{ $articulo->nombreempresa ?: 'Todas' }}</small></td>
+                                @endif
                                 <td>{{$articulo->numeroparte ?? ''}}</td>
                                 <td>{{$articulo->ubicacionparte ?? ''}}</td>
                                 <td class="text-right">

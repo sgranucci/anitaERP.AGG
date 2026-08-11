@@ -14,6 +14,17 @@
     					<input type="text" name="descripcion" id="descripcion" class="form-control descripcion" value="{{old('descripcion', $producto->descripcion ?? '')}}" required/>
                 	</div>
                 </div>
+				@if (\App\Support\Stock\ArticuloListadoFiltros::filtroEmpresaActivo())
+					@include('includes.form-empresa-asignada', [
+						'empresa_query' => $empresa_query ?? collect(),
+						'empresa_id' => old('empresa_id', $producto->empresa_id ?? null),
+						'required' => false,
+						'permite_vacio' => true,
+						'opcion_vacia' => '-- Para todas las empresas --',
+						'col_label' => 'col-lg-4 text-right pr-2',
+						'col_input' => 'col-lg-8',
+					])
+				@endif
             </div>
             <div class="col-sm-6">
 				<div class="form-group row">

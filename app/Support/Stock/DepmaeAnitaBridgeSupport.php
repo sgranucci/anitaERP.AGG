@@ -116,7 +116,8 @@ final class DepmaeAnitaBridgeSupport
 
         if (config('app.empresa') === 'Calzados Ferli'
             || config('app.empresa') === 'EL BIERZO') {
-            return 'depm_deposito,depm_desc,depm_maneja_part,depm_cta_contable';
+            // depm_desc al final: el bridge CSV parte por "|" sin escape.
+            return 'depm_deposito,depm_maneja_part,depm_cta_contable,depm_desc';
         }
 
         if (config('app.empresa') === 'AGG') {

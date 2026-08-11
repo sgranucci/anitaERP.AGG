@@ -138,6 +138,42 @@ class Articulo extends Model implements Auditable
         return $this->belongsTo(Empresa::class, 'empresa_id');
     }
 
+    /**
+     * null = aplica a todas las empresas (mismo criterio que proveedor/cuentacaja).
+     */
+    public function scopeParaEmpresa($query, int $empresaId)
+    {
+        if ($empresaId <= 0) {
+            return $query;
+        }
+
+        return $query->where(function ($q) use ($empresaId) {
+            $q->where('articulo.empresa_id', $empresaId)->orWhereNull('articulo.empresa_id');
+        });
+    }
+
+    public static function existeParaEmpresa(int $articuloId, int $empresaId): bool
+    {
+        if ($articuloId <= 0) {
+            return false;
+        }
+
+        $query = static::query()->whereKey($articuloId);
+
+        return $empresaId > 0
+            ? $query->paraEmpresa($empresaId)->exists()
+            : $query->exists();
+    }
+
+    public function perteneceAEmpresa(int $empresaId): bool
+    {
+        if ($empresaId <= 0) {
+            return true;
+        }
+
+        return $this->empresa_id === null || (int) $this->empresa_id === $empresaId;
+    }
+
     public function categorias()
     {
         return $this->belongsTo(Categoria::class, 'categoria_id');
@@ -813,7 +849,7 @@ class Articulo extends Model implements Auditable
                         'descripcion' => $data->stkm_desc,
                         'sku' => ltrim($data->stkm_articulo, '0'),
                         'detalle' => $detalle,
-                        'empresa_id' => 1,
+                        'empresa_id' => \App\Support\Stock\ArticuloListadoFiltros::empresaIdDesdeSyncAnita(),
                         'unidadesxenvase' => $data->stkm_unidad_xenv,
                         'skualternativo' => $data->stkm_articulo_prod,
                         'categoria_id' => $categoria_id > 0 ? $categoria_id : null,
@@ -918,7 +954,7 @@ class Articulo extends Model implements Auditable
                         'descripcion' => $data->stkm_desc,
                         'sku' => ltrim($data->stkm_articulo, '0'),
                         'detalle' => $detalle,
-                        'empresa_id' => 1,
+                        'empresa_id' => \App\Support\Stock\ArticuloListadoFiltros::empresaIdDesdeSyncAnita(),
                         'unidadesxenvase' => $data->stkm_unidad_xenv,
                         'skualternativo' => $data->stkm_articulo_prod,
                         'categoria_id' => $categoria_id > 0 ? $categoria_id : null,
@@ -975,7 +1011,7 @@ class Articulo extends Model implements Auditable
                     $arrayCampos = InterformingArticuloAnitaMapperSupport::mapearArrayCampos($data, [
                         'descripcion' => $data->stkm_desc,
                         'sku' => ltrim($data->stkm_articulo, '0'),
-                        'empresa_id' => 1,
+                        'empresa_id' => \App\Support\Stock\ArticuloListadoFiltros::empresaIdDesdeSyncAnita(),
                         'unidadesxenvase' => $data->stkm_unidad_xenv,
                         'skualternativo' => $data->stkm_articulo_prod,
                         'categoria_id' => $categoria_id > 0 ? $categoria_id : null,
@@ -1004,7 +1040,7 @@ class Articulo extends Model implements Auditable
                         'descripcion' => $data->stkm_desc,
                         'sku' => ltrim($data->stkm_articulo, '0'),
                         'detalle' => $data->stkm_desc,
-                        'empresa_id' => 1,
+                        'empresa_id' => \App\Support\Stock\ArticuloListadoFiltros::empresaIdDesdeSyncAnita(),
                         'unidadesxenvase' => $data->stkm_unidad_xenv,
                         'skualternativo' => $data->stkm_articulo_prod,
                         'categoria_id' => $categoria_id > 0 ? $categoria_id : null,

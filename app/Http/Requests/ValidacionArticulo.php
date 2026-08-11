@@ -18,6 +18,15 @@ class ValidacionArticulo extends FormRequest
 
     protected function prepareForValidation()
     {
+        if (! config('articulo.filtro_empresa')) {
+            $this->request->remove('empresa_id');
+        } else {
+            $eid = $this->input('empresa_id');
+            if ($eid === '' || $eid === null) {
+                $this->merge(['empresa_id' => null]);
+            }
+        }
+
         $this->merge([
             'maneja_stock_color_talle' => $this->boolean('maneja_stock_color_talle'),
         ]);
@@ -30,7 +39,7 @@ class ValidacionArticulo extends FormRequest
      */
     public function rules()
     {
-        return [
+        $rules = [
             'sku' => 'required|max:20|unique:articulo,sku,' . $this->route('id'),
             'descripcion' => 'required|max:100|',
             'codigobarra' => 'nullable|max:50',
@@ -50,5 +59,11 @@ class ValidacionArticulo extends FormRequest
             'gestioncompra' => 'nullable|max:20',
             'maneja_stock_color_talle' => 'nullable|boolean',
         ];
+
+        if (config('articulo.filtro_empresa')) {
+            $rules['empresa_id'] = ['nullable', 'integer', 'exists:empresa,id'];
+        }
+
+        return $rules;
     }
 }

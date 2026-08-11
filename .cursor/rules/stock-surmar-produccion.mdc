@@ -39,24 +39,24 @@ Patrón preferido: **menú y permisos nuevos** (no swap de rutas como Interformi
 
 ## Grabado provisorio (recepción y movimientos)
 
-Como Anita (`a-stock.c` / `a-stkmov.c`): la operación **queda en pantalla** mientras se pican ítems.
+Como Anita (`a-stock.c` COM): la operación **queda en pantalla** mientras se cargan ítems. COM **emite** etiquetas; no lee barcode (el scan es DES/TRA en `a-stkmov.c`).
 
 | Momento | Persistencia |
 |---|---|
-| Inicio | Cabecera `BORRADOR` / provisorio (`origen_carga=SURMAR`) |
-| Cada ítem cerrado | AJAX graba línea + `stock_etiqueta` + **`hora_piqueo`** (visible en grilla) |
+| Inicio | Cabecera `BORRADOR` + **OC** (`ordencompra_id`, como `carga_referencia` / recepción AGG) |
+| Cada ítem cerrado | AJAX graba línea ligada a `ordencompra_articulo_id` + `stock_etiqueta` + hora de carga (`hora_piqueo` en BD) |
 | Confirmar | Genera `movimientostock` / `articulo_movimiento` |
 
-No acumular ítems solo en el DOM hasta un “Guardar” final: cada piqueo debe quedar grabado (igual que `graba_comp` / `recepaper` en el C).
+No acumular ítems solo en el DOM hasta un “Guardar” final: cada ítem debe quedar grabado (igual que `graba_comp` / `recepaper` en el C).
 
-Workbench recepción: `stock/recepcion-proveedor-surmar/{id}/cargar` + `RecepcionProveedorSurmarService::guardarLineaProvisoria`.
+Workbench: `stock/recepcion-proveedor-surmar/{id}/cargar` + `RecepcionProveedorSurmarService` + `RecepcionProveedorSurmarOcSupport` (solo ERP Surmar; sin sync Anita AGG).
 
 
-1. **COM (`a-stock.c`)**: por línea lote proveedor + certificado + vto; obliga lote antes de grabar; emite `recepaper` + etiqueta ZPL (`eti_prod.fc`).
+1. **COM (`a-stock.c`)**: referencia pedido/OC; por línea lote + certificado + vto; emite `recepaper` + ZPL. No lee barcode.
 2. **DES**: al cargar ítem producido, modal de etiquetas consumidas (`APCOM_carga_tracking`); graba consumo y baja stock de esas aperturas.
 3. **TRA**: lee etiqueta existente (`recepaper` / `stkvaper`); puede reimprimir; graba apertura en destino.
 4. **AP**: alta + impresión etiqueta; genera lote interno tipo `YYYYMMDD-seq`.
-5. **Barcode Anita**: `articulo-nro_interno-nro_apertura-tipo-orden` → en ERP nuevo: **`id`** (+ QR JSON v2 con `etiqueta_id`).
+5. **Barcode Anita**: `articulo-nro_interno-nro_apertura-tipo-orden` → en ERP nuevo: **`id`** (+ QR JSON v2 con `etiqueta_id`) — solo movimientos, no COM.
 6. **Amparos (F9)** y lista etiquetas (F7/F8): contemplar en movimiento Surmar si el negocio lo pide.
 7. **`lotesmov`**: historial lote por comprobante; en ERP se cubre con etiqueta + consumos + movimientos.
 

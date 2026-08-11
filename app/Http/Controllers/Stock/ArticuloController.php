@@ -188,7 +188,10 @@ class ArticuloController extends Controller
     {
         can('listar-articulos');
 
-        $filtros = ArticuloListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltrosListado($request);
+        $empresa_query = ArticuloListadoFiltros::filtroEmpresaActivo()
+            ? $this->empresaRepository->allFiltrado()
+            : collect();
 
         $articulos = $this->articuloRepository->leeArticulo($filtros, true);
 
@@ -206,14 +209,34 @@ class ArticuloController extends Controller
             Log::warning('Articulo index: no se pudo consultar saldo stkdep', ['exception' => $e->getMessage()]);
         }
 
+        $camposFiltro = ArticuloListadoFiltros::CAMPOS;
+        if (! ArticuloListadoFiltros::filtroEmpresaActivo()) {
+            unset($camposFiltro['empresa']);
+        }
+
         return view('stock.articulo.index', [
             'articulos' => $articulos,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
             'filtrosQuery' => ArticuloListadoFiltros::paraQueryString($filtros),
-            'camposFiltro' => ArticuloListadoFiltros::CAMPOS,
+            'camposFiltro' => $camposFiltro,
+            'empresa_query' => $empresa_query,
             'saldosStkdep' => $saldosStkdep,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaDefault = null;
+        if (ArticuloListadoFiltros::filtroEmpresaActivo()) {
+            $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+            $empresaDefault = $empresaDefault ? (int) $empresaDefault : null;
+        }
+
+        return ArticuloListadoFiltros::resolverDesdeRequest($request, $busquedaRuta, $empresaDefault);
     }
 
     public function apiSaldosDeposito(Request $request): \Illuminate\Http\JsonResponse
@@ -307,7 +330,7 @@ class ArticuloController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = ArticuloListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
 
         switch ($formato) {
             case 'PDF':
@@ -820,7 +843,7 @@ class ArticuloController extends Controller
         $estado_enum = Articulo_Estado::$enumEstado;
         $mventa = Mventa::where('id', $request->mventa_id)->first();
         $linea = Linea::where('id', $request->linea_id)->first();
-        $data = $request->all();
+        $data = ArticuloListadoFiltros::normalizarEmpresaIdEnData($request->all());
         $data['fl_precio_promedio_transferencia'] = $request->boolean('fl_precio_promedio_transferencia');
 
         DB::beginTransaction();
@@ -965,7 +988,7 @@ class ArticuloController extends Controller
             $request->request->add(['foto' => $foto]);
         }
 
-        $data = $request->all();
+        $data = ArticuloListadoFiltros::normalizarEmpresaIdEnData($request->all());
         $data['fl_precio_promedio_transferencia'] = $request->boolean('fl_precio_promedio_transferencia');
 
         DB::beginTransaction();
@@ -1082,6 +1105,10 @@ class ArticuloController extends Controller
             ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
             ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
             ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id');
+
+        if (ArticuloListadoFiltros::filtroEmpresaActivo() && $request->filled('empresa_id')) {
+            $query->paraEmpresa((int) $request->input('empresa_id'));
+        }
 
         if (filter_var($request->input('solo_facturable'), FILTER_VALIDATE_BOOLEAN)) {
             $query->where('articulo.nofactura', '0');
@@ -1291,7 +1318,11 @@ class ArticuloController extends Controller
 
     public function leeUnArticuloPorSku($sku, Request $request)
     {
-        $articulo = $this->articuloRepository->findPorSku($sku);
+        $empresaId = null;
+        if (ArticuloListadoFiltros::filtroEmpresaActivo() && $request->filled('empresa_id')) {
+            $empresaId = (int) $request->input('empresa_id');
+        }
+        $articulo = $this->articuloRepository->findPorSku($sku, $empresaId);
 
         if (! \App\Support\Stock\ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
             return response()->json(null);

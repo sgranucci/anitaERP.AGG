@@ -20,6 +20,9 @@ class TrazabilidadSurmarController extends Controller
         $etiquetaId = (int) $request->input('etiqueta_id', 0);
         $articuloId = (int) $request->input('articulo_id', 0);
         $lote = trim((string) $request->input('lote', ''));
+        $codigo = trim((string) $request->input('codigo', ''));
+        $anitaNint = (int) $request->input('anita_nro_interno', 0);
+        $anitaNap = (int) $request->input('anita_nro_apertura', 0);
         $consultar = (string) $request->input('consultar', '') === '1';
 
         $etiquetas = collect();
@@ -28,20 +31,23 @@ class TrazabilidadSurmarController extends Controller
             'etiqueta_id' => $etiquetaId > 0 ? $etiquetaId : null,
             'articulo_id' => $articuloId > 0 ? $articuloId : null,
             'lote' => $lote !== '' ? $lote : null,
+            'codigo' => $codigo !== '' ? $codigo : null,
+            'anita_nro_interno' => $anitaNint > 0 ? $anitaNint : null,
+            'anita_nro_apertura' => $anitaNap > 0 ? $anitaNap : null,
             'consultar' => $consultar ? '1' : null,
         ], static fn ($v) => $v !== null && $v !== '');
 
         if ($consultar) {
-            if ($etiquetaId > 0) {
-                $etiquetas = $this->service->buscarEtiquetas($etiquetaId, null, null);
-                if ($etiquetas->count() === 1) {
-                    $historial = $this->service->historialEtiqueta($etiquetaId);
-                }
-            } else {
-                $etiquetas = $this->service->buscarEtiquetas(null, $articuloId ?: null, $lote !== '' ? $lote : null);
-                if ($etiquetas->count() === 1) {
-                    $historial = $this->service->historialEtiqueta((int) $etiquetas->first()->id);
-                }
+            $etiquetas = $this->service->buscarEtiquetas(
+                $etiquetaId > 0 ? $etiquetaId : null,
+                $articuloId > 0 ? $articuloId : null,
+                $lote !== '' ? $lote : null,
+                $codigo !== '' ? $codigo : null,
+                $anitaNint > 0 ? $anitaNint : null,
+                $anitaNap > 0 ? $anitaNap : null,
+            );
+            if ($etiquetas->count() === 1) {
+                $historial = $this->service->historialEtiqueta((int) $etiquetas->first()->id);
             }
         }
 
@@ -51,6 +57,9 @@ class TrazabilidadSurmarController extends Controller
             'articulo_sku' => (string) $request->input('articulo_sku', ''),
             'articulo_desc' => (string) $request->input('articulo_desc', ''),
             'lote' => $lote,
+            'codigo' => $codigo,
+            'anita_nro_interno' => $anitaNint > 0 ? $anitaNint : '',
+            'anita_nro_apertura' => $anitaNap > 0 ? $anitaNap : '',
             'consultar' => $consultar,
             'etiquetas' => $etiquetas,
             'historial' => $historial,

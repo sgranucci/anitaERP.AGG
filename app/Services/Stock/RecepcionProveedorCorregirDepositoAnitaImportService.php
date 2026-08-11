@@ -2,10 +2,13 @@
 
 namespace App\Services\Stock;
 
+use App\ApiAnita;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use App\Support\Stock\RecepcionProveedorDepositoAnitaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use App\Support\Stock\Surmar\RecepcionProveedorSurmarAnitaBridgeSupport;
+use App\Support\Stock\SurmarSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -101,12 +104,13 @@ class RecepcionProveedorCorregirDepositoAnitaImportService
             throw new \RuntimeException('Recepción sin clave Anita o empresa.');
         }
 
-        $lineasAnita = RecepcionProveedorAnitaImportSupport::listarRecepmov($tipo, $letra, $sucursal, $nro);
+        $lineasAnita = $this->listarRecepmov($tipo, $letra, $sucursal, $nro, $empresaId);
         if ($lineasAnita === []) {
             return;
         }
 
         $actualizaciones = [];
+        $depositoCabecera = null;
         foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
             if ($articuloIdFiltro !== null && (int) $linea->articulo_id !== $articuloIdFiltro) {
                 continue;
@@ -133,6 +137,10 @@ class RecepcionProveedorCorregirDepositoAnitaImportService
                 continue;
             }
 
+            if ($depositoCabecera === null) {
+                $depositoCabecera = $depositoId;
+            }
+
             if ((int) $linea->deposito_id === $depositoId) {
                 continue;
             }
@@ -146,7 +154,10 @@ class RecepcionProveedorCorregirDepositoAnitaImportService
             ];
         }
 
-        if ($actualizaciones === []) {
+        $actualizarCabecera = $depositoCabecera !== null
+            && (int) ($recepcion->deposito_id ?? 0) !== $depositoCabecera;
+
+        if ($actualizaciones === [] && ! $actualizarCabecera) {
             return;
         }
 
@@ -156,7 +167,7 @@ class RecepcionProveedorCorregirDepositoAnitaImportService
             return;
         }
 
-        DB::transaction(function () use ($actualizaciones, &$stats) {
+        DB::transaction(function () use ($actualizaciones, $actualizarCabecera, $depositoCabecera, $recepcion, &$stats) {
             foreach ($actualizaciones as $row) {
                 DB::table('recepcion_proveedor_articulo')
                     ->where('id', $row['linea_id'])
@@ -166,6 +177,35 @@ class RecepcionProveedorCorregirDepositoAnitaImportService
                     ]);
                 $stats['lineas_actualizadas']++;
             }
+
+            if ($actualizarCabecera && $depositoCabecera !== null) {
+                $recepcion->update(['deposito_id' => $depositoCabecera]);
+            }
         });
+    }
+
+    /**
+     * @return list<object>
+     */
+    private function listarRecepmov(string $tipo, string $letra, int $sucursal, int $nro, int $empresaId): array
+    {
+        if (SurmarSupport::esEmpresaSurmar($empresaId)) {
+            $api = new ApiAnita;
+            $where = " WHERE recv_tipo = '".addslashes($tipo)."'"
+                ." AND recv_letra = '".addslashes($letra)."'"
+                .' AND recv_sucursal = '.(int) $sucursal
+                .' AND recv_nro = '.(int) $nro;
+
+            return ApiAnita::decodificarListaFilas($api->apiCall(
+                RecepcionProveedorSurmarAnitaBridgeSupport::mergePayload([
+                    'acc' => 'list',
+                    'tabla' => 'recepmov',
+                    'campos' => RecepcionProveedorSurmarAnitaBridgeSupport::camposLinea(),
+                    'whereArmado' => $where,
+                ])
+            ));
+        }
+
+        return RecepcionProveedorAnitaImportSupport::listarRecepmov($tipo, $letra, $sucursal, $nro);
     }
 }

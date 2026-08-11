@@ -44,6 +44,7 @@ Recepción Surmar
                         <tr>
                             <th>Nº</th>
                             <th>Fecha</th>
+                            <th>OC</th>
                             <th>Proveedor</th>
                             <th>Estado</th>
                             <th>Ítems</th>
@@ -55,6 +56,7 @@ Recepción Surmar
                             <tr>
                                 <td>{{ $item->numerorecepcion }}</td>
                                 <td>{{ optional($item->fecha)->format('d/m/Y') }}</td>
+                                <td>{{ $item->numeroordencompra ?? '—' }}</td>
                                 <td>{{ $item->nombreproveedor }}</td>
                                 <td>
                                     @if ($item->estado === 'BORRADOR')
@@ -68,14 +70,14 @@ Recepción Surmar
                                 <td>{{ $item->recepcion_proveedor_articulos_count ?? '—' }}</td>
                                 <td class="text-nowrap">
                                     @if (can('editar-recepcion-proveedor-surmar', false))
-                                        <a href="{{ route('cargar_recepcion_proveedor_surmar', $item->id) }}" class="btn-accion-tabla tooltipsC" title="Abrir / continuar piqueo">
+                                        <a href="{{ route('cargar_recepcion_proveedor_surmar', $item->id) }}" class="btn-accion-tabla tooltipsC" title="Abrir / continuar carga">
                                             <i class="fa fa-edit"></i>
                                         </a>
                                     @endif
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="text-center text-muted py-4">Sin recepciones Surmar.</td></tr>
+                            <tr><td colspan="7" class="text-center text-muted py-4">Sin recepciones Surmar.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
