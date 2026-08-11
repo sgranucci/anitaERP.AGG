@@ -377,7 +377,8 @@ class RecepcionProveedorService
                 $this->logEstado($recepcion, $estadoAnterior, RecepcionProveedorEstados::CONFIRMADA, 'Confirmación de recepción');
 
                 RecepcionProveedorAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador(
-                    (int) $recepcion->fresh()->numerorecepcion
+                    (int) $recepcion->fresh()->numerorecepcion,
+                    (int) ($recepcion->empresa_id ?? 0)
                 );
 
                 $recepcionConfirmada = $recepcion->fresh(['recepcion_proveedor_articulos', 'ordencompras']);

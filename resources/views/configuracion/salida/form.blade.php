@@ -25,7 +25,8 @@
     <input type="text" name="comando" id="comando" class="form-control" value="{{old('comando', $data->comando ?? '')}}" required/>
         <small class="form-text text-muted">
             Pedidos PDF (CUPS): <code>{{ config('pedido.imprimir_script', base_path('bin/imprimir-pedido.sh')) }} "%s" NOMBRE_COLA</code>.
-            Etiquetas Zebra ZPL (CUPS): <code>{{ base_path('bin/imprimir-etiqueta-zebra.sh') }} "%s" NOMBRE_COLA</code>.
+            Etiquetas Zebra ZPL (CUPS o IP de red): <code>{{ base_path('bin/imprimir-etiqueta-zebra.sh') }} "%s" HOST_O_COLA</code>
+            (artículos y recepción Surmar).
             Tickets térmicos: <code>{{ base_path('bin/gastronomia-print-ticket.sh') }} "%s" IP_IMPRESORA 9100</code>.
         </small>
     </div>

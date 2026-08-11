@@ -12,6 +12,7 @@
     );
 </script>
 <script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}?v=20260722c"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/manual.js') }}?v=20260811a"></script>
 @endsection
 
 @section('contenido')
@@ -33,6 +34,7 @@
                     Mientras corre, el avión se deshabilita y verás <i class="fa fa-spinner fa-spin text-warning"></i>.
                     Al terminar el proceso recibirás un mail con el resultado.
                     Use <i class="fa fa-calculator text-secondary"></i> para refrescar contadores consultando ARCA sin enviar comprobantes.
+                    En el detalle (ojo) hay una herramienta para presentar un comprobante suelto (ERP o Anita), útil para FCE.
                 </p>
                 <form method="get" action="{{ route('arca_caea') }}" class="d-flex flex-wrap align-items-end mb-3">
                     @include('includes.listado.filtro_empresa_asignada_campo', [

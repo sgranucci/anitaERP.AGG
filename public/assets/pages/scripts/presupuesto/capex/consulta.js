@@ -5,7 +5,12 @@ var ptrDetalleCapex;
 var ptrFilaCapex;
 
 function carpetaBaseCapex() {
-	return window.location.pathname.split('/public')[0] + '/public';
+	if (typeof window.carpetaBase === 'string') {
+		return window.carpetaBase;
+	}
+	var loc = window.location.pathname || '';
+	var m = loc.match(/^(.*\/public)(?:\/|$)/);
+	return m ? m[1] : '';
 }
 
 function centrocostoFiltroDesdeFilaCapex($row) {

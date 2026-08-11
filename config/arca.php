@@ -176,6 +176,20 @@ return [
         /** Si true, el job repite lotes hasta vaciar pendientes/errores o bloquearse */
         'informe_vaciar_pendientes' => filter_var(env('ARCA_CAEA_INFORME_VACIAR_PENDIENTES', true), FILTER_VALIDATE_BOOLEAN),
         'informe_max_lotes_job' => (int) env('ARCA_CAEA_INFORME_MAX_LOTES_JOB', 50),
+        /**
+         * Datos adicionales FCE (MTXCA t=21 CBU emisor, t=27 opción transferencia).
+         * cbu_por_empresa: JSON {"1":"0170..."} o ARCA_FCE_CBU_EMPRESA_{id}.
+         */
+        'fce' => [
+            'cbu_emisor' => env('ARCA_FCE_CBU_EMISOR', ''),
+            'opcion_transferencia' => env('ARCA_FCE_OPCION_TRANSFERENCIA', 'ADC'),
+            'cbu_por_empresa' => array_replace(
+                is_array($decoded = json_decode((string) env('ARCA_FCE_CBU_POR_EMPRESA', '{}'), true)) ? $decoded : [],
+                array_filter([
+                    1 => env('ARCA_FCE_CBU_EMPRESA_1') ?: null,
+                ]),
+            ),
+        ],
     ],
 
     /*

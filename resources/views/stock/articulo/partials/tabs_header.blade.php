@@ -1,8 +1,18 @@
 @php
     $tabsArticuloActiva = $tabsArticuloActiva ?? 'datos';
-    $mostrarFormula = can('editar-formula-articulos', false) || can('actualizar-formula-articulos', false);
+    // Slugs reales: formula-articulo (singular, menu fórmulas). Plural legacy no existe en BD.
+    $mostrarFormula = can('editar-formula-articulo', false)
+        || can('actualizar-formula-articulo', false)
+        || can('listar-formula-articulo', false)
+        || can('editar-formula-articulos', false)
+        || can('actualizar-formula-articulos', false)
+        || can('editar-articulos', false)
+        || can('actualizar-articulos', false);
     $mostrarCompras = can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false);
-    $mostrarContable = can('editar-contabilidad-articulos', false) || can('actualizar-contabilidad-articulos', false);
+    $mostrarContable = can('editar-contabilidad-articulos', false)
+        || can('actualizar-contabilidad-articulos', false)
+        || can('editar-articulos', false)
+        || can('actualizar-articulos', false);
     $mostrarPartesUnicas = !empty($mostrarPartesUnicas) || (isset($producto) && (string) ($producto->numeroparte ?? '0') === '1');
 @endphp
 @include('includes.tabs-activas-estilos')

@@ -223,6 +223,13 @@ $('input').keydown(function (e) {
     if ($(this).closest('#tabla-recuento-items, #tabla-items-movimientostock, #tabla-items-recepcion').length) {
         return;
     }
+    // Recepción Surmar: Enter navega entre campos (crear / workbench / modal etiqueta)
+    if ($(this).closest('#form-recepcion-surmar, #form-encabezado-surmar, #modalEtiquetaProveedorSurmar, #surmar-nuevo-item-campos').length) {
+        return;
+    }
+    if ($(this).is('.surmar-enc-nav, .surmar-item-nav, .surmar-etiq-nav, #numero_oc_buscar, #certificado_senasa')) {
+        return;
+    }
     e.preventDefault();
     return false;
 });
@@ -505,9 +512,15 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
                 onDone(data);
             }
         })
-        .fail(function () {
+        .fail(function (xhr) {
             if ($ctx.length) {
                 $ctx.find('.codigodeposito').val(codOriginal);
+            }
+            var msg = (xhr && xhr.responseJSON && xhr.responseJSON.error)
+                ? xhr.responseJSON.error
+                : 'No se pudo leer el depósito (sin autorización o no existe).';
+            if (typeof onDone !== 'function') {
+                alert(msg);
             }
             if (typeof onDone === 'function') {
                 onDone(null);

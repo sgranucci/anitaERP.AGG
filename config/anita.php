@@ -19,6 +19,12 @@ return [
     'bdd_path' => env('ANITA_BDD_PATH', ''),
 
     /**
+     * Path Anita Surmar (El Bierzo). Solo se inyecta si SurmarSupport::esEmpresaSurmar().
+     * En AGG no aplica (id 3 = Rebisco).
+     */
+    'surmar_path' => env('ANITA_SURMAR_PATH', env('ORDENCOMPRA_SURMAR_ANITA_PATH', '/usr2/surmar')),
+
+    /**
      * Sistema Informix donde vive subdiario para controles/mayor de ventas.
      * El Bierzo: ventas. AGG / otros: suele ser contab.
      */

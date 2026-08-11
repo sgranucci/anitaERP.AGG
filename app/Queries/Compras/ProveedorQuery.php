@@ -116,13 +116,15 @@ class ProveedorQuery implements ProveedorQueryInterface
         return $data;
     }
 
-    public function consultaProveedor($consulta, ?int $empresaId = null)
+    public function consultaProveedor($consulta, ?int $empresaId = null): array
     {
 		$columns = ['proveedor.id', 'proveedor.codigo', 'proveedor.nombre', 'proveedor.domicilio', 'localidad.nombre', 'proveedor.telefono'];
 		$columnsOut = ['proveedor_id', 'codigoproveedor', 'nombreproveedor', 'domicilio', 'localidad', 'telefono'];
 
         $count = count($columns);
         $consulta = trim((string) $consulta);
+        $limite = 250;
+        $filtroEmpresaAplicado = config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0;
 
         $query = $this->model->select('proveedor.id as proveedor_id', 'proveedor.codigo as codigoproveedor',
                 'proveedor.nombre as nombreproveedor', 'proveedor.domicilio as domicilio', 'localidad.nombre as localidad',
@@ -130,7 +132,7 @@ class ProveedorQuery implements ProveedorQueryInterface
 				->leftJoin('localidad', 'proveedor.localidad_id', '=', 'localidad.id')
                 ->whereIn('proveedor.estado', ProveedorTrait::$estadosHabilitadosOperacion);
 
-        if (config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0) {
+        if ($filtroEmpresaAplicado) {
             $query->paraEmpresa($empresaId);
         }
 
@@ -142,10 +144,14 @@ class ProveedorQuery implements ProveedorQueryInterface
             });
         }
 
-        $rows = $query->get();
+        $rows = $query->orderBy('proveedor.nombre')->limit($limite)->get();
 
-        $output = [];
-		$output['data'] = '';
+        $output = [
+            'data' => '',
+            'empresa_id' => $filtroEmpresaAplicado ? $empresaId : null,
+            'total' => count($rows),
+            'limit' => $limite,
+        ];
         $flSinDatos = true;
 		if (count($rows) > 0)
 		{
@@ -154,21 +160,32 @@ class ProveedorQuery implements ProveedorQueryInterface
                 $flSinDatos = false;
                 $output['data'] .= '<tr>';
                 for ($i = 0; $i < $count; $i++) {
-                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';
+                    $valor = htmlspecialchars((string) ($row[$columnsOut[$i]] ?? ''), ENT_QUOTES, 'UTF-8');
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $valor . '</td>';
                 }
-                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultaproveedor">Elegir</a></td>';
-                $output['data'] .= '<td><a class="btn btn-warning btn-sm consultaproveedor">Consultar</a></td>';
+                $output['data'] .= '<td><a href="#" class="btn btn-warning btn-sm eligeconsultaproveedor">Elegir</a></td>';
+                $output['data'] .= '<td><a href="#" class="btn btn-info btn-sm consultaproveedor">Consultar</a></td>';
                 $output['data'] .= '</tr>';
 			}
+            if (count($rows) >= $limite) {
+                $output['data'] .= '<tr><td colspan="8" class="text-muted small">Mostrando los primeros '
+                    .$limite.' resultados. Escribí en Buscar para acotar.</td></tr>';
+            }
 		}
 
         if ($flSinDatos)
 		{
-			$output['data'] .= '<tr>';
-			$output['data'] .= '<td>Sin resultados</td>';
-			$output['data'] .= '</tr>';
+            if ($filtroEmpresaAplicado) {
+                $output['data'] .= '<tr><td colspan="8">Sin proveedores para la empresa seleccionada (id '
+                    .(int) $empresaId
+                    .'). Si es una OC Surmar, elegí la empresa <strong>SURMAR</strong> en la cabecera: '
+                    .'los proveedores importados están asociados a esa empresa.</td></tr>';
+            } else {
+                $output['data'] .= '<tr><td colspan="8">Sin resultados</td></tr>';
+            }
 		}
-		return(json_encode($output, JSON_UNESCAPED_UNICODE));
+
+		return $output;
 	}
 
 }

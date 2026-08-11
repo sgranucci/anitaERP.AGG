@@ -138,13 +138,19 @@
                 return String(carpetaBase).replace(/\/$/, '');
             }
             var loc = window.location.pathname || '';
+            // Solo inferir /…/public si la URL realmente lo trae (legado). '' = app en raíz del dominio.
+            var mPublic = loc.match(/^(.*\/public)(?:\/|$)/);
+            if (mPublic && mPublic[1]) {
+                return mPublic[1];
+            }
             var m = loc.match(/^(.+)\/(ventas|caja|stock|compras|contable|seguridad|presupuesto|ticket|admin|uif)\//);
-            if (m && m[1]) {
+            if (m && m[1] && m[1] !== '') {
                 return m[1];
             }
             return '';
         }
         carpetaBase = resolverCarpetaBaseApp();
+        window.carpetaBase = carpetaBase;
     </script>
     <script src="{{asset("assets/$theme/plugins/jquery/jquery.min.js")}}"></script>
     <!-- Bootstrap 4 -->

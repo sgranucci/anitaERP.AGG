@@ -43,6 +43,9 @@
 			case 'cantidad':
 				enfocarInput($row.find('.cantidad-linea').first());
 				break;
+			case 'pesounitario':
+				enfocarInput($row.find('.oc-peso-unitario').first());
+				break;
 			case 'precio':
 				enfocarInput($row.find('.precio-linea').first());
 				break;
@@ -218,6 +221,17 @@
 				if (!validarCantidadLinea($target, $row)) {
 					return;
 				}
+				if (($(SELECTOR_TABLA).attr('data-oc-mostrar-peso') || '0') === '1'
+					&& $row.find('.oc-peso-unitario').length
+					&& !$row.find('.oc-peso-unitario').prop('readonly')) {
+					enfocarCampoLinea($row, 'pesounitario');
+				} else {
+					enfocarCampoLinea($row, 'precio');
+				}
+				return;
+			}
+
+			if ($target.hasClass('oc-peso-unitario')) {
 				enfocarCampoLinea($row, 'precio');
 				return;
 			}
@@ -245,7 +259,11 @@
 
 			if ($target.is('select[name="centrocostodestino_ids[]"]')) {
 				$target.trigger('change');
-				enfocarCampoLinea($row, 'partidagasto');
+				if (($(SELECTOR_TABLA).attr('data-oc-pedir-partida-capex') || '1') === '1') {
+					enfocarCampoLinea($row, 'partidagasto');
+				} else {
+					agregarRenglonYEnfocarArticulo();
+				}
 				return;
 			}
 

@@ -14,6 +14,7 @@ final class RecepcionProveedorSurmarListadoFiltros
         'numeroordencompra' => ['label' => 'Nº OC', 'tipo' => 'entero'],
         'nombreproveedor' => ['label' => 'Proveedor', 'tipo' => 'texto'],
         'estado' => ['label' => 'Estado', 'tipo' => 'texto'],
+        'origen_carga' => ['label' => 'Origen', 'tipo' => 'texto'],
         'fecha' => ['label' => 'Fecha', 'tipo' => 'texto'],
     ];
 
@@ -32,6 +33,7 @@ final class RecepcionProveedorSurmarListadoFiltros
             'filtro_operador' => 'contiene',
             'filtro_busqueda_rapida' => false,
             'estado' => '',
+            'origen_carga' => '',
         ];
     }
 
@@ -44,6 +46,7 @@ final class RecepcionProveedorSurmarListadoFiltros
         $base['filtro_operador'] = (string) $request->input('filtro_operador', 'contiene');
         $base['filtro_busqueda_rapida'] = (string) $request->input('filtro_busqueda_rapida', '') === '1';
         $base['estado'] = (string) $request->input('estado', '');
+        $base['origen_carga'] = (string) $request->input('origen_carga', '');
 
         return $base;
     }
@@ -54,8 +57,11 @@ final class RecepcionProveedorSurmarListadoFiltros
         if (trim((string) ($filtros['filtro_valor'] ?? '')) !== '') {
             return true;
         }
+        if (trim((string) ($filtros['estado'] ?? '')) !== '') {
+            return true;
+        }
 
-        return trim((string) ($filtros['estado'] ?? '')) !== '';
+        return trim((string) ($filtros['origen_carga'] ?? '')) !== '';
     }
 
     /** @param array<string, mixed> $filtros @return array<string, string> */
@@ -77,6 +83,9 @@ final class RecepcionProveedorSurmarListadoFiltros
         if (trim((string) ($filtros['estado'] ?? '')) !== '') {
             $out['estado'] = (string) $filtros['estado'];
         }
+        if (trim((string) ($filtros['origen_carga'] ?? '')) !== '') {
+            $out['origen_carga'] = (string) $filtros['origen_carga'];
+        }
 
         return $out;
     }
@@ -93,6 +102,11 @@ final class RecepcionProveedorSurmarListadoFiltros
             $query->where('recepcion_proveedor.estado', $estado);
         }
 
+        $origen = trim((string) ($filtros['origen_carga'] ?? ''));
+        if ($origen !== '') {
+            $query->where('recepcion_proveedor.origen_carga', $origen);
+        }
+
         $valor = trim((string) ($filtros['filtro_valor'] ?? ''));
         if ($valor === '') {
             return;
@@ -106,9 +120,11 @@ final class RecepcionProveedorSurmarListadoFiltros
                 $q->where('recepcion_proveedor.numerorecepcion', 'like', '%'.$valor.'%')
                     ->orWhere('ordencompra.numeroordencompra', 'like', '%'.$valor.'%')
                     ->orWhere('proveedor.nombre', 'like', '%'.$valor.'%')
-                    ->orWhere('recepcion_proveedor.estado', 'like', '%'.$valor.'%');
+                    ->orWhere('recepcion_proveedor.estado', 'like', '%'.$valor.'%')
+                    ->orWhere('recepcion_proveedor.origen_carga', 'like', '%'.$valor.'%');
                 if (ctype_digit($valor)) {
-                    $q->orWhere('ordencompra.numeroordencompra', (int) $valor);
+                    $q->orWhere('ordencompra.numeroordencompra', (int) $valor)
+                        ->orWhere('recepcion_proveedor.anita_nro', (int) $valor);
                 }
                 CoincidenciaFlexibleTexto::aplicar($q, 'proveedor.nombre', $valor);
             });
@@ -131,6 +147,8 @@ final class RecepcionProveedorSurmarListadoFiltros
             });
         } elseif ($campo === 'estado') {
             $query->where('recepcion_proveedor.estado', 'like', '%'.$valor.'%');
+        } elseif ($campo === 'origen_carga') {
+            $query->where('recepcion_proveedor.origen_carga', 'like', '%'.$valor.'%');
         } elseif ($campo === 'fecha') {
             $query->where('recepcion_proveedor.fecha', 'like', '%'.$valor.'%');
         }

@@ -50,13 +50,13 @@ class RecpunicaAnitaBridgeSupport
             $skuAnita,
             $numeroparte,
         );
-        $payload = [
+        $payload = SurmarSupport::mergePathSistema([
             'acc' => 'insert',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_parte_unica', 'recpunica'),
             'campos' => $insert['campos'],
             'valores' => $insert['valores'],
-        ];
+        ], (int) ($recepcion->empresa_id ?? 0));
 
         $raw = (string) $api->apiCallEscritura($payload);
         if (stripos($raw, 'error') !== false) {
@@ -71,13 +71,13 @@ class RecpunicaAnitaBridgeSupport
     public static function existeEnAnita(int $numeroparte): bool
     {
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_parte_unica', 'recpunica'),
             'campos' => 'recpu_id',
             'whereArmado' => ' WHERE recpu_id = '.(int) $numeroparte,
             'limit' => ' FIRST 1 ',
-        ]);
+        ]));
 
         return ApiAnita::primeraFilaLista($raw) !== null;
     }
@@ -102,7 +102,7 @@ class RecpunicaAnitaBridgeSupport
             $data['limit'] = $limit;
         }
 
-        return ApiAnita::decodificarListaFilas($api->apiCall($data));
+        return ApiAnita::decodificarListaFilas($api->apiCall(SurmarSupport::mergePathSistemaContexto($data)));
     }
 
     /**
@@ -129,12 +129,12 @@ class RecpunicaAnitaBridgeSupport
             .' AND recpu_id = '.$numeroparte;
 
         $api = new ApiAnita;
-        $raw = (string) $api->apiCallEscritura([
+        $raw = (string) $api->apiCallEscritura(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'delete',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_parte_unica', 'recpunica'),
             'whereArmado' => $where,
-        ]);
+        ]));
 
         if (stripos($raw, 'error') !== false) {
             Log::warning('RecpunicaAnitaBridge: delete', ['numeroparte' => $numeroparte, 'respuesta' => $raw]);

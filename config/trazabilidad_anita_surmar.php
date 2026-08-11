@@ -5,7 +5,10 @@
  * Una lectura por tabla (sin particionar por mes). No escribe de vuelta a Anita.
  */
 return [
-    'path_sistema' => env('TRAZABILIDAD_SURMAR_ANITA_PATH', env('RECEPCION_SURMAR_ANITA_PATH', '/usr2/surmar')),
+    'path_sistema' => env(
+        'TRAZABILIDAD_SURMAR_ANITA_PATH',
+        env('ANITA_SURMAR_PATH', env('RECEPCION_SURMAR_ANITA_PATH', '/usr2/surmar'))
+    ),
     'sistema_compras' => env('TRAZABILIDAD_SURMAR_ANITA_SISTEMA_COMPRAS', 'compras'),
     'sistema_ventas' => env('TRAZABILIDAD_SURMAR_ANITA_SISTEMA_VENTAS', 'ventas'),
 

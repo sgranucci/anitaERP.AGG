@@ -3,6 +3,9 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Ordencompra_Articulo;
+use App\Models\Compras\Ordencompra_Articulo_Entrega;
+use App\Models\Stock\Articulo;
+use App\Support\Compras\OrdencompraUiConfigSupport;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
 
 class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryInterface
@@ -30,6 +33,10 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
         $idsAConservar = [];
         $aActualizar = [];
         $aInsertar = [];
+        $entregasPorIndice = [];
+        $mostrarPeso = OrdencompraUiConfigSupport::mostrarPesoArticulo();
+        $entregaSemanal = OrdencompraUiConfigSupport::entregaSemanal();
+        $pesosArticuloCache = [];
 
         $n = count($data['articulo_ids']);
         for ($i = 0; $i < $n; $i++) {
@@ -54,9 +61,29 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
                 $talleId > 0 ? $talleId : null,
             );
 
+            $fechaEntrega = $data['fechaentrega_articulos'][$i] ?? $data['fechaentrega'] ?? $data['fecha'] ?? date('Y-m-d');
+            $entregas = $entregaSemanal
+                ? $this->parseEntregasSemanal($data, $i)
+                : null;
+            if ($entregas !== null && $entregas !== []) {
+                $sumaEntregas = 0.0;
+                $fechas = [];
+                foreach ($entregas as $ent) {
+                    $sumaEntregas += (float) $ent['cantidad'];
+                    $fechas[] = (string) $ent['fecha'];
+                }
+                if ($sumaEntregas > 0) {
+                    $cantidad = $sumaEntregas;
+                }
+                sort($fechas);
+                if ($fechas !== []) {
+                    $fechaEntrega = $fechas[0];
+                }
+            }
+
             $payload = [
                 'ordencompra_id' => $ordencompra_id,
-                'fechaentrega' => $data['fechaentrega_articulos'][$i] ?? $data['fechaentrega'] ?? $data['fecha'] ?? date('Y-m-d'),
+                'fechaentrega' => $fechaEntrega,
                 'articulo_id' => $articulo_id,
                 'color_id' => $colorMov,
                 'talle_id' => $talleMov,
@@ -78,14 +105,34 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
                 'precio_origen_etiqueta' => isset($data['precio_origen_etiquetas'][$i]) ? (string) $data['precio_origen_etiquetas'][$i] : null,
             ];
 
+            if ($mostrarPeso || array_key_exists('peso_unitarios', $data)) {
+                $pesoUnit = $this->resolverPesoUnitarioLinea(
+                    $data,
+                    $i,
+                    (int) $articulo_id,
+                    $mostrarPeso,
+                    $pesosArticuloCache,
+                );
+                $payload['peso_unitario'] = $pesoUnit;
+                $payload['peso_total'] = ($pesoUnit !== null && $pesoUnit > 0 && $cantidad > 0)
+                    ? round($pesoUnit * $cantidad, 6)
+                    : null;
+            }
+
             $idCandidato = $idsEntrantes[$i] ?? null;
             $idCandidato = ($idCandidato === null || $idCandidato === '') ? null : (int) $idCandidato;
 
             if ($idCandidato !== null && isset($idsExistentesFlip[$idCandidato])) {
                 $aActualizar[$idCandidato] = $payload;
                 $idsAConservar[] = $idCandidato;
+                if ($entregas !== null) {
+                    $entregasPorIndice['u:'.$idCandidato] = $entregas;
+                }
             } else {
-                $aInsertar[] = $payload;
+                $aInsertar[] = [
+                    'payload' => $payload,
+                    'entregas' => $entregas,
+                ];
             }
         }
 
@@ -100,10 +147,115 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
             if ($registro) {
                 $registro->update($payload);
             }
+            if (isset($entregasPorIndice['u:'.$id])) {
+                $this->syncEntregasLinea((int) $id, $entregasPorIndice['u:'.$id]);
+            }
         }
 
-        foreach ($aInsertar as $payload) {
-            $this->model->create($payload);
+        foreach ($aInsertar as $item) {
+            $registro = $this->model->create($item['payload']);
+            if ($item['entregas'] !== null) {
+                $this->syncEntregasLinea((int) $registro->id, $item['entregas']);
+            }
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<array{fecha: string, cantidad: float}>|null null = no sincronizar hijas
+     */
+    private function parseEntregasSemanal(array $data, int $i): ?array
+    {
+        if (! array_key_exists('entregas_semanal_json', $data)) {
+            return null;
+        }
+
+        $raw = $data['entregas_semanal_json'][$i] ?? '[]';
+        if (is_array($raw)) {
+            $decoded = $raw;
+        } else {
+            $decoded = json_decode((string) $raw, true);
+        }
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($decoded as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $fecha = trim((string) ($row['fecha'] ?? ''));
+            $cant = (float) ($row['cantidad'] ?? 0);
+            if ($fecha === '' || $cant <= 0) {
+                continue;
+            }
+            $out[] = [
+                'fecha' => $fecha,
+                'cantidad' => $cant,
+            ];
+        }
+
+        usort($out, static function (array $a, array $b): int {
+            return strcmp($a['fecha'], $b['fecha']);
+        });
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array{fecha: string, cantidad: float}>  $entregas
+     */
+    private function syncEntregasLinea(int $ordencompraArticuloId, array $entregas): void
+    {
+        Ordencompra_Articulo_Entrega::query()
+            ->where('ordencompra_articulo_id', $ordencompraArticuloId)
+            ->delete();
+
+        $orden = 1;
+        foreach ($entregas as $ent) {
+            Ordencompra_Articulo_Entrega::query()->create([
+                'ordencompra_articulo_id' => $ordencompraArticuloId,
+                'fecha' => $ent['fecha'],
+                'cantidad' => $ent['cantidad'],
+                'orden' => $orden++,
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<int, float|null>  $cache
+     */
+    private function resolverPesoUnitarioLinea(
+        array $data,
+        int $i,
+        int $articuloId,
+        bool $mostrarPeso,
+        array &$cache,
+    ): ?float {
+        if (array_key_exists('peso_unitarios', $data)) {
+            $raw = $data['peso_unitarios'][$i] ?? null;
+            if ($raw !== null && $raw !== '') {
+                $peso = (float) $raw;
+
+                return abs($peso) > 0.0000001 ? $peso : null;
+            }
+        }
+
+        if (! $mostrarPeso || $articuloId <= 0) {
+            return null;
+        }
+
+        if (! array_key_exists($articuloId, $cache)) {
+            $cache[$articuloId] = Articulo::query()->whereKey($articuloId)->value('peso');
+        }
+        $pesoArt = $cache[$articuloId];
+        if ($pesoArt === null || $pesoArt === '') {
+            return null;
+        }
+        $peso = (float) $pesoArt;
+
+        return abs($peso) > 0.0000001 ? $peso : null;
     }
 }

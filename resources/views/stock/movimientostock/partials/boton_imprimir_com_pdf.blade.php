@@ -5,7 +5,7 @@
     $etiqueta = $etiqueta ?? 'Comprobante (PDF)';
     $titulo = $titulo ?? 'Comprobante de movimiento de stock — PDF con logos y detalle de ítems';
 @endphp
-@if($movimientoStockId > 0 && can('listar-movimientos-de-stock', false))
+@if($movimientoStockId > 0 && \App\Support\Stock\Surmar\MovimientoSurmarPermisoSupport::puedeListar(false))
     @if($modo === 'tabla')
         <a href="{{ route('movimientostock_com_pdf', ['id' => $movimientoStockId, 'inline' => 1]) }}"
            class="btn-accion-tabla tooltipsC"

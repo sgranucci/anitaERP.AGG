@@ -489,6 +489,11 @@
 		return u ? String(u).trim() : '';
 	}
 
+	function permiteCuitDuplicadoConfig() {
+		const cfg = byId('cliente-arca-config');
+		return !!(cfg && cfg.getAttribute('data-permitir-cuit-duplicado') === '1');
+	}
+
 	function getExcluirClienteIdDocumento() {
 		const form = byId('form-general');
 		if (!form) return 0;
@@ -503,23 +508,47 @@
 	function ocultarAlertaDocumentoDuplicado() {
 		const box = byId('cliente-cuit-duplicado-alerta');
 		const msg = byId('cliente-cuit-duplicado-alerta-mensaje');
+		const titulo = byId('cliente-cuit-duplicado-alerta-titulo');
 		if (msg) msg.innerHTML = '';
-		if (box) box.style.display = 'none';
+		if (titulo) {
+			titulo.innerHTML = '<i class="fa fa-exclamation-triangle"></i> CUIT ya registrado';
+		}
+		if (box) {
+			box.classList.remove('alert-info');
+			box.classList.add('alert-warning');
+			box.style.display = 'none';
+		}
 		clienteDocumentoDuplicadoActivo = false;
 	}
 
-	function mostrarAlertaDocumentoDuplicado(cliente) {
+	function mostrarAlertaDocumentoDuplicado(cliente, options) {
+		options = options || {};
 		const box = byId('cliente-cuit-duplicado-alerta');
 		const msg = byId('cliente-cuit-duplicado-alerta-mensaje');
+		const titulo = byId('cliente-cuit-duplicado-alerta-titulo');
 		if (!box || !msg || !cliente) return;
+
+		const debeBloquear = typeof options.bloquear === 'boolean'
+			? options.bloquear
+			: !permiteCuitDuplicadoConfig();
 
 		let html = escapeHtml(cliente.mensaje || 'El CUIT/documento ya está registrado en otro cliente.');
 		if (cliente.url_consulta) {
 			html += ' <a href="' + escapeHtml(cliente.url_consulta) + '" target="_blank" rel="noopener">Ver cliente existente</a>';
 		}
+		if (!debeBloquear) {
+			html += ' <span class="d-block mt-1 text-muted">La configuración permite guardar CUIT duplicados.</span>';
+		}
 		msg.innerHTML = html;
+		if (titulo) {
+			titulo.innerHTML = debeBloquear
+				? '<i class="fa fa-exclamation-triangle"></i> CUIT ya registrado'
+				: '<i class="fa fa-info-circle"></i> CUIT ya registrado (permitido)';
+		}
+		box.classList.toggle('alert-warning', debeBloquear);
+		box.classList.toggle('alert-info', !debeBloquear);
 		box.style.display = 'block';
-		clienteDocumentoDuplicadoActivo = true;
+		clienteDocumentoDuplicadoActivo = debeBloquear;
 		box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
 		const tabLink = byId('tab-datos-facturacion-link');
@@ -569,7 +598,10 @@
 				if (token !== lastVerificacionDocumentoToken) return;
 
 				if (json.duplicado && json.cliente) {
-					mostrarAlertaDocumentoDuplicado(json.cliente);
+					const bloquear = typeof json.bloquear === 'boolean'
+						? json.bloquear
+						: !permiteCuitDuplicadoConfig();
+					mostrarAlertaDocumentoDuplicado(json.cliente, { bloquear: bloquear });
 				} else {
 					ocultarAlertaDocumentoDuplicado();
 				}

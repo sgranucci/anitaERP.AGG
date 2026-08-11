@@ -16,6 +16,9 @@
 			<input type="hidden" name="articulos_id[]" class="articulo_id" value="">
 			<input type="hidden" class="articulo_id_previo" name="articulo_id_previo[]" value="">
         </td>
+        <td class="align-middle text-center ms-etiq-badge-wrap">
+            <span class="badge badge-info ms-etiq-badge" title="Etiquetas del renglón">0</span>
+        </td>
         <td class="align-middle">
 			<div class="celda-articulo-ms-wrapper">
 				<div class="celda-articulo-ms d-flex align-items-center flex-nowrap mb-0">
@@ -63,6 +66,9 @@
 			<input type="hidden" class="articulo_id_previo" name="articulo_id_previo[]" value="">
             <input type="hidden" name="combinaciones_id[]" value="">
             <input type="hidden" name="modulos_id[]" value="">
+        </td>
+        <td class="align-middle text-center ms-etiq-badge-wrap">
+            <span class="badge badge-info ms-etiq-badge" title="Etiquetas del renglón">0</span>
         </td>
         <td class="align-middle">
 			<div class="celda-articulo-ms-wrapper">

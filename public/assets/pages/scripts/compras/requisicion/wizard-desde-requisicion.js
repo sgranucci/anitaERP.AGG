@@ -11,8 +11,10 @@
 (function ($) {
 	'use strict';
 
-	if (typeof carpetaBase === 'undefined' || carpetaBase === '') {
-		window.carpetaBase = window.location.pathname.split('/public')[0] + '/public';
+	if (typeof window.carpetaBase === 'undefined') {
+		var __locCb = window.location.pathname || '';
+		var __mCb = __locCb.match(/^(.*\/public)(?:\/|$)/);
+		window.carpetaBase = __mCb ? __mCb[1] : '';
 	}
 
 	function wzCarpetaBase() {
@@ -491,6 +493,14 @@
 			$tr.append(
 				'<td><input type="number" step="0.0001" class="form-control form-control-sm wz-lin-cantidad" value="' + htmlEsc(lin.cantidad) + '"></td>'
 			);
+			if (META && META.mostrar_peso_articulo) {
+				var pesoU = parseFloat(lin.peso_unitario != null ? lin.peso_unitario : lin.peso) || 0;
+				var cantN = parseFloat(lin.cantidad) || 0;
+				var pesoT = (pesoU > 0 && cantN > 0) ? pesoU * cantN : 0;
+				$tr.attr('data-peso-unitario', pesoU > 0 ? pesoU : '');
+				$tr.append('<td class="text-right small">' + (pesoU > 0 ? htmlEsc(String(parseFloat(pesoU.toFixed(6)))) : '—') + '</td>');
+				$tr.append('<td class="text-right small wz-lin-peso-total">' + (pesoT > 0 ? htmlEsc(String(parseFloat(pesoT.toFixed(6)))) : '—') + '</td>');
+			}
 			$tr.append(
 				'<td><input type="number" step="0.0001" class="form-control form-control-sm wz-lin-precio" value="' + htmlEsc(lin.precio) + '"></td>'
 			);
@@ -516,12 +526,14 @@
 					'</select>' +
 					'</td>'
 			);
-			$tr.append(
-				'<td><span class="small">' + htmlEsc(lin.codigopartidagasto || '—') + (lin.descripcionpartidagasto ? '<br><span class="text-muted small">' + htmlEsc(lin.descripcionpartidagasto) + '</span>' : '') + '</span></td>'
-			);
-			$tr.append(
-				'<td><span class="small">' + htmlEsc(lin.codigocapex || '—') + (lin.descripcioncapex ? '<br><span class="text-muted small">' + htmlEsc(lin.descripcioncapex) + '</span>' : '') + '</span></td>'
-			);
+			if (!META || META.pedir_partida_capex !== false) {
+				$tr.append(
+					'<td><span class="small">' + htmlEsc(lin.codigopartidagasto || '—') + (lin.descripcionpartidagasto ? '<br><span class="text-muted small">' + htmlEsc(lin.descripcionpartidagasto) + '</span>' : '') + '</span></td>'
+				);
+				$tr.append(
+					'<td><span class="small">' + htmlEsc(lin.codigocapex || '—') + (lin.descripcioncapex ? '<br><span class="text-muted small">' + htmlEsc(lin.descripcioncapex) + '</span>' : '') + '</span></td>'
+				);
+			}
 			$tr.append(
 				'<td class="text-center">' +
 					'<button type="button" class="btn btn-sm btn-outline-primary wz-lin-btn-origen mb-1" title="Elegir origen del precio"><i class="fa fa-tags"></i> Origen</button><br>' +
@@ -934,9 +946,17 @@
 	// Edición inline de cantidades / precios / fechas en cada línea
 	// ---------------------------------------------------------------------
 	$(document).on('input', '#wizard-oc-tabla-articulos-body .wz-lin-cantidad', function () {
-		var idx = parseInt($(this).closest('tr').data('linIdx'), 10);
+		var $tr = $(this).closest('tr');
+		var idx = parseInt($tr.data('linIdx'), 10);
 		if (lineas[idx]) {
 			lineas[idx].cantidad = $(this).val();
+		}
+		if (META && META.mostrar_peso_articulo) {
+			var pesoU = parseFloat($tr.attr('data-peso-unitario') || (lineas[idx] && (lineas[idx].peso_unitario || lineas[idx].peso)) || 0) || 0;
+			var cant = parseFloat($(this).val()) || 0;
+			var tot = (pesoU > 0 && cant > 0) ? pesoU * cant : 0;
+			var txt = tot > 0 ? String(parseFloat(tot.toFixed(6))) : '—';
+			$tr.find('.wz-lin-peso-total').text(txt);
 		}
 		wzScheduleRefrescarTotalesCabeceras();
 	});
@@ -1741,6 +1761,10 @@
 			capex_ids: liDel.map(function (l) { return l.capex_id; }),
 			codigocapexs: liDel.map(function (l) { return l.codigocapex; }),
 			descripcioncapexs: liDel.map(function (l) { return l.descripcioncapex; }),
+			peso_unitarios: liDel.map(function (l) {
+				var p = parseFloat(l.peso_unitario != null ? l.peso_unitario : l.peso);
+				return (p && p > 0) ? p : '';
+			}),
 			detalle_articulos: liDel.map(function (l) { return l.detalle || ''; }),
 			requisicion_articulo_ids: liDel.map(function (l) { return l.requisicion_articulo_id; }),
 			articulo_proveedor_ids: liDel.map(function (l) { return l.articulo_proveedor_id || ''; }),

@@ -590,7 +590,12 @@ class ProveedorController extends Controller
             $empresaId = (int) $request->input('empresa_id');
         }
 
-        return $this->proveedorQuery->consultaProveedor($request->consulta, $empresaId > 0 ? $empresaId : null);
+        $payload = $this->proveedorQuery->consultaProveedor(
+            $request->input('consulta'),
+            $empresaId > 0 ? $empresaId : null
+        );
+
+        return response()->json($payload, 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 	}
 
     /**
@@ -713,7 +718,8 @@ class ProveedorController extends Controller
 
     public function leeProveedor($proveedor_id)
     {
-        return $this->proveedorRepository->find($proveedor_id);
+        // JSON explícito: si no existe, "null" (no body vacío) para que el front no caiga en .fail().
+        return response()->json($this->proveedorRepository->find($proveedor_id));
     }
 
     public function leeProveedorPorCodigo(Request $request, $codigo)
@@ -723,7 +729,9 @@ class ProveedorController extends Controller
             $empresaId = (int) $request->input('empresa_id');
         }
 
-        return $this->proveedorRepository->findPorCodigo($codigo, $empresaId > 0 ? $empresaId : null);
+        $proveedor = $this->proveedorRepository->findPorCodigo($codigo, $empresaId > 0 ? $empresaId : null);
+
+        return response()->json($proveedor);
     }    
 
     public function generarEncuesta($codigoProveedor, $encuesta_id, $origen, $hash)

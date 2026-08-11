@@ -18,7 +18,7 @@ class Ordencompra_Articulo extends Model
 
     protected $fillable = [
         'ordencompra_id', 'requisicion_articulo_id', 'fechaentrega', 'articulo_id', 'articulo_proveedor_id',
-        'color_id', 'talle_id', 'penvp_orden', 'penvp_nro_interno', 'lote_transferencia', 'peso_unitario',
+        'color_id', 'talle_id', 'penvp_orden', 'penvp_nro_interno', 'lote_transferencia', 'peso_unitario', 'peso_total',
         'estado_linea_oc', 'cantidad', 'precio', 'moneda_id', 'cotizacion',
         'descuento', 'cantidadalternativa', 'detalle', 'centrocostodestino_id', 'partidagasto_id', 'capex_id',
         'precio_origen_tipo', 'precio_origen_ref_id', 'precio_origen_etiqueta',
@@ -77,5 +77,13 @@ class Ordencompra_Articulo extends Model
     public function ordencompra_articulo_precio_historias()
     {
         return $this->hasMany(Ordencompra_Articulo_Precio_Historia::class, 'ordencompra_articulo_id');
+    }
+
+    public function entregas()
+    {
+        return $this->hasMany(Ordencompra_Articulo_Entrega::class, 'ordencompra_articulo_id')
+            ->orderBy('orden')
+            ->orderBy('fecha')
+            ->orderBy('id');
     }
 }

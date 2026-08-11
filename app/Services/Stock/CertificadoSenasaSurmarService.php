@@ -39,9 +39,14 @@ class CertificadoSenasaSurmarService
     public function listar(array $filtros = [], bool $paginar = true)
     {
         $query = CertificadoSenasaSurmar::query()
+            ->select([
+                'certificado_senasa_surmar.*',
+                'empresa.nombre as nombreempresa',
+            ])
             ->withCount('articulos')
-            ->where('empresa_id', SurmarSupport::EMPRESA_ID)
-            ->orderByDesc('id');
+            ->join('empresa', 'empresa.id', '=', 'certificado_senasa_surmar.empresa_id')
+            ->where('certificado_senasa_surmar.empresa_id', SurmarSupport::EMPRESA_ID)
+            ->orderByDesc('certificado_senasa_surmar.id');
 
         if (CertificadoSenasaSurmarListadoFiltros::tieneCriteriosAplicados($filtros)) {
             CertificadoSenasaSurmarListadoFiltros::aplicar($query, $filtros);

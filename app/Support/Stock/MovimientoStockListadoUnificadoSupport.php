@@ -174,8 +174,17 @@ final class MovimientoStockListadoUnificadoSupport
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($movQuery, 'depmae.empresa_id');
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($tmQuery, 'tm.empresa_id');
-        MovimientoStockVisibilidadSupport::aplicarFiltroCentrocostoMovimientoQuery($movQuery);
-        MovimientoStockVisibilidadSupport::aplicarFiltroCentrocostoTransferenciaQuery($tmQuery);
+
+        $empresaFiltro = (int) ($filtros['empresa_id'] ?? 0);
+        $omitirCcSurmar = MovimientoStockVisibilidadSupport::omitirFiltroCentrocostoEmpresaSurmar(
+            $empresaFiltro > 0 ? $empresaFiltro : null
+        );
+
+        if (! $omitirCcSurmar) {
+            MovimientoStockVisibilidadSupport::aplicarFiltroCentrocostoMovimientoQuery($movQuery);
+            MovimientoStockVisibilidadSupport::aplicarFiltroCentrocostoTransferenciaQuery($tmQuery);
+        }
+
         MovimientoStockVisibilidadSupport::aplicarFiltroDepositosMovimientoQuery($movQuery, 'am_agg.deposito_id');
         MovimientoStockVisibilidadSupport::aplicarFiltroDepositosTransferenciaQuery($tmQuery);
         MovimientoStockVisibilidadSupport::aplicarFiltroTipotransaccionesMovimientoQuery($movQuery);
@@ -183,7 +192,6 @@ final class MovimientoStockListadoUnificadoSupport
         $this->aplicarFiltrosInteligentes($movQuery, $filtros, true);
         $this->aplicarFiltrosInteligentes($tmQuery, $filtros, false);
 
-        $empresaFiltro = (int) ($filtros['empresa_id'] ?? 0);
         if ($empresaFiltro > 0 && $this->empresaRepository->empresaIdPermitida($empresaFiltro)) {
             $movQuery->where('depmae.empresa_id', $empresaFiltro);
             $tmQuery->where('tm.empresa_id', $empresaFiltro);

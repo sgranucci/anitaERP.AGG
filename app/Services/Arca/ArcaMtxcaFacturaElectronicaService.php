@@ -256,9 +256,11 @@ class ArcaMtxcaFacturaElectronicaService
         ?int $soapTimeoutSeconds = null,
     ): array {
         $this->assertTransporteSoap();
-        if (($puntoventa->webservice ?? '') !== 'wsmtxca') {
+        if (($puntoventa->webservice ?? '') !== 'wsmtxca'
+            && ! \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::esMtxca((string) ($puntoventa->webservice ?? ''))) {
             throw new Exception('ARCA MTXCA: solo aplica a webservice wsmtxca.');
         }
+        $puntoventa = \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::puntoventaParaSoap($puntoventa);
 
         $cuit = $this->cuitEmisor($empresaId);
         $ctx = $this->resolveWsaaContext($empresaId);
@@ -307,9 +309,11 @@ class ArcaMtxcaFacturaElectronicaService
         array $caeaVigente,
     ): array {
         $this->assertTransporteSoap();
-        if (($puntoventa->webservice ?? '') !== 'wsmtxca') {
+        if (($puntoventa->webservice ?? '') !== 'wsmtxca'
+            && ! \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::esMtxca((string) ($puntoventa->webservice ?? ''))) {
             throw new Exception('ARCA MTXCA: solo aplica a webservice wsmtxca.');
         }
+        $puntoventa = \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::puntoventaParaSoap($puntoventa);
 
         $caeaNum = preg_replace('/\D+/', '', (string) ($caeaVigente['caea'] ?? '')) ?? '';
         if ($caeaNum === '') {
@@ -553,6 +557,19 @@ class ArcaMtxcaFacturaElectronicaService
             $req['fechaVencimientoPago'] = $this->formatFechaSalida($datos['fechavencimiento'] ?? $datos['fechacomprobante']);
         }
 
+        // FCE MiPyME (201/206/…): fechaVencimientoPago es obligatoria aunque el concepto sea Productos.
+        if (in_array($cbteTipo, [201, 206, 211], true) && ! isset($req['fechaVencimientoPago'])) {
+            $req['fechaVencimientoPago'] = $this->formatFechaSalida($datos['fechavencimiento'] ?? $datos['fechacomprobante']);
+        }
+
+        // RG 5782 / CAEA contingencia: fechaHoraGen obligatoria (equivalente WSFE CbteFchHsGen).
+        if ($authCaea !== null) {
+            $fechaHoraGen = $this->formatFechaHoraGen($datos);
+            if ($fechaHoraGen !== null) {
+                $req['fechaHoraGen'] = $fechaHoraGen;
+            }
+        }
+
         $tributos = $this->buildOtrosTributos($datos['tributos'] ?? []);
         if ($tributos !== null) {
             $req['arrayOtrosTributos'] = $tributos;
@@ -583,7 +600,34 @@ class ArcaMtxcaFacturaElectronicaService
             $req['arrayActividades'] = $actividades;
         }
 
+        $datosAdic = $this->buildDatosAdicionales($datos['datos_adicionales'] ?? $datos['opcionales'] ?? []);
+        if ($datosAdic !== null) {
+            $req['arrayDatosAdicionales'] = $datosAdic;
+        }
+
         return $req;
+    }
+
+    /**
+     * @param  list<array{t?:int|string, codigo?:int|string, c1?:string, valor?:string}>  $lista
+     * @return array{datoAdicional: list<array{t:int, c1:string}>}|null
+     */
+    private function buildDatosAdicionales(array $lista): ?array
+    {
+        $out = [];
+        foreach ($lista as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $t = (int) ($row['t'] ?? $row['codigo'] ?? 0);
+            $c1 = trim((string) ($row['c1'] ?? $row['valor'] ?? ''));
+            if ($t <= 0 || $c1 === '') {
+                continue;
+            }
+            $out[] = ['t' => $t, 'c1' => $c1];
+        }
+
+        return $out === [] ? null : ['datoAdicional' => $out];
     }
 
     private function buildArrayItems(array $lineas, array $datos): ?array
@@ -647,16 +691,39 @@ class ArcaMtxcaFacturaElectronicaService
             ];
 
             $articulo = isset($linea['articulo_id']) ? $articulos->get((int) $linea['articulo_id']) : null;
-            $nomenclador = trim((string) ($articulo->nomenclador ?? ''));
-            if ($nomenclador !== '') {
-                $item['codigoMtx'] = $nomenclador;
-                $item['unidadesMtx'] = (int) preg_replace('/\D+/', '', $nomenclador) ?: 1;
+            $codigoMtx = trim((string) ($linea['codigo_mtx'] ?? $linea['codigoMtx'] ?? ''));
+            if ($codigoMtx === '' && $articulo !== null) {
+                $codigoMtx = trim((string) ($articulo->nomenclador ?? ''));
+                if ($codigoMtx === '') {
+                    $codigoMtx = trim((string) ($articulo->codigobarra ?? ''));
+                }
+            }
+            if ($codigoMtx !== '') {
+                $unidadesMtx = (int) ($linea['unidades_mtx'] ?? $linea['unidadesMtx'] ?? 0);
+                if ($unidadesMtx <= 0 && $articulo !== null) {
+                    $unidadesMtx = (int) ($articulo->unidadreferenciacodigobarra ?? 0);
+                }
+                if ($unidadesMtx <= 0) {
+                    $unidadesMtx = (int) (preg_replace('/\D+/', '', $codigoMtx) ?: 1);
+                    // Para códigos de barras EAN, unidades de referencia suele ser 1.
+                    if (strlen($codigoMtx) >= 8) {
+                        $unidadesMtx = max(1, (int) ($articulo->unidadreferenciacodigobarra ?? 1));
+                    }
+                }
+                $item['codigoMtx'] = $codigoMtx;
+                $item['unidadesMtx'] = max(1, $unidadesMtx);
             }
 
             if ($tasa > 0 && ($linea['incluyeimpuesto'] ?? '1') !== 'N') {
-                $importeIva = round($importeItem * $tasa / 100, 2);
+                $importeIva = isset($linea['importe_iva'])
+                    ? round((float) $linea['importe_iva'], 2)
+                    : round($importeItem * $tasa / 100, 2);
                 if ($importeIva > 0) {
                     $item['importeIVA'] = $this->money($importeIva);
+                }
+                // MTXCA FCE histórico Bierzo: importeItem = neto + IVA.
+                if (($linea['importe_item_con_iva'] ?? false) || ($datos['items_importe_con_iva'] ?? false)) {
+                    $item['importeItem'] = $this->money($importeItem + $importeIva);
                 }
             }
 
@@ -825,7 +892,18 @@ class ArcaMtxcaFacturaElectronicaService
         }
 
         $comp = $result->comprobanteResponse ?? null;
+        // informarComprobanteCAEA a veces responde solo resultado A/O (sin comprobanteResponse);
+        // el CAEA ya se envió en el request y se confirma con consultarUltimoComprobanteAutorizado.
         if ($comp === null) {
+            if (! $verificarConsulta) {
+                return [
+                    'cae' => '',
+                    'fechavencimientocae' => '',
+                    'resultado' => $res,
+                    'observaciones' => $obsText,
+                ];
+            }
+
             throw new Exception("MTXCA — {$operacion} sin comprobanteResponse.");
         }
 
@@ -1232,6 +1310,39 @@ class ArcaMtxcaFacturaElectronicaService
         }
 
         return Carbon::parse($fecha)->format('Y-m-d');
+    }
+
+    /**
+     * MTXCA dateTime AAAA-MM-DDTHH:MM:SS para CAEA por contingencia.
+     *
+     * @param  array<string, mixed>  $datos
+     */
+    private function formatFechaHoraGen(array $datos): ?string
+    {
+        $raw = trim((string) ($datos['fecha_hora_gen'] ?? $datos['cbte_fch_hs_gen'] ?? ''));
+        if ($raw === '') {
+            $fch = preg_replace('/\D+/', '', (string) ($datos['fechacomprobante'] ?? '')) ?? '';
+            if (strlen($fch) !== 8) {
+                return null;
+            }
+
+            return substr($fch, 0, 4).'-'.substr($fch, 4, 2).'-'.substr($fch, 6, 2).'T12:00:00';
+        }
+
+        $digits = preg_replace('/\D+/', '', $raw) ?? '';
+        if (strlen($digits) >= 14) {
+            return substr($digits, 0, 4).'-'.substr($digits, 4, 2).'-'.substr($digits, 6, 2)
+                .'T'.substr($digits, 8, 2).':'.substr($digits, 10, 2).':'.substr($digits, 12, 2);
+        }
+        if (strlen($digits) === 8) {
+            return substr($digits, 0, 4).'-'.substr($digits, 4, 2).'-'.substr($digits, 6, 2).'T12:00:00';
+        }
+
+        try {
+            return Carbon::parse($raw)->format('Y-m-d\TH:i:s');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function fechaArcaToYmd(string $fecha): string

@@ -22,7 +22,9 @@ final class OrdencompraAnitaLineaSupport
             throw new \RuntimeException('La orden de compra no tiene ítems para grabar en Anita.');
         }
 
-        $siguienteInterno = OrdencompraAnitaNumeracionSupport::reservarSiguienteNroInterno();
+        $siguienteInterno = OrdencompraAnitaNumeracionSupport::reservarSiguienteNroInterno(
+            (int) ($oc->empresa_id ?? 0)
+        );
         $orden = 0;
 
         foreach ($lineas as $linea) {

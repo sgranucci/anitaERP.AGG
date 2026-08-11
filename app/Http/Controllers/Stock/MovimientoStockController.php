@@ -13,6 +13,7 @@ use App\Services\Stock\MovimientoStockRevertirService;
 use App\Services\Stock\MovimientoStockService;
 use App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService;
 use App\Services\Stock\TransferenciaMercaderiaPdfService;
+use App\Support\Stock\Surmar\MovimientoSurmarPermisoSupport;
 use App\Support\Stock\SurmarSupport;
 use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Models\Contable\BienUso;
@@ -95,18 +96,20 @@ class MovimientoStockController extends Controller
 
     public function index(Request $request)
     {
-        can('listar-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeListar();
+        $this->aplicarModoSurmarAlRequest($request);
 
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $empresaDefault = $this->empresaDefaultParaListado($request);
         $filtros = MovimientoStockListadoFiltros::resolverDesdeRequest(
             $request,
             null,
-            $empresaDefault ? (int) $empresaDefault : null
+            $empresaDefault
         );
         $datas = $this->movimientoStockService->leeMovimientoStockListado($filtros, true);
         $estado_enum = $this->movimientoStockService->estadoEnum();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $deposito_query = $this->depmaeRepository->allFiltrado();
+        $modoSurmar = $this->esModoSurmar($request);
 
         return view('stock.movimientostock.index', [
             'datas' => $datas,
@@ -117,7 +120,13 @@ class MovimientoStockController extends Controller
             'empresa_query' => $empresa_query,
             'deposito_query' => $deposito_query,
             'mostrarFiltroDeposito' => $this->mostrarFiltroDeposito($deposito_query),
-            'alcance_centro_costo' => MovimientoStockVisibilidadSupport::etiquetaAlcanceActivo(),
+            'alcance_centro_costo' => MovimientoStockVisibilidadSupport::etiquetaAlcanceActivo(
+                isset($filtros['empresa_id']) ? (int) $filtros['empresa_id'] : null
+            ),
+            'modo_surmar' => $modoSurmar,
+            'ruta_index_movimientostock' => $modoSurmar ? 'movimiento_surmar' : 'movimientostock',
+            'ruta_crear_movimientostock' => $modoSurmar ? 'crear_movimiento_surmar' : 'crear_movimientostock',
+            'ruta_lista_movimientostock' => $modoSurmar ? 'lista_movimiento_surmar' : 'lista_movimientostock',
         ]);
     }
 
@@ -151,18 +160,20 @@ class MovimientoStockController extends Controller
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeListar();
+        $this->aplicarModoSurmarAlRequest($request);
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $empresaDefault = $this->empresaDefaultParaListado($request);
         $filtros = MovimientoStockListadoFiltros::resolverDesdeRequest(
             $request,
             $busqueda,
-            $empresaDefault ? (int) $empresaDefault : null
+            $empresaDefault
         );
         $estado_enum = $this->movimientoStockService->estadoEnum();
+        $modoSurmar = $this->esModoSurmar($request);
 
         switch ($formato) {
             case 'PDF':
@@ -188,12 +199,18 @@ class MovimientoStockController extends Controller
                     ->download('movimientos_stock.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        return redirect()->route('movimientostock', MovimientoStockListadoFiltros::paraQueryString($filtros));
+        return redirect()->route(
+            $modoSurmar ? 'movimiento_surmar' : 'movimientostock',
+            MovimientoStockListadoFiltros::paraQueryString($filtros)
+        );
     }
 
     public function crear()
     {
-        can('crear-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeCrear();
+        $request = request();
+        $this->aplicarModoSurmarAlRequest($request);
+        $modoSurmar = $this->esModoSurmar($request);
 
         $this->armarTablasVista($deposito_query,
                                 $mventa_query, $articulo_query, $modulo_query, 
@@ -202,7 +219,10 @@ class MovimientoStockController extends Controller
 
         $tipotransacciondefault_id = $this->resolverTipotransaccionStockDefaultId();
         $empresa_query = $this->empresaRepository->allFiltrado();
-        $empresa_id = old('empresa_id', $empresa_query->first()->id ?? null);
+        $empresa_id = old(
+            'empresa_id',
+            $modoSurmar ? SurmarSupport::EMPRESA_ID : ($empresa_query->first()->id ?? null)
+        );
         $centrocosto_query = $this->centrocostoRepository->all();
         $movimientostock = new MovimientoStock;
         $asientoPreview = ['activo' => false];
@@ -219,11 +239,19 @@ class MovimientoStockController extends Controller
             'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query',
             'empresa_query', 'empresa_id', 'centrocosto_query', 'movimientostock',
             'asientoPreview', 'mostrarSolapaAsiento', 'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
-            'color_query', 'talle_query'));
+            'color_query', 'talle_query') + [
+            'modo_surmar' => $modoSurmar,
+            'ruta_index_movimientostock' => $modoSurmar ? 'movimiento_surmar' : 'movimientostock',
+            'ruta_guardar_movimientostock' => $modoSurmar ? 'guardar_movimiento_surmar' : 'guardar_movimientostock',
+        ]);
     }
 
     public function guardar(ValidacionMovimientoStock $request)
     {
+        MovimientoSurmarPermisoSupport::puedeCrear();
+        $this->aplicarModoSurmarAlRequest($request);
+        $urlIndex = $this->urlIndexMovimientoStock($request);
+
 		$mensaje = '';
 		try
 		{
@@ -240,7 +268,7 @@ class MovimientoStockController extends Controller
                 $surmarFlash = $this->procesarSurmarTrasTransferencia($request, $tipoStockId, $resultado);
                 MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
 
-                $redirect = redirect('stock/movimientostock')
+                $redirect = redirect($urlIndex)
                     ->with('mensaje', ($resultado['mensaje'] ?? 'Transferencia registrada.').($surmarFlash['mensaje_extra'] ?? ''));
                 if (! empty($surmarFlash['hijas_ids'])) {
                     $redirect->with('surmar_imprimir_etiquetas', $surmarFlash['hijas_ids']);
@@ -254,7 +282,7 @@ class MovimientoStockController extends Controller
 				$mensaje = $data['mensaje'] ?? 'Movimiento de stock creado con éxito';
                 MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
 
-                $redirect = redirect('stock/movimientostock')->with('mensaje', $mensaje);
+                $redirect = redirect($urlIndex)->with('mensaje', $mensaje);
                 $hijas = $data['surmar_hijas_ids'] ?? [];
                 if (is_array($hijas) && $hijas !== [] && $request->boolean('imprimir_etiquetas_surmar', true)) {
                     $redirect->with('surmar_imprimir_etiquetas', array_values(array_map('intval', $hijas)));
@@ -275,12 +303,15 @@ class MovimientoStockController extends Controller
 			return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
 		}
 
-        return redirect('stock/movimientostock')->with('mensaje', $mensaje ?: 'Movimiento de stock creado con éxito');
+        return redirect($urlIndex)->with('mensaje', $mensaje ?: 'Movimiento de stock creado con éxito');
     }
 
     public function editar($id)
     {
-        can('editar-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeEditar();
+        $request = request();
+        $this->aplicarModoSurmarAlRequest($request);
+        $modoSurmar = $this->esModoSurmar($request);
     	$movimientostock = $this->movimientoStockService->leeMovimientoStock($id);
 		$this->armarTablasVista($deposito_query,
                             $mventa_query, $articulo_query, $modulo_query, 
@@ -326,6 +357,12 @@ class MovimientoStockController extends Controller
         $color_query = \App\Models\Stock\Color::query()->orderBy('nombre')->get(['id', 'nombre']);
         $talle_query = \App\Models\Stock\Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
+        $etiquetasSurmarPorLinea = [];
+        if (SurmarSupport::esEmpresaSurmar((int) $empresa_id)) {
+            $etiquetasSurmarPorLinea = app(MovimientoStockSurmarEtiquetaService::class)
+                ->consumosPayloadPorLineaProducto((int) $movimientostock->id);
+        }
+
         return view('stock.movimientostock.editar', compact('movimientostock', 
 			'mventa_query', 'articulo_query', 'modulo_query', 
 			'listaprecio_query', 'articuloall_query', 'articuloxsku_query', 
@@ -333,12 +370,18 @@ class MovimientoStockController extends Controller
             'empresa_query', 'empresa_id', 'centrocosto_query', 'asientoPreview', 'mostrarSolapaAsiento',
             'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
             'puedeModificarVentana', 'controlVentanaActivo',
-            'color_query', 'talle_query'));
+            'color_query', 'talle_query', 'etiquetasSurmarPorLinea') + [
+            'modo_surmar' => $modoSurmar,
+            'ruta_index_movimientostock' => $modoSurmar ? 'movimiento_surmar' : 'movimientostock',
+            'ruta_actualizar_movimientostock' => $modoSurmar ? 'actualizar_movimiento_surmar' : 'actualizar_movimientostock',
+        ]);
     }
 
     public function actualizar(ValidacionMovimientoStock $request, $id)
     {
-        can('actualizar-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeActualizar();
+        $this->aplicarModoSurmarAlRequest($request);
+        $urlIndex = $this->urlIndexMovimientoStock($request);
 
         $movimientostock = $this->movimientoStockService->leeMovimientoStock($id);
         if (! MovimientoStockEdicionVentanaSupport::puedeModificar($movimientostock)) {
@@ -353,12 +396,12 @@ class MovimientoStockController extends Controller
 			return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
 		}
 
-        return redirect('stock/movimientostock')->with('mensaje', 'Movimiento de Stock actualizado con éxito');
+        return redirect($urlIndex)->with('mensaje', 'Movimiento de Stock actualizado con éxito');
     }
 
     public function eliminar(Request $request, $id)
     {
-        can('borrar-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeAnular();
 
         if ($request->ajax()) {
             $movimientostock = $this->movimientoStockService->leeMovimientoStock($id);
@@ -395,7 +438,7 @@ class MovimientoStockController extends Controller
 
     public function revertirMovimiento(Request $request, int $id)
     {
-        can('revertir-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeRevertir();
 
         try {
             $resultado = $this->revertirService->revertirMovimiento(
@@ -414,12 +457,12 @@ class MovimientoStockController extends Controller
             return response()->json(['mensaje' => 'ok', 'resultado' => $resultado]);
         }
 
-        return redirect('stock/movimientostock')->with('mensaje', $resultado['mensaje'] ?? 'Movimiento revertido.');
+        return redirect($this->urlIndexMovimientoStock($request))->with('mensaje', $resultado['mensaje'] ?? 'Movimiento revertido.');
     }
 
     public function revertirTransferencia(Request $request, int $id)
     {
-        can('revertir-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeRevertir();
 
         try {
             $resultado = $this->revertirService->revertirTransferencia(
@@ -444,9 +487,9 @@ class MovimientoStockController extends Controller
     public function previewAsientoContable(Request $request, ?int $id = null): JsonResponse
     {
         if ($id) {
-            can('editar-movimientos-de-stock');
+            MovimientoSurmarPermisoSupport::puedeEditar();
         } else {
-            can('crear-movimientos-de-stock');
+            MovimientoSurmarPermisoSupport::puedeCrear();
         }
 
         $existente = null;
@@ -471,7 +514,7 @@ class MovimientoStockController extends Controller
 
     public function previewConversionFormula(Request $request): JsonResponse
     {
-        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
             return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
         }
 
@@ -491,7 +534,7 @@ class MovimientoStockController extends Controller
 
     public function saldoArticuloDeposito(Request $request): JsonResponse
     {
-        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
             return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
         }
 
@@ -540,7 +583,7 @@ class MovimientoStockController extends Controller
 
     public function resolverEtiquetaSurmar(Request $request, MovimientoStockSurmarEtiquetaService $surmarEtiquetas): JsonResponse
     {
-        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
             return response()->json(['ok' => false, 'message' => 'No tiene permisos.'], 403);
         }
 
@@ -563,9 +606,7 @@ class MovimientoStockController extends Controller
 
     public function imprimirEtiquetaSurmar(int $etiquetaId, MovimientoStockSurmarEtiquetaService $surmarEtiquetas)
     {
-        if (! can('crear-movimientos-de-stock', false)
-            && ! can('editar-movimientos-de-stock', false)
-            && ! can('listar-trazabilidad-surmar', false)) {
+        if (! MovimientoSurmarPermisoSupport::puedeImprimirEtiqueta(false)) {
             abort(403);
         }
 
@@ -583,7 +624,7 @@ class MovimientoStockController extends Controller
 
     public function zplEtiquetasSurmarBatch(Request $request, MovimientoStockSurmarEtiquetaService $surmarEtiquetas): JsonResponse
     {
-        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
             return response()->json(['ok' => false, 'message' => 'No tiene permisos.'], 403);
         }
 
@@ -619,8 +660,16 @@ class MovimientoStockController extends Controller
         $ids = $surmar->idsEtiquetasDesdeRequest($request->all());
         if ($ids === []) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'etiquetas_consumo_id' => 'TRA Surmar: piqueá al menos una etiqueta DISPONIBLE.',
+                'etiquetas_consumo_linea' => 'TRA Surmar: piqueá al menos una etiqueta DISPONIBLE por cada ítem.',
             ]);
+        }
+        $porLinea = $surmar->etiquetasPorLineaProductoDesdeRequest($request->all());
+        foreach ($porLinea as $i => $idsLinea) {
+            if ($idsLinea === []) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'etiquetas_consumo_linea' => 'TRA Surmar: el renglón '.((int) $i + 1).' no tiene etiquetas piqueadas.',
+                ]);
+            }
         }
     }
 
@@ -660,7 +709,7 @@ class MovimientoStockController extends Controller
 
     public function precioLineaArticulo(Request $request): JsonResponse
     {
-        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
             return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
         }
 
@@ -698,7 +747,7 @@ class MovimientoStockController extends Controller
 
     public function resolverNpuBaja(Request $request): JsonResponse
     {
-        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
             return response()->json(['ok' => false, 'mensaje' => 'No tiene permisos para esta consulta.'], 403);
         }
 
@@ -757,7 +806,7 @@ class MovimientoStockController extends Controller
 
     public function consultaNpuBaja(Request $request)
     {
-        if (! can('crear-movimientos-de-stock', false) && ! can('editar-movimientos-de-stock', false)) {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
             abort(403);
         }
 
@@ -805,7 +854,7 @@ class MovimientoStockController extends Controller
 
     public function imprimirCom(Request $request, int $id)
     {
-        can('listar-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeListar();
 
         MovimientoStockVisibilidadSupport::abortSiNoAccesibleMovimiento($id);
 
@@ -823,7 +872,7 @@ class MovimientoStockController extends Controller
 
     public function listarMovimientoStock($id)
     {
-        can('listar-movimientos-de-stock');
+        MovimientoSurmarPermisoSupport::puedeListar();
 
         MovimientoStockVisibilidadSupport::abortSiNoAccesibleMovimiento((int) $id);
 
@@ -956,5 +1005,47 @@ class MovimientoStockController extends Controller
             ],
             $lineas
         );
+    }
+
+    private function esModoSurmar(?Request $request = null): bool
+    {
+        $request = $request ?? request();
+
+        return $request->boolean('modo_surmar')
+            || MovimientoSurmarPermisoSupport::soloModoSurmar()
+            || str_contains((string) $request->path(), 'movimiento-surmar');
+    }
+
+    private function aplicarModoSurmarAlRequest(Request $request): void
+    {
+        if (! $this->esModoSurmar($request)) {
+            return;
+        }
+
+        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
+        $request->merge([
+            'empresa_id' => SurmarSupport::EMPRESA_ID,
+            'empresa_scope' => 'una',
+            'empresa_todas' => 0,
+            'modo_surmar' => 1,
+        ]);
+    }
+
+    private function empresaDefaultParaListado(Request $request): ?int
+    {
+        if ($this->esModoSurmar($request)) {
+            return SurmarSupport::EMPRESA_ID;
+        }
+
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+
+        return $empresaDefault ? (int) $empresaDefault : null;
+    }
+
+    private function urlIndexMovimientoStock(?Request $request = null): string
+    {
+        return $this->esModoSurmar($request)
+            ? route('movimiento_surmar', ['empresa_id' => SurmarSupport::EMPRESA_ID])
+            : url('stock/movimientostock');
     }
 }

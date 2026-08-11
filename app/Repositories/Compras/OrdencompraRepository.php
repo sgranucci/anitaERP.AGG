@@ -35,8 +35,9 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
     {
         $data = self::limpiaPayloadCabecera($data);
         if (empty($data['numeroordencompra'])) {
+            $empresaId = isset($data['empresa_id']) ? (int) $data['empresa_id'] : null;
             $data['numeroordencompra'] = OrdencompraAnitaNumeracionSupport::estaHabilitada()
-                ? OrdencompraAnitaNumeracionSupport::asignarNumeroOcLibre()
+                ? OrdencompraAnitaNumeracionSupport::asignarNumeroOcLibre($empresaId)
                 : self::siguienteNumero();
         }
 
@@ -75,6 +76,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             'ordencompra_articulos.color', 'ordencompra_articulos.talle',
             'ordencompra_articulos.articulo_proveedor.unidadesmedidacompra',
             'ordencompra_articulos.articulo_proveedor.proveedores',
+            'ordencompra_articulos.entregas',
             'ordencompra_comprobantes.monedas', 'ordencompra_comprobantes.condicionpagos',
             'ordencompra_comprobantes.ordencompra_comprobante_cuotas.monedas',
             'ordencompra_comprobantes.ordencompra_comprobante_cuotas.formapagos',

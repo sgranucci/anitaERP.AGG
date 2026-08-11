@@ -1,7 +1,9 @@
 /* global carpetaBase */
 $(function () {
-	if (typeof carpetaBase === 'undefined' || carpetaBase === '') {
-		window.carpetaBase = window.location.pathname.split('/public')[0] + '/public';
+	if (typeof window.carpetaBase === 'undefined') {
+		var __locCb = window.location.pathname || '';
+		var __mCb = __locCb.match(/^(.*\/public)(?:\/|$)/);
+		window.carpetaBase = __mCb ? __mCb[1] : '';
 	}
 
 	if (!$('#form-ordencompra-general').length) {
@@ -9,6 +11,8 @@ $(function () {
 	}
 
 	var ocMonedaPesoId = parseInt($('#tabla-articulos-ordencompra').attr('data-oc-moneda-peso-id') || '1', 10);
+	var ocMostrarPeso = ($('#tabla-articulos-ordencompra').attr('data-oc-mostrar-peso') || '0') === '1';
+	var ocPedirPartidaCapex = ($('#tabla-articulos-ordencompra').attr('data-oc-pedir-partida-capex') || '1') === '1';
 
 	function ocFormatearCantAlt(num) {
 		if (!isFinite(num)) {
@@ -21,12 +25,53 @@ $(function () {
 		return String(t);
 	}
 
+	function ocFormatearPeso(num) {
+		if (!isFinite(num)) {
+			return '';
+		}
+		var t = parseFloat(num.toFixed(6));
+		if (t === 0) {
+			return '';
+		}
+		return String(t);
+	}
+
 	function ocLimpiarCantidadAlternativaHint($tr) {
 		$tr.find('.oc-unidadesxenvase').val('');
 		$tr.find('.oc-um-alt-abrev').val('');
 		$tr.find('.oc-cantidadalternativa').val('');
 		$tr.find('.oc-cant-alt-valor').addClass('text-muted').text('—');
 		$tr.find('.oc-cant-alt-um').text('');
+	}
+
+	function ocLimpiarPesoLinea($tr) {
+		if (!ocMostrarPeso || !$tr || !$tr.length) {
+			return;
+		}
+		$tr.find('.oc-peso-unitario').val('');
+		$tr.find('.oc-peso-total').val('');
+	}
+
+	function ocAplicarPesoDesdeArticulo($tr, dataArticulo) {
+		if (!ocMostrarPeso || !$tr || !$tr.length) {
+			return;
+		}
+		var peso = dataArticulo ? (parseFloat(dataArticulo.peso) || 0) : 0;
+		$tr.find('.oc-peso-unitario').val(peso > 0 ? ocFormatearPeso(peso) : '');
+		ocActualizarPesoTotalHint($tr);
+	}
+
+	function ocActualizarPesoTotalHint($tr) {
+		if (!ocMostrarPeso || !$tr || !$tr.length) {
+			return;
+		}
+		var pesoU = parseFloat($tr.find('.oc-peso-unitario').val()) || 0;
+		var cant = parseFloat($tr.find('.cantidad-linea').val()) || 0;
+		if (pesoU <= 0 || cant <= 0) {
+			$tr.find('.oc-peso-total').val('');
+			return;
+		}
+		$tr.find('.oc-peso-total').val(ocFormatearPeso(pesoU * cant));
 	}
 
 	function ocEnriquecerUmAltDesdeArticulo($tr, dataArticulo) {
@@ -40,6 +85,7 @@ $(function () {
 		$tr.find('.oc-unidadesxenvase').val(uxenv > 0 ? uxenv : '');
 		$tr.find('.oc-um-alt-abrev').val(umdAlt || '');
 		ocActualizarCantidadAlternativaHint($tr);
+		ocAplicarPesoDesdeArticulo($tr, dataArticulo);
 	}
 
 	function ocActualizarCantidadAlternativaHint($tr) {
@@ -86,6 +132,7 @@ $(function () {
 			$tr.find('.codigoarticulo').val('');
 			$tr.find('.descripcionarticulo').val('');
 			ocLimpiarCantidadAlternativaHint($tr);
+			ocLimpiarPesoLinea($tr);
 			if (window.ArticuloProveedorOperativo) {
 				window.ArticuloProveedorOperativo.aplicarAFila($tr, null, dataArticulo);
 			}
@@ -644,6 +691,339 @@ $(function () {
 		ptrOcDetalleLineaRow.find('.oc-ta-detalle-linea').val($('#oc_detalle_linea_editor').val() || '');
 		ocRefreshDetalleLineaBadge(ptrOcDetalleLineaRow);
 		$('#modalOcDetalleLinea').modal('hide');
+	});
+
+	var ptrOcEntregaSemanalRow = null;
+	var ocEntregaSemanalSoloLectura = !$('#oc-entrega-semanal-aplicar').length;
+
+	function ocEntregaSemanalHabilitada() {
+		return $('#tabla-articulos-ordencompra').attr('data-oc-entrega-semanal') === '1';
+	}
+
+	function ocParseEntregasJson($row) {
+		var raw = $row.find('.oc-entregas-semanal-json').val() || '[]';
+		try {
+			var arr = JSON.parse(raw);
+			return Array.isArray(arr) ? arr : [];
+		} catch (e) {
+			return [];
+		}
+	}
+
+	function ocFmtCantEntrega(n) {
+		var x = Number(n);
+		if (!isFinite(x)) {
+			return '0';
+		}
+		return String(parseFloat(x.toFixed(4)));
+	}
+
+	function ocRefreshEntregasSemanalUi($row) {
+		if (!$row || !$row.length || !ocEntregaSemanalHabilitada()) {
+			return;
+		}
+		var arr = ocParseEntregasJson($row);
+		var n = arr.length;
+		var $badge = $row.find('.oc-entregas-count');
+		if ($badge.length) {
+			if (n > 0) {
+				$badge.text(String(n)).removeClass('d-none');
+			} else {
+				$badge.text('').addClass('d-none');
+			}
+		}
+		var $cant = $row.find('.cantidad-linea');
+		var puedeEditar = $('#oc-entrega-semanal-aplicar').length > 0;
+		if (n > 0) {
+			$cant.addClass('oc-cant-desde-entregas');
+			if (puedeEditar) {
+				$cant.prop('readonly', true).attr('title', 'Cantidad = suma de entregas semanales');
+			}
+		} else if (puedeEditar) {
+			$cant.removeClass('oc-cant-desde-entregas').prop('readonly', false).attr('title', '');
+		}
+		var $res = ocSubRowArticulo($row).find('.oc-entregas-semanal-resumen');
+		if ($res.length) {
+			if (!n) {
+				$res.text('—').removeAttr('title');
+			} else {
+				var parts = arr.map(function (e) {
+					var f = (e.fecha || '').toString();
+					if (/^\d{4}-\d{2}-\d{2}$/.test(f)) {
+						f = f.slice(8, 10) + '/' + f.slice(5, 7) + '/' + f.slice(0, 4);
+					}
+					return f + ': ' + ocFmtCantEntrega(e.cantidad);
+				});
+				var txt = n + ' entrega(s) · ' + parts.join(' · ');
+				$res.text(txt).attr('title', txt);
+			}
+		}
+	}
+
+	function ocEntregaSemanalLeerFilasModal() {
+		var out = [];
+		$('#oc-entrega-semanal-tbody tr.oc-entrega-semanal-renglon').each(function () {
+			var fecha = ($(this).find('.oc-entrega-fecha').val() || '').trim();
+			var cant = parseFloat($(this).find('.oc-entrega-cantidad').val());
+			if (!fecha || !isFinite(cant) || cant <= 0) {
+				return;
+			}
+			out.push({ fecha: fecha, cantidad: cant });
+		});
+		out.sort(function (a, b) {
+			return String(a.fecha).localeCompare(String(b.fecha));
+		});
+		return out;
+	}
+
+	function ocEntregaSemanalActualizarTotal() {
+		var sum = 0;
+		$('#oc-entrega-semanal-tbody .oc-entrega-cantidad').each(function () {
+			var v = parseFloat($(this).val());
+			if (isFinite(v) && v > 0) {
+				sum += v;
+			}
+		});
+		$('#oc-entrega-semanal-total').text(ocFmtCantEntrega(sum));
+	}
+
+	function ocEntregaSemanalAgregarRenglon(fecha, cantidad) {
+		var tpl = document.getElementById('oc-entrega-semanal-template-renglon');
+		if (!tpl) {
+			return;
+		}
+		var $tr = $(tpl.content.cloneNode(true)).find('tr');
+		if (fecha) {
+			$tr.find('.oc-entrega-fecha').val(fecha);
+		}
+		if (cantidad !== undefined && cantidad !== null && cantidad !== '') {
+			$tr.find('.oc-entrega-cantidad').val(ocFmtCantEntrega(cantidad));
+		}
+		if (ocEntregaSemanalSoloLectura) {
+			$tr.find('input').prop('readonly', true);
+			$tr.find('.oc-entrega-quitar').prop('disabled', true).addClass('d-none');
+		}
+		$('#oc-entrega-semanal-tbody').append($tr);
+		ocEntregaSemanalActualizarTotal();
+	}
+
+	function ocEntregaSemanalPoblarModal(arr) {
+		$('#oc-entrega-semanal-tbody').empty();
+		if (!arr || !arr.length) {
+			if (!ocEntregaSemanalSoloLectura) {
+				ocEntregaSemanalAgregarRenglon('', '');
+			}
+		} else {
+			arr.forEach(function (e) {
+				ocEntregaSemanalAgregarRenglon(e.fecha || '', e.cantidad);
+			});
+		}
+		ocEntregaSemanalActualizarTotal();
+	}
+
+	$(document).on('click', '.oc-abrir-entrega-semanal', function () {
+		if (!ocEntregaSemanalHabilitada()) {
+			return;
+		}
+		ptrOcEntregaSemanalRow = $(this).closest('tr.item-ordencompra-articulo');
+		var sku = (ptrOcEntregaSemanalRow.find('.codigoarticulo').val() || '').trim();
+		var desc = (ptrOcEntregaSemanalRow.find('.descripcionarticulo').val() || '').trim();
+		var sub = 'Cargue fecha y cantidad por semana. La suma se aplica a la cantidad de la línea.';
+		if (sku || desc) {
+			sub = (sku ? sku + ' — ' : '') + desc;
+		}
+		$('#oc-entrega-semanal-subtitulo').text(sub);
+		ocEntregaSemanalPoblarModal(ocParseEntregasJson(ptrOcEntregaSemanalRow));
+		$('#modalOcEntregaSemanal').modal('show');
+	});
+
+	$(document).on('click', '#oc-entrega-semanal-agregar', function () {
+		ocEntregaSemanalAgregarRenglon('', '');
+		$('#oc-entrega-semanal-tbody tr:last .oc-entrega-fecha').trigger('focus');
+	});
+
+	$(document).on('click', '#oc-entrega-semanal-tbody .oc-entrega-quitar', function () {
+		var $tbody = $('#oc-entrega-semanal-tbody');
+		var $tr = $(this).closest('tr');
+		if ($tbody.find('tr').length <= 1) {
+			$tr.find('input').val('');
+		} else {
+			$tr.remove();
+		}
+		ocEntregaSemanalActualizarTotal();
+	});
+
+	$(document).on('input change', '#oc-entrega-semanal-tbody .oc-entrega-fecha, #oc-entrega-semanal-tbody .oc-entrega-cantidad', function () {
+		ocEntregaSemanalActualizarTotal();
+	});
+
+	$(document).on('click', '#oc-entrega-semanal-limpiar', function () {
+		$('#oc-entrega-semanal-tbody').empty();
+		ocEntregaSemanalAgregarRenglon('', '');
+		ocEntregaSemanalActualizarTotal();
+	});
+
+	$(document).on('click', '#oc-entrega-semanal-aplicar', function () {
+		if (!ptrOcEntregaSemanalRow || !ptrOcEntregaSemanalRow.length) {
+			return;
+		}
+		var arr = ocEntregaSemanalLeerFilasModal();
+		ptrOcEntregaSemanalRow.find('.oc-entregas-semanal-json').val(JSON.stringify(arr));
+		var sum = 0;
+		var fechas = [];
+		arr.forEach(function (e) {
+			sum += Number(e.cantidad) || 0;
+			if (e.fecha) {
+				fechas.push(e.fecha);
+			}
+		});
+		if (arr.length > 0 && sum > 0) {
+			ptrOcEntregaSemanalRow.find('.cantidad-linea').val(ocFmtCantEntrega(sum));
+			fechas.sort();
+			if (fechas.length) {
+				ptrOcEntregaSemanalRow.find('input[name="fechaentrega_articulos[]"]').val(fechas[0]);
+			}
+		}
+		ocRefreshEntregasSemanalUi(ptrOcEntregaSemanalRow);
+		ocActualizarCantidadAlternativaHint(ptrOcEntregaSemanalRow);
+		ocActualizarPesoTotalHint(ptrOcEntregaSemanalRow);
+		if (window.ArticuloProveedorOperativo) {
+			window.ArticuloProveedorOperativo.actualizarHintConversion(ptrOcEntregaSemanalRow);
+		}
+		ocScheduleTotales();
+		$('#modalOcEntregaSemanal').modal('hide');
+	});
+
+	function ocFmtFechaEntregaDdMmYyyy(iso) {
+		var f = (iso || '').toString();
+		if (/^\d{4}-\d{2}-\d{2}$/.test(f)) {
+			return f.slice(8, 10) + '/' + f.slice(5, 7) + '/' + f.slice(0, 4);
+		}
+		return f;
+	}
+
+	function ocRecolectarLineasEntregaSemanalResumen() {
+		var lineas = [];
+		$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
+			var $row = $(this);
+			var sku = ($row.find('.codigoarticulo').val() || '').trim();
+			var desc = ($row.find('.descripcionarticulo').val() || '').trim();
+			var artId = ($row.find('.articulo_id').val() || '').trim();
+			if (!artId && !sku && !desc) {
+				return;
+			}
+			var entregas = ocParseEntregasJson($row);
+			var cantLinea = parseFloat($row.find('.cantidad-linea').val()) || 0;
+			var porFecha = {};
+			var totalEnt = 0;
+			entregas.forEach(function (e) {
+				var fecha = (e.fecha || '').toString();
+				var cant = Number(e.cantidad) || 0;
+				if (!fecha || cant <= 0) {
+					return;
+				}
+				porFecha[fecha] = (porFecha[fecha] || 0) + cant;
+				totalEnt += cant;
+			});
+			lineas.push({
+				sku: sku,
+				descripcion: desc,
+				cantidad_linea: cantLinea,
+				porFecha: porFecha,
+				total_entregas: totalEnt
+			});
+		});
+		return lineas;
+	}
+
+	function ocRenderEntregaSemanalResumen() {
+		var lineas = ocRecolectarLineasEntregaSemanalResumen();
+		var fechasSet = {};
+		lineas.forEach(function (l) {
+			Object.keys(l.porFecha).forEach(function (f) {
+				fechasSet[f] = true;
+			});
+		});
+		var fechas = Object.keys(fechasSet).sort();
+		var $thead = $('#oc-entrega-semanal-resumen-thead').empty();
+		var $tbody = $('#oc-entrega-semanal-resumen-tbody').empty();
+		var $tfoot = $('#oc-entrega-semanal-resumen-tfoot').empty();
+		var $vacio = $('#oc-entrega-semanal-resumen-vacio');
+
+		if (!lineas.length) {
+			$vacio.removeClass('d-none').text('No hay artículos en la grilla.');
+			return;
+		}
+
+		var $hr = $('<tr/>');
+		$hr.append($('<th class="text-nowrap"/>').text('SKU'));
+		$hr.append($('<th/>').text('Descripción'));
+		fechas.forEach(function (f) {
+			$hr.append(
+				$('<th class="text-right text-nowrap"/>')
+					.attr('title', f)
+					.text(ocFmtFechaEntregaDdMmYyyy(f))
+			);
+		});
+		$hr.append($('<th class="text-right text-nowrap"/>').text('Total entregas'));
+		$hr.append($('<th class="text-right text-nowrap"/>').text('Cant. línea'));
+		$thead.append($hr);
+
+		var totPorFecha = {};
+		fechas.forEach(function (f) { totPorFecha[f] = 0; });
+		var totEntregas = 0;
+		var totCantLinea = 0;
+		var hayEntregas = fechas.length > 0;
+
+		lineas.forEach(function (l) {
+			var $tr = $('<tr/>');
+			$tr.append($('<td class="text-nowrap"/>').text(l.sku || '—'));
+			$tr.append($('<td/>').text(l.descripcion || '—'));
+			fechas.forEach(function (f) {
+				var v = l.porFecha[f] || 0;
+				totPorFecha[f] += v;
+				$tr.append(
+					$('<td class="text-right"/>').text(v > 0 ? ocFmtCantEntrega(v) : '—')
+				);
+			});
+			totEntregas += l.total_entregas;
+			totCantLinea += l.cantidad_linea;
+			$tr.append($('<td class="text-right font-weight-bold"/>').text(ocFmtCantEntrega(l.total_entregas)));
+			$tr.append($('<td class="text-right"/>').text(ocFmtCantEntrega(l.cantidad_linea)));
+			$tbody.append($tr);
+		});
+
+		var $fr = $('<tr/>');
+		$fr.append($('<th colspan="2" class="text-right"/>').text('Totales'));
+		fechas.forEach(function (f) {
+			$fr.append(
+				$('<th class="text-right"/>').text(ocFmtCantEntrega(totPorFecha[f]))
+			);
+		});
+		$fr.append($('<th class="text-right"/>').text(ocFmtCantEntrega(totEntregas)));
+		$fr.append($('<th class="text-right"/>').text(ocFmtCantEntrega(totCantLinea)));
+		$tfoot.append($fr);
+
+		if (!hayEntregas) {
+			$vacio.removeClass('d-none').text('No hay entregas semanales cargadas; se listan los artículos con cantidad de línea.');
+		} else {
+			$vacio.addClass('d-none');
+		}
+
+		var nOc = ($('#numeroordencompra_show').val() || '').toString().trim();
+		var sub = 'Una fila por artículo; cada columna es una fecha de entrega. Totales por artículo y por fecha.';
+		if (nOc) {
+			sub = 'OC Nº ' + nOc + ' — ' + sub;
+		}
+		$('#oc-entrega-semanal-resumen-subtitulo').text(sub);
+	}
+
+	$(document).on('click', '.oc-abrir-entrega-semanal-resumen', function () {
+		if (!ocEntregaSemanalHabilitada()) {
+			return;
+		}
+		ocRenderEntregaSemanalResumen();
+		$('#modalOcEntregaSemanalResumen').modal('show');
 	});
 
 	function ocJsonParse(id, fallback) {
@@ -1597,16 +1977,22 @@ $(function () {
 		$clone.find('.descripcionpartidagasto').val('');
 		$clone.find('.descripcioncapex').val('');
 		$clone.find('.oc-ta-detalle-linea').val('');
+		$clone.find('.oc-entregas-semanal-json').val('[]');
+		$clone.find('.oc-entregas-count').text('').addClass('d-none');
+		$clone.find('.cantidad-linea').removeClass('oc-cant-desde-entregas').prop('readonly', false).attr('title', '');
 		$clone.find('select.ms-color-id, select.ms-talle-id').val('').attr('data-selected', '');
 		$clone.attr('data-maneja-stock-color-talle', '0');
 		ocLimpiarCantidadAlternativaHint($clone);
+		ocLimpiarPesoLinea($clone);
 		$clone.find('.linea-articulo-proveedor-id,.linea-codigo-articulo-proveedor,.linea-coef-conversion,.linea-um-compra-abrev').val('');
 		$clone.find('.linea-proveedor-etiqueta').text('—').attr('title', '');
 		$clone.find('.linea-conversion-hint').addClass('d-none').html('');
+		$cloneSub.find('.oc-entregas-semanal-resumen').text('—').removeAttr('title');
 		$tbody.append($clone);
 		$tbody.append($cloneSub);
 		ocRefreshDetalleLineaBadge($clone);
 		ocRefreshOrigenPrecioResumen($clone);
+		ocRefreshEntregasSemanalUi($clone);
 		$clone.find('select').each(function () {
 			$(this).prop('selectedIndex', 0);
 		});
@@ -1654,21 +2040,32 @@ $(function () {
 			$lastRow.find('.oc-precio-origen-tipo').val('');
 			$lastRow.find('.oc-precio-origen-ref-id').val('');
 			$lastRow.find('.oc-precio-origen-etiqueta').val('');
+			$lastRow.find('.oc-entregas-semanal-json').val('[]');
+			$lastRow.find('.oc-entregas-count').text('').addClass('d-none');
+			$lastRow.find('.cantidad-linea').removeClass('oc-cant-desde-entregas');
+			if ($('#oc-entrega-semanal-aplicar').length) {
+				$lastRow.find('.cantidad-linea').prop('readonly', false).attr('title', '');
+			}
 			ocLimpiarCantidadAlternativaHint($lastRow);
 			ocActualizarCotizacionLinea($lastRow);
 			ocRefreshDetalleLineaBadge($lastRow);
 			ocRefreshOrigenPrecioResumen($lastRow);
+			ocRefreshEntregasSemanalUi($lastRow);
 		}
 		ocScheduleTotales();
 	});
 
-	$(document).on('input change', '#tabla-articulos-ordencompra .cantidad-linea, #tabla-articulos-ordencompra .precio-linea, #tabla-articulos-ordencompra .oc-cotizacion-linea', function () {
+	$(document).on('input change', '#tabla-articulos-ordencompra .cantidad-linea, #tabla-articulos-ordencompra .precio-linea, #tabla-articulos-ordencompra .oc-cotizacion-linea, #tabla-articulos-ordencompra .oc-peso-unitario', function () {
+		var $tr = $(this).closest('tr.item-ordencompra-articulo');
 		if ($(this).hasClass('cantidad-linea')) {
-			var $tr = $(this).closest('tr.item-ordencompra-articulo');
 			ocActualizarCantidadAlternativaHint($tr);
+			ocActualizarPesoTotalHint($tr);
 			if (window.ArticuloProveedorOperativo) {
 				window.ArticuloProveedorOperativo.actualizarHintConversion($tr);
 			}
+		} else if ($(this).hasClass('oc-peso-unitario')) {
+			ocActualizarPesoTotalHint($tr);
+			return;
 		}
 		ocScheduleTotales();
 	});
@@ -1676,12 +2073,18 @@ $(function () {
 	$(document).on('change', '#tabla-articulos-ordencompra .codigoarticulo', function () {
 		var sku = ($(this).val() || '').trim();
 		if (!sku) {
-			ocLimpiarCantidadAlternativaHint($(this).closest('tr.item-ordencompra-articulo'));
+			var $trClear = $(this).closest('tr.item-ordencompra-articulo');
+			ocLimpiarCantidadAlternativaHint($trClear);
+			ocLimpiarPesoLinea($trClear);
 		}
 	});
 
 	$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
 		ocActualizarCantidadAlternativaHint($(this));
+		ocActualizarPesoTotalHint($(this));
+		ocRefreshDetalleLineaBadge($(this));
+		ocRefreshOrigenPrecioResumen($(this));
+		ocRefreshEntregasSemanalUi($(this));
 	});
 	$('#descuento_tipo').on('change', function () {
 		ocActualizarAyudaDescuento();
@@ -2282,6 +2685,12 @@ $(function () {
 					$row.find('.oc-precio-origen-tipo').val('');
 					$row.find('.oc-precio-origen-ref-id').val('');
 					$row.find('.oc-precio-origen-etiqueta').val('');
+					$row.find('.oc-entregas-semanal-json').val('[]');
+					$row.find('.oc-entregas-count').text('').addClass('d-none');
+					$row.find('.cantidad-linea').removeClass('oc-cant-desde-entregas');
+					if ($('#oc-entrega-semanal-aplicar').length) {
+						$row.find('.cantidad-linea').prop('readonly', false).attr('title', '');
+					}
 					$row.find('.codigoarticulo').val(a.sku || '');
 					$row.find('.descripcionarticulo').val(a.descripcion_articulo || '');
 					var colorId = a.color_id ? String(a.color_id) : '';
@@ -2305,6 +2714,11 @@ $(function () {
 					$row.find('.capex_id').val(a.capex_id || '');
 					$row.find('.codigocapex').val(a.codigocapex || '');
 					$row.find('.descripcioncapex').val(a.descripcioncapex || '');
+					if (ocMostrarPeso) {
+						var pesoU = parseFloat(a.peso_unitario != null ? a.peso_unitario : a.peso) || 0;
+						$row.find('.oc-peso-unitario').val(pesoU > 0 ? ocFormatearPeso(pesoU) : '');
+						ocActualizarPesoTotalHint($row);
+					}
 					ocActualizarCantidadAlternativaHint($row);
 					if (!(parseFloat($row.find('.oc-unidadesxenvase').val()) > 0)) {
 						$row.find('.oc-cantidadalternativa').val(a.cantidadalternativa);
@@ -2316,6 +2730,7 @@ $(function () {
 					ocActualizarCotizacionLinea($(this));
 					ocRefreshDetalleLineaBadge($(this));
 					ocRefreshOrigenPrecioResumen($(this));
+					ocRefreshEntregasSemanalUi($(this));
 					if (typeof window.msPoblarSelectsColorTalleFila === 'function') {
 						window.msPoblarSelectsColorTalleFila($(this));
 					}

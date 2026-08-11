@@ -9,6 +9,8 @@ use App\Models\Presupuesto\Presupuesto;
 /**
  * Valida que partidas de gasto y CAPEX en líneas de documentos de compras
  * correspondan al presupuesto vigente y al centro de costo destino de cada línea.
+ *
+ * Si `compras.oc_pedir_partida_capex` es false (El Bierzo), no exige ni valida.
  */
 final class ValidacionPresupuestoPartidaCapexLineas
 {
@@ -20,6 +22,10 @@ final class ValidacionPresupuestoPartidaCapexLineas
      */
     public static function validar(array $payload): void
     {
+        if (! OrdencompraUiConfigSupport::pedirPartidaCapex()) {
+            return;
+        }
+
         $empresaId = (int) ($payload['empresa_id'] ?? 0);
         $ultimoPid = (int) Presupuesto::query()->max('id');
         if ($ultimoPid <= 0) {

@@ -48,4 +48,79 @@ final class SurmarSupport
             abort(404);
         }
     }
+
+    /**
+     * Path Anita para escritura/lectura de documentos Surmar (solo El Bierzo).
+     * AGG (id 3 = Rebisco) y otras empresas → null (= config anita.bdd_path).
+     */
+    public static function pathSistemaAnita(?int $empresaId): ?string
+    {
+        if (strtoupper((string) config('app.empresa')) !== 'EL BIERZO') {
+            return null;
+        }
+        if (! self::esEmpresaSurmar($empresaId)) {
+            return null;
+        }
+
+        $path = rtrim((string) config('anita.surmar_path', '/usr2/surmar'), '/');
+
+        return $path !== '' ? $path : '/usr2/surmar';
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public static function mergePathSistema(array $payload, ?int $empresaId): array
+    {
+        $path = self::pathSistemaAnita($empresaId);
+        if ($path !== null) {
+            $payload['path_sistema'] = $path;
+        }
+
+        return $payload;
+    }
+
+    /** Empresa en curso para escritura Anita (request-scoped; ColisionSupport / helpers estáticos). */
+    private static ?int $escrituraEmpresaId = null;
+
+    public static function fijarEmpresaEscritura(?int $empresaId): void
+    {
+        self::$escrituraEmpresaId = $empresaId !== null && $empresaId > 0 ? $empresaId : null;
+    }
+
+    public static function limpiarEmpresaEscritura(): void
+    {
+        self::$escrituraEmpresaId = null;
+    }
+
+    /**
+     * @template T
+     * @param  callable(): T  $fn
+     * @return T
+     */
+    public static function conEmpresaEscritura(?int $empresaId, callable $fn): mixed
+    {
+        $prev = self::$escrituraEmpresaId;
+        self::fijarEmpresaEscritura($empresaId);
+        try {
+            return $fn();
+        } finally {
+            self::$escrituraEmpresaId = $prev;
+        }
+    }
+
+    public static function empresaEscrituraActual(): ?int
+    {
+        return self::$escrituraEmpresaId;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public static function mergePathSistemaContexto(array $payload): array
+    {
+        return self::mergePathSistema($payload, self::$escrituraEmpresaId);
+    }
 }

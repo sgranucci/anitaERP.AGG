@@ -18,7 +18,8 @@ class RecepcionProveedorArticuloSurmar extends Recepcion_Proveedor_Articulo
         'moneda_id', 'cotizacion', 'descuento', 'deposito_id', 'detalle', 'motivorechazo', 'estado',
         'impuesto_id', 'incluyeimpuesto', 'centrocosto_id', 'lote_id', 'articulo_movimiento_id',
         // Surmar
-        'lote_proveedor', 'certificado', 'fecha_vto', 'peso_bruto', 'peso_neto', 'cant_pieza',
+        'lote_proveedor', 'certificado', 'fecha_vto', 'peso_bruto', 'peso_tara', 'peso_neto', 'cant_pieza',
+        'separa_unidadmedida_id', 'cant_unid_separa', 'nro_apertura',
         'hora_piqueo', 'piqueado_at', 'stock_etiqueta_id',
     ];
 
@@ -28,6 +29,7 @@ class RecepcionProveedorArticuloSurmar extends Recepcion_Proveedor_Articulo
         'fecha_vto' => 'date',
         'piqueado_at' => 'datetime',
         'peso_bruto' => 'decimal:4',
+        'peso_tara' => 'decimal:4',
         'peso_neto' => 'decimal:4',
         'cant_pieza' => 'decimal:4',
     ];
@@ -35,5 +37,10 @@ class RecepcionProveedorArticuloSurmar extends Recepcion_Proveedor_Articulo
     public function stock_etiqueta()
     {
         return $this->belongsTo(Stock_Etiqueta::class, 'stock_etiqueta_id');
+    }
+
+    public function separaUnidadmedida()
+    {
+        return $this->belongsTo(UnidadmedidaSurmar::class, 'separa_unidadmedida_id');
     }
 }

@@ -27,6 +27,14 @@
                 </select>
             </div>
             <div class="form-group col-md-2 mb-2">
+                <label class="control-label" for="origen_carga">Origen</label>
+                <select name="origen_carga" id="origen_carga" class="form-control form-control-sm" form="form-filtros-recepcion-surmar">
+                    <option value="">Todos</option>
+                    <option value="ANITA_IMPORT" {{ ($filtros['origen_carga'] ?? '') === 'ANITA_IMPORT' ? 'selected' : '' }}>Anita</option>
+                    <option value="SURMAR" {{ ($filtros['origen_carga'] ?? '') === 'SURMAR' ? 'selected' : '' }}>ERP Surmar</option>
+                </select>
+            </div>
+            <div class="form-group col-md-2 mb-2">
                 <button type="submit" class="btn btn-primary btn-sm btn-block">Aplicar filtros</button>
             </div>
         </div>

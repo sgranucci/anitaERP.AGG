@@ -1,8 +1,10 @@
 $(function () {
 	// No redefinir carpetaBase: el layout ya define la base correcta (app.app_carpeta).
 	// Redefinirla rompía las peticiones AJAX en rutas como visualizar (sin /public en el path).
-	if (typeof carpetaBase === 'undefined' || carpetaBase === '') {
-		window.carpetaBase = window.location.pathname.split('/public')[0] + '/public';
+	if (typeof window.carpetaBase === 'undefined') {
+		var __locCb = window.location.pathname || '';
+		var __mCb = __locCb.match(/^(.*\/public)(?:\/|$)/);
+		window.carpetaBase = __mCb ? __mCb[1] : '';
 	}
 
 	function formateaAvisoGrabacion(msg) {

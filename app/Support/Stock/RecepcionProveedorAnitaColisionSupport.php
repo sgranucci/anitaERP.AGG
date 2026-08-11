@@ -5,6 +5,7 @@ namespace App\Support\Stock;
 use App\ApiAnita;
 use App\Models\Stock\Recepcion_Proveedor;
 use Illuminate\Support\Facades\DB;
+use App\Support\Stock\SurmarSupport;
 
 /**
  * Evita confirmar una recepción COM cuyo número ya existe en Anita con datos ajenos
@@ -59,18 +60,20 @@ final class RecepcionProveedorAnitaColisionSupport
      */
     public static function colisionaNumeradorGlobalConAnita(Recepcion_Proveedor $recepcion): bool
     {
-        $recepcion->loadMissing(['proveedores', 'empresas']);
+        return SurmarSupport::conEmpresaEscritura((int) ($recepcion->empresa_id ?? 0), function () use ($recepcion) {
+            $recepcion->loadMissing(['proveedores', 'empresas']);
 
-        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
-        if ((int) ($clave['nro'] ?? 0) <= 0) {
-            return false;
-        }
+            $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+            if ((int) ($clave['nro'] ?? 0) <= 0) {
+                return false;
+            }
 
-        $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+            $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
 
-        return self::existeComNroEnRecepmae((int) $clave['nro'])
-            && self::leerRecepmaeProveedorClave($codigoProveedor, $clave) === null
-            && self::leerRecepmaeErpPorClave($codigoProveedor, $clave) === null;
+            return self::existeComNroEnRecepmae((int) $clave['nro'])
+                && self::leerRecepmaeProveedorClave($codigoProveedor, $clave) === null
+                && self::leerRecepmaeErpPorClave($codigoProveedor, $clave) === null;
+        });
     }
 
     /**
@@ -87,7 +90,7 @@ final class RecepcionProveedorAnitaColisionSupport
         $letra = addslashes(RecepcionProveedorAnitaClaveSupport::letraCom());
 
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
@@ -95,7 +98,7 @@ final class RecepcionProveedorAnitaColisionSupport
             'whereArmado' => " WHERE recm_tipo = '{$tipo}' AND recm_letra = '{$letra}'"
                 .' AND recm_nro = '.(int) $nro,
             'limit' => 'FIRST 1',
-        ]);
+        ]));
 
         return ApiAnita::primeraFilaLista($raw) !== null;
     }
@@ -114,7 +117,7 @@ final class RecepcionProveedorAnitaColisionSupport
         $letra = addslashes(RecepcionProveedorAnitaClaveSupport::letraCom());
 
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
@@ -123,7 +126,7 @@ final class RecepcionProveedorAnitaColisionSupport
                 .' AND recm_sucursal = '.(int) $sucursal
                 .' AND recm_nro = '.(int) $nro,
             'limit' => 'FIRST 1',
-        ]);
+        ]));
 
         return ApiAnita::primeraFilaLista($raw) !== null;
     }
@@ -172,14 +175,14 @@ final class RecepcionProveedorAnitaColisionSupport
     {
         $cfg = config('recepcion_proveedor.anita');
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
             'campos' => 'recm_proveedor, recm_fecha, recm_tipo_fac, recm_letra_fac, recm_sucursal_fac, recm_nro_fac, recm_estado, recm_documentoid, recm_terminal',
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave),
             'limit' => 'FIRST 1',
-        ]);
+        ]));
 
         return ApiAnita::primeraFilaLista($raw);
     }
@@ -205,14 +208,14 @@ final class RecepcionProveedorAnitaColisionSupport
     private static function existeRecepmovProveedor(string $codigoProveedor, array $clave): bool
     {
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => (string) config('recepcion_proveedor.anita.tablas.recepcion_linea'),
             'campos' => 'recv_nro',
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmovProveedorCabecera($codigoProveedor, $clave),
             'limit' => 'FIRST 1',
-        ]);
+        ]));
 
         return ApiAnita::primeraFilaLista($raw) !== null;
     }
@@ -221,14 +224,14 @@ final class RecepcionProveedorAnitaColisionSupport
     {
         $cfg = config('recepcion_proveedor.anita');
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_ventas'],
             'tabla' => (string) $cfg['tablas']['stock_movimiento'],
             'campos' => 'stkv_nro',
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::stkmovCabeceraSoloErp($clave),
             'limit' => 'FIRST 1',
-        ]);
+        ]));
 
         return ApiAnita::primeraFilaLista($raw) !== null;
     }
@@ -249,6 +252,13 @@ final class RecepcionProveedorAnitaColisionSupport
      * Antes de confirmar/sincronizar: no pisar COM Anita (REF/vacío) ni otro proveedor.
      */
     public static function assertConfirmacionSegura(Recepcion_Proveedor $recepcion): void
+    {
+        SurmarSupport::conEmpresaEscritura((int) ($recepcion->empresa_id ?? 0), function () use ($recepcion) {
+            self::assertConfirmacionSeguraEnContexto($recepcion);
+        });
+    }
+
+    private static function assertConfirmacionSeguraEnContexto(Recepcion_Proveedor $recepcion): void
     {
         $recepcion->loadMissing(['proveedores', 'ordencompras', 'empresas']);
 
@@ -403,14 +413,14 @@ final class RecepcionProveedorAnitaColisionSupport
         $letra = addslashes(RecepcionProveedorAnitaClaveSupport::letraCom());
 
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
             'campos' => 'max(recm_nro) as max_nro',
             'whereArmado' => " WHERE recm_tipo = '{$tipo}' AND recm_letra = '{$letra}'"
                 .' AND recm_sucursal = '.(int) $sucursal,
-        ]);
+        ]));
 
         $fila = ApiAnita::primeraFilaLista($raw);
 
@@ -427,13 +437,13 @@ final class RecepcionProveedorAnitaColisionSupport
         $letra = addslashes(RecepcionProveedorAnitaClaveSupport::letraCom());
 
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
             'campos' => 'max(recm_nro) as max_nro',
             'whereArmado' => " WHERE recm_tipo = '{$tipo}' AND recm_letra = '{$letra}'",
-        ]);
+        ]));
 
         $fila = ApiAnita::primeraFilaLista($raw);
 
@@ -468,14 +478,14 @@ final class RecepcionProveedorAnitaColisionSupport
     {
         $cfg = config('recepcion_proveedor.anita');
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_ventas'],
             'tabla' => (string) $cfg['tablas']['stock_movimiento'],
             'campos' => 'stkv_nro',
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::stkmovCabecera($clave),
             'limit' => 'FIRST 1',
-        ]);
+        ]));
 
         return ApiAnita::primeraFilaLista($raw) !== null;
     }
@@ -487,14 +497,14 @@ final class RecepcionProveedorAnitaColisionSupport
     {
         $cfg = config('recepcion_proveedor.anita');
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
             'campos' => 'recm_proveedor, recm_tipo_fac, recm_letra_fac, recm_sucursal_fac, recm_nro_fac, recm_estado, recm_documentoid',
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaeSoloErp($codigoProveedor, $clave),
             'limit' => 'FIRST 1',
-        ]);
+        ]));
 
         return ApiAnita::primeraFilaLista($raw);
     }
@@ -506,14 +516,14 @@ final class RecepcionProveedorAnitaColisionSupport
     {
         $cfg = config('recepcion_proveedor.anita');
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $api->apiCall(SurmarSupport::mergePathSistemaContexto([
             'acc' => 'list',
             'sistema' => (string) $cfg['sistema_compras'],
             'tabla' => (string) $cfg['tablas']['recepcion_cabecera'],
             'campos' => 'recm_proveedor, recm_tipo_fac, recm_letra_fac, recm_sucursal_fac, recm_nro_fac, recm_estado, recm_documentoid',
             'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaePorClave($clave),
             'limit' => 'FIRST 1',
-        ]);
+        ]));
 
         return ApiAnita::primeraFilaLista($raw);
     }

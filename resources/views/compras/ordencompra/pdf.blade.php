@@ -14,79 +14,79 @@
         * { box-sizing: border-box; }
         body {
             font-family: DejaVu Sans, Arial, sans-serif;
-            font-size: 7px;
+            font-size: 10px;
             color: #111;
         }
         h2 {
-            font-size: 9px;
-            margin: 3px 0 2px 0;
+            font-size: 12px;
+            margin: 6px 0 4px 0;
             border-bottom: 1px solid #333;
-            padding-bottom: 1px;
+            padding-bottom: 2px;
             page-break-after: avoid;
         }
-        table { width: 100%; max-width: 100%; border-collapse: collapse; margin-bottom: 2px; table-layout: fixed; }
-        th, td { border: 1px solid #333; padding: 1px 3px; vertical-align: top; word-wrap: break-word; overflow-wrap: anywhere; }
-        th { background: #e8e8e8; font-weight: bold; text-align: left; font-size: 6.5px; }
-        .cabecera .lbl { background: #f0f0f0; font-weight: bold; font-size: 9px; }
-        .cabecera td:not(.lbl) { font-size: 9px; }
-        table.cabecera td { padding: 3px 5px; vertical-align: middle; }
+        table { width: 100%; max-width: 100%; border-collapse: collapse; margin-bottom: 4px; table-layout: fixed; }
+        th, td { border: 1px solid #333; padding: 3px 4px; vertical-align: top; word-wrap: break-word; overflow-wrap: anywhere; }
+        th { background: #e8e8e8; font-weight: bold; text-align: left; font-size: 9px; }
+        .cabecera .lbl { background: #f0f0f0; font-weight: bold; font-size: 10px; }
+        .cabecera td:not(.lbl) { font-size: 10px; }
+        table.cabecera td { padding: 4px 6px; vertical-align: middle; }
         .num { text-align: right; white-space: nowrap; }
         .cen { text-align: center; }
-        .muted { color: #444; font-size: 6px; }
-        .pdf-cabecera { width: 100%; margin-bottom: 5px; page-break-inside: avoid; }
+        .muted { color: #444; font-size: 8px; }
+        .pdf-cabecera { width: 100%; margin-bottom: 6px; page-break-inside: avoid; }
         .pdf-cabecera td { border: none !important; vertical-align: top; }
         .pdf-cabecera .logo-empresa {
-            max-width: 130px;
-            max-height: 46px;
+            max-width: 140px;
+            max-height: 52px;
             width: auto;
             height: auto;
             object-fit: contain;
         }
         .pdf-cabecera-marca {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
             margin-top: 2px;
         }
         .pdf-cabecera-cuit {
-            font-size: 8px;
+            font-size: 9px;
             margin-top: 1px;
         }
         .titulo-doc {
-            font-size: 13px;
+            font-size: 15px;
             font-weight: bold;
             margin: 0;
             padding: 0;
         }
         .fecha-doc-oc {
-            font-size: 9px;
+            font-size: 10px;
             margin: 2px 0 0 0;
             padding: 0;
         }
-        .bloque-texto { white-space: pre-wrap; word-wrap: break-word; font-size: 6.5px; line-height: 1.12; }
+        .bloque-texto { white-space: pre-wrap; word-wrap: break-word; font-size: 9px; line-height: 1.25; }
         .subtotal { font-weight: bold; background: #f0f0f0; }
         table.items { table-layout: fixed; width: 100%; }
-        .items th { font-size: 8px; padding: 2px 3px; }
-        .items td { font-size: 8px; padding: 2px 3px; }
-        .items .items-col-idx { font-size: 7px; padding: 2px 1px !important; text-align: center; }
-        .items .items-col-cant { font-size: 7.5px; padding: 2px 2px !important; }
-        .items .mcot { font-size: 7.5px; line-height: 1.1; text-align: center; }
+        .items th { font-size: 10px; padding: 3px 4px; }
+        .items td { font-size: 10px; padding: 3px 4px; }
+        .items .items-col-idx { font-size: 9px; padding: 3px 2px !important; text-align: center; }
+        .items .items-col-cant { font-size: 9.5px; padding: 3px 3px !important; }
+        .items .mcot { font-size: 9.5px; line-height: 1.15; text-align: center; }
         .items .items-subt { text-align: right; white-space: nowrap; }
         table.pdf-detalle-fila { table-layout: fixed; width: 100%; }
         .pdf-detalle-fila tr td { vertical-align: middle; }
-        .pdf-detalle-fila .lbl { width: 10%; font-size: 9px; padding: 5px 8px !important; text-align: center; }
+        .pdf-detalle-fila .lbl { width: 10%; font-size: 10px; padding: 5px 8px !important; text-align: center; }
         .pdf-detalle-fila .pdf-detalle-val {
-            font-size: 9px !important;
-            line-height: 1.22;
+            font-size: 10px !important;
+            line-height: 1.28;
             padding: 4px 6px !important;
             white-space: pre-wrap;
             word-wrap: break-word;
             overflow-wrap: break-word;
             word-break: normal;
         }
-        .item-leyenda { font-size: 7px; color: #222; background: #f7f7f7; padding: 4px 6px !important; border-top: none !important; }
+        .item-leyenda { font-size: 9px; color: #222; background: #f7f7f7; padding: 4px 6px !important; border-top: none !important; }
         .item-leyenda .item-leyenda-detalle {
-            font-size: 9px;
-            line-height: 1.28;
+            font-size: 10px;
+            line-height: 1.3;
             white-space: pre-wrap;
             word-wrap: break-word;
             overflow-wrap: break-word;
@@ -94,40 +94,40 @@
             color: #111;
             margin: 0 0 4px 0;
         }
-        .item-leyenda .muted { font-size: 6.5px; color: #555; }
-        .pdf-totales { width: 62%; margin: 4px 0 6px auto; border-collapse: collapse; font-size: 8px; page-break-inside: avoid; }
-        .pdf-totales td { border: 1px solid #333; padding: 3px 5px; vertical-align: middle; }
+        .item-leyenda .muted { font-size: 8px; color: #555; }
+        .pdf-totales { width: 62%; margin: 6px 0 8px auto; border-collapse: collapse; font-size: 10px; page-break-inside: avoid; }
+        .pdf-totales td { border: 1px solid #333; padding: 4px 6px; vertical-align: middle; }
         .pdf-totales td:first-child { text-align: left; width: 72%; }
         .pdf-totales .num { white-space: nowrap; }
-        .pdf-totales-final td { font-weight: bold; background: #ebebeb; font-size: 8.5px; }
-        .historia th, .historia td { font-size: 6px; padding: 1px 2px; }
-        .pdf-pie { margin-top: 5px; page-break-inside: avoid; }
-        .pdf-pie .lbl { background: #f0f0f0; font-weight: bold; font-size: 6px; }
-        .pdf-pie td:not(.lbl) { font-size: 6px; }
-        .pdf-pie-nota { font-size: 5.5px; color: #555; margin-top: 2px; }
-        /* Ítems, totales, historia y pie: tipografía más chica (suele caer en pág. 2+; Dompdf no permite CSS solo pág. 2). */
-        .pdf-oc-flujo-compacto { font-size: 6px; }
-        .pdf-oc-flujo-compacto h2 { font-size: 7.5px; margin: 2px 0 1px 0; padding-bottom: 1px; }
-        .pdf-oc-flujo-compacto .items th { font-size: 6.5px !important; padding: 1px 2px !important; }
-        .pdf-oc-flujo-compacto .items td { font-size: 6.5px !important; padding: 1px 2px !important; }
-        .pdf-oc-flujo-compacto .items .items-col-idx { font-size: 6px !important; padding: 1px 1px !important; }
-        .pdf-oc-flujo-compacto .items .items-col-cant { font-size: 6px !important; }
-        .pdf-oc-flujo-compacto .items .mcot { font-size: 6px !important; line-height: 1.05; }
-        .pdf-oc-flujo-compacto .item-leyenda { font-size: 6px !important; padding: 3px 4px !important; }
-        .pdf-oc-flujo-compacto .item-leyenda .item-leyenda-detalle { font-size: 7px !important; line-height: 1.2; }
-        .pdf-oc-flujo-compacto .item-leyenda .muted { font-size: 5.5px !important; }
-        .pdf-oc-flujo-compacto .pdf-totales { font-size: 6.5px !important; }
-        .pdf-oc-flujo-compacto .pdf-totales td { padding: 2px 4px !important; }
-        .pdf-oc-flujo-compacto .pdf-totales-final td { font-size: 7px !important; }
+        .pdf-totales-final td { font-weight: bold; background: #ebebeb; font-size: 10.5px; }
+        .historia th, .historia td { font-size: 9px; padding: 2px 4px; }
+        .pdf-pie { margin-top: 6px; page-break-inside: avoid; }
+        .pdf-pie .lbl { background: #f0f0f0; font-weight: bold; font-size: 9px; }
+        .pdf-pie td:not(.lbl) { font-size: 9px; }
+        .pdf-pie-nota { font-size: 8px; color: #555; margin-top: 2px; }
+        /* Bloque ítems/totales: misma escala legible (antes compactaba a ~6px). */
+        .pdf-oc-flujo-compacto { font-size: 10px; }
+        .pdf-oc-flujo-compacto h2 { font-size: 12px; margin: 6px 0 4px 0; padding-bottom: 2px; }
+        .pdf-oc-flujo-compacto .items th { font-size: 10px !important; padding: 3px 4px !important; }
+        .pdf-oc-flujo-compacto .items td { font-size: 10px !important; padding: 3px 4px !important; }
+        .pdf-oc-flujo-compacto .items .items-col-idx { font-size: 9px !important; padding: 3px 2px !important; }
+        .pdf-oc-flujo-compacto .items .items-col-cant { font-size: 9.5px !important; }
+        .pdf-oc-flujo-compacto .items .mcot { font-size: 9.5px !important; line-height: 1.15; }
+        .pdf-oc-flujo-compacto .item-leyenda { font-size: 9px !important; padding: 4px 6px !important; }
+        .pdf-oc-flujo-compacto .item-leyenda .item-leyenda-detalle { font-size: 10px !important; line-height: 1.3; }
+        .pdf-oc-flujo-compacto .item-leyenda .muted { font-size: 8px !important; }
+        .pdf-oc-flujo-compacto .pdf-totales { font-size: 10px !important; }
+        .pdf-oc-flujo-compacto .pdf-totales td { padding: 4px 6px !important; }
+        .pdf-oc-flujo-compacto .pdf-totales-final td { font-size: 10.5px !important; }
         .pdf-oc-flujo-compacto .historia th,
-        .pdf-oc-flujo-compacto .historia td { font-size: 5.5px !important; padding: 1px 1px !important; }
-        .pdf-oc-flujo-compacto .historia .bloque-texto { font-size: 5.5px !important; line-height: 1.1; }
+        .pdf-oc-flujo-compacto .historia td { font-size: 9px !important; padding: 2px 4px !important; }
+        .pdf-oc-flujo-compacto .historia .bloque-texto { font-size: 9px !important; line-height: 1.25; }
         .pdf-oc-flujo-compacto .cabecera .lbl,
-        .pdf-oc-flujo-compacto .cabecera td:not(.lbl) { font-size: 7.5px !important; }
-        .pdf-oc-flujo-compacto table.cabecera td { padding: 2px 4px !important; }
+        .pdf-oc-flujo-compacto .cabecera td:not(.lbl) { font-size: 10px !important; }
+        .pdf-oc-flujo-compacto table.cabecera td { padding: 4px 6px !important; }
         .pdf-oc-flujo-compacto .pdf-pie .lbl,
-        .pdf-oc-flujo-compacto .pdf-pie td:not(.lbl) { font-size: 5.5px !important; }
-        .pdf-oc-flujo-compacto .pdf-pie-nota { font-size: 5px !important; }
+        .pdf-oc-flujo-compacto .pdf-pie td:not(.lbl) { font-size: 9px !important; }
+        .pdf-oc-flujo-compacto .pdf-pie-nota { font-size: 8px !important; }
     </style>
 </head>
 <body>
@@ -154,7 +154,7 @@
             <td style="text-align: right;">
                 <p class="titulo-doc">ORDEN DE COMPRA NRO {{ $data->numeroordencompra }}</p>
                 <p class="fecha-doc-oc">Fecha orden de compra: {{ $fechaOc }}</p>
-                <p class="muted" style="margin:3px 0 0 0;font-size:8px;">Impresión {{ date('d/m/Y H:i') }}</p>
+                <p class="muted" style="margin:3px 0 0 0;font-size:9px;">Impresión {{ date('d/m/Y H:i') }}</p>
             </td>
         </tr>
     </table>
@@ -260,17 +260,26 @@
         $monedaRefPdfId = (int) (optional(collect($data->ordencompra_articulos ?? [])->sortBy('id')->first())->moneda_id ?: 1);
     @endphp
     <h2>Ítems</h2>
+    @php
+        $ocMostrarPesoPdf = \App\Support\Compras\OrdencompraUiConfigSupport::mostrarPesoArticulo();
+        $ocPedirPartidaCapexPdf = \App\Support\Compras\OrdencompraUiConfigSupport::pedirPartidaCapex();
+        $ocColspanItemsPdf = $ocMostrarPesoPdf ? 10 : 8;
+    @endphp
     <table class="items">
         <thead>
             <tr>
                 <th class="cen items-col-idx" style="width:3%;">#</th>
-                <th style="width:7%;">SKU</th>
-                <th style="width:34%;">Descripción</th>
+                <th style="width:{{ $ocMostrarPesoPdf ? '6%' : '7%' }};">SKU</th>
+                <th style="width:{{ $ocMostrarPesoPdf ? '28%' : '34%' }};">Descripción</th>
                 <th class="num items-col-cant" style="width:6%;">Cant.</th>
+                @if ($ocMostrarPesoPdf)
+                    <th class="num" style="width:6%;">Peso u.</th>
+                    <th class="num" style="width:6%;">Peso tot.</th>
+                @endif
                 <th class="num" style="width:8%;">P.unit.</th>
                 <th class="cen" style="width:8%;">Mon./cot.</th>
-                <th class="cen" style="width:14%;">CC dest.</th>
-                <th class="num" style="width:20%;">Subt.</th>
+                <th class="cen" style="width:{{ $ocMostrarPesoPdf ? '12%' : '14%' }};">CC dest.</th>
+                <th class="num" style="width:{{ $ocMostrarPesoPdf ? '17%' : '20%' }};">Subt.</th>
             </tr>
         </thead>
         <tbody>
@@ -306,11 +315,16 @@
                     }
                     $detLin = trim((string) ($linea->detalle ?? ''));
                     $origTxt = trim((string) ($linea->precio_origen_etiqueta ?? ''));
+                    $pesoUnitPdf = (float) ($linea->peso_unitario ?? 0);
+                    $pesoTotPdf = (float) ($linea->peso_total ?? 0);
+                    if ($ocMostrarPesoPdf && $pesoTotPdf <= 0 && $pesoUnitPdf > 0) {
+                        $pesoTotPdf = $pesoUnitPdf * (float) $linea->cantidad;
+                    }
                 @endphp
                 <tr>
-                    <td class="cen items-col-idx" style="width:3%;">{{ $i + 1 }}</td>
-                    <td style="width:7%;">{{ $art->sku ?? '—' }}</td>
-                    <td style="width:34%;">
+                    <td class="cen items-col-idx">{{ $i + 1 }}</td>
+                    <td>{{ $art->sku ?? '—' }}</td>
+                    <td>
                         {{ $art->descripcion ?? '—' }}
                         @if (optional($linea->color)->nombre)
                             <br><span class="muted">Color: {{ $linea->color->nombre }}</span>
@@ -319,14 +333,18 @@
                             <br><span class="muted">Talle: {{ $linea->talle->nombre }}</span>
                         @endif
                     </td>
-                    <td class="num items-col-cant" style="width:6%;">{{ number_format((float) $linea->cantidad, 3, ',', '.') }}</td>
-                    <td class="num" style="width:8%;">@if ($monAb !== '' && $monAb !== '—'){{ $monAb }} @endif{{ number_format((float) $linea->precio, 3, ',', '.') }}</td>
-                    <td class="mcot cen" style="width:8%;">{{ $monAb }}<br>{{ number_format($cot, 3, ',', '.') }}</td>
-                    <td class="cen" style="width:14%;">{{ $ccEtiqueta }}</td>
-                    <td class="num items-subt" style="width:20%;">@if ($monOcItems !== ''){{ $monOcItems }} @endif{{ number_format($sub, 2, ',', '.') }}</td>
+                    <td class="num items-col-cant">{{ number_format((float) $linea->cantidad, 3, ',', '.') }}</td>
+                    @if ($ocMostrarPesoPdf)
+                        <td class="num">{{ $pesoUnitPdf > 0 ? number_format($pesoUnitPdf, 3, ',', '.') : '—' }}</td>
+                        <td class="num">{{ $pesoTotPdf > 0 ? number_format($pesoTotPdf, 3, ',', '.') : '—' }}</td>
+                    @endif
+                    <td class="num">@if ($monAb !== '' && $monAb !== '—'){{ $monAb }} @endif{{ number_format((float) $linea->precio, 3, ',', '.') }}</td>
+                    <td class="mcot cen">{{ $monAb }}<br>{{ number_format($cot, 3, ',', '.') }}</td>
+                    <td class="cen">{{ $ccEtiqueta }}</td>
+                    <td class="num items-subt">@if ($monOcItems !== ''){{ $monOcItems }} @endif{{ number_format($sub, 2, ',', '.') }}</td>
                 </tr>
                 <tr class="item-leyenda">
-                    <td colspan="8">
+                    <td colspan="{{ $ocColspanItemsPdf }}">
                         @if ($detLin !== '')
                             <div class="item-leyenda-detalle">{{ $linea->detalle }}</div>
                         @endif
@@ -335,7 +353,12 @@
                         Subtotal línea (sin IVA)@if ($monOcItems !== ''), expresado en moneda OC ({{ $monOcItems }})@endif = cantidad × precio unitario × cotización.
                         Entrega: {{ $fEnt }}.
                         Centro de costo destino: {{ $ccEtiqueta }}.
-                        Partida / CAPEX: {{ $refPartCpx }}.
+                        @if ($ocPedirPartidaCapexPdf)
+                            Partida / CAPEX: {{ $refPartCpx }}.
+                        @endif
+                        @if ($ocMostrarPesoPdf)
+                            Peso tot. = cant. × peso unitario.
+                        @endif
                         @if ($origTxt !== '')
                             Origen del precio: {{ $origTxt }}@if (! empty($linea->precio_origen_tipo)) ({{ $linea->precio_origen_tipo }}@if (! empty($linea->precio_origen_ref_id)), ref. {{ $linea->precio_origen_ref_id }}@endif)@endif.
                         @endif

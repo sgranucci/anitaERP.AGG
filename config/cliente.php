@@ -1,5 +1,10 @@
 <?php
-// Constantes de reporte total de pares
+// Constantes de clientes / reporte total de pares
+
+// false = no se puede repetir CUIT/documento entre clientes (default).
+// true  = permite alta/edición con CUIT ya usado (aviso en pantalla, sin bloquear).
+$permitirCuitDuplicado = filter_var(env('CLIENTE_PERMITIR_CUIT_DUPLICADO', false), FILTER_VALIDATE_BOOLEAN);
+
 switch(config('app.empresa'))
 {
     case "INTERFORMING":
@@ -26,6 +31,7 @@ switch(config('app.empresa'))
             'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'NO',
             'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['fherber@interforming.com.ar'],
             'SINCRONIZA_CLIMA_ANITA' => false,
+            'permitir_cuit_duplicado' => $permitirCuitDuplicado,
             ];
         break;
 
@@ -53,6 +59,8 @@ switch(config('app.empresa'))
             'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'SI',
             'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['luisav@elbierzo.com.ar', 'claudiam@elbierzo.com.ar', 'carolinal@elbierzo.com.ar'],
             'SINCRONIZA_CLIMA_ANITA' => true,
+            // EL BIERZO: permite CUIT duplicados por defecto (override con CLIENTE_PERMITIR_CUIT_DUPLICADO=false)
+            'permitir_cuit_duplicado' => filter_var(env('CLIENTE_PERMITIR_CUIT_DUPLICADO', true), FILTER_VALIDATE_BOOLEAN),
             ];
         break;
 
@@ -80,6 +88,7 @@ switch(config('app.empresa'))
             'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => 'SI',
             'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['impuestosBSA@grupoagg.com'],
             'SINCRONIZA_CLIMA_ANITA' => true,
+            'permitir_cuit_duplicado' => $permitirCuitDuplicado,
             ];        
     break;
 }

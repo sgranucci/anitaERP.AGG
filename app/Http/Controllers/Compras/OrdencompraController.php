@@ -9,6 +9,7 @@ use App\Models\Compras\Condicionentrega;
 use App\Models\Compras\Condicionpago;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Archivo;
+use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Estado;
@@ -132,11 +133,9 @@ class OrdencompraController extends Controller
         $ret = $this->ordencompraGestionService->guardar($request, false);
 
         if (($ret['mensaje'] ?? '') === 'ok') {
-            $redirect = redirect()->route('editar_ordencompra', QueryRetornoListado::paramsRutaEditar(
-                $request,
-                OrdencompraListadoFiltros::class,
-                (int) $ret['id']
-            ))->with('mensaje', 'Orden de compra creada con éxito');
+            $redirect = redirect()
+                ->route('consultar_ordencompra', QueryRetornoListado::desdeRequest($request, OrdencompraListadoFiltros::class))
+                ->with('mensaje', 'Orden de compra creada con éxito');
             if ($this->ordencompraEnvioProveedorService->datosEnvio((int) $ret['id'])['puede_enviar'] ?? false) {
                 $redirect->with('sugerir_envio_oc', (int) $ret['id']);
             }
@@ -145,7 +144,7 @@ class OrdencompraController extends Controller
         }
 
         return redirect()->route('crear_ordencompra', QueryRetornoListado::desdeRequest($request, OrdencompraListadoFiltros::class))
-            ->withInput()->with('mensaje', $ret['errores'] ?? 'Error al guardar');
+            ->withInput()->with('mensaje-error', $ret['errores'] ?? 'Error al guardar');
     }
 
     public function editar(Request $request, $id)
@@ -188,7 +187,7 @@ class OrdencompraController extends Controller
 
         $params = QueryRetornoListado::paramsRutaEditar($request, OrdencompraListadoFiltros::class, (int) $id);
 
-        return redirect()->route('editar_ordencompra', $params)->withInput()->with('mensaje', $ret['errores'] ?? 'Error');
+        return redirect()->route('editar_ordencompra', $params)->withInput()->with('mensaje-error', $ret['errores'] ?? 'Error');
     }
 
     public function eliminar(Request $request, $id)
@@ -440,6 +439,109 @@ class OrdencompraController extends Controller
         return response()->json(
             $this->ordencompraRecepcionesListadoService->listar((int) $ordencompra_id)
         );
+    }
+
+    /**
+     * Entregas semanales de una línea OC (consulta desde OC / recepción).
+     */
+    public function leerEntregasSemanalLinea($ordencompra_articulo_id)
+    {
+        if (! can('listar-ordencompra', false)
+            && ! can('editar-ordencompra', false)
+            && ! can('listar-recepcion-proveedor-surmar', false)
+            && ! can('crear-recepcion-proveedor-surmar', false)
+            && ! can('editar-recepcion-proveedor-surmar', false)
+            && ! can('listar-recepcion-proveedor', false)
+        ) {
+            can('listar-ordencompra');
+        }
+
+        $linea = Ordencompra_Articulo::query()
+            ->with(['entregas', 'articulos:id,sku,descripcion'])
+            ->find((int) $ordencompra_articulo_id);
+
+        if (! $linea) {
+            return response()->json(['ok' => false, 'mensaje' => 'Línea de OC no encontrada.'], 404);
+        }
+
+        $entregas = $linea->entregas->map(static function ($e) {
+            return [
+                'fecha' => $e->fecha ? $e->fecha->format('Y-m-d') : null,
+                'cantidad' => (float) $e->cantidad,
+                'orden' => (int) ($e->orden ?? 0),
+            ];
+        })->values()->all();
+
+        $suma = 0.0;
+        foreach ($entregas as $e) {
+            $suma += (float) $e['cantidad'];
+        }
+
+        return response()->json([
+            'ok' => true,
+            'ordencompra_articulo_id' => (int) $linea->id,
+            'ordencompra_id' => (int) $linea->ordencompra_id,
+            'sku' => (string) (optional($linea->articulos)->sku ?? ''),
+            'descripcion' => (string) (optional($linea->articulos)->descripcion ?? $linea->detalle ?? ''),
+            'cantidad_linea' => (float) $linea->cantidad,
+            'entregas' => $entregas,
+            'cantidad_entregas' => $suma,
+        ]);
+    }
+
+    /**
+     * Matriz de entregas semanales de toda la OC (consulta desde OC / recepción).
+     */
+    public function leerEntregasSemanalOrden($ordencompra_id)
+    {
+        if (! can('listar-ordencompra', false)
+            && ! can('editar-ordencompra', false)
+            && ! can('listar-recepcion-proveedor-surmar', false)
+            && ! can('crear-recepcion-proveedor-surmar', false)
+            && ! can('editar-recepcion-proveedor-surmar', false)
+            && ! can('listar-recepcion-proveedor', false)
+        ) {
+            can('listar-ordencompra');
+        }
+
+        $oc = Ordencompra::query()
+            ->with([
+                'ordencompra_articulos' => static fn ($q) => $q->orderBy('penvp_orden')->orderBy('id'),
+                'ordencompra_articulos.articulos:id,sku,descripcion',
+                'ordencompra_articulos.entregas',
+            ])
+            ->find((int) $ordencompra_id);
+
+        if (! $oc) {
+            return response()->json(['ok' => false, 'mensaje' => 'Orden de compra no encontrada.'], 404);
+        }
+
+        $lineas = [];
+        foreach ($oc->ordencompra_articulos as $linea) {
+            $entregas = $linea->entregas->map(static function ($e) {
+                return [
+                    'fecha' => $e->fecha ? $e->fecha->format('Y-m-d') : null,
+                    'cantidad' => (float) $e->cantidad,
+                ];
+            })->filter(static function ($e) {
+                return ! empty($e['fecha']) && (float) $e['cantidad'] > 0;
+            })->values()->all();
+
+            $lineas[] = [
+                'ordencompra_articulo_id' => (int) $linea->id,
+                'sku' => (string) (optional($linea->articulos)->sku ?? ''),
+                'descripcion' => (string) (optional($linea->articulos)->descripcion ?? $linea->detalle ?? ''),
+                'cantidad_linea' => (float) $linea->cantidad,
+                'entregas' => $entregas,
+            ];
+        }
+
+        return response()->json([
+            'ok' => true,
+            'ordencompra_id' => (int) $oc->id,
+            'numeroordencompra' => (int) ($oc->numeroordencompra ?? 0),
+            'lineas' => $lineas,
+        ]);
     }
 
     public function leerHistoriaPrecios($ordencompra_id)

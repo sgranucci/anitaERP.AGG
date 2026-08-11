@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\ApiAnita;
 use App\Models\Stock\Articulo;
 use App\Support\Stock\ArticuloSkuMatchSupport;
+use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
 use App\Support\Stock\StockAnitaBridgeSupport;
 
 /**
@@ -122,6 +123,111 @@ class ArticuloAnitaSyncService
         }
 
         return trim((string) ($res[0]->stkm_articulo ?? '')) ?: null;
+    }
+
+    /**
+     * Actualiza solo articulo.vencimientoendia desde stkmae.stkm_vto_en_dias.
+     * Sin --sku: todos los artículos ERP que existan en Anita.
+     *
+     * @return array{en_anita:int, actualizados:int, sin_cambio:int, no_encontrados_erp:int, advertencias:list<string>}
+     */
+    public function sincronizarVencimientoEnDiasDesdeAnita(?string $sku = null, ?int $empresaId = null): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $advertencias = [];
+        $sku = is_string($sku) ? trim($sku) : '';
+
+        if ($sku !== '') {
+            $codigo = $this->resolverCodigoAnitaPorSku($sku, $empresaId);
+            if ($codigo === null) {
+                throw new \RuntimeException("Artículo «{$sku}» no encontrado en Anita (stkmae).");
+            }
+            $filas = ArticuloStkmaeAnitaBridgeSupport::listarDetallePorCodigos([$codigo], $empresaId);
+
+            return $this->aplicarVencimientoEnDiasDesdeFilasAnita($filas, $advertencias);
+        }
+
+        $apiAnita = new ApiAnita;
+        $payload = [
+            'acc' => 'list',
+            'tabla' => 'stkmae',
+            'campos' => 'stkm_articulo, stkm_vto_en_dias',
+        ];
+        if ($empresaId !== null && $empresaId > 0) {
+            $payload = StockAnitaBridgeSupport::mergePayload($payload, $empresaId);
+        }
+        $respuesta = $apiAnita->apiCall($payload);
+        $filas = ApiAnita::decodificarListaFilas(is_string($respuesta) ? $respuesta : null);
+        if ($filas === []) {
+            $decoded = json_decode((string) $respuesta);
+            $filas = is_array($decoded) ? $decoded : [];
+        }
+        if ($filas === []) {
+            return [
+                'en_anita' => 0,
+                'actualizados' => 0,
+                'sin_cambio' => 0,
+                'no_encontrados_erp' => 0,
+                'advertencias' => ['Anita no devolvió filas de stkmae (stkm_vto_en_dias).'],
+            ];
+        }
+
+        return $this->aplicarVencimientoEnDiasDesdeFilasAnita($filas, $advertencias);
+    }
+
+    /**
+     * @param  list<object>  $filas
+     * @param  list<string>  $advertencias
+     * @return array{en_anita:int, actualizados:int, sin_cambio:int, no_encontrados_erp:int, advertencias:list<string>}
+     */
+    private function aplicarVencimientoEnDiasDesdeFilasAnita(array $filas, array $advertencias): array
+    {
+        $actualizados = 0;
+        $sinCambio = 0;
+        $noEncontrados = 0;
+
+        foreach ($filas as $fila) {
+            $codigo = trim((string) ($fila->stkm_articulo ?? ''));
+            if ($codigo === '') {
+                continue;
+            }
+            $skuLocal = ltrim($codigo, '0');
+            if ($skuLocal === '') {
+                continue;
+            }
+
+            $dias = (int) ($fila->stkm_vto_en_dias ?? 0);
+            if ($dias < 0) {
+                $dias = 0;
+            }
+
+            $articulo = ArticuloSkuMatchSupport::resolverCanonico($skuLocal);
+            if ($articulo === null) {
+                $noEncontrados++;
+
+                continue;
+            }
+
+            $actual = (int) ($articulo->vencimientoendia ?? 0);
+            if ($actual === $dias) {
+                $sinCambio++;
+
+                continue;
+            }
+
+            $articulo->update(['vencimientoendia' => $dias]);
+            $actualizados++;
+        }
+
+        return [
+            'en_anita' => count($filas),
+            'actualizados' => $actualizados,
+            'sin_cambio' => $sinCambio,
+            'no_encontrados_erp' => $noEncontrados,
+            'advertencias' => $advertencias,
+        ];
     }
 
     private function existeEnStkmae(ApiAnita $apiAnita, string $codigo, ?int $empresaId = null): bool

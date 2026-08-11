@@ -23,6 +23,8 @@ final class SurmarArticuloLineaFieldMapper
         $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
         $lote = (int) ($linea->penvp_lote_transf ?? 0);
         $peso = isset($linea->penvp_peso_unit) ? (float) $linea->penvp_peso_unit : null;
+        $cantidad = (float) ($linea->penvp_cantidad ?? 0);
+        $pesoUnit = ($peso !== null && abs($peso) > 0.0000001) ? $peso : null;
 
         $codMon = $linea->penvp_cod_mon ?? $cabecera->penmp_cod_mon ?? null;
         $cot = (float) ($cabecera->penmp_cotizacion ?? 1);
@@ -32,10 +34,11 @@ final class SurmarArticuloLineaFieldMapper
             'penvp_orden' => $orden,
             'penvp_nro_interno' => $nroInterno > 0 ? $nroInterno : null,
             'lote_transferencia' => $lote > 0 ? $lote : null,
-            'peso_unitario' => ($peso !== null && abs($peso) > 0.0000001) ? $peso : null,
+            'peso_unitario' => $pesoUnit,
+            'peso_total' => ($pesoUnit !== null && $cantidad > 0) ? round($pesoUnit * $cantidad, 6) : null,
             'fechaentrega' => $ctx->fechaYmd($linea->penvp_fecha_ent ?? null),
             'articulo_id' => $ctx->fkArticuloSku($linea->penvp_articulo ?? null),
-            'cantidad' => (float) ($linea->penvp_cantidad ?? 0),
+            'cantidad' => $cantidad,
             'precio' => (float) ($linea->penvp_precio ?? 0),
             'moneda_id' => $ctx->fkMoneda($codMon),
             'cotizacion' => $cot > 0 ? $cot : 1.0,

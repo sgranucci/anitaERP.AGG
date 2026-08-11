@@ -8,6 +8,7 @@ use App\Models\Compras\Ordencompra_Comprobante;
 use App\Models\Compras\Ordencompra_Comprobante_Cuota;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
+use App\Support\Stock\SurmarSupport;
 
 /**
  * Arma campos/valores SQL para pendmaep, pendmovp, movpresup, occuota y ocfpagocuota (ERP → Anita).
@@ -152,7 +153,7 @@ final class OrdencompraAnitaEscrituraSupport
         $deposito = (int) config('ordencompra_anita.escritura.deposito_default', 1);
         $pg = $ctx->datosPresupuestoLinea((int) ($linea->partidagasto_id ?? 0));
 
-        return [
+        $columnas = [
             'penvp_proveedor' => RecepcionProveedorAnitaEscrituraSupport::proveedorSql($codigoProveedor6),
             'penvp_tipo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['tipo'], 3),
             'penvp_letra' => RecepcionProveedorAnitaEscrituraSupport::textoSql($clave['letra'], 1),
@@ -180,6 +181,18 @@ final class OrdencompraAnitaEscrituraSupport
             'penvp_empresa' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoEmpresa((int) ($oc->empresa_id ?? 0))),
             'penvp_nro_interno' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) ($linea->penvp_nro_interno ?? 0)),
         ];
+
+        // Surmar Informix: campos extra de línea (no se emiten en AGG).
+        if (SurmarSupport::esEmpresaSurmar((int) ($oc->empresa_id ?? 0))) {
+            $loteRaw = $linea->lote_transferencia ?? null;
+            $lote = is_numeric($loteRaw) ? (int) $loteRaw : (int) preg_replace('/\D+/', '', (string) $loteRaw);
+            $columnas['penvp_lote_transf'] = RecepcionProveedorAnitaEscrituraSupport::enteroSql($lote);
+            $columnas['penvp_peso_unit'] = RecepcionProveedorAnitaEscrituraSupport::decimalSql(
+                (float) ($linea->peso_unitario ?? 0)
+            );
+        }
+
+        return $columnas;
     }
 
     /**

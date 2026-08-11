@@ -1342,20 +1342,37 @@ Route::put('configuracion/recepcion-proveedor', 'Configuracion\ConfiguracionRece
 Route::post('configuracion/recepcion-proveedor/tolerancias', 'Configuracion\ConfiguracionRecepcionProveedorController@guardarTolerancias')->name('guardar_tolerancias_recepcion_proveedor');
 
 /*
+ * Movimientos Surmar (entrada de menú; reutiliza ABM movimientos + piqueo etiquetas)
+ */
+Route::get('stock/movimiento-surmar', 'Stock\MovimientoSurmarController@index')->name('movimiento_surmar');
+Route::get('stock/lista-movimiento-surmar/{formato?}/{busqueda?}', 'Stock\MovimientoSurmarController@listar')->name('lista_movimiento_surmar');
+Route::get('stock/movimiento-surmar/crear', 'Stock\MovimientoSurmarController@crear')->name('crear_movimiento_surmar');
+Route::post('stock/movimiento-surmar', 'Stock\MovimientoSurmarController@guardar')->name('guardar_movimiento_surmar');
+Route::get('stock/movimiento-surmar/{id}/editar', 'Stock\MovimientoSurmarController@editar')->name('editar_movimiento_surmar');
+Route::put('stock/movimiento-surmar/{id}', 'Stock\MovimientoSurmarController@actualizar')->name('actualizar_movimiento_surmar');
+
+/*
  * Recepción proveedores Surmar (proceso aparte; grabado provisorio por ítem)
  */
 Route::get('stock/recepcion-proveedor-surmar', 'Stock\RecepcionProveedorSurmarController@index')->name('recepcion_proveedor_surmar');
+Route::get('stock/lista-recepcion-proveedor-surmar/{formato?}/{busqueda?}', 'Stock\RecepcionProveedorSurmarController@listar')->name('lista_recepcion_proveedor_surmar');
 Route::get('stock/recepcion-proveedor-surmar/crear', 'Stock\RecepcionProveedorSurmarController@crear')->name('crear_recepcion_proveedor_surmar');
 Route::post('stock/recepcion-proveedor-surmar', 'Stock\RecepcionProveedorSurmarController@guardar')->name('guardar_recepcion_proveedor_surmar');
 Route::get('stock/recepcion-proveedor-surmar/api/buscar-oc-pendientes', 'Stock\RecepcionProveedorSurmarController@apiBuscarOcPendientes')->name('recepcion_proveedor_surmar_buscar_oc_pendientes');
 Route::get('stock/recepcion-proveedor-surmar/api/precarga-oc', 'Stock\RecepcionProveedorSurmarController@apiPrecargaOc')->name('recepcion_proveedor_surmar_precarga_oc');
 Route::get('stock/recepcion-proveedor-surmar/{id}/cargar', 'Stock\RecepcionProveedorSurmarController@cargar')->name('cargar_recepcion_proveedor_surmar');
+Route::put('stock/recepcion-proveedor-surmar/{id}/encabezado', 'Stock\RecepcionProveedorSurmarController@actualizarEncabezado')->name('actualizar_encabezado_recepcion_proveedor_surmar');
 Route::post('stock/recepcion-proveedor-surmar/{id}/linea', 'Stock\RecepcionProveedorSurmarController@apiGuardarLinea')->name('api_guardar_linea_recepcion_proveedor_surmar');
+Route::put('stock/recepcion-proveedor-surmar/{id}/linea/{lineaId}', 'Stock\RecepcionProveedorSurmarController@apiActualizarLinea')->name('api_actualizar_linea_recepcion_proveedor_surmar');
+Route::get('stock/recepcion-proveedor-surmar/{id}/etiqueta/{etiquetaId}/preview', 'Stock\RecepcionProveedorSurmarController@apiPreviewEtiqueta')->name('api_preview_etiqueta_recepcion_proveedor_surmar');
 Route::delete('stock/recepcion-proveedor-surmar/{id}/linea/{lineaId}', 'Stock\RecepcionProveedorSurmarController@apiEliminarLinea')->name('api_eliminar_linea_recepcion_proveedor_surmar');
 Route::post('stock/recepcion-proveedor-surmar/{id}/confirmar', 'Stock\RecepcionProveedorSurmarController@confirmar')->name('confirmar_recepcion_proveedor_surmar');
 Route::post('stock/recepcion-proveedor-surmar/{id}/anular', 'Stock\RecepcionProveedorSurmarController@anular')->name('anular_recepcion_proveedor_surmar');
 Route::delete('stock/recepcion-proveedor-surmar/{id}', 'Stock\RecepcionProveedorSurmarController@eliminar')->name('eliminar_recepcion_proveedor_surmar');
 Route::get('stock/etiqueta-surmar/{etiquetaId}/zpl', 'Stock\RecepcionProveedorSurmarController@imprimirEtiqueta')->name('imprimir_etiqueta_surmar');
+Route::get('stock/etiqueta-surmar/{etiquetaId}/pdf', 'Stock\RecepcionProveedorSurmarController@pdfEtiqueta')->name('pdf_etiqueta_surmar');
+Route::post('stock/etiqueta-surmar/imprimir-salida', 'Stock\RecepcionProveedorSurmarController@apiImprimirEtiquetaSalida')->name('imprimir_salida_etiqueta_surmar');
+Route::get('stock/etiqueta-surmar/estado-salida', 'Stock\RecepcionProveedorSurmarController@apiEstadoSalidaEtiqueta')->name('estado_salida_etiqueta_surmar');
 
 /*
  * Trazabilidad Surmar (por etiqueta ID o artículo+lote)
@@ -1363,6 +1380,7 @@ Route::get('stock/etiqueta-surmar/{etiquetaId}/zpl', 'Stock\RecepcionProveedorSu
 Route::get('stock/trazabilidad-surmar', 'Stock\TrazabilidadSurmarController@index')->name('trazabilidad_surmar');
 
 Route::get('stock/certificado-senasa-surmar', 'Stock\CertificadoSenasaSurmarController@index')->name('certificado_senasa_surmar');
+Route::get('stock/lista-certificado-senasa-surmar/{formato?}/{busqueda?}', 'Stock\CertificadoSenasaSurmarController@listar')->name('lista_certificado_senasa_surmar');
 Route::get('stock/certificado-senasa-surmar/crear', 'Stock\CertificadoSenasaSurmarController@crear')->name('crear_certificado_senasa_surmar');
 Route::post('stock/certificado-senasa-surmar', 'Stock\CertificadoSenasaSurmarController@guardar')->name('guardar_certificado_senasa_surmar');
 Route::get('stock/certificado-senasa-surmar/{id}/cargar', 'Stock\CertificadoSenasaSurmarController@cargar')->name('cargar_certificado_senasa_surmar');
@@ -1927,6 +1945,9 @@ Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/movimientos',
 
 Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_caea');
 Route::get('ventas/arca-caea/{id}/estado-informe', 'Ventas\ArcaCaeaController@estadoInforme')->name('arca_caea_estado_informe');
+Route::get('ventas/arca-caea/{id}/proximos-manual', 'Ventas\ArcaCaeaController@proximosManual')->name('arca_caea_proximos_manual');
+Route::post('ventas/arca-caea/{id}/previsualizar-manual', 'Ventas\ArcaCaeaController@previsualizarManual')->name('arca_caea_previsualizar_manual');
+Route::post('ventas/arca-caea/{id}/informar-uno-manual', 'Ventas\ArcaCaeaController@informarUnoManual')->name('arca_caea_informar_uno_manual');
 Route::get('ventas/arca-caea/{id}', 'Ventas\ArcaCaeaController@show')->name('arca_caea_ver');
 Route::post('ventas/arca-caea/solicitar', 'Ventas\ArcaCaeaController@solicitar')->name('arca_caea_solicitar');
 Route::post('ventas/arca-caea/{id}/reintentar', 'Ventas\ArcaCaeaController@reintentar')->name('arca_caea_reintentar');
@@ -3145,6 +3166,8 @@ Route::get('compras/ordencompra/{id}/historia-legajo', 'Compras\OrdencompraContr
 Route::get('compras/ordencompra/{id}/historia-estados', 'Compras\OrdencompraController@leerHistoriaEstados')->name('ordencompra_historia_estados');
 Route::get('compras/ordencompra/{id}/historia-precios', 'Compras\OrdencompraController@leerHistoriaPrecios')->name('ordencompra_historia_precios');
 Route::get('compras/ordencompra/{id}/recepciones', 'Compras\OrdencompraController@leerRecepciones')->name('ordencompra_recepciones');
+Route::get('compras/ordencompra-articulo/{id}/entregas-semanales', 'Compras\OrdencompraController@leerEntregasSemanalLinea')->name('ordencompra_articulo_entregas_semanales');
+Route::get('compras/ordencompra/{id}/entregas-semanales', 'Compras\OrdencompraController@leerEntregasSemanalOrden')->name('ordencompra_entregas_semanales');
 Route::post('compras/ordencompra/{id}/aplicar-precios-recepcion/{recepcion_id}', 'Compras\OrdencompraController@aplicarPreciosRecepcion')->name('ordencompra_aplicar_precios_recepcion');
 Route::post('compras/ordencompra/{id}/aplicar-precios-solicitados-recepcion/{recepcion_id}', 'Compras\OrdencompraController@aplicarPreciosSolicitadosRecepcionBorrador')->name('ordencompra_aplicar_precios_solicitados_recepcion');
 Route::get('compras/ordencompra/{id}/movimiento-aprobacion', 'Compras\OrdencompraController@leerMovimientoAprobacion')->name('ordencompra_movimiento_aprobacion');
@@ -4248,6 +4271,12 @@ Route::put('sueldos/art/{id}', 'Sueldos\Art_SueldosController@actualizar')->name
 Route::delete('sueldos/art/{id}', 'Sueldos\Art_SueldosController@eliminar')->name('eliminar_art_sueldos');
 
 // Bierzo
+
+/*
+ * Importar pedidos Anita (pendmae/pendmov) por fecha entrega y reparto
+ */
+Route::get('ventas/importar-pedido-anita', 'Ventas\PedidoImportarAnitaController@index')->name('importar_pedido_anita');
+Route::post('ventas/importar-pedido-anita', 'Ventas\PedidoImportarAnitaController@importar')->name('ejecutar_importar_pedido_anita');
 
 /*
  * Abasto

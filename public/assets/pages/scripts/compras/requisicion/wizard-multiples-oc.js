@@ -335,9 +335,11 @@
 		if (!meta) {
 			return;
 		}
-		if (typeof carpetaBase === 'undefined' || carpetaBase === '') {
-			window.carpetaBase = window.location.pathname.split('/public')[0] + '/public';
-		}
+		if (typeof window.carpetaBase === 'undefined') {
+    var __locCb = window.location.pathname || '';
+    var __mCb = __locCb.match(/^(.*\/public)(?:\/|$)/);
+    window.carpetaBase = __mCb ? __mCb[1] : '';
+}
 		if (typeof window.ocAplicarPlantillaRequisicionDesdeId === 'function') {
 			$('#requisicion_id').val(String(meta.requisicion_id));
 			window.ocAplicarPlantillaRequisicionDesdeId(meta.requisicion_id);

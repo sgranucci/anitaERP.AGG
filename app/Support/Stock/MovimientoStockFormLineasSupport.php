@@ -29,7 +29,16 @@ final class MovimientoStockFormLineasSupport
             ]);
         }
 
-        return $movimientostock->articulos_movimiento ?? collect();
+        $lineas = $movimientostock->articulos_movimiento ?? collect();
+
+        // Surmar DES: salidas automáticas por etiqueta no son renglones de producto del form
+        return $lineas
+            ->filter(static function ($linea) {
+                $concepto = (string) ($linea->concepto ?? '');
+
+                return ! preg_match('/^DES etiqueta #\d+/', $concepto);
+            })
+            ->values();
     }
 
     public static function valorLinea(int $index, string $campoOld, mixed $fallback = ''): string

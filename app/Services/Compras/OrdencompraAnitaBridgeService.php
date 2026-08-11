@@ -13,6 +13,7 @@ use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaOcfpagoCuotaExpand
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaWhereSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
+use App\Support\Stock\SurmarSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -22,9 +23,42 @@ use Illuminate\Support\Facades\Log;
  */
 class OrdencompraAnitaBridgeService
 {
+    /** Empresa de la OC en curso; define path Anita Surmar vs default. */
+    private ?int $empresaIdParaPath = null;
+
     public function habilitado(): bool
     {
         return OrdencompraAnitaNumeracionSupport::estaHabilitada();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function payloadAnita(array $payload): array
+    {
+        return SurmarSupport::mergePathSistema($payload, $this->empresaIdParaPath);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function anitaEscritura(ApiAnita $api, array $payload, ?string $contexto = null): string
+    {
+        return $api->apiCallEscritura($this->payloadAnita($payload), $contexto);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function anitaCall(ApiAnita $api, array $payload): mixed
+    {
+        return $api->apiCall($this->payloadAnita($payload));
+    }
+
+    private function fijarEmpresaPath(Ordencompra $oc): void
+    {
+        $this->empresaIdParaPath = (int) ($oc->empresa_id ?? 0);
     }
 
     public function sincronizarAlta(Ordencompra $oc): void
@@ -35,6 +69,7 @@ class OrdencompraAnitaBridgeService
 
         $this->cargarRelaciones($oc);
         $this->validarCabeceraMinima($oc);
+        $this->fijarEmpresaPath($oc);
 
         $ctx = OrdencompraAnitaErpContext::desdeUsuarioActual();
         $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
@@ -72,7 +107,10 @@ class OrdencompraAnitaBridgeService
             $this->grabarLegcompraAlta($oc, $ctx);
             $estado['legcompra_grabado'] = true;
 
-            OrdencompraAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador((int) $oc->numeroordencompra);
+            OrdencompraAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador(
+                (int) $oc->numeroordencompra,
+                (int) ($oc->empresa_id ?? 0)
+            );
         } catch (\Throwable $e) {
             $this->revertir($clave, $estado);
             throw new \RuntimeException('Error al grabar la orden de compra en Anita: '.$e->getMessage(), 0, $e);
@@ -87,6 +125,7 @@ class OrdencompraAnitaBridgeService
 
         $this->cargarRelaciones($oc);
         $this->validarCabeceraMinima($oc);
+        $this->fijarEmpresaPath($oc);
 
         $ctx = OrdencompraAnitaErpContext::desdeUsuarioActual();
         $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
@@ -123,7 +162,10 @@ class OrdencompraAnitaBridgeService
 
             $this->asegurarLegcompra($oc, $ctx);
 
-            OrdencompraAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador((int) $oc->numeroordencompra);
+            OrdencompraAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador(
+                (int) $oc->numeroordencompra,
+                (int) ($oc->empresa_id ?? 0)
+            );
         } catch (\Throwable $e) {
             $this->revertirConBackup($clave, $estado, $backup);
             throw new \RuntimeException('Error al actualizar la orden de compra en Anita: '.$e->getMessage(), 0, $e);
@@ -142,6 +184,7 @@ class OrdencompraAnitaBridgeService
         }
 
         $this->cargarRelaciones($oc);
+        $this->fijarEmpresaPath($oc);
         $numero = (int) $oc->numeroordencompra;
         if ($numero <= 0) {
             throw new \RuntimeException('La orden de compra no tiene número asignado.');
@@ -176,7 +219,7 @@ class OrdencompraAnitaBridgeService
             );
 
             $api = new ApiAnita;
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
                 'tabla' => config('ordencompra_anita.tablas.historia'),
@@ -212,6 +255,7 @@ class OrdencompraAnitaBridgeService
     public function diagnosticarSincronizacionAnita(Ordencompra $oc): array
     {
         $this->cargarRelaciones($oc);
+        $this->fijarEmpresaPath($oc);
         $numero = (int) $oc->numeroordencompra;
         $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
         $ctx = OrdencompraAnitaErpContext::desdeUsuarioId(
@@ -296,6 +340,7 @@ class OrdencompraAnitaBridgeService
 
         $this->cargarRelaciones($oc);
         $this->validarCabeceraMinima($oc);
+        $this->fijarEmpresaPath($oc);
 
         $numero = (int) $oc->numeroordencompra;
         $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
@@ -328,7 +373,7 @@ class OrdencompraAnitaBridgeService
 
             $estadoAnita = $ctx->mapEstadoAnita((string) $oc->estadoordencompra);
             $api = new ApiAnita;
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'update',
                 'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
                 'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -436,6 +481,7 @@ class OrdencompraAnitaBridgeService
 
         $this->cargarRelaciones($oc);
         $this->validarCabeceraMinima($oc);
+        $this->fijarEmpresaPath($oc);
 
         $numero = (int) $oc->numeroordencompra;
         $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
@@ -498,7 +544,7 @@ class OrdencompraAnitaBridgeService
 
         $estadoAnita = $this->resolverEstadoCabeceraDesdeCantentr($oc, $cantentrPorInterno);
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'update',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -658,7 +704,7 @@ class OrdencompraAnitaBridgeService
     private function leerCabeceraPendmaep(array $clave): ?object
     {
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -677,7 +723,7 @@ class OrdencompraAnitaBridgeService
     private function listarPendmovp(array $clave): array
     {
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.linea'),
@@ -700,7 +746,7 @@ class OrdencompraAnitaBridgeService
     private function existeOccuota(array $clave): bool
     {
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cuota'),
@@ -718,7 +764,7 @@ class OrdencompraAnitaBridgeService
     private function actualizarProveedorPendmaep(array $clave, string $proveedor6): void
     {
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'update',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -745,7 +791,7 @@ class OrdencompraAnitaBridgeService
             if ((int) $nroInterno <= 0 || (float) $cantentr <= 0) {
                 continue;
             }
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'update',
                 'sistema' => $sistema,
                 'tabla' => config('ordencompra_anita.tablas.linea'),
@@ -770,6 +816,7 @@ class OrdencompraAnitaBridgeService
         }
 
         $this->cargarRelaciones($oc);
+        $this->fijarEmpresaPath($oc);
         $numero = (int) $oc->numeroordencompra;
         if ($numero <= 0) {
             throw new \RuntimeException('La orden de compra no tiene número asignado.');
@@ -799,7 +846,7 @@ class OrdencompraAnitaBridgeService
         $api = new ApiAnita;
         $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
 
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.linea'),
@@ -849,7 +896,7 @@ class OrdencompraAnitaBridgeService
             }
 
             if (! $dryRun) {
-                $api->apiCallEscritura([
+                $this->anitaEscritura($api, [
                     'acc' => 'update',
                     'sistema' => $sistema,
                     'tabla' => config('ordencompra_anita.tablas.linea'),
@@ -871,7 +918,7 @@ class OrdencompraAnitaBridgeService
         $api = new ApiAnita;
         $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
 
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.cuota'),
@@ -906,7 +953,7 @@ class OrdencompraAnitaBridgeService
             }
 
             if (! $dryRun) {
-                $api->apiCallEscritura([
+                $this->anitaEscritura($api, [
                     'acc' => 'update',
                     'sistema' => $sistema,
                     'tabla' => config('ordencompra_anita.tablas.cuota'),
@@ -934,6 +981,7 @@ class OrdencompraAnitaBridgeService
         }
 
         $this->cargarRelaciones($oc);
+        $this->fijarEmpresaPath($oc);
         $numero = (int) $oc->numeroordencompra;
         if ($numero <= 0) {
             throw new \RuntimeException('La orden de compra no tiene número asignado.');
@@ -964,6 +1012,7 @@ class OrdencompraAnitaBridgeService
             return;
         }
 
+        $this->fijarEmpresaPath($oc);
         $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
 
         if (! $this->existePendmaep($clave)) {
@@ -1030,7 +1079,7 @@ class OrdencompraAnitaBridgeService
     private function existePendmaep(array $clave): bool
     {
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -1046,7 +1095,7 @@ class OrdencompraAnitaBridgeService
     private function assertSinRecepcionesAplicadas(array $clave): void
     {
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.linea'),
@@ -1069,7 +1118,7 @@ class OrdencompraAnitaBridgeService
     {
         $insert = OrdencompraAnitaEscrituraSupport::pendmaepInsert($oc, $ctx, $clave);
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'insert',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -1082,7 +1131,7 @@ class OrdencompraAnitaBridgeService
     private function actualizarPendmaep(Ordencompra $oc, OrdencompraAnitaErpContext $ctx, array $clave): void
     {
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'update',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -1105,7 +1154,7 @@ class OrdencompraAnitaBridgeService
 
             $insertLinea = OrdencompraAnitaEscrituraSupport::pendmovpInsert($oc, $linea, $ctx, $clave, $codigoProveedor);
             $api = new ApiAnita;
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
                 'tabla' => config('ordencompra_anita.tablas.linea'),
@@ -1114,7 +1163,7 @@ class OrdencompraAnitaBridgeService
             ], 'ordencompra pendmovp insert');
 
             $insertMovp = OrdencompraAnitaEscrituraSupport::movpresupInsert($oc, $linea, $ctx, $clave);
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
                 'tabla' => config('ordencompra_anita.tablas.presupuesto_linea'),
@@ -1123,7 +1172,7 @@ class OrdencompraAnitaBridgeService
             ], 'ordencompra movpresup insert');
 
             foreach (OrdencompraAnitaEscrituraSupport::ocvleyInsertsDesdeLinea($linea, $clave) as $insertOcvley) {
-                $api->apiCallEscritura([
+                $this->anitaEscritura($api, [
                     'acc' => 'insert',
                     'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
                     'tabla' => config('ordencompra_anita.tablas.leyenda_linea'),
@@ -1149,7 +1198,7 @@ class OrdencompraAnitaBridgeService
         foreach ($comprobantes as $comprobante) {
             $nroCuotaOcc++;
             $insertOcc = OrdencompraAnitaEscrituraSupport::occuotaInsert($comprobante, $ctx, $clave, $nroCuotaOcc, $oc);
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => $sistema,
                 'tabla' => config('ordencompra_anita.tablas.cuota'),
@@ -1170,7 +1219,7 @@ class OrdencompraAnitaBridgeService
                         $nroCuotaFpago,
                         $ctx
                     );
-                    $api->apiCallEscritura([
+                    $this->anitaEscritura($api, [
                         'acc' => 'insert',
                         'sistema' => $sistema,
                         'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
@@ -1192,7 +1241,7 @@ class OrdencompraAnitaBridgeService
                     $nroCuotaOcc,
                     $nroCuotaFpago
                 );
-                $api->apiCallEscritura([
+                $this->anitaEscritura($api, [
                     'acc' => 'insert',
                     'sistema' => $sistema,
                     'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
@@ -1209,14 +1258,14 @@ class OrdencompraAnitaBridgeService
         $api = new ApiAnita;
         $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
 
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
             'whereArmado' => OrdencompraAnitaWhereSupport::ocfpagocuota($clave),
         ], 'ordencompra ocfpagocuota delete');
 
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.cuota'),
@@ -1234,21 +1283,21 @@ class OrdencompraAnitaBridgeService
         $api = new ApiAnita;
         $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
 
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.leyenda_linea'),
             'whereArmado' => OrdencompraAnitaWhereSupport::ocvley($clave),
         ], 'ordencompra ocvley delete');
 
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.presupuesto_linea'),
             'whereArmado' => OrdencompraAnitaWhereSupport::movpresup($clave),
         ], 'ordencompra movpresup delete');
 
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.linea'),
@@ -1271,7 +1320,7 @@ class OrdencompraAnitaBridgeService
         );
 
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'insert',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.fecha_oc'),
@@ -1284,7 +1333,7 @@ class OrdencompraAnitaBridgeService
     private function eliminarPendfecha(array $clave, string $proveedor6): void
     {
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.fecha_oc'),
@@ -1302,7 +1351,7 @@ class OrdencompraAnitaBridgeService
         );
 
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'insert',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.historia'),
@@ -1323,7 +1372,7 @@ class OrdencompraAnitaBridgeService
     private function existeLegcompra(int $numeroOc): bool
     {
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.historia'),
@@ -1339,7 +1388,7 @@ class OrdencompraAnitaBridgeService
     private function existePendfecha(array $clave, string $proveedor6): bool
     {
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.fecha_oc'),
@@ -1354,7 +1403,7 @@ class OrdencompraAnitaBridgeService
     private function eliminarLegcompra(int $numeroOc): void
     {
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.historia'),
@@ -1366,7 +1415,7 @@ class OrdencompraAnitaBridgeService
     private function eliminarPendmaep(array $clave): void
     {
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -1405,7 +1454,7 @@ class OrdencompraAnitaBridgeService
     private function proveedor6DesdeClave(array $clave): string
     {
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -1486,7 +1535,7 @@ class OrdencompraAnitaBridgeService
         $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
         $whereCab = OrdencompraAnitaWhereSupport::pendmaep($clave);
 
-        $cabRaw = $api->apiCall([
+        $cabRaw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -1502,7 +1551,7 @@ class OrdencompraAnitaBridgeService
             'limit' => 'FIRST 1',
         ]);
 
-        $lineasRaw = $api->apiCall([
+        $lineasRaw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.linea'),
@@ -1516,7 +1565,7 @@ class OrdencompraAnitaBridgeService
             'whereArmado' => OrdencompraAnitaWhereSupport::pendmovp($clave),
         ]);
 
-        $movpRaw = $api->apiCall([
+        $movpRaw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.presupuesto_linea'),
@@ -1528,7 +1577,7 @@ class OrdencompraAnitaBridgeService
             'whereArmado' => OrdencompraAnitaWhereSupport::movpresup($clave),
         ]);
 
-        $occRaw = $api->apiCall([
+        $occRaw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.cuota'),
@@ -1539,7 +1588,7 @@ class OrdencompraAnitaBridgeService
             'whereArmado' => OrdencompraAnitaWhereSupport::occuota($clave),
         ]);
 
-        $ocfpRaw = $api->apiCall([
+        $ocfpRaw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
@@ -1550,7 +1599,7 @@ class OrdencompraAnitaBridgeService
             'whereArmado' => OrdencompraAnitaWhereSupport::ocfpagocuota($clave),
         ]);
 
-        $ocvlRaw = $api->apiCall([
+        $ocvlRaw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.leyenda_linea'),
@@ -1563,7 +1612,7 @@ class OrdencompraAnitaBridgeService
 
         $cab = ApiAnita::primeraFilaLista((string) $cabRaw);
         $proveedor6 = str_pad(trim((string) ($cab->penmp_proveedor ?? '0')), 6, '0', STR_PAD_LEFT);
-        $penpfRaw = $api->apiCall([
+        $penpfRaw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.fecha_oc'),
@@ -1605,7 +1654,7 @@ class OrdencompraAnitaBridgeService
         }
 
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'update',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
@@ -1636,7 +1685,7 @@ class OrdencompraAnitaBridgeService
             if ($cols === []) {
                 continue;
             }
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => $sistema,
                 'tabla' => config('ordencompra_anita.tablas.cuota'),
@@ -1658,7 +1707,7 @@ class OrdencompraAnitaBridgeService
             if ($cols === []) {
                 continue;
             }
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => $sistema,
                 'tabla' => config('ordencompra_anita.tablas.cuota_fpago'),
@@ -1680,7 +1729,7 @@ class OrdencompraAnitaBridgeService
             if ($cols === []) {
                 continue;
             }
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => $sistema,
                 'tabla' => config('ordencompra_anita.tablas.linea'),
@@ -1702,7 +1751,7 @@ class OrdencompraAnitaBridgeService
             if ($cols === []) {
                 continue;
             }
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => $sistema,
                 'tabla' => config('ordencompra_anita.tablas.presupuesto_linea'),
@@ -1724,7 +1773,7 @@ class OrdencompraAnitaBridgeService
             if ($cols === []) {
                 continue;
             }
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => $sistema,
                 'tabla' => config('ordencompra_anita.tablas.leyenda_linea'),
@@ -1750,7 +1799,7 @@ class OrdencompraAnitaBridgeService
         }
 
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'insert',
             'sistema' => OrdencompraAnitaNumeracionSupport::sistemaTComp(),
             'tabla' => config('ordencompra_anita.tablas.fecha_oc'),

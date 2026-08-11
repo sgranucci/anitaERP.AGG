@@ -3,6 +3,11 @@ var ptrproveedor_id = $();
 var ptrnombreproveedor = $();
 var ptrcodigoproveedor = $();
 
+/** Evita reconsultar/alertar el mismo código inválido en cada blur (loop con alert). */
+var ultimoCodigoProveedorIntentado = null;
+var ultimoCodigoProveedorFallo = false;
+var avisoProveedorMostrandose = false;
+
 function actualizarCondicionPagoProveedorDesdeJson(data) {
     if ($('#condicionpago_proveedor_show').length) {
         if (data && data.condicionpagos && data.condicionpagos.nombre) {
@@ -28,17 +33,31 @@ function actualizarCondicionPagoProveedorDesdeJson(data) {
 }
 
 function parsearHtmlConsultaProveedor(respuesta) {
-    var resp = String(respuesta || '').replace(/\\/g, '');
+    // No strippear "\": rompe class=\"...\" del JSON y el tbody queda vacío (Surmar ~2700 filas).
+    if (respuesta && typeof respuesta === 'object') {
+        return respuesta.data || '';
+    }
+    var resp = String(respuesta || '').trim();
+    if (resp === '') {
+        return '';
+    }
     try {
         var parsed = JSON.parse(resp);
-        return parsed.data || '';
+        return (parsed && parsed.data) ? parsed.data : '';
     } catch (e) {
-        return resp;
+        // Respuesta ya es HTML de filas (legado).
+        if (resp.indexOf('<tr') >= 0) {
+            return resp;
+        }
+        return '';
     }
 }
 
 function empresaIdConsultaProveedor() {
     var $emp = $('#empresa_id');
+    if (!$emp.length || String($emp.val() || '').trim() === '') {
+        $emp = $('#wz_empresa_id');
+    }
     if (!$emp.length) {
         return '';
     }
@@ -46,33 +65,67 @@ function empresaIdConsultaProveedor() {
     return v > 0 ? String(v) : '';
 }
 
+function actualizarAvisoConsultaProveedor(empresaId) {
+    var $aviso = $('#consultaproveedor-aviso');
+    if (!$aviso.length) {
+        return;
+    }
+    if (empresaId) {
+        $aviso
+            .removeClass('d-none')
+            .text('Filtrando proveedores de la empresa id ' + empresaId + ' (y multiempresa).');
+    } else {
+        $aviso.addClass('d-none').text('');
+    }
+}
+
+function urlAppCompras(path) {
+    var base = (typeof window.carpetaBase === 'string') ? window.carpetaBase.replace(/\/$/, '') : '';
+    var p = String(path || '');
+    if (p.charAt(0) !== '/') {
+        p = '/' + p;
+    }
+    return base + p;
+}
+
 function buscar_datos_proveedor(consulta) {
     var payload = {
-        consulta: consulta
+        consulta: consulta,
+        _token: $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').first().val()
     };
     var empresaId = empresaIdConsultaProveedor();
     if (empresaId !== '') {
         payload.empresa_id = empresaId;
     }
+    actualizarAvisoConsultaProveedor(empresaId);
+    $('#datosproveedor').html('<tr><td colspan="8" class="text-muted">Buscando…</td></tr>');
     $.ajax({
-        url: carpetaBase + '/compras/proveedor/consultaproveedor',
+        url: urlAppCompras('/compras/proveedor/consultaproveedor'),
         type: 'POST',
-        dataType: 'HTML',
+        dataType: 'json',
         headers: {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
         },
         data: payload,
     })
         .done(function (respuesta) {
-            $('#datosproveedor').html(parsearHtmlConsultaProveedor(respuesta));
+            var html = parsearHtmlConsultaProveedor(respuesta);
+            if (!html) {
+                html = '<tr><td colspan="8" class="text-muted">Sin resultados</td></tr>';
+            }
+            $('#datosproveedor').html(html);
         })
-        .fail(function () {
-            console.log('error consulta proveedor');
+        .fail(function (xhr) {
+            var msg = 'Error al consultar proveedores';
+            if (xhr && xhr.status) {
+                msg += ' (HTTP ' + xhr.status + ')';
+            }
+            $('#datosproveedor').html('<tr><td colspan="8" class="text-danger">' + msg + '</td></tr>');
         });
 }
 
 function resolverPtrProveedorDesdeBoton($btn) {
-    var $ctx = $btn.closest('#div-proveedor, tr');
+    var $ctx = $btn.closest('#div-proveedor, #div-proveedor-oc, .tm-proveedor-campo, tr');
     if ($ctx.length) {
         return {
             $id: $ctx.find('#proveedor_id, .proveedor_id').first(),
@@ -107,7 +160,46 @@ function actualizarLinkEditarProveedor(proveedorId) {
     $link.attr('href', id > 0 ? tpl.replace('__ID__', String(id)) : '#');
 }
 
+function marcarProveedorConsultaOk(codigo) {
+    ultimoCodigoProveedorIntentado = codigo != null && String(codigo).trim() !== ''
+        ? String(codigo).trim()
+        : null;
+    ultimoCodigoProveedorFallo = false;
+}
+
+function marcarProveedorConsultaFallo(codigo) {
+    ultimoCodigoProveedorIntentado = codigo != null && String(codigo).trim() !== ''
+        ? String(codigo).trim()
+        : null;
+    ultimoCodigoProveedorFallo = true;
+}
+
+function limpiarEstadoConsultaProveedor() {
+    ultimoCodigoProveedorIntentado = null;
+    ultimoCodigoProveedorFallo = false;
+}
+
+function avisarProveedorNoCargado(mensaje) {
+    if (avisoProveedorMostrandose) {
+        return;
+    }
+    avisoProveedorMostrandose = true;
+    try {
+        alert(mensaje || 'No se pudo cargar el proveedor.');
+    } finally {
+        avisoProveedorMostrandose = false;
+    }
+    var $codigo = $('#codigoproveedor');
+    if ($codigo.length && !$codigo.prop('readonly') && !$codigo.prop('disabled')) {
+        $codigo.data('cp-skip-blur-once', 1);
+        setTimeout(function () {
+            $codigo.trigger('focus');
+        }, 0);
+    }
+}
+
 function limpiarProveedorEnPantalla() {
+    limpiarEstadoConsultaProveedor();
     $('#proveedor_id').val('');
     $('#codigoproveedor').val('');
     $('#nombreproveedor').val('');
@@ -140,9 +232,9 @@ function modalConsultaProveedorAbierto() {
 }
 
 function resolverContextoProveedorDesdeInput($input) {
-    var $ctx = $input.closest('#div-proveedor, tr');
+    var $ctx = $input.closest('#div-proveedor, #div-proveedor-oc, .tm-proveedor-campo, tr');
     if (!$ctx.length) {
-        $ctx = $('#div-proveedor');
+        $ctx = $('#div-proveedor-oc').length ? $('#div-proveedor-oc') : $('#div-proveedor');
     }
     return $ctx;
 }
@@ -167,6 +259,14 @@ function aceptarCodigoProveedorDesdeInput($input) {
         limpiarProveedorEnPantalla();
         return;
     }
+    // Mismo código ya fallido y sin id cargado: no repetir GET ni alert (sale del loop blur/alert).
+    if (
+        ultimoCodigoProveedorFallo &&
+        ultimoCodigoProveedorIntentado === codigo &&
+        !(parseInt(String($('#proveedor_id').val() || '0'), 10) > 0)
+    ) {
+        return;
+    }
     leeUnProveedor(0, codigo);
 }
 
@@ -187,6 +287,8 @@ function aplicarProveedorEnPantalla(data, ctx) {
         limpiarProveedorEnPantalla();
         return;
     }
+
+    marcarProveedorConsultaOk(data.codigo || '');
 
     var dest = ctx || resolverPtrProveedorDesdeBoton($('#div-proveedor'));
     if (dest.$id && dest.$id.length) {
@@ -223,10 +325,12 @@ function aplicarProveedorEnPantalla(data, ctx) {
 
 function leeUnProveedor(proveedorId, codigoproveedor) {
     var url = '';
+    var codigoPedido = '';
     if ($.isNumeric(proveedorId) && parseInt(proveedorId, 10) > 0) {
-        url = carpetaBase + '/compras/leerproveedor/' + proveedorId;
+        url = urlAppCompras('/compras/leerproveedor/' + proveedorId);
     } else if (codigoproveedor !== undefined && codigoproveedor !== null && String(codigoproveedor).trim() !== '') {
-        url = carpetaBase + '/compras/leerproveedorporcodigo/' + encodeURIComponent(String(codigoproveedor).trim());
+        codigoPedido = String(codigoproveedor).trim();
+        url = urlAppCompras('/compras/leerproveedorporcodigo/' + encodeURIComponent(codigoPedido));
         var empresaId = empresaIdConsultaProveedor();
         if (empresaId !== '') {
             url += (url.indexOf('?') >= 0 ? '&' : '?') + 'empresa_id=' + encodeURIComponent(empresaId);
@@ -243,11 +347,13 @@ function leeUnProveedor(proveedorId, codigoproveedor) {
             aplicarProveedorEnPantalla(data);
             return;
         }
+        marcarProveedorConsultaFallo(codigoPedido || String($('#codigoproveedor').val() || '').trim());
         limpiarProveedorEnPantallaManteniendoCodigo();
-        alert('No se encontró el proveedor indicado.');
+        avisarProveedorNoCargado('No se encontró el proveedor indicado.');
     }).fail(function () {
+        marcarProveedorConsultaFallo(codigoPedido || String($('#codigoproveedor').val() || '').trim());
         limpiarProveedorEnPantallaManteniendoCodigo();
-        alert('No se pudo cargar el proveedor.');
+        avisarProveedorNoCargado('No se pudo cargar el proveedor.');
     });
 }
 
@@ -394,6 +500,17 @@ function activa_eventos_consultaproveedor() {
                 $(this).removeData('cp-enter-procesado');
                 return;
             }
+            if (event.type === 'blur' && $(this).data('cp-skip-blur-once')) {
+                $(this).removeData('cp-skip-blur-once');
+                return;
+            }
+            // Si el usuario corrige el código tras un fallo, permitir nueva consulta.
+            if (event.type === 'change') {
+                var codigoActual = String($(this).val() || '').trim();
+                if (ultimoCodigoProveedorFallo && codigoActual !== ultimoCodigoProveedorIntentado) {
+                    ultimoCodigoProveedorFallo = false;
+                }
+            }
             event.preventDefault();
             programarLeeProveedorPorCodigo($(this));
         });
@@ -424,7 +541,7 @@ function activa_eventos_consultaproveedor() {
             $(ptrrenglon).closest('tr').find('.codigoproveedor').val('');
             $(ptrrenglon).closest('tr').find('.nombreproveedor').val('');
 
-            $.get(carpetaBase + '/compras/leerproveedor/' + proveedorId, function (data) {
+            $.get(urlAppCompras('/compras/leerproveedor/' + proveedorId), function (data) {
                 if (!data) {
                     return;
                 }

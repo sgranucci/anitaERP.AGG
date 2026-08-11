@@ -16,6 +16,7 @@ use App\Services\Arca\ArcaMtxcaFacturaElectronicaService;
 use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
+use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 
 class FacturaElectronicaService 
 {
@@ -46,14 +47,14 @@ class FacturaElectronicaService
 	/** Comprobantes nacionales wsfev1 vía SOAP (config arca_wsfe.transporte = soap). */
 	private function debeUsarSoapWsfe(object $puntoventa): bool
 	{
-		return ($puntoventa->webservice ?? '') === 'wsfev1'
+		return ArcaPuntoventaWebserviceSupport::esWsfe((string) ($puntoventa->webservice ?? ''))
 			&& (string) config('arca_wsfe.transporte', 'afip_php') === 'soap';
 	}
 
 	/** Factura con detalle wsmtxca vía SOAP (config arca_mtxca.transporte = soap). */
 	private function debeUsarSoapMtxca(object $puntoventa): bool
 	{
-		return ($puntoventa->webservice ?? '') === 'wsmtxca'
+		return ArcaPuntoventaWebserviceSupport::esMtxca((string) ($puntoventa->webservice ?? ''))
 			&& (string) config('arca_mtxca.transporte', 'afip_php') === 'soap';
 	}
 
@@ -592,6 +593,8 @@ class FacturaElectronicaService
 		if ($empresaId < 1) {
 			return ['ok' => false, 'error' => 'Punto de venta sin empresa asociada.'];
 		}
+
+		$puntoventa = ArcaPuntoventaWebserviceSupport::puntoventaParaSoap($puntoventa);
 
 		if ($this->debeUsarSoapMtxca($puntoventa)) {
 			try {

@@ -12,6 +12,7 @@ class Stock_Etiqueta extends Model
 
     protected $fillable = [
         'empresa_id', 'articulo_id', 'deposito_id', 'unidadmedida_id',
+        'separa_unidadmedida_id', 'cant_unid_separa',
         'estado', 'origen_tipo', 'origen_id', 'origen_linea_id', 'articulo_movimiento_id',
         'etiqueta_origen_id',
         'lote_proveedor', 'fecha_vto', 'fecha_emision', 'hora_emision',
@@ -47,6 +48,11 @@ class Stock_Etiqueta extends Model
     public function unidadesmedida()
     {
         return $this->belongsTo(Unidadmedida::class, 'unidadmedida_id');
+    }
+
+    public function separaUnidadmedida()
+    {
+        return $this->belongsTo(UnidadmedidaSurmar::class, 'separa_unidadmedida_id');
     }
 
     public function usuarios()

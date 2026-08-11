@@ -16,6 +16,12 @@ class RuleClienteDocumentoUnico implements Rule
 
     public function passes($attribute, $value): bool
     {
+        if (ClienteDocumentoUnicoSupport::permiteCuitDuplicado()) {
+            $this->clienteDuplicado = null;
+
+            return true;
+        }
+
         $this->clienteDuplicado = ClienteDocumentoUnicoSupport::findOtroCliente(
             (string) $value,
             $this->excluirClienteId

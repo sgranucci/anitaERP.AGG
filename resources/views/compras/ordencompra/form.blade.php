@@ -1,5 +1,6 @@
 @php
     use App\Models\Compras\Ordencompra_Articulo;
+    use App\Models\Stock\Articulo as OcArticuloForm;
     $soloLectura = isset($visualizar) && $visualizar;
     if (isset($data) && $data) {
         $solicitanteTexto = trim((string) (optional($data->usuarios)->nombre ?? ''));
@@ -324,8 +325,16 @@
     </div>
 </div>
 
-<div id="oc-solapa-articulos" class="oc-solapa" style="display:none;">
-    <h5>Artículos</h5>
+    <div id="oc-solapa-articulos" class="oc-solapa" style="display:none;">
+    <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
+        <h5 class="mb-0">Artículos</h5>
+        @if (\App\Support\Compras\OrdencompraUiConfigSupport::entregaSemanal())
+            <button type="button" class="btn btn-outline-info btn-sm oc-abrir-entrega-semanal-resumen"
+                title="Ver todas las entregas semanales de la orden (matriz por artículo y fecha)">
+                <i class="fa fa-calendar"></i> Entregas semanales (orden)
+            </button>
+        @endif
+    </div>
     <p class="text-muted small mb-2">
         Requiere proveedor en cabecera. Si el art&iacute;culo tiene cat&aacute;logo <code>articulo_proveedor</code> para ese proveedor,
         se completan nombre, precio de lista, UM de compra y coeficiente (conversi&oacute;n a stock al recibir).
@@ -400,7 +409,19 @@
                 $modoStockColorTalleInicial = '0';
             }
         }
+        $ocPedirPartidaCapex = \App\Support\Compras\OrdencompraUiConfigSupport::pedirPartidaCapex();
+        $ocMostrarPesoArticulo = \App\Support\Compras\OrdencompraUiConfigSupport::mostrarPesoArticulo();
+        $ocEntregaSemanal = \App\Support\Compras\OrdencompraUiConfigSupport::entregaSemanal();
         $ocColspanMetaArticulos = $soloLectura ? 16 : 17;
+        if (! $ocPedirPartidaCapex) {
+            $ocColspanMetaArticulos -= 2;
+        }
+        if ($ocMostrarPesoArticulo) {
+            $ocColspanMetaArticulos += 2;
+        }
+        if ($ocEntregaSemanal) {
+            $ocColspanMetaArticulos += 1;
+        }
         $fechaDocOc = old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d'));
         $ocMonedaPesoId = (int) (
             optional($moneda_query->firstWhere('abreviatura', '$'))->id
@@ -413,7 +434,12 @@
         Este comprobante usa stock por color y talle: todas las líneas deben tener color y talle.
     </div>
     <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
-    <table class="table table-sm table-bordered" id="tabla-articulos-ordencompra" data-oc-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-oc-moneda-peso-id="{{ $ocMonedaPesoId }}">
+    <table class="table table-sm table-bordered" id="tabla-articulos-ordencompra"
+        data-oc-cc-destino-default="{{ $centrocostoDefaultDestino }}"
+        data-oc-moneda-peso-id="{{ $ocMonedaPesoId }}"
+        data-oc-pedir-partida-capex="{{ $ocPedirPartidaCapex ? '1' : '0' }}"
+        data-oc-mostrar-peso="{{ $ocMostrarPesoArticulo ? '1' : '0' }}"
+        data-oc-entrega-semanal="{{ $ocEntregaSemanal ? '1' : '0' }}">
         <thead>
             <tr>
                 <th style="width: 9%;">Artículo</th>
@@ -422,14 +448,23 @@
                 <th class="ms-col-color-talle" style="width: 6%; display:none;">Color</th>
                 <th class="ms-col-color-talle" style="width: 5%; display:none;">Talle</th>
                 <th style="width: 5%;">Cant.</th>
+                @if ($ocEntregaSemanal)
+                    <th style="width: 5%;" class="text-nowrap oc-col-entrega-semanal" title="Entregas semanales (fecha/cantidad); la suma define la cantidad">Entregas</th>
+                @endif
+                @if ($ocMostrarPesoArticulo)
+                    <th style="width: 5%;" class="text-nowrap oc-col-peso" title="Peso unitario (precarga del ABM; editable)">Peso unit.</th>
+                    <th style="width: 5%;" class="text-nowrap oc-col-peso" title="Cantidad × peso unitario (se recalcula al editar)">Peso tot.</th>
+                @endif
                 <th style="width: 5%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase) o conversión UM compra → stock">Cant. alt.</th>
                 <th style="width: 7%;">Precio</th>
                 <th style="width: 5%;">Moneda</th>
                 <th style="width: 5%;">Cotiz.</th>
                 <th style="width: 7%;">F. entrega línea</th>
                 <th style="width: 8%;">CC destino</th>
-                <th style="width: 15%;">Partida presupuesto</th>
-                <th style="width: 14%;">CAPEX</th>
+                @if ($ocPedirPartidaCapex)
+                    <th style="width: 15%;">Partida presupuesto</th>
+                    <th style="width: 14%;">CAPEX</th>
+                @endif
                 <th style="width: 6%;">Det. línea</th>
                 <th style="width: 6%;" class="text-nowrap">Origen</th>
                 @if (!$soloLectura)
@@ -439,9 +474,64 @@
         </thead>
         <tbody>
             @php
-                $lineas = (isset($data) && $data && $data->ordencompra_articulos && $data->ordencompra_articulos->count())
-                    ? $data->ordencompra_articulos
-                    : collect([new Ordencompra_Articulo()]);
+                $oldArticuloIds = old('articulo_ids');
+                if (is_array($oldArticuloIds) && count(array_filter($oldArticuloIds, static fn ($v) => $v !== null && $v !== '')) > 0) {
+                    $idsArtOld = [];
+                    foreach ($oldArticuloIds as $aidOld) {
+                        if ($aidOld !== null && $aidOld !== '') {
+                            $idsArtOld[] = (int) $aidOld;
+                        }
+                    }
+                    $artsOldMap = $idsArtOld === []
+                        ? collect()
+                        : OcArticuloForm::query()
+                            ->with(['unidadesdemedidasalternativas'])
+                            ->whereIn('id', array_values(array_unique($idsArtOld)))
+                            ->get()
+                            ->keyBy('id');
+                    $lineas = collect();
+                    foreach ($oldArticuloIds as $iOld => $aidOld) {
+                        if ($aidOld === null || $aidOld === '') {
+                            continue;
+                        }
+                        $linOld = new Ordencompra_Articulo([
+                            'id' => old('ordencompra_articulo_ids.'.$iOld) ?: null,
+                            'articulo_id' => (int) $aidOld,
+                            'cantidad' => old('cantidades.'.$iOld, 1),
+                            'precio' => old('precios.'.$iOld, 0),
+                            'moneda_id' => old('moneda_linea_ids.'.$iOld, 1),
+                            'cotizacion' => old('cotizaciones_linea.'.$iOld, 1),
+                            'fechaentrega' => old('fechaentrega_articulos.'.$iOld),
+                            'centrocostodestino_id' => old('centrocostodestino_ids.'.$iOld),
+                            'partidagasto_id' => old('partidagasto_ids.'.$iOld) ?: null,
+                            'capex_id' => old('capex_ids.'.$iOld) ?: null,
+                            'detalle' => old('detalle_articulos.'.$iOld),
+                            'descuento' => old('descuentos_linea.'.$iOld),
+                            'cantidadalternativa' => old('cantidadalternativas.'.$iOld),
+                            'peso_unitario' => old('peso_unitarios.'.$iOld),
+                            'peso_total' => old('peso_totales.'.$iOld),
+                            'requisicion_articulo_id' => old('requisicion_articulo_ids.'.$iOld) ?: null,
+                            'articulo_proveedor_id' => old('articulo_proveedor_ids.'.$iOld) ?: null,
+                            'precio_origen_tipo' => old('precio_origen_tipos.'.$iOld),
+                            'precio_origen_ref_id' => old('precio_origen_ref_ids.'.$iOld) ?: null,
+                            'precio_origen_etiqueta' => old('precio_origen_etiquetas.'.$iOld),
+                            'color_id' => old('colores_id.'.$iOld) ?: null,
+                            'talle_id' => old('talles_id.'.$iOld) ?: null,
+                        ]);
+                        $artRel = $artsOldMap->get((int) $aidOld);
+                        if ($artRel) {
+                            $linOld->setRelation('articulos', $artRel);
+                        }
+                        $lineas->push($linOld);
+                    }
+                    if ($lineas->isEmpty()) {
+                        $lineas = collect([new Ordencompra_Articulo()]);
+                    }
+                } else {
+                    $lineas = (isset($data) && $data && $data->ordencompra_articulos && $data->ordencompra_articulos->count())
+                        ? $data->ordencompra_articulos
+                        : collect([new Ordencompra_Articulo()]);
+                }
             @endphp
             @foreach ($lineas as $idx => $linea)
                 @php
@@ -508,6 +598,42 @@
                             ? (string) $_ap->nombre_articulo_proveedor
                             : (optional($linea->articulos)->descripcion ?? '');
                     }
+                    $_pesoUnit = old('peso_unitarios.'.$idx, $linea->peso_unitario ?? null);
+                    if (($_pesoUnit === null || $_pesoUnit === '') && $ocMostrarPesoArticulo) {
+                        $_pesoUnit = optional($linea->articulos)->peso ?? '';
+                    }
+                    $_pesoUnitShow = ($_pesoUnit !== null && $_pesoUnit !== '')
+                        ? rtrim(rtrim(number_format((float) $_pesoUnit, 6, '.', ''), '0'), '.')
+                        : '';
+                    $_pesoTotalOld = old('peso_totales.'.$idx, $linea->peso_total ?? null);
+                    if ($_pesoTotalOld !== null && $_pesoTotalOld !== '') {
+                        $_pesoTotalShow = rtrim(rtrim(number_format((float) $_pesoTotalOld, 6, '.', ''), '0'), '.');
+                    } elseif ($_pesoUnitShow !== '' && $_cantLinea > 0) {
+                        $_pesoTotalShow = rtrim(rtrim(number_format((float) $_pesoUnitShow * $_cantLinea, 6, '.', ''), '0'), '.');
+                    } else {
+                        $_pesoTotalShow = '';
+                    }
+                    $_entregasJson = old('entregas_semanal_json.'.$idx);
+                    if ($_entregasJson === null || $_entregasJson === '') {
+                        $_entregasCol = $linea->relationLoaded('entregas')
+                            ? $linea->entregas
+                            : collect();
+                        $_entregasArr = $_entregasCol->map(static function ($e) {
+                            return [
+                                'fecha' => $e->fecha ? substr((string) $e->fecha, 0, 10) : '',
+                                'cantidad' => (float) $e->cantidad,
+                            ];
+                        })->filter(static function ($e) {
+                            return $e['fecha'] !== '' && (float) $e['cantidad'] > 0;
+                        })->values()->all();
+                        $_entregasJson = json_encode($_entregasArr, JSON_UNESCAPED_UNICODE);
+                    }
+                    $_entregasCount = 0;
+                    $_entregasDecoded = json_decode((string) $_entregasJson, true);
+                    if (is_array($_entregasDecoded)) {
+                        $_entregasCount = count($_entregasDecoded);
+                    }
+                    $_cantConEntregas = $ocEntregaSemanal && $_entregasCount > 0;
                 @endphp
                 <tr class="item-ordencompra-articulo" data-maneja-stock-color-talle="{{ $_manejaColorTalle ? '1' : '0' }}">
                     <td>
@@ -523,6 +649,13 @@
                         <input type="hidden" class="linea-um-compra-abrev" value="{{ $_apUm }}">
                         <input type="hidden" name="descuentos_linea[]" value="{{ old('descuentos_linea.'.$idx, $linea->descuento ?? '') }}">
                         <input type="hidden" name="cantidadalternativas[]" class="oc-cantidadalternativa" value="{{ $_cantAltShow }}">
+                        @if ($ocEntregaSemanal)
+                            <input type="hidden" class="oc-entregas-semanal-json" name="entregas_semanal_json[]" value="{{ $_entregasJson }}">
+                        @endif
+                        @if (! $ocPedirPartidaCapex)
+                            <input type="hidden" class="partidagasto_id" name="partidagasto_ids[]" value="{{ old('partidagasto_ids.'.$idx, $linea->partidagasto_id ?? '') }}">
+                            <input type="hidden" class="capex_id" name="capex_ids[]" value="{{ old('capex_ids.'.$idx, $linea->capex_id ?? '') }}">
+                        @endif
                         <textarea name="detalle_articulos[]" class="d-none oc-ta-detalle-linea" aria-hidden="true">{{ old('detalle_articulos.'.$idx, $linea->detalle ?? '') }}</textarea>
                         <div class="form-group row celda-articulo-ordencompra mb-0 d-flex align-items-center flex-nowrap">
                             @if (!$soloLectura)
@@ -531,7 +664,7 @@
                                 </button>
                             @endif
                             <input type="text" class="codigoarticulo form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;"
-                                name="codigoarticulos[]" value="{{ optional($linea->articulos)->sku ?? '' }}" {{ $soloLectura ? 'readonly' : '' }}>
+                                name="codigoarticulos[]" value="{{ old('codigoarticulos.'.$idx, optional($linea->articulos)->sku ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}>
                         </div>
                     </td>
                     <td>
@@ -552,11 +685,37 @@
                         'manejaColorTalle' => $_manejaColorTalle,
                     ])
                     <td>
-                        <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea"
-                            value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                        <input type="number" step="0.0001" name="cantidades[]" class="form-control cantidad-linea{{ $_cantConEntregas ? ' oc-cant-desde-entregas' : '' }}"
+                            value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}"
+                            @if ($soloLectura || $_cantConEntregas)
+                                readonly
+                            @endif
+                            title="{{ $_cantConEntregas ? 'Cantidad = suma de entregas semanales' : '' }}">
                         <input type="hidden" class="oc-unidadesxenvase" value="{{ $_uxenv > 0 ? $_uxenv : '' }}">
                         <input type="hidden" class="oc-um-alt-abrev" value="{{ $_umAltAbrev }}">
                     </td>
+                    @if ($ocEntregaSemanal)
+                        <td class="align-middle p-1 text-center oc-col-entrega-semanal">
+                            <button type="button"
+                                class="btn btn-sm btn-outline-info oc-abrir-entrega-semanal"
+                                title="{{ $soloLectura ? 'Ver entregas semanales' : 'Cargar / consultar entregas semanales' }}">
+                                <i class="fa fa-calendar"></i>
+                                <span class="badge badge-secondary oc-entregas-count{{ $_entregasCount > 0 ? '' : ' d-none' }}">{{ $_entregasCount > 0 ? $_entregasCount : '' }}</span>
+                            </button>
+                        </td>
+                    @endif
+                    @if ($ocMostrarPesoArticulo)
+                        <td class="oc-col-peso align-middle px-1">
+                            <input type="number" step="0.000001" min="0" name="peso_unitarios[]" class="form-control form-control-sm oc-peso-unitario"
+                                value="{{ $_pesoUnitShow }}"
+                                title="Peso unitario (precarga del ABM; editable)"
+                                {{ $soloLectura ? 'readonly' : '' }}>
+                        </td>
+                        <td class="oc-col-peso align-middle px-1">
+                            <input type="number" step="0.000001" name="peso_totales[]" class="form-control form-control-sm oc-peso-total"
+                                value="{{ $_pesoTotalShow }}" readonly title="Cantidad × peso unitario (recalculado)">
+                        </td>
+                    @endif
                     <td class="oc-cant-alt-celda text-right px-1">
                         <span class="oc-cant-alt-texto" title="Cantidad × unidades x envase">
                             @if ($_uxenv > 0 && $_cantAltShow !== '')
@@ -600,34 +759,36 @@
                             @endforeach
                         </select>
                     </td>
-                    <td class="align-middle">
-                        <div class="celda-partidagasto d-flex align-items-center flex-nowrap">
-                            <input type="hidden" class="partidagasto_id" name="partidagasto_ids[]" value="{{ old('partidagasto_ids.'.$idx, $linea->partidagasto_id ?? '') }}">
-                            @if (!$soloLectura)
-                                <button type="button" title="Consulta partidas (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC flex-shrink-0">
-                                    <i class="fa fa-search text-primary"></i>
-                                </button>
-                            @endif
-                            <input type="text" class="codigopartidagasto form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigopartidagastos[]"
-                                value="{{ optional($linea->partidagastos)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }}>
-                            <input type="text" class="descripcionpartidagasto form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcionpartidagastos[]"
-                                value="{{ $_pgDesc }}" readonly title="{{ $_pgDesc }}">
-                        </div>
-                    </td>
-                    <td class="align-middle">
-                        <div class="celda-capex d-flex align-items-center flex-nowrap">
-                            <input type="hidden" class="capex_id" name="capex_ids[]" value="{{ old('capex_ids.'.$idx, $linea->capex_id ?? '') }}">
-                            @if (!$soloLectura)
-                                <button type="button" title="Consulta CAPEX (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC flex-shrink-0">
-                                    <i class="fa fa-search text-primary"></i>
-                                </button>
-                            @endif
-                            <input type="text" class="codigocapex form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigocapexs[]"
-                                value="{{ optional($linea->capexs)->codigo ?? '' }}" {{ $soloLectura ? 'readonly' : '' }}>
-                            <input type="text" class="descripcioncapex form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcioncapexs[]"
-                                value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly title="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}">
-                        </div>
-                    </td>
+                    @if ($ocPedirPartidaCapex)
+                        <td class="align-middle">
+                            <div class="celda-partidagasto d-flex align-items-center flex-nowrap">
+                                <input type="hidden" class="partidagasto_id" name="partidagasto_ids[]" value="{{ old('partidagasto_ids.'.$idx, $linea->partidagasto_id ?? '') }}">
+                                @if (!$soloLectura)
+                                    <button type="button" title="Consulta partidas (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultapartidagasto tooltipsC flex-shrink-0">
+                                        <i class="fa fa-search text-primary"></i>
+                                    </button>
+                                @endif
+                                <input type="text" class="codigopartidagasto form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigopartidagastos[]"
+                                    value="{{ old('codigopartidagastos.'.$idx, optional($linea->partidagastos)->codigo ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                                <input type="text" class="descripcionpartidagasto form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcionpartidagastos[]"
+                                    value="{{ $_pgDesc }}" readonly title="{{ $_pgDesc }}">
+                            </div>
+                        </td>
+                        <td class="align-middle">
+                            <div class="celda-capex d-flex align-items-center flex-nowrap">
+                                <input type="hidden" class="capex_id" name="capex_ids[]" value="{{ old('capex_ids.'.$idx, $linea->capex_id ?? '') }}">
+                                @if (!$soloLectura)
+                                    <button type="button" title="Consulta CAPEX (F1, &uacute;ltimo presupuesto)" style="padding:1;" class="btn-accion-tabla consultacapex tooltipsC flex-shrink-0">
+                                        <i class="fa fa-search text-primary"></i>
+                                    </button>
+                                @endif
+                                <input type="text" class="codigocapex form-control form-control-sm ml-1" style="width: 4.25rem; flex: 0 0 auto;" name="codigocapexs[]"
+                                    value="{{ old('codigocapexs.'.$idx, optional($linea->capexs)->codigo ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}>
+                                <input type="text" class="descripcioncapex form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcioncapexs[]"
+                                    value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly title="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}">
+                            </div>
+                        </td>
+                    @endif
                     <td class="align-middle p-1 text-center">
                         @if (!$soloLectura)
                             <button type="button" title="Editar detalle de la línea" class="btn btn-sm btn-outline-secondary oc-abrir-detalle-linea">
@@ -665,6 +826,12 @@
                                 <span class="font-weight-bold text-secondary small text-nowrap flex-shrink-0 mr-1">Origen precio</span>
                                 <div class="oc-origen-precio-resumen oc-linea-item-leyenda text-body" title="{{ $_poEtiq }}">{{ $_poEtiq !== '' && $_poEtiq !== null ? $_poEtiq : '—' }}</div>
                             </div>
+                            @if ($ocEntregaSemanal)
+                                <div class="oc-meta-bloque oc-meta-bloque-entregas border-left pl-2 ml-1">
+                                    <span class="font-weight-bold text-secondary small text-nowrap flex-shrink-0 mr-1">Entregas</span>
+                                    <div class="oc-entregas-semanal-resumen oc-linea-item-leyenda text-body">—</div>
+                                </div>
+                            @endif
                         </div>
                     </td>
                 </tr>
@@ -673,6 +840,12 @@
     </table>
     @if (!$soloLectura)
         <button type="button" class="btn btn-danger btn-sm" id="agrega_renglon_ordencompra_articulo">+ Agregar renglón</button>
+    @endif
+    @if ($ocEntregaSemanal)
+        <button type="button" class="btn btn-outline-info btn-sm ml-1 oc-abrir-entrega-semanal-resumen"
+            title="Ver todas las entregas semanales de la orden">
+            <i class="fa fa-calendar"></i> Entregas semanales (orden)
+        </button>
     @endif
 
     <div class="modal fade" id="modalOcDetalleLinea" tabindex="-1" role="dialog" aria-labelledby="modalOcDetalleLineaLabel" aria-hidden="true">
@@ -715,6 +888,13 @@
             </div>
         </div>
     </div>
+
+    @if ($ocEntregaSemanal)
+        @include('compras.ordencompra.partials.modal_entrega_semanal', [
+            'soloLectura' => $soloLectura,
+        ])
+        @include('compras.ordencompra.partials.modal_entrega_semanal_resumen')
+    @endif
 
     @php
         $ocTot = $oc_totales_resumen ?? \App\Support\Compras\OrdencompraTotalesResumen::vacioParaVista();

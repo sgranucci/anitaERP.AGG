@@ -14,6 +14,7 @@ class SincronizarProveedorDesdeAnita extends Command
     protected $signature = 'proveedor:sincronizar-anita
                             {--codigo= : Importar/actualizar un proveedor por código Anita (prom_proveedor)}
                             {--empresa= : Código o ID ERP de empresa (obligatorio en altas si PROVEEDOR_FILTRO_EMPRESA)}
+                            {--path= : Path Anita override (ej. /usr2/surmar); default ANITA_BDD_PATH}
                             {--usuario= : ID usuario para usuario_id en altas (default: primer usuario)}
                             {--dry-run : Informe sin escribir en el ERP}
                             {--informe-solo-erp : Solo listar códigos presentes en ERP y ausentes en Anita}';
@@ -45,6 +46,9 @@ class SincronizarProveedorDesdeAnita extends Command
         $soloErp = (bool) $this->option('informe-solo-erp');
         $codigo = $this->option('codigo');
         $codigo = is_string($codigo) ? trim($codigo) : '';
+        $pathSistema = $this->option('path');
+        $pathSistema = is_string($pathSistema) ? trim($pathSistema) : '';
+        $pathSistema = $pathSistema !== '' ? $pathSistema : null;
 
         try {
             $empresaId = $this->resolverEmpresaId($empresaRepository);
@@ -53,7 +57,7 @@ class SincronizarProveedorDesdeAnita extends Command
             }
 
             if ($soloErp) {
-                $stats = $proveedorRepository->resincronizarDesdeAnita(true, $empresaId);
+                $stats = $proveedorRepository->resincronizarDesdeAnita(true, $empresaId, $pathSistema);
                 $this->info('Proveedores en ERP sin registro en Anita (promae): '.count($stats['solo_en_erp']));
                 foreach ($stats['solo_en_erp'] as $codigoErp) {
                     $this->line("  - {$codigoErp}");
@@ -64,28 +68,31 @@ class SincronizarProveedorDesdeAnita extends Command
 
             if ($codigo !== '') {
                 if ($dryRun) {
-                    $preview = $proveedorRepository->previewSincronizacionDesdeAnita($codigo);
+                    $preview = $proveedorRepository->previewSincronizacionDesdeAnita($codigo, $pathSistema, $empresaId);
                     if ($preview === null) {
                         $this->warn("Proveedor Anita {$codigo} no encontrado.");
 
                         return self::FAILURE;
                     }
-                    $this->mostrarPreview($preview, $empresaId);
+                    $this->mostrarPreview($preview, $empresaId, $pathSistema);
 
                     return self::SUCCESS;
                 }
 
                 if (config('proveedor.filtro_empresa')
                     && ($empresaId === null || $empresaId <= 0)
-                    && ! $proveedorRepository->existeProveedorPorCodigo($codigo)) {
+                    && ! $proveedorRepository->existeProveedorPorCodigo($codigo, $empresaId)) {
                     $this->error('Con PROVEEDOR_FILTRO_EMPRESA activo las altas requieren --empresa= (código o id ERP).');
 
                     return self::FAILURE;
                 }
 
-                $existe = $proveedorRepository->existeProveedorPorCodigo($codigo);
+                $existe = $proveedorRepository->existeProveedorPorCodigo($codigo, $empresaId);
                 $this->info(($existe ? 'Actualizando' : 'Importando')." proveedor Anita {$codigo}…");
-                $resultado = $proveedorRepository->traerRegistroDeAnita($codigo, null, $empresaId);
+                if ($pathSistema) {
+                    $this->info("Path Anita: {$pathSistema}");
+                }
+                $resultado = $proveedorRepository->traerRegistroDeAnita($codigo, null, $empresaId, $pathSistema);
                 if ($resultado === null) {
                     $this->warn('Proveedor no encontrado en Anita o sin datos.');
 
@@ -108,8 +115,11 @@ class SincronizarProveedorDesdeAnita extends Command
             if ($empresaId) {
                 $this->info("Empresa asignada en altas/updates: {$empresaId}");
             }
+            if ($pathSistema) {
+                $this->info("Path Anita: {$pathSistema}");
+            }
 
-            $stats = $proveedorRepository->resincronizarDesdeAnita($dryRun, $empresaId);
+            $stats = $proveedorRepository->resincronizarDesdeAnita($dryRun, $empresaId, $pathSistema);
 
             $this->table(
                 ['Métrica', 'Cantidad'],
@@ -174,7 +184,7 @@ class SincronizarProveedorDesdeAnita extends Command
     /**
      * @param  array<string, mixed>  $preview
      */
-    private function mostrarPreview(array $preview, ?int $empresaId): void
+    private function mostrarPreview(array $preview, ?int $empresaId, ?string $pathSistema = null): void
     {
         $rows = [
             ['Código ERP', $preview['codigo']],
@@ -188,6 +198,9 @@ class SincronizarProveedorDesdeAnita extends Command
         ];
         if ($empresaId) {
             $rows[] = ['empresa_id a asignar', (string) $empresaId];
+        }
+        if ($pathSistema) {
+            $rows[] = ['path_sistema', $pathSistema];
         }
 
         $this->table(['Campo', 'Valor'], $rows);

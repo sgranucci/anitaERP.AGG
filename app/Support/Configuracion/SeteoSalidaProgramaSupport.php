@@ -21,6 +21,9 @@ class SeteoSalidaProgramaSupport
 
     public const VENTAS_REPETIQUETAOT = 'ventas_repetiquetaot';
 
+    /** Etiquetas recepción / stock Surmar (ZPL a Zebra en red o PDF). */
+    public const STOCK_ETIQUETA_SURMAR = 'stock_etiqueta_surmar';
+
     /** @var array<string, string> */
     private const ETIQUETAS = [
         self::VENTAS_PEDIDO => 'Pedidos de clientes',
@@ -28,6 +31,7 @@ class SeteoSalidaProgramaSupport
         self::STOCK_ARTICULO => 'Artículos (etiquetas)',
         self::UIF_EXPORTA_OPERACION => 'Exportación UIF',
         self::VENTAS_REPETIQUETAOT => 'Etiquetas de OT',
+        self::STOCK_ETIQUETA_SURMAR => 'Etiquetas Surmar (recepción)',
     ];
 
     public static function resolver(?string $opcion, ?Request $request = null): string
@@ -103,6 +107,7 @@ class SeteoSalidaProgramaSupport
             self::STOCK_ARTICULO,
             self::UIF_EXPORTA_OPERACION,
             self::VENTAS_REPETIQUETAOT,
+            self::STOCK_ETIQUETA_SURMAR,
         ];
     }
 

@@ -1,11 +1,12 @@
 <?php
 
 /**
- * Import OC Anita Surmar (aislado del sync AGG ordencompra_anita).
- * Bridge: /usr2/surmar/compras. No escribe de vuelta a Anita.
+ * Sync OC Anita Surmar (aislado del sync/escritura AGG ordencompra_anita).
+ * Bridge: /usr2/surmar/compras. Escritura ERP→Anita: solo pendmaep + pendmovp
+ * (ver OrdencompraSurmarAnitaBridgeService).
  */
 return [
-    'path_sistema' => env('ORDENCOMPRA_SURMAR_ANITA_PATH', '/usr2/surmar'),
+    'path_sistema' => env('ORDENCOMPRA_SURMAR_ANITA_PATH', env('ANITA_SURMAR_PATH', '/usr2/surmar')),
     'sistema_compras' => env('ORDENCOMPRA_SURMAR_ANITA_SISTEMA', 'compras'),
     'fecha_desde' => (int) env('ORDENCOMPRA_SURMAR_SYNC_FECHA_DESDE', 20260100),
 

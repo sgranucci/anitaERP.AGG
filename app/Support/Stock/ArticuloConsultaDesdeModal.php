@@ -52,7 +52,11 @@ class ArticuloConsultaDesdeModal
             || can('listar-prenda-sueldos', false)
             || can('crear-prenda-sueldos', false)
             || can('editar-prenda-sueldos', false)
-            || can('actualizar-prenda-sueldos', false);
+            || can('actualizar-prenda-sueldos', false)
+            || can('listar-recepcion-proveedor-surmar', false)
+            || can('crear-recepcion-proveedor-surmar', false)
+            || can('editar-recepcion-proveedor-surmar', false)
+            || can('actualizar-recepcion-proveedor-surmar', false);
     }
 
     public static function urlEditar(int $id): string

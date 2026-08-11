@@ -39,7 +39,11 @@ Cert. SENASA Surmar
                 @include('stock.certificado_senasa_surmar.partials.filtros_listado')
             </form>
             <div class="card-body table-responsive p-0">
-                <table id="tabla-paginada" class="table table-hover table-striped table-sm">
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_certificado_senasa_surmar',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
+                <table id="tabla-paginada" class="table table-striped table-bordered table-hover">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>Nº</th>
@@ -47,7 +51,7 @@ Cert. SENASA Surmar
                             <th>Estado</th>
                             <th>Remito AFIP</th>
                             <th>Ítems</th>
-                            <th></th>
+                            <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>

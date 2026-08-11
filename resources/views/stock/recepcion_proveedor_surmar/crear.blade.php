@@ -39,8 +39,10 @@ window.SURMAR_RECEPCION_CREAR = {
                 <input type="hidden" name="proveedor_id" id="proveedor_id" value="{{ old('proveedor_id') }}">
                 <div class="card-body">
                     <p class="text-muted mb-3">
-                        Seleccione la <strong>orden de compra</strong> (como en Anita / recepción AGG). Luego se abre la carga provisoria:
+                        Seleccione la <strong>orden de compra</strong>, el depósito y los <strong>datos SENASA</strong>
+                        (como Anita «Datos adicionales»). Luego se abre la carga provisoria:
                         cada ítem se graba con lote/peso y emite etiqueta al aceptar.
+                        El certificado se usa como lote por defecto en cada línea.
                     </p>
                     <div class="form-group row">
                         <label class="col-lg-4 control-label text-right pr-2">Empresa</label>
@@ -58,12 +60,12 @@ window.SURMAR_RECEPCION_CREAR = {
                                 <input type="number"
                                        id="numero_oc_buscar"
                                        name="numero_oc_buscar"
-                                       class="form-control flex-grow-1"
+                                       class="form-control flex-grow-1 surmar-enc-nav"
                                        placeholder="Número OC"
                                        min="1"
                                        value="{{ old('numero_oc_buscar') }}"
                                        autofocus
-                                       title="Enter o Tab para cargar la orden de compra"
+                                       title="Enter: carga la OC y salta al depósito"
                                        style="min-width:6rem;max-width:10rem;">
                                 @if ($puedeConsultarOc)
                                     <a href="#"
@@ -81,15 +83,15 @@ window.SURMAR_RECEPCION_CREAR = {
                         <label class="col-lg-4 control-label text-right pr-2">Proveedor</label>
                         <div class="col-lg-6">
                             <div class="input-group">
-                                <input type="text" id="codigoproveedor" class="form-control" style="max-width:7rem;" readonly placeholder="Cód.">
-                                <input type="text" id="proveedor_nombre" class="form-control" readonly placeholder="Se completa al cargar la OC" value="{{ old('proveedor_nombre') }}">
+                                <input type="text" id="codigoproveedor" name="codigoproveedor" class="form-control" style="max-width:7rem;" readonly placeholder="Cód." value="{{ old('codigoproveedor') }}">
+                                <input type="text" id="proveedor_nombre" name="proveedor_nombre" class="form-control" readonly placeholder="Se completa al cargar la OC" value="{{ old('proveedor_nombre') }}">
                             </div>
                         </div>
                     </div>
                     <div class="form-group row">
                         <label class="col-lg-4 control-label text-right pr-2 requerido">Fecha</label>
                         <div class="col-lg-3">
-                            <input type="date" name="fecha" id="fecha" class="form-control" value="{{ old('fecha', date('Y-m-d')) }}" required>
+                            <input type="date" name="fecha" id="fecha" class="form-control surmar-enc-nav" value="{{ old('fecha', date('Y-m-d')) }}" required>
                         </div>
                     </div>
                     @include('stock.partials.campo_consulta_deposito', [
@@ -98,11 +100,18 @@ window.SURMAR_RECEPCION_CREAR = {
                         'inputName' => 'deposito_id',
                         'inputId' => 'deposito_id',
                         'depositoId' => old('deposito_id'),
-                        'codigo' => old('deposito_codigo', ''),
-                        'descripcion' => old('deposito_descripcion', ''),
+                        'codigo' => old('deposito_codigo', old('codigo_deposito', '')),
+                        'descripcion' => old('deposito_descripcion', old('descripcion_deposito', '')),
                         'col_label' => 'col-lg-4 control-label text-right pr-2 requerido',
                         'col_input' => 'col-lg-6',
+                        // Evita que HTML5 bloquee el submit mientras se resuelve el código vía AJAX.
+                        'required' => false,
+                        'codigoExtraClass' => 'surmar-enc-nav',
                     ])
+                    {{-- Persistencia en old() al fallar validación (el partial no nombra código/descripción) --}}
+                    <input type="hidden" name="deposito_codigo" id="deposito_codigo_old" value="{{ old('deposito_codigo', old('codigo_deposito', '')) }}">
+                    <input type="hidden" name="deposito_descripcion" id="deposito_descripcion_old" value="{{ old('deposito_descripcion', old('descripcion_deposito', '')) }}">
+                    @include('stock.recepcion_proveedor_surmar.partials.form_datos_senasa')
                     <div class="form-group row">
                         <label class="col-lg-4 control-label text-right pr-2">Observación</label>
                         <div class="col-lg-6">

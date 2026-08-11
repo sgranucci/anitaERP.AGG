@@ -19,9 +19,12 @@ use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
+use App\Services\Compras\Surmar\OrdencompraSurmarAnitaBridgeService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
+use App\Support\Compras\OrdencompraCondicionPagoDefaultSupport;
+use App\Support\Stock\SurmarSupport;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
@@ -52,6 +55,7 @@ class OrdencompraGestionService
         private Requisicion_EstadoRepositoryInterface $requisicionEstadoRepository,
         private RequisicionPresupuestoService $requisicionPresupuestoService,
         private OrdencompraAnitaBridgeService $ordencompraAnitaBridge,
+        private OrdencompraSurmarAnitaBridgeService $ordencompraSurmarAnitaBridge,
         private ProveedorRepositoryInterface $proveedorRepository,
         private CotizacionQueryInterface $cotizacionQuery,
         private ImpuestoService $impuestoService,
@@ -156,6 +160,8 @@ class OrdencompraGestionService
                 'cantidadalternativa' => $lin->cantidadalternativa,
                 'unidadesxenvase' => $uxenv > 0 ? $uxenv : null,
                 'um_alternativa_abreviatura' => $umAltAbrev,
+                'peso' => $art ? (float) ($art->peso ?? 0) : 0.0,
+                'peso_unitario' => $art && (float) ($art->peso ?? 0) > 0 ? (float) $art->peso : null,
                 'detalle' => $lin->detalle,
                 'centrocostodestino_id' => $lin->centrocostodestino_id,
                 'partidagasto_id' => $lin->partidagasto_id,
@@ -454,7 +460,7 @@ class OrdencompraGestionService
                 $this->sincronizarEstadoRequisicionSegunLineasOc((int) $cab['requisicion_id'], $uid);
             }
 
-            $this->ordencompraAnitaBridge->sincronizarAlta($this->ordencompraRepository->find($oc->id));
+            $this->sincronizarAnitaAlta($this->ordencompraRepository->find($oc->id));
 
             DB::commit();
         } catch (\Exception $e) {
@@ -572,7 +578,7 @@ class OrdencompraGestionService
                 $this->sincronizarEstadoRequisicionSegunLineasOc((int) $reqIdSync, $uidAct);
             }
 
-            $this->ordencompraAnitaBridge->sincronizarActualizacion($this->ordencompraRepository->find($id));
+            $this->sincronizarAnitaActualizacion($this->ordencompraRepository->find($id));
 
             DB::commit();
         } catch (\Exception $e) {
@@ -597,7 +603,7 @@ class OrdencompraGestionService
 
         DB::beginTransaction();
         try {
-            $this->ordencompraAnitaBridge->sincronizarBaja($oc);
+            $this->sincronizarAnitaBaja($oc);
             $this->ordencompraRepository->delete($id);
             // Sync después de borrar: con las líneas aún presentes el sync podía dejar GENERO huérfano.
             if ($requisicionId) {
@@ -1001,9 +1007,9 @@ class OrdencompraGestionService
      * Precarga el primer comprobante a venir heredando la condición de pago del proveedor
      * y al menos una cuota con la forma de pago cargada en el ABM del proveedor.
      *
-     * Si el payload ya trae comprobantes (form u wizard), respeta lo cargado. Si el
-     * proveedor no tiene condición de pago o forma de pago, detiene la grabación de la OC:
-     * no se puede grabar una orden de compra sin comprobante asociado.
+     * Si el payload ya trae comprobantes (form u wizard), respeta lo cargado.
+     * Si el proveedor no tiene condición / forma de pago, asume «Contado» del maestro
+     * (lo crea si aún no existe, típico en entornos nuevos como El Bierzo).
      *
      * @param  array<string, mixed>  $payload
      *
@@ -1019,7 +1025,7 @@ class OrdencompraGestionService
         if ($proveedorId <= 0) {
             throw new \InvalidArgumentException(
                 'No se puede grabar la orden de compra sin comprobante a venir asociado. '
-                .'Seleccione un proveedor con condición de pago y forma de pago cargadas en su ABM.'
+                .'Seleccione un proveedor.'
             );
         }
 
@@ -1032,11 +1038,9 @@ class OrdencompraGestionService
         if ($condicionpagoId <= 0) {
             $condicionpagoId = (int) ($proveedor->condicionpago_id ?? 0);
         }
-        if ($condicionpagoId <= 0) {
-            throw new \InvalidArgumentException(
-                'El proveedor no tiene condición de pago cargada, por lo que no se puede precargar '
-                .'el comprobante a venir. Cargue la condición de pago en el ABM del proveedor antes de grabar la orden de compra.'
-            );
+        $condicionpagoId = OrdencompraCondicionPagoDefaultSupport::resolverCondicionpagoId($condicionpagoId);
+        if ((int) ($payload['condicionpago_id'] ?? 0) <= 0) {
+            $payload['condicionpago_id'] = $condicionpagoId;
         }
 
         $formapagoId = 0;
@@ -1047,12 +1051,7 @@ class OrdencompraGestionService
                 break;
             }
         }
-        if ($formapagoId <= 0) {
-            throw new \InvalidArgumentException(
-                'El proveedor no tiene forma de pago cargada en su ABM, por lo que no se puede precargar '
-                .'la cuota del comprobante a venir. Cargue al menos una forma de pago en el ABM del proveedor antes de grabar la orden de compra.'
-            );
-        }
+        $formapagoId = OrdencompraCondicionPagoDefaultSupport::resolverFormapagoId($formapagoId);
 
         $totales = OrdencompraTotalesResumen::desdeRequest($payload, $this->cotizacionQuery, $this->impuestoService);
         $montoTotal = round((float) ($totales['total'] ?? 0), 2);
@@ -1116,8 +1115,7 @@ class OrdencompraGestionService
      *
      * @return bool true si generó el comprobante; false si la OC ya tenía comprobantes.
      *
-     * @throws \InvalidArgumentException cuando faltan datos para precargar (proveedor sin condición
-     *                                   de pago / forma de pago, OC sin importe, etc.)
+     * @throws \InvalidArgumentException cuando faltan datos para precargar (OC sin importe, etc.)
      */
     public function generarComprobanteDefaultDesdeProveedor(int $ordencompraId, ?int $creousuarioId = null): bool
     {
@@ -1144,9 +1142,7 @@ class OrdencompraGestionService
         if ($condicionpagoId <= 0) {
             $condicionpagoId = (int) ($proveedor->condicionpago_id ?? 0);
         }
-        if ($condicionpagoId <= 0) {
-            throw new \InvalidArgumentException('El proveedor no tiene condición de pago cargada en su ABM.');
-        }
+        $condicionpagoId = OrdencompraCondicionPagoDefaultSupport::resolverCondicionpagoId($condicionpagoId);
 
         $formapagoId = 0;
         foreach (($proveedor->proveedor_formapagos ?? []) as $fp) {
@@ -1156,9 +1152,7 @@ class OrdencompraGestionService
                 break;
             }
         }
-        if ($formapagoId <= 0) {
-            throw new \InvalidArgumentException('El proveedor no tiene forma de pago cargada en su ABM.');
-        }
+        $formapagoId = OrdencompraCondicionPagoDefaultSupport::resolverFormapagoId($formapagoId);
 
         $totales = OrdencompraTotalesResumen::desdeModelo($oc, $this->cotizacionQuery, $this->impuestoService);
         $montoTotal = round((float) ($totales['total'] ?? 0), 2);
@@ -1509,5 +1503,44 @@ class OrdencompraGestionService
         if (count($ids) === 1) {
             $this->requisicionPresupuestoService->marcarComoElegidoParaOc($requisicionId, $ids[0]);
         }
+    }
+
+    /** Surmar/El Bierzo → bridge Surmar; resto → bridge AGG (sin cambios). */
+    private function sincronizarAnitaAlta(Ordencompra $oc): void
+    {
+        if ($this->usaEscrituraAnitaSurmar($oc)) {
+            $this->ordencompraSurmarAnitaBridge->sincronizarAlta($oc);
+
+            return;
+        }
+
+        $this->ordencompraAnitaBridge->sincronizarAlta($oc);
+    }
+
+    private function sincronizarAnitaActualizacion(Ordencompra $oc): void
+    {
+        if ($this->usaEscrituraAnitaSurmar($oc)) {
+            $this->ordencompraSurmarAnitaBridge->sincronizarActualizacion($oc);
+
+            return;
+        }
+
+        $this->ordencompraAnitaBridge->sincronizarActualizacion($oc);
+    }
+
+    private function sincronizarAnitaBaja(Ordencompra $oc): void
+    {
+        if ($this->usaEscrituraAnitaSurmar($oc)) {
+            $this->ordencompraSurmarAnitaBridge->sincronizarBaja($oc);
+
+            return;
+        }
+
+        $this->ordencompraAnitaBridge->sincronizarBaja($oc);
+    }
+
+    private function usaEscrituraAnitaSurmar(Ordencompra $oc): bool
+    {
+        return SurmarSupport::esEmpresaSurmar((int) ($oc->empresa_id ?? 0));
     }
 }

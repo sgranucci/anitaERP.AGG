@@ -59,7 +59,10 @@ final class RecepcionProveedorSurmarOcSupport
             ->leftJoinSub($recibidoSub, 'rec', function ($join) {
                 $join->on('rec.linea_id', '=', 'oa.id');
             })
+            // El Bierzo/Surmar: incluye PENDIENTE (OC recién cargadas).
+            // AGG sigue en RecepcionProveedorOcPendienteSupport → solo APROBADA/CUMPLIDA.
             ->whereIn('oc.estadoordencompra', [
+                OrdencompraEstados::PENDIENTE,
                 OrdencompraEstados::APROBADA,
                 OrdencompraEstados::CUMPLIDA,
             ])
@@ -84,8 +87,8 @@ final class RecepcionProveedorSurmarOcSupport
             ->selectRaw('p.nombre as proveedor_nombre, e.nombre as empresa_nombre')
             ->selectRaw('SUM(oa.cantidad) as cantidad_pedida')
             ->selectRaw('COALESCE(SUM(rec.cantidad_recibida), 0) as cantidad_recibida')
-            ->orderByDesc('oc.fecha')
             ->orderByDesc('oc.numeroordencompra')
+            ->orderByDesc('oc.fecha')
             ->limit($limite);
 
         RecepcionProveedorVisibilidadSupport::aplicarFiltroOrdencompra($query, 'oc');
@@ -139,6 +142,8 @@ final class RecepcionProveedorSurmarOcSupport
                 'proveedores',
                 'ordencompra_articulos' => static fn ($q) => $q->orderBy('penvp_orden')->orderBy('id'),
                 'ordencompra_articulos.articulos.unidadesdemedidas',
+                'ordencompra_articulos.monedas',
+                'ordencompra_articulos.entregas',
             ])
             ->whereKey($ordencompraId)
             ->where('empresa_id', SurmarSupport::EMPRESA_ID)
@@ -158,7 +163,11 @@ final class RecepcionProveedorSurmarOcSupport
      */
     public static function armarLineasPendientes(Ordencompra $oc): array
     {
-        $oc->loadMissing(['ordencompra_articulos.articulos.unidadesdemedidas']);
+        $oc->loadMissing([
+            'ordencompra_articulos.articulos.unidadesdemedidas',
+            'ordencompra_articulos.monedas',
+            'ordencompra_articulos.entregas',
+        ]);
         $recibidos = RecepcionProveedorOcPendienteSupport::cantidadesRecibidasPorLineaOc((int) $oc->id);
         $lineas = [];
         $orden = 1;
@@ -177,6 +186,22 @@ final class RecepcionProveedorSurmarOcSupport
             }
 
             $art = $ocArt->articulos;
+            $pesoUnit = (float) ($ocArt->peso_unitario ?? 0);
+            $pesoTotal = (float) ($ocArt->peso_total ?? 0);
+            if ($pesoTotal <= 0 && $pesoUnit > 0 && $pedida > 0) {
+                $pesoTotal = round($pesoUnit * $pedida, 6);
+            }
+            $monedaAbr = trim((string) ($ocArt->monedas->abreviatura ?? ''));
+            $precio = (float) ($ocArt->precio ?? 0);
+            $entregas = $ocArt->entregas->map(static function ($e) {
+                return [
+                    'fecha' => $e->fecha ? $e->fecha->format('Y-m-d') : null,
+                    'cantidad' => (float) $e->cantidad,
+                ];
+            })->filter(static function ($e) {
+                return ! empty($e['fecha']) && (float) $e['cantidad'] > 0;
+            })->values()->all();
+
             $lineas[] = [
                 'orden' => $orden++,
                 'ordencompra_articulo_id' => (int) $ocArt->id,
@@ -188,10 +213,17 @@ final class RecepcionProveedorSurmarOcSupport
                 'cantidad_oc' => $pedida,
                 'cantidad_recibida' => $recibido,
                 'cantidad_pendiente' => $pendiente,
-                'precio' => (float) ($ocArt->precio ?? 0),
-                'precio_ordencompra' => (float) ($ocArt->precio ?? 0),
+                'peso_unitario' => $pesoUnit,
+                'peso_total' => $pesoTotal,
+                'precio' => $precio,
+                'precio_ordencompra' => $precio,
+                'moneda_id' => (int) ($ocArt->moneda_id ?? 0) ?: null,
+                'moneda_abreviatura' => $monedaAbr,
                 'unidadmedida_id' => (int) ($art->unidadmedida_id ?? 0) ?: null,
                 'detalle' => (string) ($ocArt->detalle ?? ''),
+                'vencimientoendia' => (int) ($art->vencimientoendia ?? 0),
+                'entregas_semanales' => $entregas,
+                'tiene_entregas_semanales' => $entregas !== [],
             ];
         }
 

@@ -13,7 +13,10 @@ final class RecepcionProveedorSurmarAnitaBridgeSupport
      */
     public static function parametrosBridge(): array
     {
-        $path = rtrim((string) config('recepcion_anita_surmar.path_sistema', '/usr2/surmar'), '/');
+        $path = rtrim((string) config(
+            'recepcion_anita_surmar.path_sistema',
+            config('anita.surmar_path', '/usr2/surmar')
+        ), '/');
         $sistema = trim((string) config('recepcion_anita_surmar.sistema_compras', 'compras'));
 
         return [

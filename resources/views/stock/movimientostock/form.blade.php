@@ -351,11 +351,21 @@
             }
         @endphp
         <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
+        @php
+            $etiquetasSurmarPorLinea = $etiquetasSurmarPorLinea ?? [];
+            if ($etiquetasSurmarPorLinea === [] && old('etiquetas_consumo_linea')) {
+                $etiquetasSurmarPorLinea = app(\App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService::class)
+                    ->hidratarPayloadsPorLinea((array) old('etiquetas_consumo_linea'));
+            }
+        @endphp
+        <div class="row" id="ms-surmar-workbench">
+            <div class="col-12 ms-surmar-col-items" id="ms-surmar-col-items">
         <div class="table-responsive">
     	<table class="table table-sm table-bordered table-hover table-ms-items-compact" id="tabla-items-movimientostock">
     		<thead class="thead-light">
     			<tr>
     				<th class="col-num">#</th>
+                    <th class="col-etiq ms-etiq-badge-wrap text-center" title="Etiquetas piqueadas del renglón">Etiq.</th>
     				<th class="col-art">Art.</th>
     				<th class="col-desc">Descripci&oacute;n</th>
     				<th class="col-npu ms-col-npu-baja text-center" style="display:none;" title="N&uacute;mero de parte &uacute;nica">NPU</th>
@@ -384,7 +394,7 @@
     		</thead>
     		<tbody id="tbody-tabla">
 		 		@foreach ($lineasFormulario as $pedidoitem)
-            			<tr class="item-pedido">
+            			<tr class="item-pedido" data-ms-uid="msl-{{ $loop->index }}-{{ (int) ($pedidoitem->id ?? 0) }}">
                 			<td class="align-middle">
 								<input type="text" name="items[]" class="form-control form-control-sm item text-center" value="{{ $loop->index+1 }}" readonly style="@if ($pedidoitem->estado ?? '' == 'A') background-color:red;font-weight:900; @endif">
                 				<input type="hidden" name="medidas[]" class="form-control medidas" readonly value="{{ MovimientoStockFormLineasSupport::medidasHidden($loop->index, $pedidoitem) }}" />
@@ -401,6 +411,9 @@
                                 <input type="hidden" name="modulos_id[]" value="">
                                 @endunless
                 			</td>
+                            <td class="align-middle text-center ms-etiq-badge-wrap">
+                                <span class="badge badge-info ms-etiq-badge" title="Etiquetas del renglón">0</span>
+                            </td>
                 			<td class="align-middle">
                 				@include('stock.movimientostock.partials.fila_articulo_celda', [
                 				    'articuloId' => (int) ($pedidoitem->articulo_id ?? 0),
@@ -461,11 +474,15 @@
                 			</td>
                 		</tr>
            			@endforeach
-       		</tbody>
+       	</tbody>
        	</table>
         </div>
 		@include('stock.movimientostock.template')
-        @include('stock.movimientostock.partials.panel_etiquetas_surmar')
+            </div>{{-- /ms-surmar-col-items --}}
+            <div class="col-12 col-lg-5 ms-surmar-col-etiq mt-3 mt-lg-0" id="ms-surmar-col-etiq" style="display:none;">
+                @include('stock.movimientostock.partials.panel_etiquetas_surmar')
+            </div>
+        </div>{{-- /ms-surmar-workbench --}}
 
         <div class="row mt-2">
         	<div class="col-md-8">
@@ -542,6 +559,7 @@
     }
     #tabla-items-movimientostock .col-npu { width: 6rem; min-width: 5rem; }
     #tabla-items-movimientostock .col-num { width: 2.5rem; }
+    #tabla-items-movimientostock .col-etiq { width: 2.75rem; min-width: 2.5rem; }
     #tabla-items-movimientostock .col-art { width: 10rem; min-width: 9rem; }
     #tabla-items-movimientostock .col-desc { width: 8rem; min-width: 6rem; max-width: 8rem; }
     #tabla-items-movimientostock .col-desc-celda .descripcionarticulo {

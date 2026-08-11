@@ -1,6 +1,8 @@
 $(function () {
-    if (typeof carpetaBase === 'undefined' || carpetaBase === '') {
-        window.carpetaBase = window.location.pathname.split('/public')[0] + '/public';
+    if (typeof window.carpetaBase === 'undefined') {
+        var __locCb = window.location.pathname || '';
+        var __mCb = __locCb.match(/^(.*\/public)(?:\/|$)/);
+        window.carpetaBase = __mCb ? __mCb[1] : '';
     }
 
     var articuloIdActivo = 0;

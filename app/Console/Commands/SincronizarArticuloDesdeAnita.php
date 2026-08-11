@@ -10,11 +10,12 @@ use Illuminate\Support\Facades\Auth;
 class SincronizarArticuloDesdeAnita extends Command
 {
     protected $signature = 'articulo:sincronizar-anita
-                            {--sku= : Importar/actualizar un solo artículo por SKU ERP (ej. V0432)}
+                            {--sku= : Importar/actualizar un solo artículo por SKU ERP (ej. V0432 / Y108)}
                             {--resync : Re-sincroniza todos los artículos (altas nuevas + actualización de existentes, conserva id ERP)}
+                            {--solo-vencimiento : Solo actualiza articulo.vencimientoendia desde stkmae.stkm_vto_en_dias}
                             {--usuario= : ID usuario para altas (cuentas/estado; default: primer usuario)}';
 
-    protected $description = 'Importa artículos desde Anita (stkmae) vía ApiAnita. Sin --sku: solo altas nuevas. Con --resync: altas + actualización de todos. Con --sku: importa o actualiza ese artículo.';
+    protected $description = 'Importa artículos desde Anita (stkmae) vía ApiAnita. Sin --sku: solo altas nuevas. Con --resync: altas + actualización de todos. Con --solo-vencimiento: solo vencimientoendia. Con --sku: importa o actualiza ese artículo.';
 
     public function handle(ArticuloAnitaSyncService $sync): int
     {
@@ -39,6 +40,22 @@ class SincronizarArticuloDesdeAnita extends Command
         $sku = is_string($sku) ? trim($sku) : '';
 
         try {
+            if ($this->option('solo-vencimiento')) {
+                $this->info($sku !== ''
+                    ? "Sincronizando vencimientoendia de {$sku} desde Anita…"
+                    : 'Sincronizando vencimientoendia de todos los artículos desde Anita…');
+                $ret = $sync->sincronizarVencimientoEnDiasDesdeAnita($sku !== '' ? $sku : null);
+                $this->info(
+                    "Anita: {$ret['en_anita']}; actualizados: {$ret['actualizados']}; "
+                    ."sin cambio: {$ret['sin_cambio']}; no en ERP: {$ret['no_encontrados_erp']}."
+                );
+                foreach ($ret['advertencias'] as $w) {
+                    $this->warn($w);
+                }
+
+                return self::SUCCESS;
+            }
+
             if ($sku !== '') {
                 $this->info("Sincronizando artículo {$sku} desde Anita…");
                 $ret = $sync->sincronizarSkuDesdeAnita($sku);

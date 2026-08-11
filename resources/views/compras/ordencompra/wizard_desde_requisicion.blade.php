@@ -9,7 +9,7 @@ Generar órdenes de compra desde requisición
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/presupuesto/partidagasto/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/presupuesto/capex/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
 <script type="text/javascript">
 jQuery(function ($) {
@@ -97,6 +97,8 @@ jQuery(function ($) {
         'puede_enviar_proveedor' => can('editar-ordencompra', false),
         'moneda_peso_id' => $monedaPesoId,
         'centrocosto_default_id' => $centrocostoDefaultDestino,
+        'pedir_partida_capex' => \App\Support\Compras\OrdencompraUiConfigSupport::pedirPartidaCapex(),
+        'mostrar_peso_articulo' => \App\Support\Compras\OrdencompraUiConfigSupport::mostrarPesoArticulo(),
     ], $ocJsonFlags);
 @endphp
 
@@ -207,6 +209,10 @@ jQuery(function ($) {
                     <div class="card-body">
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered wizard-oc-tabla" id="wizard-oc-tabla-articulos">
+                                @php
+                                    $ocPedirPartidaCapexWz = \App\Support\Compras\OrdencompraUiConfigSupport::pedirPartidaCapex();
+                                    $ocMostrarPesoWz = \App\Support\Compras\OrdencompraUiConfigSupport::mostrarPesoArticulo();
+                                @endphp
                                 <thead class="thead-light">
                                     <tr>
                                         <th style="width: 3%;">#</th>
@@ -215,13 +221,19 @@ jQuery(function ($) {
                                         <th style="width: 6%;">Color</th>
                                         <th style="width: 5%;">Talle</th>
                                         <th style="width: 6%;">Cant.</th>
+                                        @if ($ocMostrarPesoWz)
+                                            <th style="width: 5%;">Peso unit.</th>
+                                            <th style="width: 5%;">Peso tot.</th>
+                                        @endif
                                         <th style="width: 7%;">Precio</th>
                                         <th style="width: 5%;">Mon.</th>
                                         <th style="width: 5%;">Cotiz.</th>
                                         <th style="width: 7%;">F. entrega</th>
                                         <th style="width: 8%;">CC destino</th>
-                                        <th style="width: 10%;">Partida presup.</th>
-                                        <th style="width: 8%;">CAPEX</th>
+                                        @if ($ocPedirPartidaCapexWz)
+                                            <th style="width: 10%;">Partida presup.</th>
+                                            <th style="width: 8%;">CAPEX</th>
+                                        @endif
                                         <th style="width: 10%;">Origen / Proveedor</th>
                                     </tr>
                                 </thead>

@@ -10,6 +10,7 @@ use App\Models\Stock\Transferencia_Mercaderia;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Alcance del listado y acceso a movimientos de stock / transferencias.
@@ -17,6 +18,9 @@ use Illuminate\Support\Facades\Auth;
  * Por defecto (sin listar-todos-movimientos-de-stock): solo registros cargados por usuarios
  * del mismo centro de costo que el usuario logueado. Además pueden aplicar depósitos y tipos
  * de transacción autorizados en la ficha del usuario (transferencias: solo depósito de origen).
+ *
+ * Excepción Surmar (El Bierzo): si el listado filtra empresa Surmar, no se aplica el filtro
+ * por centro de costo (el histórico Anita quedó con usuario Administrador de otro CC).
  */
 final class MovimientoStockVisibilidadSupport
 {
@@ -25,6 +29,32 @@ final class MovimientoStockVisibilidadSupport
     public static function puedeVerTodos(): bool
     {
         return can(self::PERMISO_VER_TODOS, false);
+    }
+
+    /**
+     * Histórico Anita Surmar se grabó con usuario Administrador (otro CC).
+     * En listados/acceso de empresa Surmar no aplicar filtro por centro de costo del cargador.
+     */
+    public static function omitirFiltroCentrocostoEmpresaSurmar(?int $empresaId): bool
+    {
+        return SurmarSupport::esEmpresaSurmar($empresaId);
+    }
+
+    /**
+     * Movimiento con líneas en depósito de empresa Surmar (El Bierzo).
+     */
+    public static function movimientoPerteneceEmpresaSurmar(int $movimientoId): bool
+    {
+        if ($movimientoId <= 0 || ! SurmarSupport::esEmpresaSurmar(SurmarSupport::EMPRESA_ID)) {
+            return false;
+        }
+
+        return DB::table('articulo_movimiento as am')
+            ->join('depmae', 'depmae.id', '=', 'am.deposito_id')
+            ->where('am.movimientostock_id', $movimientoId)
+            ->whereNull('am.deleted_at')
+            ->where('depmae.empresa_id', SurmarSupport::EMPRESA_ID)
+            ->exists();
     }
 
     /** Consulta / PDF COM de transferencias (mail aviso, pantalla transferencias, pendientes). */
@@ -88,11 +118,12 @@ final class MovimientoStockVisibilidadSupport
             || self::tieneRestriccionPorTipotransaccionStock();
     }
 
-    public static function etiquetaAlcanceActivo(): ?string
+    public static function etiquetaAlcanceActivo(?int $empresaIdFiltro = null): ?string
     {
         $partes = [];
 
-        $centrocosto = self::etiquetaCentrocostoActivo();
+        $omitirCc = self::omitirFiltroCentrocostoEmpresaSurmar($empresaIdFiltro);
+        $centrocosto = $omitirCc ? null : self::etiquetaCentrocostoActivo();
         if ($centrocosto !== null) {
             $partes[] = 'Centro de costo: '.$centrocosto;
         }
@@ -347,7 +378,9 @@ final class MovimientoStockVisibilidadSupport
         }
 
         $query = MovimientoStock::query()->where('movimientostock.id', $movimientoId);
-        self::aplicarFiltroCentrocostoMovimientoEloquent($query);
+        if (! self::movimientoPerteneceEmpresaSurmar($movimientoId)) {
+            self::aplicarFiltroCentrocostoMovimientoEloquent($query);
+        }
         self::aplicarFiltroDepositosMovimientoEloquent($query);
         self::aplicarFiltroTipotransaccionesMovimientoEloquent($query);
 

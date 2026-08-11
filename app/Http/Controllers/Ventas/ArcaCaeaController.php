@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\Ventas\InformarArcaCaeaPeriodoJob;
 use App\Models\Ventas\ArcaCaea;
 use App\Services\Arca\ArcaCaeaAnitaSyncService;
+use App\Services\Arca\ArcaCaeaPresentacionManualService;
 use App\Services\Arca\ArcaCaeaPresentacionService;
 use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Support\Ventas\ArcaCaeaInformeColaSupport;
@@ -23,6 +24,7 @@ class ArcaCaeaController extends Controller
         private ArcaWsfeCaeaService $caeaService,
         private ArcaCaeaAnitaSyncService $anitaSync,
         private ArcaCaeaPresentacionService $presentacionService,
+        private ArcaCaeaPresentacionManualService $presentacionManualService,
     ) {}
 
     public function index(Request $request)
@@ -392,6 +394,107 @@ class ArcaCaeaController extends Controller
         return redirect()
             ->route('arca_caea', $filtros)
             ->with('mensaje-error', $resultado['mensaje']);
+    }
+
+    /**
+     * Lista próximos comprobantes a presentar (último ARCA+1) con fuente ERP/Anita.
+     */
+    public function proximosManual(int $id)
+    {
+        can('informar-arca-caea');
+
+        $registro = $this->resolverRegistroPermitido($id);
+        if (! $registro->estaAutorizado()) {
+            return response()->json(['ok' => false, 'mensaje' => 'El CAEA no está autorizado.'], 422);
+        }
+
+        try {
+            $pendientes = $this->presentacionManualService->listarProximosPendientes($registro);
+        } catch (\Throwable $e) {
+            Log::warning('arca.caea.manual.proximos_fallo', [
+                'arca_caea_id' => $id,
+                'msg' => $e->getMessage(),
+            ]);
+
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'pendientes' => $pendientes,
+        ]);
+    }
+
+    /**
+     * Previsualiza un comprobante a presentar (ERP o Anita).
+     */
+    public function previsualizarManual(Request $request, int $id)
+    {
+        can('informar-arca-caea');
+
+        $registro = $this->resolverRegistroPermitido($id);
+        $data = $request->validate([
+            'pto_vta' => ['required', 'integer', 'min:1'],
+            'tipo_afip' => ['required', 'integer', 'min:1'],
+            'numero' => ['required', 'integer', 'min:1'],
+            'tipo_anita' => ['nullable', 'string', 'max:10'],
+            'letra' => ['nullable', 'string', 'max:1'],
+        ]);
+
+        $resultado = $this->presentacionManualService->previsualizar(
+            $registro,
+            (int) $data['pto_vta'],
+            (int) $data['tipo_afip'],
+            (int) $data['numero'],
+            $data['tipo_anita'] ?? null,
+            $data['letra'] ?? null,
+        );
+
+        return response()->json($resultado, ($resultado['ok'] ?? false) ? 200 : 422);
+    }
+
+    /**
+     * Presenta un comprobante CAEA (ERP primero, fallback Anita).
+     */
+    public function informarUnoManual(Request $request, int $id)
+    {
+        can('informar-arca-caea');
+
+        $registro = $this->resolverRegistroPermitido($id);
+        $data = $request->validate([
+            'pto_vta' => ['required', 'integer', 'min:1'],
+            'tipo_afip' => ['required', 'integer', 'min:1'],
+            'numero' => ['required', 'integer', 'min:1'],
+            'tipo_anita' => ['nullable', 'string', 'max:10'],
+            'letra' => ['nullable', 'string', 'max:1'],
+        ]);
+
+        if (ArcaCaeaInformeColaSupport::estaActivo((int) $registro->id)) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'Hay una presentación por lote en segundo plano. Espere a que termine.',
+            ], 422);
+        }
+
+        try {
+            $resultado = $this->presentacionManualService->informarUno(
+                $registro,
+                (int) $data['pto_vta'],
+                (int) $data['tipo_afip'],
+                (int) $data['numero'],
+                $data['tipo_anita'] ?? null,
+                $data['letra'] ?? null,
+            );
+        } catch (\Throwable $e) {
+            Log::error('arca.caea.manual.informar_fallo', [
+                'arca_caea_id' => $id,
+                'msg' => $e->getMessage(),
+            ]);
+
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 500);
+        }
+
+        return response()->json($resultado, ($resultado['ok'] ?? false) ? 200 : 422);
     }
 
     private function resolverRegistroPermitido(int $id): ArcaCaea

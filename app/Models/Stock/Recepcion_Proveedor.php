@@ -32,6 +32,8 @@ class Recepcion_Proveedor extends Model
         'fl_diferencia_cantidad', 'fl_articulo_extra', 'fl_faltante_oc', 'fl_laboratorio', 'fl_linea_rechazada',
         'resumen_diferencias', 'resumen_rechazos',
         'impuesto_interno',
+        // Surmar / SENASA (Anita carga_certificado)
+        'certificado_senasa', 'tropa', 'temperatura_ingreso', 'destino_senasa', 'camara', 'nro_establecimiento',
         'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro', 'origen_carga', 'stkmae_precio_anita_sync_at', 'creousuario_id',
         'centrocosto_id',
     ];
@@ -44,6 +46,9 @@ class Recepcion_Proveedor extends Model
         'numerorecepcion' => 'integer',
         'stkmae_precio_anita_sync_at' => 'datetime',
         'impuesto_interno' => 'decimal:2',
+        'temperatura_ingreso' => 'decimal:2',
+        'tropa' => 'integer',
+        'nro_establecimiento' => 'integer',
     ];
 
     public function ordencompras()

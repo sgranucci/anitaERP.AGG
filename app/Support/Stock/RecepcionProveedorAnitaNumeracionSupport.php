@@ -3,6 +3,7 @@
 namespace App\Support\Stock;
 
 use App\ApiAnita;
+use App\Support\Stock\SurmarSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -49,17 +50,17 @@ final class RecepcionProveedorAnitaNumeracionSupport
     }
 
     /** Lee tcomp_refer de t_comp para la clave COM (ventas). */
-    public static function resolverClaveNumeradorDesdeTComp(): string
+    public static function resolverClaveNumeradorDesdeTComp(?int $empresaId = null): string
     {
         $claveCom = self::escSqlLiteral(self::claveTipoCom());
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $api->apiCallEscritura(SurmarSupport::mergePathSistema([
             'acc' => 'list',
             'sistema' => self::sistemaVentas(),
             'tabla' => 't_comp',
             'campos' => 'tcomp_refer',
             'whereArmado' => " WHERE tcomp_clave = '".$claveCom."'",
-        ], 'recepcion t_comp numerador COM');
+        ], $empresaId), 'recepcion t_comp numerador COM');
 
         $err = ApiAnita::extraerMensajeError($raw);
         if ($err !== null) {
@@ -77,17 +78,17 @@ final class RecepcionProveedorAnitaNumeracionSupport
         return $refer;
     }
 
-    public static function leerUltimoNumero(string $claveNumerador): int
+    public static function leerUltimoNumero(string $claveNumerador, ?int $empresaId = null): int
     {
         $clave = self::escSqlLiteral($claveNumerador);
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $api->apiCallEscritura(SurmarSupport::mergePathSistema([
             'acc' => 'list',
             'sistema' => self::sistemaVentas(),
             'tabla' => 'numerador',
             'campos' => 'num_ult_numero',
             'whereArmado' => " WHERE num_clave = '".$clave."'",
-        ], 'recepcion numerador COM lectura');
+        ], $empresaId), 'recepcion numerador COM lectura');
 
         $err = ApiAnita::extraerMensajeError($raw);
         if ($err !== null) {
@@ -104,7 +105,7 @@ final class RecepcionProveedorAnitaNumeracionSupport
         return max(0, (int) $fila->num_ult_numero);
     }
 
-    public static function actualizarNumerador(string $claveNumerador, int $numero): void
+    public static function actualizarNumerador(string $claveNumerador, int $numero, ?int $empresaId = null): void
     {
         if ($numero <= 0) {
             throw new \InvalidArgumentException('Número de recepción Anita inválido.');
@@ -112,13 +113,13 @@ final class RecepcionProveedorAnitaNumeracionSupport
 
         $clave = self::escSqlLiteral($claveNumerador);
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $api->apiCallEscritura(SurmarSupport::mergePathSistema([
             'acc' => 'update',
             'sistema' => self::sistemaVentas(),
             'tabla' => 'numerador',
             'valores' => 'num_ult_numero = '.(int) $numero,
             'whereArmado' => " WHERE num_clave = '".$clave."'",
-        ], 'recepcion numerador COM update');
+        ], $empresaId), 'recepcion numerador COM update');
 
         $err = ApiAnita::extraerMensajeError($raw);
         if ($err !== null) {
@@ -189,33 +190,37 @@ final class RecepcionProveedorAnitaNumeracionSupport
     }
 
     /** Tras asignar numerorecepcion en ERP, deja numerador ≥ max(ERP, recepmae, número asignado). */
-    public static function registrarNumeroAsignadoEnNumerador(int $numero): void
+    public static function registrarNumeroAsignadoEnNumerador(int $numero, ?int $empresaId = null): void
     {
         if ($numero <= 0) {
             return;
         }
 
         try {
-            $claveNumerador = self::resolverClaveNumeradorDesdeTComp();
-            $ultimoNumerador = self::leerUltimoNumero($claveNumerador);
-            $maxErp = (int) \Illuminate\Support\Facades\DB::table('recepcion_proveedor')->max('numerorecepcion');
-            $maxRecepmae = 0;
-            try {
-                $maxRecepmae = RecepcionProveedorAnitaColisionSupport::maxNumeroRecepmaeGlobal();
-            } catch (\Throwable $e) {
-                Log::warning('RecepcionProveedorAnitaNumeracion: no se pudo leer max recepmae al registrar COM', [
-                    'numero' => $numero,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+            SurmarSupport::conEmpresaEscritura($empresaId, function () use ($numero, $empresaId) {
+                $claveNumerador = self::resolverClaveNumeradorDesdeTComp($empresaId);
+                $ultimoNumerador = self::leerUltimoNumero($claveNumerador, $empresaId);
+                $maxErp = (int) \Illuminate\Support\Facades\DB::table('recepcion_proveedor')->max('numerorecepcion');
+                $maxRecepmae = 0;
+                try {
+                    $maxRecepmae = RecepcionProveedorAnitaColisionSupport::maxNumeroRecepmaeGlobal();
+                } catch (\Throwable $e) {
+                    Log::warning('RecepcionProveedorAnitaNumeracion: no se pudo leer max recepmae al registrar COM', [
+                        'numero' => $numero,
+                        'empresa_id' => $empresaId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
 
-            $objetivo = max($numero, $ultimoNumerador, $maxErp, $maxRecepmae);
-            if ($objetivo > $ultimoNumerador) {
-                self::actualizarNumerador($claveNumerador, $objetivo);
-            }
+                $objetivo = max($numero, $ultimoNumerador, $maxErp, $maxRecepmae);
+                if ($objetivo > $ultimoNumerador) {
+                    self::actualizarNumerador($claveNumerador, $objetivo, $empresaId);
+                }
+            });
         } catch (\Throwable $e) {
             Log::warning('RecepcionProveedorAnitaNumeracion: no se pudo actualizar numerador tras asignar COM', [
                 'numero' => $numero,
+                'empresa_id' => $empresaId,
                 'error' => $e->getMessage(),
             ]);
         }

@@ -28,6 +28,7 @@
     $colInput = $col_input ?? 'col-lg-7';
     $wrapRow = $wrap_row ?? true;
     $tipodeposito = $tipodeposito ?? '';
+    $codigoExtraClass = trim((string) ($codigoExtraClass ?? ''));
     $puedeAbrirAbmDeposito = can('editar-depositos', false) || can('listar-depositos', false);
     $editUrl = ((int) $depositoId > 0 && $puedeAbrirAbmDeposito)
         ? route('editar_depmae', ['id' => (int) $depositoId, 'origen' => 'modal_consulta', 'vista' => 'consulta'])
@@ -64,7 +65,7 @@
                             <i class="fa fa-edit"></i>
                         </a>
                     @endif
-                    <input type="text" class="form-control codigodeposito"
+                    <input type="text" class="form-control codigodeposito{{ $codigoExtraClass !== '' ? ' '.$codigoExtraClass : '' }}"
                         id="{{ $inputId }}_codigo" value="{{ $codigo }}"
                         placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem; flex-shrink: 0;">
                     <input type="text" class="form-control descripciondeposito text-truncate"

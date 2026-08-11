@@ -54,7 +54,7 @@ class MovimientoStockSurmarEtiquetaService
     public function zplParaEtiqueta(int $etiquetaId): string
     {
         $eti = Stock_Etiqueta::query()
-            ->with(['articulos', 'unidadesmedida'])
+            ->with(['articulos', 'unidadesmedida', 'separaUnidadmedida'])
             ->where('empresa_id', SurmarSupport::EMPRESA_ID)
             ->whereKey($etiquetaId)
             ->firstOrFail();
@@ -66,8 +66,11 @@ class MovimientoStockSurmarEtiquetaService
             'peso_bruto' => (float) $eti->peso_bruto,
             'peso_neto' => (float) $eti->peso_neto,
             'cant_pieza' => (float) $eti->cant_pieza,
-            'umd' => (string) ($eti->unidadesmedida->abreviatura ?? $eti->unidadesmedida->nombre ?? 'KG'),
-            'cantidad' => (int) round((float) $eti->peso_neto),
+            'umd_separa' => (string) (
+                \App\Support\Stock\Surmar\SurmarUnidadmedidaSeparaSupport::abreviatura((int) ($eti->separa_unidadmedida_id ?? 0))
+            ),
+            'cant_unid_separa' => (int) ($eti->cant_unid_separa ?? 1),
+            'nro_apertura' => (int) ($eti->anita_nro_apertura ?? 1),
             'lote' => (string) ($eti->lote_proveedor ?? ''),
             'fecha' => optional($eti->fecha_emision)->format('d/m/Y'),
             'fecha_vto' => optional($eti->fecha_vto)->format('d/m/Y'),
@@ -229,43 +232,38 @@ class MovimientoStockSurmarEtiquetaService
             return $stats;
         }
 
-        $ids = $this->idsEtiquetasDesdeRequest($data);
-        if ($ids === []) {
-            throw ValidationException::withMessages([
-                'etiquetas_consumo_id' => 'Debe piquear al menos una etiqueta disponible para '.$abrev.'.',
-            ]);
-        }
-
-        $lineasProducto = Articulo_Movimiento::query()
-            ->where('movimientostock_id', $movimiento->id)
-            ->whereNull('deleted_at')
-            ->orderBy('id')
-            ->get();
+        $porLinea = $this->etiquetasPorLineaProductoDesdeRequest($data);
+        $lineasProducto = $this->lineasProductoSurmar((int) $movimiento->id);
         if ($lineasProducto->isEmpty()) {
             throw ValidationException::withMessages([
                 'articulos_id' => 'El movimiento no tiene líneas de producto.',
             ]);
         }
 
+        $this->assertEtiquetasPorLineaCompletas($porLinea, $lineasProducto->count(), $abrev);
+
         $depositoForm = (int) ($data['deposito_id'] ?? $lineasProducto->first()->deposito_id ?? 0);
         $loteCab = $this->resolverLote($data, (int) $movimiento->id);
         $fecha = (string) ($movimiento->fecha ?? $data['fecha'] ?? now()->toDateString());
 
-        $this->consumirEtiquetas(
-            $ids,
-            $empresaId,
-            (int) $movimiento->id,
-            (int) $lineasProducto->first()->id,
-            $depositoForm,
-            $abrev === 'DES' ? 'SALIDA' : 'SALIDA',
-            $depositoForm,
-            null,
-            $stats,
-            $abrev === 'DES' ? $movimiento : null,
-            $abrev === 'DES' ? $tipo : null,
-            $fecha,
-            $loteCab,
-        );
+        foreach ($lineasProducto->values() as $idx => $linea) {
+            $ids = $porLinea[$idx] ?? [];
+            $this->consumirEtiquetas(
+                $ids,
+                $empresaId,
+                (int) $movimiento->id,
+                (int) $linea->id,
+                $depositoForm,
+                'SALIDA',
+                $depositoForm,
+                null,
+                $stats,
+                $abrev === 'DES' ? $movimiento : null,
+                $abrev === 'DES' ? $tipo : null,
+                $fecha,
+                $loteCab,
+            );
+        }
 
         $origenTipo = $abrev === 'DES' ? SurmarSupport::ORIGEN_DES : SurmarSupport::ORIGEN_AP;
         $this->crearEtiquetasHijas(
@@ -299,12 +297,7 @@ class MovimientoStockSurmarEtiquetaService
             return $stats;
         }
 
-        $ids = $this->idsEtiquetasDesdeRequest($data);
-        if ($ids === []) {
-            throw ValidationException::withMessages([
-                'etiquetas_consumo_id' => 'Debe piquear al menos una etiqueta disponible para TRA.',
-            ]);
-        }
+        $porLinea = $this->etiquetasPorLineaProductoDesdeRequest($data);
 
         $salidaId = (int) ($transferencia->movimientostock_salida_id ?? 0);
         $entradaId = (int) ($transferencia->movimientostock_entrada_id ?? 0);
@@ -314,42 +307,39 @@ class MovimientoStockSurmarEtiquetaService
             ]);
         }
 
-        $lineaSalida = Articulo_Movimiento::query()
-            ->where('movimientostock_id', $salidaId)
-            ->whereNull('deleted_at')
-            ->orderBy('id')
-            ->first();
-        $lineasEntrada = Articulo_Movimiento::query()
-            ->where('movimientostock_id', $entradaId)
-            ->whereNull('deleted_at')
-            ->orderBy('id')
-            ->get();
-        if (! $lineaSalida || $lineasEntrada->isEmpty()) {
+        $lineasSalida = $this->lineasProductoSurmar($salidaId);
+        $lineasEntrada = $this->lineasProductoSurmar($entradaId);
+        if ($lineasSalida->isEmpty() || $lineasEntrada->isEmpty()) {
             throw ValidationException::withMessages([
                 'articulos_id' => 'Transferencia sin líneas de stock para vincular etiquetas.',
             ]);
         }
+
+        $this->assertEtiquetasPorLineaCompletas($porLinea, $lineasSalida->count(), 'TRA');
 
         $depOrigen = (int) ($transferencia->deposito_origen_id ?? $data['deposito_salida_id'] ?? 0);
         $depDestino = (int) ($transferencia->deposito_destino_id ?? $data['deposito_entrada_id'] ?? 0);
         $loteCab = $this->resolverLote($data, $entradaId);
         $fecha = (string) ($data['fecha'] ?? now()->toDateString());
 
-        $this->consumirEtiquetas(
-            $ids,
-            $empresaId,
-            $salidaId,
-            (int) $lineaSalida->id,
-            $depOrigen,
-            'TRANSFERENCIA',
-            $depOrigen,
-            $depDestino,
-            $stats,
-            null,
-            null,
-            $fecha,
-            $loteCab,
-        );
+        foreach ($lineasSalida->values() as $idx => $lineaSalida) {
+            $ids = $porLinea[$idx] ?? [];
+            $this->consumirEtiquetas(
+                $ids,
+                $empresaId,
+                $salidaId,
+                (int) $lineaSalida->id,
+                $depOrigen,
+                'TRANSFERENCIA',
+                $depOrigen,
+                $depDestino,
+                $stats,
+                null,
+                null,
+                $fecha,
+                $loteCab,
+            );
+        }
 
         $this->crearEtiquetasHijas(
             $lineasEntrada,
@@ -502,24 +492,294 @@ class MovimientoStockSurmarEtiquetaService
     }
 
     /**
+     * Etiquetas por índice de renglón de producto (solo filas con artículo/cantidad, mismo orden que el grabado).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, list<int>>
+     */
+    public function etiquetasPorLineaProductoDesdeRequest(array $data): array
+    {
+        $raw = $this->etiquetasPorLineaDesdeRequest($data);
+        $articulos = array_values((array) ($data['articulos_id'] ?? []));
+        $cantidades = array_values((array) ($data['cantidades'] ?? []));
+        $n = max(count($articulos), count($cantidades), $raw === [] ? 0 : (max(array_keys($raw)) + 1));
+
+        $out = [];
+        $j = 0;
+        for ($i = 0; $i < $n; $i++) {
+            $articuloId = (int) ($articulos[$i] ?? 0);
+            $cant = (float) ($cantidades[$i] ?? 0);
+            if ($articuloId <= 0 && abs($cant) < 1e-9) {
+                continue;
+            }
+            $out[$j] = $raw[$i] ?? [];
+            $j++;
+        }
+
+        // Sin filas de artículo en el request (caso raro / legacy pool): devolver raw
+        if ($j === 0 && $raw !== []) {
+            return $raw;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Etiquetas piqueadas por índice de renglón de producto (orden del formulario).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, list<int>>
+     */
+    public function etiquetasPorLineaDesdeRequest(array $data): array
+    {
+        $rawLinea = $data['etiquetas_consumo_linea'] ?? null;
+        $porLinea = [];
+        $vistos = [];
+
+        if (is_array($rawLinea) && $rawLinea !== []) {
+            foreach ($rawLinea as $idx => $idsRaw) {
+                $idx = (int) $idx;
+                if (! is_array($idsRaw)) {
+                    $idsRaw = [$idsRaw];
+                }
+                $ids = [];
+                foreach ($idsRaw as $v) {
+                    $id = (int) $v;
+                    if ($id <= 0) {
+                        continue;
+                    }
+                    if (isset($vistos[$id])) {
+                        throw ValidationException::withMessages([
+                            'etiquetas_consumo_linea' => 'Etiqueta #'.$id.' repetida en más de un renglón.',
+                        ]);
+                    }
+                    $vistos[$id] = true;
+                    $ids[$id] = $id;
+                }
+                $porLinea[$idx] = array_values($ids);
+            }
+
+            return $porLinea;
+        }
+
+        // Compat: pool único → todo en renglón 0
+        $flat = [];
+        $raw = $data['etiquetas_consumo_id'] ?? [];
+        if (! is_array($raw)) {
+            $raw = [$raw];
+        }
+        foreach ($raw as $v) {
+            $id = (int) $v;
+            if ($id > 0) {
+                $flat[$id] = $id;
+            }
+        }
+        if ($flat !== []) {
+            $porLinea[0] = array_values($flat);
+        }
+
+        return $porLinea;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return list<int>
      */
     public function idsEtiquetasDesdeRequest(array $data): array
     {
-        $raw = $data['etiquetas_consumo_id'] ?? [];
-        if (! is_array($raw)) {
-            $raw = [$raw];
-        }
         $ids = [];
-        foreach ($raw as $v) {
-            $id = (int) $v;
-            if ($id > 0) {
-                $ids[$id] = $id;
+        foreach ($this->etiquetasPorLineaDesdeRequest($data) as $lista) {
+            foreach ($lista as $id) {
+                $ids[(int) $id] = (int) $id;
             }
         }
 
         return array_values($ids);
+    }
+
+    /**
+     * Líneas de producto del movimiento (excluye salidas automáticas DES por etiqueta).
+     *
+     * @return \Illuminate\Support\Collection<int, Articulo_Movimiento>
+     */
+    public function lineasProductoSurmar(int $movimientoId): \Illuminate\Support\Collection
+    {
+        return Articulo_Movimiento::query()
+            ->where('movimientostock_id', $movimientoId)
+            ->whereNull('deleted_at')
+            ->where(function ($q) {
+                $q->whereNull('concepto')
+                    ->orWhere('concepto', 'not like', 'DES etiqueta #%');
+            })
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Precarga para editar / old input: lista por índice de renglón con payload de consulta.
+     *
+     * @param  array<int, mixed>|null  $idsPorLineaOld
+     * @return list<list<array<string, mixed>>>
+     */
+    public function consumosPayloadPorLineaProducto(int $movimientoId, ?array $idsPorLineaOld = null): array
+    {
+        if (is_array($idsPorLineaOld) && $idsPorLineaOld !== []) {
+            return $this->hidratarPayloadsPorLinea($idsPorLineaOld);
+        }
+
+        $lineas = $this->lineasProductoSurmar($movimientoId);
+        if ($lineas->isEmpty()) {
+            return [];
+        }
+
+        $lineaIds = $lineas->pluck('id')->map(fn ($v) => (int) $v)->all();
+        $consumos = DB::table('stock_etiqueta_consumo')
+            ->where('movimientostock_id', $movimientoId)
+            ->whereIn('articulo_movimiento_id', $lineaIds)
+            ->orderBy('id')
+            ->get();
+
+        $etiquetaIds = $consumos->pluck('etiqueta_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+        $etiquetas = $etiquetaIds === []
+            ? collect()
+            : Stock_Etiqueta::query()
+                ->with(['articulos:id,sku,descripcion,grupocarne,tipocarne', 'depositos:id,codigo,nombre', 'unidadesmedida:id,abreviatura,nombre'])
+                ->whereIn('id', $etiquetaIds)
+                ->get()
+                ->keyBy('id');
+
+        $porAm = [];
+        foreach ($consumos as $c) {
+            $amId = (int) ($c->articulo_movimiento_id ?? 0);
+            $etiId = (int) ($c->etiqueta_id ?? 0);
+            $eti = $etiquetas->get($etiId);
+            if (! $eti) {
+                continue;
+            }
+            $porAm[$amId][] = SurmarEtiquetaLookupSupport::payload($eti);
+        }
+
+        $out = [];
+        foreach ($lineas->values() as $idx => $linea) {
+            $out[$idx] = $porAm[(int) $linea->id] ?? [];
+        }
+
+        $tieneAlgo = false;
+        foreach ($out as $lista) {
+            if ($lista !== []) {
+                $tieneAlgo = true;
+                break;
+            }
+        }
+
+        // Legacy: pool único colgado de un AM que no matcheó / vacío → renglón 0
+        if (! $tieneAlgo) {
+            $todos = DB::table('stock_etiqueta_consumo')
+                ->where('movimientostock_id', $movimientoId)
+                ->orderBy('id')
+                ->pluck('etiqueta_id')
+                ->map(fn ($v) => (int) $v)
+                ->unique()
+                ->values()
+                ->all();
+            if ($todos !== []) {
+                return $this->hidratarPayloadsPorLinea([0 => $todos]);
+            }
+        }
+
+        return array_values($out);
+    }
+
+    /**
+     * @param  array<int, mixed>  $idsPorLinea
+     * @return list<list<array<string, mixed>>>
+     */
+    public function hidratarPayloadsPorLinea(array $idsPorLinea): array
+    {
+        $idsFlat = [];
+        foreach ($idsPorLinea as $lista) {
+            if (! is_array($lista)) {
+                $lista = [$lista];
+            }
+            foreach ($lista as $v) {
+                if (is_array($v) && isset($v['etiqueta_id'])) {
+                    $id = (int) $v['etiqueta_id'];
+                } else {
+                    $id = (int) $v;
+                }
+                if ($id > 0) {
+                    $idsFlat[$id] = $id;
+                }
+            }
+        }
+
+        $etiquetas = $idsFlat === []
+            ? collect()
+            : Stock_Etiqueta::query()
+                ->with(['articulos:id,sku,descripcion,grupocarne,tipocarne', 'depositos:id,codigo,nombre', 'unidadesmedida:id,abreviatura,nombre'])
+                ->where('empresa_id', SurmarSupport::EMPRESA_ID)
+                ->whereIn('id', array_values($idsFlat))
+                ->get()
+                ->keyBy('id');
+
+        $out = [];
+        $maxIdx = -1;
+        foreach ($idsPorLinea as $idx => $lista) {
+            $idx = (int) $idx;
+            $maxIdx = max($maxIdx, $idx);
+            if (! is_array($lista)) {
+                $lista = [$lista];
+            }
+            $payloads = [];
+            foreach ($lista as $v) {
+                if (is_array($v) && isset($v['etiqueta_id']) && isset($v['sku'])) {
+                    $payloads[] = $v;
+                    continue;
+                }
+                $id = is_array($v) ? (int) ($v['etiqueta_id'] ?? 0) : (int) $v;
+                $eti = $etiquetas->get($id);
+                if ($eti) {
+                    $payloads[] = SurmarEtiquetaLookupSupport::payload($eti);
+                }
+            }
+            $out[$idx] = $payloads;
+        }
+
+        $ordenado = [];
+        for ($i = 0; $i <= $maxIdx; $i++) {
+            $ordenado[$i] = $out[$i] ?? [];
+        }
+
+        return array_values($ordenado);
+    }
+
+    /**
+     * @param  array<int, list<int>>  $porLinea
+     */
+    private function assertEtiquetasPorLineaCompletas(array $porLinea, int $cantLineas, string $abrev): void
+    {
+        if ($cantLineas <= 0) {
+            throw ValidationException::withMessages([
+                'etiquetas_consumo_linea' => 'Debe piquear etiquetas disponibles para '.$abrev.'.',
+            ]);
+        }
+
+        $faltan = [];
+        for ($i = 0; $i < $cantLineas; $i++) {
+            if (($porLinea[$i] ?? []) === []) {
+                $faltan[] = (string) ($i + 1);
+            }
+        }
+        if ($faltan !== []) {
+            throw ValidationException::withMessages([
+                'etiquetas_consumo_linea' => 'Surmar '.$abrev.': cada ítem debe tener al menos una etiqueta. Faltan renglón(es): '.implode(', ', $faltan).'.',
+            ]);
+        }
+    }
+
+    public static function esLineaSalidaDesEtiqueta(?string $concepto): bool
+    {
+        return is_string($concepto) && preg_match('/^DES etiqueta #\d+/', $concepto) === 1;
     }
 
     /** @param  array<string, mixed>  $data */

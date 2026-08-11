@@ -11,6 +11,15 @@ final class ClienteDocumentoUnicoSupport
         return preg_replace('/\D+/', '', (string) $valor);
     }
 
+    /**
+     * Si true (CLIENTE_PERMITIR_CUIT_DUPLICADO), el ABM permite guardar un CUIT/documento
+     * ya usado por otro cliente. Sigue avisando en pantalla; no bloquea ni falla validación.
+     */
+    public static function permiteCuitDuplicado(): bool
+    {
+        return filter_var(config('cliente.permitir_cuit_duplicado', false), FILTER_VALIDATE_BOOLEAN);
+    }
+
     public static function findOtroCliente(?string $numerodocumento, ?int $excluirClienteId = null): ?Cliente
     {
         $digitos = self::normalizarDigitos($numerodocumento);

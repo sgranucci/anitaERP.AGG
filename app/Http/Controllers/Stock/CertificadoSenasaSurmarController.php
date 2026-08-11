@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Stock;
 
+use App\Exports\Stock\CertificadoSenasaSurmarListadoExport;
 use App\Http\Controllers\Controller;
 use App\Models\Stock\CertificadoSenasaSurmar;
 use App\Models\Ventas\Camion;
 use App\Models\Ventas\Transporte;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Stock\CertificadoSenasaSurmarService;
+use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\CertificadoSenasaSurmarListadoFiltros;
 use App\Support\Stock\SurmarSupport;
 use Illuminate\Http\Request;
@@ -38,6 +40,45 @@ class CertificadoSenasaSurmarController extends Controller
             'camposFiltro' => CertificadoSenasaSurmarListadoFiltros::camposFiltro(),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
         ]);
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-certificado-senasa-surmar');
+        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = CertificadoSenasaSurmarListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = $this->service->listar($filtros, false);
+                $view = \View::make('stock.certificado_senasa_surmar.listado', compact('datas'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombrePdf = 'listado_certificado_senasa_surmar';
+                $pdf = \App::make('dompdf.wrapper');
+                DompdfPaperSupport::aplicar($pdf, DompdfPaperSupport::CONTEXTO_LISTADO);
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+                return (new CertificadoSenasaSurmarListadoExport($this->service))
+                    ->parametros($filtros)
+                    ->download('certificado_senasa_surmar.xlsx');
+
+            case 'CSV':
+                return (new CertificadoSenasaSurmarListadoExport($this->service))
+                    ->parametros($filtros)
+                    ->download('certificado_senasa_surmar.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('certificado_senasa_surmar', CertificadoSenasaSurmarListadoFiltros::paraQueryString($filtros));
     }
 
     public function crear()

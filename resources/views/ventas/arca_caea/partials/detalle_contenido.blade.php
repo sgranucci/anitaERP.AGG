@@ -276,6 +276,8 @@
     @endif
 @endif
 
+@include('ventas.arca_caea.partials.herramienta_manual')
+
 @if ($puedeReintentar ?? false)
     <form method="post" action="{{ route('arca_caea_reintentar', $registro->id) }}" class="mt-3 mb-0">
         @csrf

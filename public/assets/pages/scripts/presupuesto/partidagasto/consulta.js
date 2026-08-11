@@ -5,7 +5,12 @@ var ptrDetallePartidagasto;
 var ptrFilaPartidagasto;
 
 function carpetaBasePartidagasto() {
-	return window.location.pathname.split('/public')[0] + '/public';
+	if (typeof window.carpetaBase === 'string') {
+		return window.carpetaBase;
+	}
+	var loc = window.location.pathname || '';
+	var m = loc.match(/^(.*\/public)(?:\/|$)/);
+	return m ? m[1] : '';
 }
 
 function centrocostoFiltroDesdeFila($row) {

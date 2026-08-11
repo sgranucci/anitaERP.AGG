@@ -40,7 +40,28 @@ return [
     ],
 
     /*
-    | Metas de KPIs de proceso de Compras (tablero + panel IA).
+    | OC: pedir partida de presupuesto y CAPEX en líneas.
+    | Default true = AGG (columnas visibles + validación contra presupuesto vigente).
+    | El Bierzo: false (no pide ni valida; permite operar sin presupuestos cargados).
+    */
+    'oc_pedir_partida_capex' => filter_var(env('ORDENCOMPRA_PEDIR_PARTIDA_CAPEX', true), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+    | OC: mostrar peso unitario del artículo (ABM) y peso total (cant. × peso unit.).
+    | Default false = AGG sin columnas ni impacto.
+    | El Bierzo: true (persiste peso_unitario / peso_total en la línea; PDF/Excel).
+    */
+    'oc_mostrar_peso_articulo' => filter_var(env('ORDENCOMPRA_MOSTRAR_PESO_ARTICULO', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+    | OC: entregas semanales por línea (fecha + cantidad; suma → cantidad de grilla).
+    | Default false = AGG sin UI ni sync de hijas.
+    | El Bierzo / Surmar: true (modal por artículo; consultable desde recepción).
+    */
+    'oc_entrega_semanal' => filter_var(env('ORDENCOMPRA_ENTREGA_SEMANAL', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+    | Metas de KPIs de compras (tablero + panel IA).
     | Roles comprador: solo estos cuentan en OC gestionadas / productividad / ahorro.
     */
     'kpis' => [

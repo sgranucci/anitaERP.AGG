@@ -806,6 +806,7 @@ class ClienteController extends Controller
         }
 
         $excluirId = (int) $request->input('excluir_cliente_id', 0);
+        $permitirDuplicado = ClienteDocumentoUnicoSupport::permiteCuitDuplicado();
         $cliente = ClienteDocumentoUnicoSupport::findOtroCliente(
             (string) $request->input('numerodocumento', ''),
             $excluirId > 0 ? $excluirId : null
@@ -815,12 +816,16 @@ class ClienteController extends Controller
             return response()->json([
                 'ok' => true,
                 'duplicado' => false,
+                'bloquear' => false,
+                'permitir_duplicado' => $permitirDuplicado,
             ]);
         }
 
         return response()->json([
             'ok' => true,
             'duplicado' => true,
+            'bloquear' => ! $permitirDuplicado,
+            'permitir_duplicado' => $permitirDuplicado,
             'cliente' => ClienteDocumentoUnicoSupport::payloadDuplicado($cliente),
             'mensaje' => ClienteDocumentoUnicoSupport::mensajeDuplicado($cliente),
         ]);

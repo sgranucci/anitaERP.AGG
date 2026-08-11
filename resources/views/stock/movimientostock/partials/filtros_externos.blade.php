@@ -2,7 +2,8 @@
     $empresaScope = $filtros['empresa_scope'] ?? 'una';
     $empresaActual = (int) ($filtros['empresa_id'] ?? 0);
     $baseQ = $filtrosQuery ?? [];
-    $rutaIndex = 'movimientostock';
+    $rutaIndex = $ruta_index_movimientostock ?? 'movimientostock';
+    $modoSurmar = ! empty($modo_surmar);
 
     $urlEmpresa = function ($id) use ($baseQ, $rutaIndex) {
         $q = $baseQ;
@@ -16,7 +17,7 @@
         return route($rutaIndex, $q);
     };
 @endphp
-@if (($empresa_query ?? collect())->count() > 1)
+@if (! $modoSurmar && ($empresa_query ?? collect())->count() > 1)
 <div class="card-body py-2 border-bottom bg-white">
     <div class="d-flex flex-wrap align-items-center">
         <div class="mb-1">

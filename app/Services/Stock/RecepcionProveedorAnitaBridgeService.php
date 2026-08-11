@@ -24,14 +24,78 @@ use App\Support\Stock\StockAnitaBridgeSupport;
 use App\Support\Stock\DepmaeAnitaCodigoSupport;
 use App\Support\Stock\RecpunicaAnitaBridgeSupport;
 use App\Support\Stock\StkParteUnicaAnitaBridgeSupport;
+use App\Support\Stock\SurmarSupport;
 use Auth;
 use Illuminate\Support\Facades\Log;
 
 class RecepcionProveedorAnitaBridgeService
 {
+    /** Empresa de la recepción en curso; define path Anita Surmar vs default. */
+    private ?int $empresaIdParaPath = null;
+
     public function __construct(
         private readonly OrdencompraAnitaSyncService $ordencompraAnitaSync,
     ) {
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function payloadAnita(array $payload): array
+    {
+        $empresaId = $this->empresaIdParaPath ?? SurmarSupport::empresaEscrituraActual();
+
+        return SurmarSupport::mergePathSistema($payload, $empresaId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function anitaEscritura(
+        ApiAnita $api,
+        array $payload,
+        ?string $contexto = null,
+        string $logEvento = 'anita_bridge.fallo',
+        bool $exigirFilasAfectadas = false,
+    ): string {
+        return $api->apiCallEscritura(
+            $this->payloadAnita($payload),
+            $contexto,
+            $logEvento,
+            $exigirFilasAfectadas,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function anitaCall(ApiAnita $api, array $payload): mixed
+    {
+        return $api->apiCall($this->payloadAnita($payload));
+    }
+
+    private function fijarEmpresaPath(Recepcion_Proveedor $recepcion): void
+    {
+        $this->empresaIdParaPath = (int) ($recepcion->empresa_id ?? 0);
+        SurmarSupport::fijarEmpresaEscritura($this->empresaIdParaPath);
+    }
+
+    private function ejecutarConPathRecepcion(Recepcion_Proveedor $recepcion, callable $fn): mixed
+    {
+        $yaFijado = $this->empresaIdParaPath !== null
+            && $this->empresaIdParaPath === (int) ($recepcion->empresa_id ?? 0);
+        if (! $yaFijado) {
+            $this->fijarEmpresaPath($recepcion);
+        }
+        try {
+            return $fn();
+        } finally {
+            if (! $yaFijado) {
+                SurmarSupport::limpiarEmpresaEscritura();
+                $this->empresaIdParaPath = null;
+            }
+        }
     }
 
     /**
@@ -50,6 +114,16 @@ class RecepcionProveedorAnitaBridgeService
             'recepcion_proveedor_articulos.centrocostos',
         ]);
 
+        return $this->ejecutarConPathRecepcion($recepcion, function () use ($recepcion) {
+            return $this->sincronizarRecepcionInterno($recepcion);
+        });
+    }
+
+    /**
+     * @return array{cabecera_nueva: bool, pendmov_aplicado: bool}
+     */
+    private function sincronizarRecepcionInterno(Recepcion_Proveedor $recepcion): array
+    {
         $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
         RecepcionProveedorAnitaClaveSupport::asignarEnRecepcion($recepcion, $clave);
 
@@ -115,6 +189,16 @@ class RecepcionProveedorAnitaBridgeService
      * @param  array{cabecera_nueva: bool, pendmov_aplicado: bool}  $estado
      */
     public function revertirSincronizacionConfirmacion(Recepcion_Proveedor $recepcion, array $estado): void
+    {
+        $this->ejecutarConPathRecepcion($recepcion, function () use ($recepcion, $estado) {
+            $this->revertirSincronizacionConfirmacionInterno($recepcion, $estado);
+        });
+    }
+
+    /**
+     * @param  array{cabecera_nueva: bool, pendmov_aplicado: bool}  $estado
+     */
+    private function revertirSincronizacionConfirmacionInterno(Recepcion_Proveedor $recepcion, array $estado): void
     {
         if ((int) $recepcion->numerorecepcion <= 0) {
             return;
@@ -202,26 +286,28 @@ class RecepcionProveedorAnitaBridgeService
 
     public function anularRecepcion(Recepcion_Proveedor $recepcion): void
     {
-        if ((int) $recepcion->numerorecepcion <= 0) {
-            return;
-        }
+        $this->ejecutarConPathRecepcion($recepcion, function () use ($recepcion) {
+            if ((int) $recepcion->numerorecepcion <= 0) {
+                return;
+            }
 
-        $recepcion->loadMissing([
-            'proveedores', 'empresas', 'ordencompras',
-            'recepcion_proveedor_articulos.articulos',
-            'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
-        ]);
+            $recepcion->loadMissing([
+                'proveedores', 'empresas', 'ordencompras',
+                'recepcion_proveedor_articulos.articulos',
+                'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
+            ]);
 
-        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
-        $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
+            $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+            $codigoProveedor = RecepcionProveedorAnitaWhereSupport::codigoProveedorAnita($recepcion);
 
-        $this->eliminarStkParteUnica($recepcion);
-        $this->eliminarRecpunica($recepcion, $clave);
-        $this->eliminarStkmov($clave, (int) $recepcion->empresa_id);
-        $this->eliminarAplicped($codigoProveedor, $clave);
-        $this->eliminarRecepmov($clave, $codigoProveedor);
-        $this->marcarRecepmaeAnulada($codigoProveedor, $clave);
-        $this->actualizarPendmovp($recepcion, -1);
+            $this->eliminarStkParteUnica($recepcion);
+            $this->eliminarRecpunica($recepcion, $clave);
+            $this->eliminarStkmov($clave, (int) $recepcion->empresa_id);
+            $this->eliminarAplicped($codigoProveedor, $clave);
+            $this->eliminarRecepmov($clave, $codigoProveedor);
+            $this->marcarRecepmaeAnulada($codigoProveedor, $clave);
+            $this->actualizarPendmovp($recepcion, -1);
+        });
     }
 
     /**
@@ -239,24 +325,26 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function listarRecepmaePorClaveAuditoria(Recepcion_Proveedor $recepcion): array
     {
-        $recepcion->loadMissing(['proveedores', 'empresas']);
+        return $this->ejecutarConPathRecepcion($recepcion, function () use ($recepcion) {
+            $recepcion->loadMissing(['proveedores', 'empresas']);
 
-        $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
-        if ((int) ($clave['nro'] ?? 0) <= 0) {
-            return [];
-        }
+            $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
+            if ((int) ($clave['nro'] ?? 0) <= 0) {
+                return [];
+            }
 
-        $api = new ApiAnita;
-        $raw = $api->apiCall([
-            'acc' => 'list',
-            'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
-            'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
-            'campos' => 'recm_proveedor, recm_tipo, recm_letra, recm_sucursal, recm_nro, recm_estado, recm_documentoid, recm_terminal',
-            'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaePorClave($clave),
-            'limit' => 'FIRST 20',
-        ]);
+            $api = new ApiAnita;
+            $raw = $this->anitaCall($api, [
+                'acc' => 'list',
+                'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
+                'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
+                'campos' => 'recm_proveedor, recm_tipo, recm_letra, recm_sucursal, recm_nro, recm_estado, recm_documentoid, recm_terminal',
+                'whereArmado' => RecepcionProveedorAnitaWhereSupport::recepmaePorClave($clave),
+                'limit' => 'FIRST 20',
+            ]);
 
-        return ApiAnita::decodificarListaFilas((string) $raw);
+            return ApiAnita::decodificarListaFilas((string) $raw);
+        });
     }
 
     /**
@@ -269,7 +357,7 @@ class RecepcionProveedorAnitaBridgeService
         }
 
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
@@ -288,6 +376,7 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function ajustarPendmovpRecepcion(Recepcion_Proveedor $recepcion, int $multiplicador): void
     {
+        $this->fijarEmpresaPath($recepcion);
         if ($multiplicador === 0) {
             return;
         }
@@ -302,6 +391,7 @@ class RecepcionProveedorAnitaBridgeService
 
     public function tieneDetalleComEnAnita(Recepcion_Proveedor $recepcion): bool
     {
+        $this->fijarEmpresaPath($recepcion);
         $recepcion->loadMissing(['proveedores', 'empresas']);
 
         $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
@@ -319,6 +409,7 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function cabeceraRecepmaeVinculadaDocumento(Recepcion_Proveedor $recepcion): ?object
     {
+        $this->fijarEmpresaPath($recepcion);
         $recepcion->loadMissing(['proveedores', 'empresas', 'ordencompras', 'asientos']);
 
         $clave = RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
@@ -347,7 +438,7 @@ class RecepcionProveedorAnitaBridgeService
     public function contarRecepmovPorClave(array $clave): int
     {
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_linea'),
@@ -361,7 +452,7 @@ class RecepcionProveedorAnitaBridgeService
     public function contarStkmovPorClave(array $clave, int $empresaId): int
     {
         $api = new ApiAnita;
-        $raw = $api->apiCall(
+        $raw = $this->anitaCall($api, 
             StockAnitaBridgeSupport::mergePayload([
                 'acc' => 'list',
                 'sistema' => config('recepcion_proveedor.anita.sistema_ventas'),
@@ -379,6 +470,7 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function detalleComIncompletoEnAnita(Recepcion_Proveedor $recepcion): bool
     {
+        $this->fijarEmpresaPath($recepcion);
         return (bool) ($this->diagnosticoDetalleComAnita($recepcion)['incompleto'] ?? false);
     }
 
@@ -393,6 +485,7 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function diagnosticoDetalleComAnita(Recepcion_Proveedor $recepcion): array
     {
+        $this->fijarEmpresaPath($recepcion);
         $recepcion->loadMissing(['empresas', 'recepcion_proveedor_articulos']);
 
         $lineasErp = $recepcion->recepcion_proveedor_articulos->count();
@@ -442,6 +535,7 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function repararAplicpedSiFalta(Recepcion_Proveedor $recepcion): array
     {
+        $this->fijarEmpresaPath($recepcion);
         $recepcion->loadMissing([
             'proveedores',
             'empresas',
@@ -505,7 +599,7 @@ class RecepcionProveedorAnitaBridgeService
     public function existeAplicped(string $codigoProveedor, array $claveCom): bool
     {
         $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
+        $raw = $this->anitaEscritura($api, [
             'acc' => 'list',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.aplicacion_oc'),
@@ -522,6 +616,7 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function repararDetallePreservandoCabecera(Recepcion_Proveedor $recepcion): void
     {
+        $this->fijarEmpresaPath($recepcion);
         if ((int) $recepcion->numerorecepcion <= 0) {
             throw new \RuntimeException('La recepción debe tener numerorecepcion asignado.');
         }
@@ -607,7 +702,7 @@ class RecepcionProveedorAnitaBridgeService
     private function eliminarStkmovPorClaveCompleto(array $claveCom, int $empresaId): void
     {
         $api = new ApiAnita;
-        $api->apiCallEscritura(
+        $this->anitaEscritura($api, 
             StockAnitaBridgeSupport::mergePayload([
                 'acc' => 'delete',
                 'sistema' => config('recepcion_proveedor.anita.sistema_ventas'),
@@ -628,6 +723,7 @@ class RecepcionProveedorAnitaBridgeService
         array $clave,
         bool $revertirPendmovp = true
     ): void {
+        $this->fijarEmpresaPath($recepcion);
         if ((int) ($clave['nro'] ?? 0) <= 0 || (int) ($clave['sucursal'] ?? 0) <= 0) {
             return;
         }
@@ -663,7 +759,7 @@ class RecepcionProveedorAnitaBridgeService
     private function existeRecepmaeErp(string $codigoProveedor, array $clave): bool
     {
         $api = new ApiAnita;
-        $raw = $api->apiCall([
+        $raw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
@@ -684,7 +780,7 @@ class RecepcionProveedorAnitaBridgeService
 
         $estadoAnulada = (string) config('recepcion_proveedor.anita.recepcion_estado_anulada', '3');
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'update',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera'),
@@ -700,6 +796,7 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function actualizarCotizacionRecepmov(Recepcion_Proveedor $recepcion, float $nuevaCotizacion): void
     {
+        $this->fijarEmpresaPath($recepcion);
         if ((int) $recepcion->numerorecepcion <= 0) {
             return;
         }
@@ -717,7 +814,7 @@ class RecepcionProveedorAnitaBridgeService
         $where = RecepcionProveedorAnitaWhereSupport::recepmovProveedorCabecera($codigoProveedor, $clave);
 
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'update',
             'sistema' => $sistema,
             'tabla' => $tabla,
@@ -741,7 +838,7 @@ class RecepcionProveedorAnitaBridgeService
         float $nuevaCotizacion,
         array $clave,
     ): void {
-        $raw = (string) $api->apiCall([
+        $raw = (string) $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => $tabla,
@@ -798,6 +895,7 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function repararRecepmaeYRecepmovSinStkmov(Recepcion_Proveedor $recepcion): array
     {
+        $this->fijarEmpresaPath($recepcion);
         if ((int) $recepcion->numerorecepcion <= 0) {
             throw new \RuntimeException('La recepción debe tener numerorecepcion asignado.');
         }
@@ -854,7 +952,7 @@ class RecepcionProveedorAnitaBridgeService
             8
         );
 
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'update',
             'sistema' => $cfg['sistema_compras'],
             'tabla' => $cfg['tablas']['recepcion_cabecera'],
@@ -876,7 +974,7 @@ class RecepcionProveedorAnitaBridgeService
         }
 
         $lineasErp = $recepcion->recepcion_proveedor_articulos->count();
-        $rawMov = (string) $api->apiCall([
+        $rawMov = (string) $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $cfg['sistema_compras'],
             'tabla' => $cfg['tablas']['recepcion_linea'],
@@ -905,7 +1003,7 @@ class RecepcionProveedorAnitaBridgeService
             }
         }
 
-        $rawMae = (string) $api->apiCall([
+        $rawMae = (string) $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $cfg['sistema_compras'],
             'tabla' => $cfg['tablas']['recepcion_cabecera'],
@@ -964,6 +1062,7 @@ class RecepcionProveedorAnitaBridgeService
      */
     public function assertContabilidadAnitaSinDobleSubdiario(Recepcion_Proveedor $recepcion, ?array $clave = null): array
     {
+        $this->fijarEmpresaPath($recepcion);
         $clave ??= RecepcionProveedorAnitaClaveSupport::resolver($recepcion);
         $tipo = trim((string) ($clave['tipo'] ?? ''));
         $letra = trim((string) ($clave['letra'] ?? ''));
@@ -995,7 +1094,7 @@ class RecepcionProveedorAnitaBridgeService
         }
 
         $api = new ApiAnita;
-        $rawSub = (string) $api->apiCall([
+        $rawSub = (string) $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => (string) config('recepcion_proveedor.anita.sistema_contab', 'contab'),
             'tabla' => (string) config('recepcion_proveedor.anita.tablas.subdiario', 'subdiario'),
@@ -1045,7 +1144,7 @@ class RecepcionProveedorAnitaBridgeService
     private function contarStkmovAnita(array $clave, int $empresaId): int
     {
         $api = new ApiAnita;
-        $raw = (string) $api->apiCall(StockAnitaBridgeSupport::mergePayload([
+        $raw = (string) $this->anitaCall($api, StockAnitaBridgeSupport::mergePayload([
             'acc' => 'list',
             'sistema' => config('recepcion_proveedor.anita.sistema_ventas'),
             'tabla' => config('recepcion_proveedor.anita.tablas.stock_movimiento'),
@@ -1066,7 +1165,7 @@ class RecepcionProveedorAnitaBridgeService
             : RecepcionProveedorAnitaWhereSupport::recepmovCabecera($clave);
 
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_linea'),
@@ -1078,7 +1177,7 @@ class RecepcionProveedorAnitaBridgeService
     private function eliminarAplicped(string $codigoProveedor, array $claveCom): void
     {
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.aplicacion_oc'),
@@ -1090,7 +1189,7 @@ class RecepcionProveedorAnitaBridgeService
     private function eliminarStkmov(array $claveCom, int $empresaId): void
     {
         $api = new ApiAnita;
-        $api->apiCallEscritura(
+        $this->anitaEscritura($api, 
             StockAnitaBridgeSupport::mergePayload([
                 'acc' => 'delete',
                 'sistema' => config('recepcion_proveedor.anita.sistema_ventas'),
@@ -1140,7 +1239,7 @@ class RecepcionProveedorAnitaBridgeService
         }
 
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'delete',
             'sistema' => config('recepcion_proveedor.anita.sistema_compras'),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_parte_unica'),
@@ -1169,7 +1268,7 @@ class RecepcionProveedorAnitaBridgeService
             : RecepcionProveedorAnitaWhereSupport::recepmae($codigoProveedor, $clave);
 
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'update',
             'sistema' => $cfg['sistema_compras'],
             'tabla' => $cfg['tablas']['recepcion_cabecera'],
@@ -1216,7 +1315,7 @@ class RecepcionProveedorAnitaBridgeService
             (int) $recepcion->id,
         );
 
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'insert',
             'sistema' => $cfg['sistema_compras'],
             'tabla' => $cfg['tablas']['recepcion_cabecera'],
@@ -1275,7 +1374,7 @@ class RecepcionProveedorAnitaBridgeService
                 $tipoIvaAnita,
             );
 
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => $cfg['sistema_compras'],
                 'tabla' => $cfg['tablas']['recepcion_linea'],
@@ -1350,7 +1449,7 @@ class RecepcionProveedorAnitaBridgeService
         $orden = $ordenMax + 1;
         $cfg = config('recepcion_proveedor.anita');
         $api = new ApiAnita;
-        $api->apiCallEscritura([
+        $this->anitaEscritura($api, [
             'acc' => 'insert',
             'sistema' => $cfg['sistema_compras'],
             'tabla' => $cfg['tablas']['recepcion_linea'],
@@ -1407,7 +1506,7 @@ class RecepcionProveedorAnitaBridgeService
                 $nroInterno,
             );
 
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'insert',
                 'sistema' => $cfg['sistema_compras'],
                 'tabla' => $cfg['tablas']['aplicacion_oc'],
@@ -1483,7 +1582,7 @@ class RecepcionProveedorAnitaBridgeService
                 $empresaId,
             );
 
-            $api->apiCallEscritura(
+            $this->anitaEscritura($api, 
                 StockAnitaBridgeSupport::mergePayload([
                     'acc' => 'insert',
                     'sistema' => $cfg['sistema_ventas'],
@@ -1537,7 +1636,7 @@ class RecepcionProveedorAnitaBridgeService
                 $sku
             );
 
-            $rows = json_decode($api->apiCall([
+            $rows = json_decode($this->anitaCall($api, [
                 'acc' => 'list',
                 'sistema' => $cfg['sistema_compras'],
                 'tabla' => $cfg['tablas']['oc_linea'],
@@ -1590,7 +1689,7 @@ class RecepcionProveedorAnitaBridgeService
                 ? RecepcionProveedorAnitaEscrituraSupport::pendmovpCerrarLineaUpdateSet((float) $paso['cantidad_oc'])
                 : RecepcionProveedorAnitaEscrituraSupport::pendmovpCantentrUpdateSet($paso['nueva_cant']);
 
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'update',
                 'sistema' => $cfg['sistema_compras'],
                 'tabla' => $cfg['tablas']['oc_linea'],
@@ -1601,7 +1700,7 @@ class RecepcionProveedorAnitaBridgeService
 
         if ($plan !== []) {
             $estadoCabecera = $this->resolverEstadoCabeceraOcDesdePendmovp($api, $cfg, (int) $oc->numeroordencompra);
-            $api->apiCallEscritura([
+            $this->anitaEscritura($api, [
                 'acc' => 'update',
                 'sistema' => $cfg['sistema_compras'],
                 'tabla' => $cfg['tablas']['oc_cabecera'],
@@ -1622,7 +1721,7 @@ class RecepcionProveedorAnitaBridgeService
             penvp_sucursal=".(int) $cfg['oc_sucursal']." and
             penvp_nro={$numeroOc}";
 
-        $rows = json_decode($api->apiCall([
+        $rows = json_decode($this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $cfg['sistema_compras'],
             'tabla' => $cfg['tablas']['oc_linea'],

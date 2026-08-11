@@ -66,13 +66,19 @@
         @endif
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Editar Movimiento de Stock</h3>
+                <h3 class="card-title">
+                    @if (! empty($modo_surmar))
+                        Editar Movimiento Surmar
+                    @else
+                        Editar Movimiento de Stock
+                    @endif
+                </h3>
 				&nbsp;- ID: {{ $movimientostock->id }} - Movimiento: {{$movimientostock->codigo}}
                 <div class="card-tools">
                     @include('stock.movimientostock.partials.boton_imprimir_com_pdf', [
                         'movimientoStockId' => $movimientostock->id,
                     ])
-                    @if (can('revertir-movimientos-de-stock', false)
+                    @if (\App\Support\Stock\Surmar\MovimientoSurmarPermisoSupport::puedeRevertir(false)
                         && ($movimientostock->estado ?? 'A') === 'A'
                         && ! ($movimientostock->movimientostock_revertido_por_id ?? null)
                         && ! ($movimientostock->movimientostock_origen_id ?? null)
@@ -84,15 +90,18 @@
                             </button>
                         </form>
                     @endif
-                    <a href="{{route('movimientostock')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route($ruta_index_movimientostock ?? 'movimientostock') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('actualizar_movimientostock', ['id' => $movimientostock->id])}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off"
+            <form action="{{ route($ruta_actualizar_movimientostock ?? 'actualizar_movimientostock', ['id' => $movimientostock->id]) }}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off"
                 data-preview-url="{{ route('preview_asiento_movimientostock', ['id' => $movimientostock->id]) }}"
                 data-tiene-asiento-grabado="{{ (int) ($movimientostock->asiento_id ?? 0) > 0 ? '1' : '0' }}">
                 @csrf @method("put")
+                @if (! empty($modo_surmar))
+                    <input type="hidden" name="modo_surmar" value="1">
+                @endif
                 <div class="card-body">
         			<input type="hidden" id="codigo" name="codigo" value="{{$movimientostock->codigo}}" >
         			<input type="hidden" id="movimientostockid" name="movimientostockid" value="{{$movimientostock->id}}" >

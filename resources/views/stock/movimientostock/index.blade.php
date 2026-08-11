@@ -1,6 +1,10 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-Movimientos de Stock
+    @if (! empty($modo_surmar))
+        Movimientos Surmar
+    @else
+        Movimientos de Stock
+    @endif
 @endsection
 
 @section("scripts")
@@ -51,7 +55,17 @@ Movimientos de Stock
 @endsection
 
 <?php use App\Support\Stock\MovimientoStockFerliSupport;
-use App\Support\Stock\MovimientoStockListadoFiltros; ?>
+use App\Support\Stock\MovimientoStockListadoFiltros;
+use App\Support\Stock\Surmar\MovimientoSurmarPermisoSupport;
+
+$modoSurmar = ! empty($modo_surmar);
+$rutaIndex = $ruta_index_movimientostock ?? ($modoSurmar ? 'movimiento_surmar' : 'movimientostock');
+$rutaCrear = $ruta_crear_movimientostock ?? ($modoSurmar ? 'crear_movimiento_surmar' : 'crear_movimientostock');
+$rutaLista = $ruta_lista_movimientostock ?? ($modoSurmar ? 'lista_movimiento_surmar' : 'lista_movimientostock');
+$nuevoCan = can('crear-movimientos-de-stock', false)
+    ? 'crear-movimientos-de-stock'
+    : (can('crear-movimiento-surmar', false) ? 'crear-movimiento-surmar' : 'crear-movimientos-de-stock');
+?>
 
 @section('contenido')
 <div class="row">
@@ -59,24 +73,30 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Movimientos de Stock</h3>
+                <h3 class="card-title">
+                    @if ($modoSurmar)
+                        <i class="fa fa-exchange"></i> Movimientos Surmar
+                    @else
+                        Movimientos de Stock
+                    @endif
+                </h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.stock.boton-manual-recepcion-movstock')
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-movimientostock',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => MovimientoStockListadoFiltros::tieneCriteriosTexto($filtros ?? []),
-                        'limpiarUrl' => route('movimientostock', MovimientoStockListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
+                        'limpiarUrl' => route($rutaIndex, MovimientoStockListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
                         'placeholder' => 'Búsqueda rápida (movimientos y transferencias)…',
                         'toggleTarget' => '#panel-filtros-movimientostock',
                         'toggleId' => 'btn-toggle-filtros-movimientostock',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_movimientostock'),
-                        'nuevoRegistroCan' => 'crear-movimientos-de-stock',
+                        'nuevoRegistroUrl' => route($rutaCrear),
+                        'nuevoRegistroCan' => $nuevoCan,
                     ])
                 </div>
             </div>
-            <form method="get" action="{{ route('movimientostock') }}" id="form-filtros-movimientostock" class="mb-0">
+            <form method="get" action="{{ route($rutaIndex) }}" id="form-filtros-movimientostock" class="mb-0">
                 @include('stock.movimientostock.partials.filtros_listado')
             </form>
             @include('stock.movimientostock.partials.filtros_externos')
@@ -88,11 +108,11 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
             @endif
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_movimientostock',
+                    'ruta' => $rutaLista,
                     'queryparams' => $filtrosQuery ?? [],
                 ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width20">ID</th>
                             <th>Fecha</th>
@@ -116,6 +136,10 @@ use App\Support\Stock\MovimientoStockListadoFiltros; ?>
                         @include('stock.movimientostock.partials.tabla_datos', [
                             'datas' => $datas,
                             'estado_enum' => $estado_enum,
+                            'puede_editar' => MovimientoSurmarPermisoSupport::puedeEditar(false),
+                            'puede_borrar' => MovimientoSurmarPermisoSupport::puedeAnular(false),
+                            'puede_revertir' => MovimientoSurmarPermisoSupport::puedeRevertir(false),
+                            'puede_listar' => MovimientoSurmarPermisoSupport::puedeListar(false),
                         ])
                     </tbody>
                 </table>

@@ -5,7 +5,7 @@
  * Aislado del import AGG (COM/X, path bierzo). No escribe de vuelta a Anita.
  */
 return [
-    'path_sistema' => env('RECEPCION_SURMAR_ANITA_PATH', '/usr2/surmar'),
+    'path_sistema' => env('RECEPCION_SURMAR_ANITA_PATH', env('ANITA_SURMAR_PATH', '/usr2/surmar')),
     'sistema_compras' => env('RECEPCION_SURMAR_ANITA_SISTEMA', 'compras'),
     'fecha_desde' => (int) env('RECEPCION_SURMAR_SYNC_FECHA_DESDE', 20260101),
 
@@ -22,6 +22,13 @@ return [
     'letra' => env('RECEPCION_SURMAR_ANITA_LETRA', 'D'),
 
     'origen_carga' => env('RECEPCION_SURMAR_ORIGEN_CARGA', 'ANITA_IMPORT'),
+
+    /**
+     * Destino por defecto al imprimir etiqueta en recepción Surmar:
+     * impresora = salida seteosalida (Zebra red / CUPS via bin/imprimir-etiqueta-zebra.sh)
+     * pdf = DomPDF descargable / abrir en navegador
+     */
+    'etiqueta_destino_default' => env('RECEPCION_SURMAR_ETIQUETA_DESTINO', 'impresora'),
 
     'tablas' => [
         'cabecera' => 'recepmae',

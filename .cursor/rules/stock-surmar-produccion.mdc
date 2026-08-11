@@ -26,6 +26,7 @@ Todas las migraciones `*surmar*` (empresa, tablas etiqueta, menú/permisos, colu
 | Vistas / JS | `…/surmar/` bajo el recurso |
 | Persistencia | tablas compartidas (`recepcion_proveedor`, `movimientostock`, `articulo_movimiento`) + **`stock_etiqueta*`** |
 | Gate | `SurmarSupport::esEmpresaSurmar($empresaId)` / filtrar siempre `empresa_id = 3` |
+| Listado recepción | `origen_carga IN (SURMAR, ANITA_IMPORT)` — no filtrar solo `SURMAR` o no se ven las importadas |
 
 Patrón preferido: **menú y permisos nuevos** (no swap de rutas como Interforming pedidos).
 

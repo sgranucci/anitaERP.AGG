@@ -39,6 +39,8 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     protected $tableAnita = ['promae', 'proley', 'proexcl', 'propago'];
     protected $keyField = 'codigo';
     protected $keyFieldAnita = 'prom_proveedor';
+    /** @var string|null Path Anita override (ej. /usr2/surmar); null = ANITA_BDD_PATH default */
+    private ?string $anitaPathSistema = null;
 
 	private $tipoempresaRepository;
     private $retenciongananciaRepository;
@@ -257,45 +259,76 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         return $proveedor;
     }
 
-    public function existeProveedorPorCodigo(string $codigo): bool
+    private function withAnitaPath(array $data): array
+    {
+        $path = trim((string) ($this->anitaPathSistema ?? ''));
+        if ($path !== '') {
+            $data['path_sistema'] = rtrim($path, '/');
+        }
+
+        return $data;
+    }
+
+    private function usarAnitaPath(?string $pathSistema): void
+    {
+        $path = trim((string) ($pathSistema ?? ''));
+        $this->anitaPathSistema = $path !== '' ? rtrim($path, '/') : null;
+    }
+
+    public function existeProveedorPorCodigo(string $codigo, ?int $empresaId = null): bool
     {
         $codigo = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita($codigo);
 
-        return $this->model->where('codigo', $codigo)->exists();
-    }
-
-    public function previewSincronizacionDesdeAnita(string $codigoAnita): ?array
-    {
-        $key = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge($codigoAnita);
-        $codigoErp = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita($key);
-        $apiAnita = new ApiAnita();
-
-        $promae = $this->consultarPromaeAnita($apiAnita, $key);
-        if ($promae === null) {
-            return null;
+        $query = $this->model->where('codigo', $codigo);
+        if (config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
         }
 
-        $filasProexcl = $this->consultarProexclAnita($apiAnita, $key);
-        $lineasExclusion = ProveedorExclusionAnitaSupport::lineasErpDesdeAnita($filasProexcl, $promae);
-        $filasPropago = $this->consultarPropagoAnita($apiAnita, $key);
-        $existe = $this->existeProveedorPorCodigo($codigoErp);
+        return $query->exists();
+    }
 
-        return [
-            'codigo' => $codigoErp,
-            'codigo_anita' => $key,
-            'nombre_anita' => trim((string) ($promae->prom_nombre ?? '')),
-            'accion' => $existe ? 'actualizar' : 'insertar',
-            'exclusiones_anita' => count($lineasExclusion),
-            'formapagos_anita' => count($filasPropago),
-            'proexcl_filas' => count($filasProexcl),
-            'proexcl_tipo_invalido' => count($filasProexcl) - count(array_filter($filasProexcl, function ($fila) use ($promae) {
-                $tipo = ProveedorExclusionAnitaSupport::tipoRetencionAnitaErpCodigo((string) ($fila->proex_tipo_ret ?? ''));
+    public function previewSincronizacionDesdeAnita(
+        string $codigoAnita,
+        ?string $pathSistema = null,
+        ?int $empresaId = null,
+    ): ?array {
+        $prevPath = $this->anitaPathSistema;
+        $this->usarAnitaPath($pathSistema);
 
-                return $tipo !== null
-                    || ProveedorExclusionAnitaSupport::inferirTipoRetencionDesdePromaePorFechas($fila, $promae) !== null
-                    || ProveedorExclusionAnitaSupport::inferirTipoRetencionDesdeComentario((string) ($fila->proex_comentario ?? '')) !== null;
-            })),
-        ];
+        try {
+            $key = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge($codigoAnita);
+            $codigoErp = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita($key);
+            $apiAnita = new ApiAnita();
+
+            $promae = $this->consultarPromaeAnita($apiAnita, $key);
+            if ($promae === null) {
+                return null;
+            }
+
+            $filasProexcl = $this->consultarProexclAnita($apiAnita, $key);
+            $lineasExclusion = ProveedorExclusionAnitaSupport::lineasErpDesdeAnita($filasProexcl, $promae);
+            $filasPropago = $this->consultarPropagoAnita($apiAnita, $key);
+            $existe = $this->existeProveedorPorCodigo($codigoErp, $empresaId);
+
+            return [
+                'codigo' => $codigoErp,
+                'codigo_anita' => $key,
+                'nombre_anita' => trim((string) ($promae->prom_nombre ?? '')),
+                'accion' => $existe ? 'actualizar' : 'insertar',
+                'exclusiones_anita' => count($lineasExclusion),
+                'formapagos_anita' => count($filasPropago),
+                'proexcl_filas' => count($filasProexcl),
+                'proexcl_tipo_invalido' => count($filasProexcl) - count(array_filter($filasProexcl, function ($fila) use ($promae) {
+                    $tipo = ProveedorExclusionAnitaSupport::tipoRetencionAnitaErpCodigo((string) ($fila->proex_tipo_ret ?? ''));
+
+                    return $tipo !== null
+                        || ProveedorExclusionAnitaSupport::inferirTipoRetencionDesdePromaePorFechas($fila, $promae) !== null
+                        || ProveedorExclusionAnitaSupport::inferirTipoRetencionDesdeComentario((string) ($fila->proex_comentario ?? '')) !== null;
+                })),
+            ];
+        } finally {
+            $this->anitaPathSistema = $prevPath;
+        }
     }
 
     /**
@@ -308,10 +341,16 @@ class ProveedorRepository implements ProveedorRepositoryInterface
      *     dry_run: bool
      * }
      */
-    public function resincronizarDesdeAnita(bool $dryRun = false, ?int $empresaId = null): array
-    {
+    public function resincronizarDesdeAnita(
+        bool $dryRun = false,
+        ?int $empresaId = null,
+        ?string $pathSistema = null,
+    ): array {
         ini_set('max_execution_time', '0');
         ini_set('memory_limit', '512M');
+
+        $prevPath = $this->anitaPathSistema;
+        $this->usarAnitaPath($pathSistema);
 
         $stats = [
             'insertados' => 0,
@@ -322,73 +361,81 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             'dry_run' => $dryRun,
         ];
 
-        $apiAnita = new ApiAnita();
-        $data = [
-            'acc' => 'list',
-            'sistema' => 'compras',
-            'campos' => "{$this->keyFieldAnita} as {$this->keyField}, {$this->keyFieldAnita}",
-            'tabla' => $this->tableAnita[0],
-        ];
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-        if (! is_array($dataAnita)) {
-            return $stats;
-        }
-
-        $codigosAnita = [];
-        foreach ($dataAnita as $value) {
-            $codigoAnita = (string) ($value->{$this->keyFieldAnita} ?? '');
-            if ($codigoAnita === '') {
-                continue;
+        try {
+            $apiAnita = new ApiAnita();
+            $data = $this->withAnitaPath([
+                'acc' => 'list',
+                'sistema' => 'compras',
+                'campos' => "{$this->keyFieldAnita} as {$this->keyField}, {$this->keyFieldAnita}",
+                'tabla' => $this->tableAnita[0],
+            ]);
+            $dataAnita = json_decode($apiAnita->apiCall($data));
+            if (! is_array($dataAnita)) {
+                return $stats;
             }
-            $codigosAnita[] = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita($codigoAnita);
 
-            if ($dryRun) {
-                $preview = $this->previewSincronizacionDesdeAnita($codigoAnita);
-                if ($preview === null) {
-                    $stats['omitidos']++;
+            $codigosAnita = [];
+            foreach ($dataAnita as $value) {
+                $codigoAnita = (string) ($value->{$this->keyFieldAnita} ?? '');
+                if ($codigoAnita === '') {
+                    continue;
+                }
+                $codigosAnita[] = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita($codigoAnita);
+
+                if ($dryRun) {
+                    $preview = $this->previewSincronizacionDesdeAnita($codigoAnita, $pathSistema, $empresaId);
+                    if ($preview === null) {
+                        $stats['omitidos']++;
+
+                        continue;
+                    }
+                    if ($preview['accion'] === 'insertar') {
+                        $stats['insertados']++;
+                    } else {
+                        $stats['actualizados']++;
+                    }
 
                     continue;
                 }
-                if ($preview['accion'] === 'insertar') {
-                    $stats['insertados']++;
-                } else {
-                    $stats['actualizados']++;
-                }
 
-                continue;
+                try {
+                    $resultado = $this->traerRegistroDeAnita($codigoAnita, null, $empresaId, $pathSistema);
+                    if ($resultado === 'insertado') {
+                        $stats['insertados']++;
+                    } elseif ($resultado === 'actualizado') {
+                        $stats['actualizados']++;
+                    } else {
+                        $stats['omitidos']++;
+                    }
+                } catch (\Throwable) {
+                    $stats['errores']++;
+                }
             }
 
-            try {
-                $resultado = $this->traerRegistroDeAnita($codigoAnita, null, $empresaId);
-                if ($resultado === 'insertado') {
-                    $stats['insertados']++;
-                } elseif ($resultado === 'actualizado') {
-                    $stats['actualizados']++;
-                } else {
-                    $stats['omitidos']++;
-                }
-            } catch (\Throwable) {
-                $stats['errores']++;
+            $codigosAnitaFlip = array_flip($codigosAnita);
+            $soloErpQuery = $this->model->newQuery()->whereNull('deleted_at');
+            if (config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0) {
+                $soloErpQuery->where('empresa_id', $empresaId);
             }
+            $soloErpQuery
+                ->orderBy('codigo')
+                ->pluck('codigo')
+                ->each(function ($codigoErp) use (&$stats, $codigosAnitaFlip) {
+                    $codigo = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita((string) $codigoErp);
+                    if (! isset($codigosAnitaFlip[$codigo])) {
+                        $stats['solo_en_erp'][] = $codigo;
+                    }
+                });
+
+            return $stats;
+        } finally {
+            $this->anitaPathSistema = $prevPath;
         }
-
-        $codigosAnitaFlip = array_flip($codigosAnita);
-        $this->model->newQuery()
-            ->whereNull('deleted_at')
-            ->orderBy('codigo')
-            ->pluck('codigo')
-            ->each(function ($codigoErp) use (&$stats, $codigosAnitaFlip) {
-                $codigo = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita((string) $codigoErp);
-                if (! isset($codigosAnitaFlip[$codigo])) {
-                    $stats['solo_en_erp'][] = $codigo;
-                }
-            });
-
-        return $stats;
     }
 
-    public function sincronizarConAnita(?int $empresaId = null){
-		$this->resincronizarDesdeAnita(false, $empresaId);
+    public function sincronizarConAnita(?int $empresaId = null, ?string $pathSistema = null)
+    {
+        $this->resincronizarDesdeAnita(false, $empresaId, $pathSistema);
     }
 
     /**
@@ -541,19 +588,27 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         return $data;
     }
 
-    public function traerRegistroDeAnita(string $codigoAnita, ?bool $fl_crea_registro = null, ?int $empresaId = null): ?string
-    {
+    public function traerRegistroDeAnita(
+        string $codigoAnita,
+        ?bool $fl_crea_registro = null,
+        ?int $empresaId = null,
+        ?string $pathSistema = null,
+    ): ?string {
+        $prevPath = $this->anitaPathSistema;
+        $this->usarAnitaPath($pathSistema);
+
+        try {
         $key = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge($codigoAnita);
         $apiAnita = new ApiAnita();
-        $data = array( 
+        $data = $this->withAnitaPath([ 
             'acc' => 'list', 'tabla' => $this->tableAnita[0], 
 			'sistema' => 'compras',
             'campos' => $this->camposPromaeLecturaAnita(),
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-        );
+        ]);
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-		$data = array( 
+		$data = $this->withAnitaPath([ 
             'acc' => 'list', 'tabla' => $this->tableAnita[1], 
 			'sistema' => 'compras',
             'campos' => '
@@ -561,14 +616,14 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     		prol_leyenda
 			',
             'whereArmado' => " WHERE prol_proveedor = '".$key."' " 
-        );
+        ]);
         $dataleyAnita = json_decode($apiAnita->apiCall($data));
 
-		// Surmar: promadic/proexcl/propago no están alineados o no existen; el bridge puede
+		// Surmar: promadic/proexcl/propago no estan alineados o no existen; el bridge puede
 		// devolver filas ajenas si el WHERE no aplica. Solo leerlas en esquema AGG.
 		$dataAdicionalAnita = [];
 		if (! config('proveedor.filtro_empresa')) {
-			$data = array(
+			$data = $this->withAnitaPath([
 				'acc' => 'list', 'tabla' => 'promadic',
 				'sistema' => 'compras',
 				'campos' => '
@@ -577,7 +632,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				proad_semaforo
 				',
 				'whereArmado' => " WHERE proad_proveedor = '".$key."' ",
-			);
+			]);
 			$dataAdicionalAnita = json_decode($apiAnita->apiCall($data));
 		}
 
@@ -603,7 +658,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             $data = $this->normalizarFilaPromaeAnita($dataAnita[0]);
             $codigoErp = ProveedorExclusionAnitaSupport::codigoErpDesdeAnita((string) $data->prom_proveedor);
             if ($fl_crea_registro === null) {
-                $fl_crea_registro = ! $this->existeProveedorPorCodigo($codigoErp);
+                $fl_crea_registro = ! $this->existeProveedorPorCodigo($codigoErp, $empresaId);
             }
             $resultado = null;
 
@@ -882,7 +937,11 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             	$proveedor = $this->model->create($arr_campos);
                 $resultado = 'insertado';
             } else {
-                $proveedor = $this->model->where('codigo', $codigoErp)->first();
+                $proveedorQuery = $this->model->where('codigo', $codigoErp);
+                if (config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0) {
+                    $proveedorQuery->where('empresa_id', $empresaId);
+                }
+                $proveedor = $proveedorQuery->first();
                 if ($proveedor === null) {
                     $proveedor = $this->model->create($arr_campos);
                     $resultado = 'insertado';
@@ -907,6 +966,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         }
 
         return null;
+        } finally {
+            $this->anitaPathSistema = $prevPath;
+        }
     }
 
     private function consultarPromaeAnita(ApiAnita $apiAnita, string $key): ?object
@@ -933,13 +995,13 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				prom_fecha_exclib,
 				prom_fe_ini_exclib
 			';
-        $data = [
+        $data = $this->withAnitaPath([
             'acc' => 'list',
             'tabla' => $this->tableAnita[0],
             'sistema' => 'compras',
             'campos' => $campos,
             'whereArmado' => " WHERE {$this->keyFieldAnita} = '{$key}' ",
-        ];
+        ]);
         $filas = ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
         $fila = $filas[0] ?? null;
 
@@ -955,7 +1017,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             return [];
         }
 
-        $data = [
+        $data = $this->withAnitaPath([
             'acc' => 'list',
             'tabla' => $this->tableAnita[2],
             'sistema' => 'compras',
@@ -969,7 +1031,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					proex_comentario
 				',
             'whereArmado' => " WHERE proex_proveedor = '{$key}' ",
-        ];
+        ]);
 
         return ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
     }
@@ -983,7 +1045,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             return [];
         }
 
-        $data = [
+        $data = $this->withAnitaPath([
             'acc' => 'list',
             'tabla' => $this->tableAnita[3],
             'sistema' => 'compras',
@@ -1002,7 +1064,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 					prop_offset
 				',
             'whereArmado' => " WHERE prop_proveedor = '{$key}' ",
-        ];
+        ]);
 
         return ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
     }

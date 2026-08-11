@@ -1136,7 +1136,7 @@ class ArcaCaeaPresentacionService
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->where('puntoventa.empresa_id', (int) $registro->empresa_id)
             ->where('puntoventa.modofacturacion', 'A')
-            ->whereIn('puntoventa.webservice', ['wsfev1', 'wsmtxca'])
+            ->whereIn('puntoventa.webservice', \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
             ->whereBetween('venta.fecha', [
                 $fechas['desde']->toDateString(),
                 $fechas['hasta']->toDateString(),
@@ -1294,7 +1294,7 @@ class ArcaCaeaPresentacionService
             ->join('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
             ->where('puntoventa.empresa_id', $empresaId)
             ->where('puntoventa.modofacturacion', 'A')
-            ->whereIn('puntoventa.webservice', ['wsfev1', 'wsmtxca'])
+            ->whereIn('puntoventa.webservice', \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
             ->whereNotNull('venta.cae')
             ->where('venta.cae', '!=', '')
             ->where(function ($q): void {
@@ -1328,7 +1328,7 @@ class ArcaCaeaPresentacionService
             ->join('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
             ->where('puntoventa.empresa_id', (int) $registro->empresa_id)
             ->where('puntoventa.modofacturacion', 'A')
-            ->whereIn('puntoventa.webservice', ['wsfev1', 'wsmtxca'])
+            ->whereIn('puntoventa.webservice', \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
             ->whereBetween('venta.fecha', [
                 $fechas['desde']->toDateString(),
                 $fechas['hasta']->toDateString(),
