@@ -32,7 +32,7 @@ final class ClienteAnitaZonamultSupport
         }
 
         $provincia = Provincia::query()
-            ->select(['id', 'codigo', 'jurisdiccion'])
+            ->select(['id', 'codigo', 'jurisdiccion', 'nombre'])
             ->whereKey($provinciaId)
             ->first();
 
@@ -46,7 +46,7 @@ final class ClienteAnitaZonamultSupport
         }
 
         $fallback = max(0, (int) ($provincia->codigo ?? 0));
-        $jurisdiccion = (int) ($provincia->jurisdiccion ?? 0);
+        $jurisdiccion = self::resolverJurisdiccion($provincia);
         if ($jurisdiccion <= 0) {
             return $fallback;
         }
@@ -57,6 +57,56 @@ final class ClienteAnitaZonamultSupport
         }
 
         return $mapa[$jurisdiccion];
+    }
+
+    /**
+     * Jurisdicción AFIP (900+). Usa provincia.jurisdiccion o inferencia por nombre.
+     */
+    public static function resolverJurisdiccion(?Provincia $provincia): int
+    {
+        if ($provincia === null) {
+            return 0;
+        }
+
+        $jurisdiccion = (int) ($provincia->jurisdiccion ?? 0);
+        if ($jurisdiccion >= 900) {
+            return $jurisdiccion;
+        }
+
+        return self::jurisdiccionDesdeNombre((string) ($provincia->nombre ?? ''));
+    }
+
+    public static function jurisdiccionDesdeNombre(string $nombre): int
+    {
+        $key = self::normalizarNombreProvincia($nombre);
+        if ($key === '') {
+            return 0;
+        }
+
+        $mapa = config('cliente_anita.jurisdiccion_por_nombre_provincia', []);
+        if (! is_array($mapa)) {
+            return 0;
+        }
+
+        return (int) ($mapa[$key] ?? 0);
+    }
+
+    public static function normalizarNombreProvincia(string $nombre): string
+    {
+        $nombre = trim($nombre);
+        if ($nombre === '') {
+            return '';
+        }
+
+        $sinAcentos = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $nombre);
+        if (is_string($sinAcentos) && $sinAcentos !== '') {
+            $nombre = $sinAcentos;
+        }
+
+        $nombre = strtoupper($nombre);
+        $nombre = preg_replace('/[^A-Z0-9]+/', ' ', $nombre) ?? $nombre;
+
+        return trim(preg_replace('/\s+/', ' ', $nombre) ?? $nombre);
     }
 
     /**
@@ -73,7 +123,11 @@ final class ClienteAnitaZonamultSupport
         if (self::$mapaPorJurisdiccion === []) {
             self::$mapaPorJurisdiccion = self::mapaFallbackConfig();
             if (self::$mapaPorJurisdiccion !== []) {
-                Log::warning('ClienteAnitaZonamult: usando fallback config cliente_anita.zonamult_por_jurisdiccion');
+                try {
+                    Log::warning('ClienteAnitaZonamult: usando fallback config cliente_anita.zonamult_por_jurisdiccion');
+                } catch (\Throwable) {
+                    // CLI sin permiso de escritura en storage/logs
+                }
             }
         }
 

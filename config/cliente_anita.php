@@ -70,4 +70,38 @@ return [
         923 => 12, // Tierra del Fuego
         924 => 19, // Tucuman
     ],
+
+    /*
+     * Si provincia.jurisdiccion está vacío/0 (maestro ERP incompleto), inferir jurisdicción AFIP
+     * por nombre normalizado para clim_zonamult. Claves sin acentos, mayúsculas.
+     */
+    'jurisdiccion_por_nombre_provincia' => [
+        'CAPITAL FEDERAL' => 901,
+        'CABA' => 901,
+        'CIUDAD AUTONOMA DE BUENOS AIRES' => 901,
+        'CIUDAD DE BUENOS AIRES' => 901,
+        'BUENOS AIRES' => 902,
+        'CATAMARCA' => 903,
+        'CORDOBA' => 904,
+        'CORRIENTES' => 905,
+        'CHACO' => 906,
+        'CHUBUT' => 907,
+        'ENTRE RIOS' => 908,
+        'FORMOSA' => 909,
+        'JUJUY' => 910,
+        'LA PAMPA' => 911,
+        'LA RIOJA' => 912,
+        'MENDOZA' => 913,
+        'MISIONES' => 914,
+        'NEUQUEN' => 915,
+        'RIO NEGRO' => 916,
+        'SALTA' => 917,
+        'SAN JUAN' => 918,
+        'SAN LUIS' => 919,
+        'SANTA CRUZ' => 920,
+        'SANTA FE' => 921,
+        'SANTIAGO DEL ESTERO' => 922,
+        'TIERRA DEL FUEGO' => 923,
+        'TUCUMAN' => 924,
+    ],
 ];
