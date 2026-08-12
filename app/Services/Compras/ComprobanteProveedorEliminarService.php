@@ -3,9 +3,13 @@
 namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Compras\Comprobante_Proveedor_Archivo;
+use App\Models\Compras\Comprobante_Proveedor_Articulo;
+use App\Models\Compras\Comprobante_Proveedor_Concepto;
+use App\Models\Compras\Comprobante_Proveedor_Cuota;
+use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
-use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -13,13 +17,13 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Borra comprobante proveedor en ERP y Anita (compra/concmov/promov/ctamov + asiento + CC).
+ * Borra físicamente el comprobante proveedor en ERP y Anita
+ * (compra/concmov/promov/ctamov + asiento + CC + hijas).
  * Opcionalmente también la precarga asociada.
  */
 class ComprobanteProveedorEliminarService
 {
     public function __construct(
-        private Comprobante_ProveedorRepositoryInterface $comprobanteRepository,
         private Precarga_Comprobante_ProveedorRepositoryInterface $precargaRepository,
         private ComprobanteProveedorAnitaSyncService $anitaSyncService,
         private ComprobanteProveedorAsientoService $asientoService,
@@ -30,7 +34,7 @@ class ComprobanteProveedorEliminarService
      */
     public function eliminar(int $comprobanteId, bool $tambienPrecarga = false): array
     {
-        $comprobante = Comprobante_Proveedor::query()
+        $comprobante = Comprobante_Proveedor::withTrashed()
             ->with([
                 'tipotransaccion_compras',
                 'proveedores',
@@ -74,8 +78,8 @@ class ComprobanteProveedorEliminarService
             );
         }
 
-        // 2) ERP: CC, asiento, vínculos COM, soft-delete cabecera.
-        DB::transaction(function () use ($comprobante, $asientoId) {
+        // 2) ERP: CC, asiento, hijas y hard-delete cabecera.
+        DB::transaction(function () use ($comprobante, $asientoId, $tambienPrecarga) {
             $ccIds = DB::table('comprobante_proveedor_cuota')
                 ->where('comprobante_proveedor_id', $comprobante->id)
                 ->whereNotNull('proveedor_cuentacorriente_id')
@@ -92,31 +96,45 @@ class ComprobanteProveedorEliminarService
                 DB::table('proveedor_cuentacorriente')->whereIn('id', $ccIds)->delete();
             }
 
-            Comprobante_Proveedor_Recepcion::query()
-                ->where('comprobante_proveedor_id', $comprobante->id)
-                ->delete();
-
-            // Primero soltar FK asiento_id; si no, MySQL RESTRICT impide borrar asiento.
+            // Soltar FKs RESTRICT antes de borrar asiento / precarga.
             $comprobante->forceFill([
                 'asiento_id' => null,
                 'anita_nro_interno' => null,
+                'precarga_comprobante_proveedor_id' => $tambienPrecarga
+                    ? $comprobante->precarga_comprobante_proveedor_id
+                    : null,
             ])->save();
 
             if ($asientoId > 0) {
                 DB::table('asiento_movimiento')->where('asiento_id', $asientoId)->delete();
+                // Otras FKs a este asiento (p. ej. comprobante_proveedor ya soltado).
                 DB::table('asiento')->where('id', $asientoId)->delete();
             }
 
-            $this->comprobanteRepository->delete($comprobante->id);
+            // Hijas (también CASCADE en MySQL; se borran explícitas por claridad).
+            Comprobante_Proveedor_Recepcion::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
+            Comprobante_Proveedor_Concepto::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
+            Comprobante_Proveedor_Articulo::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
+            Comprobante_Proveedor_Cuota::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
+            Comprobante_Proveedor_Estado::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
+            // Filas de adjuntos en BD (el PDF en disco de Facturas_scan no se toca acá:
+            // suele pertenecer a la precarga / montaje compartido).
+            Comprobante_Proveedor_Archivo::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
+
+            if ($tambienPrecarga) {
+                $comprobante->forceFill(['precarga_comprobante_proveedor_id' => null])->save();
+            }
+
+            $comprobante->forceDelete();
         });
 
         $precargaBorrada = false;
         if ($tambienPrecarga && $precargaId > 0) {
-            $this->eliminarPrecargaSiCorresponde($precargaId, $comprobanteId);
+            $this->eliminarPrecargaSiCorresponde($precargaId);
             $precargaBorrada = true;
         }
 
-        $mensaje = 'Comprobante #'.$comprobanteId.' borrado en anitaERP'
+        $mensaje = 'Comprobante #'.$comprobanteId.' borrado físicamente en anitaERP'
             .($anitaNro > 0 || $asientoId > 0 ? ' y Anita' : '')
             .'.';
         if ($precargaBorrada) {
@@ -154,12 +172,10 @@ class ComprobanteProveedorEliminarService
         }
     }
 
-    private function eliminarPrecargaSiCorresponde(int $precargaId, int $comprobanteIdExcluido): void
+    private function eliminarPrecargaSiCorresponde(int $precargaId): void
     {
         $otros = Comprobante_Proveedor::query()
             ->where('precarga_comprobante_proveedor_id', $precargaId)
-            ->where('id', '!=', $comprobanteIdExcluido)
-            ->whereNull('deleted_at')
             ->exists();
 
         if ($otros) {
@@ -169,8 +185,7 @@ class ComprobanteProveedorEliminarService
             );
         }
 
-        $precarga = Precarga_Comprobante_Proveedor::query()->find($precargaId);
-        if (! $precarga) {
+        if (! Precarga_Comprobante_Proveedor::query()->find($precargaId)) {
             return;
         }
 

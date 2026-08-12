@@ -463,19 +463,23 @@ class Precarga_Comprobante_ProveedorController extends Controller
     {
         can('borrar-precarga-proveedores');
 
-        if ($request->ajax()) 
-		{
-			$fl_borro = false;
-			if ($this->precarga_comprobante_proveedorRepository->delete($id))
-				$fl_borro = true;
-
-            if ($fl_borro) {
-                return response()->json(['mensaje' => 'ok']);
-            } else {
-                return response()->json(['mensaje' => 'ng']);
-            }
-        } else {
+        if (! $request->ajax()) {
             abort(404);
         }
+
+        try {
+            $fl_borro = (bool) $this->precarga_comprobante_proveedorRepository->delete($id);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'mensaje' => 'ng',
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+
+        if ($fl_borro) {
+            return response()->json(['mensaje' => 'ok']);
+        }
+
+        return response()->json(['mensaje' => 'ng', 'error' => 'No se pudo eliminar la precarga.']);
     }
 }

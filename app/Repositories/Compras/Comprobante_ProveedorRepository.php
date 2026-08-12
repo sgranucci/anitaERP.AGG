@@ -30,9 +30,13 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
 
     public function delete($id)
     {
-        $row = $this->model->find($id);
+        $row = $this->model->withTrashed()->find($id);
+        if (! $row) {
+            return false;
+        }
 
-        return $row ? (bool) $row->delete() : false;
+        // Borrado físico (no soft-delete).
+        return (bool) $row->forceDelete();
     }
 
     public function find($id)

@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Compras;
 
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
@@ -10,6 +11,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_ProveedorRepositoryInterface
 {
@@ -114,9 +116,32 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
     public function delete($id)
     {
         $precargaId = (int) $id;
-        Precarga_Comprobante_Proveedor::find($id);
+        if ($precargaId <= 0 || ! Precarga_Comprobante_Proveedor::query()->whereKey($precargaId)->exists()) {
+            return false;
+        }
 
-        $precarga_comprobante_proveedor = $this->model->destroy($id);
+        $activos = Comprobante_Proveedor::query()
+            ->where('precarga_comprobante_proveedor_id', $precargaId)
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($v) => (int) $v)
+            ->all();
+
+        if ($activos !== []) {
+            throw new RuntimeException(
+                'No se puede borrar la precarga #'.$precargaId
+                .': hay comprobante(s) vinculado(s) #'.implode(', #', $activos)
+                .'. Borrá primero la factura desde Comprobantes de proveedor.'
+            );
+        }
+
+        // Soft-deleted CP siguen con FK RESTRICT: soltar vínculo y luego borrar precarga.
+        Comprobante_Proveedor::withTrashed()
+            ->where('precarga_comprobante_proveedor_id', $precargaId)
+            ->update(['precarga_comprobante_proveedor_id' => null]);
+
+        $precarga_comprobante_proveedor = $this->model->destroy($precargaId);
 
         DB::afterCommit(function () use ($precargaId) {
             $this->anitaSync->deleteCabecera($precargaId);
